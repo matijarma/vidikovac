@@ -7,13 +7,13 @@ const xml = readFileSync(new URL('../fixtures/cap_hr_today.xml', import.meta.url
 describe('parseDhmzCap', () => {
   const payload = parseDhmzCap(xml);
 
-  it('keeps only the Zagreb region blocks, one item per language', () => {
+  it('keeps only the Croatian block per Zagreb alert, exactly one item', () => {
     expect(ZAGREB_EMMA_ID).toBe('HR002');
-    expect(payload.items).toHaveLength(2);
+    expect(payload.items).toHaveLength(1);
     expect(payload.items.map((item) => item.id)).toEqual([
       '2.49.0.0.191.0.HR.260911082407.LDZM:hr:Žuto upozorenje za grmljavinsku oluju@2026-09-11T00:00:00+02:00',
-      '2.49.0.0.191.0.HR.260911082407.LDZM:en:Yellow thunderstorm warning@2026-09-11T00:00:00+02:00',
     ]);
+    expect(payload.items[0]!.title).toBe('Žuto upozorenje za grmljavinsku oluju');
     expect(payload.items.every((item) => item.kind === 'warning')).toBe(true);
   });
 
@@ -103,6 +103,7 @@ describe('fetchDhmzCap', () => {
     });
     expect(asked).toEqual([CAP_URL]);
     expect(CAP_URL).toBe('https://meteo.hr/upozorenja/cap_hr_today.xml');
-    expect(payload.items).toHaveLength(2);
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items[0]!.title).toBe('Žuto upozorenje za grmljavinsku oluju');
   });
 });

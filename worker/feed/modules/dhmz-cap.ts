@@ -48,19 +48,24 @@ const ARRAY_PATHS = ['alert.info', 'alert.info.area', 'alert.info.area.geocode']
 export function parseDhmzCap(xml: string): FeedPayload {
   const alert = parseXml<CapDocument>(xml, { arrayPaths: ARRAY_PATHS }).alert;
   const identifier = xmlText(alert?.identifier) || 'cap';
-  const items: ItemInput[] = [];
   const idSeen = new Map<string, number>();
 
-  for (const info of xmlArray(alert?.info)) {
-    const area = zagrebArea(info);
-    if (!area) continue;
+  const zagrebInfos = xmlArray(alert?.info).filter((info) => zagrebArea(info) !== null);
+  // DHMZ carries the same warning once per language (hr, en, ...) as sibling
+  // <info> blocks; without this, every Zagreb warning rendered twice. Keep
+  // only the Croatian block(s); fall back to the first block when none of the
+  // Zagreb-matching blocks is Croatian (R-60).
+  const hrInfos = zagrebInfos.filter((info) => xmlText(info.language).toLowerCase().startsWith('hr'));
+  const selected = hrInfos.length > 0 ? hrInfos : zagrebInfos.slice(0, 1);
+
+  const items: ItemInput[] = selected.map((info): ItemInput => {
     const language = xmlText(info.language) || 'hr';
     const summary = [xmlText(info.description), xmlText(info.instruction)]
       .filter(Boolean)
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
-    items.push({
+    return {
       id: uniqueItemId(idSeen, identifier, language, xmlText(info.event), xmlText(info.onset)),
       kind: 'warning',
       title: xmlText(info.event),
@@ -73,8 +78,8 @@ export function parseDhmzCap(xml: string): FeedPayload {
         certainty: xmlText(info.certainty) || undefined,
         urgency: xmlText(info.urgency) || undefined,
       }),
-    });
-  }
+    };
+  });
 
   return { items, ...(isoOrUndefined(xmlText(alert?.sent)) ? { sourceUpdatedAt: isoOrUndefined(xmlText(alert?.sent)) } : {}) };
 }
