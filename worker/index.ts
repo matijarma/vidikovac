@@ -46,7 +46,7 @@ export default {
     }
     return env.ASSETS.fetch(request);
   },
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     await warmFeeds(env, ctx);
   },
 } satisfies ExportedHandler<Env>;
