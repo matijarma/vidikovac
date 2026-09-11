@@ -168,8 +168,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         <p class="kiosk-code-value" data-testid="pair-code"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
         <p class="kiosk-code-hint">${escapeHtml(i18n.t('kiosk.typeCode'))}</p>
         <!-- The QR's payload as text: what the camera reads, for anyone who
-             cannot read the QR (and the end-to-end contract, R-52). -->
-        <a class="visually-hidden" data-testid="pair-url" href=""></a>
+             cannot read the QR (and the end-to-end contract, R-52). Hidden
+             until a code exists, because a link with no text is a serious
+             axe violation and there is nothing to link to yet. -->
+        <a class="visually-hidden" data-testid="pair-url" href="" hidden></a>
       </aside>
       <div class="kiosk-layer" data-testid="kiosk-layer" hidden></div>
       <div class="corner-qr" data-testid="corner-qr" hidden></div>
@@ -275,6 +277,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const payload = codeUrl(currentCode, deps.codeBase);
     codeLink.href = payload;
     codeLink.textContent = payload;
+    codeLink.hidden = false;
     const spoken = speakableCode(currentCode);
     const qr = createQr({
       payload: codeUrl(currentCode, deps.codeBase),

@@ -149,6 +149,13 @@ describe('mountKiosk', () => {
     expect(text(root.querySelector('[data-testid=pair-code]'))).toBe('ABCD-EFG0');
     const link = root.querySelector<HTMLAnchorElement>('[data-testid=pair-url]')!;
     expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
+    expect(link.hidden).toBe(false);
+  });
+  it('keeps the code link out of the page until there is a code to link to', () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    // A link with no text is a serious axe violation, and the kiosk page is
+    // loaded without a session in the accessibility run.
+    expect(root.querySelector<HTMLAnchorElement>('[data-testid=pair-url]')!.hidden).toBe(true);
   });
   it('asks the beacon for more codes when the rotation runs low', () => {
     const { beacon, handlers } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
