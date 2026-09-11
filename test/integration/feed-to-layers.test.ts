@@ -107,6 +107,16 @@ describe('every layer renders the real feed output', () => {
       expect(clean(section), layer).not.toContain(UNAVAILABLE);
     }
   });
+
+  it('fills every attribution template so no brace reaches a panel footer (R-62)', () => {
+    for (const layer of LAYERS) {
+      const section = renderLayer(layer, ctx());
+      for (const attr of section.querySelectorAll('[data-testid=panel-attr]')) {
+        expect(attr.textContent, layer).not.toContain('{');
+        expect(attr.textContent, layer).not.toContain('}');
+      }
+    }
+  });
 });
 
 describe('the kiosk teaser renders the real feed output', () => {
@@ -125,6 +135,15 @@ describe('the kiosk teaser renders the real feed output', () => {
       expect(c.body, c.id).not.toContain(UNAVAILABLE);
       expect(c.body, c.id).not.toContain(DASH);
       expect(c.body, c.id).not.toBe(i18n.t('kiosk.teaserSoon'));
+    }
+  });
+
+  it('fills every teaser card attribution so no brace reaches the kiosk (R-62)', () => {
+    const cards = teaserCards(teaser, i18n, NOW);
+    for (const c of cards) {
+      if (!c.attribution) continue;
+      expect(c.attribution.text, c.id).not.toContain('{');
+      expect(c.attribution.text, c.id).not.toContain('}');
     }
   });
 

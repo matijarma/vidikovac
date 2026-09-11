@@ -45,6 +45,16 @@ export function zagrebDateTime(value: TimeInput): string {
   return `${Number(p.day)}. ${Number(p.month)}. ${zagrebTime(date)}`;
 }
 
+/** '11. 9. 2026. 15:00' — the with-year form R-62's attribution fill needs
+ *  (zagrebDateTime above deliberately omits the year: pages state it once,
+ *  but a citation embedded in a template has to stand on its own). */
+export function zagrebDateTimeWithYear(value: TimeInput): string {
+  const date = parseIso(value);
+  if (!date) return '';
+  const p = parts(date);
+  return `${Number(p.day)}. ${Number(p.month)}. ${p.year}. ${zagrebTime(date)}`;
+}
+
 /** Whole minutes of age; null when the instant is unparseable. */
 export function minutesSince(value: TimeInput, now: number): number | null {
   const date = parseIso(value);

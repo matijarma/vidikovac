@@ -4,6 +4,7 @@
 // original and the export actions. Nothing here fetches or polls.
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
+import { fillAttribution } from '../attribution';
 import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -29,8 +30,16 @@ export function statusText(snapshot: ModuleSnapshot, i18n: I18n, _now: number): 
   return i18n.t(snapshot.status === 'stale' ? 'status.stale' : 'status.live', { time });
 }
 
-export function attributionMarkup(attribution: Attribution, i18n: I18n): string {
-  return `<p class="panel-attr" data-testid="panel-attr"><span class="panel-attr-text">${escapeHtml(attribution.text)}</span> <a class="panel-attr-link" href="${escapeAttribute(attribution.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a> <span class="panel-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(attribution.licence)}</span></p>`;
+/**
+ * `snapshot.attribution.text` is an R-08 template ("{vrijeme}", "{naziv}"...);
+ * this fills it from the snapshot itself, using the first item as the
+ * representative one where the template needs one (R-62). No raw brace ever
+ * reaches this footer.
+ */
+export function attributionMarkup(snapshot: ModuleSnapshot, i18n: I18n): string {
+  const { attribution } = snapshot;
+  const text = fillAttribution(attribution, snapshot, snapshot.items[0]);
+  return `<p class="panel-attr" data-testid="panel-attr"><span class="panel-attr-text">${escapeHtml(text)}</span> <a class="panel-attr-link" href="${escapeAttribute(attribution.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a> <span class="panel-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(attribution.licence)}</span></p>`;
 }
 
 /** `rows` are markup fragments the layer has already escaped. */
@@ -96,7 +105,7 @@ export function createPanel(options: PanelOptions): PanelHandle {
       <div class="panel-body" data-testid="panel-body"></div>
       <footer class="panel-foot">
         ${options.snapshot ? `<p class="panel-status" data-testid="panel-status" data-status="${options.snapshot.status}">${escapeHtml(statusText(options.snapshot, i18n, now))}</p>` : ''}
-        ${options.snapshot ? attributionMarkup(options.snapshot.attribution, i18n) : ''}
+        ${options.snapshot ? attributionMarkup(options.snapshot, i18n) : ''}
         <div class="panel-actions" data-testid="panel-actions"></div>
       </footer>
     </section>`,
@@ -109,7 +118,14 @@ export function createPanel(options: PanelOptions): PanelHandle {
   const actions: PanelAction[] = [];
   const { copyText, onCopy, snapshot, shareUrl, onShare } = options;
   if (copyText && onCopy && snapshot) {
-    actions.push({ id: 'copy', label: i18n.t('common.copy'), run: () => onCopy(copyText, snapshot.attribution) });
+    // Filled once here, at the one place a copy action is attached, so every
+    // consumer of the resulting Attribution (the clipboard text, an export
+    // built from it) already carries a real value and never a brace (R-62).
+    const filledAttribution: Attribution = {
+      ...snapshot.attribution,
+      text: fillAttribution(snapshot.attribution, snapshot, snapshot.items[0]),
+    };
+    actions.push({ id: 'copy', label: i18n.t('common.copy'), run: () => onCopy(copyText, filledAttribution) });
   }
   if (shareUrl && onShare) {
     actions.push({ id: 'share', label: i18n.t('common.share'), run: () => onShare(shareUrl, options.title) });

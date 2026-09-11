@@ -3,6 +3,7 @@
 // so the collection and every feature carry `adapted: true` and the source
 // attribution rides along as top-level foreign members (RFC 7946 §6.1).
 import type { FeedItem, Geo, ModuleSnapshot } from '../feed/schema';
+import { fillAttribution } from './attribution';
 
 export interface ClosureFeature {
   type: 'Feature';
@@ -54,7 +55,10 @@ export function closuresToGeoJson(snapshot: ModuleSnapshot, origin: string): Clo
   return {
     type: 'FeatureCollection',
     features,
-    attribution: snapshot.attribution.text,
+    // R-62: the human-readable attribution line is filled from this same
+    // snapshot before it leaves the Worker, so a brace never reaches whoever
+    // downloads this file.
+    attribution: fillAttribution(snapshot.attribution, snapshot, snapshot.items[0]),
     licence: snapshot.attribution.licence,
     source: snapshot.attribution.url,
     adapted: true,

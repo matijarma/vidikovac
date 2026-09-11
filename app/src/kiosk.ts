@@ -2,9 +2,10 @@
 // strip and shows the rotating QR; unlocked mode renders the driver's layer with
 // a small corner QR so the next person can join. Nothing here talks to the
 // network directly: every dependency is injected.
-import type { Attribution, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, LayerId } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl } from './api';
+import { fillAttribution } from './attribution';
 import {
   createBeaconClient,
   parseProvisionHash,
@@ -51,6 +52,13 @@ function byModule(modules: readonly ModuleSnapshot[]): Partial<Record<ModuleId, 
   return out;
 }
 
+/** The template in `snapshot.attribution.text` filled from that snapshot and
+ *  a representative item (R-62); undefined when there is no snapshot yet. */
+function teaserAttribution(snapshot: ModuleSnapshot | undefined, item?: FeedItem): Attribution | undefined {
+  if (!snapshot) return undefined;
+  return { ...snapshot.attribution, text: fillAttribution(snapshot.attribution, snapshot, item) };
+}
+
 export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now: number): TeaserCard[] {
   const map = byModule(modules);
   const observation = map['dhmz-now']?.items[0];
@@ -69,7 +77,7 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
       body: observation
         ? `${temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp })} · ${dataText(observation, 'weather') || observation.title}`
         : i18n.t('status.loading'),
-      attribution: map['dhmz-now']?.attribution,
+      attribution: teaserAttribution(map['dhmz-now'], observation),
     },
     {
       id: 'quake',
@@ -81,19 +89,19 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
         : quakes
           ? i18n.t('panels.quakeNone')
           : i18n.t('status.loading'),
-      attribution: quakes?.attribution,
+      attribution: teaserAttribution(quakes, quake),
     },
     {
       id: 'closures',
       title: i18n.t('kiosk.teaserClosures'),
       body: closures ? i18n.t('panels.closuresCount', { count: closureCount }) : i18n.t('status.loading'),
-      attribution: closures?.attribution,
+      attribution: teaserAttribution(closures),
     },
     {
       id: 'news',
       title: i18n.t('kiosk.teaserNews'),
       body: news ? news.title : i18n.t('status.loading'),
-      attribution: map['hrt-news']?.attribution,
+      attribution: teaserAttribution(map['hrt-news'], news),
     },
     { id: 'invitation', title: i18n.t('common.appName'), body: i18n.t('kiosk.invitation') },
   ];

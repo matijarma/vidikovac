@@ -5,7 +5,8 @@
 //
 // Every value from a feed passes through escapeHtml. Severity, freshness and
 // status are always a word plus a shape; colour only reinforces.
-import type { Attribution, FeedItem, Severity } from '../feed/schema';
+import type { FeedItem, Severity } from '../feed/schema';
+import { fillAttribution } from '../open/attribution';
 import { escapeHtml } from '../open/html';
 import { formatZagrebDateTime, formatZagrebTime, parseIso } from '../open/time';
 import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from './brojevi';
@@ -91,12 +92,18 @@ function freshness(panel: HitnoPanel, now: Date): string {
   );
 }
 
-function sourceLine(a: Attribution | null, download: string | null): string {
-  if (a === null) return '';
+/** `panel`'s attribution text may be an R-08 template; it is filled from the
+ *  panel's own snapshot and its first (most relevant) item before it ever
+ *  reaches this page (R-62). */
+function sourceLine(panel: HitnoPanel, download: string | null): string {
+  const { snapshot } = panel;
+  if (snapshot === null) return '';
+  const { attribution } = snapshot;
+  const text = fillAttribution(attribution, snapshot, panel.items[0]);
   const dl = download === null ? '' : ` · <a href="${escapeHtml(download)}">podaci (JSON)</a>`;
   return (
-    `<footer class="src"><p>${escapeHtml(a.text)} · ${escapeHtml(a.licence)} · ` +
-    `<a class="ext" href="${escapeHtml(a.url)}" rel="noopener">izvornik</a>${dl}</p></footer>`
+    `<footer class="src"><p>${escapeHtml(text)} · ${escapeHtml(attribution.licence)} · ` +
+    `<a class="ext" href="${escapeHtml(attribution.url)}" rel="noopener">izvornik</a>${dl}</p></footer>`
   );
 }
 
@@ -155,7 +162,7 @@ function warningsSection(panel: HitnoPanel, now: Date): string {
   return section(
     'upozorenja',
     'Upozorenja DHMZ-a',
-    freshness(panel, now) + list + sourceLine(panel.snapshot?.attribution ?? null, '/open/dhmz-cap.json'),
+    freshness(panel, now) + list + sourceLine(panel, '/open/dhmz-cap.json'),
   );
 }
 
@@ -182,7 +189,7 @@ function quakesSection(panel: HitnoPanel, now: Date): string {
   return section(
     'potresi',
     'Potresi u posljednja 72 sata',
-    freshness(panel, now) + list + sourceLine(panel.snapshot?.attribution ?? null, '/open/emsc.json'),
+    freshness(panel, now) + list + sourceLine(panel, '/open/emsc.json'),
   );
 }
 
@@ -209,7 +216,7 @@ function closuresSection(panel: HitnoPanel, now: Date): string {
     'Zatvorene prometnice',
     freshness(panel, now) +
       list +
-      sourceLine(panel.snapshot?.attribution ?? null, '/open/prometnice.geojson'),
+      sourceLine(panel, '/open/prometnice.geojson'),
   );
 }
 
@@ -234,7 +241,7 @@ function assemblySection(panel: HitnoPanel, now: Date): string {
   return section(
     'zborna-mjesta',
     'Zborna mjesta civilne zaštite',
-    freshness(panel, now) + body + sourceLine(panel.snapshot?.attribution ?? null, '/open/ckan-geo.json'),
+    freshness(panel, now) + body + sourceLine(panel, '/open/ckan-geo.json'),
   );
 }
 

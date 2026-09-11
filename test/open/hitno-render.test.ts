@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ATTRIBUTION } from '../../worker/feed/registry';
 import type { FeedItem, ModuleSnapshot } from '../../worker/feed/schema';
 import { renderHitnoPage } from '../../worker/hitno/render';
 import { ZBORNA_MJESTA_LAYER, selectHitno } from '../../worker/hitno/select';
@@ -169,5 +170,30 @@ describe('renderHitnoPage', () => {
     const out = renderHitnoPage(selectHitno([stale], NOW), NOW);
     expect(out).toContain('Zastarjelo');
     expect(out).toContain('Nema aktivnih zatvaranja.');
+  });
+
+  it('fills every attribution template at render time so no brace reaches the page (R-62)', () => {
+    // The real R-08 templates, not the plain (already brace-free) fixture
+    // attribution the other tests in this file use, so this actually proves
+    // the fill runs and none of "{vrijeme}"/"{datum}"/"{naziv}" survive.
+    const capTemplated: ModuleSnapshot = { ...CAP, attribution: ATTRIBUTION['dhmz-cap'] };
+    const prometniceTemplated: ModuleSnapshot = { ...PROMETNICE, attribution: ATTRIBUTION.prometnice };
+    const ckanTemplated: ModuleSnapshot = {
+      ...CKAN,
+      attribution: ATTRIBUTION['ckan-geo'],
+      items: [{ ...CKAN.items[0]!, data: { layer: ZBORNA_MJESTA_LAYER, category: 'Zborno mjesto civilne zaštite' } }],
+    };
+    const out = renderHitnoPage(selectHitno([capTemplated, prometniceTemplated, ckanTemplated], NOW), NOW);
+    // <main>, not the whole document: the inline <style> block is legitimate
+    // CSS and is full of braces that have nothing to do with attribution.
+    const main = out.slice(out.indexOf('<main>'), out.indexOf('</main>'));
+    expect(main).not.toContain('{');
+    expect(main).not.toContain('}');
+    // fetchedAt '2026-09-11T07:58:00Z' is 09:58 in Zagreb; none of these three
+    // modules carries a sourceUpdatedAt in this fixture, so {vrijeme}/{datum}
+    // both fall back to the fetch time, labelled as such (R-25).
+    expect(out).toContain('Izvor: DHMZ, Otvorena dozvola, dohvaćeno 11. 9. 2026. 09:58');
+    expect(out).toContain('posljednja izmjena dohvaćeno 11. 9. 2026. 09:58');
+    expect(out).toContain('Zborno mjesto civilne zaštite');
   });
 });

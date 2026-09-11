@@ -9,6 +9,7 @@ import type { Env } from '../env';
 import { getModules } from '../feed/cache';
 import type { ModuleId, ModuleSnapshot } from '../feed/schema';
 import { json } from '../http';
+import { fillAttribution } from './attribution';
 import { CATALOG_TTL_SECONDS, buildCatalog, findOpenDataset } from './catalog';
 import type { OpenDeps } from './deps';
 import { closuresToGeoJson } from './geojson';
@@ -131,7 +132,17 @@ async function resolveOpenData(env: Env, ctx: ExecutionContext, url: URL, deps: 
   const { response } = await edgeCached(ctx, cacheKey, async () => {
     const result = await loadOpenSnapshot(load, env, ctx, dataset.module);
     if (!result.ok) return result.response;
-    return json(result.snapshot, 200, { 'cache-control': cacheControl(dataset.ttl), ...CORS });
+    // R-08's placeholders are filled from this same live snapshot before it
+    // leaves the Worker (R-62); the static catalogue (buildCatalog above)
+    // keeps its template verbatim, but this is a live reading, not a listing.
+    const snapshot = {
+      ...result.snapshot,
+      attribution: {
+        ...result.snapshot.attribution,
+        text: fillAttribution(result.snapshot.attribution, result.snapshot, result.snapshot.items[0]),
+      },
+    };
+    return json(snapshot, 200, { 'cache-control': cacheControl(dataset.ttl), ...CORS });
   });
   return response;
 }

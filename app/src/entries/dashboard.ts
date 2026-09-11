@@ -80,7 +80,9 @@ if (!params) {
         toast('status.loading', 'info');
         return;
       }
-      void downloadFile(kind === 'ics' ? icsFile(snapshot.items, snapshot.attribution) : geojsonFile(snapshot));
+      void downloadFile(
+        kind === 'ics' ? icsFile(snapshot.items, snapshot.attribution, snapshot) : geojsonFile(snapshot),
+      );
       session.event('export', kind);
     },
   });

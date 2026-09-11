@@ -2,12 +2,25 @@
 // with the data in all four: clipboard, share sheet, calendar file and GeoJSON.
 // Pure functions with injected browser seams, so all of it is unit-tested.
 import type { Attribution, FeedItem, ModuleSnapshot } from '../../worker/feed/schema';
+import { fillAttribution } from './attribution';
 
 export const ICS_PRODID = '-//Vidikovac//Zagreb//HR';
 const UID_HOST = 'zagreb.aningfilm.hr';
 
-export function attributionBlock(attribution: Attribution): string {
-  return `${attribution.text}\n${attribution.url}\n${attribution.licence}`;
+/**
+ * `attribution.text` may be an unfilled R-08 template. Pass `snapshot` (and,
+ * where the template needs one, `item`) to fill it first (R-62); omit both
+ * when the caller has already filled it (or the text has no placeholder at
+ * all) — the block is then built from `attribution.text` verbatim, exactly
+ * as before.
+ */
+export function attributionBlock(
+  attribution: Attribution,
+  snapshot?: Pick<ModuleSnapshot, 'sourceUpdatedAt' | 'fetchedAt'>,
+  item?: FeedItem,
+): string {
+  const text = snapshot ? fillAttribution(attribution, snapshot, item) : attribution.text;
+  return `${text}\n${attribution.url}\n${attribution.licence}`;
 }
 
 export interface CopyDeps {
@@ -92,6 +105,9 @@ function fold(line: string): string[] {
 export interface IcsDeps {
   now?: Date;
   uidHost?: string;
+  /** Snapshot time context for filling {vrijeme}/{datum} in `attribution`'s
+   *  text (R-62); omit when it carries no placeholder. */
+  snapshot?: Pick<ModuleSnapshot, 'sourceUpdatedAt' | 'fetchedAt'>;
 }
 
 /** Closures and events as a calendar. `attribution`, when given, goes into every
@@ -109,7 +125,7 @@ export function icsForItems(
     const start = item.at ? new Date(item.at) : null;
     if (!start || !Number.isFinite(start.getTime())) continue;
     const end = item.until ? new Date(item.until) : null;
-    const description = [item.summary, attribution ? attributionBlock(attribution) : '']
+    const description = [item.summary, attribution ? attributionBlock(attribution, deps.snapshot, item) : '']
       .filter(Boolean)
       .join('\n');
     lines.push('BEGIN:VEVENT');
@@ -128,8 +144,14 @@ export function icsForItems(
   return `${lines.flatMap(fold).join('\r\n')}\r\n`;
 }
 
-export function icsFile(items: readonly FeedItem[], attribution?: Attribution): File {
-  return new File([icsForItems(items, attribution)], 'vidikovac.ics', { type: 'text/calendar;charset=utf-8' });
+export function icsFile(
+  items: readonly FeedItem[],
+  attribution?: Attribution,
+  snapshot?: Pick<ModuleSnapshot, 'sourceUpdatedAt' | 'fetchedAt'>,
+): File {
+  return new File([icsForItems(items, attribution, { snapshot })], 'vidikovac.ics', {
+    type: 'text/calendar;charset=utf-8',
+  });
 }
 
 export interface ClosureFeature {
@@ -147,10 +169,16 @@ export interface ClosureFeatureCollection {
 }
 
 export function geojsonForClosures(snapshot: ModuleSnapshot): ClosureFeatureCollection {
+  // Filled once, from the full snapshot this function already owns, so the
+  // exported file's own attribution line never carries a raw brace (R-62).
+  const attribution: Attribution = {
+    ...snapshot.attribution,
+    text: fillAttribution(snapshot.attribution, snapshot, snapshot.items[0]),
+  };
   return {
     type: 'FeatureCollection',
     adapted: true,
-    attribution: snapshot.attribution,
+    attribution,
     features: snapshot.items
       .filter((item) => item.geo !== undefined)
       .map((item) => ({
@@ -164,7 +192,7 @@ export function geojsonForClosures(snapshot: ModuleSnapshot): ClosureFeatureColl
           ...(item.until ? { until: item.until } : {}),
           ...(item.data ?? {}),
           adapted: true,
-          attribution: snapshot.attribution.text,
+          attribution: attribution.text,
           licence: snapshot.attribution.licence,
           source: snapshot.attribution.url,
         },
