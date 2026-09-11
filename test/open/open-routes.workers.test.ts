@@ -143,4 +143,16 @@ describe('/open/*', () => {
     expect(post.status).toBe(405);
     expect(post.headers.get('allow')).toBe('GET, HEAD');
   });
+
+  it('strips the body from a HEAD request, including a HEAD 404', async () => {
+    const { getModules } = fake(snapshot('emsc'));
+    const okHead = await call('open-head.test', '/open/emsc.json', { getModules }, admitAll, { method: 'HEAD' });
+    expect(okHead.status).toBe(200);
+    expect(await okHead.text()).toBe('');
+    const notFoundHead = await call('open-head.test', '/open/unknown.json', { getModules }, admitAll, {
+      method: 'HEAD',
+    });
+    expect(notFoundHead.status).toBe(404);
+    expect(await notFoundHead.text()).toBe('');
+  });
 });

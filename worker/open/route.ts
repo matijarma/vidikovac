@@ -69,21 +69,31 @@ export async function handleOpenData(
     );
   }
 
+  // Every branch below funnels through this one return so HEAD stripping
+  // (RFC 9110 §9.3.2: same headers, no body) applies uniformly, including the
+  // 404s for a path that never reaches the feed at all.
+  const response = await resolveOpenData(env, ctx, url, deps);
+  if (request.method === 'HEAD') return new Response(null, response);
+  return response;
+}
+
+async function resolveOpenData(env: Env, ctx: ExecutionContext, url: URL, deps: OpenDeps): Promise<Response> {
   const load = deps.getModules ?? getModules;
   const now = deps.now ?? (() => new Date());
   const path = url.pathname;
   const cacheKey = new Request(`${url.origin}${path}`, { method: 'GET' });
 
-  let produced: { response: Response } | null = null;
-
   if (path === '/open/catalog.json') {
-    produced = await edgeCached(ctx, cacheKey, async () =>
+    const { response } = await edgeCached(ctx, cacheKey, async () =>
       json(buildCatalog(url.origin, now()), 200, { 'cache-control': cacheControl(CATALOG_TTL_SECONDS), ...CORS }),
     );
-  } else if (path === '/open/prometnice.geojson') {
+    return response;
+  }
+
+  if (path === '/open/prometnice.geojson') {
     const dataset = findOpenDataset('prometnice');
     if (dataset === undefined) return notFound();
-    produced = await edgeCached(ctx, cacheKey, async () => {
+    const { response } = await edgeCached(ctx, cacheKey, async () => {
       const result = await loadOpenSnapshot(load, env, ctx, dataset.module);
       if (!result.ok) return result.response;
       return json(closuresToGeoJson(result.snapshot, url.origin), 200, {
@@ -92,20 +102,17 @@ export async function handleOpenData(
         ...CORS,
       });
     });
-  } else {
-    const match = MODULE_JSON.exec(path);
-    if (match !== null) {
-      const dataset = findOpenDataset(match[1]);
-      if (dataset === undefined) return notFound();
-      produced = await edgeCached(ctx, cacheKey, async () => {
-        const result = await loadOpenSnapshot(load, env, ctx, dataset.module);
-        if (!result.ok) return result.response;
-        return json(result.snapshot, 200, { 'cache-control': cacheControl(dataset.ttl), ...CORS });
-      });
-    }
+    return response;
   }
 
-  if (produced === null) return notFound();
-  if (request.method === 'HEAD') return new Response(null, produced.response);
-  return produced.response;
+  const match = MODULE_JSON.exec(path);
+  if (match === null) return notFound();
+  const dataset = findOpenDataset(match[1]);
+  if (dataset === undefined) return notFound();
+  const { response } = await edgeCached(ctx, cacheKey, async () => {
+    const result = await loadOpenSnapshot(load, env, ctx, dataset.module);
+    if (!result.ok) return result.response;
+    return json(result.snapshot, 200, { 'cache-control': cacheControl(dataset.ttl), ...CORS });
+  });
+  return response;
 }
