@@ -41,7 +41,14 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     createPanel({
       i18n, now, id: 'grad-sada-observation', title: i18n.t('panels.observation'),
       snapshot: observation, body: obsBody, ...actions,
-      copyText: o ? `${o.title}: ${temp ?? '–'} °C, ${dataText(o, 'weather')}` : undefined,
+      // A fetched-but-empty snapshot still gets a copy action (the "no items"
+      // sentence plus attribution): a frozen session must keep exporting
+      // whatever it last held, even when that reading was empty.
+      copyText: o
+        ? `${o.title}: ${temp ?? '–'} °C, ${dataText(o, 'weather')}`
+        : observation
+          ? i18n.t('status.empty')
+          : undefined,
     }).element,
   );
 

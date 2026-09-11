@@ -1,0 +1,221 @@
+// @vitest-environment happy-dom
+import { describe, expect, it, vi } from 'vitest';
+import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import type { LayerId } from '../../worker/protocol';
+import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import type { SessionClient, SessionSnapshot } from '../../app/src/session';
+import { mountDashboard, parseSessionHash, POLL_MS } from '../../app/src/dashboard';
+
+const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
+const EXPIRES = NOW + 10 * 60_000; // 14:42
+
+function fakeSession() {
+  const listeners = {
+    joined: [] as ((s: SessionSnapshot) => void)[],
+    expiring: [] as ((n: number) => void)[],
+    expired: [] as (() => void)[],
+    view: [] as ((l: LayerId) => void)[],
+    count: [] as ((n: number) => void)[],
+  };
+  let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
+  const sent: { layer: LayerId }[] = [];
+  const events: { name: string; dim?: string }[] = [];
+  const client: SessionClient = {
+    connect: vi.fn(),
+    snapshot: () => snapshot,
+    serverNow: () => NOW,
+    secondsLeft: () => Math.max(0, Math.floor(((snapshot.expiresAt ?? NOW) - NOW) / 1000)),
+    onJoined: (l) => { listeners.joined.push(l); return () => {}; },
+    onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
+    onExpired: (l) => { listeners.expired.push(l); return () => {}; },
+    onView: (l) => { listeners.view.push(l as never); return () => {}; },
+    onCodes: () => () => {},
+    onCount: (l) => { listeners.count.push(l); return () => {}; },
+    onError: () => () => {},
+    onClose: () => () => {},
+    sendView: (layer) => { sent.push({ layer }); },
+    share: vi.fn(),
+    event: (name, dim) => { events.push({ name, dim }); },
+    close: vi.fn(),
+  };
+  return {
+    client, sent, events,
+    join() {
+      snapshot = { phase: 'live', role: 'scanner', expiresAt: EXPIRES, dataToken: 'dt1', participants: 2, secondsLeft: 600 };
+      listeners.joined.forEach((l) => l(snapshot));
+    },
+    expiring: (n: number) => listeners.expiring.forEach((l) => l(n)),
+    expire() {
+      snapshot = { ...snapshot, phase: 'expired' };
+      listeners.expired.forEach((l) => l());
+    },
+    view: (l: LayerId) => listeners.view.forEach((fn) => fn(l)),
+  };
+}
+
+const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
+  module, tier: 'open', status: 'live', fetchedAt: new Date(NOW - 30_000).toISOString(),
+  attribution: { text: `Izvor: ${module}`, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' },
+  items: [],
+});
+
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void } = {}) {
+  const root = document.createElement('main');
+  document.body.replaceChildren(root);
+  const session = fakeSession();
+  const ticks: (() => void)[] = [];
+  const fetchData = vi.fn(async (module: ModuleId) => snapshotOf(module));
+  const handle = mountDashboard(root, {
+    i18n: createDefaultI18n('hr'),
+    session: session.client,
+    now: () => NOW,
+    fetchData: fetchData as never,
+    wide: opts.wide ?? false,
+    label: 'Kavana Velebit',
+    onCopy: opts.onCopy,
+    setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
+    clearInterval: () => { ticks.length = 0; },
+  });
+  return { root, session, handle, fetchData, ticks };
+}
+const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+describe('parseSessionHash', () => {
+  it('reads room, ticket and label from the fragment C4 navigates to', () => {
+    expect(parseSessionHash('#room=r1&ticket=t1&label=Kavana%20Velebit')).toEqual({ roomId: 'r1', ticket: 't1', label: 'Kavana Velebit' });
+    expect(parseSessionHash('#room=r2&label=phone')).toEqual({ roomId: 'r2', ticket: null, label: 'phone' });
+    expect(parseSessionHash('#nothing')).toBeNull();
+    expect(parseSessionHash('')).toBeNull();
+  });
+});
+
+describe('layer switcher', () => {
+  it('renders seven tabs in the contract order with roving tabindex', () => {
+    const { root } = mount();
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+    expect(tabs.map((t) => t.dataset.layer)).toEqual(['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti']);
+    expect(tabs[0]!.textContent).toBe('Grad sada');
+    expect(root.querySelector('[role=tablist]')?.getAttribute('aria-label')).toBe('Slojevi');
+    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
+    expect(tabs[0]!.tabIndex).toBe(0);
+    expect(tabs[1]!.tabIndex).toBe(-1);
+  });
+  it('arrow keys, Home and End move selection and wrap', () => {
+    const { root, session } = mount();
+    const list = root.querySelector('[role=tablist]')!;
+    const tab = (i: number) => [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')][i]!;
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(tab(1).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(tab(1));
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(tab(6).getAttribute('aria-selected')).toBe('true');
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(tab(0).getAttribute('aria-selected')).toBe('true');
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    expect(tab(6).getAttribute('aria-selected')).toBe('true');
+    expect(session.sent.at(-1)).toEqual({ layer: 'vijesti' });
+    expect(session.events.at(-1)).toEqual({ name: 'panel_open', dim: 'vijesti' });
+  });
+  it('shows one layer on a narrow viewport and all seven on a wide one', () => {
+    const narrow = mount({ wide: false });
+    expect(narrow.root.querySelectorAll('.layer')).toHaveLength(1);
+    const wide = mount({ wide: true });
+    expect(wide.root.querySelectorAll('.layer')).toHaveLength(7);
+  });
+});
+
+describe('unlock, countdown and announcements', () => {
+  it('announces the end time politely and moves focus to the layer heading', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
+    expect(root.querySelector('[data-testid=announce-polite]')?.getAttribute('role')).toBe('status');
+    expect(document.activeElement).toBe(root.querySelector('#layer-title-grad-sada'));
+    expect(text(root.querySelector('[data-testid=session-label]'))).toBe('Otključano · Kavana Velebit · do 14:42');
+  });
+  it('shows a minute-grain countdown and the session ring', () => {
+    const { root, session } = mount();
+    session.join();
+    const time = root.querySelector<HTMLTimeElement>('[data-testid=countdown]')!;
+    expect(time.textContent).toBe('10 minuta');
+    expect(time.getAttribute('datetime')).toBe('PT600S');
+    expect(root.querySelector('[data-testid=session-ring]')?.getAttribute('aria-hidden')).toBe('true');
+  });
+  it('warns at 60 s politely and at 15 s assertively, with the approved sentences', () => {
+    const { root, session } = mount();
+    session.join();
+    session.expiring(60);
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
+    session.expiring(15);
+    const alert = root.querySelector('[data-testid=announce-assertive]')!;
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(text(alert)).toBe('Još petnaest sekundi.');
+  });
+});
+
+describe('polling and the two toggles', () => {
+  it('fetches exactly the modules of the visible layer with the data token', async () => {
+    const { root, session, fetchData, ticks } = mount();
+    session.join();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'prometnice', 'zet-rt']);
+    expect(fetchData.mock.calls[0]![1]).toBe('dt1');
+    fetchData.mockClear();
+    [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')][6]!.click();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
+    fetchData.mockClear();
+    ticks.forEach((tick) => tick());
+    await flush();
+    expect(fetchData).toHaveBeenCalledTimes(1);
+    expect(POLL_MS).toBe(20_000);
+  });
+  it('"zaustavi osvježavanje" stops the polling and flips its own label', async () => {
+    const { root, session, fetchData, ticks } = mount();
+    session.join();
+    await flush();
+    const pause = root.querySelector<HTMLButtonElement>('[data-testid=toggle-refresh]')!;
+    expect(pause.textContent).toBe('zaustavi osvježavanje');
+    pause.click();
+    expect(pause.getAttribute('aria-pressed')).toBe('true');
+    expect(pause.textContent).toBe('nastavi osvježavanje');
+    fetchData.mockClear();
+    ticks.forEach((tick) => tick());
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(text(root.querySelector('[data-testid=refresh-state]'))).toBe('osvježavanje zaustavljeno');
+  });
+  it('"sakrij odbrojavanje" hides the timer without ending the session', () => {
+    const { root, session } = mount();
+    session.join();
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
+    expect(toggle.textContent).toBe('sakrij odbrojavanje');
+    toggle.click();
+    expect(root.querySelector<HTMLElement>('[data-testid=countdown]')!.hidden).toBe(true);
+    expect(toggle.textContent).toBe('pokaži odbrojavanje');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('expiry freeze', () => {
+  it('stops polling, disables navigation, keeps exports and states the frozen view', async () => {
+    const onCopy = vi.fn();
+    const { root, session, fetchData, ticks } = mount({ onCopy });
+    session.join();
+    await flush();
+    const copy = root.querySelector<HTMLButtonElement>('#grad-sada-observation-copy');
+    fetchData.mockClear();
+    session.expire();
+    ticks.forEach((tick) => tick());
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    for (const tab of root.querySelectorAll<HTMLButtonElement>('[role=tab]')) expect(tab.disabled).toBe(true);
+    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');
+    expect(root.querySelector('[data-testid=countdown]')?.textContent).toBe('0 minuta');
+    expect(copy?.disabled).toBe(false);
+    copy?.click();
+    expect(onCopy).toHaveBeenCalledTimes(1);
+  });
+});
