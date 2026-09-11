@@ -5,9 +5,11 @@
 // no camera, no network and no real location.
 import type { ScanFail, ScanOk } from '../../worker/protocol';
 import { scan as scanRequest } from './api';
-import { formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
+import { codeFromScan, formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
 import type { I18n } from './i18n/i18n';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
+import { iconMarkup } from './ui/icons';
+import { createQrScanner, type QrScannerDeps, type QrScannerHandle } from './ui/qrScanner';
 
 /** Shape of our own QR fragment: four plus four, one optional dash. Anything
  *  else in the fragment (a stray `#room=…`, a marketing tag) is not a code, and
@@ -21,6 +23,11 @@ export interface ScanPageDeps {
   navigate: (url: string) => void;
   now?: () => number;
   scan?: (code: string) => Promise<ScanOk | ScanFail>;
+  /** The entry passes isQrScanSupported(); false means no camera affordance at
+   *  all, because a button that opens a camera which cannot decode is worse
+   *  than no button. */
+  scannerSupported?: boolean;
+  createScanner?: (deps: QrScannerDeps) => QrScannerHandle;
   /** Drops the spent code from the address bar after a successful scan. */
   replaceUrl?: (url: string) => void;
 }
@@ -64,6 +71,8 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
   const { i18n } = deps;
   const now = deps.now ?? (() => Date.now());
   const post = deps.scan ?? ((code: string) => scanRequest(code));
+  const makeScanner = deps.createScanner ?? createQrScanner;
+  const cameraOffered = deps.scannerSupported === true;
   const replaceUrl =
     deps.replaceUrl ??
     ((url: string) => {
@@ -77,6 +86,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
       <p class="scan-error" id="scan-error" role="alert" data-testid="scan-error" hidden></p>
       <section class="scan-confirm card" data-testid="confirm-card" role="group"
         aria-labelledby="scan-confirm-title" tabindex="-1" hidden></section>
+      ${cameraOffered ? '<div class="scan-camera" id="scan-camera-region" data-testid="scan-camera-region" hidden></div>' : ''}
       <form class="scan-form" novalidate>
         <label class="scan-label" for="scan-code">${escapeHtml(i18n.t('scan.codeLabel'))}</label>
         <input id="scan-code" class="scan-input" data-testid="code-input" type="text" name="code"
@@ -85,6 +95,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
         <p id="scan-hint" class="scan-hint">${escapeHtml(i18n.t('scan.codeHint'))}</p>
         <div class="scan-actions">
           <button type="submit" class="btn" data-testid="code-submit" disabled>${escapeHtml(i18n.t('scan.check'))}</button>
+          ${cameraOffered ? `<button type="button" class="btn-ghost" data-testid="scan-camera" aria-expanded="false" aria-controls="scan-camera-region">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('scan.scanButton'))}</span></button>` : ''}
         </div>
       </form>
       <p class="scan-status" role="status" data-testid="scan-status"></p>
@@ -100,6 +111,10 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
 
   let busy = false;
   let navigated = false;
+
+  const cameraButton = element.querySelector<HTMLButtonElement>('[data-testid=scan-camera]');
+  const cameraRegion = element.querySelector<HTMLElement>('[data-testid=scan-camera-region]');
+  let scanner: QrScannerHandle | null = null;
 
   function hideConfirm(): void {
     confirmBox.hidden = true;
@@ -200,6 +215,66 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     void submitCode(input.value);
   });
 
+  function closeScanner(): void {
+    scanner?.destroy();
+    scanner = null;
+    if (cameraRegion) {
+      cameraRegion.hidden = true;
+      cameraRegion.replaceChildren();
+    }
+    cameraButton?.setAttribute('aria-expanded', 'false');
+  }
+
+  function acceptScanned(payload: string): void {
+    const code = codeFromScan(payload);
+    if (!code) {
+      showError('scan.errors.notOurs');
+      input.focus();
+      return;
+    }
+    input.value = formatCode(code);
+    submitButton.disabled = false;
+    void submitCode(code);
+  }
+
+  function openScanner(): void {
+    if (!cameraButton || !cameraRegion || scanner) return;
+    clearError();
+    cameraRegion.hidden = false;
+    cameraButton.setAttribute('aria-expanded', 'true');
+    const handle = makeScanner({
+      strings: {
+        hint: i18n.t('scan.scanner.hint'),
+        cancel: i18n.t('scan.scanner.cancel'),
+        denied: i18n.t('scan.scanner.denied'),
+        unavailable: i18n.t('scan.scanner.unavailable'),
+        videoLabel: i18n.t('scan.scanner.videoLabel'),
+        struggling: i18n.t('scan.scanner.struggling'),
+        torch: i18n.t('scan.scanner.torch'),
+      },
+      onResult: (value) => {
+        closeScanner();
+        acceptScanned(value);
+      },
+      onCancel: () => {
+        closeScanner();
+        cameraButton.focus();
+      },
+      onError: (reason) => {
+        // The scanner writes the reason into its own element, which we are about
+        // to remove, so the same sentence is repeated in the page's alert line.
+        closeScanner();
+        showMessage(i18n.t(reason === 'denied' ? 'scan.scanner.denied' : 'scan.scanner.unavailable'));
+        input.focus();
+      },
+    });
+    scanner = handle;
+    cameraRegion.appendChild(handle.element);
+    void handle.start();
+  }
+
+  cameraButton?.addEventListener('click', openScanner);
+
   const initial = codeFromHash(deps.hash);
   if (initial) {
     input.value = formatCode(initial);
@@ -211,6 +286,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     element,
     submit: submitCode,
     destroy() {
+      closeScanner();
       element.remove();
     },
   };

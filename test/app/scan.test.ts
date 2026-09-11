@@ -231,3 +231,110 @@ describe('createScanPage', () => {
     expect(root.querySelector('.scan')).toBeNull();
   });
 });
+
+import type { QrScannerDeps, QrScannerHandle } from '../../app/src/ui/qrScanner';
+
+interface FakeScanner extends QrScannerHandle {
+  deps: QrScannerDeps;
+  started: number;
+  destroyed: number;
+}
+
+function mountWithCamera(options: { result?: ScanOk | ScanFail } = {}) {
+  const root = document.createElement('main');
+  document.body.appendChild(root);
+  const navigate = vi.fn();
+  const scan = vi.fn(async () => options.result ?? KIOSK);
+  let scanner: FakeScanner | null = null;
+  createScanPage(root, {
+    i18n: createDefaultI18n('hr'),
+    hash: '',
+    navigate,
+    replaceUrl: vi.fn(),
+    now: () => NOW,
+    scan,
+    scannerSupported: true,
+    createScanner: (deps) => {
+      const element = document.createElement('div');
+      element.className = 'qr-scanner';
+      const fake: FakeScanner = {
+        deps,
+        started: 0,
+        destroyed: 0,
+        element,
+        start: async () => {
+          fake.started += 1;
+        },
+        stop: () => {},
+        destroy: () => {
+          fake.destroyed += 1;
+          element.remove();
+        },
+      };
+      scanner = fake;
+      return fake;
+    },
+  });
+  const button = root.querySelector<HTMLButtonElement>('[data-testid=scan-camera]')!;
+  const region = root.querySelector<HTMLElement>('[data-testid=scan-camera-region]')!;
+  const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
+  return { root, button, region, input, scan, scanner: () => scanner!, navigate };
+}
+
+describe('camera region', () => {
+  it('offers the camera only when the platform can decode, and starts it inside the region', () => {
+    const { button, region, scanner } = mountWithCamera();
+    expect(button.textContent).toContain('Skeniraj kamerom');
+    expect(button.getAttribute('aria-controls')).toBe('scan-camera-region');
+    expect(region.hidden).toBe(true);
+    button.click();
+    expect(region.hidden).toBe(false);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(scanner().started).toBe(1);
+    expect(region.querySelector('.qr-scanner')).not.toBeNull();
+    expect(scanner().deps.strings.hint).toBe('Usmjeri kameru prema QR kodu na zaslonu.');
+  });
+
+  it('a decoded Vidikovac payload fills the field, closes the camera and submits', async () => {
+    const { button, region, input, scan, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onResult('https://zagreb.aningfilm.hr/s#ABCD-EFGH');
+    await flush();
+    expect(input.value).toBe('ABCD-EFGH');
+    expect(scan).toHaveBeenCalledWith('ABCDEFGH');
+    expect(scanner().destroyed).toBe(1);
+    expect(region.hidden).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a foreign QR code is named as such instead of being posted', async () => {
+    const { root, button, scan, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onResult('WIFI:S:kafic;T:WPA;P:tajna;;');
+    await flush();
+    expect(scan).not.toHaveBeenCalled();
+    expect(text(root.querySelector('[role=alert]'))).toBe('To nije kod s Vidikovca. Skeniraj QR kod sa zaslona.');
+  });
+
+  it('a refused or missing camera closes the region and sends the person to the field', () => {
+    const denied = mountWithCamera();
+    denied.button.click();
+    denied.scanner().deps.onError?.('denied');
+    expect(text(denied.root.querySelector('[role=alert]'))).toBe('Pristup kameri je odbijen. Upiši kod ručno.');
+    expect(denied.region.hidden).toBe(true);
+    expect(document.activeElement).toBe(denied.input);
+
+    const busy = mountWithCamera();
+    busy.button.click();
+    busy.scanner().deps.onError?.('unavailable');
+    expect(text(busy.root.querySelector('[role=alert]'))).toBe('Kamera nije dostupna. Upiši kod ručno.');
+  });
+
+  it('Odustani in the camera returns focus to the button', () => {
+    const { button, region, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onCancel?.();
+    expect(region.hidden).toBe(true);
+    expect(document.activeElement).toBe(button);
+  });
+});
