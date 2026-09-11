@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CodeSlot } from '../../worker/protocol';
 import { createRotation, currentSlot, shouldRequestMore, slotProgress, slotsRemaining } from '../../app/src/rotation';
 
-function batch(start: number, count = 20, len = 30_000): CodeSlot[] {
-  return Array.from({ length: count }, (_, i) => ({ code: `C${String(i).padStart(7, '0')}`, slotStart: start + i * len, slotEnd: start + (i + 1) * len }));
+function batch(start: number, count = 20, len = 30_000, prefix = 'C'): CodeSlot[] {
+  return Array.from({ length: count }, (_, i) => ({
+    code: `${prefix}${String(i).padStart(8 - prefix.length, '0')}`,
+    slotStart: start + i * len,
+    slotEnd: start + (i + 1) * len,
+  }));
 }
 
 describe('slot arithmetic', () => {
@@ -42,12 +46,47 @@ describe('createRotation', () => {
     expect(onSlot).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'C0000001' }));
     local += 16 * 30_000; fn?.(); fn?.();
     expect(onMore).toHaveBeenCalledTimes(1);
-    r.setBatch(batch(1_000_000 + 20 * 30_000), 1_000_000 + 17 * 30_000 + 1);
+    r.setBatch(batch(1_000_000 + 20 * 30_000, 20, 30_000, 'D'), 1_000_000 + 17 * 30_000 + 1);
     local += 3 * 30_000; fn?.();
-    expect(onSlot).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'C0000000' }));
+    expect(onSlot).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'D0000000' }));
     r.stop();
     expect(fn).toBeNull();
   });
+  // R-51: a 'more' batch starts where the old one ended, so replacing the batch
+  // blanked the screen until the new slots opened; a reconnect replays codes the
+  // screen is already showing, so replacing the batch there is a ten-minute gap.
+  it('keeps the current code when a future batch arrives, and rotates into it', () => {
+    let fn: (() => void) | null = null;
+    let local = 1_000_000;
+    const onSlot = vi.fn();
+    const r = createRotation({ now: () => local, onSlot, onMore: () => {}, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => {} });
+    r.setBatch(batch(1_000_000), 1_000_000);
+    local += 17 * 30_000; fn?.();
+    expect(r.current()?.code).toBe('C0000017');
+
+    // What the server sends on 'more': slots that all start in the future.
+    r.setBatch(batch(1_000_000 + 20 * 30_000, 20, 30_000, 'D'), local);
+    expect(r.current()?.code).toBe('C0000017');
+    local += 30_000; fn?.();
+    expect(r.current()?.code).toBe('C0000018');
+    local += 2 * 30_000; fn?.();
+    expect(r.current()?.code).toBe('D0000000');
+    expect(onSlot).not.toHaveBeenLastCalledWith(null);
+  });
+
+  it('still has a current code when a reconnect replays a batch it already holds', () => {
+    let fn: (() => void) | null = null;
+    let local = 1_000_000;
+    const onSlot = vi.fn();
+    const r = createRotation({ now: () => local, onSlot, onMore: () => {}, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => {} });
+    r.setBatch(batch(1_000_000), 1_000_000);
+    local += 5 * 30_000; fn?.();
+    // The screen reconnects and the object answers with the same live slots.
+    r.setBatch(batch(1_000_000).slice(5), local);
+    expect(r.current()?.code).toBe('C0000005');
+    expect(onSlot).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'C0000005' }));
+  });
+
   it('reports null when the batch has run out', () => {
     let fn: (() => void) | null = null;
     let local = 0;

@@ -2,7 +2,7 @@
 // The server sends a batch with its own `serverNow`; we keep the offset to the
 // device clock and pick the slot by server time, so a phone whose clock is
 // minutes off still shows the code the Worker will accept.
-import type { CodeSlot } from '../../worker/protocol';
+import { CODE_GRACE_MS, type CodeSlot } from '../../worker/protocol';
 
 export function currentSlot(batch: readonly CodeSlot[], serverNow: number): CodeSlot | null {
   return batch.find((s) => s.slotStart <= serverNow && serverNow < s.slotEnd) ?? null;
@@ -57,7 +57,16 @@ export function createRotation(deps: RotationDeps): Rotation {
   return {
     setBatch(next, sNow) {
       offset = sNow - deps.now();
-      batch = [...next].sort((a, b) => a.slotStart - b.slotStart);
+      // Merge, never replace (R-51). The server already sends the union of its
+      // still-valid codes, but a client that threw its own batch away on every
+      // frame would blank the screen for a minute after each 'more' and for up
+      // to ten minutes after a reconnect if a future server ever sent only the
+      // new slots. Keeping whatever is still redeemable is the defensive half
+      // of the same fix.
+      const merged = new Map<string, CodeSlot>();
+      for (const slot of batch) if (slot.slotEnd + CODE_GRACE_MS > sNow) merged.set(slot.code, slot);
+      for (const slot of next) merged.set(slot.code, slot);
+      batch = [...merged.values()].sort((a, b) => a.slotStart - b.slotStart);
       moreRequested = false;
       lastCode = null;
       tick();

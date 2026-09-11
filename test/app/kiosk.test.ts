@@ -21,8 +21,15 @@ const MODULES: ModuleSnapshot[] = [
   snap('ckan-geo', [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Ljekarna Centar, Ilica 1', data: { category: 'ljekarne', duty: 'da' } }]),
 ];
 
+// Every code in a real batch is distinct; the rotation merges batches by code
+// (R-51), so a fixture that repeated one would silently lose slots.
+const CODE_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function batch(start: number, count = 20): CodeSlot[] {
-  return Array.from({ length: count }, (_, i) => ({ code: `ABCDEFG${i % 10}`, slotStart: start + i * 30_000, slotEnd: start + (i + 1) * 30_000 }));
+  return Array.from({ length: count }, (_, i) => ({
+    code: `ABCDEFG${CODE_CHARS[i]}`,
+    slotStart: start + i * 30_000,
+    slotEnd: start + (i + 1) * 30_000,
+  }));
 }
 
 function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {

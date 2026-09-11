@@ -83,12 +83,43 @@ describe('BeaconDO kiosk socket', () => {
     expect((await kiosk.inbox.nextOfType('codes')).batch).toHaveLength(CODES_PER_BATCH);
   });
 
-  it("'more' continues from the end of the previous batch", async () => {
-    const { batch, kiosk } = await onlineKiosk();
+  it("'more' extends the batch instead of replacing it, so the screen never goes codeless", async () => {
+    const { beaconId, batch, kiosk } = await onlineKiosk();
+    // Three slots left is exactly when the client asks for more.
+    const atThreeLeft = batch[CODES_PER_BATCH - 3]!.slotStart;
+    await runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => {
+      vi.spyOn(instance, 'now').mockReturnValue(atThreeLeft);
+    });
     kiosk.ws.send(JSON.stringify({ t: 'more' }));
     const next = (await kiosk.inbox.nextOfType('codes')).batch as CodeSlot[];
-    expect(next[0]!.slotStart).toBe(batch[batch.length - 1]!.slotEnd);
-    expect(new Set([...batch, ...next].map((s) => s.code)).size).toBe(2 * CODES_PER_BATCH);
+
+    // The code on the screen right now is still in the batch and still
+    // redeemable: no dead window at the roll-over.
+    const current = next.filter((s) => s.slotStart <= atThreeLeft && atThreeLeft < s.slotEnd);
+    expect(current).toHaveLength(1);
+    expect(current[0]!.code).toBe(batch[CODES_PER_BATCH - 3]!.code);
+
+    const stillValid = batch.filter((s) => s.slotEnd + CODE_GRACE_MS > atThreeLeft);
+    expect(next).toHaveLength(stillValid.length + CODES_PER_BATCH);
+    expect(new Set(next.map((s) => s.code)).size).toBe(next.length);
+    for (const slot of stillValid) expect(next.some((s) => s.code === slot.code), `${slot.code} dropped`).toBe(true);
+    // The minted half still starts where the previous batch ended, and the
+    // union is one unbroken run of slots.
+    const minted = next.filter((s) => !batch.some((old) => old.code === s.code));
+    expect(minted).toHaveLength(CODES_PER_BATCH);
+    expect(minted[0]!.slotStart).toBe(batch[batch.length - 1]!.slotEnd);
+    for (let i = 1; i < next.length; i += 1) expect(next[i]!.slotStart).toBe(next[i - 1]!.slotEnd);
+  });
+
+  it('a reconnecting screen is handed the codes that are still valid, not a batch ten minutes away', async () => {
+    const { beaconId, secret, batch, kiosk } = await onlineKiosk();
+    kiosk.ws.close(1000, 'wifi blip');
+    const again = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
+    const resumed = (await authKiosk(again, secret)).batch as CodeSlot[];
+    const now = Date.now();
+    const live = resumed.filter((slot) => slot.slotStart <= now && now < slot.slotEnd);
+    expect(live, 'the reconnected screen has no current code').toHaveLength(1);
+    expect(batch.some((slot) => slot.code === live[0]!.code)).toBe(true);
   });
 
   it('records kiosk_online once per day', async () => {

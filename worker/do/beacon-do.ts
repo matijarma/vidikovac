@@ -340,26 +340,54 @@ export class BeaconDO extends DurableObject<Env> {
 
   // --- codes -----------------------------------------------------------------
 
+  /** Every unused code that is still redeemable, oldest slot first. */
+  private liveSlots(now: number): CodeSlot[] {
+    return this.ctx.storage.sql
+      .exec<{ code: string; slot_start: number; slot_end: number }>(
+        `SELECT code, slot_start, slot_end FROM codes WHERE used = 0 AND slot_end + ? > ? ORDER BY slot_start`,
+        CODE_GRACE_MS,
+        now,
+      )
+      .toArray()
+      .map((row) => ({ code: row.code, slotStart: row.slot_start, slotEnd: row.slot_end }));
+  }
+
+  /**
+   * Sends the union of every still-valid unused code, minting a fresh batch
+   * only when fewer than CODES_PER_BATCH remain (R-51).
+   *
+   * Sending just the freshly minted slots left the screen codeless: the client
+   * replaces its batch on every `codes` frame, so after a `more` (which mints
+   * from the end of the previous batch) the new slots all started in the
+   * future and there was no current code for a minute, and after a reconnect
+   * or a reload — a Wi-Fi blip, a TV browser restart, F5 — for up to ten
+   * minutes. The union keeps whatever the screen was already showing valid
+   * and redeemable across both paths.
+   */
   private async sendBatch(ws: WebSocket): Promise<void> {
     const now = this.now();
     const slotMs = codeRotateSeconds(this.env) * 1000;
     const sql = this.ctx.storage.sql;
     sql.exec(`DELETE FROM codes WHERE slot_end + ? < ?`, CODE_GRACE_MS, now);
-    const last = sql.exec<{ m: number | null }>(`SELECT MAX(slot_end) AS m FROM codes`).one().m;
-    const start = last !== null && last > now ? last : alignSlotStart(now, slotMs);
-    let batch: CodeSlot[] = [];
-    for (let attempt = 0; attempt < 3 && batch.length === 0; attempt += 1) {
-      const candidate = mintBatch(start, slotMs, CODES_PER_BATCH);
-      const collision = candidate.some((s) => sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM codes WHERE code = ?`, s.code).one().n > 0);
-      if (!collision) batch = candidate;
+
+    if (this.liveSlots(now).length < CODES_PER_BATCH) {
+      const last = sql.exec<{ m: number | null }>(`SELECT MAX(slot_end) AS m FROM codes`).one().m;
+      const start = last !== null && last > now ? last : alignSlotStart(now, slotMs);
+      let minted: CodeSlot[] = [];
+      for (let attempt = 0; attempt < 3 && minted.length === 0; attempt += 1) {
+        const candidate = mintBatch(start, slotMs, CODES_PER_BATCH);
+        const collision = candidate.some((s) => sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM codes WHERE code = ?`, s.code).one().n > 0);
+        if (!collision) minted = candidate;
+      }
+      if (minted.length === 0) throw new Error('code-collision');
+      this.ctx.storage.transactionSync(() => {
+        for (const slot of minted) sql.exec(`INSERT INTO codes (code, slot_start, slot_end, used) VALUES (?, ?, ?, 0)`, slot.code, slot.slotStart, slot.slotEnd);
+      });
+      const beaconId = this.meta('beaconId')!;
+      await indexStub(this.env).register(minted.map((s) => ({ code: s.code, kind: 'kiosk' as const, ownerId: beaconId, expiresAt: s.slotEnd + CODE_GRACE_MS })));
     }
-    if (batch.length === 0) throw new Error('code-collision');
-    this.ctx.storage.transactionSync(() => {
-      for (const slot of batch) sql.exec(`INSERT INTO codes (code, slot_start, slot_end, used) VALUES (?, ?, ?, 0)`, slot.code, slot.slotStart, slot.slotEnd);
-    });
-    const beaconId = this.meta('beaconId')!;
-    await indexStub(this.env).register(batch.map((s) => ({ code: s.code, kind: 'kiosk' as const, ownerId: beaconId, expiresAt: s.slotEnd + CODE_GRACE_MS })));
-    ws.send(frame({ t: 'codes', batch, serverNow: this.now() }));
+
+    ws.send(frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now() }));
   }
 
   // --- RPC: redeem -----------------------------------------------------------
