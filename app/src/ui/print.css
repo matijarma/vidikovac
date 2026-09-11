@@ -1,0 +1,10 @@
+/* Save as PDF: one act, readable, with the permalink spelled out. */
+@media print {
+  .dash-head, .dash-tabs, .dash-toggles, .dash-foot, .panel-actions, .skip-link, .lang-toggle { display: none !important; }
+  html, body { background: #fff; color: #000; }
+  .panel { border: 1px solid #000; break-inside: avoid; page-break-inside: avoid; }
+  .panel-attr, .panel-status { color: #000; }
+  .panel-attr-link::after { content: ' (' attr(href) ')'; }
+  a[href^='http']::after { content: ' (' attr(href) ')'; font-size: 0.8em; }
+  .map-canvas { display: none; }
+}
