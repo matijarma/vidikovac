@@ -1,4 +1,4 @@
-import type { Attribution, FetchContext, ModuleId, ModuleSpec, Tier } from './schema';
+import type { Attribution, FeedItem, FetchContext, ModuleId, ModuleSnapshot, ModuleSpec, Tier } from './schema';
 import type { FeedPayload } from './payload';
 
 // The registry is the single source of truth for tier, refresh windows and
@@ -140,4 +140,37 @@ export function setFetcherForTest(id: ModuleId, fetcher: ModuleSpec['fetcher'] |
 
 export function clearFetcherOverrides(): void {
   FETCHER_OVERRIDES.clear();
+}
+
+// The kiosk shows a reduced view of three session modules before anyone scans:
+// enough to be useful standing in a cafe, not enough to replace the session.
+export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'hrt-news'];
+export const TEASER_NEWS_LIMIT = 3;
+
+function vozila(count: number): string {
+  return count % 10 === 1 && count % 100 !== 11 ? `${count} vozilo` : `${count} vozila`;
+}
+
+export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
+  switch (snapshot.module) {
+    case 'dhmz-now':
+      return snapshot;
+    case 'zet-rt': {
+      const vehicles = snapshot.items.filter((item) => item.kind === 'vehicle').length;
+      const delays = snapshot.items.filter((item) => item.kind === 'observation');
+      const count: FeedItem = {
+        id: 'vozila',
+        module: 'zet-rt',
+        kind: 'vehicle',
+        tier: snapshot.tier,
+        title: `${vozila(vehicles)} u pokretu`,
+        data: { vehicles },
+      };
+      return { ...snapshot, items: [count, ...delays] };
+    }
+    case 'hrt-news':
+      return { ...snapshot, items: snapshot.items.slice(0, TEASER_NEWS_LIMIT) };
+    default:
+      return snapshot;
+  }
 }
