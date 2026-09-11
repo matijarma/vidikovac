@@ -44,7 +44,7 @@ test.describe('pairing: a public screen and a phone', () => {
         return;
       }
 
-      await unlockOnPhone(phone, scanUrl);
+      await unlockOnPhone(phone, scanUrl, '10 minuta');
 
       // Both devices are in the same session: identical expiry down to the millisecond.
       const kioskLabel = kiosk.getByTestId('session-label');
@@ -103,7 +103,8 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
       await kiosk.goto(kioskUrl);
       const { scanUrl } = await readPairing(kiosk, base);
       const phone = await phoneCtx.newPage();
-      await unlockOnPhone(phone, scanUrl);
+      // 12 seconds rounds to 1 minute: Math.max(1, Math.round((expiresAt - now) / 60_000)) per confirmLabel.
+      await unlockOnPhone(phone, scanUrl, '1 minuta');
       await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
 
       // Guard: prove the short server really runs with 0.2 minutes, otherwise fail

@@ -66,12 +66,18 @@ export async function readPairing(kiosk: Page, base: string): Promise<{ code: st
   return { code, scanUrl: rebaseUrl(href, base) };
 }
 
-/** Phone side: open the scanned URL, read the confirm card, press Otključaj, wait for the session label. */
-export async function unlockOnPhone(phone: Page, scanUrl: string): Promise<void> {
+/**
+ * Phone side: open the scanned URL, read the confirm card, press Otključaj, wait for the session label.
+ * `expectedMinutesText` is the confirm card's minutes wording for the session under test — per
+ * `confirmLabel`'s `Math.max(1, Math.round((expiresAt - now) / 60_000))`, that's '10 minuta' for the
+ * default 10-minute session (the main pairing spec, :8787) but '1 minuta' for the 12-second
+ * SESSION_MINUTES=0.2 session (the expiry spec, :8788) — never a literal shared between the two.
+ */
+export async function unlockOnPhone(phone: Page, scanUrl: string, expectedMinutesText: string): Promise<void> {
   await phone.goto(scanUrl);
   const card = phone.getByTestId('confirm-card');
   await expect(card).toBeVisible({ timeout: 30_000 });
-  await expect(card).toContainText('10 minuta');
+  await expect(card).toContainText(expectedMinutesText);
   await phone.getByRole('button', { name: 'Otključaj' }).click();
   await expect(phone.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
 }
