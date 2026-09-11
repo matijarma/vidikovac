@@ -177,6 +177,9 @@
     "teaserQuake": "Latest earthquake",
     "teaserClosures": "Road closures",
     "teaserCap": "Warnings",
+    "teaserDepartures": "Next departures",
+    "teaserAir": "Air",
+    "teaserSoon": "Coming in the next stage.",
     "tapHint": "Tap for full screen",
     "sources": "Sources"
   },
