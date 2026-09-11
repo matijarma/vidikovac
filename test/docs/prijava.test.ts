@@ -72,8 +72,12 @@ describe('plan-provedbe.md and rizici-i-odgovori.md', () => {
     });
     expect([...idx].sort((a, b) => a - b)).toEqual(idx);
   });
-  it('answers exactly seven committee objections', () => {
+  it('answers exactly eight committee objections, numbered in order', () => {
     const md = read('rizici-i-odgovori.md');
-    expect(md.match(/^### \d\. /gm)).toHaveLength(7);
+    const headings = md.match(/^### (\d)\. /gm) ?? [];
+    expect(headings).toHaveLength(8);
+    expect(headings.map((h) => Number(h.slice(4, 5)))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    // The count in the opening line must follow the headings.
+    expect(md).toContain('Osam prigovora');
   });
 });

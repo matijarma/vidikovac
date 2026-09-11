@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+@font-face{font-family:'Space Grotesk';font-weight:700;font-display:swap;src:url('fonts/space-grotesk-700-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'Space Grotesk';font-weight:700;font-display:swap;src:url('fonts/space-grotesk-700-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'Space Grotesk';font-weight:500;font-display:swap;src:url('fonts/space-grotesk-500-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'Space Grotesk';font-weight:500;font-display:swap;src:url('fonts/space-grotesk-500-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url('fonts/manrope-400-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url('fonts/manrope-400-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'Manrope';font-weight:500;font-display:swap;src:url('fonts/manrope-500-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'Manrope';font-weight:500;font-display:swap;src:url('fonts/manrope-500-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url('fonts/manrope-700-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url('fonts/manrope-700-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'JetBrains Mono';font-weight:400;font-display:swap;src:url('fonts/jetbrains-mono-400-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'JetBrains Mono';font-weight:400;font-display:swap;src:url('fonts/jetbrains-mono-400-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+@font-face{font-family:'JetBrains Mono';font-weight:500;font-display:swap;src:url('fonts/jetbrains-mono-500-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+20AC;}
+@font-face{font-family:'JetBrains Mono';font-weight:500;font-display:swap;src:url('fonts/jetbrains-mono-500-latin-ext.woff2') format('woff2');unicode-range:U+0100-024F,U+1E00-1EFF;}
+body{margin:0;background:#0c0f16;color:#e8ecf5;font-family:'Manrope','Segoe UI',sans-serif;}
+a{color:#9db4ff;}a:hover{color:#c3cdf5;}
+</style>
+</helmet>
+<section style="background:#0c0f16;padding:48px 56px 96px;display:flex;flex-direction:column;gap:36px;min-width:2200px">
+  <header style="display:flex;align-items:baseline;gap:20px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8494b3;letter-spacing:.08em">1 · KONAČNI KONCEPT</span>
+    <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;letter-spacing:-0.015em">Modrotisak + pogled s Vidikovca</h1>
+    <span style="font-size:13px;color:#8494b3">Medvedgrad u prvom planu, grad kao polje svjetala pod njim — jedna točka = jedno vozilo ZET-a, sada · dva lica platna: Noć i Dan</span>
+  </header>
+  <div style="display:flex;gap:72px;align-items:flex-start">
+
+    <!-- ══ 1a NOĆ ══ -->
+    <div id="1a" style="display:flex;flex-direction:column;gap:20px;width:1000px;flex:0 0 auto">
+      <div style="display:flex;align-items:center;gap:14px">
+        <a href="#1a" style="text-decoration:none;background:#16226b;color:#f2ead8;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;padding:4px 10px;border-radius:6px;border:1px solid #9db4ff">1a</a>
+        <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px">Noć — indigo platno, krem otisak</h2>
+        <span style="display:flex;gap:6px;margin-left:auto">
+          <span style="width:14px;height:14px;border-radius:50%;background:#16226b"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#0f1a52"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#9db4ff"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#f2ead8"></span>
+        </span>
+      </div>
+      <div style="width:998px;height:562px;overflow:hidden;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="width:1920px;height:1080px;transform:scale(.52);transform-origin:0 0;background:#16226b;color:#f2ead8;display:flex;flex-direction:column;font-family:'Manrope',sans-serif">
+          <header style="display:flex;align-items:baseline;justify-content:space-between;padding:40px 0 24px;border-bottom:2px solid #f2ead8;margin:0 80px;flex:0 0 auto">
+            <div style="display:flex;align-items:baseline;gap:24px">
+              <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:38px;letter-spacing:-0.02em">Vidikovac</span>
+              <span style="font-size:22px;color:#c3cdf5">Zagreb, povezan.</span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:28px">
+              <span style="font-size:22px;color:#c3cdf5">čet 11. 9. 2026.</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:500;font-size:38px;font-variant-numeric:tabular-nums">19:32</span>
+            </div>
+          </header>
+          <div style="flex:0 0 auto">
+            <canvas data-panorama="k1" data-fg="#f2ead8" data-count="214" style="width:1920px;height:264px;display:block"></canvas>
+            <p style="margin:10px 80px 0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#c3cdf5;letter-spacing:.04em">SL. 1 — ZAGREBAČKA PANORAMA: MEDVEDNICA I GRAD · NA PRUGAMA JEDNA TOČKA = JEDNO VOZILO ZET-a · 214 U POKRETU, 19:32</p>
+          </div>
+          <main style="flex:1;display:grid;grid-template-columns:1fr 560px;gap:64px;padding:30px 80px 0;min-height:0">
+            <div style="display:flex;flex-direction:column;min-width:0">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:68px;line-height:1.06;letter-spacing:-0.02em">Skeniraj za 10 minuta grada.<br><span style="color:#9db4ff">Plaćaš pažnjom, ne novcem.</span></h1>
+              <div style="margin-top:30px">
+                <canvas data-meander="k1m" data-ink="rgba(242,234,216,.2)" data-fill="#f2ead8" data-pct="0.62" style="width:860px;height:72px;display:block"></canvas>
+                <p style="margin:12px 0 0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#c3cdf5;letter-spacing:.04em">SL. 3 — MEANDAR KODA · ISPRAZNI SE SVAKIH 30 s, PA SE IZDA NOVI KOD</p>
+              </div>
+              <div style="display:flex;gap:60px;align-items:flex-end;margin-top:auto;padding:24px 0 32px;border-top:2px solid #f2ead8">
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#9db4ff;letter-spacing:.08em">01 · MAKSIMIR SADA</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">19 °C <span style="font-weight:500;color:#c3cdf5;font-size:30px">vedro</span></p></div>
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#9db4ff;letter-spacing:.08em">02 · ZET U POKRETU</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">214 <span style="font-weight:500;color:#c3cdf5;font-size:30px">vozila</span></p></div>
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#9db4ff;letter-spacing:.08em">03 · PROMETNICE</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">7 <span style="font-weight:500;color:#c3cdf5;font-size:30px">zatvorenih</span></p></div>
+              </div>
+            </div>
+            <aside style="display:flex;flex-direction:column;justify-content:flex-start;padding-top:6px">
+              <div style="border:4px solid #f2ead8;background:#0f1a52;padding:30px;display:flex;flex-direction:column;align-items:center;gap:18px">
+                <div style="background:#f2ead8;padding:14px;line-height:0"><canvas data-qr="vjtr8kma" data-fg="#16226b" data-bg="#f2ead8" style="width:228px;height:228px"></canvas></div>
+                <p style="margin:0;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:52px;letter-spacing:.14em;font-variant-numeric:tabular-nums">VJTR<span style="opacity:.45">-</span>8KMA</p>
+                <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:18px;color:#c3cdf5;letter-spacing:.04em;text-align:center">SL. 2 — OTISAK ZA KAMERU<br><span style="color:#f2ead8">ili upiši kod: zagreb.aningfilm.hr/s</span></p>
+              </div>
+            </aside>
+          </main>
+          <footer style="background:#0b1440;color:#f2ead8;padding:28px 80px;display:flex;align-items:center;gap:44px;flex:0 0 auto">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:19px;letter-spacing:.08em;color:#9db4ff">SIGURNOST — OTVORENO SVIMA</span>
+            <span style="font-size:26px">Upozorenja: nema</span>
+            <span style="font-size:26px">Prometnice: 7</span>
+            <span style="font-size:26px">Ljekarna 0–24: Ozaljska 1</span>
+            <span style="margin-left:auto;background:#f2ead8;color:#16226b;border-radius:999px;padding:9px 24px;font-size:23px;font-weight:700">/hitno</span>
+          </footer>
+        </div>
+      </div>
+      <p style="margin:-8px 0 0;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494b3">PROZOR · 1080p · NOĆ</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="width:414px;height:868px;transform:scale(.68);transform-origin:0 0;margin-bottom:-278px">
+          <div style="width:390px;height:844px;border-radius:52px;background:#05070a;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(169,182,209,.18)">
+            <div style="width:100%;height:100%;border-radius:40px;overflow:hidden;background:#16226b;color:#f2ead8;display:flex;flex-direction:column;font-family:'Manrope',sans-serif">
+              <div style="flex:0 0 auto;padding-top:24px">
+                <canvas data-panorama="p1" data-fg="#f2ead8" data-count="214" style="width:366px;height:92px;display:block"></canvas>
+              </div>
+              <header style="padding:8px 22px 0">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#c3cdf5">OTKLJUČANO · KAFIĆ, DONJI GRAD</p>
+                  <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#9db4ff">PODIJELI GRAD</p>
+                </div>
+                <p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.02em">do 19:42 <span style="color:#9db4ff;font-size:21px;font-variant-numeric:tabular-nums">· još 9:12</span></p>
+                <canvas data-meander="p1m" data-ink="rgba(242,234,216,.2)" data-fill="#f2ead8" data-pct="0.92" style="width:346px;height:30px;display:block;margin-top:10px"></canvas>
+                <p style="margin:5px 0 0;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.05em;color:#c3cdf5">SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO 19:42</p>
+              </header>
+              <nav style="display:flex;gap:16px;padding:12px 22px 0;overflow:hidden;border-bottom:2px solid #f2ead8;margin-bottom:2px">
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#f2ead8;border-bottom:3px solid #f2ead8;padding-bottom:7px">GRAD SADA</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#c3cdf5;padding-bottom:7px">U POKRETU</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#c3cdf5;padding-bottom:7px">ZRAK I NEBO</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#c3cdf5;padding-bottom:7px">SIGURNOST</span>
+              </nav>
+              <main style="flex:1;padding:0 22px;display:flex;flex-direction:column;overflow:hidden">
+                <div style="padding:11px 0;border-bottom:1px solid rgba(242,234,216,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9db4ff;letter-spacing:.06em;width:26px;flex:0 0 auto">01</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#c3cdf5;font-weight:500">Zagreb, sada</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">19:32</p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#f2ead8">● ŽIVO</span></div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(242,234,216,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9db4ff;letter-spacing:.06em;width:26px;flex:0 0 auto">02</span>
+                  <div style="flex:1">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><p style="margin:0;font-size:13px;color:#c3cdf5;font-weight:500">Maksimir sada</p><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#f2ead8">● ŽIVO</span></div>
+                    <p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;white-space:nowrap">19 °C <span style="font-weight:500;font-size:16px;color:#c3cdf5">vedro</span></p>
+                    <p style="margin:4px 0 0;font-size:12px;color:#c3cdf5">vlaga 62 % · tlak 1016 hPa · SZ 2 m/s</p>
+                    <p style="margin:5px 0 0;font-size:11px;color:#a3aed8">podaci od 19:20 · DHMZ · CC BY 4.0 · <span style="color:#f2ead8">izvornik</span></p>
+                  </div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(242,234,216,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9db4ff;letter-spacing:.06em;width:26px;flex:0 0 auto">03</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#c3cdf5;font-weight:500">Prognoza za danas</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;white-space:nowrap">od 12 do 24 °C</p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#c3cdf5"><span style="display:inline-block;width:7px;height:7px;background:#c3cdf5;vertical-align:0"></span> DANAS</span></div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(242,234,216,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9db4ff;letter-spacing:.06em;width:26px;flex:0 0 auto">04</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#c3cdf5;font-weight:500">Vozila ZET-a u pokretu</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">214 <span style="font-weight:500;font-size:16px;color:#c3cdf5">vozila</span></p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#f2ead8">● ŽIVO</span></div>
+                </div>
+                <div style="padding:11px 0;display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9db4ff;letter-spacing:.06em;width:26px;flex:0 0 auto">05</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#c3cdf5;font-weight:500">Zatvorene prometnice</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">7 <span style="font-weight:500;font-size:16px;color:#c3cdf5">zatvaranja</span></p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#f2ead8">● ŽIVO</span></div>
+                </div>
+              </main>
+              <footer style="padding:6px 22px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#c3cdf5;text-align:center">SIGURNOSNI SLOJ OSTAJE OTVOREN NA /HITNO</footer>
+            </div>
+          </div>
+        </div>
+        <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494b3">RUKA · /d · NOĆ</p>
+      </div>
+    </div>
+
+    <!-- ══ 1b DAN ══ -->
+    <div id="1b" style="display:flex;flex-direction:column;gap:20px;width:1000px;flex:0 0 auto">
+      <div style="display:flex;align-items:center;gap:14px">
+        <a href="#1b" style="text-decoration:none;background:#f2ead8;color:#16226b;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;padding:4px 10px;border-radius:6px">1b</a>
+        <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px">Dan — krem platno, indigo otisak</h2>
+        <span style="display:flex;gap:6px;margin-left:auto">
+          <span style="width:14px;height:14px;border-radius:50%;background:#f2ead8"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#faf5e9"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#3a49b0"></span>
+          <span style="width:14px;height:14px;border-radius:50%;background:#16226b"></span>
+        </span>
+      </div>
+      <div style="width:998px;height:562px;overflow:hidden;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="width:1920px;height:1080px;transform:scale(.52);transform-origin:0 0;background:#f2ead8;color:#16226b;display:flex;flex-direction:column;font-family:'Manrope',sans-serif">
+          <header style="display:flex;align-items:baseline;justify-content:space-between;padding:40px 0 24px;border-bottom:2px solid #16226b;margin:0 80px;flex:0 0 auto">
+            <div style="display:flex;align-items:baseline;gap:24px">
+              <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:38px;letter-spacing:-0.02em">Vidikovac</span>
+              <span style="font-size:22px;color:#4553a8">Zagreb, povezan.</span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:28px">
+              <span style="font-size:22px;color:#4553a8">čet 11. 9. 2026.</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:500;font-size:38px;font-variant-numeric:tabular-nums">19:32</span>
+            </div>
+          </header>
+          <div style="flex:0 0 auto">
+            <canvas data-panorama="k2" data-fg="#16226b" data-count="214" style="width:1920px;height:264px;display:block"></canvas>
+            <p style="margin:10px 80px 0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#4553a8;letter-spacing:.04em">SL. 1 — ZAGREBAČKA PANORAMA: MEDVEDNICA I GRAD · NA PRUGAMA JEDNA TOČKA = JEDNO VOZILO ZET-a · 214 U POKRETU, 19:32</p>
+          </div>
+          <main style="flex:1;display:grid;grid-template-columns:1fr 560px;gap:64px;padding:30px 80px 0;min-height:0">
+            <div style="display:flex;flex-direction:column;min-width:0">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:68px;line-height:1.06;letter-spacing:-0.02em">Skeniraj za 10 minuta grada.<br><span style="color:#3a49b0">Plaćaš pažnjom, ne novcem.</span></h1>
+              <div style="margin-top:30px">
+                <canvas data-meander="k2m" data-ink="rgba(22,34,107,.18)" data-fill="#16226b" data-pct="0.62" style="width:860px;height:72px;display:block"></canvas>
+                <p style="margin:12px 0 0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#4553a8;letter-spacing:.04em">SL. 3 — MEANDAR KODA · ISPRAZNI SE SVAKIH 30 s, PA SE IZDA NOVI KOD</p>
+              </div>
+              <div style="display:flex;gap:60px;align-items:flex-end;margin-top:auto;padding:24px 0 32px;border-top:2px solid #16226b">
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#3a49b0;letter-spacing:.08em">01 · MAKSIMIR SADA</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">19 °C <span style="font-weight:500;color:#4553a8;font-size:30px">vedro</span></p></div>
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#3a49b0;letter-spacing:.08em">02 · ZET U POKRETU</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">214 <span style="font-weight:500;color:#4553a8;font-size:30px">vozila</span></p></div>
+                <div><p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:19px;color:#3a49b0;letter-spacing:.08em">03 · PROMETNICE</p><p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;white-space:nowrap">7 <span style="font-weight:500;color:#4553a8;font-size:30px">zatvorenih</span></p></div>
+              </div>
+            </div>
+            <aside style="display:flex;flex-direction:column;justify-content:flex-start;padding-top:6px">
+              <div style="border:4px solid #16226b;background:#faf5e9;padding:30px;display:flex;flex-direction:column;align-items:center;gap:18px">
+                <div style="line-height:0"><canvas data-qr="vjtr8kma-d" data-fg="#16226b" data-bg="#faf5e9" style="width:256px;height:256px"></canvas></div>
+                <p style="margin:0;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:52px;letter-spacing:.14em;color:#16226b;font-variant-numeric:tabular-nums">VJTR<span style="opacity:.45">-</span>8KMA</p>
+                <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:18px;color:#4553a8;letter-spacing:.04em;text-align:center">SL. 2 — OTISAK ZA KAMERU<br><span style="color:#16226b">ili upiši kod: zagreb.aningfilm.hr/s</span></p>
+              </div>
+            </aside>
+          </main>
+          <footer style="background:#16226b;color:#f2ead8;padding:28px 80px;display:flex;align-items:center;gap:44px;flex:0 0 auto">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:19px;letter-spacing:.08em;color:#9db4ff">SIGURNOST — OTVORENO SVIMA</span>
+            <span style="font-size:26px">Upozorenja: nema</span>
+            <span style="font-size:26px">Prometnice: 7</span>
+            <span style="font-size:26px">Ljekarna 0–24: Ozaljska 1</span>
+            <span style="margin-left:auto;background:#f2ead8;color:#16226b;border-radius:999px;padding:9px 24px;font-size:23px;font-weight:700">/hitno</span>
+          </footer>
+        </div>
+      </div>
+      <p style="margin:-8px 0 0;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494b3">PROZOR · 1080p · DAN</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="width:414px;height:868px;transform:scale(.68);transform-origin:0 0;margin-bottom:-278px">
+          <div style="width:390px;height:844px;border-radius:52px;background:#05070a;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(169,182,209,.18)">
+            <div style="width:100%;height:100%;border-radius:40px;overflow:hidden;background:#f2ead8;color:#16226b;display:flex;flex-direction:column;font-family:'Manrope',sans-serif">
+              <div style="flex:0 0 auto;padding-top:24px">
+                <canvas data-panorama="p2" data-fg="#16226b" data-count="214" style="width:366px;height:92px;display:block"></canvas>
+              </div>
+              <header style="padding:8px 22px 0">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#4553a8">OTKLJUČANO · KAFIĆ, DONJI GRAD</p>
+                  <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#3a49b0">PODIJELI GRAD</p>
+                </div>
+                <p style="margin:6px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:32px;letter-spacing:-0.02em">do 19:42 <span style="color:#3a49b0;font-size:21px;font-variant-numeric:tabular-nums">· još 9:12</span></p>
+                <canvas data-meander="p2m" data-ink="rgba(22,34,107,.18)" data-fill="#16226b" data-pct="0.92" style="width:346px;height:30px;display:block;margin-top:10px"></canvas>
+                <p style="margin:5px 0 0;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.05em;color:#4553a8">SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO 19:42</p>
+              </header>
+              <nav style="display:flex;gap:16px;padding:12px 22px 0;overflow:hidden;border-bottom:2px solid #16226b;margin-bottom:2px">
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#16226b;border-bottom:3px solid #16226b;padding-bottom:7px">GRAD SADA</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#4553a8;padding-bottom:7px">U POKRETU</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#4553a8;padding-bottom:7px">ZRAK I NEBO</span>
+                <span style="flex:0 0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:#4553a8;padding-bottom:7px">SIGURNOST</span>
+              </nav>
+              <main style="flex:1;padding:0 22px;display:flex;flex-direction:column;overflow:hidden">
+                <div style="padding:11px 0;border-bottom:1px solid rgba(22,34,107,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a49b0;letter-spacing:.06em;width:26px;flex:0 0 auto">01</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#4553a8;font-weight:500">Zagreb, sada</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">19:32</p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#16226b">● ŽIVO</span></div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(22,34,107,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a49b0;letter-spacing:.06em;width:26px;flex:0 0 auto">02</span>
+                  <div style="flex:1">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><p style="margin:0;font-size:13px;color:#4553a8;font-weight:500">Maksimir sada</p><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#16226b">● ŽIVO</span></div>
+                    <p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;white-space:nowrap">19 °C <span style="font-weight:500;font-size:16px;color:#4553a8">vedro</span></p>
+                    <p style="margin:4px 0 0;font-size:12px;color:#4553a8">vlaga 62 % · tlak 1016 hPa · SZ 2 m/s</p>
+                    <p style="margin:5px 0 0;font-size:11px;color:#5d6890">podaci od 19:20 · DHMZ · CC BY 4.0 · <span style="color:#16226b">izvornik</span></p>
+                  </div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(22,34,107,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a49b0;letter-spacing:.06em;width:26px;flex:0 0 auto">03</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#4553a8;font-weight:500">Prognoza za danas</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;white-space:nowrap">od 12 do 24 °C</p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#4553a8"><span style="display:inline-block;width:7px;height:7px;background:#4553a8;vertical-align:0"></span> DANAS</span></div>
+                </div>
+                <div style="padding:11px 0;border-bottom:1px solid rgba(22,34,107,.24);display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a49b0;letter-spacing:.06em;width:26px;flex:0 0 auto">04</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#4553a8;font-weight:500">Vozila ZET-a u pokretu</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">214 <span style="font-weight:500;font-size:16px;color:#4553a8">vozila</span></p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#16226b">● ŽIVO</span></div>
+                </div>
+                <div style="padding:11px 0;display:flex;align-items:baseline;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a49b0;letter-spacing:.06em;width:26px;flex:0 0 auto">05</span>
+                  <div style="flex:1;display:flex;align-items:baseline;justify-content:space-between"><div><p style="margin:0;font-size:13px;color:#4553a8;font-weight:500">Zatvorene prometnice</p><p style="margin:3px 0 0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:29px;font-variant-numeric:tabular-nums">7 <span style="font-weight:500;font-size:16px;color:#4553a8">zatvaranja</span></p></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;color:#16226b">● ŽIVO</span></div>
+                </div>
+              </main>
+              <footer style="padding:6px 22px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#4553a8;text-align:center">SIGURNOSNI SLOJ OSTAJE OTVOREN NA /HITNO</footer>
+            </div>
+          </div>
+        </div>
+        <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8494b3">RUKA · /d · DAN</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const cssSize = (c) => [((c.offsetWidth || parseFloat(c.style.width)) * 2), ((c.offsetHeight || parseFloat(c.style.height)) * 2)];
+    document.querySelectorAll('canvas[data-qr]').forEach((c) => {
+      const n = 29, s = 8;
+      c.width = n * s; c.height = n * s;
+      const ctx = c.getContext('2d');
+      const fg = c.dataset.fg, bg = c.dataset.bg;
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = fg;
+      let seed = 0;
+      for (const ch of c.dataset.qr) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        const inFinder = (x < 9 && y < 9) || (x > n - 10 && y < 9) || (x < 9 && y > n - 10);
+        if (!inFinder && rnd() < 0.46) ctx.fillRect(x * s, y * s, s, s);
+      }
+      const finder = (x, y) => {
+        ctx.fillRect(x * s, y * s, 7 * s, 7 * s);
+        ctx.fillStyle = bg; ctx.fillRect((x + 1) * s, (y + 1) * s, 5 * s, 5 * s);
+        ctx.fillStyle = fg; ctx.fillRect((x + 2) * s, (y + 2) * s, 3 * s, 3 * s);
+      };
+      finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+      for (let i = 8; i < n - 8; i += 2) { ctx.fillRect(i * s, 6 * s, s, s); ctx.fillRect(6 * s, i * s, s, s); }
+    });
+    document.querySelectorAll('canvas[data-meander]').forEach((c) => {
+      const [w, h] = cssSize(c);
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      const lw = Math.round(h * 0.3), half = lw / 2;
+      const top = half, bot = h - half, step = bot - top;
+      const path = new Path2D();
+      let x = half, atTop = true;
+      path.moveTo(x, bot); path.lineTo(x, top);
+      while (x < w - step) {
+        x += step;
+        path.lineTo(x, atTop ? top : bot);
+        path.lineTo(x, atTop ? bot : top);
+        atTop = !atTop;
+      }
+      const draw = (style, clipW) => {
+        ctx.save();
+        if (clipW != null) { ctx.beginPath(); ctx.rect(0, 0, clipW, h); ctx.clip(); }
+        ctx.strokeStyle = style; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.miterLimit = 4;
+        ctx.stroke(path);
+        ctx.restore();
+      };
+      draw(c.dataset.ink, null);
+      draw(c.dataset.fill, w * parseFloat(c.dataset.pct || '0.6'));
+    });
+    document.querySelectorAll('canvas[data-panorama]').forEach((c) => {
+      const [W, H] = cssSize(c);
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      const fg = c.dataset.fg;
+      const count = parseInt(c.dataset.count, 10) || 214;
+      let seed = 2026;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
+      const a = (al) => { ctx.globalAlpha = al; ctx.fillStyle = fg; ctx.strokeStyle = fg; };
+      // Medvednica ridge behind the city
+      a(0.3);
+      ctx.beginPath(); ctx.moveTo(0, H * 0.66);
+      [[0, .42], [.10, .32], [.20, .25], [.30, .31], [.44, .26], [.58, .34], [.72, .28], [.86, .35], [1, .32]].forEach((p) => ctx.lineTo(W * p[0], H * p[1]));
+      ctx.lineTo(W, H * 0.66); ctx.closePath(); ctx.fill();
+      // Sljeme TV tower on the crest
+      a(0.55);
+      const tx = W * 0.20, tw = Math.max(2.4, W * 0.0032);
+      ctx.fillRect(tx - tw / 2, H * 0.045, tw, H * 0.205);
+      ctx.beginPath(); ctx.ellipse(tx, H * 0.115, tw * 1.9, H * 0.022, 0, 0, 7); ctx.fill();
+      ctx.fillRect(tx - tw, H * 0.19, tw * 2, H * 0.06);
+      // city silhouette on a baseline
+      a(1);
+      const base = H * 0.68;
+      let x = W * 0.02;
+      let cathedralDone = false, towerDone = false;
+      while (x < W * 0.97) {
+        const px = x / W;
+        if (!cathedralDone && px >= 0.36) {
+          const sw = W * 0.011, gap = W * 0.017, shh = H * 0.28, sph = H * 0.15;
+          ctx.fillRect(x - W * 0.012, base - H * 0.11, W * 0.062, H * 0.11);
+          [0, 1].forEach((k) => {
+            const sx = x + k * (sw + gap);
+            ctx.fillRect(sx, base - shh, sw, shh);
+            ctx.beginPath(); ctx.moveTo(sx - sw * 0.4, base - shh); ctx.lineTo(sx + sw / 2, base - shh - sph); ctx.lineTo(sx + sw * 1.4, base - shh); ctx.closePath(); ctx.fill();
+          });
+          x += sw * 2 + gap + W * 0.022; cathedralDone = true; continue;
+        }
+        if (!towerDone && px >= 0.60) {
+          ctx.fillRect(x, base - H * 0.34, W * 0.017, H * 0.34);
+          x += W * 0.022; towerDone = true; continue;
+        }
+        const bw = W * (0.016 + rnd() * 0.028), bh = H * (0.06 + rnd() * 0.15);
+        ctx.fillRect(x, base - bh, bw, bh);
+        x += bw + W * 0.0045;
+      }
+      ctx.fillRect(0, base, W, Math.max(1.5, H * 0.012));
+      // one rail at the city's feet: one bead = one ZET vehicle
+      const ry = base + H * 0.10;
+      a(0.28); ctx.lineWidth = Math.max(1, H * 0.008);
+      ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke();
+      a(0.95);
+      const r = Math.max(1.4, H * 0.016);
+      for (let i = 0; i < count; i++) {
+        const xx = W * (0.008 + 0.984 * ((i + rnd() * 0.6) / count));
+        ctx.beginPath(); ctx.arc(xx, ry, r, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    });
+  }
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

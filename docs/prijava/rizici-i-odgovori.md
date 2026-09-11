@@ -1,6 +1,6 @@
 # Rizici i odgovori na očekivane prigovore Povjerenstva
 
-Sedam prigovora koje očekujemo, s odgovorom koji je već ugrađen u proizvod, a ne obećan.
+Osam prigovora koje očekujemo, s odgovorom koji je već ugrađen u proizvod, a ne obećan.
 
 ### 1. "Još jedna ZET aplikacija."
 
@@ -26,6 +26,10 @@ Ne upravljamo nikakvim kamerama i ne prikazujemo tuđe kamere bez dopuštenja; j
 
 Trošak rada sustava nakon projekta je ispod 100 EUR godišnje (jedan plaćeni Cloudflare račun). Zaslone drže prostori koji od njih imaju korist, uz upute i opoziv na daljinu. Kod je otvoren i dokumentiran na hrvatskom; Grad ima ponudu pod EUPL-1.2 i može preuzeti sustav bez ikakvog dogovora s prijaviteljem. Projekt ne stvara ovisnost ni o osobi, ni o tvrtki, ni o ugovoru.
 
-### 7. "Zašto filmska tvrtka?"
+### 7. "Stari uređaji su spori, nesigurni i past će za mjesec dana."
+
+Zaslon prikazuje javne podatke i ne drži nikakve korisničke podatke, pa stari uređaj nema što izgubiti: nema računa, kolačića ni pohrane osim tajne zaslona koju vlasnik može opozvati jednim klikom iz administracije. Tajna vrijedi za taj jedan zaslon i ništa drugo. Brzina nije stvar vjere nego mjerenja: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije, kod se prevodi i za starije preglednike, a mjerila su objavljena i provjerljiva (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad s 1 GB RAM-a). Matrica testiranih uređaja u `docs/kiosk.md` navodi i uređaje koji su pali na testu i zašto, pa Grad vidi stvarnu granicu, a ne obećanje. Dvije nove postave na Raspberry Pi 5 u proračunu su referenca i rezerva ako donirani uređaj otkaže, a prostor u svakom trenutku može zamijeniti uređaj bez ikakve migracije: novi uređaj samo otvori istu adresu.
+
+### 8. "Zašto filmska tvrtka?"
 
 Zato što je javni zaslon medij, a ne samo sučelje: tipografija čitljiva s tri metra, ritam izmjene kartica, tema koja prati dnevno svjetlo, prsten QR koda kao jedina kretnja, kartica potvrde koja se čita u sekundi, sve su to zanati vizualnog pripovijedanja koje Aning Film radi. Softverska strana nije obećanje: proizvodi prijavitelja u produkciji navedeni su adresama, a prototip ovog projekta je uživo prije roka. Spoj tih dviju kompetencija je razlog zašto ovaj projekt predlaže baš ova tvrtka.

@@ -10,13 +10,17 @@ Isporuke: https://zagreb.aningfilm.hr s otvorenim slojem `/hitno`, javnim zaslon
 
 Isporuke: dovršena provjera iste mreže u načinu enforce na stvarnim mrežama (kafić Wi-Fi, tri mobilna operatera, iPhone i Android), WASM rezervni skener za preglednike bez BarcodeDetectora, Turnstile iza zastavice, ograničenja po zaslonu (30 sesija na sat, 200 na dan), prva revizija pristupačnosti s korisnicima s invaliditetom i izjava o pristupačnosti v1 s deklariranim odstupanjem, izjava o privatnosti nakon pravnog pregleda. Mjera: revizijski izvještaj i dvije izjave objavljene na stranici.
 
+### M1b Lagani način rada za stare uređaje (mjesec 2)
+
+Isporuke: lagani način zaslona bez karte, WebGL-a, `canvas` animacija i upitnika o spremniku, s prijelomnom točkom rasporeda u JavaScriptu; druga inačica koda prevedena za starije preglednike (cilj ES2017) uz postojeću modernu; automatsko prepoznavanje slabog uređaja i ručni prekidač `?lagano=1`; prva matrica testiranih uređaja u `docs/kiosk.md` s nazivom preglednika, vremenom učitavanja, potrošnjom u vatima i, gdje uređaj padne, razlogom. Mjera: zaslon radi na uređaju iz 2014. ili starijem i na tabletu iz 2015., uz manje od 200 kB prijenosa po učitavanju i manje od 300 MB radne memorije, izmjereno i objavljeno.
+
 ### M2 Svi zeleni izvori u produkciji, pisma vlasnicima podataka (mjeseci 2 do 3)
 
 Isporuke: hidrološki bilten, indeks zraka (INSPIRE WFS/WMS), HŽPP polasci prema voznom redu, Službeni glasnik s ispisom u PDF, Narodne novine (ELI), Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi; test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje"), HRT-u (audio i video) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradu o uvjetima API-ja Službenog glasnika. Mjera: `/izvori` prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.
 
-### M3 Četiri zaslona instalirana, administracija zaslona (mjeseci 3 do 4)
+### M3 Šest zaslona instalirano, administracija zaslona (mjeseci 3 do 4)
 
-Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na četvrtoj lokaciji; administracija zaslona (provizioniranje, opoziv, oznaka stanice, pregled dostupnosti) iza Cloudflare Accessa; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena. Mjera: četiri zaslona javljaju `kiosk_online` svakog dana u mjesecu 4.
+Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na tri daljnje lokacije, od toga **četiri na doniranim uređajima** koje projekt pregleda, pripremi i ostavi prostoru; administracija zaslona (provizioniranje, opoziv, oznaka stanice, pregled dostupnosti) iza Cloudflare Accessa; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena i izmjerenom potrošnjom svakog uređaja. Mjera: šest zaslona javlja `kiosk_online` svakog dana u mjesecu 4; matrica uređaja sadrži šest stvarnih postava.
 
 ### M4 Prvi skup podataka Gradu, ZGBit, javni katalog `/open` (mjesec 5)
 
@@ -36,12 +40,12 @@ Isporuke: inačica 1.0 označena u repozitoriju; paket za predaju Gradu: kod pod
 
 ## Tko što radi
 
-| Uloga | M0 | M1 | M2 | M3 | M4 | M5 | M6 | M7 |
-|---|---|---|---|---|---|---|---|---|
-| Voditelj projekta i glavni razvoj (redak 1) | ● | ● | ● | ● | ● | ● | ● | ● |
-| Drugi razvojni inženjer (redak 2) | | | ● | | | ● | | ● |
-| Revizor pristupačnosti (redak 2) | | ● | | | | | ● | |
-| UX i motion dizajner (redak 2) | | ● | | ● | | | | |
-| Pravni i privacy pregled (redak 2) | | ● | | | ● | | | |
-| Instalater zaslona (redak 2, redak 5) | | | | ● | | | | |
-| Promidžba (redak 3) | ● | | | ● | ● | | ● | |
+| Uloga | M0 | M1 | M1b | M2 | M3 | M4 | M5 | M6 | M7 |
+|---|---|---|---|---|---|---|---|---|---|
+| Voditelj projekta i glavni razvoj (redak 1) | ● | ● | ● | ● | ● | ● | ● | ● | ● |
+| Drugi razvojni inženjer (redak 2) | | | ● | ● | | | ● | | ● |
+| Revizor pristupačnosti (redak 2) | | ● | | | | | | ● | |
+| UX i motion dizajner (redak 2) | | ● | ● | | ● | | | | |
+| Pravni i privacy pregled (redak 2) | | ● | | | | ● | | | |
+| Instalater zaslona (redak 2, redak 5) | | | | | ● | | | | |
+| Promidžba (redak 3) | ● | | | | ● | ● | | ● | |

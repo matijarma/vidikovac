@@ -17,7 +17,31 @@ Javni zaslon je bilo koji preglednik koji drži otvorenu stranicu `/kiosk/` na a
 | Zaslon 24" do 43", HDMI | okomiti ili vodoravni; stranica se prilagođava omjeru |
 | Nosač i kabeli | mikro-HDMI na HDMI, produžni kabel napajanja |
 
-Proračun u prijavi računa 245 EUR po zaslonu (Pi, zaslon, nosač, napajanje).
+Proračun u prijavi računa 245 EUR po novoj postavi (Pi, nosač, napajanje) i 95 EUR po oživljenom doniranom uređaju. Dvije nove postave u pilotu služe kao referenca i rezerva; četiri zaslona rade na doniranim uređajima.
+
+## Stari uređaj kao zaslon (lagani način)
+
+Najbolji zaslon je onaj koji prostor već ima. Ništa se ne instalira: uređaju treba preglednik, struja i mreža. Vidikovac ima lagani način rada bez karte, WebGL-a i animacija, s kodom prevedenim i za starije preglednike, pa radi i na uređajima koje proizvođač više ne podržava.
+
+- **Uključivanje:** doda se `?lagano=1` u adresu zaslona (`https://zagreb.aningfilm.hr/kiosk/?lagano=1#<id>.<tajna>`). Bez tog parametra zaslon sam prepozna slab uređaj i prebaci se.
+- **Što otpada:** karta u sloju U pokretu (zamjenjuje je popis linija i kašnjenja), `canvas` grafike i prijelazi. Sve ostalo, uključujući sigurnosnu traku i rotaciju koda, radi isto.
+- **Mjerila koja držimo:** manje od 200 kB prijenosa po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a.
+- **Prikladni uređaji:** prijenosnik iz 2014. ili noviji s bilo kojim ažuriranim preglednikom, tablet iz 2015., Android TV kutija, otpisano uredsko računalo, iPad u načinu "Vođeni pristup", Raspberry Pi 3 ili noviji.
+- **Što uređaj ne treba:** račun, trgovinu aplikacija, ažuriranje operacijskog sustava, antivirus. Zaslon ne drži nikakve korisničke podatke; jedino što je na uređaju je tajna tog zaslona, koju voditelj može opozvati jednim klikom.
+
+### Matrica testiranih uređaja
+
+Popunjava se mjerenjem, a ne procjenom: vrijeme je do prvog ispisa koda, potrošnja se mjeri utičnim mjeračem pri normalnom radu. Uređaj koji padne na testu ostaje u tablici s razlogom.
+
+| Uređaj | Godina | Preglednik | Način | Učitavanje | Potrošnja | Ishod |
+|---|---|---|---|---|---|---|
+| Raspberry Pi 5 2 GB | 2023. | Chromium 1xx | puni | | | referentna postava |
+| [[POPUNITI: donirani prijenosnik]] | | | lagani | | | |
+| [[POPUNITI: tablet 2015.]] | | | lagani | | | |
+| [[POPUNITI: Android TV kutija]] | | | lagani | | | |
+| [[POPUNITI: otpisano uredsko računalo]] | | | lagani | | | |
+
+Tablica se objavljuje i na stranici projekta; mjerenja nastaju u M1b i M3 plana provedbe.
 
 ## Prvo postavljanje (Raspberry Pi OS Bookworm)
 
