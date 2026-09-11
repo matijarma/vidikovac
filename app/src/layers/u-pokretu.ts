@@ -59,18 +59,17 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
 
   const mapBody = document.createElement('div');
   mapBody.className = 'map-holder';
-  if (ctx.mapFactory) {
-    const container = document.createElement('div');
-    container.className = 'map-canvas';
-    container.dataset.testid = 'map-canvas';
-    mapBody.appendChild(container);
-    ctx.mapFactory({
-      container,
-      ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.vehiclesCount', { count: points.length })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`,
-      points,
-      lines,
-      reducedMotion: ctx.reducedMotion,
-    });
+  const canvas = ctx.maps?.slot({
+    id: 'u-pokretu-map',
+    className: 'map-canvas',
+    testid: 'map-canvas',
+    ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.vehiclesCount', { count: points.length })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`,
+    points,
+    lines,
+    reducedMotion: ctx.reducedMotion,
+  });
+  if (canvas) {
+    mapBody.appendChild(canvas);
   } else {
     const fallback = document.createElement('p');
     fallback.className = 'panel-empty';

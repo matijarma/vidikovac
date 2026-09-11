@@ -9,6 +9,7 @@ import type { I18n } from './i18n/i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
 import type { ExportKind } from './layers/types';
 import type { MapFactory } from './map/city-map';
+import { createMapSlots } from './map/map-slots';
 import type { SessionClient } from './session';
 import { escapeHtml } from './ui/dom/escape';
 
@@ -63,6 +64,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const wide = deps.wide ?? false;
 
   const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
+  const maps = createMapSlots(deps.mapFactory);
   let active: LayerId = LAYERS[0]!;
   let frozen = false;
   let paused = false;
@@ -144,7 +146,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onCopy: deps.onCopy,
       onShare: deps.onShare,
       onExport: deps.onExport,
-      mapFactory: deps.mapFactory,
+      maps,
       reducedMotion: deps.reducedMotion,
     };
   }
@@ -154,6 +156,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const ctx = layerContext();
     const sections = (wide ? LAYERS : [active]).map((layer) => renderLayer(layer, ctx));
     view.replaceChildren(...sections);
+    // Each map panel moved its own live container into the new section; the
+    // maps of a layer this render did not draw are torn down here (R-54).
+    maps.sweep();
     if (focusId) document.getElementById(focusId)?.focus();
   }
 
@@ -294,6 +299,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     destroy() {
       if (timer !== null) clearTimer(timer);
       timer = null;
+      maps.destroy();
       element.remove();
     },
   };

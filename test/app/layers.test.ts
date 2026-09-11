@@ -5,6 +5,7 @@ import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
+import { createMapSlots } from '../../app/src/map/map-slots';
 import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -93,7 +94,8 @@ describe('u-pokretu', () => {
   it('builds the map from vehicle points and closure lines and prints the delay table', () => {
     const update = vi.fn();
     const factory = vi.fn(() => ({ update, destroy: vi.fn() }));
-    const section = renderLayer('u-pokretu', ctx({ mapFactory: factory }));
+    const maps = createMapSlots(factory as never);
+    const section = renderLayer('u-pokretu', ctx({ maps }));
     expect(factory).toHaveBeenCalledTimes(1);
     const options = factory.mock.calls[0]![0];
     expect(options.points).toHaveLength(3);
@@ -103,9 +105,19 @@ describe('u-pokretu', () => {
     const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
     expect(rows[0]).toContain('+90 s');
     expect(rows[1]).toContain('−30 s');
+
+    // R-54: a second render reuses the same live map, moving the one container
+    // into the new section instead of allocating another WebGL context.
+    const canvas = section.querySelector('[data-testid=map-canvas]');
+    const again = renderLayer('u-pokretu', ctx({ maps }));
+    maps.sweep();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
+    expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
   it('falls back to the list when no map factory is available', () => {
-    const section = renderLayer('u-pokretu', ctx({ mapFactory: undefined }));
+    const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');
   });
 });
@@ -113,7 +125,7 @@ describe('u-pokretu', () => {
 describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
   it('lists quakes with magnitude, depth and a mini map', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
-    const section = renderLayer('zrak-i-nebo', ctx({ mapFactory: factory }));
+    const section = renderLayer('zrak-i-nebo', ctx({ maps: createMapSlots(factory as never) }));
     expect(text(section.querySelector('[data-testid=quake-row]'))).toContain('M 1.6');
     expect(text(section.querySelector('[data-testid=quake-row]'))).toContain('dubina 10 km');
     expect(factory).toHaveBeenCalledTimes(1);

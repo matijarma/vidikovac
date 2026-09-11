@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+import { describe, expect, it, vi } from 'vitest';
 import {
   linesToGeoJson,
   OSM_ATTRIBUTION,
@@ -7,6 +8,7 @@ import {
   pointsToGeoJson,
   ZAGREB_CENTER,
 } from '../../app/src/map/city-map';
+import { createMapSlots } from '../../app/src/map/map-slots';
 
 describe('open raster basemap', () => {
   it('uses the OpenStreetMap tile URL and attributes it in the style', () => {
@@ -39,5 +41,54 @@ describe('feed items to GeoJSON', () => {
   it('drops coordinates that are not finite numbers', () => {
     expect(pointsToGeoJson([{ id: 'x', lon: Number.NaN, lat: 45, title: 'x' }]).features).toHaveLength(0);
     expect(linesToGeoJson([{ id: 'x', title: 'x', coordinates: [[15.9, 45.8]] }]).features).toHaveLength(0);
+  });
+});
+
+describe('map slots', () => {
+  const spyFactory = () => {
+    const made: { update: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[] = [];
+    const factory = vi.fn(() => {
+      const handle = { update: vi.fn(), destroy: vi.fn() };
+      made.push(handle);
+      return handle;
+    });
+    return { factory, made };
+  };
+  const ask = (maps: ReturnType<typeof createMapSlots>, id: string) =>
+    maps.slot({ id, className: 'map-canvas', ariaLabel: `karta ${id}`, points: [], lines: [] });
+
+  it('answers with nothing when the page has no map factory', () => {
+    expect(ask(createMapSlots(undefined), 'a')).toBeNull();
+  });
+
+  it('creates one map per id and updates it on every later render', () => {
+    const { factory, made } = spyFactory();
+    const maps = createMapSlots(factory as never);
+    const first = ask(maps, 'a')!;
+    maps.sweep();
+    const second = ask(maps, 'a')!;
+    maps.sweep();
+    expect(second).toBe(first);
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(made[0]!.update).toHaveBeenCalledTimes(1);
+    expect(made[0]!.destroy).not.toHaveBeenCalled();
+    expect(first.getAttribute('aria-label')).toBe('karta a');
+  });
+
+  it('destroys a map no render asked for, and every map on destroy', () => {
+    const { factory, made } = spyFactory();
+    const maps = createMapSlots(factory as never);
+    ask(maps, 'a');
+    ask(maps, 'b');
+    maps.sweep();
+    ask(maps, 'a');
+    maps.sweep(); // 'b' was not drawn this time
+    expect(made[1]!.destroy).toHaveBeenCalledTimes(1);
+    expect(made[0]!.destroy).not.toHaveBeenCalled();
+    maps.destroy();
+    expect(made[0]!.destroy).toHaveBeenCalledTimes(1);
+    // A map that came back after a destroy is a new one.
+    ask(maps, 'a');
+    expect(factory).toHaveBeenCalledTimes(3);
   });
 });

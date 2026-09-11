@@ -62,7 +62,7 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
@@ -76,6 +76,7 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void 
     wide: opts.wide ?? false,
     label: 'Kavana Velebit',
     onCopy: opts.onCopy,
+    mapFactory: opts.mapFactory as never,
     setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
     clearInterval: () => { ticks.length = 0; },
   });
@@ -206,6 +207,24 @@ describe('polling and the two toggles', () => {
 });
 
 describe('expiry freeze', () => {
+  it('keeps one live map across polls instead of re-creating it', async () => {
+    const update = vi.fn();
+    const destroy = vi.fn();
+    const mapFactory = vi.fn(() => ({ update, destroy }));
+    const { handle, session, ticks } = mount({ mapFactory });
+    handle.selectLayer('u-pokretu');
+    session.join();
+    await flush();
+    ticks.forEach((tick) => tick());
+    await flush();
+    // R-54: every poll used to allocate a WebGL context, and Chrome drops the
+    // oldest after about sixteen — the panel went black mid-session.
+    expect(mapFactory).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls.length).toBeGreaterThan(0);
+    handle.destroy();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
   it('freezes on the clock alone when the socket died and no expired frame arrives', async () => {
     const { root, session, fetchData, ticks } = mount();
     session.join();

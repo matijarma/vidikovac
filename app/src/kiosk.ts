@@ -19,6 +19,7 @@ import { zagrebTime } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import type { MapFactory } from './map/city-map';
+import { createMapSlots } from './map/map-slots';
 import { createRotation, slotProgress } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { dataNumber, dataText } from './panels/panel';
@@ -181,6 +182,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // stale "unlocked until" line anywhere in the page (R-52).
   let sessionLabel: HTMLElement | null = null;
 
+  const maps = createMapSlots(deps.mapFactory);
+
   // The teaser fetch and the beacon socket are two independent failure
   // domains sharing one alert line. Each keeps its own entry in this map
   // instead of one shared flag, so a fix in one can never erase a warning
@@ -277,10 +280,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         snapshots: sessionSnapshots,
         now: now(),
         kiosk: true,
-        mapFactory: deps.mapFactory,
+        maps,
         reducedMotion: deps.reducedMotion,
       }),
     );
+    // One live map per panel for the screen's whole session (R-54): a TV
+    // browser that re-created one every twenty seconds would run out of WebGL
+    // contexts long before the ten minutes are up.
+    maps.sweep();
   }
 
   /** The one line the room is open for, on the screen and in the DOM contract. */
@@ -312,6 +319,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     unlockedToken = null;
     sessionSnapshots = {};
     setMode('teaser');
+    maps.destroy();
   }
 
   async function refreshSessionData(): Promise<void> {
@@ -428,6 +436,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(rotateTimer);
       beacon?.close();
       session?.close();
+      maps.destroy();
       element.remove();
     },
   };

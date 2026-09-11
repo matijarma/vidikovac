@@ -1,5 +1,5 @@
 import type { Attribution, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
-import type { MapFactory } from '../map/city-map';
+import type { MapSlots } from '../map/map-slots';
 import type { I18n } from '../i18n/i18n';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
@@ -13,13 +13,16 @@ export interface LayerContext {
   onShare?: (url: string, title: string) => void;
   onExport?: (kind: ExportKind, module: ModuleId) => void;
   /**
-   * Injected so unit tests never load MapLibre; the pages pass createCityMap.
+   * One live map per panel, owned by the page and reused across renders, so a
+   * poll never re-creates a map (R-54). Absent in unit tests and on a browser
+   * with no map, and the layer then renders its list-only fallback.
+   *
    * Contract: until maplibre-gl is upgraded past 6.9.0 (tracked separately —
    * installed ^5 carries GHSA-jrc7-96c5-q579, a sanitizer XSS bypass), no
    * caller may pass feed-derived (external) text into a MapLibre Popup or
-   * marker HTML reached through this factory; only static, hard-coded strings.
+   * marker HTML reached through these maps; only static, hard-coded strings.
    */
-  mapFactory?: MapFactory;
+  maps?: MapSlots;
   reducedMotion?: boolean;
   /** Kiosk layout: bigger type, no action buttons (no touch). */
   kiosk?: boolean;

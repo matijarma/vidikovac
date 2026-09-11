@@ -21,18 +21,15 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
 
   const quakeBody = document.createElement('div');
   quakeBody.className = 'map-holder';
-  if (ctx.mapFactory) {
-    const container = document.createElement('div');
-    container.className = 'map-canvas map-canvas-mini';
-    quakeBody.appendChild(container);
-    ctx.mapFactory({
-      container,
-      ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.quakes')}`,
-      points: quakePoints,
-      lines: [],
-      reducedMotion: ctx.reducedMotion,
-    });
-  }
+  const quakeCanvas = ctx.maps?.slot({
+    id: 'zrak-i-nebo-quakes-map',
+    className: 'map-canvas map-canvas-mini',
+    ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.quakes')}`,
+    points: quakePoints,
+    lines: [],
+    reducedMotion: ctx.reducedMotion,
+  });
+  if (quakeCanvas) quakeBody.appendChild(quakeCanvas);
   const list = document.createElement('div');
   list.innerHTML = listMarkup(
     (emsc?.items ?? []).map(
