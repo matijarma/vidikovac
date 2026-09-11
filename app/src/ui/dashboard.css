@@ -22,3 +22,7 @@
 .dash-view[data-wide='true'] { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr)); }
 .skip-link { position: absolute; inset-block-start: -3rem; inset-inline-start: 0.5rem; padding: 0.5rem; background: Canvas; color: CanvasText; z-index: 10; }
 .skip-link:focus { inset-block-start: 0.5rem; }
+
+/* Podijeli grad: one rotating peer code, the same component the screen shows. */
+.share-body { display: grid; justify-items: center; gap: var(--sp-3); text-align: center; }
+.share-code { margin: 0; font-family: var(--font-mono); font-size: var(--text-h3, 1.5rem); letter-spacing: 0.12em; }

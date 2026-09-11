@@ -152,6 +152,7 @@
     "shareTitle": "Share the city",
     "shareBody": "Another person scans this code or types the letters at zagreb.aningfilm.hr/s. They get their own five minutes; your time does not change. The code changes every 30 seconds.",
     "shareUnavailable": "This session came from another person and cannot be shared further.",
+    "shareTooLate": "Too little time left to share.",
     "participants_one": "{count} device",
     "participants_other": "{count} devices",
     "tabsLabel": "Layers",

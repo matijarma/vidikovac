@@ -12,6 +12,7 @@ import '../ui/base.css';
 import '../ui/fonts.css';
 import '../ui/panel.css';
 import '../ui/layers.css';
+import '../ui/qr.css';
 import '../ui/kiosk.css';
 
 const { i18n } = bootPage({ page: 'kiosk' });

@@ -18,6 +18,8 @@ import '../ui/toast.css';
 import '../ui/panel.css';
 import '../ui/layers.css';
 import '../ui/dashboard.css';
+import '../ui/dialog.css';
+import '../ui/qr.css';
 import '../ui/print.css';
 
 const { i18n, toasts } = bootPage({ page: 'dashboard' });

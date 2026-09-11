@@ -16,6 +16,8 @@ function fakeSession() {
     expired: [] as (() => void)[],
     view: [] as ((l: LayerId) => void)[],
     count: [] as ((n: number) => void)[],
+    codes: [] as ((batch: unknown[], serverNow: number) => void)[],
+    error: [] as ((code: string) => void)[],
   };
   let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
   let runOut = false;
@@ -30,9 +32,9 @@ function fakeSession() {
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
     onExpired: (l) => { listeners.expired.push(l); return () => {}; },
     onView: (l) => { listeners.view.push(l as never); return () => {}; },
-    onCodes: () => () => {},
+    onCodes: (l) => { listeners.codes.push(l as never); return () => {}; },
     onCount: (l) => { listeners.count.push(l); return () => {}; },
-    onError: () => () => {},
+    onError: (l) => { listeners.error.push(l); return () => {}; },
     onClose: () => () => {},
     sendView: (layer) => { sent.push({ layer }); },
     share: vi.fn(),
@@ -53,6 +55,13 @@ function fakeSession() {
     view: (l: LayerId) => listeners.view.forEach((fn) => fn(l)),
     /** The clock passes the expiry with no 'expired' frame: a dropped socket. */
     runOut() { runOut = true; },
+    /** A room another phone opened: RoomDO reports role 'phone' (roleFor). */
+    joinAsPeer() {
+      snapshot = { phase: 'live', role: 'phone', expiresAt: EXPIRES, dataToken: 'dt1', participants: 2, secondsLeft: 300 };
+      listeners.joined.forEach((l) => l(snapshot));
+    },
+    codes: (batch: unknown[], serverNow: number) => listeners.codes.forEach((l) => l(batch, serverNow)),
+    error: (code: string) => listeners.error.forEach((l) => l(code)),
   };
 }
 
@@ -261,5 +270,46 @@ describe('expiry freeze', () => {
     expect(copy?.disabled).toBe(false);
     copy?.click();
     expect(onCopy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Podijeli grad', () => {
+  const slot = (code: string, index: number) => ({ code, slotStart: NOW + index * 30_000, slotEnd: NOW + (index + 1) * 30_000 });
+
+  it('offers the action to the person who scanned the screen and to nobody else', () => {
+    const scanner = mount();
+    expect(scanner.root.querySelector<HTMLButtonElement>('[data-testid=share-city]')!.hidden).toBe(true);
+    scanner.session.join();
+    const button = scanner.root.querySelector<HTMLButtonElement>('[data-testid=share-city]')!;
+    expect(button.hidden).toBe(false);
+    expect(button.textContent).toBe('Podijeli grad');
+
+    const peer = mount();
+    peer.session.joinAsPeer();
+    expect(peer.root.querySelector<HTMLButtonElement>('[data-testid=share-city]')!.hidden).toBe(true);
+  });
+
+  it('asks the room for peer codes and rotates them as a QR with the code in letters', () => {
+    const { root, session } = mount();
+    session.join();
+    root.querySelector<HTMLButtonElement>('[data-testid=share-city]')!.click();
+    expect(session.client.share).toHaveBeenCalledTimes(1);
+    session.codes([slot('ABCDEFGH', 0), slot('JKMNPQRS', 1)], NOW);
+    const dialog = document.querySelector<HTMLElement>('[data-testid=share-dialog]')!;
+    expect(dialog).not.toBeNull();
+    expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('ABCD-EFGH');
+    expect(dialog.querySelector('.qr')?.getAttribute('role')).toBe('img');
+    // The approved copy: five minutes of their own, and the asker's time is untouched.
+    expect(text(dialog)).toContain('Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja.');
+  });
+
+  it('withdraws the action when the room says this session is already the second hop', () => {
+    const { root, session } = mount();
+    session.join();
+    session.error('share-not-allowed');
+    expect(root.querySelector<HTMLButtonElement>('[data-testid=share-city]')!.hidden).toBe(true);
+    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe(
+      'Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.',
+    );
   });
 });

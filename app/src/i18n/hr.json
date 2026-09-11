@@ -156,6 +156,7 @@
     "shareTitle": "Podijeli grad",
     "shareBody": "Druga osoba skenira ovaj kod ili upiše slova na zagreb.aningfilm.hr/s. Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja. Kod se mijenja svakih 30 sekundi.",
     "shareUnavailable": "Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.",
+    "shareTooLate": "Za dijeljenje je ostalo premalo vremena.",
     "participants_one": "{count} uređaj",
     "participants_few": "{count} uređaja",
     "participants_other": "{count} uređaja",

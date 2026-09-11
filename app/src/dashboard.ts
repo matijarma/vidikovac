@@ -3,15 +3,19 @@
 // loop and the expiry freeze. Every browser global is injected so the whole
 // behaviour is unit-tested under happy-dom.
 import type { Attribution, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import { LAYERS, type LayerId } from '../../worker/protocol';
+import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
+import { codeUrl, formatCode, speakableCode } from './code';
 import { countdown, zagrebTime } from './format';
 import type { I18n } from './i18n/i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
 import type { ExportKind } from './layers/types';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
+import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
+import { createDialog, type DialogHandle } from './ui/dialog';
 import { escapeHtml } from './ui/dom/escape';
+import { createQr } from './ui/qr';
 
 /** How often a visible layer refetches its modules. */
 export const POLL_MS = 20_000;
@@ -93,6 +97,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       <div class="dash-toggles">
         <button type="button" class="btn-ghost" data-testid="toggle-countdown" aria-pressed="false">${escapeHtml(i18n.t('session.hideCountdown'))}</button>
         <button type="button" class="btn-ghost" data-testid="toggle-refresh" aria-pressed="false">${escapeHtml(i18n.t('session.pauseRefresh'))}</button>
+        <button type="button" class="btn" data-testid="share-city" hidden>${escapeHtml(i18n.t('session.share'))}</button>
         <span class="dash-refresh-state panel-sub" data-testid="refresh-state"></span>
       </div>
     </header>
@@ -115,6 +120,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const refreshState = element.querySelector<HTMLElement>('[data-testid=refresh-state]')!;
   const countdownToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
   const refreshToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-refresh]')!;
+  const shareButton = element.querySelector<HTMLButtonElement>('[data-testid=share-city]')!;
 
   const tabs = LAYERS.map((layer) => {
     const tab = document.createElement('button');
@@ -216,6 +222,82 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     polite.textContent = i18n.t('session.expiring60');
   }
 
+  // --- Podijeli grad ---------------------------------------------------------
+  // One hop: the person who scanned the screen may hand five minutes to someone
+  // beside them, and that person may not pass it on again. The room mints the
+  // peer batch; this only rotates it, exactly like the screen does (R-56).
+  let shareDialog: DialogHandle | null = null;
+  let shareRotation: Rotation | null = null;
+
+  function closeShare(): void {
+    shareRotation?.stop();
+    shareRotation = null;
+    shareDialog?.close();
+    shareDialog?.destroy();
+    shareDialog = null;
+  }
+
+  function openShare(batch: CodeSlot[], serverNow: number): void {
+    closeShare();
+    const body = document.createElement('div');
+    body.className = 'share-body';
+    const qrBox = document.createElement('div');
+    qrBox.className = 'share-qr';
+    const codeLine = document.createElement('p');
+    codeLine.className = 'share-code';
+    codeLine.dataset.testid = 'share-code';
+    const copy = document.createElement('p');
+    copy.className = 'panel-sub';
+    copy.textContent = i18n.t('session.shareBody');
+    body.append(qrBox, codeLine, copy);
+
+    shareDialog = createDialog({
+      titleId: 'share-title',
+      title: i18n.t('session.shareTitle'),
+      closeLabel: i18n.t('common.close'),
+      body,
+      className: 'dialog-share',
+    });
+    shareDialog.element.dataset.testid = 'share-dialog';
+    shareDialog.open();
+
+    shareRotation = createRotation({
+      now,
+      onSlot: (slot) => {
+        // The room mints for the rest of the session and never for longer, so
+        // an empty slot means the peer window is over, not that more are due.
+        if (!slot) {
+          closeShare();
+          return;
+        }
+        codeLine.textContent = formatCode(slot.code);
+        qrBox.replaceChildren(
+          createQr({
+            payload: codeUrl(slot.code),
+            ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }),
+            unavailableText: formatCode(slot.code),
+          }).element,
+        );
+      },
+      onMore: () => {},
+      setInterval: setTimer as (fn: () => void, ms: number) => unknown,
+      clearInterval: clearTimer,
+    });
+    shareRotation.setBatch(batch, serverNow);
+  }
+
+  shareButton.addEventListener('click', () => {
+    session.share();
+  });
+  session.onCodes((batch, serverNow) => openShare(batch, serverNow));
+  session.onError((code) => {
+    if (code !== 'share-not-allowed' && code !== 'share-unavailable') return;
+    // A room opened by another phone is already the second hop; a room with
+    // less than one rotation slot left cannot mint at all.
+    if (code === 'share-not-allowed') shareButton.hidden = true;
+    assertive.textContent = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
+  });
+
   countdownToggle.addEventListener('click', () => {
     countdownHidden = !countdownHidden;
     timeEl.hidden = countdownHidden;
@@ -252,6 +334,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     });
     // Both unlocked surfaces carry the same expiry to the millisecond (R-52).
     if (snapshot.expiresAt !== null) label.dataset.expiresAt = String(snapshot.expiresAt);
+    // Only the person who scanned the screen may pass the city on (R-56).
+    if (snapshot.role === 'scanner') shareButton.hidden = false;
     polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
     totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     paintTimer();
@@ -261,6 +345,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function freeze(): void {
     if (frozen) return;
     frozen = true;
+    closeShare();
+    shareButton.hidden = true;
     paintTabs();
     paintTimer();
     // The closing line is its own visible element, not another announcement in
@@ -299,6 +385,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     destroy() {
       if (timer !== null) clearTimer(timer);
       timer = null;
+      closeShare();
       maps.destroy();
       element.remove();
     },
