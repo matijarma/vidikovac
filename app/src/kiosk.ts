@@ -23,6 +23,13 @@ import { createSessionClient, type SessionClient } from './session';
 import { dataNumber, dataText } from './panels/panel';
 import { createQr } from './ui/qr';
 import { escapeHtml } from './ui/dom/escape';
+// Task A10's ckan-geo module (the only open-tier feed poi items come from)
+// covers city districts and civil-protection assembly points only; nothing in
+// its registered layers is ever tagged as a pharmacy, so the `category`
+// filter below can never match a real snapshot. Until Area A ships a tagged
+// pharmacy layer, the curated on-duty list already built for /hitno (task
+// D1) is the honest stand-in: it is real Grad Zagreb data, not a fixture.
+import { LJEKARNE } from '../../worker/hitno/ljekarne';
 
 /** Cross-fade interval for the teaser cards. */
 export const TEASER_ROTATE_MS = 20_000;
@@ -78,12 +85,18 @@ export function safetyStripText(
   const warning = map['dhmz-cap']?.items[0];
   const closures = (map.prometnice?.items ?? []).filter((item) => item.kind === 'closure').length;
   const pharmacy = (map['ckan-geo']?.items ?? []).find((item) => dataText(item, 'category') === 'ljekarne');
+  // Every curated entry runs both the day and the night duty shift (or, for
+  // Ljekarna ZEUS, is open outright 0-24), so none is ever "more on duty" than
+  // another at a given moment; with no per-kiosk location to rank by
+  // distance, the first entry is a stable, always-true answer rather than an
+  // arbitrary one.
+  const onDuty = LJEKARNE[0];
   return {
     cap: warning
       ? `${i18n.t(`panels.severity.${warning.severity ?? 'info'}`)} · ${warning.title}`
       : i18n.t('panels.capNone'),
     closures: i18n.t('panels.closuresCount', { count: closures }),
-    pharmacy: pharmacy ? pharmacy.title : i18n.t('status.empty'),
+    pharmacy: pharmacy ? pharmacy.title : onDuty ? onDuty.label : i18n.t('status.empty'),
   };
 }
 
@@ -159,9 +172,36 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let activeLayer: LayerId = 'grad-sada';
   let unlockedToken: string | null = null;
 
-  function showAlert(key: string): void {
+  // The teaser fetch and the beacon socket are two independent failure
+  // domains sharing one alert line. Each keeps its own entry in this map
+  // instead of one shared flag, so a fix in one can never erase a warning
+  // the other is still raising (e.g. the beacon going live again while the
+  // teaser fetch is still failing), and a source's own resolved outage
+  // always self-heals even while another source is also complaining. When
+  // more than one is active, the worst (most blocking) one wins the single
+  // visible line; clearing it reveals whatever is still active underneath.
+  type AlertSource = 'provision' | 'revoked' | 'beacon' | 'teaser';
+  const ALERT_PRIORITY: readonly AlertSource[] = ['provision', 'revoked', 'beacon', 'teaser'];
+  const activeAlerts = new Map<AlertSource, string>();
+
+  function renderAlert(): void {
+    const source = ALERT_PRIORITY.find((candidate) => activeAlerts.has(candidate));
+    if (source === undefined) {
+      alertBox.hidden = true;
+      return;
+    }
     alertBox.hidden = false;
-    alertBox.textContent = i18n.t(key);
+    alertBox.textContent = i18n.t(activeAlerts.get(source)!);
+  }
+
+  function showAlert(key: string, source: AlertSource): void {
+    activeAlerts.set(source, key);
+    renderAlert();
+  }
+
+  function clearAlert(source: AlertSource): void {
+    if (!activeAlerts.delete(source)) return;
+    renderAlert();
   }
 
   function paintTeaser(): void {
@@ -253,12 +293,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const fetchTeaser = deps.fetchTeaser ?? (() => fetchTeaserImpl());
     try {
       const response = await fetchTeaser();
+      clearAlert('teaser'); // this poll succeeded: any outage it raised is over
       teaser = response.modules;
       cards = teaserCards(teaser, i18n, now());
       paintTeaser();
       paintStrip();
     } catch {
-      showAlert('status.down');
+      showAlert('status.down', 'teaser');
     }
   }
 
@@ -279,13 +320,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   let beacon: BeaconClient | null = null;
   if (!credentials) {
-    showAlert('kiosk.notProvisioned');
+    showAlert('kiosk.notProvisioned', 'provision');
   } else {
     const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
     beacon = makeBeacon({
       credentials,
       onCodes: (batchSlots, serverNow) => rotation.setBatch(batchSlots, serverNow),
       onUnlocked: ({ roomId, ticket }) => {
+        // The corner QR keeps minting codes throughout an active session so
+        // the next person can join; a second redeem mid-session (BeaconDO's
+        // redeem() always opens a fresh room, task B6) must not leak the
+        // still-open RoomDO connection from the session it is replacing.
+        session?.close();
         const makeSession = deps.createSession ?? ((o: { roomId: string; ticket: string }) => createSessionClient(o));
         session = makeSession({ roomId, ticket });
         session.onJoined((snapshot) => {
@@ -307,10 +353,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         });
         session.connect();
       },
-      onRevoked: () => showAlert('kiosk.revoked'),
+      onRevoked: () => showAlert('kiosk.revoked', 'revoked'),
       onStatus: (status) => {
-        if (status === 'offline') showAlert('kiosk.offline');
-        else if (status === 'live') alertBox.hidden = true;
+        if (status === 'offline') showAlert('kiosk.offline', 'beacon');
+        else if (status === 'live') clearAlert('beacon');
       },
     });
     beacon.connect();

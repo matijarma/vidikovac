@@ -5,6 +5,7 @@ import type { CodeSlot } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
+import { LJEKARNE } from '../../worker/hitno/ljekarne';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const attr = (text: string) => ({ text, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
@@ -24,7 +25,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   return Array.from({ length: count }, (_, i) => ({ code: `ABCDEFG${i % 10}`, slotStart: start + i * 30_000, slotEnd: start + (i + 1) * 30_000 }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -35,6 +36,9 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
   const timers: (() => void)[] = [];
   const requestFullscreen = vi.fn(async () => {});
   const requestWakeLock = vi.fn(async () => {});
+  let sessionExpired: (() => void) | null = null;
+  let sessionView: ((layer: string) => void) | null = null;
+  const sessions: { close: ReturnType<typeof vi.fn> }[] = [];
   const handle = mountKiosk(root, {
     i18n: createDefaultI18n('hr'),
     hash: opts.hash ?? '',
@@ -42,19 +46,21 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     now: () => NOW,
     codeBase: 'https://zagreb.aningfilm.hr',
     reducedMotion: opts.reducedMotion ?? false,
-    fetchTeaser: async () => ({ modules: MODULES }),
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })),
     fetchData: async (module: ModuleId) => snap(module, []),
     createBeacon: (deps) => { handlers = deps; return beacon; },
-    createSession: () => ({ connect: vi.fn(), snapshot: () => ({ phase: 'live', role: 'kiosk', expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 }), serverNow: () => NOW, secondsLeft: () => 600, onJoined: (l) => { queueMicrotask(() => l({ phase: 'live', role: 'kiosk', expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 })); return () => {}; }, onExpiring: () => () => {}, onExpired: (l) => { sessionExpired = l; return () => {}; }, onView: (l) => { sessionView = l as never; return () => {}; }, onCodes: () => () => {}, onCount: () => () => {}, onError: () => () => {}, onClose: () => () => {}, sendView: vi.fn(), share: vi.fn(), event: vi.fn(), close: vi.fn() }),
+    createSession: () => {
+      const s = { connect: vi.fn(), snapshot: () => ({ phase: 'live', role: 'kiosk', expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 }), serverNow: () => NOW, secondsLeft: () => 600, onJoined: (l: (snapshot: unknown) => void) => { queueMicrotask(() => l({ phase: 'live', role: 'kiosk', expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 })); return () => {}; }, onExpiring: () => () => {}, onExpired: (l: () => void) => { sessionExpired = l; return () => {}; }, onView: (l: (layer: string) => void) => { sessionView = l; return () => {}; }, onCodes: () => () => {}, onCount: () => () => {}, onError: () => () => {}, onClose: () => () => {}, sendView: vi.fn(), share: vi.fn(), event: vi.fn(), close: vi.fn() };
+      sessions.push(s);
+      return s as ReturnType<NonNullable<Parameters<typeof mountKiosk>[1]['createSession']>>;
+    },
     setInterval: (fn: () => void) => { timers.push(fn); return timers.length; },
     clearInterval: () => {},
     requestFullscreen,
     requestWakeLock,
   });
-  let sessionExpired: (() => void) | null = null;
-  let sessionView: ((layer: string) => void) | null = null;
   return {
-    root, handle, beacon, timers, storage, raw, requestFullscreen, requestWakeLock,
+    root, handle, beacon, timers, storage, raw, requestFullscreen, requestWakeLock, sessions,
     get handlers() { return handlers!; },
     expire: () => sessionExpired?.(),
     view: (layer: string) => sessionView?.(layer),
@@ -82,6 +88,15 @@ describe('teaser content', () => {
     expect(strip.closures).toBe('1 zatvaranje');
     expect(strip.pharmacy).toBe('Ljekarna Centar, Ilica 1');
     expect(safetyStripText([], i18n).cap).toBe('Nema upozorenja za Zagrebačku regiju.');
+  });
+  it('falls back to the curated on-duty pharmacy list when no feed tags one (the real-world case: ckan-geo never sets category)', () => {
+    const withoutPharmacyTag = MODULES.map((m) =>
+      m.module === 'ckan-geo'
+        ? snap('ckan-geo', [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Gradska četvrt Centar', data: { layer: 'gradske-cetvrti' } }])
+        : m,
+    );
+    expect(safetyStripText(withoutPharmacyTag, i18n).pharmacy).toBe(LJEKARNE[0]!.label);
+    expect(safetyStripText([], i18n).pharmacy).toBe(LJEKARNE[0]!.label);
   });
 });
 
@@ -151,5 +166,47 @@ describe('mountKiosk', () => {
     k.expire();
     expect(k.root.querySelector('[data-testid=kiosk]')?.getAttribute('data-mode')).toBe('teaser');
     expect(text(k.root.querySelector('[data-testid=teaser-card]'))).toContain('Vrijeme sada');
+  });
+  it('closes the previous session before opening the next one on a mid-session hand-off', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.sessions).toHaveLength(1);
+    // The corner QR keeps minting codes while unlocked; a second scan (the
+    // next person joining) must not leak the first RoomDO connection.
+    k.handlers.onUnlocked({ roomId: 'r2', ticket: 't2', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.sessions).toHaveLength(2);
+    expect(k.sessions[0]!.close).toHaveBeenCalledTimes(1);
+    expect(k.sessions[1]!.close).not.toHaveBeenCalled();
+  });
+  it('a beacon reconnect does not dismiss an unrelated teaser-outage alert', async () => {
+    const { root, handlers } = mount({
+      stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }),
+      fetchTeaser: async () => { throw new Error('down'); },
+    });
+    await flush();
+    expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(false);
+    handlers.onStatus('offline');
+    handlers.onStatus('live'); // the beacon recovers; the teaser fetch is still failing
+    expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(false);
+    expect(text(root.querySelector('[data-testid=kiosk-alert]'))).toBe('izvor nedostupan');
+  });
+  it('a recovered teaser fetch clears its own outage alert on the next successful poll', async () => {
+    let fail = true;
+    const { root, timers } = mount({
+      stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }),
+      fetchTeaser: async () => {
+        if (fail) throw new Error('down');
+        return { modules: MODULES };
+      },
+    });
+    await flush();
+    expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(false);
+    fail = false;
+    timers.forEach((tick) => tick());
+    await flush();
+    expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(true);
   });
 });
