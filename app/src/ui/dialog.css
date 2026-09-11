@@ -1,0 +1,169 @@
+/* The closed state. `display` MUST be scoped to `[open]` (below) and never set
+   unconditionally here.
+
+   The browser's own stylesheet hides a closed dialog with
+   `dialog:not([open]) { display: none }`, but that is a UA rule and ANY author
+   `display` on `.dialog` outranks it. This file used to declare `display: flex`
+   here, which meant `dialog.close()` removed the `open` attribute, dropped the
+   dialog out of the top layer — and left it laid out at full size in normal flow.
+   Measured on the emulator: after tapping the X, `dialog.open === false` while
+   `display` was still `flex` and the element still covered 379x721 of a 411x838
+   viewport. Every dialog in the product was affected, so Settings, Connection
+   health and pairing all looked like they simply would not close.
+
+   The opacity/transform pair also lives here rather than only on `[open]`, so the
+   exit animates instead of the dialog staying fully opaque until `display` flips.
+   Verifying this by asserting `dialog.open` is NOT enough — see
+   test/components/dialog.test.ts, which pins the computed display in both
+   states. */
+.dialog {
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: min(40rem, calc(100vw - 2rem));
+  max-height: min(86vh, 48rem);
+  padding: 0;
+  margin: auto;
+  border: 1px solid var(--tone-stroke-strong);
+  border-radius: var(--r-2xl);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  box-shadow: var(--tone-shadow-heavy);
+  font-family: var(--font-body);
+  opacity: 0;
+  transform: translateY(var(--sp-3)) scale(0.96);
+  transition:
+    opacity var(--dur-base) var(--ease-enter),
+    transform var(--dur-slow) var(--ease-enter),
+    overlay var(--dur-slow) var(--ease-enter) allow-discrete,
+    display var(--dur-slow) var(--ease-enter) allow-discrete;
+}
+
+.dialog::backdrop {
+  background: var(--tone-overlay-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Fallback initial-focus target (see dialog.ts moveInitialFocus) — in
+   practice the close button always wins as "first focusable descendant",
+   but keep this visible in case a future dialog body has nothing focusable. */
+.dialog:focus-visible {
+  outline: 2px solid var(--tone-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Entry needs an explicit pre-transition state: the element goes from
+   `display: none` to `display: flex`, and without this there is no "from" value
+   for the browser to animate out of. */
+@starting-style {
+  .dialog[open] {
+    opacity: 0;
+    transform: translateY(var(--sp-3)) scale(0.96);
+  }
+}
+
+.dialog[open] {
+  display: flex;
+  opacity: 1;
+  transform: none;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--tone-stroke);
+}
+
+.dialog-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--tone-text-primary);
+}
+
+/* 2.75rem ≈ 44px, matching `.icon-btn` and the touch-target floor PRODUCT.md
+   commits to. This was 2rem, and it was the only control in the product below
+   that floor — measured on a phone the button was 32px with a 16px glyph, sitting
+   under 17px of header padding that swallows a slightly-high thumb. On Android
+   that made Settings feel unclosable: there is no Escape key, the dialog covers
+   all but a ~16px strip of the viewport so there is almost no backdrop to tap,
+   and the system Back button did not close it either (fixed separately, in
+   native-back.ts). The glyph itself stays 16px — only the target grew. */
+.dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--tone-text-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.dialog-close:hover {
+  background: var(--tone-surface-2);
+  color: var(--tone-text-primary);
+}
+
+.dialog-close:focus-visible {
+  outline: 2px solid var(--tone-focus-ring);
+  outline-offset: 2px;
+}
+
+/* The pinned action row. Peer of `.dialog-head`, on the other side of the
+   scrollport — `.dialog` is `display:flex; flex-direction:column`, so
+   `flex: none` here is all it takes to keep the confirm button on screen no
+   matter how long the body gets.
+
+   This exists because every dialog used to put its buttons at the END OF THE
+   BODY, which is the element that scrolls. On a phone (`max-height: 86vh` plus
+   safe-area insets) and in the 600px extension popup, that put "They match —
+   trust this device" below the fold, and pairing turned into homework. */
+.dialog-foot {
+  flex: none;
+  display: flex;
+  gap: var(--sp-3);
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-5);
+  border-block-start: 1px solid var(--tone-stroke, var(--color-border));
+  background: var(--tone-surface-1, var(--color-surface-1));
+}
+
+@media (max-width: 30rem) {
+  .dialog-foot {
+    padding-inline: var(--sp-4);
+  }
+
+  /* Full-width stacked actions on a narrow screen: a 44px target matters more
+     than a tidy right-aligned row when the thumb is the pointer. */
+  .dialog-foot > * {
+    flex: 1 1 auto;
+  }
+}
+
+.dialog-body {
+  min-height: 0;
+  padding: var(--sp-5);
+  overflow-y: auto;
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+}
+
+@media (max-width: 30rem) {
+  .dialog-head,
+  .dialog-body {
+    padding-inline: var(--sp-4);
+  }
+}
