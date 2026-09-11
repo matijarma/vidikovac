@@ -87,6 +87,33 @@ export function stubLocalStorage(): void {
 }
 
 /**
+ * Same shim as `stubLocalStorage`, for `globalThis.sessionStorage`. Node ships
+ * a placeholder `sessionStorage` global too, which happy-dom's real one never
+ * overwrites under this vitest version — any test whose code path touches
+ * bare `sessionStorage` (dashboard's remembered-layer key, R-60) needs this
+ * called once per file before it runs; `sessionStorage.clear()` in
+ * `beforeEach` is enough after that.
+ */
+export function stubSessionStorage(): void {
+  const store = new Map<string, string>();
+  const shim: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'sessionStorage', { value: shim, configurable: true, writable: true });
+}
+
+/**
  * Pins `navigator.language`/`navigator.languages` to a tag outside our
  * catalog (`de-DE` by default). happy-dom's default navigator reports
  * `en-US`, so with no stored locale `bootLocale()`'s browser-language

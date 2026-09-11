@@ -1,10 +1,15 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
-import { mountDashboard, parseSessionHash, POLL_MS } from '../../app/src/dashboard';
+import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, POLL_MS } from '../../app/src/dashboard';
+import { stubSessionStorage } from './helpers';
+
+// See stubSessionStorage's doc comment: Node's own `sessionStorage` global
+// shadows happy-dom's real one under this vitest version.
+stubSessionStorage();
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const EXPIRES = NOW + 10 * 60_000; // 14:42
@@ -93,6 +98,10 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
 }
 const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+beforeEach(() => {
+  sessionStorage.clear();
+});
 
 describe('parseSessionHash', () => {
   it('reads room, ticket and label from the fragment C4 navigates to', () => {
@@ -314,5 +323,27 @@ describe('Podijeli grad', () => {
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe(
       'Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.',
     );
+  });
+});
+
+describe('remembering the last layer (R-60)', () => {
+  const selectedLayer = (root: HTMLElement): string | undefined =>
+    [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')].find((t) => t.getAttribute('aria-selected') === 'true')?.dataset.layer;
+
+  it('remembers the layer the user switched to and opens it at the next unlock', () => {
+    const first = mount();
+    first.root.querySelector<HTMLButtonElement>('[role=tab][data-layer=sigurnost]')!.click();
+    expect(selectedLayer(first.root)).toBe('sigurnost');
+    first.handle.destroy();
+
+    const second = mount();
+    expect(selectedLayer(second.root)).toBe('sigurnost');
+    expect(sessionStorage.getItem(LAYER_STORAGE_KEY)).toBe('sigurnost');
+  });
+
+  it('ignores an invalid stored value and opens the default layer instead', () => {
+    sessionStorage.setItem(LAYER_STORAGE_KEY, 'not-a-real-layer');
+    const { root } = mount();
+    expect(selectedLayer(root)).toBe('grad-sada');
   });
 });

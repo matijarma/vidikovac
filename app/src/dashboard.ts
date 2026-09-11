@@ -22,6 +22,30 @@ export const POLL_MS = 20_000;
 /** Circumference of the r=45 ring in the SVG below. */
 const RING_LENGTH = 283;
 
+/**
+ * The layer last opened by the user, mirrored into sessionStorage so the next
+ * unlock (the next scan) reopens it instead of always defaulting to the first
+ * tab — the accessibility statement already promises this (R-60).
+ */
+export const LAYER_STORAGE_KEY = 'vidikovac.layer';
+
+function readStoredLayer(): LayerId | null {
+  try {
+    const stored = globalThis.sessionStorage?.getItem(LAYER_STORAGE_KEY);
+    return stored && (LAYERS as readonly string[]).includes(stored) ? (stored as LayerId) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeLayer(layer: LayerId): void {
+  try {
+    globalThis.sessionStorage?.setItem(LAYER_STORAGE_KEY, layer);
+  } catch {
+    /* ignore */
+  }
+}
+
 export interface SessionHashParams {
   roomId: string;
   ticket: string | null;
@@ -69,7 +93,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
   const maps = createMapSlots(deps.mapFactory);
-  let active: LayerId = LAYERS[0]!;
+  let active: LayerId = readStoredLayer() ?? LAYERS[0]!;
   let frozen = false;
   let paused = false;
   let countdownHidden = false;
@@ -175,6 +199,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (!wide) render();
     const heading = document.getElementById(`layer-title-${layer}`);
     if (fromUser) {
+      storeLayer(layer);
       heading?.focus();
       session.sendView(layer);
       session.event('panel_open', layer);
