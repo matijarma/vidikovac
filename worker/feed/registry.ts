@@ -5,6 +5,7 @@ import { fetchDhmzCap } from './modules/dhmz-cap';
 import { fetchDhmzForecast } from './modules/dhmz-forecast';
 import { fetchDhmzNow } from './modules/dhmz-now';
 import { fetchEmsc } from './modules/emsc';
+import { fetchGlasnik } from './modules/glasnik';
 import { fetchHrtNews } from './modules/hrt-news';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt } from './modules/zet-rt';
@@ -99,13 +100,6 @@ function defineModule(def: ModuleDefinition): ModuleSpec {
   };
 }
 
-/** Placeholder loader: tasks A4-A11 replace these one module at a time. */
-function notImplemented(id: ModuleId): () => Promise<FeedPayload> {
-  return async () => {
-    throw new Error(`feed module ${id} not implemented`);
-  };
-}
-
 export const MODULES: Record<ModuleId, ModuleSpec> = {
   'zet-rt': defineModule({ id: 'zet-rt', tier: 'session', ttl: 30, maxStale: 300, load: fetchZetRt }),
   prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: fetchPrometnice }),
@@ -114,7 +108,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
   emsc: defineModule({ id: 'emsc', tier: 'open', ttl: 60, maxStale: 3600, load: fetchEmsc }),
   'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: fetchHrtNews }),
-  glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: notImplemented('glasnik') }),
+  glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: fetchGlasnik }),
   'ckan-geo': defineModule({ id: 'ckan-geo', tier: 'open', ttl: 86400, maxStale: 2592000, load: fetchCkanGeo }),
 };
 
