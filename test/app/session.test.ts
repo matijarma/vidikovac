@@ -1,20 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CLOSE_SESSION_EXPIRED } from '../../worker/protocol';
-import { createSessionClient, RESUME_KEY, roomSocketUrl, type WebSocketLike } from '../../app/src/session';
+import { createSessionClient, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
+import { FakeSocket } from './helpers';
 
-class FakeSocket implements WebSocketLike {
-  readyState = 0;
-  sent: string[] = [];
-  closed: { code?: number } | null = null;
-  private handlers: Record<string, ((e: never) => void)[]> = {};
-  constructor(public url: string) {}
-  addEventListener(type: string, l: (e: never) => void): void { (this.handlers[type] ??= []).push(l); }
-  send(data: string): void { this.sent.push(data); }
-  close(code?: number): void { this.closed = { code }; this.emit('close', { code: code ?? 1000, reason: '' }); }
-  emit(type: string, e: unknown = {}): void { if (type === 'open') this.readyState = 1; if (type === 'close') this.readyState = 3; for (const l of this.handlers[type] ?? []) l(e as never); }
-  server(msg: unknown): void { this.emit('message', { data: JSON.stringify(msg) }); }
-  json(i: number): unknown { return JSON.parse(this.sent[i]!); }
-}
 function storage(initial: Record<string, string> = {}) {
   const raw = { ...initial };
   return { raw, getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
