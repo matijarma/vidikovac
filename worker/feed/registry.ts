@@ -4,6 +4,7 @@ import { fetchDhmzCap } from './modules/dhmz-cap';
 import { fetchDhmzForecast } from './modules/dhmz-forecast';
 import { fetchDhmzNow } from './modules/dhmz-now';
 import { fetchEmsc } from './modules/emsc';
+import { fetchHrtNews } from './modules/hrt-news';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt } from './modules/zet-rt';
 
@@ -111,7 +112,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: fetchDhmzForecast }),
   'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
   emsc: defineModule({ id: 'emsc', tier: 'open', ttl: 60, maxStale: 3600, load: fetchEmsc }),
-  'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: notImplemented('hrt-news') }),
+  'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: fetchHrtNews }),
   glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: notImplemented('glasnik') }),
   'ckan-geo': defineModule({ id: 'ckan-geo', tier: 'open', ttl: 86400, maxStale: 2592000, load: notImplemented('ckan-geo') }),
 };
