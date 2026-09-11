@@ -173,6 +173,10 @@ function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
     }
     case 'share':
       return { t: 'share' };
+    case 'ping':
+      // setWebSocketAutoResponse is best-effort, not a guarantee: a ping that
+      // races a wake for another reason can still reach here (beacon-do.ts).
+      return { t: 'ping' };
     case 'event': {
       if (!isClientEvent(parsed.name)) return null;
       if (parsed.dim === undefined) return { t: 'event', name: parsed.name };
@@ -400,6 +404,10 @@ export class RoomDO extends DurableObject<Env> {
         return;
       case 'event':
         this.handleEvent(attachment, parsed.name, parsed.dim);
+        return;
+      case 'ping':
+        // Normally auto-answered by setWebSocketAutoResponse without waking
+        // the object; a stray one that reaches here is a no-op (beacon-do.ts).
         return;
     }
   }

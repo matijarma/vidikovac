@@ -131,6 +131,20 @@ describe('RoomDO open and join', () => {
     expect((await c.inbox.nextOfType('pong')).t).toBe('pong');
   });
 
+  it('treats a ping the auto-response missed as a silent no-op, not a bad-frame error', async () => {
+    const { roomId, input } = await openRoom();
+    const scanner = await join(roomId, input.tickets[0]!.ticket);
+    // Not byte-identical to KEEPALIVE_REQUEST, so setWebSocketAutoResponse's
+    // exact-match fast path does not intercept it and the frame reaches
+    // webSocketMessage as RoomClientMessage's own `{ t: 'ping' }` variant —
+    // the same "best-effort, not a guarantee" race beacon-do.ts documents.
+    scanner.conn.ws.send(JSON.stringify({ t: 'ping', stray: true }));
+    await scanner.conn.inbox.expectSilence();
+    // The socket is still fully live afterward, not errored into some broken state.
+    scanner.conn.ws.send(JSON.stringify({ t: 'view', layer: 'not-a-layer' }));
+    expect((await scanner.conn.inbox.nextOfType('error')).error).toBe('bad-frame');
+  });
+
   it('resume re-attaches with the same role and closes the previous socket', async () => {
     const { roomId, input } = await openRoom();
     const first = await join(roomId, input.tickets[0]!.ticket);
