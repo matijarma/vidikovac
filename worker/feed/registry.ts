@@ -2,6 +2,7 @@ import type { Attribution, FeedItem, FetchContext, ModuleId, ModuleSnapshot, Mod
 import type { FeedPayload } from './payload';
 import { fetchDhmzCap } from './modules/dhmz-cap';
 import { fetchEmsc } from './modules/emsc';
+import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt } from './modules/zet-rt';
 
 // The registry is the single source of truth for tier, refresh windows and
@@ -103,7 +104,7 @@ function notImplemented(id: ModuleId): () => Promise<FeedPayload> {
 
 export const MODULES: Record<ModuleId, ModuleSpec> = {
   'zet-rt': defineModule({ id: 'zet-rt', tier: 'session', ttl: 30, maxStale: 300, load: fetchZetRt }),
-  prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: notImplemented('prometnice') }),
+  prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: fetchPrometnice }),
   'dhmz-now': defineModule({ id: 'dhmz-now', tier: 'session', ttl: 600, maxStale: 7200, load: notImplemented('dhmz-now') }),
   'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: notImplemented('dhmz-forecast') }),
   'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
