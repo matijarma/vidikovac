@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { METRICS_DO_NAME, MetricsDO, type MetricsDailyRow, type MetricsEntry } from '../../worker/metrics-do';
 import { recordMetric } from '../../worker/metrics';
 import { EXPORT_KINDS, SERVER_EVENTS } from '../../worker/protocol';
-import { waitForRow } from './helpers';
+import { waitForRows } from './helpers';
 
 describe('metrics contract (R-14, R-29, R-42, R-44)', () => {
   it('exports the names Area D consumes and answers query as a Promise', async () => {
@@ -58,10 +58,10 @@ describe('metrics contract (R-14, R-29, R-42, R-44)', () => {
     expect(result).toBeUndefined();
     const id = env.METRICS_DO.idFromName(METRICS_DO_NAME);
     const stub = env.METRICS_DO.get(id) as unknown as DurableObjectStub<MetricsDO>;
-    // waitForRow (R-31) polls the whole row list; recordMetric is fire-and-forget
+    // waitForRows (R-31) polls the whole row list; recordMetric is fire-and-forget
     // and hands the caller no promise to await, so a per-call predicate over the
     // returned rows is how a test observes the write landing.
-    const rows = await waitForRow(stub, (list) => list.some((r) => r.event === 'session_start' && r.dim1 === 'kiosk'), 2000);
+    const rows = await waitForRows(stub, (list) => list.some((r) => r.event === 'session_start' && r.dim1 === 'kiosk'), 2000);
     const row = rows.find((r) => r.event === 'session_start' && r.dim1 === 'kiosk');
     expect(row?.count).toBe(1);
   });

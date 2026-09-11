@@ -5,6 +5,7 @@ import { env } from 'cloudflare:test';
 import { expect } from 'vitest';
 import { beaconStub, type BeaconCreateInput } from '../../worker/do/beacon-do';
 import { indexStub } from '../../worker/do/index-do';
+import { roomStub } from '../../worker/do/room-do';
 import type { Env } from '../../worker/env';
 import type { MetricsDailyRow, MetricsDO } from '../../worker/metrics-do';
 import { NET_KEY_HEADER } from '../../worker/pairing/netkey';
@@ -19,8 +20,12 @@ const testEnv = (): Env => env as unknown as Env;
  * `recordMetric` is void and fire-and-forget (R-29): a caller has no promise
  * to await, so a test observes the resulting row this way instead of a fixed
  * setTimeout or an immediate read that may race the write.
+ *
+ * Named `waitForRows` (plural: the predicate sees the whole row list) to
+ * leave `waitForRow` free for B7's single-row variant below — same polling
+ * idiom, different granularity, so both live under names that say which.
  */
-export async function waitForRow(
+export async function waitForRows(
   stub: DurableObjectStub<MetricsDO>,
   predicate: (rows: MetricsDailyRow[]) => boolean,
   timeoutMs = 1000,
@@ -29,7 +34,7 @@ export async function waitForRow(
   for (;;) {
     const rows = await stub.query(EPOCH_DAY);
     if (predicate(rows)) return rows;
-    if (Date.now() >= deadline) throw new Error(`waitForRow: timed out after ${timeoutMs}ms`);
+    if (Date.now() >= deadline) throw new Error(`waitForRows: timed out after ${timeoutMs}ms`);
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
@@ -186,4 +191,43 @@ export async function onlineKiosk(area = 'donji-grad'): Promise<{ beaconId: stri
   const kiosk = await connectWs(beaconId, KIOSK_NET_KEY);
   const codes = await authKiosk(kiosk, secret);
   return { beaconId, secret, kiosk, batch: codes.batch as CodeSlot[] };
+}
+
+// --- added in B7 -----------------------------------------------------------
+
+/**
+ * A room socket opened straight against the Durable Object. The `/ws/room/:id`
+ * route arrives in B8; the object's own `fetch` is the contract under test
+ * here, and it answers the same 101 the Worker forwards.
+ */
+export async function connectRoom(roomId: string): Promise<Conn> {
+  const response = await roomStub(testEnv(), roomId).fetch('https://room.do/ws', {
+    headers: { Upgrade: 'websocket' },
+  });
+  if (response.status !== 101) throw new Error(`expected 101, got ${response.status} ${await response.text()}`);
+  const ws = response.webSocket;
+  if (!ws) throw new Error('expected a webSocket on the 101 response');
+  ws.accept();
+  return { ws, inbox: new Inbox(ws) };
+}
+
+/**
+ * R-31: counters are written fire-and-forget, so a test polls for the single
+ * row it expects instead of sleeping a guessed number of milliseconds.
+ * Single-row counterpart to {@link waitForRows} above (whole-list predicate);
+ * this one hands the caller the one row that matched.
+ */
+export async function waitForRow(
+  stub: DurableObjectStub<MetricsDO>,
+  predicate: (row: MetricsDailyRow) => boolean,
+  timeoutMs = 3000,
+): Promise<MetricsDailyRow> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await stub.query(EPOCH_DAY);
+    const found = rows.find(predicate);
+    if (found !== undefined) return found;
+    if (Date.now() >= deadline) throw new Error('waitForRow: no metrics row matched the predicate within the timeout');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }

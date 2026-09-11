@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/env';
 import { metricsStub, recordMetric, zagrebDayHour } from '../../worker/metrics';
 import { METRICS_DO_NAME, MetricsDO, type MetricsDailyRow } from '../../worker/metrics-do';
-import { waitForRow } from './helpers';
+import { waitForRows } from './helpers';
 
 const testEnv = env as unknown as Env;
 
@@ -82,7 +82,7 @@ describe('MetricsDO', () => {
   it('recordMetric is void and fire-and-forget: it never throws, and the write lands', async () => {
     expect(recordMetric(testEnv, 'kiosk_online', 'sesvete')).toBeUndefined();
     expect(recordMetric(testEnv, 'not_an_event' as never)).toBeUndefined();
-    const list = await waitForRow(stub(), (list) => total(list, 'kiosk_online', 'sesvete') > 0);
+    const list = await waitForRows(stub(), (list) => total(list, 'kiosk_online', 'sesvete') > 0);
     expect(total(list, 'kiosk_online', 'sesvete')).toBe(1);
     expect(list.filter((r) => r.event === 'not_an_event')).toHaveLength(0);
   });
