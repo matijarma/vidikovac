@@ -305,6 +305,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
   }
 
+  /** Back to the teaser: the room is over, whatever the socket thinks. */
+  function endSession(): void {
+    session?.close();
+    session = null;
+    unlockedToken = null;
+    sessionSnapshots = {};
+    setMode('teaser');
+  }
+
   async function refreshSessionData(): Promise<void> {
     const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
     if (!unlockedToken) return;
@@ -370,12 +379,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
           paintLayer();
           void refreshSessionData();
         });
-        session.onExpired(() => {
-          session = null;
-          unlockedToken = null;
-          sessionSnapshots = {};
-          setMode('teaser');
-        });
+        session.onExpired(endSession);
         session.connect();
       },
       onRevoked: () => showAlert('kiosk.revoked', 'revoked'),
@@ -405,6 +409,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (element.dataset.mode === 'teaser') {
       cardIndex += 1;
       paintTeaser();
+    } else {
+      // An unlocked screen is the one evaluators watch: the ZET dots and the
+      // counts have to move without anyone touching the driver's phone (R-55).
+      // And if the room's clock ran out while the socket was down, the screen
+      // returns to the teaser on its own rather than freezing for good (R-53).
+      const live = session;
+      if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
+      else void refreshSessionData();
     }
     void loadTeaser();
   }, TEASER_ROTATE_MS);
