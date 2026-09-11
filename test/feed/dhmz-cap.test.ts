@@ -11,8 +11,8 @@ describe('parseDhmzCap', () => {
     expect(ZAGREB_EMMA_ID).toBe('HR002');
     expect(payload.items).toHaveLength(2);
     expect(payload.items.map((item) => item.id)).toEqual([
-      '2.49.0.0.191.0.HR.260911082407.LDZM:hr',
-      '2.49.0.0.191.0.HR.260911082407.LDZM:en',
+      '2.49.0.0.191.0.HR.260911082407.LDZM:hr:Žuto upozorenje za grmljavinsku oluju@2026-09-11T00:00:00+02:00',
+      '2.49.0.0.191.0.HR.260911082407.LDZM:en:Yellow thunderstorm warning@2026-09-11T00:00:00+02:00',
     ]);
     expect(payload.items.every((item) => item.kind === 'warning')).toBe(true);
   });
@@ -51,6 +51,43 @@ describe('parseDhmzCap', () => {
         `<geocode><valueName>EMMA_ID</valueName><value>HR005</value></geocode></area></info></alert>`,
     );
     expect(other.items).toEqual([]);
+  });
+
+  it('gives distinct ids to two concurrently active warning types both naming Zagreb', () => {
+    // Same document identifier, same language, same region — only the hazard
+    // (event/onset) differs, exactly the real shape DHMZ can publish (this
+    // fixture already carries a thunderstorm warning and a rain warning as
+    // separate <info> blocks, just not both for Zagreb in this instance).
+    const both = parseDhmzCap(
+      `<alert><identifier>Z</identifier>` +
+        `<info><language>hr</language><event>Grmljavinska oluja</event><onset>2026-09-11T00:00:00+02:00</onset>` +
+        `<severity>Moderate</severity><area><areaDesc>Zagrebačka regija</areaDesc>` +
+        `<geocode><valueName>EMMA_ID</valueName><value>HR002</value></geocode></area></info>` +
+        `<info><language>hr</language><event>Kiša</event><onset>2026-09-11T00:00:00+02:00</onset>` +
+        `<severity>Moderate</severity><area><areaDesc>Zagrebačka regija</areaDesc>` +
+        `<geocode><valueName>EMMA_ID</valueName><value>HR002</value></geocode></area></info></alert>`,
+    );
+    expect(both.items).toHaveLength(2);
+    const ids = both.items.map((item) => item.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toEqual(['Z:hr:Grmljavinska oluja@2026-09-11T00:00:00+02:00', 'Z:hr:Kiša@2026-09-11T00:00:00+02:00']);
+  });
+
+  it('still yields unique ids when even event and onset coincide', () => {
+    const identical = parseDhmzCap(
+      `<alert><identifier>Z</identifier>` +
+        `<info><language>hr</language><event>Grmljavinska oluja</event><onset>2026-09-11T00:00:00+02:00</onset>` +
+        `<severity>Moderate</severity><area><areaDesc>Zagrebačka regija</areaDesc></area></info>` +
+        `<info><language>hr</language><event>Grmljavinska oluja</event><onset>2026-09-11T00:00:00+02:00</onset>` +
+        `<severity>Severe</severity><area><areaDesc>Zagrebačka regija</areaDesc></area></info></alert>`,
+    );
+    expect(identical.items).toHaveLength(2);
+    const ids = identical.items.map((item) => item.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toEqual([
+      'Z:hr:Grmljavinska oluja@2026-09-11T00:00:00+02:00',
+      'Z:hr:Grmljavinska oluja@2026-09-11T00:00:00+02:00#2',
+    ]);
   });
 });
 

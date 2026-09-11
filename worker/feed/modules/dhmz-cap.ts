@@ -47,6 +47,7 @@ export function parseDhmzCap(xml: string): FeedPayload {
   const alert = parseXml<CapDocument>(xml, { arrayPaths: ARRAY_PATHS }).alert;
   const identifier = xmlText(alert?.identifier) || 'cap';
   const items: ItemInput[] = [];
+  const idSeen = new Map<string, number>();
 
   for (const info of xmlArray(alert?.info)) {
     const area = zagrebArea(info);
@@ -58,7 +59,7 @@ export function parseDhmzCap(xml: string): FeedPayload {
       .replace(/\s+/g, ' ')
       .trim();
     items.push({
-      id: `${identifier}:${language}`,
+      id: uniqueItemId(idSeen, identifier, language, xmlText(info.event), xmlText(info.onset)),
       kind: 'warning',
       title: xmlText(info.event),
       ...(summary ? { summary } : {}),
@@ -70,6 +71,22 @@ export function parseDhmzCap(xml: string): FeedPayload {
   }
 
   return { items, ...(isoOrUndefined(xmlText(alert?.sent)) ? { sourceUpdatedAt: isoOrUndefined(xmlText(alert?.sent)) } : {}) };
+}
+
+// The document-level <identifier> is one per whole national file, and
+// <language> is only 'hr'/'en' — neither varies per hazard. DHMZ can and does
+// bundle several concurrently active warning types (thunderstorm, rain, wind)
+// as separate <info> blocks in one document, and more than one can name
+// Zagreb at once, so `identifier:language` alone can collide between two
+// genuinely distinct, simultaneously active warnings. <event> and <onset>
+// are what actually distinguishes one hazard window from another; the
+// counter is a last-resort tie-breaker so the id is unique even if a future
+// document ever repeats both (schema.ts documents id as unique per module).
+function uniqueItemId(seen: Map<string, number>, identifier: string, language: string, event: string, onset: string): string {
+  const base = `${identifier}:${language}:${event}${onset ? `@${onset}` : ''}`;
+  const count = (seen.get(base) ?? 0) + 1;
+  seen.set(base, count);
+  return count === 1 ? base : `${base}#${count}`;
 }
 
 function zagrebArea(info: CapInfo): { areaDesc: string; emmaId?: string } | null {
