@@ -1,5 +1,6 @@
 import type { Attribution, FeedItem, FetchContext, ModuleId, ModuleSnapshot, ModuleSpec, Tier } from './schema';
 import type { FeedPayload } from './payload';
+import { fetchDhmzCap } from './modules/dhmz-cap';
 
 // The registry is the single source of truth for tier, refresh windows and
 // attribution. Module files know only how to parse their own source.
@@ -103,7 +104,7 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: notImplemented('prometnice') }),
   'dhmz-now': defineModule({ id: 'dhmz-now', tier: 'session', ttl: 600, maxStale: 7200, load: notImplemented('dhmz-now') }),
   'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: notImplemented('dhmz-forecast') }),
-  'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: notImplemented('dhmz-cap') }),
+  'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
   emsc: defineModule({ id: 'emsc', tier: 'open', ttl: 60, maxStale: 3600, load: notImplemented('emsc') }),
   'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: notImplemented('hrt-news') }),
   glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: notImplemented('glasnik') }),
