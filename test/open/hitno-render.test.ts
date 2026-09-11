@@ -139,6 +139,31 @@ describe('renderHitnoPage', () => {
     expect(out).toContain('<span class="sev sev-extreme">izuzetno</span>');
   });
 
+  it('falls back to a safe severity word and class when a feed value is outside the closed vocabulary', () => {
+    // FeedItem['severity'] is typed to five literals, but that is a
+    // compile-time promise only: a bug in Area A's CAP-severity mapping, an
+    // unmapped CAP severity string, or a future field could hand render.ts a
+    // value outside that vocabulary. The cast below reproduces that at
+    // runtime the way a real bug would, using the exact attribute-breakout
+    // shape the finding names.
+    const malformed = snapshot('dhmz-cap', [
+      {
+        id: 'y',
+        module: 'dhmz-cap',
+        kind: 'warning',
+        tier: 'open',
+        title: 'Neispravna razina',
+        severity: 'moderate"><script>alert(1)</script>' as unknown as FeedItem['severity'],
+        until: '2026-09-11T23:00:00+02:00',
+      },
+    ]);
+    const out = renderHitnoPage(selectHitno([malformed], NOW), NOW);
+    expect(out).not.toContain('<script>alert(1)</script>');
+    expect(out).not.toContain('moderate">');
+    expect(out).not.toContain('sev-moderate"');
+    expect(out).toContain('<span class="sev sev-info">obavijest</span>');
+  });
+
   it('marks a stale snapshot as such', () => {
     const stale = snapshot('prometnice', [], 'stale');
     const out = renderHitnoPage(selectHitno([stale], NOW), NOW);

@@ -5,7 +5,7 @@
 //
 // Every value from a feed passes through escapeHtml. Severity, freshness and
 // status are always a word plus a shape; colour only reinforces.
-import type { Attribution, FeedItem } from '../feed/schema';
+import type { Attribution, FeedItem, Severity } from '../feed/schema';
 import { escapeHtml } from '../open/html';
 import { formatZagrebDateTime, formatZagrebTime, parseIso } from '../open/time';
 import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from './brojevi';
@@ -108,6 +108,21 @@ function osmLink(item: FeedItem): string {
   return ` · <a class="ext" href="${escapeHtml(href)}" rel="noopener">karta</a>`;
 }
 
+/**
+ * A `severity` this far has already been through `FeedItem`'s type, but that
+ * is a compile-time promise only: a bug in Area A's CAP-severity mapping, an
+ * unmapped CAP severity string, or a future field could hand this a value
+ * outside the closed 5-word vocabulary. That value is about to become part
+ * of an HTML class attribute (`sev-${sev}`), so it is normalised against the
+ * one true list of valid keys — `SEVERITY_WORDS` — and anything not on that
+ * list becomes 'info' before it ever reaches markup. This is stronger than
+ * escaping: an unrecognised value can't reach the page in any form, not even
+ * escaped.
+ */
+function safeSeverity(sev: string): Severity {
+  return Object.prototype.hasOwnProperty.call(SEVERITY_WORDS, sev) ? (sev as Severity) : 'info';
+}
+
 function section(id: string, heading: string, body: string, badge = ''): string {
   return (
     `<section id="${id}" aria-labelledby="h-${id}">` +
@@ -124,7 +139,7 @@ function warningsSection(panel: HitnoPanel, now: Date): string {
       `<ul class="items">` +
       panel.items
         .map((w) => {
-          const sev = w.severity ?? 'info';
+          const sev = safeSeverity(w.severity ?? 'info');
           const state = isActiveWarning(w, now) ? 'na snazi' : 'najavljeno';
           return (
             `<li><span class="sev sev-${sev}">${SEVERITY_WORDS[sev]}</span>` +
