@@ -13,6 +13,7 @@ import { CATALOG_TTL_SECONDS, buildCatalog, findOpenDataset } from './catalog';
 import type { OpenDeps } from './deps';
 import { closuresToGeoJson } from './geojson';
 import { cacheControl, edgeCached, openRateLimited } from './http';
+import { renderOpenIndex } from './index-page';
 
 const MODULE_JSON = /^\/open\/([a-z][a-z0-9-]*)\.json$/;
 
@@ -82,6 +83,24 @@ async function resolveOpenData(env: Env, ctx: ExecutionContext, url: URL, deps: 
   const now = deps.now ?? (() => new Date());
   const path = url.pathname;
   const cacheKey = new Request(`${url.origin}${path}`, { method: 'GET' });
+
+  if (path === '/open' || path === '/open/') {
+    // Both spellings serve the same page from the same cache entry, keyed on
+    // the canonical trailing-slash form (run_worker_first lists both in
+    // wrangler.jsonc: '/open/*' does not match the bare '/open').
+    const indexKey = new Request(`${url.origin}/open/`, { method: 'GET' });
+    const { response } = await edgeCached(ctx, indexKey, async () =>
+      new Response(renderOpenIndex(url.origin, now()), {
+        status: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-language': 'hr',
+          'cache-control': cacheControl(CATALOG_TTL_SECONDS),
+        },
+      }),
+    );
+    return response;
+  }
 
   if (path === '/open/catalog.json') {
     const { response } = await edgeCached(ctx, cacheKey, async () =>
