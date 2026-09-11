@@ -107,6 +107,33 @@ describe('the test-only bypass (R-02)', () => {
   });
 });
 
+describe('the default JWKS fetch (no injected deps.fetchJwks)', () => {
+  it('sends the project-wide User-Agent and an abortable timeout signal', async () => {
+    const domain = 'zivi.cloudflareaccess.com';
+    const signer = await makeSigner('k-live');
+    const token = await signer.sign({ alg: 'RS256', kid: 'k-live' }, claims({ iss: `https://${domain}` }));
+    let capturedUrl: string | undefined;
+    let capturedInit: RequestInit | undefined;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL, init?: RequestInit): Promise<Response> => {
+      capturedUrl = String(url);
+      capturedInit = init;
+      return new Response(JSON.stringify({ keys: [] }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      // No deps passed: this exercises the real defaultFetchJwks, not the injected test stub.
+      expect(
+        await verifyAccess(accessEnv({ CF_ACCESS_TEAM_DOMAIN: domain }), requestWith({ 'Cf-Access-Jwt-Assertion': token })),
+      ).toBe(false); // empty keyset: only the outgoing request shape is under test here
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(capturedUrl).toBe(`https://${domain}/cdn-cgi/access/certs`);
+    expect(new Headers(capturedInit?.headers).get('user-agent')).toBe('Vidikovac/0.1 (zagreb.aningfilm.hr; kontakt@aningfilm.hr)');
+    expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
 // Last on purpose: a failed JWKS fetch arms a module-level 60 s back-off.
 describe('a JWKS outage', () => {
   it('fails closed', async () => {

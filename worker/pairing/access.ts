@@ -58,8 +58,19 @@ function base64UrlToJson(value: string): unknown {
   return JSON.parse(new TextDecoder().decode(base64UrlToBytes(value)));
 }
 
+// Matches the project-wide upstream-fetch convention (global-constraints.md:
+// identified User-Agent, 6 s ceiling) already established by worker/feed/http.ts's
+// upstreamFetch. Kept local rather than imported: this module owns its own
+// security-relevant fetch, and a hanging Access certs endpoint must never stall
+// an /api/admin/* or /stats request past that ceiling.
+const JWKS_FETCH_USER_AGENT = 'Vidikovac/0.1 (zagreb.aningfilm.hr; kontakt@aningfilm.hr)';
+const JWKS_FETCH_TIMEOUT_MS = 6000;
+
 async function defaultFetchJwks(url: string): Promise<JwksDocument> {
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: { 'user-agent': JWKS_FETCH_USER_AGENT },
+    signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`jwks-fetch-failed: ${response.status}`);
   return (await response.json()) as JwksDocument;
 }
