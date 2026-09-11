@@ -57,6 +57,13 @@ export function zagrebDayHour(at: Date): { day: string; hour: number } {
   return { day: `${parts.year}-${parts.month}-${parts.day}`, hour };
 }
 
+/** The one shared stub every writer and reader builds from, so the two-line
+ *  namespace/idFromName lookup exists in exactly one place. */
+export function metricsStub(env: Env): DurableObjectStub<MetricsDO> {
+  const namespace = env.METRICS_DO as DurableObjectNamespace<MetricsDO>;
+  return namespace.get(namespace.idFromName(METRICS_DO_NAME));
+}
+
 /**
  * Fires one counter increment at MetricsDO and forgets it (R-29): returns
  * void, is never awaited or passed to `ctx.waitUntil` by a caller, and never
@@ -66,9 +73,9 @@ export function zagrebDayHour(at: Date): { day: string; hour: number } {
 export function recordMetric(env: Env, event: ServerEvent | ClientEvent, dim1?: string, dim2?: string): void {
   try {
     if (!isMetricEvent(event)) return;
-    const namespace = env.METRICS_DO as DurableObjectNamespace<MetricsDO>;
-    const stub = namespace.get(namespace.idFromName(METRICS_DO_NAME));
-    Promise.resolve(stub.record(event, dim1, dim2)).catch((error) => logError('metrics-write-failed', error, { event }));
+    Promise.resolve(metricsStub(env).record(event, dim1, dim2)).catch((error) =>
+      logError('metrics-write-failed', error, { event }),
+    );
   } catch (error) {
     logError('metrics-write-failed', error, { event });
   }

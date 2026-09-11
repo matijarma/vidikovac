@@ -1,15 +1,14 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/env';
-import { recordMetric, zagrebDayHour } from '../../worker/metrics';
+import { metricsStub, recordMetric, zagrebDayHour } from '../../worker/metrics';
 import { METRICS_DO_NAME, MetricsDO, type MetricsDailyRow } from '../../worker/metrics-do';
 import { waitForRow } from './helpers';
 
 const testEnv = env as unknown as Env;
 
 function stub(): DurableObjectStub<MetricsDO> {
-  const namespace = testEnv.METRICS_DO as DurableObjectNamespace<MetricsDO>;
-  return namespace.get(namespace.idFromName(METRICS_DO_NAME));
+  return metricsStub(testEnv);
 }
 
 async function rows(): Promise<MetricsDailyRow[]> {
