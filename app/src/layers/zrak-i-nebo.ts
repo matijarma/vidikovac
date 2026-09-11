@@ -4,6 +4,7 @@ import { zagrebDateTime, zagrebTime } from '../format';
 import { createLayerSection, createPanel, dataNumber, listMarkup } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
 import { sunTimes } from '../ui/solar';
+import { capWarningRow } from './shared';
 import type { LayerContext } from './types';
 
 export function renderZrakINebo(ctx: LayerContext): HTMLElement {
@@ -52,12 +53,7 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   panels.appendChild(
     createPanel({
       i18n, now, id: 'zrak-i-nebo-cap', title: i18n.t('panels.cap'), snapshot: cap,
-      body: listMarkup(
-        (cap?.items ?? []).map(
-          (w) => `<strong>${escapeHtml(i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</strong> · ${escapeHtml(w.title)}<span class="panel-sub"> ${escapeHtml(i18n.t('panels.until', { time: zagrebTime(w.until) }))}</span>`,
-        ),
-        i18n.t('panels.capNone'),
-      ),
+      body: listMarkup((cap?.items ?? []).map((w) => capWarningRow(w, i18n)), i18n.t('panels.capNone')),
     }).element,
   );
 

@@ -1,8 +1,9 @@
 // Sigurnost inside a session shows exactly what /hitno shows to everyone, in the
 // same order, and links to the untimed page (WCAG 2.2.1 alternative).
-import { zagrebDateTime, zagrebTime } from '../format';
+import { zagrebDateTime } from '../format';
 import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
+import { capWarningRow, closureRow } from './shared';
 import type { LayerContext } from './types';
 
 export function renderSigurnost(ctx: LayerContext): HTMLElement {
@@ -24,9 +25,7 @@ export function renderSigurnost(ctx: LayerContext): HTMLElement {
     createPanel({
       i18n, now, id: 'sigurnost-cap', title: i18n.t('panels.cap'), snapshot: cap,
       body: listMarkup(
-        (cap?.items ?? []).map(
-          (w) => `<strong>${escapeHtml(i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</strong> · ${escapeHtml(w.title)}<br><span class="panel-sub">${escapeHtml(w.summary ?? '')} ${escapeHtml(i18n.t('panels.until', { time: zagrebTime(w.until) }))}</span>`,
-        ),
+        (cap?.items ?? []).map((w) => capWarningRow(w, i18n, { withSummary: true })),
         i18n.t('panels.capNone'),
       ),
       onCopy: ctx.onCopy,
@@ -52,9 +51,7 @@ export function renderSigurnost(ctx: LayerContext): HTMLElement {
     createPanel({
       i18n, now, id: 'sigurnost-closures', title: i18n.t('panels.closures'), snapshot: closures,
       body: listMarkup(
-        (closures?.items ?? []).map(
-          (c) => `<strong>${escapeHtml(c.title)}</strong><span class="panel-sub"> ${escapeHtml(i18n.t(`panels.closureType.${dataText(c, 'subtype') || 'ROAD_CLOSED'}`))} · ${escapeHtml(i18n.t(`panels.direction.${dataText(c, 'direction') || 'BOTH_DIRECTIONS'}`))} · ${escapeHtml(i18n.t('panels.until', { time: zagrebDateTime(c.until) }))}</span>`,
-        ),
+        (closures?.items ?? []).map((c) => closureRow(c, i18n, { withDirection: true })),
         i18n.t('status.empty'),
       ),
       extraActions: ctx.onExport

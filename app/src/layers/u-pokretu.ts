@@ -2,10 +2,10 @@
 // each route is running right now.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
-import { zagrebDateTime } from '../format';
 import type { MapLine, MapPoint } from '../map/city-map';
 import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
+import { closureRow } from './shared';
 import type { LayerContext } from './types';
 
 export interface RouteDelay {
@@ -101,12 +101,7 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   panels.appendChild(
     createPanel({
       i18n, now, id: 'u-pokretu-closures', title: i18n.t('panels.closures'), snapshot: closures,
-      body: listMarkup(
-        (closures?.items ?? []).map(
-          (c) => `<strong>${escapeHtml(c.title)}</strong><span class="panel-sub"> ${escapeHtml(i18n.t(`panels.closureType.${dataText(c, 'subtype') || 'ROAD_CLOSED'}`))} · ${escapeHtml(i18n.t('panels.until', { time: zagrebDateTime(c.until) }))}</span>`,
-        ),
-        i18n.t('status.empty'),
-      ),
+      body: listMarkup((closures?.items ?? []).map((c) => closureRow(c, i18n)), i18n.t('status.empty')),
       extraActions: ctx.onExport
         ? [
             { id: 'geojson', label: i18n.t('export.geojson'), run: () => ctx.onExport?.('geojson', 'prometnice') },

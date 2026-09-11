@@ -99,6 +99,11 @@ export interface CityMapHandle {
   destroy(): void;
 }
 
+// Contract: installed maplibre-gl is ^5 (GHSA-jrc7-96c5-q579, a sanitizer XSS
+// bypass fixed only in 6.9.0+ — tracked as a separate major-version upgrade,
+// not done here). Until that upgrade lands, no caller of a MapFactory may pass
+// feed-derived (external) text into a MapLibre Popup or marker HTML; this
+// wrapper itself only ever hands MapLibre the static OSM_ATTRIBUTION string.
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
 export function createCityMap(options: CityMapOptions): CityMapHandle {

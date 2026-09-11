@@ -10,6 +10,7 @@ import {
   dataText,
   listMarkup,
 } from '../panels/panel';
+import { capWarningRow } from './shared';
 import type { LayerContext } from './types';
 
 export function renderGradSada(ctx: LayerContext): HTMLElement {
@@ -59,10 +60,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   );
 
   const cap = snapshots['dhmz-cap'];
-  const warnings = (cap?.items ?? []).map(
-    (w) =>
-      `<strong>${escapeHtml(i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</strong> · ${escapeHtml(w.title)}<span class="panel-sub"> ${escapeHtml(i18n.t('panels.until', { time: zagrebTime(w.until) }))}</span>`,
-  );
+  const warnings = (cap?.items ?? []).map((w) => capWarningRow(w, i18n));
   panels.appendChild(
     createPanel({
       i18n, now, id: 'grad-sada-cap', title: i18n.t('panels.cap'), snapshot: cap,
