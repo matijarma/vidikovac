@@ -2,20 +2,23 @@
 // write path. Pure apart from recordMetric, so the unit project can load it;
 // metrics-do.ts imports from here (never the other way at runtime).
 //
-// Contract note (see task-B4-report.md "Rulings"): the plan text originally
-// handed to this task specified a batch `record(entries)` DO method and a
-// Promise-returning `recordMetric`. The controller's rulings.md (R-14, R-17,
-// R-20, R-24, R-29, R-31) pin a different, already-consumed shape: a single-
-// event `record(event, dim1?, dim2?)`, `METRICS_DO_NAME`/`MetricsDailyRow`
-// exported from worker/metrics-do.ts, and a void, fire-and-forget
-// `recordMetric` observed in tests only via a polling helper (R-31). Area D's
-// task D3 is already committed against exactly that shape (`worker/stats/
-// export.ts`, `worker/stats/page.ts`, `worker/routes/stats.ts` on the area-D
-// branch import `MetricsDailyRow`/`METRICS_DO_NAME` from `../metrics-do` and
-// call `stub.query(sinceDay)`), so this file follows the rulings, not the
-// stale plan text.
+// Contract note (B4, then B6b — see task-B4-report.md and task-B6b-report.md
+// "Rulings"): rulings.md R-14/R-17/R-20/R-24/R-29/R-31/R-42/R-44 pin a
+// single-event `record(event, dim1?, dim2?)` alongside a batch `recordMany`,
+// `MetricsDailyRow`/`METRICS_DO_NAME` importable from worker/metrics-do.ts, a
+// void fire-and-forget `recordMetric`, and `EXPORT_KINDS`/`ExportKind` living
+// only in protocol.ts — never a second list here. Area D's task D3 (already
+// merged) imports `MetricsDailyRow`/`METRICS_DO_NAME` from `../metrics-do` and
+// calls `stub.query(sinceDay)` directly. `METRICS_DO_NAME`'s canonical
+// declaration stays in *this* file (metrics-do.ts re-exports it) rather than
+// the other way around, despite R-42's literal wording: metrics-do.ts imports
+// 'cloudflare:workers', which the `unit` vitest project's plain-node
+// environment cannot resolve, so a barrel re-export running the other
+// direction breaks `test/pairing/metrics.test.ts` (proven empirically —
+// task-B6b-report.md, Rulings). The re-exported name Area D actually consumes
+// (`import { METRICS_DO_NAME } from '../metrics-do'`) resolves identically
+// either way.
 import type { Env } from './env';
-import { logError } from './log';
 import type { MetricsDO } from './metrics-do';
 import { CLIENT_EVENTS, SERVER_EVENTS } from './protocol';
 import type { ClientEvent, ServerEvent } from './protocol';
@@ -35,10 +38,6 @@ const EVENT_SET: ReadonlySet<string> = new Set(METRIC_EVENTS);
 export function isMetricEvent(name: unknown): name is ServerEvent | ClientEvent {
   return typeof name === 'string' && EVENT_SET.has(name);
 }
-
-/** Second dimension of the client `export` event; the first is the LayerId. */
-export const EXPORT_KINDS = ['copy', 'link', 'ics', 'geojson', 'pdf'] as const;
-export type ExportKind = (typeof EXPORT_KINDS)[number];
 
 const ZAGREB = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Zagreb',
@@ -65,18 +64,17 @@ export function metricsStub(env: Env): DurableObjectStub<MetricsDO> {
 }
 
 /**
- * Fires one counter increment at MetricsDO and forgets it (R-29): returns
- * void, is never awaited or passed to `ctx.waitUntil` by a caller, and never
- * throws. An event outside the closed vocabulary is dropped silently; any
- * failure reaching the DO is dropped after one operational log line.
+ * Fires one counter increment at MetricsDO and forgets it (R-29/R-42):
+ * returns void, is never awaited or passed to `ctx.waitUntil` by a caller,
+ * and never throws. An event outside the closed vocabulary is dropped
+ * silently; any failure reaching the DO is dropped too — counters never
+ * break a request.
  */
-export function recordMetric(env: Env, event: ServerEvent | ClientEvent, dim1?: string, dim2?: string): void {
-  try {
-    if (!isMetricEvent(event)) return;
-    Promise.resolve(metricsStub(env).record(event, dim1, dim2)).catch((error) =>
-      logError('metrics-write-failed', error, { event }),
-    );
-  } catch (error) {
-    logError('metrics-write-failed', error, { event });
-  }
+export function recordMetric(env: Env, event: ServerEvent | ClientEvent, dim1 = '', dim2 = ''): void {
+  if (!isMetricEvent(event)) return;
+  void metricsStub(env)
+    .record(event, dim1, dim2)
+    .catch(() => {
+      /* counters never break a request */
+    });
 }

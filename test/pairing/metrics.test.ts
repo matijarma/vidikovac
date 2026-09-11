@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS } from '../../worker/protocol';
-import { EXPORT_KINDS, METRIC_EVENTS, isMetricEvent, zagrebDayHour } from '../../worker/metrics';
+import { EXPORT_KINDS, LAYERS } from '../../worker/protocol';
+import { METRIC_EVENTS, isMetricEvent, zagrebDayHour } from '../../worker/metrics';
 
 describe('metric vocabulary', () => {
   it('lists every server and client event exactly once', () => {
@@ -12,7 +12,9 @@ describe('metric vocabulary', () => {
     expect(isMetricEvent(42)).toBe(false);
   });
   it('export kinds and layers are closed lists', () => {
-    expect(EXPORT_KINDS).toEqual(['copy', 'link', 'ics', 'geojson', 'pdf']);
+    // EXPORT_KINDS lives only in protocol.ts (R-44); metrics.ts no longer
+    // duplicates it.
+    expect(EXPORT_KINDS).toEqual(['copy', 'share', 'ics', 'geojson', 'print']);
     expect(LAYERS).toHaveLength(7);
   });
 });
