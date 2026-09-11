@@ -17,6 +17,7 @@ const MODULES: ModuleSnapshot[] = [
   snap('dhmz-now', [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', data: { temp: 21, weather: 'vedro' } }]),
   snap('dhmz-cap', [{ id: 'w1', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Grmljavina', severity: 'moderate' }]),
   snap('prometnice', [{ id: 'c1', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Grada Vukovara' }]),
+  snap('emsc', [{ id: 'q1', module: 'emsc', kind: 'quake', tier: 'open', title: 'Potres magnitude 1,6', at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } }]),
   snap('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', link: 'https://vijesti.hrt.hr/clanak' }]),
   snap('ckan-geo', [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Ljekarna Centar, Ilica 1', data: { category: 'ljekarne', duty: 'da' } }]),
 ];
@@ -81,16 +82,29 @@ const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s
 
 describe('teaser content', () => {
   const i18n = createDefaultI18n('hr');
-  it('builds weather, departures, air, one HRT headline and the invitation, in that order', () => {
+  it('builds weather, the last quake, the closure count, one HRT headline and the invitation, in that order', () => {
     const cards = teaserCards(MODULES, i18n, NOW);
-    expect(cards.map((c) => c.id)).toEqual(['weather', 'departures', 'air', 'news', 'invitation']);
+    // R-59: every card is live open-tier data; no "Uskoro" sign on a public screen.
+    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'news', 'invitation']);
     expect(cards[0]!.title).toBe('Vrijeme sada');
     expect(cards[0]!.body).toContain('21 °C');
-    expect(cards[1]!.body).toBe('Uskoro u sljedećoj fazi.');
-    expect(cards[2]!.body).toBe('Uskoro u sljedećoj fazi.');
+    expect(cards[1]!.title).toBe('Posljednji potres');
+    expect(cards[1]!.body).toBe('M 1.6 · CROATIA');
+    expect(cards[1]!.attribution?.text).toBe('Izvor: emsc');
+    expect(cards[2]!.title).toBe('Zatvorene prometnice');
+    expect(cards[2]!.body).toBe('1 zatvaranje');
+    expect(cards[2]!.attribution?.text).toBe('Izvor: prometnice');
     expect(cards[3]!.body).toBe('Naslov vijesti');
     expect(cards[3]!.attribution?.text).toBe('Izvor: hrt-news');
     expect(cards[4]!.body).toBe('Skeniraj za 10 minuta pogleda na Zagreb. Plaćaš pažnjom, ne novcem.');
+    expect(cards.some((c) => c.body === i18n.t('kiosk.teaserSoon'))).toBe(false);
+  });
+  it('says so honestly when the quake feed is empty or still loading', () => {
+    const empty = teaserCards([...MODULES.filter((m) => m.module !== 'emsc'), snap('emsc', [])], i18n, NOW);
+    expect(empty[1]!.body).toBe('Nema zabilježenih potresa u posljednjih 7 dana.');
+    const loading = teaserCards(MODULES.filter((m) => m.module !== 'emsc' && m.module !== 'prometnice'), i18n, NOW);
+    expect(loading[1]!.body).toBe('učitavanje podataka');
+    expect(loading[2]!.body).toBe('učitavanje podataka');
   });
   it('the safety strip states the warning, the closure count and the on-duty pharmacy', () => {
     const strip = safetyStripText(MODULES, i18n);
@@ -147,7 +161,7 @@ describe('mountKiosk', () => {
     expect(TEASER_ROTATE_MS).toBe(20_000);
     expect(text(root.querySelector('[data-testid=teaser-card]'))).toContain('Vrijeme sada');
     timers.forEach((tick) => tick());
-    expect(text(root.querySelector('[data-testid=teaser-card]'))).toContain('Sljedeći polasci');
+    expect(text(root.querySelector('[data-testid=teaser-card]'))).toContain('Posljednji potres');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('žuto upozorenje');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('Ljekarna Centar, Ilica 1');
   });

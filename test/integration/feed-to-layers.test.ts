@@ -6,7 +6,7 @@
 // "Nedostupno" over healthy data (final review, C1). Nothing here builds a
 // FeedItem by hand.
 import { describe, expect, it } from 'vitest';
-import { MODULES, MODULE_IDS, TEASER_MODULES, teaserSubset } from '../../worker/feed/registry';
+import { MODULES, MODULE_IDS, OPEN_MODULES, TEASER_MODULES, teaserSubset } from '../../worker/feed/registry';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../feed/fixture-contexts';
@@ -110,19 +110,26 @@ describe('every layer renders the real feed output', () => {
 });
 
 describe('the kiosk teaser renders the real feed output', () => {
-  const teaser = TEASER_MODULES.map((id) => teaserSubset(snapshots[id]!));
+  // Exactly what /api/teaser answers: the open modules plus the three session
+  // teasers, each through teaserSubset (worker/routes/feed.ts).
+  const teaser = [...OPEN_MODULES, ...TEASER_MODULES].map((id) => teaserSubset(snapshots[id]!));
 
-  it('puts a real temperature on the weather card', () => {
-    const weather = teaserCards(teaser, i18n, NOW).find((card) => card.id === 'weather')!;
-    expect(weather.body).toMatch(/-?\d+([.,]\d+)? °C/);
-    expect(weather.body).not.toContain(UNAVAILABLE);
+  it('puts real values on every card and no "coming soon" sign', () => {
+    const cards = teaserCards(teaser, i18n, NOW);
+    const card = (id: string) => cards.find((c) => c.id === id)!;
+    expect(card('weather').body).toMatch(/-?\d+([.,]\d+)? °C/);
+    expect(card('quake').body).toMatch(/M \d+([.,]\d+)?/);
+    expect(card('closures').body).toMatch(/^\d+ zatvaranj/);
+    expect(card('news').body).not.toBe('');
+    for (const c of cards) {
+      expect(c.body, c.id).not.toContain(UNAVAILABLE);
+      expect(c.body, c.id).not.toContain(DASH);
+      expect(c.body, c.id).not.toBe(i18n.t('kiosk.teaserSoon'));
+    }
   });
 
   it('keeps the safety strip counting real closures', () => {
-    const strip = safetyStripText(
-      [...teaser, snapshots['dhmz-cap']!, snapshots.prometnice!, snapshots['ckan-geo']!],
-      i18n,
-    );
+    const strip = safetyStripText(teaser, i18n);
     expect(strip.closures).toMatch(/^\d+ zatvaranj/);
     expect(strip.cap).not.toBe('');
     expect(strip.pharmacy).not.toBe('');

@@ -39,7 +39,7 @@ export const TEASER_ROTATE_MS = 20_000;
 export const RING_SEGMENTS = 6;
 
 export interface TeaserCard {
-  id: 'weather' | 'departures' | 'air' | 'news' | 'invitation';
+  id: 'weather' | 'quake' | 'closures' | 'news' | 'invitation';
   title: string;
   body: string;
   attribution?: Attribution;
@@ -56,6 +56,12 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
   const observation = map['dhmz-now']?.items[0];
   const temp = dataNumber(observation, 'temp');
   const news = map['hrt-news']?.items[0];
+  // The teaser payload carries emsc newest-first and the whole closure list
+  // (registry.teaserSubset), so both cards below are live open-tier data.
+  const quakes = map.emsc;
+  const quake = quakes?.items[0];
+  const closures = map.prometnice;
+  const closureCount = (closures?.items ?? []).filter((item) => item.kind === 'closure').length;
   return [
     {
       id: 'weather',
@@ -65,10 +71,24 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
         : i18n.t('status.loading'),
       attribution: map['dhmz-now']?.attribution,
     },
-    // Departures need a GTFS stop per venue; the feature lands after stage 1 and
-    // the card says so rather than showing an empty timetable.
-    { id: 'departures', title: i18n.t('kiosk.teaserDepartures'), body: i18n.t('kiosk.teaserSoon') },
-    { id: 'air', title: i18n.t('kiosk.teaserAir'), body: i18n.t('kiosk.teaserSoon') },
+    {
+      id: 'quake',
+      title: i18n.t('kiosk.teaserQuake'),
+      body: quake
+        ? [i18n.t('panels.quakeMag', { mag: dataNumber(quake, 'mag') ?? '–' }), dataText(quake, 'region') || quake.title]
+            .filter(Boolean)
+            .join(' · ')
+        : quakes
+          ? i18n.t('panels.quakeNone')
+          : i18n.t('status.loading'),
+      attribution: quakes?.attribution,
+    },
+    {
+      id: 'closures',
+      title: i18n.t('kiosk.teaserClosures'),
+      body: closures ? i18n.t('panels.closuresCount', { count: closureCount }) : i18n.t('status.loading'),
+      attribution: closures?.attribution,
+    },
     {
       id: 'news',
       title: i18n.t('kiosk.teaserNews'),
