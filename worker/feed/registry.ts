@@ -1,6 +1,8 @@
 import type { Attribution, FeedItem, FetchContext, ModuleId, ModuleSnapshot, ModuleSpec, Tier } from './schema';
 import type { FeedPayload } from './payload';
 import { fetchDhmzCap } from './modules/dhmz-cap';
+import { fetchDhmzForecast } from './modules/dhmz-forecast';
+import { fetchDhmzNow } from './modules/dhmz-now';
 import { fetchEmsc } from './modules/emsc';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt } from './modules/zet-rt';
@@ -105,8 +107,8 @@ function notImplemented(id: ModuleId): () => Promise<FeedPayload> {
 export const MODULES: Record<ModuleId, ModuleSpec> = {
   'zet-rt': defineModule({ id: 'zet-rt', tier: 'session', ttl: 30, maxStale: 300, load: fetchZetRt }),
   prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: fetchPrometnice }),
-  'dhmz-now': defineModule({ id: 'dhmz-now', tier: 'session', ttl: 600, maxStale: 7200, load: notImplemented('dhmz-now') }),
-  'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: notImplemented('dhmz-forecast') }),
+  'dhmz-now': defineModule({ id: 'dhmz-now', tier: 'session', ttl: 600, maxStale: 7200, load: fetchDhmzNow }),
+  'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: fetchDhmzForecast }),
   'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
   emsc: defineModule({ id: 'emsc', tier: 'open', ttl: 60, maxStale: 3600, load: fetchEmsc }),
   'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: notImplemented('hrt-news') }),
