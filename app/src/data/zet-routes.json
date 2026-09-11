@@ -1,0 +1,772 @@
+{
+ "1": {
+  "shortName": "1",
+  "longName": "Zap.kol. - Borongaj",
+  "type": 0
+ },
+ "2": {
+  "shortName": "2",
+  "longName": "Črnomerec - Savišće",
+  "type": 0
+ },
+ "3": {
+  "shortName": "3",
+  "longName": "Ljubljanica -Savišće",
+  "type": 0
+ },
+ "4": {
+  "shortName": "4",
+  "longName": "Savski most - Dubec",
+  "type": 0
+ },
+ "5": {
+  "shortName": "5",
+  "longName": "Prečko-Park Maksimir",
+  "type": 0
+ },
+ "6": {
+  "shortName": "6",
+  "longName": "Črnomerec-Sopot",
+  "type": 0
+ },
+ "7": {
+  "shortName": "7",
+  "longName": "Savski most-Dubrava",
+  "type": 0
+ },
+ "8": {
+  "shortName": "8",
+  "longName": "Mihaljevac-Zapruđe",
+  "type": 0
+ },
+ "9": {
+  "shortName": "9",
+  "longName": "Ljubljanica-Borongaj",
+  "type": 0
+ },
+ "11": {
+  "shortName": "11",
+  "longName": "Črnomerec - Dubec",
+  "type": 0
+ },
+ "12": {
+  "shortName": "12",
+  "longName": "Ljubljanica -Dubrava",
+  "type": 0
+ },
+ "13": {
+  "shortName": "13",
+  "longName": "Žitnjak-Kvatern. trg",
+  "type": 0
+ },
+ "14": {
+  "shortName": "14",
+  "longName": "Mihaljevac-Zapruđe",
+  "type": 0
+ },
+ "15": {
+  "shortName": "15",
+  "longName": "Mihalj.- Grač. dolje",
+  "type": 0
+ },
+ "17": {
+  "shortName": "17",
+  "longName": "Prečko-Borongaj",
+  "type": 0
+ },
+ "31": {
+  "shortName": "31",
+  "longName": "Črnomerec - Sav.most",
+  "type": 0
+ },
+ "32": {
+  "shortName": "32",
+  "longName": "Prečko - Borongaj",
+  "type": 0
+ },
+ "33": {
+  "shortName": "33",
+  "longName": "Mihaljevac - Savišće",
+  "type": 0
+ },
+ "34": {
+  "shortName": "34",
+  "longName": "Ljubljanica - Dubec",
+  "type": 0
+ },
+ "101": {
+  "shortName": "101",
+  "longName": "Brit.trg-Šestine",
+  "type": 3
+ },
+ "102": {
+  "shortName": "102",
+  "longName": "Brit.trg-Mihaljevac",
+  "type": 3
+ },
+ "103": {
+  "shortName": "103",
+  "longName": "Brit.trg-Kraljevec",
+  "type": 3
+ },
+ "104": {
+  "shortName": "104",
+  "longName": "Miha.-Dom Ksaver",
+  "type": 3
+ },
+ "105": {
+  "shortName": "105",
+  "longName": "Kaptol-Britanski trg",
+  "type": 3
+ },
+ "106": {
+  "shortName": "106",
+  "longName": "Kaptol-Mirog.-Krem.",
+  "type": 3
+ },
+ "107": {
+  "shortName": "107",
+  "longName": "Jankomir - Žitnjak",
+  "type": 3
+ },
+ "108": {
+  "shortName": "108",
+  "longName": "Gl.kol.-Savski most",
+  "type": 3
+ },
+ "109": {
+  "shortName": "109",
+  "longName": "Črnomerec - Dugave",
+  "type": 3
+ },
+ "110": {
+  "shortName": "110",
+  "longName": "Savski most-Botinec",
+  "type": 3
+ },
+ "111": {
+  "shortName": "111",
+  "longName": "Zag.(S.m.)-D.S.-S.O.",
+  "type": 3
+ },
+ "112": {
+  "shortName": "112",
+  "longName": "Savski most - Lučko",
+  "type": 3
+ },
+ "113": {
+  "shortName": "113",
+  "longName": "Ljubljanica - Jarun",
+  "type": 3
+ },
+ "114": {
+  "shortName": "114",
+  "longName": "Ljubljanica - Prečko",
+  "type": 3
+ },
+ "115": {
+  "shortName": "115",
+  "longName": "Ljub.-Špansko-Jank.",
+  "type": 3
+ },
+ "116": {
+  "shortName": "116",
+  "longName": "Ljublj.-Podsus. most",
+  "type": 3
+ },
+ "117": {
+  "shortName": "117",
+  "longName": "Črnomerec - Jarun",
+  "type": 3
+ },
+ "118": {
+  "shortName": "118",
+  "longName": "Trg Mažuran.-Voltino",
+  "type": 3
+ },
+ "119": {
+  "shortName": "119",
+  "longName": "Črnom.-Podsused most",
+  "type": 3
+ },
+ "120": {
+  "shortName": "120",
+  "longName": "Črn.-Gajnice-Prečko",
+  "type": 3
+ },
+ "121": {
+  "shortName": "121",
+  "longName": "Črn.-Karaž.-Gajnice",
+  "type": 3
+ },
+ "122": {
+  "shortName": "122",
+  "longName": "Črn.-Podsused centar",
+  "type": 3
+ },
+ "123": {
+  "shortName": "123",
+  "longName": "Črnomerec-Pods.dolje",
+  "type": 3
+ },
+ "124": {
+  "shortName": "124",
+  "longName": "Črnomerec-G.Stenjev.",
+  "type": 3
+ },
+ "125": {
+  "shortName": "125",
+  "longName": "Črnomerec-G.Vrapče",
+  "type": 3
+ },
+ "126": {
+  "shortName": "126",
+  "longName": "Črnom.-G.K.- Krvarić",
+  "type": 3
+ },
+ "127": {
+  "shortName": "127",
+  "longName": "Črnomerec-Mikulići",
+  "type": 3
+ },
+ "128": {
+  "shortName": "128",
+  "longName": "Črnomerec-Lukšić",
+  "type": 3
+ },
+ "129": {
+  "shortName": "129",
+  "longName": "Kuniščak.-Šest.dol",
+  "type": 3
+ },
+ "130": {
+  "shortName": "130",
+  "longName": "Črnomerec-Borčec",
+  "type": 3
+ },
+ "131": {
+  "shortName": "131",
+  "longName": "Črnomerec-Bizek",
+  "type": 3
+ },
+ "132": {
+  "shortName": "132",
+  "longName": "S. most-G.Breg-Brez.",
+  "type": 3
+ },
+ "133": {
+  "shortName": "133",
+  "longName": "S.most-Sv.Klara-Čehi",
+  "type": 3
+ },
+ "134": {
+  "shortName": "134",
+  "longName": "Črnomerec-Prečko",
+  "type": 3
+ },
+ "135": {
+  "shortName": "135",
+  "longName": "Črnomerec - Graberje",
+  "type": 3
+ },
+ "136": {
+  "shortName": "136",
+  "longName": "Črnomerec-Špansko",
+  "type": 3
+ },
+ "137": {
+  "shortName": "137",
+  "longName": "Črn.-Donji Borčec",
+  "type": 3
+ },
+ "138": {
+  "shortName": "138",
+  "longName": "Brit.trg-Zel.-Brit.",
+  "type": 3
+ },
+ "139": {
+  "shortName": "139",
+  "longName": "Reljk-Jelenovac-Relj",
+  "type": 3
+ },
+ "140": {
+  "shortName": "140",
+  "longName": "Mihaljevac-Sljeme",
+  "type": 3
+ },
+ "141": {
+  "shortName": "141",
+  "longName": "Relj.-Vinogradi-Relj",
+  "type": 3
+ },
+ "142": {
+  "shortName": "142",
+  "longName": "Vrap.al.-Jač.-Vr.al.",
+  "type": 3
+ },
+ "143": {
+  "shortName": "143",
+  "longName": "Vrapčan.aleja-Orešje",
+  "type": 3
+ },
+ "144": {
+  "shortName": "144",
+  "longName": "Črnom.-Dom Sv. Josip",
+  "type": 3
+ },
+ "146": {
+  "shortName": "146",
+  "longName": "Reljkov.-Jankomir",
+  "type": 3
+ },
+ "148": {
+  "shortName": "148",
+  "longName": "Relj.-Herc.-Bos.-Rel",
+  "type": 3
+ },
+ "149": {
+  "shortName": "149",
+  "longName": "Kuniščak - Vrhovec",
+  "type": 3
+ },
+ "150": {
+  "shortName": "150",
+  "longName": "Tuš.gar.-G.g.-Trg J.",
+  "type": 3
+ },
+ "151": {
+  "shortName": "151",
+  "longName": "Zavr.-Trg S. Severa",
+  "type": 3
+ },
+ "159": {
+  "shortName": "159",
+  "longName": "S.most-Strm.Odranski",
+  "type": 3
+ },
+ "160": {
+  "shortName": "160",
+  "longName": "S.most-Lipnica-H. S.",
+  "type": 3
+ },
+ "161": {
+  "shortName": "161",
+  "longName": "S.m.-Kup.Kr.-Štrpet",
+  "type": 3
+ },
+ "162": {
+  "shortName": "162",
+  "longName": "S. most - Ašpergeri",
+  "type": 3
+ },
+ "163": {
+  "shortName": "163",
+  "longName": "S.m.-D.Trp.-G.Trp.",
+  "type": 3
+ },
+ "164": {
+  "shortName": "164",
+  "longName": "Zag.(S.m.)-Horvati",
+  "type": 3
+ },
+ "166": {
+  "shortName": "166",
+  "longName": "Zg.(Gl.k.)-D.Dragon.",
+  "type": 3
+ },
+ "168": {
+  "shortName": "168",
+  "longName": "S.most-Ježd.-Prečko",
+  "type": 3
+ },
+ "172": {
+  "shortName": "172",
+  "longName": "Zg.(Črn.)-Zaprešić",
+  "type": 3
+ },
+ "174": {
+  "shortName": "174",
+  "longName": "Zapre.-Hru. Kupljen.",
+  "type": 3
+ },
+ "176": {
+  "shortName": "176",
+  "longName": "Zg.(Črn.)-G.Bistra",
+  "type": 3
+ },
+ "177": {
+  "shortName": "177",
+  "longName": "Zg.(Črn.)-Polj.-G.B.",
+  "type": 3
+ },
+ "182": {
+  "shortName": "182",
+  "longName": "Trg Mladosti- Šibice",
+  "type": 3
+ },
+ "201": {
+  "shortName": "201",
+  "longName": "Kaptol-Kvaternik.trg",
+  "type": 3
+ },
+ "202": {
+  "shortName": "202",
+  "longName": "Kvaternik.trg-Kozjak",
+  "type": 3
+ },
+ "203": {
+  "shortName": "203",
+  "longName": "Svetice-Kaptol",
+  "type": 3
+ },
+ "204": {
+  "shortName": "204",
+  "longName": "Kv.t-Horv-Voć-Kv.trg",
+  "type": 3
+ },
+ "205": {
+  "shortName": "205",
+  "longName": "Dubr.-Mark.-Bidrovec",
+  "type": 3
+ },
+ "206": {
+  "shortName": "206",
+  "longName": "Dubrava-Miroševec",
+  "type": 3
+ },
+ "207": {
+  "shortName": "207",
+  "longName": "Kv.trg-Rim-Kv.trg",
+  "type": 3
+ },
+ "208": {
+  "shortName": "208",
+  "longName": "Dubrava-Vidovec",
+  "type": 3
+ },
+ "209": {
+  "shortName": "209",
+  "longName": "Dubrava-Čučerje",
+  "type": 3
+ },
+ "210": {
+  "shortName": "210",
+  "longName": "Dubr.-St.gr.-N.Retk.",
+  "type": 3
+ },
+ "211": {
+  "shortName": "211",
+  "longName": "Dubec-Branove.-Dubec",
+  "type": 3
+ },
+ "212": {
+  "shortName": "212",
+  "longName": "Dubec-Sesvete",
+  "type": 3
+ },
+ "213": {
+  "shortName": "213",
+  "longName": "Dubrava-Jalševec",
+  "type": 3
+ },
+ "214": {
+  "shortName": "214",
+  "longName": "Koled.-Trnava-K.Bok",
+  "type": 3
+ },
+ "215": {
+  "shortName": "215",
+  "longName": "Kv.trg-Trnava",
+  "type": 3
+ },
+ "216": {
+  "shortName": "216",
+  "longName": "Kv.trg-Resnik-I.Reka",
+  "type": 3
+ },
+ "217": {
+  "shortName": "217",
+  "longName": "Kv.trg-Struge-P.nas.",
+  "type": 3
+ },
+ "218": {
+  "shortName": "218",
+  "longName": "Gl. kolodvor-Borovje",
+  "type": 3
+ },
+ "219": {
+  "shortName": "219",
+  "longName": "Glavni k.-Sloboština",
+  "type": 3
+ },
+ "220": {
+  "shortName": "220",
+  "longName": "Glavni k.-Dugave",
+  "type": 3
+ },
+ "221": {
+  "shortName": "221",
+  "longName": "Glavni k.-Travno",
+  "type": 3
+ },
+ "222": {
+  "shortName": "222",
+  "longName": "Remetinec-Žitnjak",
+  "type": 3
+ },
+ "223": {
+  "shortName": "223",
+  "longName": "Dubrava-Trn.-Dubec",
+  "type": 3
+ },
+ "224": {
+  "shortName": "224",
+  "longName": "Dubec - Novoselec",
+  "type": 3
+ },
+ "225": {
+  "shortName": "225",
+  "longName": "Ses.-Resnik-K.Bok",
+  "type": 3
+ },
+ "226": {
+  "shortName": "226",
+  "longName": "Kaptol-Remete-Svet.",
+  "type": 3
+ },
+ "227": {
+  "shortName": "227",
+  "longName": "Svetice-G.B.-G.dolje",
+  "type": 3
+ },
+ "228": {
+  "shortName": "228",
+  "longName": "Borongaj-Rebro-Boro.",
+  "type": 3
+ },
+ "229": {
+  "shortName": "229",
+  "longName": "Gl.kolodvor-M.Mlaka",
+  "type": 3
+ },
+ "230": {
+  "shortName": "230",
+  "longName": "Dubrava-Gran.Novaki",
+  "type": 3
+ },
+ "231": {
+  "shortName": "231",
+  "longName": "Borongaj - Dubec",
+  "type": 3
+ },
+ "232": {
+  "shortName": "232",
+  "longName": "Dubrava-Čret",
+  "type": 3
+ },
+ "233": {
+  "shortName": "233",
+  "longName": "Mihaljevac-Markušev.",
+  "type": 3
+ },
+ "234": {
+  "shortName": "234",
+  "longName": "Gl.k.-Kajzer.-Laniš.",
+  "type": 3
+ },
+ "235": {
+  "shortName": "235",
+  "longName": "Dubrava-Trnava-K.Bok",
+  "type": 3
+ },
+ "236": {
+  "shortName": "236",
+  "longName": "Kampus-Čavićeva",
+  "type": 3
+ },
+ "237": {
+  "shortName": "237",
+  "longName": "Kv.Trg-Kozari Putevi",
+  "type": 3
+ },
+ "238": {
+  "shortName": "238",
+  "longName": "Kaptol-Rebro-Kozjak",
+  "type": 3
+ },
+ "239": {
+  "shortName": "239",
+  "longName": "Čučer.-Dank.-Marku.T",
+  "type": 3
+ },
+ "241": {
+  "shortName": "241",
+  "longName": "Gl. kolodvor-V.Polje",
+  "type": 3
+ },
+ "242": {
+  "shortName": "242",
+  "longName": "Glavni k.- Podbrežje",
+  "type": 3
+ },
+ "243": {
+  "shortName": "243",
+  "longName": "Gl.kolod.-Kajzerica",
+  "type": 3
+ },
+ "261": {
+  "shortName": "261",
+  "longName": "Dubec-Sesv.-Goranec",
+  "type": 3
+ },
+ "262": {
+  "shortName": "262",
+  "longName": "Dubec-Ses.-Pl.Donja",
+  "type": 3
+ },
+ "263": {
+  "shortName": "263",
+  "longName": "Dubec-Ses.-Kaš.-P.G.",
+  "type": 3
+ },
+ "264": {
+  "shortName": "264",
+  "longName": "Dubec-Ses.-Jesenovec",
+  "type": 3
+ },
+ "267": {
+  "shortName": "267",
+  "longName": "Dubec-Markovo Polje",
+  "type": 3
+ },
+ "268": {
+  "shortName": "268",
+  "longName": "Zag.(Gl.k.)-V.Gorica",
+  "type": 3
+ },
+ "269": {
+  "shortName": "269",
+  "longName": "Boron.-S.Kralj.-Iver",
+  "type": 3
+ },
+ "270": {
+  "shortName": "270",
+  "longName": "Dubec-Blaguša",
+  "type": 3
+ },
+ "271": {
+  "shortName": "271",
+  "longName": "Dubec-Ses.-Gl.Donja",
+  "type": 3
+ },
+ "272": {
+  "shortName": "272",
+  "longName": "Dubec-Sesv.-Moravče",
+  "type": 3
+ },
+ "273": {
+  "shortName": "273",
+  "longName": "Dubec - Sesv.- Lužan",
+  "type": 3
+ },
+ "274": {
+  "shortName": "274",
+  "longName": "Zg.(Dubec)-Ses.-Lak.",
+  "type": 3
+ },
+ "275": {
+  "shortName": "275",
+  "longName": "Sesvete-Ses.Sopnica",
+  "type": 3
+ },
+ "276": {
+  "shortName": "276",
+  "longName": "Zg.(Kv.t.)-I.R.-Dum.",
+  "type": 3
+ },
+ "277": {
+  "shortName": "277",
+  "longName": "Sesvete-Sesv.Selnica",
+  "type": 3
+ },
+ "278": {
+  "shortName": "278",
+  "longName": "Ses.-S.Sela-K.Novaki",
+  "type": 3
+ },
+ "279": {
+  "shortName": "279",
+  "longName": "Dubec-Novi Jelkovec",
+  "type": 3
+ },
+ "280": {
+  "shortName": "280",
+  "longName": "Dubec-Ses.-Šimunčev.",
+  "type": 3
+ },
+ "281": {
+  "shortName": "281",
+  "longName": "G.kolodv.-N.Jelkovec",
+  "type": 3
+ },
+ "282": {
+  "shortName": "282",
+  "longName": "Sesvete-N. Jelkovec",
+  "type": 3
+ },
+ "283": {
+  "shortName": "283",
+  "longName": "Dubec-Brest.-Sesvete",
+  "type": 3
+ },
+ "284": {
+  "shortName": "284",
+  "longName": "Sesv.-Iv. Reka-Dumov",
+  "type": 3
+ },
+ "290": {
+  "shortName": "290",
+  "longName": "Zg.(Kv.t.)-Z.l.-V.G.",
+  "type": 3
+ },
+ "295": {
+  "shortName": "295",
+  "longName": "Zapr.-Jakušev.-Zapr.",
+  "type": 3
+ },
+ "307": {
+  "shortName": "307",
+  "longName": "Zg.(Zapruđe)-St.Buk.",
+  "type": 3
+ },
+ "308": {
+  "shortName": "308",
+  "longName": "Zg. (Zapruđe) - Sasi",
+  "type": 3
+ },
+ "310": {
+  "shortName": "310",
+  "longName": "Zg.(Gl.k.)-Petrovina",
+  "type": 3
+ },
+ "311": {
+  "shortName": "311",
+  "longName": "Zg.(Gl.k.)-Cerov.vrh",
+  "type": 3
+ },
+ "313": {
+  "shortName": "313",
+  "longName": "Zg.(Gl.k.)-Vukomerić",
+  "type": 3
+ },
+ "315": {
+  "shortName": "315",
+  "longName": "Zg.(S.m.)-Lukavec",
+  "type": 3
+ },
+ "330": {
+  "shortName": "330",
+  "longName": "Zg.(Gl.k.)-V.G. brza",
+  "type": 3
+ }
+}
