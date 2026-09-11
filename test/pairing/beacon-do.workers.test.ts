@@ -17,7 +17,7 @@ const OTHER_NET = 'a'.repeat(22);
 describe('BeaconDO provisioning', () => {
   it('creates once and refuses a second create', async () => {
     const { beaconId } = await provision();
-    const again = await beaconStub(testEnv, beaconId).create({ beaconId, venueType: 'zet', area: 'trnje', operatorLabel: 'x', stopId: null, secretHash: 'ab'.repeat(32) });
+    const again = await beaconStub(testEnv, beaconId).create({ beaconId, venueType: 'zet', area: 'trnje', operatorLabel: 'x', stopId: null, secret: 'B'.repeat(32) });
     expect(again).toEqual({ created: false });
     expect(await beaconStub(testEnv, beaconId).status()).toMatchObject({ exists: true, revoked: false, kioskOnline: false, codes: 0 });
   });
@@ -31,7 +31,7 @@ describe('BeaconDO provisioning', () => {
     const stub = beaconStub(testEnv, randomId(5));
     await runInDurableObject(stub, async (instance: BeaconDO) => {
       await expect(
-        instance.create({ beaconId: 'bad', venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', stopId: null, secretHash: 'zz' }),
+        instance.create({ beaconId: 'bad', venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', stopId: null, secret: 'zz' }),
       ).rejects.toThrow();
     });
   });

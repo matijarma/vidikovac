@@ -11,7 +11,7 @@ import { recordMetric, zagrebDayHour } from '../metrics';
 import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
 import { NET_KEY_HEADER, isNetKey } from '../pairing/netkey';
-import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hexDecode, hmacSha256, randomBytes, randomId, utf8 } from '../pairing/tokens';
+import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId } from '../pairing/tokens';
 import {
   CODES_PER_BATCH,
   CODE_GRACE_MS,
@@ -43,7 +43,11 @@ const CHALLENGE_MAX_AGE_MS = 10 * 60 * 1000;
 const NONCE_BYTES = 32;
 const OPERATOR_LABEL_MAX = 80;
 const STOP_ID_SHAPE = /^[0-9A-Za-z_-]{1,32}$/;
-const SECRET_HASH_SHAPE = /^[0-9a-f]{64}$/;
+// Provisioning secret shape: randomId(n) output (worker/routes/admin.ts mints
+// 32 chars from 20 bytes), same alphabet as BEACON_ID_SHAPE. Bounded
+// generously since the exact byte count is the admin route's concern, not
+// BeaconDO's — only the character set and a sane length are enforced here.
+const SECRET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16,64}$/;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -53,8 +57,15 @@ export interface BeaconCreateInput {
   area: string;
   operatorLabel: string;
   stopId: string | null;
-  /** hex(SHA-256(utf8(secret))); also the HMAC key the kiosk derives client-side. */
-  secretHash: string;
+  /**
+   * The raw provisioning secret, shown once to the operator and never
+   * re-derivable afterwards. Stored as-is and used directly as the kiosk
+   * challenge's HMAC key, per protocol.ts's BEACON_AUTH: hmac =
+   * base64url_unpadded(HMAC-SHA256(key = utf8(secret), message = utf8(nonce))) —
+   * no hashing of the secret before use (rulings.md R-32; matches the kiosk's
+   * own derivation so both sides key the HMAC identically).
+   */
+  secret: string;
 }
 
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
@@ -148,8 +159,8 @@ export class BeaconDO extends DurableObject<Env> {
       input.operatorLabel.trim().length === 0 ||
       input.operatorLabel.length > OPERATOR_LABEL_MAX ||
       (input.stopId !== null && !STOP_ID_SHAPE.test(input.stopId)) ||
-      typeof input.secretHash !== 'string' ||
-      !SECRET_HASH_SHAPE.test(input.secretHash)
+      typeof input.secret !== 'string' ||
+      !SECRET_SHAPE.test(input.secret)
     ) {
       throw new Error('beacon-create-invalid');
     }
@@ -160,7 +171,7 @@ export class BeaconDO extends DurableObject<Env> {
       this.setMeta('area', input.area);
       this.setMeta('operatorLabel', input.operatorLabel.trim());
       this.setMeta('stopId', input.stopId ?? '');
-      this.setMeta('secretHash', input.secretHash);
+      this.setMeta('secret', input.secret);
       this.setMeta('revoked', '0');
       this.setMeta('createdAt', String(this.now()));
     });
@@ -288,13 +299,15 @@ export class BeaconDO extends DurableObject<Env> {
       ws.close(CLOSE_REVOKED, 'revoked');
       return;
     }
-    const key = hexDecode(this.meta('secretHash') ?? '');
+    const secret = this.meta('secret');
     const given = base64UrlDecode(hmac);
-    if (key === null || given === null) {
+    if (secret === null || given === null) {
       this.rejectChallenge(ws, attachment, 'auth-failed');
       return;
     }
-    const expected = await hmacSha256(key, utf8(attachment.nonce));
+    // BEACON_AUTH (protocol.ts, R-32): key = utf8(secret) raw, no pre-hash.
+    // hmacSha256 accepts a string key/message and utf8-encodes it internally.
+    const expected = await hmacSha256(secret, attachment.nonce);
     if (!constantTimeEqual(expected, given)) {
       this.rejectChallenge(ws, attachment, 'auth-failed');
       return;

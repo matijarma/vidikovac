@@ -8,7 +8,7 @@ import { indexStub } from '../../worker/do/index-do';
 import type { Env } from '../../worker/env';
 import type { MetricsDailyRow, MetricsDO } from '../../worker/metrics-do';
 import { NET_KEY_HEADER } from '../../worker/pairing/netkey';
-import { base64UrlEncode, hexEncode, hmacSha256, randomId, sha256, utf8 } from '../../worker/pairing/tokens';
+import { base64UrlEncode, hmacSha256, randomId } from '../../worker/pairing/tokens';
 import type { CodeSlot } from '../../worker/protocol';
 
 const EPOCH_DAY = '2020-01-01';
@@ -135,14 +135,16 @@ export async function connectWs(beaconId: string, netKey: string): Promise<Conn>
 }
 
 /**
- * The kiosk side of the challenge: HMAC over the nonce with SHA-256(secret)
- * as the key. The Durable Object never learns the raw secret, only its hash
- * (`secretHash`, task-B9-brief.md: "the Durable Object keeps only
- * hex(SHA-256(secret)), which doubles as the kiosk's challenge key"), so both
- * sides must derive the same key by hashing the secret first.
+ * The kiosk side of the challenge: HMAC over the nonce with the raw
+ * provisioning secret as the key — protocol.ts's BEACON_AUTH: hmac =
+ * base64url_unpadded(HMAC-SHA256(key = utf8(secret), message = utf8(nonce))),
+ * no pre-hashing of the secret (rulings.md R-32). BeaconDO stores this same
+ * raw secret (`BeaconCreateInput.secret`) so both sides key the HMAC
+ * identically. `hmacSha256` accepts a string key/message and utf8-encodes it
+ * internally.
  */
 export async function kioskAnswer(secret: string, nonce: string): Promise<string> {
-  return base64UrlEncode(await hmacSha256(await sha256(utf8(secret)), utf8(nonce)));
+  return base64UrlEncode(await hmacSha256(secret, nonce));
 }
 
 export async function authKiosk(conn: Conn, secret: string): Promise<Frame> {
@@ -172,7 +174,7 @@ export async function provision(area = 'donji-grad'): Promise<{ beaconId: string
     area,
     operatorLabel: 'Kavana Velebit',
     stopId: null,
-    secretHash: hexEncode(await sha256(utf8(secret))),
+    secret,
   };
   expect(await beaconStub(testEnv(), beaconId).create(input)).toEqual({ created: true });
   await indexStub(testEnv()).registerBeacon({ ...input, createdAt: Date.now() });
