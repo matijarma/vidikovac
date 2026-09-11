@@ -1,7 +1,7 @@
 // Shared helpers for Area B's workers-pool tests (R-12: test/pairing/** is
 // Area B's test directory). The Inbox idiom is psdlat's
 // worker/test/mesh-do.test.ts.
-import { env } from 'cloudflare:test';
+import { SELF, env } from 'cloudflare:test';
 import { expect } from 'vitest';
 import { beaconStub, type BeaconCreateInput } from '../../worker/do/beacon-do';
 import { indexStub } from '../../worker/do/index-do';
@@ -41,12 +41,15 @@ export async function waitForRows(
 
 // --- WebSocket client helpers -----------------------------------------------
 //
-// R-41 pins how a Beacon test reaches the socket: directly through the
-// Durable Object's own stub (`env.BEACON_DO.get(id).fetch(...)`), never
-// through SELF's `/ws/beacon/:id` — that HTTP route is wired by task B8, so a
-// SELF fetch would 404 today. `connectWs` therefore takes a beaconId and a
-// net key rather than a path and an IP; a later task that needs the real
-// HTTP upgrade (once routing exists) adds its own helper alongside this one.
+// Two ways to open a kiosk socket, for two different things under test.
+// `connectBeaconDirect` (R-41) reaches BeaconDO straight through its own
+// stub — no HTTP, no netKey minting, no origin check — because B6/B7 tested
+// the object before B8's routes existed and B9's scan-route suite still
+// exercises the DO's auth/redeem logic without re-deriving a route-minted key
+// for every case. `connectWs` (added for B10, the end-to-end chain) is the
+// real thing: it goes through `SELF.fetch`, so the Worker's own route
+// (`worker/routes/pairing.ts`) mints the net key from the given address the
+// same way a browser's request would.
 
 export type Frame = Record<string, unknown>;
 
@@ -127,10 +130,30 @@ export interface Conn {
 }
 
 /** Connects directly to a beacon's kiosk socket through its Durable Object stub (R-41). */
-export async function connectWs(beaconId: string, netKey: string): Promise<Conn> {
+export async function connectBeaconDirect(beaconId: string, netKey: string): Promise<Conn> {
   const stub = beaconStub(testEnv(), beaconId);
   const response = await stub.fetch('https://beacon/ws', {
     headers: { Upgrade: 'websocket', [NET_KEY_HEADER]: netKey },
+  });
+  if (response.status !== 101) throw new Error(`expected 101, got ${response.status} ${await response.text()}`);
+  const ws = response.webSocket;
+  if (!ws) throw new Error('expected a webSocket on the 101 response');
+  ws.accept();
+  return { ws, inbox: new Inbox(ws) };
+}
+
+/**
+ * Connects through the real HTTP upgrade route (`/ws/beacon/:id` or
+ * `/ws/room/:id`, both wired by `worker/routes/pairing.ts`), `ip` becoming
+ * the request's `CF-Connecting-IP` so the Worker mints the net key the same
+ * way it would for a browser. B10's end-to-end test is the first to need
+ * this for the pairing chain; `test/pairing/scan-route.workers.test.ts` and
+ * `test/pairing/ws-upgrade.workers.test.ts` (B8/B9) each already open a
+ * socket this same way through their own local copy of this function.
+ */
+export async function connectWs(path: string, ip: string): Promise<Conn> {
+  const response = await SELF.fetch(`https://vidikovac.test${path}`, {
+    headers: { Upgrade: 'websocket', 'CF-Connecting-IP': ip },
   });
   if (response.status !== 101) throw new Error(`expected 101, got ${response.status} ${await response.text()}`);
   const ws = response.webSocket;
@@ -188,7 +211,7 @@ export async function provision(area = 'donji-grad'): Promise<{ beaconId: string
 
 export async function onlineKiosk(area = 'donji-grad'): Promise<{ beaconId: string; secret: string; kiosk: Conn; batch: CodeSlot[] }> {
   const { beaconId, secret } = await provision(area);
-  const kiosk = await connectWs(beaconId, KIOSK_NET_KEY);
+  const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
   const codes = await authKiosk(kiosk, secret);
   return { beaconId, secret, kiosk, batch: codes.batch as CodeSlot[] };
 }

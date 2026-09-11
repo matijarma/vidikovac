@@ -6,7 +6,7 @@ import type { Env } from '../../worker/env';
 import { metricsStub } from '../../worker/metrics';
 import { randomId } from '../../worker/pairing/tokens';
 import { CODES_PER_BATCH, CODE_GRACE_MS, type CodeSlot } from '../../worker/protocol';
-import { KIOSK_NET_KEY, authKiosk, connectWs, kioskAnswer, onlineKiosk, provision } from './helpers';
+import { KIOSK_NET_KEY, authKiosk, connectBeaconDirect, kioskAnswer, onlineKiosk, provision } from './helpers';
 
 const testEnv = env as unknown as Env;
 
@@ -58,7 +58,7 @@ describe('BeaconDO kiosk socket', () => {
 
   it('closes after three wrong answers', async () => {
     const { beaconId } = await provision();
-    const kiosk = await connectWs(beaconId, KIOSK_NET_KEY);
+    const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
     await kiosk.inbox.nextOfType('challenge');
     for (let i = 0; i < 3; i += 1) {
       kiosk.ws.send(JSON.stringify({ t: 'auth', hmac: 'AAAA' }));
@@ -73,7 +73,7 @@ describe('BeaconDO kiosk socket', () => {
 
   it('a wrong secret against a fresh nonce fails and the right one then succeeds', async () => {
     const { beaconId, secret } = await provision();
-    const kiosk = await connectWs(beaconId, KIOSK_NET_KEY);
+    const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
     const first = await kiosk.inbox.nextOfType('challenge');
     kiosk.ws.send(JSON.stringify({ t: 'auth', hmac: await kioskAnswer('wrong', String(first.nonce)) }));
     await kiosk.inbox.nextOfType('error');
@@ -97,7 +97,7 @@ describe('BeaconDO kiosk socket', () => {
     // other test's kiosk_online write can be mistaken for this one's.
     const { beaconId, secret, kiosk } = await onlineKiosk('sesvete');
     kiosk.ws.close(1000, 'bye');
-    const again = await connectWs(beaconId, KIOSK_NET_KEY);
+    const again = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
     await authKiosk(again, secret);
     const rows = await metricsStub(testEnv).query('2020-01-01');
     expect(rows.filter((r) => r.event === 'kiosk_online' && r.dim1 === 'sesvete').reduce((s, r) => s + r.count, 0)).toBe(1);
