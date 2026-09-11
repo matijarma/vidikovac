@@ -8,14 +8,26 @@ function storage(initial: Record<string, string> = {}) {
   return { raw, getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
 }
 function boot(opts: { ticket?: string | null; store?: ReturnType<typeof storage>; now?: () => number } = {}) {
-  let sock: FakeSocket | null = null;
+  const sockets: FakeSocket[] = [];
+  const retries: { fn: () => void; ms: number }[] = [];
   const st = opts.store ?? storage();
+  let clock = 1_000_000;
   const client = createSessionClient({
     roomId: 'room1', ticket: opts.ticket === undefined ? 'tick1' : opts.ticket,
-    createSocket: (url) => (sock = new FakeSocket(url)), storage: st, now: opts.now ?? (() => 1_000_000), wsBase: 'wss://x.test',
+    createSocket: (url) => { const s = new FakeSocket(url); sockets.push(s); return s; },
+    storage: st,
+    now: opts.now ?? (() => clock),
+    wsBase: 'wss://x.test',
+    setTimeout: (fn, ms) => { retries.push({ fn, ms }); return retries.length; },
+    clearTimeout: () => { retries.length = 0; },
   });
   client.connect();
-  return { client, sock: sock!, st };
+  return {
+    client, st, sockets, retries,
+    get sock() { return sockets[sockets.length - 1]!; },
+    advance: (ms: number) => { clock += ms; },
+    runRetry: () => { const next = retries.shift(); next?.fn(); return next; },
+  };
 }
 const JOINED = { t: 'joined', role: 'scanner', expiresAt: 1_600_000, serverNow: 1_010_000, resumeToken: 'res1', dataToken: 'dt1', participants: 2 };
 
@@ -97,11 +109,61 @@ describe('createSessionClient', () => {
     sock.emit('close', { code: CLOSE_SESSION_EXPIRED, reason: '' });
     expect(expired).toHaveBeenCalledTimes(1);
   });
-  it('an ordinary close while live is reported as closed, not expired', () => {
+  // R-53: a phone drops its socket the moment the camera app comes up.
+  it('reconnects with the resume token after a dropped socket while the room is still open', () => {
+    const boot1 = boot();
+    const { client, sockets } = boot1;
+    const expired = vi.fn(); const closed = vi.fn();
+    client.onExpired(expired); client.onClose(closed);
+    sockets[0]!.emit('open'); sockets[0]!.server(JOINED);
+    sockets[0]!.emit('close', { code: 1006, reason: '' });
+    expect(expired).not.toHaveBeenCalled();
+    expect(closed).toHaveBeenCalledWith(1006);
+    expect(client.snapshot().phase).toBe('connecting');
+    expect(boot1.retries[0]!.ms).toBe(500);
+
+    boot1.runRetry();
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.emit('open');
+    // The ticket was single-use and is spent; the resume token carries the room.
+    expect(sockets[1]!.json(0)).toEqual({ t: 'resume', resumeToken: 'res1' });
+    sockets[1]!.server(JOINED);
+    expect(client.snapshot().phase).toBe('live');
+  });
+
+  it('backs off further on every failed attempt and stops when the session has run out', () => {
+    const boot1 = boot();
+    const { client, sockets } = boot1;
+    const expired = vi.fn();
+    client.onExpired(expired);
+    sockets[0]!.emit('open'); sockets[0]!.server(JOINED);
+    sockets[0]!.emit('close', { code: 1006, reason: '' });
+    boot1.runRetry();
+    sockets[1]!.emit('close', { code: 1006, reason: '' });
+    expect(boot1.retries[0]!.ms).toBe(1_000);
+    // The room's ten minutes run out while the phone is still away.
+    boot1.advance(700_000);
+    boot1.runRetry();
+    expect(sockets).toHaveLength(2);
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(client.snapshot().phase).toBe('expired');
+  });
+
+  it('does not reconnect after the page closed the session itself', () => {
+    const boot1 = boot();
+    const { client, sockets } = boot1;
+    sockets[0]!.emit('open'); sockets[0]!.server(JOINED);
+    client.close();
+    sockets[0]!.emit('close', { code: 1000, reason: 'leave' });
+    expect(boot1.retries).toHaveLength(0);
+    expect(client.snapshot().phase).toBe('closed');
+  });
+
+  it('an ordinary close before a session exists is reported as closed, not expired', () => {
     const { client, sock } = boot();
     const expired = vi.fn(); const closed = vi.fn();
     client.onExpired(expired); client.onClose(closed);
-    sock.emit('open'); sock.server(JOINED);
+    sock.emit('open');
     sock.emit('close', { code: 1006, reason: '' });
     expect(expired).not.toHaveBeenCalled();
     expect(closed).toHaveBeenCalledWith(1006);

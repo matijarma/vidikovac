@@ -253,9 +253,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     document.getElementById(`layer-title-${active}`)?.focus();
     void refresh();
   });
-  session.onExpiring((secondsLeft) => announce(secondsLeft));
-  session.onCount(() => paintTimer());
-  session.onExpired(() => {
+  function freeze(): void {
+    if (frozen) return;
     frozen = true;
     paintTabs();
     paintTimer();
@@ -268,12 +267,23 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       clearTimer(timer);
       timer = null;
     }
-  });
+  }
+
+  session.onExpiring((secondsLeft) => announce(secondsLeft));
+  session.onCount(() => paintTimer());
+  session.onExpired(freeze);
 
   paintTabs();
   render();
   paintTimer();
   timer = setTimer(() => {
+    // The clock decides, not the socket: a phone whose socket died on the way
+    // to the camera app still freezes on time and still shows the closing
+    // line (R-53).
+    if (session.snapshot().expiresAt !== null && session.secondsLeft() === 0) {
+      freeze();
+      return;
+    }
     paintTimer();
     void refresh();
   }, pollMs);

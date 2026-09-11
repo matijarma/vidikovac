@@ -18,13 +18,14 @@ function fakeSession() {
     count: [] as ((n: number) => void)[],
   };
   let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
+  let runOut = false;
   const sent: { layer: LayerId }[] = [];
   const events: { name: string; dim?: string }[] = [];
   const client: SessionClient = {
     connect: vi.fn(),
     snapshot: () => snapshot,
     serverNow: () => NOW,
-    secondsLeft: () => Math.max(0, Math.floor(((snapshot.expiresAt ?? NOW) - NOW) / 1000)),
+    secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? NOW) - NOW) / 1000))),
     onJoined: (l) => { listeners.joined.push(l); return () => {}; },
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
     onExpired: (l) => { listeners.expired.push(l); return () => {}; },
@@ -50,6 +51,8 @@ function fakeSession() {
       listeners.expired.forEach((l) => l());
     },
     view: (l: LayerId) => listeners.view.forEach((fn) => fn(l)),
+    /** The clock passes the expiry with no 'expired' frame: a dropped socket. */
+    runOut() { runOut = true; },
   };
 }
 
@@ -203,6 +206,23 @@ describe('polling and the two toggles', () => {
 });
 
 describe('expiry freeze', () => {
+  it('freezes on the clock alone when the socket died and no expired frame arrives', async () => {
+    const { root, session, fetchData, ticks } = mount();
+    session.join();
+    await flush();
+    fetchData.mockClear();
+    session.runOut();
+    ticks.forEach((tick) => tick());
+    await flush();
+    // R-53: the izjava promises the closing line; the socket cannot be trusted
+    // to deliver it from a phone that spent a minute in the camera app.
+    const frozen = root.querySelector<HTMLElement>('[data-testid=frozen-line]');
+    expect(frozen?.hidden).toBe(false);
+    expect(text(frozen)).toContain('Sesija je završila.');
+    expect(fetchData).not.toHaveBeenCalled();
+    for (const tab of root.querySelectorAll<HTMLButtonElement>('[role=tab]')) expect(tab.disabled).toBe(true);
+  });
+
   it('stops polling, disables navigation, keeps exports and states the frozen view', async () => {
     const onCopy = vi.fn();
     const { root, session, fetchData, ticks } = mount({ onCopy });

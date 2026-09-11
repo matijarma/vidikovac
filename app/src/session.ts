@@ -40,7 +40,18 @@ export interface SessionClientDeps {
   now?: () => number;
   /** 'wss://host'; defaults to the page origin with the ws scheme. */
   wsBase?: string;
+  setTimeout?: (fn: () => void, ms: number) => unknown;
+  clearTimeout?: (handle: unknown) => void;
 }
+
+/**
+ * Backoff between reconnect attempts, the last value repeating. A phone drops
+ * its socket the moment the person opens the camera app or locks the screen,
+ * and the room keeps the session alive for the full ten minutes: without this
+ * the countdown froze, the expiry never arrived, the closing line the izjava
+ * promises was never shown and the view counters silently stopped (R-53).
+ */
+export const RECONNECT_DELAYS_MS: readonly number[] = [500, 1_000, 2_000, 5_000, 10_000];
 
 export type SessionPhase = 'idle' | 'connecting' | 'live' | 'expired' | 'closed';
 
@@ -99,8 +110,14 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   const storage = deps.storage === undefined ? safeSessionStorage() : deps.storage;
   const now = deps.now ?? (() => Date.now());
   const wsBase = deps.wsBase ?? wsBaseFromLocation();
+  const later = deps.setTimeout ?? ((fn, ms) => globalThis.setTimeout(fn, ms));
+  const cancelLater = deps.clearTimeout ?? ((h) => globalThis.clearTimeout(h as never));
 
   let socket: WebSocketLike | null = null;
+  let ticketSpent = false;
+  let leaving = false;
+  let attempt = 0;
+  let retryHandle: unknown = null;
   let phase: SessionPhase = 'idle';
   let role: Role | null = null;
   let expiresAt: number | null = null;
@@ -145,6 +162,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         participants = message.participants;
         offset = message.serverNow - now();
         phase = 'live';
+        attempt = 0;
         try { storage?.setItem(RESUME_KEY, JSON.stringify({ roomId: deps.roomId, resumeToken: message.resumeToken } satisfies StoredResume)); } catch { /* ignore */ }
         try { storage?.setItem(DATA_TOKEN_KEY, message.dataToken); } catch { /* ignore */ }
         joined.forEach((l) => l(snapshot()));
@@ -159,33 +177,69 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     }
   }
 
+  /** The room is still running and we are not the ones who hung up. */
+  function shouldReconnect(): boolean {
+    return !leaving && phase !== 'expired' && expiresAt !== null && expiresAt > serverNow();
+  }
+
+  function scheduleReconnect(): void {
+    if (retryHandle !== null) return;
+    const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)]!;
+    attempt += 1;
+    retryHandle = later(() => {
+      retryHandle = null;
+      if (!shouldReconnect()) {
+        if (!leaving && expiresAt !== null) fireExpired();
+        return;
+      }
+      openSocket();
+    }, delay);
+  }
+
+  function openSocket(): void {
+    phase = 'connecting';
+    socket = createSocket(roomSocketUrl(deps.roomId, wsBase));
+    socket.addEventListener('open', () => {
+      const resumeToken = readResume(storage, deps.roomId);
+      // The ticket is single-use, so only the first attempt may spend it; every
+      // later one resumes, which is what RoomDO's one-live-socket rule expects.
+      if (deps.ticket && !ticketSpent) {
+        ticketSpent = true;
+        send({ t: 'join', ticket: deps.ticket });
+      } else if (resumeToken) {
+        send({ t: 'resume', resumeToken });
+      } else {
+        phase = 'closed';
+        error.forEach((l) => l('no-ticket'));
+        socket?.close(1000, 'no-ticket');
+      }
+    });
+    socket.addEventListener('message', (event) => {
+      if (typeof event.data !== 'string') return;
+      let parsed: unknown;
+      try { parsed = JSON.parse(event.data); } catch { return; }
+      if (parsed && typeof parsed === 'object' && typeof (parsed as { t?: unknown }).t === 'string') handle(parsed as RoomServerMessage);
+    });
+    socket.addEventListener('close', (event) => {
+      socket = null;
+      if (event.code === CLOSE_SESSION_EXPIRED) { fireExpired(); return; }
+      const reconnecting = shouldReconnect();
+      if (reconnecting) {
+        phase = 'connecting';
+        scheduleReconnect();
+      } else if (phase !== 'expired') phase = 'closed';
+      closed.forEach((l) => l(event.code));
+      // A socket that dropped after the room's own clock ran out never gets an
+      // 'expired' frame, so the client says so itself.
+      if (!reconnecting && !leaving && phase !== 'expired' && expiresAt !== null && expiresAt <= serverNow()) fireExpired();
+    });
+    socket.addEventListener('error', () => { error.forEach((l) => l('socket')); });
+  }
+
   return {
     connect() {
       if (socket) return;
-      phase = 'connecting';
-      socket = createSocket(roomSocketUrl(deps.roomId, wsBase));
-      socket.addEventListener('open', () => {
-        const resumeToken = readResume(storage, deps.roomId);
-        if (deps.ticket) send({ t: 'join', ticket: deps.ticket });
-        else if (resumeToken) send({ t: 'resume', resumeToken });
-        else {
-          phase = 'closed';
-          error.forEach((l) => l('no-ticket'));
-          socket?.close(1000, 'no-ticket');
-        }
-      });
-      socket.addEventListener('message', (event) => {
-        if (typeof event.data !== 'string') return;
-        let parsed: unknown;
-        try { parsed = JSON.parse(event.data); } catch { return; }
-        if (parsed && typeof parsed === 'object' && typeof (parsed as { t?: unknown }).t === 'string') handle(parsed as RoomServerMessage);
-      });
-      socket.addEventListener('close', (event) => {
-        if (event.code === CLOSE_SESSION_EXPIRED) { fireExpired(); return; }
-        if (phase !== 'expired') phase = 'closed';
-        closed.forEach((l) => l(event.code));
-      });
-      socket.addEventListener('error', () => { error.forEach((l) => l('socket')); });
+      openSocket();
     },
     snapshot,
     serverNow,
@@ -201,7 +255,11 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     sendView(layer, params) { send(params ? { t: 'view', layer, params } : { t: 'view', layer }); },
     share() { send({ t: 'share' }); },
     event(name, dim) { send(dim === undefined ? { t: 'event', name } : { t: 'event', name, dim }); },
-    close() { socket?.close(1000, 'leave'); },
+    close() {
+      leaving = true;
+      if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
+      socket?.close(1000, 'leave');
+    },
   };
 }
 
