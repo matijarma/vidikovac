@@ -124,6 +124,20 @@ export type RoomServerMessage =
 
 /** WebSocket close code sent with 'expired'. */
 export const CLOSE_SESSION_EXPIRED = 4000;
+/** Beacon socket closed after three failed challenge answers. */
+export const CLOSE_AUTH_EXHAUSTED = 4002;
+/** Beacon revoked by the operator; codes are void. */
+export const CLOSE_REVOKED = 4003;
+/** A newer socket replaced this one (same beacon or same resume token). */
+export const CLOSE_REPLACED = 4004;
+
+/**
+ * Kiosk challenge answer: hmac = base64url_unpadded(HMAC-SHA256(key = utf8(secret),
+ * message = utf8(nonce))). The secret is the raw provisioning secret string;
+ * no hashing of the secret before use. Implemented identically in
+ * worker/do/beacon-do.ts and app/src/beacon.ts.
+ */
+export const BEACON_AUTH = 'HMAC-SHA256(utf8(secret), utf8(nonce)) as unpadded base64url';
 
 export type LayerId =
   | 'grad-sada'
