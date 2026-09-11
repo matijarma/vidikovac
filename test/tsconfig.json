@@ -1,7 +1,9 @@
 {
   "extends": "../worker/tsconfig.json",
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    "resolveJsonModule": true
   },
-  "include": ["./**/*.ts", "../worker/**/*.ts"]
+  "include": ["./**/*.ts", "../worker/**/*.ts", "../app/src/**/*.ts"]
 }

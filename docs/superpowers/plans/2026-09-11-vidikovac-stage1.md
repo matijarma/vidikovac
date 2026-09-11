@@ -6244,38 +6244,118 @@ B6 needs B7's `roomStub` and `open`. If you are building strictly in order, crea
 ### Task B7: RoomDO: tickets, resume, driver view, one-hop share, expiry chain
 
 **Files:**
-- Modify (replace placeholder/B6 stub): `D:\scratch\vidikovac\worker\do\room-do.ts`
+- Modify (replace the B6 stub): `D:\scratch\vidikovac\worker\do\room-do.ts`
+- Modify (append two helpers): `D:\scratch\vidikovac\test\pairing\helpers.ts`
 - Test: `D:\scratch\vidikovac\test\pairing\room-do.workers.test.ts`
 
 **Interfaces:**
-- Consumes: B1 `mintBatch`, `alignSlotStart`, `codeWindow`; B2 `signDataToken`, `randomId`; B4 `recordMetric`, `isMetricEvent`, `EXPORT_KINDS`; B5 `indexStub`; `peerMinutes`, `codeRotateSeconds`; protocol `RoomClientMessage`, `RoomServerMessage`, `CLOSE_SESSION_EXPIRED`, `LAYERS`, `LayerId`, `Role`, `BeaconKind`, `ScanOk`, `ScanError`, `CODES_PER_BATCH`, `CODE_GRACE_MS`.
-- Produces:
+- Consumes (exact signatures from earlier tasks):
+  - B1 `worker/pairing/codes.ts`: `alignSlotStart(nowMs: number, slotMs: number): number`, `mintBatch(startMs: number, slotMs: number, count: number): CodeSlot[]`, `codeWindow(slot: { slotStart: number; slotEnd: number }, nowMs: number): 'early' | 'open' | 'late'`
+  - B2 `worker/pairing/tokens.ts`: `randomId(bytes: number): string`, `signDataToken(env: Env, roomId: string, expiresAt: number): Promise<string>`, `verifyDataToken(env: Env, token: string): Promise<{ roomId: string; expiresAt: number } | null>`
+  - B4 `worker/metrics.ts`: `recordMetric(env: Env, event: ServerEvent | ClientEvent, dim1 = '', dim2 = ''): Promise<void>` (never rejects; called as `void recordMetric(...)` per R-29), `EXPORT_KINDS = ['copy','link','ics','geojson','pdf'] as const`, `metricsStub(env: Env): DurableObjectStub<MetricsDO>`; `worker/log.ts`: `logError(event: string, error: unknown, context?: Record<string, string | number | boolean | undefined>): void`
+  - B5 `worker/do/index-do.ts`: `indexStub(env: Env): DurableObjectStub<IndexDO>` with `register(codes: CodeRegistration[]): Promise<{ accepted: number }>` and `CodeRegistration { code: string; kind: 'kiosk' | 'room'; ownerId: string; expiresAt: number }`
+  - B6 `worker/do/beacon-do.ts` calls `roomStub(this.env, roomId).open(open)` with `open: RoomOpenInput = { roomId, expiresAt, beaconType: 'kiosk', venueType, area, screenLabel, tickets: [{ ticket: scannerTicket, role: 'scanner' }, { ticket: kioskTicket, role: 'kiosk' }] }` and reads `opened.participants` — the field names below are exactly those
+  - `worker/config.ts`: `peerMinutes(env: Env): number`, `codeRotateSeconds(env: Env): number`
+  - `worker/protocol.ts`: `RoomClientMessage`, `RoomServerMessage`, `CodeSlot`, `Role`, `BeaconKind`, `VenueType`, `LayerId`, `LAYERS`, `ClientEvent`, `CLIENT_EVENTS`, `ScanOk`, `ScanError`, `CODES_PER_BATCH`, `CODE_GRACE_MS`, `CLOSE_SESSION_EXPIRED = 4000`, `CLOSE_REPLACED = 4004`
+  - `test/pairing/helpers.ts` (B6): `Inbox`, `Conn { ws: WebSocket; inbox: Inbox }`, `connectWs(path: string, ip: string): Promise<Conn>`
+- Produces (later tasks rely on these exact names):
   - `interface RoomTicket { ticket: string; role: Role }`
   - `interface RoomOpenInput { roomId: string; expiresAt: number; beaconType: BeaconKind; venueType: VenueType | null; area: string | null; screenLabel: string | null; tickets: RoomTicket[] }`
+  - `interface RoomAttachment { role: Role; joinedAt: number; resumeToken: string }`
+  - `type Phase = 'none' | 'live' | 'warned60' | 'warned20' | 'closed'`
+  - `type DurationBucket = '<1min' | '1-5min' | '5-10min' | '10min'`; `durationBucket(ms: number): DurationBucket`
   - `type RedeemPeerResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError }`
   - `roomStub(env: Env, roomId: string): DurableObjectStub<RoomDO>`
   - `ROOM_ID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16}$/`, `EVENTS_PER_SOCKET_MAX = 60`, `WARN_60_MS = 60_000`, `WARN_20_MS = 20_000`
-  - class `RoomDO` with `open(input): Promise<{ participants: number }>`, `redeemPeer(code: string): Promise<RedeemPeerResult>`, `phase(): 'none' | 'live' | 'warned60' | 'warned20' | 'closed'`, `fetch`, hibernation handlers, `alarm()`, `now()`.
-  - Client `event` dims: `panel_open` → `dim` is a `LayerId`, counted as `(layer, beaconType)`; `export` → `dim` is `<layer>/<kind>` with kind in `EXPORT_KINDS`, counted as `(layer, kind)`. Anything else is dropped.
+  - `class RoomDO extends DurableObject<Env>` with `open(input: RoomOpenInput): Promise<{ participants: number }>`, `redeemPeer(code: string): Promise<RedeemPeerResult>`, `phase(): Phase`, `now(): number`, `fetch(request: Request): Promise<Response>`, `webSocketMessage`, `webSocketClose`, `webSocketError`, `alarm(): Promise<void>`
+  - `test/pairing/helpers.ts`: `connectRoom(roomId: string): Promise<Conn>`, `waitForRow(stub: DurableObjectStub<MetricsDO>, predicate: (row: MetricsRow) => boolean, timeoutMs?: number): Promise<MetricsRow>`
+  - Client `event` dims: `panel_open` → `dim` is a `LayerId`, counted as `(layer, beaconType)`; `export` → `dim` is `<layer>/<kind>` with `kind` in `EXPORT_KINDS`, counted as `(layer, kind)`. Anything else is dropped without consuming the socket's budget.
 
-- [ ] **Step 1: Write the failing test**
+**Rulings notes (report these under Rulings, R-09 procedure).**
+1. The brief for this task says `redeemPeer` "returns `{roomId, ticket, expiresAt}` (the caller B8 builds ScanOk)", but B8 is already written against `const result = await roomStub(env, owner.ownerId).redeemPeer(code); … const ok: ScanOk = result.scan;`. B8 is downstream and fixed, so `redeemPeer` returns the full `RedeemPeerResult` whose `scan` is `{roomId, ticket, expiresAt}` plus the four constants a phone room always has (`beaconType:'phone'`, `venueType:null`, `area:null`, `screenLabel:null`, `participants:0`). Both readings are satisfied.
+2. R-32 puts the close codes in `worker/protocol.ts`. `CLOSE_REPLACED` is imported from there, never redeclared in `room-do.ts` (B6's local `CLOSE_AUTH_EXHAUSTED`/`CLOSE_REVOKED` are B6's affair and are not copied here).
+3. The room sockets in this test reach the Durable Object through `roomStub(env, roomId).fetch(…)` with `Upgrade: websocket` and `response.webSocket.accept()`, not through `SELF.fetch('/ws/room/…')`: `worker/routes/pairing.ts` is still the stub until B8, so a `SELF` route would 404 and this task could never end green. B8's `ws-upgrade.workers.test.ts` and B10 prove the `SELF` path; this file proves the object.
+4. Clock mocking moves `now()` **forward** only. A mocked clock behind real time makes `setAlarm(expiresAt - WARN_20_MS)` land in the real past, which fires immediately, re-arms in the past again and loops. The expiry test therefore opens a real ten-minute room and mocks `now()` into the future; the shortened-expiry test (`now + 3000 ms`) uses no mock at all and lets the object's own armed alarm run the chain.
+
+- [ ] **Step 1: Add the two shared test helpers (R-31)**
+
+Append to `D:\scratch\vidikovac\test\pairing\helpers.ts`, after `authKiosk` and before B6's trailing `import { expect } from 'vitest';` line (ES imports hoist, so position is cosmetic; keep all imports in one place at the top if you prefer):
 
 ```ts
-// test/pairing/room-do.workers.test.ts
-import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
+// --- added in B7 -----------------------------------------------------------
+import { env } from 'cloudflare:test';
+import { roomStub } from '../../worker/do/room-do';
+import type { Env } from '../../worker/env';
+import type { MetricsDO, MetricsRow } from '../../worker/metrics-do';
+
+/**
+ * A room socket opened straight against the Durable Object. The `/ws/room/:id`
+ * route arrives in B8; the object's own `fetch` is the contract under test
+ * here, and it answers the same 101 the Worker forwards.
+ */
+export async function connectRoom(roomId: string): Promise<Conn> {
+  const response = await roomStub(env as unknown as Env, roomId).fetch('https://room.do/ws', {
+    headers: { Upgrade: 'websocket' },
+  });
+  if (response.status !== 101) throw new Error(`expected 101, got ${response.status} ${await response.text()}`);
+  const ws = response.webSocket;
+  if (!ws) throw new Error('expected a webSocket on the 101 response');
+  ws.accept();
+  return { ws, inbox: new Inbox(ws) };
+}
+
+/**
+ * R-31: counters are written fire-and-forget, so a test polls for the row it
+ * expects instead of sleeping a guessed number of milliseconds.
+ */
+export async function waitForRow(
+  stub: DurableObjectStub<MetricsDO>,
+  predicate: (row: MetricsRow) => boolean,
+  timeoutMs = 3000,
+): Promise<MetricsRow> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await stub.query('2020-01-01');
+    const found = rows.find(predicate);
+    if (found !== undefined) return found;
+    if (Date.now() >= deadline) throw new Error('no metrics row matched the predicate within the timeout');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+```
+
+- [ ] **Step 2: Write the failing test**
+
+`D:\scratch\vidikovac\test\pairing\room-do.workers.test.ts`:
+
+```ts
+import { env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import { indexStub } from '../../worker/do/index-do';
-import { EVENTS_PER_SOCKET_MAX, RoomDO, roomStub, type RoomOpenInput } from '../../worker/do/room-do';
+import {
+  EVENTS_PER_SOCKET_MAX,
+  RoomDO,
+  WARN_20_MS,
+  WARN_60_MS,
+  roomStub,
+  type RoomOpenInput,
+} from '../../worker/do/room-do';
 import type { Env } from '../../worker/env';
 import { metricsStub } from '../../worker/metrics';
 import { randomId, verifyDataToken } from '../../worker/pairing/tokens';
-import { CLOSE_SESSION_EXPIRED, type CodeSlot } from '../../worker/protocol';
-import { connectWs, type Conn } from './helpers';
+import {
+  CLOSE_REPLACED,
+  CLOSE_SESSION_EXPIRED,
+  CODES_PER_BATCH,
+  type CodeSlot,
+} from '../../worker/protocol';
+import { connectRoom, waitForRow, type Conn } from './helpers';
 
 const testEnv = env as unknown as Env;
 
+/** A kiosk-opened ten-minute room with one scanner and one kiosk ticket. */
 async function openRoom(overrides: Partial<RoomOpenInput> = {}): Promise<{ roomId: string; input: RoomOpenInput }> {
-  const roomId = randomId(10);
+  const roomId = overrides.roomId ?? randomId(10);
   const input: RoomOpenInput = {
     roomId,
     expiresAt: Date.now() + 10 * 60_000,
@@ -6288,58 +6368,110 @@ async function openRoom(overrides: Partial<RoomOpenInput> = {}): Promise<{ roomI
       { ticket: randomId(16), role: 'kiosk' },
     ],
     ...overrides,
+    roomId,
   };
   expect(await roomStub(testEnv, roomId).open(input)).toEqual({ participants: 0 });
   return { roomId, input };
 }
 
-async function join(roomId: string, ticket: string, ip = '198.51.100.7'): Promise<{ conn: Conn; joined: Record<string, unknown> }> {
-  const conn = await connectWs(`/ws/room/${roomId}`, ip);
+async function join(roomId: string, ticket: string): Promise<{ conn: Conn; joined: Record<string, unknown> }> {
+  const conn = await connectRoom(roomId);
   conn.ws.send(JSON.stringify({ t: 'join', ticket }));
   const joined = await conn.inbox.nextOfType('joined');
   return { conn, joined };
 }
 
-describe('RoomDO join', () => {
+describe('RoomDO open and join', () => {
+  it('refuses a malformed open and a second open of the same room', async () => {
+    const roomId = randomId(10);
+    const stub = roomStub(testEnv, roomId);
+    await expect(
+      stub.open({
+        roomId: 'PREKRATAK',
+        expiresAt: Date.now() + 60_000,
+        beaconType: 'kiosk',
+        venueType: null,
+        area: null,
+        screenLabel: null,
+        tickets: [{ ticket: randomId(16), role: 'scanner' }],
+      }),
+    ).rejects.toThrow(/room-open-invalid/);
+    const { input } = await openRoom({ roomId });
+    await expect(stub.open(input)).rejects.toThrow(/room-already-open/);
+  });
+
   it('joins with each ticket once, assigns roles, hands out resume and data tokens', async () => {
     const { roomId, input } = await openRoom();
     const scanner = await join(roomId, input.tickets[0]!.ticket);
     expect(scanner.joined).toMatchObject({ role: 'scanner', expiresAt: input.expiresAt, participants: 1 });
     expect(typeof scanner.joined.serverNow).toBe('number');
-    expect(await verifyDataToken(testEnv, String(scanner.joined.dataToken))).toEqual({ roomId, expiresAt: input.expiresAt });
-    const kiosk = await join(roomId, input.tickets[1]!.ticket, '203.0.113.10');
+    expect(String(scanner.joined.resumeToken)).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(await verifyDataToken(testEnv, String(scanner.joined.dataToken))).toEqual({
+      roomId,
+      expiresAt: input.expiresAt,
+    });
+
+    const kiosk = await join(roomId, input.tickets[1]!.ticket);
     expect(kiosk.joined).toMatchObject({ role: 'kiosk', participants: 2 });
     expect((await scanner.conn.inbox.nextOfType('count')).participants).toBe(2);
 
-    const reuse = await connectWs(`/ws/room/${roomId}`, '198.51.100.8');
+    const reuse = await connectRoom(roomId);
     reuse.ws.send(JSON.stringify({ t: 'join', ticket: input.tickets[0]!.ticket }));
     expect((await reuse.inbox.nextOfType('error')).error).toBe('ticket-invalid');
   });
 
-  it('rejects an unknown ticket, a malformed frame and a join to a room that was never opened', async () => {
+  it('counts down again when a joined socket leaves', async () => {
+    const { roomId, input } = await openRoom();
+    const scanner = await join(roomId, input.tickets[0]!.ticket);
+    const kiosk = await join(roomId, input.tickets[1]!.ticket);
+    expect((await scanner.conn.inbox.nextOfType('count')).participants).toBe(2);
+    kiosk.conn.ws.close(1000, 'bye');
+    expect((await scanner.conn.inbox.nextOfType('count')).participants).toBe(1);
+  });
+
+  it('rejects junk, an unknown ticket, an unjoined command and a room nobody opened', async () => {
     const { roomId } = await openRoom();
-    const c = await connectWs(`/ws/room/${roomId}`, '198.51.100.7');
+    const c = await connectRoom(roomId);
     c.ws.send('not json');
     expect((await c.inbox.nextOfType('error')).error).toBe('bad-frame');
     c.ws.send(JSON.stringify({ t: 'join', ticket: 'NOPE' }));
     expect((await c.inbox.nextOfType('error')).error).toBe('ticket-invalid');
-    const ghost = await connectWs(`/ws/room/${randomId(10)}`, '198.51.100.7');
+    c.ws.send(JSON.stringify({ t: 'share' }));
+    expect((await c.inbox.nextOfType('error')).error).toBe('join-required');
+
+    const ghost = await connectRoom(randomId(10));
     ghost.ws.send(JSON.stringify({ t: 'join', ticket: randomId(16) }));
     expect((await ghost.inbox.nextOfType('error')).error).toBe('room-closed');
+  });
+
+  it('answers a keepalive ping from the runtime, without waking the object', async () => {
+    const { roomId } = await openRoom();
+    const c = await connectRoom(roomId);
+    c.ws.send('{"t":"ping"}');
+    expect((await c.inbox.nextOfType('pong')).t).toBe('pong');
   });
 
   it('resume re-attaches with the same role and closes the previous socket', async () => {
     const { roomId, input } = await openRoom();
     const first = await join(roomId, input.tickets[0]!.ticket);
-    const second = await connectWs(`/ws/room/${roomId}`, '198.51.100.7');
+    const second = await connectRoom(roomId);
     second.ws.send(JSON.stringify({ t: 'resume', resumeToken: first.joined.resumeToken }));
     const joined = await second.inbox.nextOfType('joined');
-    expect(joined).toMatchObject({ role: 'scanner', resumeToken: first.joined.resumeToken, dataToken: first.joined.dataToken });
+    expect(joined).toMatchObject({
+      role: 'scanner',
+      resumeToken: first.joined.resumeToken,
+      dataToken: first.joined.dataToken,
+      participants: 1,
+    });
     await first.conn.inbox.waitClose();
-    expect(first.conn.inbox.closeCode).toBe(4004);
-    const bogus = await connectWs(`/ws/room/${roomId}`, '198.51.100.7');
+    expect(first.conn.inbox.closeCode).toBe(CLOSE_REPLACED);
+
+    const bogus = await connectRoom(roomId);
     bogus.ws.send(JSON.stringify({ t: 'resume', resumeToken: randomId(16) }));
     expect((await bogus.inbox.nextOfType('error')).error).toBe('resume-invalid');
+
+    second.ws.send(JSON.stringify({ t: 'join', ticket: input.tickets[1]!.ticket }));
+    expect((await second.inbox.nextOfType('error')).error).toBe('already-joined');
   });
 });
 
@@ -6347,14 +6479,17 @@ describe('RoomDO view forwarding', () => {
   it('forwards view only from the driver to kiosk sockets', async () => {
     const { roomId, input } = await openRoom();
     const scanner = await join(roomId, input.tickets[0]!.ticket);
-    const kiosk = await join(roomId, input.tickets[1]!.ticket, '203.0.113.10');
+    const kiosk = await join(roomId, input.tickets[1]!.ticket);
     await scanner.conn.inbox.nextOfType('count');
+
     scanner.conn.ws.send(JSON.stringify({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } }));
     expect(await kiosk.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } });
     await scanner.conn.inbox.expectSilence();
+
     kiosk.conn.ws.send(JSON.stringify({ t: 'view', layer: 'vijesti' }));
     await scanner.conn.inbox.expectSilence();
     await kiosk.conn.inbox.expectSilence();
+
     scanner.conn.ws.send(JSON.stringify({ t: 'view', layer: 'not-a-layer' }));
     expect((await scanner.conn.inbox.nextOfType('error')).error).toBe('bad-frame');
   });
@@ -6368,57 +6503,86 @@ describe('RoomDO events', () => {
     scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'export', dim: 'u-pokretu/ics' }));
     scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'export', dim: 'u-pokretu/zip' }));
     scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'page_view', dim: 'x' }));
-    for (let i = 0; i < EVENTS_PER_SOCKET_MAX + 10; i += 1) scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'panel_open', dim: 'vijesti' }));
-    await runInDurableObject(roomStub(testEnv, roomId), async () => {});
-    await new Promise((r) => setTimeout(r, 100));
-    const rows = await metricsStub(testEnv).query('2020-01-01');
-    const sum = (event: string, dim1: string, dim2: string) => rows.filter((r) => r.event === event && r.dim1 === dim1 && r.dim2 === dim2).reduce((s, r) => s + r.count, 0);
+    for (let i = 0; i < EVENTS_PER_SOCKET_MAX + 10; i += 1) {
+      scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'panel_open', dim: 'vijesti' }));
+    }
+
+    const stub = metricsStub(testEnv);
+    await waitForRow(
+      stub,
+      (row) => row.event === 'panel_open' && row.dim1 === 'vijesti' && row.count === EVENTS_PER_SOCKET_MAX - 2,
+      5000,
+    );
+    const rows = await stub.query('2020-01-01');
+    const sum = (event: string, dim1: string, dim2: string): number =>
+      rows.filter((r) => r.event === event && r.dim1 === dim1 && r.dim2 === dim2).reduce((s, r) => s + r.count, 0);
     expect(sum('panel_open', 'zrak-i-nebo', 'kiosk')).toBe(1);
     expect(sum('export', 'u-pokretu', 'ics')).toBe(1);
     expect(sum('export', 'u-pokretu', 'zip')).toBe(0);
     expect(rows.some((r) => r.event === 'page_view')).toBe(false);
-    expect(sum('panel_open', 'vijesti', 'kiosk')).toBe(EVENTS_PER_SOCKET_MAX - 2);
-  });
+  }, 15_000);
 });
 
 describe('RoomDO share and redeemPeer', () => {
-  it('a kiosk-opened room mints peer codes and a redeemed code opens a fresh phone room', async () => {
+  it('a kiosk-opened room mints peer codes and a redeemed code opens a fresh five-minute phone room', async () => {
     const { roomId, input } = await openRoom();
     const scanner = await join(roomId, input.tickets[0]!.ticket);
     scanner.conn.ws.send(JSON.stringify({ t: 'share' }));
-    const codes = await scanner.conn.inbox.nextOfType('codes');
-    const batch = codes.batch as CodeSlot[];
+    const batch = (await scanner.conn.inbox.nextOfType('codes')).batch as CodeSlot[];
     expect(batch.length).toBeGreaterThan(0);
+    expect(batch.length).toBeLessThanOrEqual(CODES_PER_BATCH);
     expect(batch[batch.length - 1]!.slotStart).toBeLessThan(input.expiresAt);
     expect(await indexStub(testEnv).resolve(batch[0]!.code)).toEqual({ kind: 'room', ownerId: roomId });
 
     const result = await roomStub(testEnv, roomId).redeemPeer(batch[0]!.code);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.scan).toMatchObject({ beaconType: 'phone', venueType: null, area: null, screenLabel: null, participants: 0 });
+    expect(result.scan).toMatchObject({
+      beaconType: 'phone',
+      venueType: null,
+      area: null,
+      screenLabel: null,
+      participants: 0,
+    });
+    expect(result.scan.roomId).toMatch(/^[0-9A-HJKMNP-TV-Z]{16}$/);
     expect(result.scan.roomId).not.toBe(roomId);
     expect(result.scan.expiresAt).toBeGreaterThan(Date.now() + 4 * 60_000);
     expect(result.scan.expiresAt).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 1000);
-    expect(await roomStub(testEnv, roomId).redeemPeer(batch[0]!.code)).toEqual({ ok: false, error: 'code-used' });
 
-    const peer = await join(result.scan.roomId, result.scan.ticket, '198.51.100.9');
+    expect(await roomStub(testEnv, roomId).redeemPeer(batch[0]!.code)).toEqual({ ok: false, error: 'code-used' });
+    expect(await roomStub(testEnv, roomId).redeemPeer('ZZZZZZZZ')).toEqual({ ok: false, error: 'code-unknown' });
+
+    const peer = await join(result.scan.roomId, result.scan.ticket);
     expect(peer.joined.role).toBe('phone');
     peer.conn.ws.send(JSON.stringify({ t: 'share' }));
     expect((await peer.conn.inbox.nextOfType('error')).error).toBe('share-not-allowed');
-    expect(await roomStub(testEnv, roomId).redeemPeer('ZZZZZZZZ')).toEqual({ ok: false, error: 'code-unknown' });
+    await waitForRow(metricsStub(testEnv), (row) => row.event === 'session_start' && row.dim1 === 'phone');
   });
 
-  it('share from a kiosk socket is refused and a second share re-sends the live batch', async () => {
+  it('share is refused from a kiosk socket and from a phone-opened room, and repeats the live batch', async () => {
     const { roomId, input } = await openRoom();
-    const kiosk = await join(roomId, input.tickets[1]!.ticket, '203.0.113.10');
+    const kiosk = await join(roomId, input.tickets[1]!.ticket);
     kiosk.conn.ws.send(JSON.stringify({ t: 'share' }));
     expect((await kiosk.conn.inbox.nextOfType('error')).error).toBe('share-not-allowed');
+
     const scanner = await join(roomId, input.tickets[0]!.ticket);
     scanner.conn.ws.send(JSON.stringify({ t: 'share' }));
     const first = (await scanner.conn.inbox.nextOfType('codes')).batch as CodeSlot[];
     scanner.conn.ws.send(JSON.stringify({ t: 'share' }));
     const second = (await scanner.conn.inbox.nextOfType('codes')).batch as CodeSlot[];
     expect(second.map((s) => s.code)).toEqual(first.map((s) => s.code));
+
+    const phoneRoom = await openRoom({
+      beaconType: 'phone',
+      venueType: null,
+      area: null,
+      screenLabel: null,
+      tickets: [{ ticket: randomId(16), role: 'scanner' }],
+    });
+    const phone = await join(phoneRoom.roomId, phoneRoom.input.tickets[0]!.ticket);
+    expect(phone.joined.role).toBe('phone');
+    phone.conn.ws.send(JSON.stringify({ t: 'share' }));
+    expect((await phone.conn.inbox.nextOfType('error')).error).toBe('share-not-allowed');
   });
 });
 
@@ -6427,88 +6591,121 @@ describe('RoomDO expiry chain', () => {
     const { roomId, input } = await openRoom();
     const stub = roomStub(testEnv, roomId);
     const scanner = await join(roomId, input.tickets[0]!.ticket);
-    const kiosk = await join(roomId, input.tickets[1]!.ticket, '203.0.113.10');
+    const kiosk = await join(roomId, input.tickets[1]!.ticket);
+    await scanner.conn.inbox.nextOfType('count');
     expect(await stub.phase()).toBe('live');
 
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    // Far from expiry: the alarm only re-arms.
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
     expect(await stub.phase()).toBe('live');
-
-    await runInDurableObject(stub, (instance: RoomDO) => {
-      vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt - 60_000);
-    });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
-    expect((await scanner.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(60);
-    expect((await kiosk.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(60);
-    expect(await stub.phase()).toBe('warned60');
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
     await scanner.conn.inbox.expectSilence();
 
     await runInDurableObject(stub, (instance: RoomDO) => {
-      vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt - 20_000);
+      vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt - WARN_60_MS);
     });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
+    expect((await scanner.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(60);
+    expect((await kiosk.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(60);
+    expect(await stub.phase()).toBe('warned60');
+    // Alarms are at-least-once: a second delivery at the same instant is silent.
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
+    await scanner.conn.inbox.expectSilence();
+
+    await runInDurableObject(stub, (instance: RoomDO) => {
+      vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt - WARN_20_MS);
+    });
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
     expect((await scanner.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(20);
+    expect((await kiosk.conn.inbox.nextOfType('expiring')).secondsLeft).toBe(20);
     expect(await stub.phase()).toBe('warned20');
 
     await runInDurableObject(stub, (instance: RoomDO) => {
       vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt);
     });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
     await scanner.conn.inbox.nextOfType('expired');
+    await kiosk.conn.inbox.nextOfType('expired');
     await scanner.conn.inbox.waitClose();
     await kiosk.conn.inbox.waitClose();
     expect(scanner.conn.inbox.closeCode).toBe(CLOSE_SESSION_EXPIRED);
     expect(scanner.conn.inbox.closeReason).toBe('session-expired');
+    expect(kiosk.conn.inbox.closeCode).toBe(CLOSE_SESSION_EXPIRED);
+
     expect(await stub.phase()).toBe('none');
-    const tables = await runInDurableObject(stub, (_i: RoomDO, state) => state.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM meta`).one().n);
-    expect(tables).toBe(0);
-    expect(await runInDurableObject(stub, (_i: RoomDO, state) => state.storage.getAlarm())).toBeNull();
-    const rows = await metricsStub(testEnv).query('2020-01-01');
-    expect(rows.some((r) => r.event === 'session_end' && r.dim1 === 'expired' && r.dim2 === '10min')).toBe(true);
+    const metaRows = await runInDurableObject(stub, (_instance: RoomDO, state) =>
+      state.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM meta`).one().n,
+    );
+    expect(metaRows).toBe(0);
+    expect(await runInDurableObject(stub, (_instance: RoomDO, state) => state.storage.getAlarm())).toBeNull();
+    await waitForRow(
+      metricsStub(testEnv),
+      (row) => row.event === 'session_end' && row.dim1 === 'expired' && row.dim2 === '10min',
+    );
+
+    // A wiped room grants nothing more.
     expect(await stub.redeemPeer('ZZZZZZZZ')).toEqual({ ok: false, error: 'code-unknown' });
+    await runInDurableObject(stub, (instance: RoomDO) => instance.alarm());
+    expect(await stub.phase()).toBe('none');
   });
 
-  it('skips straight to closed when every boundary has passed (very short sessions)', async () => {
-    const { roomId, input } = await openRoom({ expiresAt: Date.now() + 12_000 });
+  it('a session too short for the warnings still closes itself on its own alarm', async () => {
+    const { roomId, input } = await openRoom({ expiresAt: Date.now() + 3000 });
     const stub = roomStub(testEnv, roomId);
     const scanner = await join(roomId, input.tickets[0]!.ticket);
-    await runInDurableObject(stub, (instance: RoomDO) => {
-      vi.spyOn(instance, 'now').mockReturnValue(input.expiresAt + 1);
-    });
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
-    await scanner.conn.inbox.nextOfType('expired');
-    await scanner.conn.inbox.waitClose();
+    await scanner.conn.inbox.nextOfType('expired', 10_000);
+    await scanner.conn.inbox.waitClose(5000);
+    expect(scanner.conn.inbox.closeCode).toBe(CLOSE_SESSION_EXPIRED);
     expect(await stub.phase()).toBe('none');
-  });
+    await waitForRow(
+      metricsStub(testEnv),
+      (row) => row.event === 'session_end' && row.dim1 === 'expired' && row.dim2 === '<1min',
+      5000,
+    );
+  }, 20_000);
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 3: Run it and watch it fail**
 
-`npx vitest run --project workers test/pairing/room-do.workers.test.ts` → fails on `stub.open` behaviour (`participants` returned but `join` yields no `joined`).
+`npx vitest run --project workers test/pairing/room-do.workers.test.ts`
 
-- [ ] **Step 3: Write `worker/do/room-do.ts`**
+Expected: every test fails. The B6 stub `RoomDO` exports neither `roomStub`'s companions nor the constants, so the file fails to load with `No "EVENTS_PER_SOCKET_MAX" export is defined on the "worker/do/room-do" module` (and `instance.alarm is not a function` once that is past).
+
+- [ ] **Step 4: Write `worker/do/room-do.ts`**
 
 ```ts
 // worker/do/room-do.ts
-// RoomDO: one per session (a kiosk unlock or a peer grant). Holds the tickets,
-// the participants and the code batch a phone may share; forwards the driver's
-// view to kiosk sockets; runs the idempotent expiry chain
-// live -> warned60 -> warned20 -> closed; wipes itself at close.
+// RoomDO: one per session — a kiosk unlock (two tickets: scanner and kiosk) or
+// a peer grant (one ticket, five minutes, no screen). It holds the tickets, the
+// participants and the code batch a phone may share, forwards the driver's
+// chosen view to the screen, and runs the idempotent expiry chain
+// live -> warned60 -> warned20 -> closed, wiping itself at the end.
+//
+// Privacy: nothing here identifies anyone. A participant is a random resume
+// token, a role and a joined-at; the socket attachment holds those three fields
+// and nothing else (no address, no netKey, no user agent), so a hibernated
+// socket carries no identifier through the runtime either.
+//
+// Socket idioms ported from D:\scratch\psdlat\worker\src\mesh-do.ts:
+// the hibernation upgrade (476-527), the webSocketClose/webSocketError pair
+// with the `socketsGone` double-fire guard (529-575), and the idempotent,
+// self-rearming alarm (2726-2829).
 import { DurableObject } from 'cloudflare:workers';
 import { codeRotateSeconds, peerMinutes } from '../config';
 import type { Env } from '../env';
 import { logError } from '../log';
-import { EXPORT_KINDS, isMetricEvent, recordMetric } from '../metrics';
+import { EXPORT_KINDS, recordMetric } from '../metrics';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
-import { NET_KEY_HEADER, isNetKey } from '../pairing/netkey';
 import { randomId, signDataToken } from '../pairing/tokens';
 import {
+  CLIENT_EVENTS,
+  CLOSE_REPLACED,
   CLOSE_SESSION_EXPIRED,
   CODES_PER_BATCH,
   CODE_GRACE_MS,
   LAYERS,
   type BeaconKind,
+  type ClientEvent,
   type CodeSlot,
   type LayerId,
   type Role,
@@ -6520,19 +6717,23 @@ import {
 } from '../protocol';
 import { indexStub } from './index-do';
 
+/** randomId(10) → 16 Crockford symbols. */
 export const ROOM_ID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+/** randomId(16) → 26 Crockford symbols (tickets and resume tokens). */
+const TICKET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+/** Counters a single socket may contribute in one session; beyond this they are dropped. */
 export const EVENTS_PER_SOCKET_MAX = 60;
 export const WARN_60_MS = 60_000;
 export const WARN_20_MS = 20_000;
-/** A second live socket for the same resume token replaces the first. */
-export const CLOSE_REPLACED = 4004;
-const TICKET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
 const PARAMS_MAX_KEYS = 8;
 const PARAMS_MAX_CHARS = 64;
-/** Re-send the current share batch while at least this many slots are still ahead. */
-const RESEND_MIN_SLOTS_AHEAD = 3;
+const FRAME_MAX_CHARS = 2048;
+const TICKETS_MAX = 4;
 
 export type Phase = 'none' | 'live' | 'warned60' | 'warned20' | 'closed';
+
+const PHASE_ORDER: Record<Phase, number> = { none: 0, live: 1, warned60: 2, warned20: 3, closed: 4 };
 
 export interface RoomTicket {
   ticket: string;
@@ -6541,20 +6742,43 @@ export interface RoomTicket {
 
 export interface RoomOpenInput {
   roomId: string;
+  /** Unix ms; the session dies here whatever happens. */
   expiresAt: number;
   beaconType: BeaconKind;
   venueType: VenueType | null;
+  /** Area slug for the counters; null for a phone-granted room. */
   area: string | null;
   screenLabel: string | null;
   tickets: RoomTicket[];
 }
 
+/** Everything a hibernated socket needs, and nothing that could identify a person. */
+export interface RoomAttachment {
+  role: Role;
+  joinedAt: number;
+  resumeToken: string;
+}
+
 export type RedeemPeerResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
-type Attachment = { role: Role; participantId: string };
+/** Coarse buckets for the session_end counter (R-24: dimension values, not a vocabulary). */
+export type DurationBucket = '<1min' | '1-5min' | '5-10min' | '10min';
+
+/**
+ * Rounded to the nearest minute, so a ten-minute session that closes a few
+ * milliseconds before its nominal expiry is still counted as a full one.
+ */
+export function durationBucket(ms: number): DurationBucket {
+  const minutes = Math.round(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return '<1min';
+  if (minutes <= 5) return '1-5min';
+  if (minutes < 10) return '5-10min';
+  return '10min';
+}
+
 type MetaRow = { key: string; value: string };
 type TicketRow = { ticket: string; role: string; used: number };
-type ParticipantRow = { participant_id: string; role: string; resume_token: string; events: number };
+type ParticipantRow = { resume_token: string; role: string; joined_at: number; events: number };
 type CodeRow = { code: string; slot_start: number; slot_end: number; used: number };
 
 export function roomStub(env: Env, roomId: string): DurableObjectStub<RoomDO> {
@@ -6570,20 +6794,44 @@ function isLayer(value: unknown): value is LayerId {
   return typeof value === 'string' && (LAYERS as readonly string[]).includes(value);
 }
 
+function isRole(value: unknown): value is Role {
+  return value === 'kiosk' || value === 'scanner' || value === 'phone';
+}
+
+// R-17/R-24: the allowlist is membership in the protocol's own array, not a second list.
+const CLIENT_EVENT_SET: ReadonlySet<string> = new Set(CLIENT_EVENTS);
+
+function isClientEvent(value: unknown): value is ClientEvent {
+  return typeof value === 'string' && CLIENT_EVENT_SET.has(value);
+}
+
+/** Every frame the room accepts, validated into the shared union or rejected. */
 function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
-  if (typeof message !== 'string' || message.length > 2048) return null;
-  let parsed: { t?: unknown; ticket?: unknown; resumeToken?: unknown; layer?: unknown; params?: unknown; name?: unknown; dim?: unknown };
+  if (typeof message !== 'string' || message.length > FRAME_MAX_CHARS) return null;
+  let parsed: {
+    t?: unknown;
+    ticket?: unknown;
+    resumeToken?: unknown;
+    layer?: unknown;
+    params?: unknown;
+    name?: unknown;
+    dim?: unknown;
+  };
   try {
-    parsed = JSON.parse(message);
+    parsed = JSON.parse(message) as typeof parsed;
   } catch {
     return null;
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   switch (parsed.t) {
     case 'join':
-      return typeof parsed.ticket === 'string' && parsed.ticket.length <= 64 ? { t: 'join', ticket: parsed.ticket } : null;
+      return typeof parsed.ticket === 'string' && parsed.ticket.length <= 64
+        ? { t: 'join', ticket: parsed.ticket }
+        : null;
     case 'resume':
-      return typeof parsed.resumeToken === 'string' && parsed.resumeToken.length <= 64 ? { t: 'resume', resumeToken: parsed.resumeToken } : null;
+      return typeof parsed.resumeToken === 'string' && parsed.resumeToken.length <= 64
+        ? { t: 'resume', resumeToken: parsed.resumeToken }
+        : null;
     case 'view': {
       if (!isLayer(parsed.layer)) return null;
       if (parsed.params === undefined) return { t: 'view', layer: parsed.layer };
@@ -6599,24 +6847,32 @@ function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
     }
     case 'share':
       return { t: 'share' };
-    case 'event':
-      if (parsed.name !== 'panel_open' && parsed.name !== 'export') return null;
-      if (parsed.dim !== undefined && (typeof parsed.dim !== 'string' || parsed.dim.length > PARAMS_MAX_CHARS)) return null;
-      return { t: 'event', name: parsed.name, ...(typeof parsed.dim === 'string' ? { dim: parsed.dim } : {}) };
+    case 'event': {
+      if (!isClientEvent(parsed.name)) return null;
+      if (parsed.dim === undefined) return { t: 'event', name: parsed.name };
+      if (typeof parsed.dim !== 'string' || parsed.dim.length > PARAMS_MAX_CHARS) return null;
+      return { t: 'event', name: parsed.name, dim: parsed.dim };
+    }
     default:
       return null;
   }
 }
 
 export class RoomDO extends DurableObject<Env> {
+  /** psdlat mesh-do 529-575: close and error can both fire for one socket. */
   private socketsGone = new WeakSet<WebSocket>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => this.ensureSchema());
-    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"pong"}', '{"t":"pong"}'));
+    ctx.blockConcurrencyWhile(async () => {
+      this.ensureSchema();
+    });
+    // Keepalive answered by the runtime without waking a hibernated object; the
+    // pair is matched before webSocketMessage, so 'ping' never reaches parseClient.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'));
   }
 
+  /** Wall clock; a method so tests can pin it with vi.spyOn. */
   now(): number {
     return Date.now();
   }
@@ -6624,16 +6880,29 @@ export class RoomDO extends DurableObject<Env> {
   private ensureSchema(): void {
     const sql = this.ctx.storage.sql;
     sql.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
-    sql.exec(`CREATE TABLE IF NOT EXISTS tickets (ticket TEXT PRIMARY KEY, role TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)`);
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS tickets (
+         ticket TEXT PRIMARY KEY,
+         role TEXT NOT NULL,
+         used INTEGER NOT NULL DEFAULT 0
+       )`,
+    );
     sql.exec(
       `CREATE TABLE IF NOT EXISTS participants (
-         participant_id TEXT PRIMARY KEY,
+         resume_token TEXT PRIMARY KEY,
          role TEXT NOT NULL,
-         resume_token TEXT NOT NULL UNIQUE,
+         joined_at INTEGER NOT NULL,
          events INTEGER NOT NULL DEFAULT 0
        )`,
     );
-    sql.exec(`CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, slot_start INTEGER NOT NULL, slot_end INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)`);
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS codes (
+         code TEXT PRIMARY KEY,
+         slot_start INTEGER NOT NULL,
+         slot_end INTEGER NOT NULL,
+         used INTEGER NOT NULL DEFAULT 0
+       )`,
+    );
   }
 
   private meta(key: string): string | null {
@@ -6641,7 +6910,11 @@ export class RoomDO extends DurableObject<Env> {
   }
 
   private setMeta(key: string, value: string): void {
-    this.ctx.storage.sql.exec(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`, key, value);
+    this.ctx.storage.sql.exec(
+      `INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+      key,
+      value,
+    );
   }
 
   phase(): Phase {
@@ -6657,6 +6930,11 @@ export class RoomDO extends DurableObject<Env> {
     return Number(this.meta('expiresAt') ?? '0');
   }
 
+  /** A room opened by a phone gives everyone the phone role, whatever the ticket says. */
+  private roleFor(ticketRole: Role): Role {
+    return this.meta('beaconType') === 'phone' ? 'phone' : ticketRole;
+  }
+
   // --- RPC -------------------------------------------------------------------
 
   async open(input: RoomOpenInput): Promise<{ participants: number }> {
@@ -6668,12 +6946,18 @@ export class RoomDO extends DurableObject<Env> {
       (input.beaconType !== 'kiosk' && input.beaconType !== 'phone') ||
       !Array.isArray(input.tickets) ||
       input.tickets.length === 0 ||
-      input.tickets.length > 4
+      input.tickets.length > TICKETS_MAX ||
+      new Set(input.tickets.map((t) => t?.ticket)).size !== input.tickets.length
     ) {
       throw new Error('room-open-invalid');
     }
+    for (const entry of input.tickets) {
+      if (typeof entry?.ticket !== 'string' || !TICKET_SHAPE.test(entry.ticket) || !isRole(entry.role)) {
+        throw new Error('room-open-invalid');
+      }
+    }
     if (this.phase() !== 'none') throw new Error('room-already-open');
-    this.ensureSchema();
+
     this.ctx.storage.transactionSync(() => {
       this.setMeta('roomId', input.roomId);
       this.setMeta('openedAt', String(this.now()));
@@ -6683,23 +6967,38 @@ export class RoomDO extends DurableObject<Env> {
       this.setMeta('area', input.area ?? '');
       this.setMeta('screenLabel', input.screenLabel ?? '');
       this.setMeta('phase', 'live');
-      for (const t of input.tickets) {
-        if (!TICKET_SHAPE.test(t.ticket) || (t.role !== 'kiosk' && t.role !== 'scanner' && t.role !== 'phone')) throw new Error('room-open-invalid');
-        this.ctx.storage.sql.exec(`INSERT INTO tickets (ticket, role, used) VALUES (?, ?, 0)`, t.ticket, t.role);
+      for (const entry of input.tickets) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO tickets (ticket, role, used) VALUES (?, ?, 0)`,
+          entry.ticket,
+          entry.role,
+        );
       }
     });
     await this.ctx.storage.setAlarm(Math.max(input.expiresAt - WARN_60_MS, this.now() + 1000));
-    return { participants: this.ctx.getWebSockets().length };
+    return { participants: this.joinedSockets().length };
   }
 
+  /**
+   * One hop: a code minted by this room grants a NEW room of its own, never a
+   * seat in this one, and that new room is opened by a phone so it can never
+   * mint codes in turn.
+   */
   async redeemPeer(code: string): Promise<RedeemPeerResult> {
     if (!this.isLive()) return { ok: false, error: 'code-unknown' };
     const now = this.now();
-    const row = this.ctx.storage.sql.exec<CodeRow>(`SELECT * FROM codes WHERE code = ?`, code).toArray()[0];
+    const row = this.ctx.storage.sql
+      .exec<CodeRow>(`SELECT code, slot_start, slot_end, used FROM codes WHERE code = ?`, code)
+      .toArray()[0];
     if (row === undefined) return { ok: false, error: 'code-unknown' };
     if (row.used === 1) return { ok: false, error: 'code-used' };
-    if (codeWindow({ slotStart: row.slot_start, slotEnd: row.slot_end }, now) !== 'open') return { ok: false, error: 'code-expired' };
-    if (this.ctx.storage.sql.exec(`UPDATE codes SET used = 1 WHERE code = ? AND used = 0`, code).rowsWritten === 0) return { ok: false, error: 'code-used' };
+    if (codeWindow({ slotStart: row.slot_start, slotEnd: row.slot_end }, now) !== 'open') {
+      return { ok: false, error: 'code-expired' };
+    }
+    // Flip atomically; a concurrent redeem of the same code sees used = 1.
+    if (this.ctx.storage.sql.exec(`UPDATE codes SET used = 1 WHERE code = ? AND used = 0`, code).rowsWritten === 0) {
+      return { ok: false, error: 'code-used' };
+    }
 
     const roomId = randomId(10);
     const ticket = randomId(16);
@@ -6711,47 +7010,61 @@ export class RoomDO extends DurableObject<Env> {
       venueType: null,
       area: null,
       screenLabel: null,
-      tickets: [{ ticket, role: 'phone' }],
+      tickets: [{ ticket, role: 'scanner' }],
     });
     void recordMetric(this.env, 'session_start', 'phone', '');
     return {
       ok: true,
-      scan: { roomId, ticket, beaconType: 'phone', venueType: null, area: null, expiresAt, participants: opened.participants, screenLabel: null },
+      scan: {
+        roomId,
+        ticket,
+        beaconType: 'phone',
+        venueType: null,
+        area: null,
+        expiresAt,
+        participants: opened.participants,
+        screenLabel: null,
+      },
     };
   }
 
-  // --- WebSocket ---------------------------------------------------------------
+  // --- WebSocket -------------------------------------------------------------
 
+  /**
+   * psdlat mesh-do 476-527. No attachment until join or resume: an unjoined
+   * socket has no role, receives no broadcast and counts for nobody. The room
+   * has no network rule, so it neither reads nor stores the Worker's net key.
+   */
   async fetch(request: Request): Promise<Response> {
-    if (request.method !== 'GET' || request.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 400 });
-    if (!isNetKey(request.headers.get(NET_KEY_HEADER))) return new Response('missing net key', { status: 400 });
+    if (request.method !== 'GET' || (request.headers.get('Upgrade') ?? '').toLowerCase() !== 'websocket') {
+      return new Response('expected websocket', { status: 400 });
+    }
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
-    // No attachment until join/resume: an unjoined socket has no role and receives nothing.
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const parsed = parseClient(message);
     if (parsed === null) {
-      ws.send(frame({ t: 'error', error: 'bad-frame' }));
+      this.safeSend(ws, frame({ t: 'error', error: 'bad-frame' }));
       return;
     }
-    const attachment = ws.deserializeAttachment() as Attachment | null;
     if (!this.isLive()) {
-      ws.send(frame({ t: 'error', error: 'room-closed' }));
+      this.safeSend(ws, frame({ t: 'error', error: 'room-closed' }));
       return;
     }
+    const attachment = ws.deserializeAttachment() as RoomAttachment | null;
     if (attachment === null) {
       if (parsed.t === 'join') await this.handleJoin(ws, parsed.ticket);
       else if (parsed.t === 'resume') await this.handleResume(ws, parsed.resumeToken);
-      else ws.send(frame({ t: 'error', error: 'join-required' }));
+      else this.safeSend(ws, frame({ t: 'error', error: 'join-required' }));
       return;
     }
     switch (parsed.t) {
       case 'join':
       case 'resume':
-        ws.send(frame({ t: 'error', error: 'already-joined' }));
+        this.safeSend(ws, frame({ t: 'error', error: 'already-joined' }));
         return;
       case 'view':
         this.handleView(attachment, parsed.layer, parsed.params);
@@ -6765,7 +7078,7 @@ export class RoomDO extends DurableObject<Env> {
     }
   }
 
-  webSocketClose(ws: WebSocket): void {
+  webSocketClose(ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): void {
     this.noteSocketGone(ws);
   }
 
@@ -6774,22 +7087,24 @@ export class RoomDO extends DurableObject<Env> {
     this.noteSocketGone(ws);
   }
 
+  /**
+   * psdlat mesh-do 529-575: shared "this socket is gone" bookkeeping for both
+   * callbacks, guarded so the pair firing for one socket broadcasts once.
+   */
   private noteSocketGone(ws: WebSocket): void {
     if (this.socketsGone.has(ws)) return;
     this.socketsGone.add(ws);
     if (!this.isLive()) return;
-    if ((ws.deserializeAttachment() as Attachment | null) === null) return;
-    this.broadcastCount(ws);
+    if ((ws.deserializeAttachment() as RoomAttachment | null) === null) return;
+    const remaining = this.joinedSockets([ws]);
+    const message = frame({ t: 'count', participants: remaining.length });
+    for (const peer of remaining) this.safeSend(peer, message);
   }
 
-  private joinedSockets(except?: WebSocket): WebSocket[] {
-    return this.ctx.getWebSockets().filter((peer) => peer !== except && (peer.deserializeAttachment() as Attachment | null) !== null);
-  }
-
-  private broadcastCount(except?: WebSocket): void {
-    const sockets = this.joinedSockets(except);
-    const message = frame({ t: 'count', participants: sockets.length });
-    for (const peer of sockets) this.safeSend(peer, message);
+  private joinedSockets(exclude: readonly WebSocket[] = []): WebSocket[] {
+    return this.ctx
+      .getWebSockets()
+      .filter((peer) => !exclude.includes(peer) && (peer.deserializeAttachment() as RoomAttachment | null) !== null);
   }
 
   private safeSend(ws: WebSocket, message: string): void {
@@ -6800,62 +7115,296 @@ export class RoomDO extends DurableObject<Env> {
     }
   }
 
-  private async sendJoined(ws: WebSocket, participant: ParticipantRow): Promise<void> {
-    const roomId = this.meta('roomId')!;
-    const expiresAt = this.expiresAt();
-    const attachment: Attachment = { role: participant.role as Role, participantId: participant.participant_id };
-    ws.serializeAttachment(attachment);
-    const dataToken = await signDataToken(this.env, roomId, expiresAt);
-    const participants = this.joinedSockets().length;
-    this.safeSend(
-      ws,
-      frame({ t: 'joined', role: attachment.role, expiresAt, serverNow: this.now(), resumeToken: participant.resume_token, dataToken, participants }),
-    );
-    this.broadcastCount(ws);
+  private broadcast(message: string): void {
+    for (const peer of this.joinedSockets()) this.safeSend(peer, message);
   }
 
   private async handleJoin(ws: WebSocket, ticket: string): Promise<void> {
     const sql = this.ctx.storage.sql;
-    const row = sql.exec<TicketRow>(`SELECT * FROM tickets WHERE ticket = ?`, ticket).toArray()[0];
-    if (row === undefined || row.used === 1 || sql.exec(`UPDATE tickets SET used = 1 WHERE ticket = ? AND used = 0`, ticket).rowsWritten === 0) {
-      ws.send(frame({ t: 'error', error: 'ticket-invalid' }));
+    const row = sql.exec<TicketRow>(`SELECT ticket, role, used FROM tickets WHERE ticket = ?`, ticket).toArray()[0];
+    if (
+      row === undefined ||
+      row.used === 1 ||
+      !isRole(row.role) ||
+      sql.exec(`UPDATE tickets SET used = 1 WHERE ticket = ? AND used = 0`, ticket).rowsWritten === 0
+    ) {
+      this.safeSend(ws, frame({ t: 'error', error: 'ticket-invalid' }));
       return;
     }
-    const participant: ParticipantRow = { participant_id: randomId(10), role: row.role, resume_token: randomId(16), events: 0 };
-    sql.exec(`INSERT INTO participants (participant_id, role, resume_token, events) VALUES (?, ?, ?, 0)`, participant.participant_id, participant.role, participant.resume_token);
-    await this.sendJoined(ws, participant);
+    const participant: ParticipantRow = {
+      resume_token: randomId(16),
+      role: this.roleFor(row.role),
+      joined_at: this.now(),
+      events: 0,
+    };
+    sql.exec(
+      `INSERT INTO participants (resume_token, role, joined_at, events) VALUES (?, ?, ?, 0)`,
+      participant.resume_token,
+      participant.role,
+      participant.joined_at,
+    );
+    await this.sendJoined(ws, participant, []);
   }
 
   private async handleResume(ws: WebSocket, resumeToken: string): Promise<void> {
-    const participant = this.ctx.storage.sql.exec<ParticipantRow>(`SELECT * FROM participants WHERE resume_token = ?`, resumeToken).toArray()[0];
+    const participant = this.ctx.storage.sql
+      .exec<ParticipantRow>(
+        `SELECT resume_token, role, joined_at, events FROM participants WHERE resume_token = ?`,
+        resumeToken,
+      )
+      .toArray()[0];
     if (participant === undefined) {
-      ws.send(frame({ t: 'error', error: 'resume-invalid' }));
+      this.safeSend(ws, frame({ t: 'error', error: 'resume-invalid' }));
       return;
     }
-    // One live socket per resume token: the newcomer replaces any older holder.
+    // One live socket per resume token: the newcomer replaces the older holder.
+    // The replaced socket is marked gone up front so its close callback does not
+    // broadcast a second, lower count on top of the one sendJoined is about to send.
+    const replaced: WebSocket[] = [];
     for (const peer of this.ctx.getWebSockets()) {
       if (peer === ws) continue;
-      const att = peer.deserializeAttachment() as Attachment | null;
-      if (att?.participantId === participant.participant_id) {
-        try {
-          peer.close(CLOSE_REPLACED, 'replaced');
-        } catch (error) {
-          logError('room-replace-close-failed', error);
-        }
+      const att = peer.deserializeAttachment() as RoomAttachment | null;
+      if (att?.resumeToken !== resumeToken) continue;
+      replaced.push(peer);
+      this.socketsGone.add(peer);
+      try {
+        peer.close(CLOSE_REPLACED, 'replaced');
+      } catch (error) {
+        logError('room-replace-close-failed', error);
       }
     }
+    await this.sendJoined(ws, participant, replaced);
+  }
 
-You've hit your session limit · resets 4pm (Europe/Zagreb)
+  private async sendJoined(
+    ws: WebSocket,
+    participant: ParticipantRow,
+    replaced: readonly WebSocket[],
+  ): Promise<void> {
+    const roomId = this.meta('roomId')!;
+    const expiresAt = this.expiresAt();
+    const role = isRole(participant.role) ? participant.role : 'phone';
+    const attachment: RoomAttachment = {
+      role,
+      joinedAt: participant.joined_at,
+      resumeToken: participant.resume_token,
+    };
+    ws.serializeAttachment(attachment);
+    const dataToken = await signDataToken(this.env, roomId, expiresAt);
+    const participants = this.joinedSockets(replaced).length;
+    this.safeSend(
+      ws,
+      frame({
+        t: 'joined',
+        role,
+        expiresAt,
+        serverNow: this.now(),
+        resumeToken: participant.resume_token,
+        dataToken,
+        participants,
+      }),
+    );
+    const count = frame({ t: 'count', participants });
+    for (const peer of this.joinedSockets([ws, ...replaced])) this.safeSend(peer, count);
+  }
 
-I'll start by reading the required context files.
+  /** Only the driver — the first scanner to join — steers the screen. */
+  private isDriver(attachment: RoomAttachment): boolean {
+    if (attachment.role !== 'scanner') return false;
+    const driver = this.ctx.storage.sql
+      .exec<{ resume_token: string }>(
+        `SELECT resume_token FROM participants WHERE role = 'scanner' ORDER BY joined_at, resume_token LIMIT 1`,
+      )
+      .toArray()[0];
+    return driver !== undefined && driver.resume_token === attachment.resumeToken;
+  }
 
-# Area B (continued): scan and WebSocket routes, Cloudflare Access, admin provisioning, end-to-end proof
+  /** A view from anyone else is dropped in silence: it is not an error the person made. */
+  private handleView(attachment: RoomAttachment, layer: LayerId, params?: Record<string, string>): void {
+    if (!this.isDriver(attachment)) return;
+    const message = frame(params === undefined ? { t: 'view', layer } : { t: 'view', layer, params });
+    for (const peer of this.joinedSockets()) {
+      const att = peer.deserializeAttachment() as RoomAttachment | null;
+      if (att?.role === 'kiosk') this.safeSend(peer, message);
+    }
+  }
 
-**Area overview.** These three tasks close Area B by putting the Worker in front of the Durable Objects built in B1–B7. `worker/routes/pairing.ts` (B8) is the only place in the system that sees a visitor's address: it turns it into a `netKey` and forwards that — never the address — to `BeaconDO` and `RoomDO`, rate-limits `POST /api/scan` per client address with `RL_SCAN`, caps the scan body at 64 bytes before parsing, resolves the code through `IndexDO` and dispatches to `BeaconDO.redeem` or `RoomDO.redeemPeer`, answering `ScanOk` or a `ScanFail` whose message is Croatian and safe to show. `worker/pairing/access.ts` (B9) replaces its stub with the fail-closed Cloudflare Access JWT verification ported from `D:\scratch\psdlat\worker\src\stats.ts` (JWKS with a kid cache, pinned RS256, exact `aud`, header or `CF_Authorization` cookie) plus the R-02 bypass, and `worker/routes/admin.ts` provisions, lists and revokes screens behind it with one uniform 404 for everything unauthorised. B10 wires the whole chain in one workers-pool test — provision, kiosk socket, challenge, code batch, scan from another address, `unlocked`, both room joins, a forwarded `view`, a verified data token — and fixes the two cross-area names R-14 and R-20 require from `worker/metrics-do.ts`. **Sequencing note (verified against B6 and B7 as written):** `connectWs` in `test/pairing/helpers.ts` reaches the DOs through `SELF.fetch('/ws/beacon/…')` and `SELF.fetch('/ws/room/…')`, so B6's and B7's socket tests can only be green once B8 Step 5 has landed; if you built B1→B7 in order they are red for exactly that reason and B8 Step 6 re-runs them. **Rulings note:** the plan's line 3955 mints `provisionUrl` on the request origin, while this brief fixes it at `https://zagreb.aningfilm.hr/kiosk#<beaconId>.<secret>`; B9 follows the brief, and E2's `kioskUrl()` rebases the fragment onto whatever origin the test targets, so both stay satisfied. B4's `worker/metrics.ts` is already the final state (fire-and-forget with `.catch`, never rejects); B10 only adds the two contract names Area D imports from `worker/metrics-do.ts`.
+  /**
+   * One hop. Only a scanner in a room a kiosk opened may mint peer codes, and
+   * only for as many whole rotation slots as the session has left. A second
+   * share repeats the live batch instead of minting a competing one.
+   */
+  private async handleShare(ws: WebSocket, attachment: RoomAttachment): Promise<void> {
+    if (attachment.role !== 'scanner' || this.meta('beaconType') !== 'kiosk') {
+      this.safeSend(ws, frame({ t: 'error', error: 'share-not-allowed' }));
+      return;
+    }
+    const now = this.now();
+    const sql = this.ctx.storage.sql;
+    sql.exec(`DELETE FROM codes WHERE slot_end + ? <= ?`, CODE_GRACE_MS, now);
+    let batch: CodeSlot[] = sql
+      .exec<CodeRow>(`SELECT code, slot_start, slot_end, used FROM codes WHERE used = 0 ORDER BY slot_start`)
+      .toArray()
+      .map((row) => ({ code: row.code, slotStart: row.slot_start, slotEnd: row.slot_end }));
 
-**Dependencies to add:** none (`@cloudflare/vitest-pool-workers`, `vitest`, `@cloudflare/workers-types` and `wrangler` are already in `package.json`; the rate-limit bindings `RL_SCAN`, `RL_DATA`, `RL_OPEN` are simulated locally by the miniflare pool).
+    if (batch.length === 0) {
+      const slotMs = codeRotateSeconds(this.env) * 1000;
+      const slots = Math.min(CODES_PER_BATCH, Math.floor((this.expiresAt() - now) / slotMs));
+      if (slots <= 0) {
+        this.safeSend(ws, frame({ t: 'error', error: 'share-unavailable' }));
+        return;
+      }
+      batch = mintBatch(alignSlotStart(now, slotMs), slotMs, slots);
+      this.ctx.storage.transactionSync(() => {
+        for (const slot of batch) {
+          sql.exec(
+            `INSERT INTO codes (code, slot_start, slot_end, used) VALUES (?, ?, ?, 0)`,
+            slot.code,
+            slot.slotStart,
+            slot.slotEnd,
+          );
+        }
+      });
+      const roomId = this.meta('roomId')!;
+      await indexStub(this.env).register(
+        batch.map((slot) => ({
+          code: slot.code,
+          kind: 'room' as const,
+          ownerId: roomId,
+          expiresAt: slot.slotEnd + CODE_GRACE_MS,
+        })),
+      );
+    }
+    this.safeSend(ws, frame({ t: 'codes', batch, serverNow: this.now() }));
+  }
 
----
+  /** Counters only: an unknown name or dimension is dropped and costs the socket nothing. */
+  private handleEvent(attachment: RoomAttachment, name: ClientEvent, dim: string | undefined): void {
+    const sql = this.ctx.storage.sql;
+    const row = sql
+      .exec<ParticipantRow>(
+        `SELECT resume_token, role, joined_at, events FROM participants WHERE resume_token = ?`,
+        attachment.resumeToken,
+      )
+      .toArray()[0];
+    if (row === undefined || row.events >= EVENTS_PER_SOCKET_MAX) return;
+    const dims = this.eventDims(name, dim);
+    if (dims === null) return;
+    sql.exec(`UPDATE participants SET events = events + 1 WHERE resume_token = ?`, attachment.resumeToken);
+    void recordMetric(this.env, name, dims[0], dims[1]);
+  }
+
+  private eventDims(name: ClientEvent, dim: string | undefined): [string, string] | null {
+    if (name === 'panel_open') {
+      return isLayer(dim) ? [dim, this.meta('beaconType') ?? ''] : null;
+    }
+    // export: '<layer>/<kind>'
+    const parts = (dim ?? '').split('/');
+    if (parts.length !== 2) return null;
+    const [layer, kind] = parts as [string, string];
+    if (!isLayer(layer) || !(EXPORT_KINDS as readonly string[]).includes(kind)) return null;
+    return [layer, kind];
+  }
+
+  // --- expiry chain ------------------------------------------------------------
+
+  /**
+   * psdlat mesh-do 2726-2829: idempotent and self-rearming. Alarms are
+   * at-least-once and can arrive late, so the phase to be in is derived from the
+   * clock and compared with the stored one; a repeat delivery changes nothing and
+   * a session too short for a warning simply skips it rather than lying about the
+   * seconds left.
+   */
+  async alarm(): Promise<void> {
+    const stored = this.phase();
+    if (stored === 'none') return;
+    if (stored === 'closed') {
+      // A previous delivery announced the close but died before the wipe.
+      await this.wipe();
+      return;
+    }
+    const remaining = this.expiresAt() - this.now();
+    if (remaining <= 0) {
+      await this.closeRoom('expired');
+      return;
+    }
+    const due: Phase = remaining <= WARN_20_MS ? 'warned20' : remaining <= WARN_60_MS ? 'warned60' : 'live';
+    if (PHASE_ORDER[due] > PHASE_ORDER[stored]) {
+      this.setMeta('phase', due);
+      if (due !== 'live') {
+        this.broadcast(frame({ t: 'expiring', secondsLeft: Math.max(1, Math.ceil(remaining / 1000)) }));
+      }
+    }
+    const next =
+      due === 'live'
+        ? this.expiresAt() - WARN_60_MS
+        : due === 'warned60'
+          ? this.expiresAt() - WARN_20_MS
+          : this.expiresAt();
+    await this.ctx.storage.setAlarm(Math.max(next, this.now() + 1000));
+  }
+
+  private async closeRoom(reason: string): Promise<void> {
+    if (this.phase() === 'none' || this.phase() === 'closed') {
+      await this.wipe();
+      return;
+    }
+    const bucket = durationBucket(this.now() - Number(this.meta('openedAt') ?? '0'));
+    // Marked closed before anything else: a retried alarm must not send a second
+    // 'expired' or count a second session_end.
+    this.setMeta('phase', 'closed');
+    this.broadcast(frame({ t: 'expired' }));
+    for (const ws of this.ctx.getWebSockets()) {
+      this.socketsGone.add(ws);
+      try {
+        ws.close(CLOSE_SESSION_EXPIRED, 'session-expired');
+      } catch (error) {
+        logError('room-expire-close-failed', error);
+      }
+    }
+    void recordMetric(this.env, 'session_end', reason, bucket);
+    await this.wipe();
+  }
+
+  /** Nothing about a finished session is kept: the ten minutes are the whole retention policy. */
+  private async wipe(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    // deleteAll drops the tables of a SQLite object; recreate the empty ones so a
+    // late frame or RPC reads a clean 'none' room instead of throwing on a
+    // missing table.
+    this.ensureSchema();
+  }
+}
+```
+
+- [ ] **Step 5: Run the tests**
+
+`npx vitest run --project workers test/pairing/room-do.workers.test.ts`
+
+Expected: 11 tests pass (the two expiry tests take about four seconds together; the shortened-expiry one waits for the object's own alarm).
+
+- [ ] **Step 6: Re-run the area and typecheck**
+
+`npx vitest run --project workers test/pairing/metrics-do.workers.test.ts test/pairing/index-do.workers.test.ts test/pairing/room-do.workers.test.ts`
+Expected: the metrics, index and room files pass. `test/pairing/beacon-do.workers.test.ts` still fails on its socket tests until B8 lands the `/ws/beacon/:id` route (B8's Step 6 re-runs it); its RPC tests pass.
+
+`npx tsc --noEmit -p worker/tsconfig.json`
+Expected: no output. B6's `import { roomStub, type RoomOpenInput } from './room-do'` now resolves against the real class.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add worker/do/room-do.ts test/pairing/helpers.ts test/pairing/room-do.workers.test.ts
+git commit -m "RoomDO: single-use tickets, resume with one live socket per token, driver-only view, one-hop share, peer rooms, idempotent expiry chain" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+### Critical Files for Implementation
+- D:\scratch\vidikovac\worker\do\room-do.ts
+- D:\scratch\vidikovac\test\pairing\room-do.workers.test.ts
+- D:\scratch\vidikovac\test\pairing\helpers.ts
+- D:\scratch\vidikovac\worker\protocol.ts
+- D:\scratch\vidikovac\worker\do\beacon-do.ts
 
 ### Task B8: `POST /api/scan` and the two WebSocket upgrades
 
@@ -10863,152 +11412,667 @@ git commit -m "app: SessionClient over the room WebSocket (join, resume, offset,
 
 ---
 
-### Task C4: Scan page `/s/`
+### Task C4: Scan page `/s/` and the page boot module
 
 **Files:**
-- Create: `app/s/index.html`, `app/src/scan.ts`, `app/src/entries/scan.ts`, `app/src/ui/scan.css`, `app/src/boot.ts`
-- Modify: `vite.config.ts` (add the `s` input)
-- Test: `test/app/scan.test.ts`
+- Create: `app/src/boot.ts`, `app/src/entries/theme-init.ts`, `app/src/scan.ts`, `app/src/entries/scan.ts`, `app/src/ui/scan.css`, `app/s/index.html`
+- Modify: `vite.config.ts` (one line: the `s` input; C8 rewrites the file later), `test/app/session.test.ts` (drop its inline `FakeSocket`, import the shared one — R-39)
+- Test: `test/app/helpers.ts` (shared, R-39; create if C1–C3 did not), `test/app/boot.test.ts`, `test/app/scan.test.ts`
 
 **Interfaces:**
-- Consumes: `scan()` from `app/src/api.ts`; `normalizeCode`, `formatCode`, `isCompleteCode`, `codeFromScan`, `speakableCode` from `app/src/code.ts`; `createQrScanner`, `isQrScanSupported` from `app/src/ui/qrScanner.ts`; `createDialog`; `createToastQueue`; `I18n`; `ScanOk`, `ScanFail`, `VenueType` from `worker/protocol.ts`.
-- Produces: `mountScan(root: HTMLElement, deps: ScanDeps): ScanHandle`; `confirmLabel(ok: ScanOk, i18n: I18n, now: number): string`; `dashboardUrl(ok: ScanOk): string` (→ `/d/#room=<id>&ticket=<t>&label=<screenLabel|venue>`); `bootPage(options): { i18n, theme, toasts }` in `app/src/boot.ts` reused by every page entry.
 
-- [ ] **Step 1: Test the pure parts and the DOM flow**
+- Consumes (exact signatures shipped by C1–C3):
+  - C1 `app/src/ui/theme.ts`: `createThemeController(options?: ThemeControllerOptions): ThemeController`, `THEME_STORAGE_KEY = 'vidikovac-theme'`, `type ThemePreference = 'auto' | 'light' | 'dark' | 'solar'`; `ThemeController` has `getPreference()`, `getResolvedTheme()`, `setPreference(next)`, `onChange(listener)`, `destroy()`.
+  - C1 `app/src/ui/toast.ts`: `createToastQueue(options?: ToastQueueOptions): ToastQueue` with `ToastQueueOptions { container?: HTMLElement; maxVisible?: number; defaultDuration?: number }`, `ToastQueue { container, push(options), dismiss(id), clear(), size }`.
+  - C1 `app/src/ui/icons.ts`: `mountIconSprite(root?: Document): void`, `iconMarkup(name: IconName, label?: string): string`.
+  - C1 `app/src/ui/dom/escape.ts`: `escapeHtml(value: unknown): string`, `escapeAttribute(value: unknown): string`, `createElementFromHTML(html: string): HTMLElement`.
+  - C1 `app/src/ui/qrScanner.ts`: `createQrScanner(deps: QrScannerDeps): QrScannerHandle`, `isQrScanSupported(scope?): boolean`, `type QrScannerDeps { strings: QrScannerStrings; onResult: (value: string) => void; onCancel?: () => void; onError?: (reason: QrScanFailure) => void; … }`, `type QrScannerHandle { readonly element: HTMLElement; start(): Promise<void>; stop(): void; destroy(): void }`, `type QrScanFailure = 'denied' | 'unavailable' | 'unsupported'`.
+  - C2 `app/src/i18n/i18n.ts`: `I18n.t(key: string, vars?: Record<string, string | number>): string`, `setLocale(next: LocaleCode): LocaleCode`, `getLocale(): LocaleCode`, `translatePage(root?: ParentNode): void`; C2 `app/src/i18n/create-default-i18n.ts`: `createDefaultI18n(locale?: LocaleCode): I18n`, `bootLocale(): LocaleCode`, `LOCALE_STORAGE_KEY = 'vidikovac-locale'`; C2 `app/src/i18n/toggle.ts`: `createLanguageToggle(i18n: I18n, deps?: { storage?: Pick<Storage,'setItem'>; documentRef?: Document; onChange?: (locale: LocaleCode) => void }): HTMLButtonElement`. Catalog keys used here: `scan.*` (title, intro, codeLabel, codeHint, check, checking, unlock, cancel, confirmTitle, confirmScreen, confirmPhone, confirmHint, scanButton, venue.*, errors.*, scanner.*), `common.minutes`, `common.links.*`.
+  - C3 `app/src/api.ts`: `scan(code: string, fetchImpl?: typeof fetch): Promise<ScanOk | ScanFail>` (a network failure resolves to `{ error: 'bad-request', message: 'network' }`).
+  - C3 `app/src/code.ts`: `normalizeCode(raw): string`, `formatCode(raw): string`, `isCompleteCode(raw): boolean`, `codeFromScan(payload): string | null`, `speakableCode(raw): string`.
+  - C3 `app/src/session.ts`: `type WebSocketLike` (used only by the shared test `FakeSocket`).
+  - `worker/protocol.ts`: `ScanOk`, `ScanFail`, `ScanError`.
+- Produces (later tasks rely on exactly these):
+  - `app/src/boot.ts`: `bootPage(options: BootPageOptions): BootedPage`; `interface BootPageOptions { page: string; documentRef?: Document; toastContainer?: HTMLElement; onLocaleChange?: (locale: LocaleCode) => void }`; `interface BootedPage { i18n: I18n; theme: ThemeController; toasts: ToastQueue }`; `const LANG_SLOT_SELECTOR = '[data-lang-toggle]'`. C6 calls `const { i18n } = bootPage({ page: 'dashboard' })`, C7 `bootPage({ page: 'kiosk' })`, C8 `bootPage({ page: 'static' })`, C9 `const { i18n, toasts } = bootPage({ page: 'dashboard' })`.
+  - `app/src/entries/theme-init.ts`: no exports, side effect only. Every page `<head>` carries `<script type="module" src="/src/entries/theme-init.ts"></script>` — C6, C7 and C8 copy that line verbatim (R-16).
+  - `app/src/scan.ts`: `createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageHandle`; `confirmLabel(ok: ScanOk, i18n: I18n, now: number): string`; `dashboardUrl(ok: ScanOk): string` → `/d/#room=<id>&ticket=<t>&label=<screenLabel|venue|phone>` (parsed by C6's `parseSessionHash`); `codeFromHash(hash: string): string | null`; `interface ScanPageDeps { i18n; hash; navigate; now?; scan?; scannerSupported?; createScanner?; replaceUrl? }`; `interface ScanPageHandle { readonly element: HTMLElement; submit(code: string): Promise<void>; destroy(): void }`.
+  - `test/app/helpers.ts`: `class FakeSocket implements WebSocketLike`, `flush(): Promise<void>`, `text(element: Element | null | undefined): string` (R-39; C5, C6, C7 import them).
+  - `vite.config.ts`: input key `s` → `app/s/index.html`.
 
-`test/app/scan.test.ts`:
+- [ ] **Step 1: One home for the shared browser-test helpers (R-39)**
+
+If `test/app/helpers.ts` already exists from C1–C3, open it and add only the exports it is missing; otherwise create it:
+
+```ts
+// Shared browser-test helpers (R-39): one FakeSocket, one flush, one text for
+// every test under test/app. Not a *.test.ts file, so the unit project does not
+// collect it as a suite.
+import type { WebSocketLike } from '../../app/src/session';
+
+/** A WebSocket the test drives by hand: nothing happens until the test says so. */
+export class FakeSocket implements WebSocketLike {
+  readyState = 0;
+  readonly sent: string[] = [];
+  /** Set by close(); `closedWith` is the bare code for tests that only check that. */
+  closed: { code?: number } | null = null;
+  closedWith: number | null = null;
+  private readonly handlers: Record<string, ((event: never) => void)[]> = {};
+
+  constructor(public readonly url: string) {}
+
+  addEventListener(type: string, listener: (event: never) => void): void {
+    (this.handlers[type] ??= []).push(listener);
+  }
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(code?: number): void {
+    this.closed = { code };
+    this.closedWith = code ?? 1000;
+    this.emit('close', { code: code ?? 1000, reason: '' });
+  }
+  /** Dispatches one event to whatever the client registered. */
+  emit(type: string, event: unknown = {}): void {
+    if (type === 'open') this.readyState = 1;
+    if (type === 'close') this.readyState = 3;
+    for (const listener of this.handlers[type] ?? []) listener(event as never);
+  }
+  /** Delivers one server frame as JSON text. */
+  server(message: unknown): void {
+    this.emit('message', { data: JSON.stringify(message) });
+  }
+  /** The i-th outbound frame, parsed. */
+  json(index: number): unknown {
+    return JSON.parse(this.sent[index]!);
+  }
+}
+
+/** Drains the microtask queue: enough for a handler that awaits a chain of promises. */
+export const flush = async (): Promise<void> => {
+  for (let i = 0; i < 8; i += 1) await Promise.resolve();
+};
+
+/** Visible text of an element, whitespace collapsed; '' when the element is absent. */
+export const text = (element: Element | null | undefined): string =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+```
+
+Now de-duplicate C3's copy. In `test/app/session.test.ts` replace the line
+
+```ts
+import { createSessionClient, RESUME_KEY, roomSocketUrl, type WebSocketLike } from '../../app/src/session';
+```
+
+with
+
+```ts
+import { createSessionClient, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
+import { FakeSocket } from './helpers';
+```
+
+and delete the whole `class FakeSocket implements WebSocketLike { … }` declaration that follows it (from the `class FakeSocket` line down to its closing `}`, immediately above `function storage(`). Nothing else in that file changes: the shared class keeps `sent`, `closed`, `emit`, `server` and `json` with the same shapes.
+
+Run: `grep -c "class FakeSocket" test/app/session.test.ts` → expected: `0`; `grep -c "class FakeSocket" test/app/helpers.ts` → expected: `1`.
+
+Run: `npx vitest run --project unit test/app/session.test.ts` → expected: 13 passed (the same suite, now on the shared socket).
+
+Commit:
+```bash
+git add test/app/helpers.ts test/app/session.test.ts
+git commit -m "test: one shared FakeSocket, flush and text for the browser tests" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 2: `bootPage` and the pre-paint theme module — test first**
+
+`test/app/boot.test.ts`:
 
 ```ts
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import en from '../../app/src/i18n/en.json';
+import { LOCALE_STORAGE_KEY } from '../../app/src/i18n/create-default-i18n';
+import { THEME_STORAGE_KEY } from '../../app/src/ui/theme';
+import { bootPage } from '../../app/src/boot';
+import { text } from './helpers';
+
+/** A fresh page: no theme attributes, a theme-color meta, the given body. */
+function page(body: string): void {
+  for (const attribute of ['data-theme', 'data-theme-resolved', 'data-page', 'lang']) {
+    document.documentElement.removeAttribute(attribute);
+  }
+  document.head.innerHTML = '<meta name="theme-color" content="">';
+  document.body.innerHTML = body;
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  page('');
+});
+
+describe('bootPage', () => {
+  it('boots Croatian, marks the page and resolves a theme for the tokens to switch on', () => {
+    const { i18n, theme, toasts } = bootPage({ page: 'scan' });
+    expect(i18n.getLocale()).toBe('hr');
+    expect(document.documentElement.lang).toBe('hr');
+    expect(document.documentElement.getAttribute('data-page')).toBe('scan');
+    expect(theme.getPreference()).toBe('auto');
+    expect(['light', 'dark']).toContain(document.documentElement.getAttribute('data-theme-resolved'));
+    expect(toasts.size).toBe(0);
+  });
+
+  it('honours the stored locale and the stored theme preference', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'en');
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    const { i18n, theme } = bootPage({ page: 'scan' });
+    expect(i18n.getLocale()).toBe('en');
+    expect(document.documentElement.lang).toBe('en');
+    expect(theme.getPreference()).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme-resolved')).toBe('light');
+  });
+
+  it('translates every data-i18n node and mounts the icon sprite once', () => {
+    page('<h1 data-i18n="scan.title"></h1>');
+    bootPage({ page: 'scan' });
+    bootPage({ page: 'scan' });
+    expect(text(document.querySelector('h1'))).toBe('Otključaj pogled na Zagreb');
+    expect(document.querySelectorAll('#vidikovac-icon-sprite')).toHaveLength(1);
+    expect(document.querySelector('#icon-qr-code')).not.toBeNull();
+  });
+
+  it('fills the language slot, and the toggle switches, stores and re-translates', () => {
+    page('<span data-lang-toggle></span><h1 data-i18n="scan.title"></h1>');
+    const seen: string[] = [];
+    bootPage({ page: 'scan', onLocaleChange: (locale) => seen.push(locale) });
+    const toggle = document.querySelector<HTMLButtonElement>('[data-testid=lang-toggle]')!;
+    expect(toggle.textContent).toBe('English');
+    expect(toggle.getAttribute('lang')).toBe('en');
+    toggle.click();
+    expect(document.documentElement.lang).toBe('en');
+    expect(text(document.querySelector('h1'))).toBe(en.scan.title);
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('en');
+    expect(seen).toEqual(['en']);
+    expect(document.querySelectorAll('[data-testid=lang-toggle]')).toHaveLength(1);
+  });
+
+  it('leaves a slot that already carries a toggle alone (C8 fills its own)', () => {
+    page('<span data-lang-toggle><button type="button" data-testid="lang-toggle">English</button></span>');
+    bootPage({ page: 'static' });
+    expect(document.querySelectorAll('[data-testid=lang-toggle]')).toHaveLength(1);
+  });
+
+  it('puts toasts in the container the page hands it', () => {
+    page('<div id="toasts"></div>');
+    const container = document.querySelector<HTMLElement>('#toasts')!;
+    const { toasts } = bootPage({ page: 'scan', toastContainer: container });
+    toasts.push({ message: 'Kopirano s navodom izvora.', variant: 'success', dismissLabel: 'Ukloni obavijest' });
+    expect(container.querySelectorAll('.toast')).toHaveLength(1);
+    expect(toasts.size).toBe(1);
+    toasts.clear();
+    expect(toasts.size).toBe(0);
+  });
+});
+
+describe('entries/theme-init', () => {
+  it('applies the stored theme as soon as <head> loads it', async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    vi.resetModules();
+    await import('../../app/src/entries/theme-init');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme-resolved')).toBe('light');
+  });
+});
+```
+
+Run: `npx vitest run --project unit test/app/boot.test.ts` → expected failure: `Error: Failed to load url ../../app/src/boot`.
+
+`app/src/boot.ts`:
+
+```ts
+// One boot for every surface: locale, theme, icon sprite, toast queue, language
+// toggle, then a single translatePage pass. Every entry module calls this first
+// and differs only in what it mounts afterwards, so a surface-wide decision
+// (which locale, which theme, where toasts live) is made in exactly one place.
+// No CSS is imported here: the entry modules own the stylesheets (R-37), which
+// also keeps this module loadable by a plain node test.
+import { bootLocale, createDefaultI18n } from './i18n/create-default-i18n';
+import type { I18n, LocaleCode } from './i18n/i18n';
+import { createLanguageToggle } from './i18n/toggle';
+import { mountIconSprite } from './ui/icons';
+import { createThemeController, type ThemeController } from './ui/theme';
+import { createToastQueue, type ToastQueue } from './ui/toast';
+
+/** Where a page offers room for the language toggle. Empty in the HTML; bootPage
+ *  fills it. C8's static pages carry their own `[data-testid=lang-slot]` and fill
+ *  it themselves, so the two conventions never produce two buttons. */
+export const LANG_SLOT_SELECTOR = '[data-lang-toggle]';
+
+export interface BootPageOptions {
+  /** Written to <html data-page>, so CSS and tests can key on the surface. */
+  page: string;
+  documentRef?: Document;
+  /** Where toasts go; defaults to the queue's own .toast-stack on <body>. */
+  toastContainer?: HTMLElement;
+  /** Fired after the language toggle switched the locale. */
+  onLocaleChange?: (locale: LocaleCode) => void;
+}
+
+export interface BootedPage {
+  i18n: I18n;
+  theme: ThemeController;
+  toasts: ToastQueue;
+}
+
+export function bootPage(options: BootPageOptions): BootedPage {
+  const doc = options.documentRef ?? document;
+  const root = doc.documentElement;
+
+  const i18n = createDefaultI18n(bootLocale());
+  root.lang = i18n.getLocale();
+  root.setAttribute('data-page', options.page);
+
+  // The <head> module already resolved a theme before first paint; this is the
+  // controller the page keeps, so `auto` and `solar` stay live while it is open.
+  const theme = createThemeController({ root, documentRef: doc });
+  mountIconSprite(doc);
+
+  const toasts = createToastQueue({ container: options.toastContainer, maxVisible: 2 });
+
+  const slot = doc.querySelector(LANG_SLOT_SELECTOR);
+  if (slot && slot.childElementCount === 0) {
+    slot.appendChild(
+      createLanguageToggle(i18n, { documentRef: doc, onChange: options.onLocaleChange }),
+    );
+  }
+
+  i18n.translatePage(doc);
+  return { i18n, theme, toasts };
+}
+```
+
+`app/src/entries/theme-init.ts`:
+
+```ts
+// R-16: the CSP is `script-src 'self'` with no inline script anywhere, so the
+// decision that must happen before first paint ships as its own tiny module,
+// loaded from <head> on every page. It writes data-theme and
+// data-theme-resolved on <html> (the stored preference, the OS answer for
+// 'auto', the Zagreb sun for 'solar') and then detaches its listeners: the
+// controller the page keeps is the one bootPage() creates a moment later.
+import { createThemeController } from '../ui/theme';
+
+createThemeController().destroy();
+```
+
+Run: `npx vitest run --project unit test/app/boot.test.ts` → expected: 7 passed.
+
+Commit:
+```bash
+git add app/src/boot.ts app/src/entries/theme-init.ts test/app/boot.test.ts
+git commit -m "app: one bootPage for every surface and the pre-paint theme module" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3: The pure parts of the scan page — hash, confirm sentence, dashboard URL**
+
+`test/app/scan.test.ts` (first part; Steps 4 and 5 append to this file):
+
+```ts
+// @vitest-environment happy-dom
+import { describe, expect, it } from 'vitest';
 import type { ScanOk } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { confirmLabel, dashboardUrl, mountScan } from '../../app/src/scan';
+import { codeFromHash, confirmLabel, dashboardUrl } from '../../app/src/scan';
 
-const NOW = 1_700_000_000_000;
-const KIOSK: ScanOk = { roomId: 'r1', ticket: 't1', beaconType: 'kiosk', venueType: 'kafic', area: 'Donji grad', expiresAt: NOW + 10 * 60_000, participants: 1, screenLabel: 'Kavana Velebit' };
-const PHONE: ScanOk = { roomId: 'r2', ticket: 't2', beaconType: 'phone', venueType: null, area: null, expiresAt: NOW + 5 * 60_000 - 400, participants: 1, screenLabel: null };
+const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
+const KIOSK: ScanOk = {
+  roomId: 'r1',
+  ticket: 't1',
+  beaconType: 'kiosk',
+  venueType: 'kafic',
+  area: 'Donji grad',
+  expiresAt: NOW + 10 * 60_000,
+  participants: 1,
+  screenLabel: 'Kavana Velebit',
+};
+const PHONE: ScanOk = {
+  roomId: 'r2',
+  ticket: 't2',
+  beaconType: 'phone',
+  venueType: null,
+  area: null,
+  expiresAt: NOW + 5 * 60_000 - 400,
+  participants: 1,
+  screenLabel: null,
+};
 
-describe('confirmLabel and dashboardUrl', () => {
-  it('names the screen kind, area and minutes; or the phone and minutes', () => {
+describe('codeFromHash', () => {
+  it('reads our own QR fragment in both forms and refuses anything else', () => {
+    expect(codeFromHash('#ABCD-EFGH')).toBe('ABCDEFGH');
+    expect(codeFromHash('#abcdefgh')).toBe('ABCDEFGH');
+    expect(codeFromHash('#code=abcd-efgh')).toBe('ABCDEFGH');
+    expect(codeFromHash('#ilo1-abcd')).toBe('1101ABCD');
+    expect(codeFromHash('#ABCU-EFGH')).toBeNull(); // U is not in the alphabet
+    expect(codeFromHash('#room=r1&ticket=t1')).toBeNull();
+    expect(codeFromHash('#ABCD')).toBeNull();
+    expect(codeFromHash('#%E0%A4%A')).toBeNull();
+    expect(codeFromHash('')).toBeNull();
+  });
+});
+
+describe('confirmLabel', () => {
+  it('names the kind of screen, the district and the minutes', () => {
     const i18n = createDefaultI18n('hr');
     expect(confirmLabel(KIOSK, i18n, NOW)).toBe('Zaslon: kafić, Donji grad, 10 minuta');
-    expect(confirmLabel(PHONE, i18n, NOW)).toBe('Telefon druge osobe, 5 minuta');
   });
+  it('names the other person\u2019s phone and its five minutes', () => {
+    expect(confirmLabel(PHONE, createDefaultI18n('hr'), NOW)).toBe('Telefon druge osobe, 5 minuta');
+  });
+  it('drops the empty district instead of printing a dangling comma', () => {
+    const i18n = createDefaultI18n('hr');
+    expect(confirmLabel({ ...KIOSK, area: null }, i18n, NOW)).toBe('Zaslon: kafić, 10 minuta');
+  });
+  it('falls back to the neutral venue word for an unknown screen', () => {
+    const i18n = createDefaultI18n('hr');
+    expect(confirmLabel({ ...KIOSK, venueType: null }, i18n, NOW)).toBe('Zaslon: javni zaslon, Donji grad, 10 minuta');
+  });
+});
+
+describe('dashboardUrl', () => {
   it('puts room, ticket and a label in the fragment, never in the query', () => {
     expect(dashboardUrl(KIOSK)).toBe('/d/#room=r1&ticket=t1&label=Kavana%20Velebit');
     expect(dashboardUrl(PHONE)).toBe('/d/#room=r2&ticket=t2&label=phone');
   });
 });
-
-function mount(opts: { hash?: string; scan?: (code: string) => Promise<unknown>; supported?: boolean } = {}) {
-  const root = document.createElement('main');
-  document.body.appendChild(root);
-  const navigate = vi.fn();
-  const scanImpl = vi.fn(opts.scan ?? (async () => KIOSK));
-  const handle = mountScan(root, {
-    i18n: createDefaultI18n('hr'), hash: opts.hash ?? '', navigate, now: () => NOW,
-    scan: scanImpl as never, scannerSupported: opts.supported ?? false,
-  });
-  return { root, navigate, scanImpl, handle };
-}
-const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
-
-describe('mountScan', () => {
-  it('always renders the typed-code field; the camera button only when supported', () => {
-    const a = mount({ supported: false });
-    expect(a.root.querySelector('input[data-testid=code-input]')).not.toBeNull();
-    expect(a.root.querySelector('[data-testid=scan-camera]')).toBeNull();
-    const b = mount({ supported: true });
-    expect(b.root.querySelector('[data-testid=scan-camera]')).not.toBeNull();
-  });
-  it('auto-formats typing to ABCD-EFGH and normalises I, L and O', () => {
-    const { root } = mount();
-    const input = root.querySelector('input[data-testid=code-input]') as HTMLInputElement;
-    input.value = 'ilo1abc';
-    input.dispatchEvent(new Event('input'));
-    expect(input.value).toBe('1101-ABC');
-    const submit = root.querySelector('[data-testid=code-submit]') as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-    input.value = '1101-ABCD';
-    input.dispatchEvent(new Event('input'));
-    expect(submit.disabled).toBe(false);
-  });
-  it('scans the code from the URL fragment and shows the confirm card with the approved wording', async () => {
-    const { root, scanImpl } = mount({ hash: '#ABCD-EFGH' });
-    await flush();
-    expect(scanImpl).toHaveBeenCalledWith('ABCDEFGH');
-    const card = root.querySelector('[data-testid=confirm-card]')!;
-    expect(card.textContent).toContain('Zaslon: kafić, Donji grad, 10 minuta');
-    expect(card.querySelector('[data-testid=confirm-code]')?.textContent).toBe('ABCD-EFGH');
-    expect(card.querySelector('[data-testid=unlock]')?.textContent).toBe('Otključaj');
-  });
-  it('Otključaj navigates to the dashboard with room and ticket in the fragment', async () => {
-    const { root, navigate } = mount({ hash: '#ABCD-EFGH' });
-    await flush();
-    (root.querySelector('[data-testid=unlock]') as HTMLButtonElement).click();
-    expect(navigate).toHaveBeenCalledWith('/d/#room=r1&ticket=t1&label=Kavana%20Velebit');
-  });
-  it('shows the Croatian error for a ScanFail and keeps the field usable', async () => {
-    const { root } = mount({ hash: '#ABCD-EFGH', scan: async () => ({ error: 'same-network', message: 'server text' }) });
-    await flush();
-    const err = root.querySelector('[role=alert]')!;
-    expect(err.textContent).toBe('Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.');
-    expect((root.querySelector('input[data-testid=code-input]') as HTMLInputElement).disabled).toBe(false);
-  });
-  it('maps a network failure to the network message', async () => {
-    const { root } = mount({ hash: '#ABCD-EFGH', scan: async () => ({ error: 'bad-request', message: 'network' }) });
-    await flush();
-    expect(root.querySelector('[role=alert]')?.textContent).toBe('Nema veze s poslužiteljem. Provjeri mrežu i pokušaj ponovno.');
-  });
-  it('refuses to submit an incomplete typed code', async () => {
-    const { root, scanImpl } = mount();
-    const form = root.querySelector('form')!;
-    (root.querySelector('input[data-testid=code-input]') as HTMLInputElement).value = 'ABC';
-    form.dispatchEvent(new Event('submit', { cancelable: true }));
-    await flush();
-    expect(scanImpl).not.toHaveBeenCalled();
-    expect(root.querySelector('[role=alert]')?.textContent).toBe('Kod nije potpun. Upiši svih osam znakova.');
-  });
-});
 ```
 
-Run: `npx vitest run test/app/scan.test.ts` → expected failure: `Failed to load url ../../app/src/scan`.
-
-- [ ] **Step 2: Write scan.ts**
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected failure: `Error: Failed to load url ../../app/src/scan`.
 
 `app/src/scan.ts`:
 
 ```ts
-// The /s/ page: read the code from the fragment, or from the camera, or from
-// the field; POST it; show the confirm card (the possession check); navigate.
-// All browser globals are injected so the flow is unit-tested under happy-dom.
-import type { ScanFail, ScanOk } from '../../worker/protocol';
-import { scan as scanRequest } from './api';
-import { codeFromScan, formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
+// The /s/ page: take a code from the URL fragment, the camera or the field,
+// POST it, show the confirm card (the possession check the whole mechanic rests
+// on), then hand the room and the ticket to /d/ in the fragment. Every browser
+// global it needs is injected, so the flow is unit-tested under happy-dom with
+// no camera, no network and no real location.
+import type { ScanOk } from '../../worker/protocol';
+import { isCompleteCode, normalizeCode } from './code';
 import type { I18n } from './i18n/i18n';
-import { createDialog } from './ui/dialog';
-import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
-import { iconMarkup } from './ui/icons';
-import { createQrScanner } from './ui/qrScanner';
 
-export interface ScanDeps {
-  i18n: I18n;
-  hash: string;
-  navigate: (url: string) => void;
-  now?: () => number;
-  scan?: (code: string) => Promise<ScanOk | ScanFail>;
-  scannerSupported: boolean;
-  onEvent?: (name: 'scan_ok' | 'scan_fail', dim: string) => void;
+/** Shape of our own QR fragment: four plus four, one optional dash. Anything
+ *  else in the fragment (a stray `#room=…`, a marketing tag) is not a code, and
+ *  guessing at one would auto-submit garbage. */
+const HASH_CODE = /^[0-9A-Za-z]{4}-?[0-9A-Za-z]{4}$/;
+
+export function codeFromHash(hash: string): string | null {
+  let value = hash.replace(/^#/, '').trim();
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // A malformed percent escape is not a code; keep the raw text and let the
+    // shape test below reject it.
+  }
+  if (value.startsWith('code=')) value = value.slice('code='.length);
+  if (!HASH_CODE.test(value)) return null;
+  const code = normalizeCode(value);
+  return isCompleteCode(code) ? code : null;
 }
-export interface ScanHandle { element: HTMLElement; destroy(): void }
 
 export function confirmLabel(ok: ScanOk, i18n: I18n, now: number): string {
   const minutes = Math.max(1, Math.round((ok.expiresAt - now) / 60_000));
   const minutesText = i18n.t('common.minutes', { count: minutes });
   if (ok.beaconType === 'phone') return i18n.t('scan.confirmPhone', { minutes: minutesText });
   const venue = i18n.t(`scan.venue.${ok.venueType ?? 'ostalo'}`);
-  return i18n.t('scan.confirmScreen', { venue, area: ok.area ?? '', minutes: minutesText });
+  const sentence = i18n.t('scan.confirmScreen', { venue, area: ok.area ?? '', minutes: minutesText });
+  return sentence.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+}
+
+export function dashboardUrl(ok: ScanOk): string {
+  const label = ok.screenLabel ?? (ok.beaconType === 'phone' ? 'phone' : ok.venueType ?? 'screen');
+  return `/d/#room=${encodeURIComponent(ok.roomId)}&ticket=${encodeURIComponent(ok.ticket)}&label=${encodeURIComponent(label)}`;
+}
+```
+
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected: 6 passed.
+
+Commit:
+```bash
+git add app/src/scan.ts test/app/scan.test.ts
+git commit -m "app: scan-page pure parts (fragment code, confirm sentence, dashboard URL)" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 4: The page itself — field, fragment auto-submit, confirm card, errors**
+
+Append to `test/app/scan.test.ts`:
+
+```ts
+import { beforeEach, vi } from 'vitest';
+import type { ScanFail } from '../../worker/protocol';
+import { createScanPage } from '../../app/src/scan';
+import { flush, text } from './helpers';
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+});
+
+function mount(options: {
+  hash?: string;
+  result?: ScanOk | ScanFail;
+  scan?: (code: string) => Promise<ScanOk | ScanFail>;
+} = {}) {
+  const root = document.createElement('main');
+  document.body.appendChild(root);
+  const navigate = vi.fn();
+  const replaceUrl = vi.fn();
+  const scan = vi.fn(options.scan ?? (async () => options.result ?? KIOSK));
+  const handle = createScanPage(root, {
+    i18n: createDefaultI18n('hr'),
+    hash: options.hash ?? '',
+    navigate,
+    replaceUrl,
+    now: () => NOW,
+    scan,
+  });
+  const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
+  const form = root.querySelector<HTMLFormElement>('form')!;
+  const submitButton = root.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
+  const type = (value: string): void => {
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  };
+  const send = (): void => {
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+  };
+  return { root, handle, navigate, replaceUrl, scan, input, form, submitButton, type, send };
+}
+
+const ERRORS: [ScanFail['error'], string][] = [
+  ['bad-request', 'Kod nije u ispravnom obliku.'],
+  ['code-unknown', 'Taj kod ne postoji ili je prošao. Pogledaj zaslon i skeniraj ponovno.'],
+  ['code-expired', 'Kod je istekao. Zaslon već pokazuje novi.'],
+  ['code-used', 'Taj je kod već iskorišten. Pričekaj novi na zaslonu.'],
+  ['screen-offline', 'Zaslon je trenutačno bez veze. Pokušaj za minutu.'],
+  ['same-network', 'Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.'],
+  ['slow-down', 'Previše pokušaja. Pričekaj minutu.'],
+  ['rate-limited', 'Previše pokušaja s ove mreže. Pričekaj minutu.'],
+  ['revoked', 'Ovaj je zaslon isključen.'],
+];
+
+describe('createScanPage', () => {
+  it('always offers the typed code, with the alphabet warning and no camera by default', () => {
+    const { root } = mount();
+    expect(root.querySelector('h1')?.textContent).toBe('Otključaj pogled na Zagreb');
+    expect(root.querySelector('[data-testid=code-input]')).not.toBeNull();
+    expect(text(root.querySelector('#scan-hint'))).toBe('Osam znakova, npr. ABCD-EFGH. Slova I, L i O ne postoje: upiši 1 ili 0.');
+    expect(root.querySelector('[data-testid=scan-camera]')).toBeNull();
+    expect(root.querySelector('[data-testid=scan-error]')?.getAttribute('role')).toBe('alert');
+    expect(root.querySelector('[data-testid=scan-status]')?.getAttribute('role')).toBe('status');
+  });
+
+  it('formats typing as ABCD-EFGH, maps I, L and O, and enables submit only when complete', () => {
+    const { input, submitButton, type } = mount();
+    type('ilo1abc');
+    expect(input.value).toBe('1101-ABC');
+    expect(submitButton.disabled).toBe(true);
+    type('1101-ABCD');
+    expect(input.value).toBe('1101-ABCD');
+    expect(submitButton.disabled).toBe(false);
+  });
+
+  it('scans the code from the fragment, shows the approved confirm card and takes the code out of the address bar', async () => {
+    const { root, scan, replaceUrl } = mount({ hash: '#ABCD-EFGH' });
+    await flush();
+    expect(scan).toHaveBeenCalledWith('ABCDEFGH');
+    const card = root.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
+    expect(card.hidden).toBe(false);
+    expect(text(card.querySelector('.scan-confirm-title'))).toBe('Isti kod je na zaslonu?');
+    expect(text(card.querySelector('[data-testid=confirm-code]'))).toBe('ABCD-EFGH');
+    expect(card.querySelector('[data-testid=confirm-code]')?.getAttribute('aria-label')).toBe('A B C D, E F G H');
+    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Zaslon: kafić, Donji grad, 10 minuta');
+    expect(card.querySelector('[data-testid=unlock]')?.textContent).toBe('Otključaj');
+    expect(document.activeElement).toBe(card);
+    expect(replaceUrl).toHaveBeenCalledWith('/s/');
+  });
+
+  it('Otključaj navigates to the dashboard once, however often it is pressed', async () => {
+    const { root, navigate } = mount({ hash: '#ABCD-EFGH' });
+    await flush();
+    const unlock = root.querySelector<HTMLButtonElement>('[data-testid=unlock]')!;
+    unlock.click();
+    unlock.click();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/d/#room=r1&ticket=t1&label=Kavana%20Velebit');
+  });
+
+  it('Odustani puts the person back in the field with the card gone', async () => {
+    const { root, input } = mount({ hash: '#ABCD-EFGH' });
+    await flush();
+    root.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!.click();
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it.each(ERRORS)('shows the Croatian sentence for %s and keeps the field usable', async (error, message) => {
+    const { root, input } = mount({ hash: '#ABCD-EFGH', result: { error, message: 'server text' } });
+    await flush();
+    expect(text(root.querySelector('[role=alert]'))).toBe(message);
+    expect(input.disabled).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe('scan-hint scan-error');
+    expect(document.activeElement).toBe(input);
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+  });
+
+  it('maps the client-side network failure to the network sentence', async () => {
+    const { root } = mount({ hash: '#ABCD-EFGH', result: { error: 'bad-request', message: 'network' } });
+    await flush();
+    expect(text(root.querySelector('[role=alert]'))).toBe('Nema veze s poslužiteljem. Provjeri mrežu i pokušaj ponovno.');
+  });
+
+  it('falls back to the server sentence for an error the catalog does not know', async () => {
+    const unknown = { error: 'teapot', message: 'Nešto posve novo.' } as unknown as ScanFail;
+    const { root } = mount({ hash: '#ABCD-EFGH', result: unknown });
+    await flush();
+    expect(text(root.querySelector('[role=alert]'))).toBe('Nešto posve novo.');
+  });
+
+  it('refuses an incomplete typed code without touching the network', async () => {
+    const { root, scan, input, type, send } = mount();
+    type('ABC');
+    send();
+    await flush();
+    expect(scan).not.toHaveBeenCalled();
+    expect(text(root.querySelector('[role=alert]'))).toBe('Kod nije potpun. Upiši svih osam znakova.');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('sends one request per submit and announces the wait while it is in flight', async () => {
+    let release!: (value: ScanOk) => void;
+    const pending = new Promise<ScanOk>((resolve) => {
+      release = resolve;
+    });
+    const { root, scan, input, type, send } = mount({ scan: () => pending });
+    type('ABCD-EFGH');
+    send();
+    send();
+    await flush();
+    expect(scan).toHaveBeenCalledTimes(1);
+    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda…');
+    expect(input.disabled).toBe(true);
+    release(KIOSK);
+    await flush();
+    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('');
+    expect(input.disabled).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(false);
+  });
+
+  it('destroy() takes the section off the page', () => {
+    const { root, handle } = mount();
+    handle.destroy();
+    expect(root.querySelector('.scan')).toBeNull();
+  });
+});
+```
+
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected failure: `TypeError: (0 , import_scan.createScanPage) is not a function`.
+
+`app/src/scan.ts` now reads in full:
+
+```ts
+// The /s/ page: take a code from the URL fragment, the camera or the field,
+// POST it, show the confirm card (the possession check the whole mechanic rests
+// on), then hand the room and the ticket to /d/ in the fragment. Every browser
+// global it needs is injected, so the flow is unit-tested under happy-dom with
+// no camera, no network and no real location.
+import type { ScanFail, ScanOk } from '../../worker/protocol';
+import { scan as scanRequest } from './api';
+import { formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
+import type { I18n } from './i18n/i18n';
+import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
+
+/** Shape of our own QR fragment: four plus four, one optional dash. Anything
+ *  else in the fragment (a stray `#room=…`, a marketing tag) is not a code, and
+ *  guessing at one would auto-submit garbage. */
+const HASH_CODE = /^[0-9A-Za-z]{4}-?[0-9A-Za-z]{4}$/;
+
+export interface ScanPageDeps {
+  i18n: I18n;
+  /** location.hash as the page was opened with. */
+  hash: string;
+  navigate: (url: string) => void;
+  now?: () => number;
+  scan?: (code: string) => Promise<ScanOk | ScanFail>;
+  /** Drops the spent code from the address bar after a successful scan. */
+  replaceUrl?: (url: string) => void;
+}
+
+export interface ScanPageHandle {
+  readonly element: HTMLElement;
+  /** Normalise, validate and POST one code; resolves when the UI has settled. */
+  submit(code: string): Promise<void>;
+  destroy(): void;
+}
+
+export function codeFromHash(hash: string): string | null {
+  let value = hash.replace(/^#/, '').trim();
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // A malformed percent escape is not a code; keep the raw text and let the
+    // shape test below reject it.
+  }
+  if (value.startsWith('code=')) value = value.slice('code='.length);
+  if (!HASH_CODE.test(value)) return null;
+  const code = normalizeCode(value);
+  return isCompleteCode(code) ? code : null;
+}
+
+export function confirmLabel(ok: ScanOk, i18n: I18n, now: number): string {
+  const minutes = Math.max(1, Math.round((ok.expiresAt - now) / 60_000));
+  const minutesText = i18n.t('common.minutes', { count: minutes });
+  if (ok.beaconType === 'phone') return i18n.t('scan.confirmPhone', { minutes: minutesText });
+  const venue = i18n.t(`scan.venue.${ok.venueType ?? 'ostalo'}`);
+  const sentence = i18n.t('scan.confirmScreen', { venue, area: ok.area ?? '', minutes: minutesText });
+  return sentence.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
 }
 
 export function dashboardUrl(ok: ScanOk): string {
@@ -11016,26 +12080,31 @@ export function dashboardUrl(ok: ScanOk): string {
   return `/d/#room=${encodeURIComponent(ok.roomId)}&ticket=${encodeURIComponent(ok.ticket)}&label=${encodeURIComponent(label)}`;
 }
 
-export function mountScan(root: HTMLElement, deps: ScanDeps): ScanHandle {
+export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageHandle {
   const { i18n } = deps;
   const now = deps.now ?? (() => Date.now());
-  const doScan = deps.scan ?? ((code: string) => scanRequest(code));
+  const post = deps.scan ?? ((code: string) => scanRequest(code));
+  const replaceUrl =
+    deps.replaceUrl ??
+    ((url: string) => {
+      globalThis.history.replaceState(null, '', url);
+    });
 
   const element = createElementFromHTML(`
-    <section class="scan card">
+    <section class="scan">
       <h1 class="scan-title">${escapeHtml(i18n.t('scan.title'))}</h1>
       <p class="scan-intro">${escapeHtml(i18n.t('scan.intro'))}</p>
-      <div class="scan-error" role="alert" data-testid="scan-error" hidden></div>
-      <div class="scan-confirm" data-testid="confirm-card" hidden></div>
+      <p class="scan-error" id="scan-error" role="alert" data-testid="scan-error" hidden></p>
+      <section class="scan-confirm card" data-testid="confirm-card" role="group"
+        aria-labelledby="scan-confirm-title" tabindex="-1" hidden></section>
       <form class="scan-form" novalidate>
         <label class="scan-label" for="scan-code">${escapeHtml(i18n.t('scan.codeLabel'))}</label>
-        <input id="scan-code" data-testid="code-input" type="text" inputmode="text" autocomplete="one-time-code"
-          autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH"
-          aria-describedby="scan-hint" class="scan-input" />
+        <input id="scan-code" class="scan-input" data-testid="code-input" type="text" name="code"
+          inputmode="text" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off"
+          spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-describedby="scan-hint">
         <p id="scan-hint" class="scan-hint">${escapeHtml(i18n.t('scan.codeHint'))}</p>
         <div class="scan-actions">
           <button type="submit" class="btn" data-testid="code-submit" disabled>${escapeHtml(i18n.t('scan.check'))}</button>
-          ${deps.scannerSupported ? `<button type="button" class="btn-ghost" data-testid="scan-camera">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('scan.scanButton'))}</span></button>` : ''}
         </div>
       </form>
       <p class="scan-status" role="status" data-testid="scan-status"></p>
@@ -11046,66 +12115,591 @@ export function mountScan(root: HTMLElement, deps: ScanDeps): ScanHandle {
   const confirmBox = element.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
   const form = element.querySelector<HTMLFormElement>('form')!;
   const input = element.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
-  const submit = element.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
+  const submitButton = element.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
   const status = element.querySelector<HTMLElement>('[data-testid=scan-status]')!;
+
   let busy = false;
+  let navigated = false;
 
-  function showError(key: string): void {
-    errorBox.textContent = i18n.t(key);
-    errorBox.hidden = false;
+  function hideConfirm(): void {
     confirmBox.hidden = true;
-    confirmBox.innerHTML = '';
+    confirmBox.replaceChildren();
   }
-  function clearError(): void { errorBox.hidden = true; errorBox.textContent = ''; }
 
-  input.addEventListener('input', () => {
-    const formatted = formatCode(input.value);
-    if (input.value !== formatted) input.value = formatted;
-    submit.disabled = !isCompleteCode(input.value);
-    clearError();
-  });
+  /** One visible, announced message; the field carries the same error for AT. */
+  function showMessage(message: string): void {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+    input.setAttribute('aria-invalid', 'true');
+    input.setAttribute('aria-describedby', 'scan-hint scan-error');
+    hideConfirm();
+  }
 
-  async function submitCode(raw: string): Promise<void> {
-    if (busy) return;
-    const code = normalizeCode(raw);
-    if (!isCompleteCode(code)) { showError('scan.errors.incomplete'); return; }
-    busy = true;
-    input.disabled = true; submit.disabled = true;
-    status.textContent = i18n.t('scan.checking');
-    clearError();
-    let result: ScanOk | ScanFail;
-    try { result = await doScan(code); } catch { result = { error: 'bad-request', message: 'network' }; }
-    busy = false;
-    input.disabled = false; submit.disabled = !isCompleteCode(input.value);
-    status.textContent = '';
-    if ('error' in result) {
-      deps.onEvent?.('scan_fail', result.error);
-      showError(result.message === 'network' ? 'scan.errors.network' : `scan.errors.${result.error}`);
-      input.focus();
-      return;
-    }
-    deps.onEvent?.('scan_ok', result.beaconType);
-    renderConfirm(code, result);
+  /** Catalog first; the server sentence only when this build has no key for it. */
+  function showError(key: string, fallback = ''): void {
+    const message = i18n.t(key);
+    showMessage(message === key ? fallback || i18n.t('scan.errors.bad-request') : message);
+  }
+
+  function clearError(): void {
+    errorBox.hidden = true;
+    errorBox.textContent = '';
+    input.removeAttribute('aria-invalid');
+    input.setAttribute('aria-describedby', 'scan-hint');
   }
 
   function renderConfirm(code: string, ok: ScanOk): void {
     confirmBox.innerHTML = `
-      <h2 class="scan-confirm-title">${escapeHtml(i18n.t('scan.confirmTitle'))}</h2>
+      <h2 class="scan-confirm-title" id="scan-confirm-title">${escapeHtml(i18n.t('scan.confirmTitle'))}</h2>
       <p class="scan-confirm-code" data-testid="confirm-code" aria-label="${escapeAttribute(speakableCode(code))}">${escapeHtml(formatCode(code))}</p>
       <p class="scan-confirm-label" data-testid="confirm-label">${escapeHtml(confirmLabel(ok, i18n, now()))}</p>
-      <p class="scan-confirm-hint">${escapeHtml(i18
+      <p class="scan-confirm-hint">${escapeHtml(i18n.t('scan.confirmHint'))}</p>
+      <div class="scan-confirm-actions">
+        <button type="button" class="btn" data-testid="unlock">${escapeHtml(i18n.t('scan.unlock'))}</button>
+        <button type="button" class="btn-ghost" data-testid="confirm-cancel">${escapeHtml(i18n.t('scan.cancel'))}</button>
+      </div>`;
+    confirmBox.hidden = false;
+    confirmBox.querySelector<HTMLButtonElement>('[data-testid=unlock]')!.addEventListener('click', () => {
+      if (navigated) return;
+      navigated = true;
+      deps.navigate(dashboardUrl(ok));
+    });
+    confirmBox.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!.addEventListener('click', () => {
+      hideConfirm();
+      input.focus();
+    });
+    confirmBox.focus();
+  }
 
-You've hit your session limit · resets 4pm (Europe/Zagreb)
+  async function submitCode(raw: string): Promise<void> {
+    if (busy) return;
+    const code = normalizeCode(raw);
+    if (!isCompleteCode(code)) {
+      showError('scan.errors.incomplete');
+      input.focus();
+      return;
+    }
+    busy = true;
+    clearError();
+    input.disabled = true;
+    submitButton.disabled = true;
+    status.textContent = i18n.t('scan.checking');
 
-I'll start by reading the required context files.
+    let result: ScanOk | ScanFail;
+    try {
+      result = await post(code);
+    } catch {
+      result = { error: 'bad-request', message: 'network' };
+    }
 
-## Area overview
+    busy = false;
+    input.disabled = false;
+    submitButton.disabled = !isCompleteCode(input.value);
+    status.textContent = '';
 
-Area C's remaining tasks turn the C1–C4 foundation (design tokens, i18n, `SessionClient`, `api.ts`, scan page) into the three surfaces the mechanic needs. C5 builds one `panel.ts` (title, freshness word plus shape, body slot, footer with the verbatim attribution, licence, source link and copy/share/export actions) and the seven `LayerId` renderers over `ModuleSnapshot`, plus a lazily-imported MapLibre wrapper on the open OpenStreetMap raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, "© OpenStreetMap contributors", with the production-tile-policy comment Area D's CSP expects — this supersedes the CARTO line in the C1–C4 overview). C6 is `/d/`: a roving-tabindex layer switcher wrapped in the session ring, one layer on narrow viewports and a grid on wide, focus to the layer heading with a polite "Otključano do HH:MM", minute-grain countdown, 60 s `role=status` and 15 s `role=alert` announcements, the two toggles, and the expiry freeze that stops polling and disables navigation while exports keep working. C7 is `/kiosk/`: provisioning from `location.hash` into `localStorage["vidikovac-beacon"]`, a `BeaconClient` that answers the challenge with `hmacSha256Base64Url(secret, nonce)`, wall-clock code rotation via `createRotation` with `{t:"more"}` at three slots left, the rotating QR (`createQr` over `codeUrl`) with the code in two monospace groups of four, a 30 s ring that degrades to static segments under `prefers-reduced-motion`, the 20 s teaser cross-fade and fixed safety strip from `/api/teaser`, unlocked mode that joins the room and renders the driver's layer in kiosk layout, first-tap Fullscreen and Wake Lock, and exponential-backoff reconnect. C8 ships the three static pages (`/izvori` generated at build time from `app/src/data/izvori.json`, `/privatnost`, `/pristupacnost`) and completes the vite inputs; C9 ships `app/src/export.ts` and wires it into the dashboard entry. Every module that carries logic has a vitest test in `test/app/**` (R-12), DOM tests opting in per file with `// @vitest-environment happy-dom`, and no page carries an inline script (R-16).
+    if ('error' in result) {
+      const networkFailure = result.error === 'bad-request' && result.message === 'network';
+      showError(networkFailure ? 'scan.errors.network' : `scan.errors.${result.error}`, result.message);
+      input.focus();
+      return;
+    }
+    // The code is spent the moment the Worker answers; a reload must not retry it.
+    replaceUrl('/s/');
+    renderConfirm(code, result);
+  }
 
-**Dependencies to add:** `maplibre-gl` (dependency, `npm install maplibre-gl@^5`, added in C5 Step 6 — the first task that needs it, per R-13); `happy-dom` (devDependency, already added by C1; `npm install -D happy-dom@^20` if `node_modules/happy-dom` is absent).
+  input.addEventListener('input', () => {
+    const formatted = formatCode(input.value);
+    if (input.value !== formatted) input.value = formatted;
+    submitButton.disabled = !isCompleteCode(input.value);
+    clearError();
+  });
 
----
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void submitCode(input.value);
+  });
+
+  const initial = codeFromHash(deps.hash);
+  if (initial) {
+    input.value = formatCode(initial);
+    submitButton.disabled = false;
+    void submitCode(initial);
+  }
+
+  return {
+    element,
+    submit: submitCode,
+    destroy() {
+      element.remove();
+    },
+  };
+}
+```
+
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected: 25 passed (6 from Step 3, 19 here; the vitest summary is the truth, R-40).
+
+Commit:
+```bash
+git add app/src/scan.ts test/app/scan.test.ts
+git commit -m "app: /s/ scan flow — fragment auto-submit, confirm card, Croatian errors, no double submit" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 5: The camera region, offered only where a decoder exists**
+
+Append to `test/app/scan.test.ts`:
+
+```ts
+import type { QrScannerDeps, QrScannerHandle } from '../../app/src/ui/qrScanner';
+
+interface FakeScanner extends QrScannerHandle {
+  deps: QrScannerDeps;
+  started: number;
+  destroyed: number;
+}
+
+function mountWithCamera(options: { result?: ScanOk | ScanFail } = {}) {
+  const root = document.createElement('main');
+  document.body.appendChild(root);
+  const navigate = vi.fn();
+  const scan = vi.fn(async () => options.result ?? KIOSK);
+  let scanner: FakeScanner | null = null;
+  createScanPage(root, {
+    i18n: createDefaultI18n('hr'),
+    hash: '',
+    navigate,
+    replaceUrl: vi.fn(),
+    now: () => NOW,
+    scan,
+    scannerSupported: true,
+    createScanner: (deps) => {
+      const element = document.createElement('div');
+      element.className = 'qr-scanner';
+      const fake: FakeScanner = {
+        deps,
+        started: 0,
+        destroyed: 0,
+        element,
+        start: async () => {
+          fake.started += 1;
+        },
+        stop: () => {},
+        destroy: () => {
+          fake.destroyed += 1;
+          element.remove();
+        },
+      };
+      scanner = fake;
+      return fake;
+    },
+  });
+  const button = root.querySelector<HTMLButtonElement>('[data-testid=scan-camera]')!;
+  const region = root.querySelector<HTMLElement>('[data-testid=scan-camera-region]')!;
+  const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
+  return { root, button, region, input, scan, scanner: () => scanner!, navigate };
+}
+
+describe('camera region', () => {
+  it('offers the camera only when the platform can decode, and starts it inside the region', () => {
+    const { button, region, scanner } = mountWithCamera();
+    expect(button.textContent).toContain('Skeniraj kamerom');
+    expect(button.getAttribute('aria-controls')).toBe('scan-camera-region');
+    expect(region.hidden).toBe(true);
+    button.click();
+    expect(region.hidden).toBe(false);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(scanner().started).toBe(1);
+    expect(region.querySelector('.qr-scanner')).not.toBeNull();
+    expect(scanner().deps.strings.hint).toBe('Usmjeri kameru prema QR kodu na zaslonu.');
+  });
+
+  it('a decoded Vidikovac payload fills the field, closes the camera and submits', async () => {
+    const { button, region, input, scan, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onResult('https://zagreb.aningfilm.hr/s#ABCD-EFGH');
+    await flush();
+    expect(input.value).toBe('ABCD-EFGH');
+    expect(scan).toHaveBeenCalledWith('ABCDEFGH');
+    expect(scanner().destroyed).toBe(1);
+    expect(region.hidden).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a foreign QR code is named as such instead of being posted', async () => {
+    const { root, button, scan, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onResult('WIFI:S:kafic;T:WPA;P:tajna;;');
+    await flush();
+    expect(scan).not.toHaveBeenCalled();
+    expect(text(root.querySelector('[role=alert]'))).toBe('To nije kod s Vidikovca. Skeniraj QR kod sa zaslona.');
+  });
+
+  it('a refused or missing camera closes the region and sends the person to the field', () => {
+    const denied = mountWithCamera();
+    denied.button.click();
+    denied.scanner().deps.onError?.('denied');
+    expect(text(denied.root.querySelector('[role=alert]'))).toBe('Pristup kameri je odbijen. Upiši kod ručno.');
+    expect(denied.region.hidden).toBe(true);
+    expect(document.activeElement).toBe(denied.input);
+
+    const busy = mountWithCamera();
+    busy.button.click();
+    busy.scanner().deps.onError?.('unavailable');
+    expect(text(busy.root.querySelector('[role=alert]'))).toBe('Kamera nije dostupna. Upiši kod ručno.');
+  });
+
+  it('Odustani in the camera returns focus to the button', () => {
+    const { button, region, scanner } = mountWithCamera();
+    button.click();
+    scanner().deps.onCancel?.();
+    expect(region.hidden).toBe(true);
+    expect(document.activeElement).toBe(button);
+  });
+});
+```
+
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected failure: 5 failed with `TypeError: Cannot read properties of null (reading 'textContent')` (there is no `[data-testid=scan-camera]` yet).
+
+Four edits to `app/src/scan.ts`, each complete.
+
+(a) Replace the import block at the top of the file with:
+
+```ts
+import type { ScanFail, ScanOk } from '../../worker/protocol';
+import { scan as scanRequest } from './api';
+import { codeFromScan, formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
+import type { I18n } from './i18n/i18n';
+import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
+import { iconMarkup } from './ui/icons';
+import { createQrScanner, type QrScannerDeps, type QrScannerHandle } from './ui/qrScanner';
+```
+
+(b) Replace `interface ScanPageDeps` with:
+
+```ts
+export interface ScanPageDeps {
+  i18n: I18n;
+  /** location.hash as the page was opened with. */
+  hash: string;
+  navigate: (url: string) => void;
+  now?: () => number;
+  scan?: (code: string) => Promise<ScanOk | ScanFail>;
+  /** The entry passes isQrScanSupported(); false means no camera affordance at
+   *  all, because a button that opens a camera which cannot decode is worse
+   *  than no button. */
+  scannerSupported?: boolean;
+  createScanner?: (deps: QrScannerDeps) => QrScannerHandle;
+  /** Drops the spent code from the address bar after a successful scan. */
+  replaceUrl?: (url: string) => void;
+}
+```
+
+(c) In `createScanPage`, replace the `const element = createElementFromHTML(...)` statement and the two `const` lines above it with:
+
+```ts
+  const makeScanner = deps.createScanner ?? createQrScanner;
+  const cameraOffered = deps.scannerSupported === true;
+  const replaceUrl =
+    deps.replaceUrl ??
+    ((url: string) => {
+      globalThis.history.replaceState(null, '', url);
+    });
+
+  const element = createElementFromHTML(`
+    <section class="scan">
+      <h1 class="scan-title">${escapeHtml(i18n.t('scan.title'))}</h1>
+      <p class="scan-intro">${escapeHtml(i18n.t('scan.intro'))}</p>
+      <p class="scan-error" id="scan-error" role="alert" data-testid="scan-error" hidden></p>
+      <section class="scan-confirm card" data-testid="confirm-card" role="group"
+        aria-labelledby="scan-confirm-title" tabindex="-1" hidden></section>
+      ${cameraOffered ? '<div class="scan-camera" id="scan-camera-region" data-testid="scan-camera-region" hidden></div>' : ''}
+      <form class="scan-form" novalidate>
+        <label class="scan-label" for="scan-code">${escapeHtml(i18n.t('scan.codeLabel'))}</label>
+        <input id="scan-code" class="scan-input" data-testid="code-input" type="text" name="code"
+          inputmode="text" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off"
+          spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-describedby="scan-hint">
+        <p id="scan-hint" class="scan-hint">${escapeHtml(i18n.t('scan.codeHint'))}</p>
+        <div class="scan-actions">
+          <button type="submit" class="btn" data-testid="code-submit" disabled>${escapeHtml(i18n.t('scan.check'))}</button>
+          ${cameraOffered ? `<button type="button" class="btn-ghost" data-testid="scan-camera" aria-expanded="false" aria-controls="scan-camera-region">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('scan.scanButton'))}</span></button>` : ''}
+        </div>
+      </form>
+      <p class="scan-status" role="status" data-testid="scan-status"></p>
+    </section>`);
+  root.appendChild(element);
+```
+
+(d) After the `let navigated = false;` line add the camera state, and after the `form.addEventListener('submit', …)` block (immediately before `const initial = codeFromHash(deps.hash);`) add the camera wiring:
+
+```ts
+  const cameraButton = element.querySelector<HTMLButtonElement>('[data-testid=scan-camera]');
+  const cameraRegion = element.querySelector<HTMLElement>('[data-testid=scan-camera-region]');
+  let scanner: QrScannerHandle | null = null;
+```
+
+```ts
+  function closeScanner(): void {
+    scanner?.destroy();
+    scanner = null;
+    if (cameraRegion) {
+      cameraRegion.hidden = true;
+      cameraRegion.replaceChildren();
+    }
+    cameraButton?.setAttribute('aria-expanded', 'false');
+  }
+
+  function acceptScanned(payload: string): void {
+    const code = codeFromScan(payload);
+    if (!code) {
+      showError('scan.errors.notOurs');
+      input.focus();
+      return;
+    }
+    input.value = formatCode(code);
+    submitButton.disabled = false;
+    void submitCode(code);
+  }
+
+  function openScanner(): void {
+    if (!cameraButton || !cameraRegion || scanner) return;
+    clearError();
+    cameraRegion.hidden = false;
+    cameraButton.setAttribute('aria-expanded', 'true');
+    const handle = makeScanner({
+      strings: {
+        hint: i18n.t('scan.scanner.hint'),
+        cancel: i18n.t('scan.scanner.cancel'),
+        denied: i18n.t('scan.scanner.denied'),
+        unavailable: i18n.t('scan.scanner.unavailable'),
+        videoLabel: i18n.t('scan.scanner.videoLabel'),
+        struggling: i18n.t('scan.scanner.struggling'),
+        torch: i18n.t('scan.scanner.torch'),
+      },
+      onResult: (value) => {
+        closeScanner();
+        acceptScanned(value);
+      },
+      onCancel: () => {
+        closeScanner();
+        cameraButton.focus();
+      },
+      onError: (reason) => {
+        // The scanner writes the reason into its own element, which we are about
+        // to remove, so the same sentence is repeated in the page's alert line.
+        closeScanner();
+        showMessage(i18n.t(reason === 'denied' ? 'scan.scanner.denied' : 'scan.scanner.unavailable'));
+        input.focus();
+      },
+    });
+    scanner = handle;
+    cameraRegion.appendChild(handle.element);
+    void handle.start();
+  }
+
+  cameraButton?.addEventListener('click', openScanner);
+```
+
+and change `destroy()` in the returned handle to:
+
+```ts
+    destroy() {
+      closeScanner();
+      element.remove();
+    },
+```
+
+Run: `npx vitest run --project unit test/app/scan.test.ts` → expected: 30 passed.
+
+Commit:
+```bash
+git add app/src/scan.ts test/app/scan.test.ts
+git commit -m "app: camera scan region on /s/, offered only where a decoder exists" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 6: The page, its entry, its stylesheet and the vite input**
+
+`app/s/index.html` (Croatian first; external module scripts only, R-16; the `<head>` line is the one C6, C7 and C8 copy):
+
+```html
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vidikovac · Otključaj pogled na Zagreb</title>
+<meta name="description" content="Skeniraj QR kod s javnog zaslona ili upiši osmeroznamenkasti kod i otključaj deset minuta pogleda na Zagreb u stvarnom vremenu.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b1020">
+<script type="module" src="/src/entries/theme-init.ts"></script>
+</head>
+<body>
+<header class="scan-head">
+  <p class="scan-brand"><a href="/">Vidikovac</a></p>
+  <p class="scan-tools"><span data-lang-toggle></span></p>
+</header>
+<main id="scan" class="scan-page">
+  <noscript>
+    <p>Za upis koda potreban je JavaScript. Sigurnosni sloj radi i bez njega: <a href="/hitno">otvori /hitno</a>.</p>
+  </noscript>
+</main>
+<footer class="scan-foot">
+  <a href="/hitno" data-i18n="common.links.hitno">Sigurnost (otvoreno svima)</a>
+  <a href="/izvori/" data-i18n="common.links.izvori">Izvori podataka</a>
+  <a href="/privatnost/" data-i18n="common.links.privatnost">Privatnost</a>
+  <a href="/pristupacnost/" data-i18n="common.links.pristupacnost">Pristupačnost</a>
+</footer>
+<script type="module" src="/src/entries/scan.ts"></script>
+</body>
+</html>
+```
+
+`app/src/entries/scan.ts`:
+
+```ts
+// Page entry for /s/. R-16: with the theme module in <head> these are the page's
+// only two scripts, both external. R-37: an entry imports the three shared
+// stylesheets plus the component stylesheets its page actually uses.
+import { bootPage } from '../boot';
+import { createScanPage, type ScanPageHandle } from '../scan';
+import { isQrScanSupported } from '../ui/qrScanner';
+import '../ui/tokens.css';
+import '../ui/base.css';
+import '../ui/fonts.css';
+import '../ui/toast.css';
+import '../ui/qrScanner.css';
+import '../ui/scan.css';
+
+const root = document.querySelector<HTMLElement>('#scan')!;
+// The fragment is read once: after the first attempt the code is spent, so a
+// language switch must not re-post it.
+let hash = location.hash;
+
+const { i18n } = bootPage({ page: 'scan', onLocaleChange: () => remount() });
+let page = mount();
+
+function mount(): ScanPageHandle {
+  const handle = createScanPage(root, {
+    i18n,
+    hash,
+    navigate: (url) => {
+      location.assign(url);
+    },
+    scannerSupported: isQrScanSupported(),
+  });
+  hash = '';
+  return handle;
+}
+
+function remount(): void {
+  page.destroy();
+  page = mount();
+}
+```
+
+`app/src/ui/scan.css`:
+
+```css
+/* /s/ — one column, thumb-reachable, the code the largest thing on the page.
+   Layer-2 tokens only; .btn, .btn-ghost, .card and the input reset come from
+   base.css. Each [hidden] rule is explicit because a class with `display`
+   would otherwise beat the user agent's [hidden] rule. */
+.scan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.scan-brand { font-family: var(--font-display); font-weight: var(--weight-semi); }
+.scan-brand a { color: inherit; text-decoration: none; }
+.scan-tools { display: flex; gap: var(--sp-2); align-items: center; }
+
+.scan-page {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-4) var(--sp-8);
+}
+.scan { display: grid; gap: var(--sp-4); }
+.scan-title { font-size: var(--text-2xl); }
+.scan-intro { color: var(--tone-text-muted); }
+
+.scan-error {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--tone-state-danger);
+  border-radius: var(--r-md);
+  background: var(--tone-surface-2);
+  color: var(--tone-text-primary);
+}
+.scan-error[hidden] { display: none; }
+
+.scan-form { display: grid; gap: var(--sp-2); }
+.scan-label { font-weight: var(--weight-medium); }
+.scan-input {
+  width: 100%;
+  min-height: 3.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.scan-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
+.scan-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
+.scan-actions .btn, .scan-actions .btn-ghost { flex: 1 1 12rem; }
+.scan-status { min-height: 1.5rem; color: var(--tone-text-muted); font-size: var(--text-sm); }
+
+.scan-camera { border-radius: var(--r-lg); overflow: hidden; }
+.scan-camera[hidden] { display: none; }
+
+.scan-confirm { display: grid; gap: var(--sp-3); }
+.scan-confirm[hidden] { display: none; }
+.scan-confirm:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 3px; }
+.scan-confirm-title { font-size: var(--text-lg); }
+.scan-confirm-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xl);
+  letter-spacing: 0.22em;
+  color: var(--tone-text-brand);
+}
+.scan-confirm-label { font-weight: var(--weight-medium); }
+.scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
+.scan-confirm-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.scan-confirm-actions .btn, .scan-confirm-actions .btn-ghost { flex: 1 1 12rem; }
+
+.scan-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 0 var(--sp-4) var(--sp-8);
+  color: var(--tone-text-muted);
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 40rem) {
+  .scan-page { padding-top: var(--sp-10); }
+}
+```
+
+`vite.config.ts` gains exactly one line inside `input` (C8 rewrites this file):
+
+```ts
+        s: resolve(__dirname, 'app/s/index.html'),
+```
+
+Run: `npx vite build` → expected: exit code 0 and `dist/s/index.html` in the summary alongside `dist/index.html`.
+Run: `grep -c "text/javascript\|<script>" app/dist/s/index.html` → expected: `0` (every script is an external module, R-16).
+Run: `npx tsc --noEmit -p app/tsconfig.json` → expected: no output.
+Run: `npx vitest run --project unit` → expected: the whole unit project green, including `test/app/boot.test.ts` (7) and `test/app/scan.test.ts` (30).
+
+Commit:
+```bash
+git add app/s app/src/entries/scan.ts app/src/ui/scan.css vite.config.ts
+git commit -m "app: /s/ page, entry and stylesheet, with the s input in the vite build" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
 
 ### Task C5: `panels/panel.ts`, the map wrapper and the seven layer renderers
 

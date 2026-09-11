@@ -87,6 +87,7 @@ export interface CreateBeaconResponse {
 export type BeaconClientMessage =
   | { t: 'auth'; hmac: string }
   | { t: 'more' } // request the next code batch
+  | { t: 'ping' } // keepalive, answered by the DO's auto-response without waking it
   | { t: 'pong' };
 
 export type BeaconServerMessage =
@@ -94,7 +95,12 @@ export type BeaconServerMessage =
   | { t: 'codes'; batch: CodeSlot[]; serverNow: number }
   | { t: 'unlocked'; roomId: string; ticket: string; expiresAt: number }
   | { t: 'revoked' }
+  | { t: 'pong' }
   | { t: 'error'; error: string };
+
+/** Keepalive pair for every socket: client sends KEEPALIVE_REQUEST, the DO auto-responds KEEPALIVE_RESPONSE. */
+export const KEEPALIVE_REQUEST = '{"t":"ping"}';
+export const KEEPALIVE_RESPONSE = '{"t":"pong"}';
 
 // ---- WebSocket: /ws/room/:roomId (scanner, kiosk, phone <-> RoomDO) --------
 
@@ -103,7 +109,8 @@ export type RoomClientMessage =
   | { t: 'resume'; resumeToken: string }
   | { t: 'view'; layer: LayerId; params?: Record<string, string> }
   | { t: 'share' }
-  | { t: 'event'; name: ClientEvent; dim?: string };
+  | { t: 'event'; name: ClientEvent; dim?: string }
+  | { t: 'ping' };
 
 export type RoomServerMessage =
   | {
@@ -120,6 +127,7 @@ export type RoomServerMessage =
   | { t: 'count'; participants: number }
   | { t: 'expiring'; secondsLeft: number }
   | { t: 'expired' }
+  | { t: 'pong' }
   | { t: 'error'; error: string };
 
 /** WebSocket close code sent with 'expired'. */
@@ -161,6 +169,27 @@ export const LAYERS: readonly LayerId[] = [
 /** Client-side counter events; anything else is dropped by the room. */
 export const CLIENT_EVENTS = ['panel_open', 'export'] as const;
 export type ClientEvent = (typeof CLIENT_EVENTS)[number];
+
+/** The dim of an 'export' event; shared by the room's allowlist and the app's export actions. */
+export const EXPORT_KINDS = ['copy', 'share', 'ics', 'geojson', 'print'] as const;
+export type ExportKind = (typeof EXPORT_KINDS)[number];
+
+/**
+ * Croatian sentences for every ScanError, the single source for the Worker's
+ * ScanFail.message and for app/src/i18n/hr.json (scan.errors.*), which a test
+ * asserts equal. English lives only in en.json.
+ */
+export const SCAN_MESSAGES_HR: Record<ScanError, string> = {
+  'bad-request': 'Kod nije u ispravnom obliku.',
+  'code-unknown': 'Taj kod ne postoji ili je prošao. Pogledaj zaslon i skeniraj ponovno.',
+  'code-expired': 'Kod je istekao. Zaslon već pokazuje novi.',
+  'code-used': 'Taj je kod već iskorišten. Pričekaj novi na zaslonu.',
+  'screen-offline': 'Zaslon je trenutačno bez veze. Pokušaj za minutu.',
+  'same-network': 'Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.',
+  'slow-down': 'Previše pokušaja. Pričekaj minutu.',
+  'rate-limited': 'Previše pokušaja s ove mreže. Pričekaj minutu.',
+  revoked: 'Ovaj je zaslon isključen.',
+};
 
 /** Server-truth counter events written by the Worker and the DOs. */
 export const SERVER_EVENTS = [

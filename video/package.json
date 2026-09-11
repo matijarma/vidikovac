@@ -1,0 +1,27 @@
+{
+  "name": "vidikovac-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "check": "tsc --noEmit",
+    "compositions": "remotion compositions src/index.ts",
+    "still:title": "remotion still src/index.ts TitleCard out/title-check.png --frame=90",
+    "still:end": "remotion still src/index.ts EndCard out/end-check.png --frame=150",
+    "render:title": "remotion render src/index.ts TitleCard out/title.mp4 --codec=h264 --crf=18",
+    "render:end": "remotion render src/index.ts EndCard out/end.mp4 --codec=h264 --crf=18",
+    "render": "npm run render:title && npm run render:end"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.518",
+    "@remotion/google-fonts": "4.0.518",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.518"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^6.0.3"
+  }
+}
