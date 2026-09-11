@@ -145,4 +145,24 @@ describe('teaserSubset', () => {
     const open = snapshot('emsc', [item({ id: 'q1', kind: 'quake', title: 'Potres', module: 'emsc', tier: 'open' })]);
     expect(teaserSubset(open)).toEqual(open);
   });
+
+  it('cuts emsc to the ten most recent quakes, newest first', () => {
+    const quakes = snapshot(
+      'emsc',
+      Array.from({ length: 25 }, (_, n) =>
+        item({
+          id: `q${n}`,
+          kind: 'quake',
+          title: 'Potres',
+          module: 'emsc',
+          tier: 'open',
+          at: new Date(Date.UTC(2026, 8, 11, 10, 0, 0) - n * 60_000).toISOString(),
+        }),
+      ),
+    );
+    const reduced = teaserSubset(quakes);
+    expect(reduced.items).toHaveLength(10);
+    expect(reduced.items[0].id).toBe('q0');
+    expect(reduced.items.map((i) => i.id)).toEqual(Array.from({ length: 10 }, (_, n) => `q${n}`));
+  });
 });

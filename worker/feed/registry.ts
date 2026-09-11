@@ -148,6 +148,7 @@ export function clearFetcherOverrides(): void {
 // enough to be useful standing in a cafe, not enough to replace the session.
 export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'hrt-news'];
 export const TEASER_NEWS_LIMIT = 3;
+export const TEASER_EMSC_LIMIT = 10;
 
 function vozila(count: number): string {
   return count % 10 === 1 && count % 100 !== 11 ? `${count} vozilo` : `${count} vozila`;
@@ -172,6 +173,10 @@ export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
     }
     case 'hrt-news':
       return { ...snapshot, items: snapshot.items.slice(0, TEASER_NEWS_LIMIT) };
+    case 'emsc': {
+      const newestFirst = [...snapshot.items].sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));
+      return { ...snapshot, items: newestFirst.slice(0, TEASER_EMSC_LIMIT) };
+    }
     default:
       return snapshot;
   }

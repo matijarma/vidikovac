@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { EMSC_URL, fetchEmsc, magnitudeSeverity, parseEmsc } from '../../worker/feed/modules/emsc';
+import { EMSC_URL, emscQueryUrl, fetchEmsc, magnitudeSeverity, parseEmsc } from '../../worker/feed/modules/emsc';
 
 const raw = JSON.parse(readFileSync(new URL('../fixtures/emsc.json', import.meta.url), 'utf8'));
 
@@ -59,8 +59,18 @@ describe('parseEmsc', () => {
   });
 });
 
+describe('emscQueryUrl', () => {
+  it('bounds the query to the last seven days with a hard limit', () => {
+    const url = new URL(emscQueryUrl(new Date('2026-09-11T15:20:00Z')));
+    expect(url.searchParams.get('starttime')).toBe('2026-09-04T15:20:00');
+    expect(url.searchParams.get('limit')).toBe('100');
+    expect(url.searchParams.get('maxradius')).toBe('1.5');
+    expect(url.searchParams.get('format')).toBe('json');
+  });
+});
+
 describe('fetchEmsc', () => {
-  it('queries the FDSN event service around Zagreb', async () => {
+  it('queries the FDSN event service around Zagreb, bounded to seven days', async () => {
     const asked: string[] = [];
     const payload = await fetchEmsc({
       now: () => new Date('2026-09-11T10:00:00.000Z'),
@@ -69,7 +79,9 @@ describe('fetchEmsc', () => {
         return new Response(JSON.stringify(raw));
       },
     });
-    expect(asked).toEqual([EMSC_URL]);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain('starttime=');
+    expect(asked[0]).toContain('limit=100');
     expect(EMSC_URL).toBe('https://www.seismicportal.eu/fdsnws/event/1/query?lat=45.81&lon=15.98&maxradius=1.5&format=json');
     expect(payload.items).toHaveLength(20);
   });

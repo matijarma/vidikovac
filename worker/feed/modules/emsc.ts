@@ -7,8 +7,18 @@ import { isoOrUndefined } from '../time';
 // negative depth value, so the item position is built from the flat lon/lat
 // properties instead: GeoJSON order, exactly two numbers.
 
+// Base URL for attribution; the live query adds a seven-day starttime and a
+// hard limit so a swarm can never balloon the response (see emscQueryUrl).
 export const EMSC_URL =
   'https://www.seismicportal.eu/fdsnws/event/1/query?lat=45.81&lon=15.98&maxradius=1.5&format=json';
+
+const SEVEN_DAYS_MS = 7 * 86_400_000;
+
+/** The plan's window: 1.5 degrees around Zagreb, last seven days, capped at 100 events. */
+export function emscQueryUrl(now: Date): string {
+  const starttime = new Date(now.getTime() - SEVEN_DAYS_MS).toISOString().slice(0, 19);
+  return `${EMSC_URL}&limit=100&starttime=${starttime}`;
+}
 
 export function magnitudeSeverity(magnitude: number): Severity {
   if (!Number.isFinite(magnitude) || magnitude < 3) return 'info';
@@ -77,6 +87,6 @@ export function parseEmsc(json: unknown): FeedPayload {
 }
 
 export async function fetchEmsc(ctx: FetchContext): Promise<FeedPayload> {
-  const response = await ctx.fetch(EMSC_URL);
+  const response = await ctx.fetch(emscQueryUrl(ctx.now()));
   return parseEmsc(await response.json());
 }

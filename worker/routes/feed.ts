@@ -48,9 +48,11 @@ export async function handleFeed(
   if (path === '/api/teaser') {
     const ids = [...OPEN_MODULES, ...TEASER_MODULES];
     const snapshots = await load(env, ctx, ids);
-    const modules = snapshots.map((snapshot) =>
-      TEASER_MODULES.includes(snapshot.module) ? teaserSubset(snapshot) : snapshot,
-    );
+    // teaserSubset already knows, per module, whether and how to reduce a
+    // snapshot (a no-op for most); applying it to every module here, not just
+    // the session ones in TEASER_MODULES, is what also caps an open module
+    // such as emsc down to its teaser size.
+    const modules = snapshots.map((snapshot) => teaserSubset(snapshot));
     return json({ generatedAt: now().toISOString(), modules } satisfies FeedResponse, 200, {
       'cache-control': TEASER_CACHE_CONTROL,
     });

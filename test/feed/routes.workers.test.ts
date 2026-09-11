@@ -82,6 +82,25 @@ describe('GET /api/teaser', () => {
     const response = await call('/api/teaser', { headers: { authorization: 'Bearer lose' } });
     expect(response.status).toBe(200);
   });
+
+  it('cuts emsc to its ten newest quakes even though it is an open module', async () => {
+    const quakes = Array.from({ length: 25 }, (_, n) => ({
+      id: `q${n}`,
+      module: 'emsc' as const,
+      kind: 'quake' as const,
+      tier: 'open' as const,
+      title: 'Potres',
+      at: new Date(NOW.getTime() - n * 60_000).toISOString(),
+    }));
+    const response = await call('/api/teaser', {}, {
+      getModules: async (_e: Env, _c: ExecutionContext, ids: ModuleId[]) =>
+        ids.map((id) => (id === 'emsc' ? { ...snapshot(id), items: quakes } : snapshot(id))),
+    });
+    const body = (await response.json()) as { modules: ModuleSnapshot[] };
+    const emsc = body.modules.find((m) => m.module === 'emsc');
+    expect(emsc?.items).toHaveLength(10);
+    expect(emsc?.items.map((item) => item.id)).toEqual(Array.from({ length: 10 }, (_, n) => `q${n}`));
+  });
 });
 
 describe('GET /api/data', () => {
