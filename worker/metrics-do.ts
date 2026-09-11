@@ -17,7 +17,13 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './env';
 import { isMetricEvent, zagrebDayHour } from './metrics';
 
-export { METRICS_DO_NAME } from './metrics';
+// METRICS_DO_NAME lives in the dependency-free worker/metrics-do-name.ts
+// (fix round 1, R-42 finding), not declared directly here: this file imports
+// 'cloudflare:workers', which only the `workers` vitest project can resolve,
+// so a plain declaration here re-exported by metrics.ts would break the
+// `unit` project's test/pairing/metrics.test.ts. See worker/metrics.ts's
+// header comment for the full reconciliation.
+export { METRICS_DO_NAME } from './metrics-do-name';
 
 /** One row of the aggregate counter table. `day` is YYYY-MM-DD and `hour` is
  *  0-23, both Europe/Zagreb. A type alias, not an interface: SqlStorage#exec's
