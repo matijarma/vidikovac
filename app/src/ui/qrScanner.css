@@ -1,0 +1,94 @@
+/* Camera viewfinder for QR scanning (see qrScanner.ts).
+
+   The stage is a fixed square with the video cropped to fill it. `aspect-ratio`
+   plus `object-fit: cover` rather than letting the intrinsic video size decide:
+   phone cameras hand back 4:3 or 16:9 depending on the device, and a viewfinder
+   that changes shape per phone makes the reticle meaningless. */
+.qr-scanner {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: center;
+}
+
+.qr-scanner-stage {
+  position: relative;
+  width: min(100%, 20rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--tone-stroke);
+  border-radius: var(--r-lg);
+  /* Not `transparent`: until the first frame arrives the element is empty, and a
+     transparent box over the dialog surface reads as a layout bug rather than as
+     a camera that is still starting. */
+  background: #000;
+}
+
+.qr-scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Chrome paints a 1px seam at the crop edge on some densities. */
+  display: block;
+}
+
+/* Framing guide. Corner brackets rather than a full box, so the guide never
+   covers the code it is helping the user aim at. */
+.qr-scanner-reticle {
+  position: absolute;
+  inset: 16%;
+  border-radius: var(--r-md);
+  background:
+    linear-gradient(var(--tone-action-brand) 0 0) 0 0 / 1.5rem 2px no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 0 0 / 2px 1.5rem no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 100% 0 / 1.5rem 2px no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 100% 0 / 2px 1.5rem no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 0 100% / 1.5rem 2px no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 0 100% / 2px 1.5rem no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 100% 100% / 1.5rem 2px no-repeat,
+    linear-gradient(var(--tone-action-brand) 0 0) 100% 100% / 2px 1.5rem no-repeat;
+}
+
+/* Once the camera is gone there is nothing to aim at, and a failure message sits
+   under a black square with brackets on it otherwise. */
+.qr-scanner[data-state='denied'] .qr-scanner-stage,
+.qr-scanner[data-state='unavailable'] .qr-scanner-stage,
+.qr-scanner[data-state='unsupported'] .qr-scanner-stage,
+.qr-scanner[data-state='done'] .qr-scanner-stage {
+  display: none;
+}
+
+.qr-scanner-hint {
+  margin: 0;
+  max-width: 22rem;
+  color: var(--tone-text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.qr-scanner[data-state='denied'] .qr-scanner-hint,
+.qr-scanner[data-state='unavailable'] .qr-scanner-hint,
+.qr-scanner[data-state='unsupported'] .qr-scanner-hint {
+  color: var(--tone-state-warning);
+}
+
+.qr-scanner-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.qr-scanner-cancel,
+.qr-scanner-torch {
+  min-height: max(2.75rem, 44px);
+}
+
+/* The torch toggle, shown only when the camera reports it has one. `aria-pressed` carries
+   the state for assistive tech; the tint carries it visually. */
+.qr-scanner-torch .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.qr-scanner-torch[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--tone-action-brand) 45%, var(--tone-stroke));
+  color: var(--tone-action-brand);
+}

@@ -1,0 +1,58 @@
+/* A QR code is a machine-readable image, so this one component does NOT follow the
+   theme: the plate and the modules are pinned literals.
+
+   These used to be `--tone-surface-1` / `--tone-text-primary`, which in dark mode is
+   a LIGHT-on-DARK code. That polarity decodes fine — measured against the Android
+   WebView's own BarcodeDetector, an inverted code was read correctly. The problem is
+   that the pair has to move TOGETHER, and it is two declarations, so a consumer that
+   overrode only the background got near-white modules on a near-white plate. The
+   extension options page did exactly that, and that combination decoded to NOTHING
+   in the same measurement — 0 barcodes found, against 1 for both other polarities.
+
+   Pinning both here means the next consumer cannot half-override it. The modules
+   also stay `currentColor` in the SVG (qr.ts), so `color` is what sets them. */
+.qr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 16rem;
+  padding: var(--sp-3);
+  border: 1px solid var(--tone-stroke);
+  border-radius: var(--r-lg);
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The fallback is prose plus a copyable code, not a scannable image, so it goes back
+   to the theme — dark text on a light plate inside a dark app would read as a
+   rendering fault rather than as an error message. */
+.qr-fallback {
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  text-align: center;
+}
+
+.qr-fallback-text {
+  margin: 0;
+  color: var(--tone-text-muted);
+  font-size: var(--text-meta);
+}
+
+.qr-payload {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--tone-surface-2);
+  color: var(--tone-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}

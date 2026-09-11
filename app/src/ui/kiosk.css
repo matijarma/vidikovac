@@ -1,0 +1,36 @@
+/* Prozor: no touch, readable across a room. Body >= 40 px and headline 72 px at
+   1080p come from container-height units, so the same file serves a 1080p
+   landscape screen and a portrait totem. */
+.kiosk-body { margin: 0; overflow: hidden; }
+.kiosk { container-type: size; container-name: kiosk; block-size: 100dvh; display: grid; grid-template-rows: 1fr auto; font-size: clamp(24px, 3.7cqh, 48px); }
+.kiosk-stage { display: grid; gap: 2cqh; padding: 3cqh 3cqw; align-items: center; }
+.teaser-title { font-size: 6.7cqh; line-height: 1.05; margin: 0 0 1cqh; font-family: var(--font-display, 'Space Grotesk', system-ui, sans-serif); }
+.teaser-body { margin: 0; }
+.teaser-attr { font-size: 2.2cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+.teaser-card { opacity: 0; transition: opacity 600ms ease; }
+.teaser-card.is-in { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .teaser-card { transition: none; opacity: 1; } }
+
+.kiosk-code { display: grid; justify-items: center; gap: 1cqh; }
+.kiosk-qr { inline-size: 28cqh; block-size: 28cqh; }
+.kiosk-qr .qr svg { inline-size: 100%; block-size: 100%; }
+.kiosk-code-value { font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 7cqh; letter-spacing: 0.12em; margin: 0; }
+.code-dash { opacity: 0.5; padding-inline: 0.2em; }
+.kiosk-code-label, .kiosk-code-hint { margin: 0; font-size: 2.4cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+
+.code-ring { position: relative; inline-size: 30cqh; block-size: 1.2cqh; display: flex; gap: 0.4cqh; }
+.ring-sweep { display: block; inline-size: 100%; background: var(--tone-accent, #7cd4ff); transform-origin: left; animation: ring-sweep 30s linear infinite; }
+@keyframes ring-sweep { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.ring-segment { flex: 1; background: var(--tone-border, color-mix(in oklab, CanvasText 25%, transparent)); }
+.ring-segment[data-on='true'] { background: var(--tone-accent, #7cd4ff); }
+[data-motion='segments'] .ring-sweep { display: none; }
+
+.kiosk-safety { display: flex; gap: 3cqw; padding: 1.5cqh 3cqw; font-size: 2.6cqh; border-block-start: 2px solid var(--tone-border, color-mix(in oklab, CanvasText 20%, transparent)); }
+.corner-qr { position: absolute; inset-block-end: 10cqh; inset-inline-end: 3cqw; inline-size: 12cqh; }
+.kiosk-alert[hidden] { display: none; }
+.kiosk-alert { margin: 0; padding: 2cqh 3cqw; font-size: 3cqh; }
+
+@container kiosk (min-aspect-ratio: 16/9) { .kiosk-stage { grid-template-columns: 3fr 2fr; } }
+@container kiosk (max-aspect-ratio: 1/1) { .kiosk-stage { grid-template-rows: 1fr auto; justify-items: center; text-align: center; } }
+[data-mode='unlocked'] .kiosk-teaser, [data-mode='unlocked'] .kiosk-code { display: none; }
+[data-mode='unlocked'] .kiosk-stage { grid-template-columns: 1fr; position: relative; }
