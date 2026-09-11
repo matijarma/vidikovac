@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vidikovac", // production Worker serving https://zagreb.aningfilm.hr
+  // Runtime values (SESSION_MINUTES, NETWORK_CHECK, ...) live in the Cloudflare
+  // dashboard, not in git. Without keep_vars a Git-connected build would wipe them.
+  "keep_vars": true,
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "zagreb.aningfilm.hr", "custom_domain": true }],
+  "assets": {
+    "directory": "app/dist",
+    "binding": "ASSETS",
+    // Only these paths reach the Worker; every other GET is served straight from
+    // the static-asset store (free and off the request meter). /hitno is
+    // server-rendered (open safety tier), /open/* is derived data, /stats is the
+    // Access-gated operator page.
+    "run_worker_first": ["/api/*", "/ws/*", "/hitno", "/hitno/*", "/open/*", "/stats", "/stats/*"],
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "BEACON_DO", "class_name": "BeaconDO" }, // one per public screen: mints rotating codes
+      { "name": "ROOM_DO", "class_name": "RoomDO" }, // one per session: both devices, expiry alarm
+      { "name": "INDEX_DO", "class_name": "IndexDO" }, // singleton: code -> beacon | room
+      { "name": "METRICS_DO", "class_name": "MetricsDO" } // singleton: identifier-free counters
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BeaconDO", "RoomDO", "IndexDO", "MetricsDO"] }],
+  "kv_namespaces": [
+    { "binding": "FEED", "id": "8cb66336f0424a8ea1246bfc6a4ae29b" } // last-good copy of every feed module
+  ],
+  "ratelimits": [
+    { "name": "RL_SCAN", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }, // POST /api/scan per IP
+    { "name": "RL_DATA", "namespace_id": "2002", "simple": { "limit": 240, "period": 60 } }, // /api/data per data token
+    { "name": "RL_OPEN", "namespace_id": "2003", "simple": { "limit": 120, "period": 60 } } // open routes per IP
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] }, // warms the slow feed modules into KV
+  "observability": { "enabled": true, "head_sampling_rate": 0.05 },
+  "build": { "command": "npm run build" }
+}

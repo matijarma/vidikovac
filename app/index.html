@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vidikovac · Zagreb, povezan.</title>
+<meta name="description" content="Pogled na Zagreb u stvarnom vremenu, izgrađen na otvorenim podacima. Otključava se skeniranjem rotirajućeg QR koda s javnog zaslona.">
+<meta name="color-scheme" content="dark light">
+<style>
+  :root { color-scheme: dark; --bg: #0b1020; --fg: #e8ecf5; --muted: #9aa5bf; --accent: #7cd4ff; }
+  @media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f7f3ea; --fg: #14181f; --muted: #5a6172; --accent: #005f8a; } }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.5 Inter, system-ui, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 4rem 1.25rem 6rem; }
+  h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); line-height: 1.05; margin: 0 0 1rem; letter-spacing: -0.02em; }
+  h1 small { display: block; font-size: 0.45em; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-bottom: 0.6rem; }
+  p.lead { font-size: 1.25rem; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  .status { margin-top: 3rem; padding: 1rem 1.25rem; border: 1px solid color-mix(in oklab, var(--fg) 15%, transparent); border-radius: 12px; }
+  code { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 0.95em; }
+</style>
+</head>
+<body>
+<main>
+  <h1><small>Dobro došli u budućnost.</small>Zagreb, povezan.</h1>
+  <p class="lead">Pogled na Zagreb u stvarnom vremenu, izgrađen isključivo na otvorenim podacima. Otključava se na deset minuta skeniranjem rotirajućeg QR koda s javnog zaslona ili s telefona druge osobe. Plaća se pažnjom i prisutnošću, ne novcem.</p>
+  <p class="muted">Sigurnosni sloj (upozorenja DHMZ-a, potresi, zatvorene prometnice, dežurne ljekarne, zborna mjesta civilne zaštite) bit će otvoren svima, bez skeniranja.</p>
+  <div class="status" id="status" role="status">Prototip u izgradnji. <span class="muted">Stanje: <code id="health">…</code></span></div>
+  <p class="muted">Izvorni kod: AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
+</main>
+<script type="module">
+  const el = document.getElementById('health');
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    const j = await r.json();
+    el.textContent = j.ok ? `worker ${j.version} · ${new Date(j.time).toLocaleTimeString('hr-HR')}` : 'greška';
+  } catch { el.textContent = 'nedostupno'; }
+</script>
+</body>
+</html>

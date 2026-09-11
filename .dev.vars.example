@@ -1,0 +1,7 @@
+SESSION_SECRET=dev-session-secret-change-me
+NET_KEY_SECRET=dev-net-key-secret-change-me
+SESSION_MINUTES=10
+PEER_MINUTES=5
+CODE_ROTATE_SECONDS=30
+NETWORK_CHECK=off
+SCAN_TURNSTILE=off
