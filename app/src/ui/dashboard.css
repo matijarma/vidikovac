@@ -1,0 +1,22 @@
+/* Ruka and Stol: one layer at a time when narrow, a grid when wide.
+   .visually-hidden and .btn-ghost already live in base.css; not repeated here. */
+.dash { display: flex; flex-direction: column; gap: 1rem; padding: 1rem clamp(0.75rem, 3vw, 2rem) 5rem; }
+.dash-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; }
+.dash-label { margin: 0; font-weight: 600; }
+.dash-timer { position: relative; display: inline-grid; place-items: center; inline-size: 3.5rem; block-size: 3.5rem; }
+.session-ring { position: absolute; inset: 0; rotate: -90deg; }
+.ring-track, .ring-fill { fill: none; stroke-width: 6; }
+.ring-track { stroke: var(--tone-border, color-mix(in oklab, CanvasText 18%, transparent)); }
+.ring-fill { stroke: var(--tone-accent, #7cd4ff); transition: stroke-dashoffset 1s linear; }
+@media (prefers-reduced-motion: reduce) { .ring-fill { transition: none; } }
+.dash-countdown { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.dash-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-inline-start: auto; }
+.dash-alert:empty { display: none; }
+.dash-alert { margin: 0; padding: 0.75rem 1rem; border-radius: 10px; background: var(--tone-surface-2, color-mix(in oklab, Canvas 85%, CanvasText 15%)); }
+.dash-tabs { display: flex; gap: 0.25rem; overflow-x: auto; padding-block: 0.25rem; }
+.dash-tabs [role='tab'] { flex: 0 0 auto; padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 18%, transparent)); background: transparent; color: inherit; font: inherit; }
+.dash-tabs [role='tab'][aria-selected='true'] { background: var(--tone-accent, #7cd4ff); color: var(--tone-text-on-brand, #0b1020); }
+.dash-tabs [role='tab'][disabled] { opacity: 0.5; }
+.dash-view[data-wide='true'] { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr)); }
+.skip-link { position: absolute; inset-block-start: -3rem; inset-inline-start: 0.5rem; padding: 0.5rem; background: Canvas; color: CanvasText; z-index: 10; }
+.skip-link:focus { inset-block-start: 0.5rem; }
