@@ -70,6 +70,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let warned60 = false;
   let warned15 = false;
   let timer: unknown = null;
+  // Captured once, the moment a live expiry first appears (join or resume):
+  // the denominator for the ring's fill fraction. The wire contract carries
+  // no session-start timestamp, so a reload mid-session sees the ring start
+  // full at whatever time is left then — the best any client can infer.
+  let totalSeconds: number | null = null;
 
   const element = document.createElement('div');
   element.className = 'dash';
@@ -170,6 +175,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (!token || !fetchData || frozen || paused) return;
     const ids = wide ? ALL_LAYER_MODULES : LAYER_MODULES[active];
     const results = await Promise.allSettled(ids.map((id) => fetchData(id, token)));
+    // The session may have expired while these were in flight; a frozen view
+    // must not be repainted by a fetch that started before the freeze.
+    if (frozen) return;
     for (const result of results) if (result.status === 'fulfilled') snapshots[result.value.module] = result.value;
     render();
   }
@@ -181,7 +189,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     timeEl.textContent = i18n.t('common.minutes', { count: minutes });
     timeEl.dateTime = `PT${seconds}S`;
     timeEl.title = countdown(seconds);
-    const total = expiresAt ? Math.max(1, Math.round((expiresAt - (now() - seconds * 1000)) / 1000)) : 1;
+    const total = totalSeconds ?? Math.max(1, seconds);
     ring.setAttribute('stroke-dashoffset', String(Math.round(RING_LENGTH * (1 - seconds / total))));
     // A session with no expiry yet (still connecting) is not "about to expire";
     // only an actual live countdown may trip the 60 s/15 s warnings.
@@ -236,6 +244,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       time: zagrebTime(snapshot.expiresAt ?? now()),
     });
     polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
+    totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     paintTimer();
     document.getElementById(`layer-title-${active}`)?.focus();
     void refresh();
