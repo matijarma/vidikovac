@@ -26,6 +26,24 @@ describe('vite multi-page inputs', () => {
 });
 
 describe('static pages', () => {
+  it('the landing page is in the present tense and links to every public route', () => {
+    const html = read('app/index.html');
+    // R-57: an evaluator who types the URL from the proposal must land on a
+    // working product, not on an "under construction" notice.
+    expect(html).not.toContain('Prototip u izgradnji');
+    expect(html).not.toContain('bit će otvoren');
+    expect(html).toContain('otvoren je svima, bez skeniranja i bez ograničenja trajanja');
+    for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/']) {
+      expect(html, href).toContain(`href="${href}"`);
+    }
+    // How to find a screen at all, in one sentence.
+    expect(html).toContain('priđi mu, skeniraj kod kamerom ili upiši osam slova');
+    // The body font is the one the product actually ships (fonts.css).
+    expect(html).not.toContain('Inter');
+    expect(html).toContain("'Manrope'");
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
+    expect(html).toContain('id="health"');
+  });
   it('/izvori carries the placeholder and no inline script', () => {
     const html = read('app/izvori/index.html');
     expect(html).toContain('<!--IZVORI-->');

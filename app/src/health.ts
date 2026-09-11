@@ -1,5 +1,9 @@
 // Landing-page status line: shows the Worker version and time from /api/health.
 // Lives in a file (not inline) so the strict CSP (script-src 'self') allows it.
+// It is also the landing page's only module, so the self-hosted faces the page's
+// token stack names are pulled in here (R-37, and the page used to name a font
+// the product does not ship).
+import './ui/fonts.css';
 const el = document.getElementById('health');
 if (el) {
   try {
