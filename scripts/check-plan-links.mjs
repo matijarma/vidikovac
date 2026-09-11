@@ -61,8 +61,11 @@ export async function checkUrl(url, { fetchImpl = fetch, timeoutMs = 10_000 } = 
   }
 }
 
+/** Every [[POPUNITI ...]] marker, except one shown as a literal example inside a `...` code span. */
 export function findFillFields(text) {
-  return [...text.matchAll(/\[\[POPUNITI[^\]]*\]\]/g)].map((m) => m[0]);
+  return [...text.matchAll(/\[\[POPUNITI[^\]]*\]\]/g)]
+    .filter((m) => !(text[m.index - 1] === '`' && text[m.index + m[0].length] === '`'))
+    .map((m) => m[0]);
 }
 
 export function renderTable(rows) {

@@ -81,6 +81,14 @@ describe('findFillFields and renderTable', () => {
     expect(findFillFields('a [[POPUNITI: OIB]] b [[POPUNITI: adresa]] c')).toEqual(['[[POPUNITI: OIB]]', '[[POPUNITI: adresa]]']);
     expect(findFillFields('clean')).toEqual([]);
   });
+  it('skips a marker shown as a literal example in a code span, but still catches real ones', () => {
+    expect(
+      findFillFields('Sva mjesta označena `[[POPUNITI: ...]]` popunjavaju se iz registara.'),
+    ).toEqual([]);
+    expect(
+      findFillFields('Real: [[POPUNITI: OIB]]. Example: `[[POPUNITI: ...]]` describes the convention.'),
+    ).toEqual(['[[POPUNITI: OIB]]']);
+  });
   it('renders one aligned line per URL', () => {
     const text = renderTable([
       { url: 'https://a.example/', method: 'HEAD', status: 200, ok: true, ms: 120 },
