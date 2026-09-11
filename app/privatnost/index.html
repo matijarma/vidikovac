@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vidikovac · Privatnost</title>
+<meta name="description" content="Što Vidikovac pohranjuje, što broji i što nikada ne dodiruje.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="/src/ui/tokens.css">
+<link rel="stylesheet" href="/src/ui/base.css">
+<script type="module" src="/src/entries/theme-init.ts"></script>
+</head>
+<body>
+<main class="page">
+  <p class="page-nav"><a href="/">Vidikovac</a> <span data-testid="lang-slot"></span></p>
+  <h1>Privatnost</h1>
+  <p>Vidikovac je građen tako da o tebi nema što izgubiti. Ovo je cijeli popis.</p>
+  <ol>
+    <li id="tocka-1"><strong>Što pohranjujemo.</strong> Registar zaslona (oznaka lokacije, vrsta prostora, gradska četvrt), zapise sesije koji žive najviše 10 minuta, kodove koji se brišu unutar 5 minuta od isteka i brojače opisane u točki 4.</li>
+    <li id="tocka-2"><strong>Što ne pohranjujemo.</strong> Ne pohranjujemo IP adresu, korisnički agent, identifikator uređaja, kolačić ni koordinate. Lokacija za polaske s odabrane stanice ostaje na telefonu i ne šalje se poslužitelju.</li>
+    <li id="tocka-3"><strong>Mrežni ključ.</strong> Provjera „zaslon i telefon nisu na istoj mreži” računa se iz mrežnih podataka u trenutku skeniranja, sprema se samo u privitku otvorene veze zaslona i nestaje kad se veza zatvori. Izvorne vrijednosti se odbacuju odmah.</li>
+    <li id="tocka-4"><strong>Što brojimo.</strong> Samo zbrojeve oblika (dan, sat, događaj, dimenzija 1, dimenzija 2) u vremenskoj zoni Europe/Zagreb, iz zatvorenog rječnika: session_start, session_end, scan_fail, kiosk_online, source_fetch, hitno_view, over_cap te panel_open i export iz preglednika. Brojač ne zna tko si, nego samo da se nešto dogodilo.</li>
+    <li id="tocka-5"><strong>Bez kolačića i bez bannera.</strong> Ne koristimo kolačiće. Token za nastavak sesije drži se u sessionStorage i nužan je za traženu uslugu (članak 43. stavak 4. Zakona o elektroničkim komunikacijama), pa privola nije potrebna ni moguća zamjena.</li>
+    <li id="tocka-6"><strong>Koliko dugo.</strong> Brojače čuvamo 24 mjeseca na razini sata, zatim samo mjesečne zbrojeve. Zapisi poslužitelja uzorkuju se s 0,05 i ne sadrže sadržaj zahtjeva.</li>
+    <li id="tocka-7"><strong>Skup podataka za Grad Zagreb.</strong> Gradu mjesečno predajemo CSV i JSON oblika (mjesec, dan, sat, događaj, dimenzija 1, dimenzija 2, broj) u kojem su brojevi zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo”. Grad ga smije objaviti kao otvoreni podatak; mi ga ne objavljujemo sami.</li>
+    <li id="tocka-8"><strong>Kod i podaci.</strong> Izvorni kod je otvoren pod licencom AGPL-3.0-or-later, izvedeni podaci objavljeni su na <a href="/open/">/open</a> pod Otvorenom dozvolom, a izvori su popisani na <a href="/izvori/">/izvori</a>. Pitanja i zahtjeve šalji na <a href="mailto:kontakt@aningfilm.hr">kontakt@aningfilm.hr</a>.</li>
+  </ol>
+  <p class="page-nav"><a href="/hitno">Sigurnost</a> <a href="/izvori/">Izvori</a> <a href="/pristupacnost/">Pristupačnost</a></p>
+</main>
+<script type="module" src="/src/entries/static.ts"></script>
+</body>
+</html>
