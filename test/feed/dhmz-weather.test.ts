@@ -22,12 +22,12 @@ describe('parseDhmzNow', () => {
   it('reads the measurements and says them in Croatian', () => {
     const item = payload.items[0];
     expect(item.data).toEqual({
-      temperatureC: 15.2,
-      humidityPercent: 90,
-      pressureHpa: 1018.3,
-      windDirection: 'NW',
-      windSpeedMs: 1.2,
-      conditions: 'slaba kiša',
+      temp: 15.2,
+      humidity: 90,
+      pressure: 1018.3,
+      windDir: 'NW',
+      windSpeed: 1.2,
+      weather: 'slaba kiša',
     });
     expect(item.summary).toBe('slaba kiša, 15,2 °C, vlaga 90 %, vjetar NW 1,2 m/s');
   });
@@ -56,7 +56,7 @@ describe('parseDhmzForecast', () => {
       'Pretežno oblačno, na širem području grada moguće je malo kiše. Vjetar slab do umjeren sjeverni i sjeveroistočni. Najviša temperatura zraka oko 19 °C.',
     );
     expect(item.geo).toEqual({ type: 'Point', coordinates: [16.03, 45.82] });
-    expect(item.data).toEqual({ minC: 14, maxC: 19, weatherCode: '6', windCode: '1' });
+    expect(item.data).toEqual({ tmin: 14, tmax: 19, weather: '6', text: item.summary });
   });
 
   it('covers the whole Zagreb day', () => {

@@ -118,7 +118,7 @@ export function parseAkti(json: unknown, issue: GlasnikIssue): FeedPayload {
       title: repairMojibake(rawTitle).trim(),
       link: `${GLASNIK_ACT_URL}${act.id}`,
       ...(issue.publishedAt ? { at: issue.publishedAt } : {}),
-      data: compactData({ issue: issue.issueLabel, issueNumber: issue.issueNumber, year: issue.year }),
+      data: compactData({ broj: issue.issueNumber, godina: issue.year }),
     });
   }
 

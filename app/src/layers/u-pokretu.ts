@@ -10,30 +10,33 @@ import type { LayerContext } from './types';
 
 export interface RouteDelay {
   routeId: string;
+  /** Trips the module saw on this route. */
   count: number;
-  /** Mean delay in whole seconds; negative means early. */
+  /** Median delay in whole seconds; negative means early. */
   meanDelay: number;
 }
 
+/**
+ * The module already publishes one summary row per route (kind 'vehicle',
+ * id 'route:<routeId>', R-22): a median over that route's stop-time updates,
+ * which is the honest figure. Re-averaging the pins here would be arithmetic
+ * over data the pins do not carry.
+ */
 export function routeDelays(snapshot: ModuleSnapshot | undefined): RouteDelay[] {
-  const sums = new Map<string, { total: number; count: number }>();
-  for (const item of snapshot?.items ?? []) {
-    const routeId = dataText(item, 'routeId');
-    const delay = dataNumber(item, 'delaySeconds');
-    if (!routeId || delay === null) continue;
-    const entry = sums.get(routeId) ?? { total: 0, count: 0 };
-    entry.total += delay;
-    entry.count += 1;
-    sums.set(routeId, entry);
-  }
-  return [...sums.entries()]
-    .map(([routeId, { total, count }]) => ({ routeId, count, meanDelay: Math.round(total / count) }))
+  return (snapshot?.items ?? [])
+    .filter((item) => item.id.startsWith('route:'))
+    .map((item) => ({
+      routeId: dataText(item, 'routeId'),
+      count: dataNumber(item, 'vehicles') ?? 0,
+      meanDelay: dataNumber(item, 'medianDelaySeconds') ?? 0,
+    }))
+    .filter((row) => row.routeId !== '')
     .sort((a, b) => Math.abs(b.meanDelay) - Math.abs(a.meanDelay) || a.routeId.localeCompare(b.routeId, 'hr'));
 }
 
 export function vehiclePoints(snapshot: ModuleSnapshot | undefined): MapPoint[] {
   return (snapshot?.items ?? [])
-    .filter((i) => i.kind === 'vehicle' && i.geo?.type === 'Point')
+    .filter((i) => i.id.startsWith('vehicle:') && i.geo?.type === 'Point')
     .map((i) => {
       const [lon, lat] = i.geo!.coordinates as number[];
       return { id: i.id, lon: lon!, lat: lat!, title: routeName(dataText(i, 'routeId') || i.title), routeId: dataText(i, 'routeId') };

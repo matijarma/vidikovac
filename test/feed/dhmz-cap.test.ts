@@ -26,7 +26,7 @@ describe('parseDhmzCap', () => {
     expect(hr.summary).toContain('Lokalno obilniji pljuskovi');
     expect(hr.summary).toContain('BUDITE NA OPREZU');
     expect(hr.summary).not.toMatch(/\s{2,}/);
-    expect(hr.data).toEqual({ language: 'hr', area: 'Zagrebačka regija', emmaId: 'HR002' });
+    expect(hr.data).toEqual({ event: 'Žuto upozorenje za grmljavinsku oluju', certainty: 'Likely', urgency: 'Future' });
   });
 
   it('publishes the alert timestamp as the source update time', () => {
@@ -41,7 +41,7 @@ describe('parseDhmzCap', () => {
     );
     expect(minimal.items[0].severity).toBe('info');
     expect(minimal.items[0].at).toBeUndefined();
-    expect(minimal.items[0].data).toEqual({ language: 'hr', area: 'Zagrebačka regija' });
+    expect(minimal.items[0].data).toEqual({ event: 'Test' });
   });
 
   it('yields nothing when no block names Zagreb', () => {

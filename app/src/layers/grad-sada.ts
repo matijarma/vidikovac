@@ -78,7 +78,9 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   );
 
   const zet = snapshots['zet-rt'];
-  const vehicles = (zet?.items ?? []).filter((i) => i.kind === 'vehicle').length;
+  // 'vehicle' also covers the one delay summary per route (id 'route:<id>');
+  // only the pins (id 'vehicle:<id>') are trams and buses actually moving.
+  const vehicles = (zet?.items ?? []).filter((i) => i.id.startsWith('vehicle:')).length;
   panels.appendChild(
     createPanel({
       i18n, now, id: 'grad-sada-vehicles', title: i18n.t('panels.vehicles'), snapshot: zet,

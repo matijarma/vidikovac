@@ -4,7 +4,9 @@ import {
   ARCGIS_CETVRTI_URL,
   CETVRTI_DATASET,
   CKAN_PACKAGE_SHOW,
+  POI_CATEGORIES,
   ZBORNA_MJESTA_DATASET,
+  ZBORNA_MJESTA_LAYER,
   ckanResourceUrl,
   featureCentroid,
   fetchCkanGeo,
@@ -49,16 +51,11 @@ describe('parseGradskeCetvrti', () => {
     expect(items.every((item) => item.data?.layer === CETVRTI_DATASET)).toBe(true);
   });
 
-  it('reads the district name, number and seat', () => {
+  it('reads the district name, seat and poi vocabulary', () => {
     const brezovica = items.find((item) => item.id === 'cetvrt:17');
     expect(brezovica?.title).toBe('Brezovica');
     expect(brezovica?.summary).toBe('Brezovica, Brezovička cesta 100');
-    expect(brezovica?.data).toEqual({
-      layer: CETVRTI_DATASET,
-      dataset: CETVRTI_DATASET,
-      number: 17,
-      seat: 'Brezovica, Brezovička cesta 100',
-    });
+    expect(brezovica?.data).toEqual({ layer: CETVRTI_DATASET, category: POI_CATEGORIES[CETVRTI_DATASET] });
     const [lon, lat] = brezovica?.geo?.coordinates as number[];
     expect(lon).toBeGreaterThan(15.7);
     expect(lon).toBeLessThan(16.2);
@@ -84,8 +81,7 @@ describe('ckanResourceUrl and parseCkanRecords', () => {
           { properties: { naziv: 'Zrinjevac', adresa: 'Trg Nikole Šubića Zrinskog' }, geometry: { type: 'Point', coordinates: [15.978, 45.811] } },
         ],
       },
-      'zborna-mjesta',
-      ZBORNA_MJESTA_DATASET,
+      ZBORNA_MJESTA_LAYER,
     );
     expect(geo).toHaveLength(1);
     expect(geo[0]).toMatchObject({
@@ -93,18 +89,17 @@ describe('ckanResourceUrl and parseCkanRecords', () => {
       title: 'Zrinjevac',
       summary: 'Trg Nikole Šubića Zrinskog',
       geo: { type: 'Point', coordinates: [15.978, 45.811] },
-      data: { layer: 'zborna-mjesta', dataset: ZBORNA_MJESTA_DATASET },
+      data: { layer: ZBORNA_MJESTA_LAYER, category: POI_CATEGORIES[ZBORNA_MJESTA_LAYER] },
     });
 
     const flat = parseCkanRecords(
       [{ naziv: 'Park Stara Trešnjevka', lat: 45.805, lon: 15.94 }, { ime: 'Bez koordinata' }, 'smeće'],
-      'zborna-mjesta',
-      ZBORNA_MJESTA_DATASET,
+      ZBORNA_MJESTA_LAYER,
     );
     expect(flat.map((item) => item.title)).toEqual(['Park Stara Trešnjevka', 'Bez koordinata']);
     expect(flat[0].geo).toEqual({ type: 'Point', coordinates: [15.94, 45.805] });
     expect(flat[1].geo).toBeUndefined();
-    expect(parseCkanRecords(null, 'x', 'y')).toEqual([]);
+    expect(parseCkanRecords(null, 'x')).toEqual([]);
   });
 });
 
@@ -137,8 +132,8 @@ describe('fetchCkanGeo', () => {
       `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`,
       'https://data.zagreb.hr/zborna.json',
     ]);
-    expect(payload.items.filter((item) => item.data?.dataset === CETVRTI_DATASET)).toHaveLength(17);
-    expect(payload.items.filter((item) => item.data?.dataset === ZBORNA_MJESTA_DATASET)).toHaveLength(1);
+    expect(payload.items.filter((item) => item.data?.layer === CETVRTI_DATASET)).toHaveLength(17);
+    expect(payload.items.filter((item) => item.data?.layer === ZBORNA_MJESTA_LAYER)).toHaveLength(1);
     expect(payload.sourceUpdatedAt).toBe('2026-09-01T08:00:00.000Z');
   });
 

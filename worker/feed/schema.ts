@@ -96,3 +96,24 @@ export interface ModuleSpec {
   /** Fetch and normalise. Must throw on any upstream failure. */
   fetcher: (ctx: FetchContext) => Promise<Omit<ModuleSnapshot, 'status' | 'staleSince'>>;
 }
+
+/**
+ * The `data` vocabulary every module emits and every layer reads (R-22, R-50).
+ * One closed list per kind: a module that needs another key needs a ruling
+ * first, and `test/feed/fixtures.test.ts` fails the moment a fixture produces
+ * a key that is not here. Area A and Area C can no longer drift apart
+ * silently, which is exactly how the dashboard ended up rendering dashes over
+ * healthy data.
+ */
+export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
+  // Both the per-vehicle pin and the one summary row per route (id 'route:<routeId>').
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'bearing', 'speed', 'medianDelaySeconds', 'vehicles'],
+  closure: ['type', 'subtype', 'direction', 'street'],
+  observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
+  forecast: ['tmin', 'tmax', 'weather', 'text'],
+  warning: ['event', 'certainty', 'urgency'],
+  quake: ['mag', 'depth', 'magType', 'region'],
+  news: ['source'],
+  act: ['broj', 'godina', 'category'],
+  poi: ['layer', 'category'],
+};

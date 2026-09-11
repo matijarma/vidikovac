@@ -101,7 +101,7 @@ export const OPEN_DATASETS: readonly OpenDataset[] = [
     module: 'ckan-geo',
     title: 'Sigurnosne točke Grada Zagreba (zborna mjesta, ljekarne, vatrogasci, policija, zdenci, javni WC)',
     description:
-      'Točkasti slojevi s data.zagreb.hr i ArcGIS servisa Grada Zagreba, svedeni na naziv, opis, položaj i izvorni skup (data.dataset). Osvježava se dnevno.',
+      'Točkasti slojevi s data.zagreb.hr i ArcGIS servisa Grada Zagreba, svedeni na naziv, opis, položaj i izvorni sloj (data.layer). Osvježava se dnevno.',
     keywords: ['civilna zaštita', 'zborna mjesta', 'ljekarne', 'vatrogasci', 'policija', 'javni zdenci', 'javni WC'],
     ttl: 86400,
     source: {

@@ -36,7 +36,7 @@ describe('parseEmsc', () => {
     expect(newest.geo).toEqual({ type: 'Point', coordinates: [14.3609, 45.4524] });
     expect(newest.title).toBe('Potres magnitude 1,6');
     expect(newest.summary).toBe('CROATIA, dubina 10 km');
-    expect(newest.data).toEqual({ magnitude: 1.6, magnitudeType: 'ml', depthKm: 10, region: 'CROATIA' });
+    expect(newest.data).toEqual({ mag: 1.6, magType: 'ml', depth: 10, region: 'CROATIA' });
     expect(payload.sourceUpdatedAt).toBe('2026-09-09T17:24:41.146Z');
   });
 

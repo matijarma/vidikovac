@@ -20,6 +20,11 @@ export function routeLabel(routeId: string, routes: ZetRoutes): string {
   return route.longName ? `${short} ${route.longName}` : `Linija ${short}`;
 }
 
+/** The number a rider reads on the front of the tram; the route id when GTFS has no short name. */
+export function routeShortName(routeId: string, routes: ZetRoutes): string {
+  return routes[routeId]?.shortName || routeId;
+}
+
 export function delayWords(seconds: number): string {
   if (!Number.isFinite(seconds) || Math.abs(seconds) < ON_TIME_SECONDS) return 'na vrijeme';
   const minutes = Math.max(1, Math.round(Math.abs(seconds) / 60));
@@ -76,6 +81,7 @@ export function parseZetRt(bytes: Uint8Array, routes: ZetRoutes): FeedPayload {
             routeId: routeId || undefined,
             tripId: vehicle.trip?.tripId ?? undefined,
             vehicleId,
+            routeShortName: routeId ? routeShortName(routeId, routes) : undefined,
             bearing: toNumber(vehicle.position.bearing),
             speed: toNumber(vehicle.position.speed),
           }),
@@ -99,12 +105,16 @@ export function parseZetRt(bytes: Uint8Array, routes: ZetRoutes): FeedPayload {
   for (const [routeId, bucket] of [...delaysByRoute].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (bucket.delays.length === 0) continue;
     const medianDelaySeconds = median(bucket.delays);
+    // One summary row per route, not per stop: a rider asks whether the 6 is
+    // late, never what the delay is at stop 311_1. It is a 'vehicle' item
+    // with the id prefix 'route:' (R-22, R-50), so a consumer that wants the
+    // moving pins filters on 'vehicle:' and never counts a summary as a tram.
     items.push({
-      id: `delay:${routeId}`,
-      kind: 'observation',
+      id: `route:${routeId}`,
+      kind: 'vehicle',
       title: routeLabel(routeId, routes),
       summary: delayWords(medianDelaySeconds),
-      data: { routeId, medianDelaySeconds, vehicles: bucket.trips.size },
+      data: { routeId, routeShortName: routeShortName(routeId, routes), medianDelaySeconds, vehicles: bucket.trips.size },
     });
   }
 

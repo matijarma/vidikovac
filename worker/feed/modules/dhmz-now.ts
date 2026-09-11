@@ -50,20 +50,20 @@ export function parseDhmzNow(xml: string): FeedPayload {
       ? zagrebIso(year, month, day, term)
       : undefined;
 
-  const temperatureC = num(city.Podatci?.Temp);
-  const humidityPercent = num(city.Podatci?.Vlaga);
-  const pressureHpa = num(city.Podatci?.Tlak);
-  const windSpeedMs = num(city.Podatci?.VjetarBrzina);
-  const windDirection = xmlText(city.Podatci?.VjetarSmjer) || undefined;
-  const conditions = xmlText(city.Podatci?.Vrijeme) || undefined;
+  const temp = num(city.Podatci?.Temp);
+  const humidity = num(city.Podatci?.Vlaga);
+  const pressure = num(city.Podatci?.Tlak);
+  const windSpeed = num(city.Podatci?.VjetarBrzina);
+  const windDir = xmlText(city.Podatci?.VjetarSmjer) || undefined;
+  const weather = xmlText(city.Podatci?.Vrijeme) || undefined;
   const lat = num(city.Lat);
   const lon = num(city.Lon);
 
   const summary = [
-    conditions,
-    temperatureC === undefined ? '' : `${hr(temperatureC)} °C`,
-    humidityPercent === undefined ? '' : `vlaga ${humidityPercent} %`,
-    windDirection && windSpeedMs !== undefined ? `vjetar ${windDirection} ${hr(windSpeedMs)} m/s` : '',
+    weather,
+    temp === undefined ? '' : `${hr(temp)} °C`,
+    humidity === undefined ? '' : `vlaga ${humidity} %`,
+    windDir && windSpeed !== undefined ? `vjetar ${windDir} ${hr(windSpeed)} m/s` : '',
   ]
     .filter(Boolean)
     .join(', ');
@@ -77,7 +77,7 @@ export function parseDhmzNow(xml: string): FeedPayload {
         ...(summary ? { summary } : {}),
         ...(at ? { at } : {}),
         ...(lat !== undefined && lon !== undefined ? { geo: { type: 'Point' as const, coordinates: [lon, lat] } } : {}),
-        data: compactData({ temperatureC, humidityPercent, pressureHpa, windDirection, windSpeedMs, conditions }),
+        data: compactData({ temp, humidity, pressure, windDir, windSpeed, weather }),
       },
     ],
     ...(at ? { sourceUpdatedAt: at } : {}),

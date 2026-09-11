@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedItem, ModuleSnapshot } from '../../worker/feed/schema';
 import { renderHitnoPage } from '../../worker/hitno/render';
-import { ZBORNA_MJESTA_DATASET, selectHitno } from '../../worker/hitno/select';
+import { ZBORNA_MJESTA_LAYER, selectHitno } from '../../worker/hitno/select';
 
 const NOW = new Date('2026-09-11T08:00:00Z'); // 10:00 in Zagreb
 
@@ -62,7 +62,7 @@ const CKAN = snapshot('ckan-geo', [
     title: 'Zborno mjesto Zrinjevac',
     summary: 'Trg Nikole Šubića Zrinskog',
     geo: { type: 'Point', coordinates: [15.9785, 45.8093] },
-    data: { dataset: ZBORNA_MJESTA_DATASET },
+    data: { layer: ZBORNA_MJESTA_LAYER },
   },
 ]);
 

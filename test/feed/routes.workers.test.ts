@@ -20,7 +20,7 @@ function snapshot(module: ModuleId): ModuleSnapshot {
       module === 'zet-rt'
         ? [
             { id: 'vehicle:1', module, kind: 'vehicle', tier: spec.tier, title: 'Linija 12', geo: { type: 'Point', coordinates: [15.98, 45.81] } },
-            { id: 'delay:12', module, kind: 'observation', tier: spec.tier, title: 'Linija 12', data: { routeId: '12', medianDelaySeconds: 0, vehicles: 1 } },
+            { id: 'route:12', module, kind: 'vehicle', tier: spec.tier, title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 0, vehicles: 1 } },
           ]
         : [{ id: `${module}-1`, module, kind: 'poi', tier: spec.tier, title: 'Stavka' }],
   };
@@ -73,7 +73,7 @@ describe('GET /api/teaser', () => {
       'hrt-news',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
-    expect(zet?.items.map((item) => item.id)).toEqual(['vozila', 'delay:12']);
+    expect(zet?.items.map((item) => item.id)).toEqual(['vozila', 'route:12']);
     expect(zet?.items.some((item) => item.geo)).toBe(false);
     expect(body.modules.find((m) => m.module === 'emsc')?.items).toHaveLength(1);
   });

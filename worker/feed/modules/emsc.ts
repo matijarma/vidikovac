@@ -74,9 +74,9 @@ export function parseEmsc(json: unknown): FeedPayload {
       at,
       geo: { type: 'Point', coordinates: [lon, lat] },
       data: compactData({
-        magnitude: Number.isFinite(magnitude) ? magnitude : undefined,
-        magnitudeType: props?.magtype,
-        depthKm: Number.isFinite(depthKm) ? depthKm : undefined,
+        mag: Number.isFinite(magnitude) ? magnitude : undefined,
+        magType: props?.magtype,
+        depth: Number.isFinite(depthKm) ? depthKm : undefined,
         region: region || undefined,
       }),
     });

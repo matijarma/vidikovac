@@ -3,7 +3,7 @@ import type { FeedItem, ModuleSnapshot } from '../../worker/feed/schema';
 import {
   HITNO_MODULES,
   SEVERITY_WORDS,
-  ZBORNA_MJESTA_DATASET,
+  ZBORNA_MJESTA_LAYER,
   selectHitno,
 } from '../../worker/hitno/select';
 
@@ -75,8 +75,8 @@ describe('selectHitno', () => {
 
   it('takes assembly points only from the zborna mjesta dataset, sorted by name', () => {
     const ckan = snapshot('ckan-geo', [
-      item({ id: 'p2', module: 'ckan-geo', kind: 'poi', title: 'Trešnjevka – Park Stara Trešnjevka', data: { dataset: ZBORNA_MJESTA_DATASET }, geo: { type: 'Point', coordinates: [15.95, 45.8] } }),
-      item({ id: 'p1', module: 'ckan-geo', kind: 'poi', title: 'Centar – Zrinjevac', data: { dataset: ZBORNA_MJESTA_DATASET } }),
+      item({ id: 'p2', module: 'ckan-geo', kind: 'poi', title: 'Trešnjevka – Park Stara Trešnjevka', data: { layer: ZBORNA_MJESTA_LAYER }, geo: { type: 'Point', coordinates: [15.95, 45.8] } }),
+      item({ id: 'p1', module: 'ckan-geo', kind: 'poi', title: 'Centar – Zrinjevac', data: { layer: ZBORNA_MJESTA_LAYER } }),
       item({ id: 'lj', module: 'ckan-geo', kind: 'poi', title: 'Ljekarna', data: { dataset: 'ljekarne' } }),
     ]);
     const data = selectHitno([ckan], NOW);

@@ -30,6 +30,8 @@ interface CapArea {
 interface CapInfo {
   language?: unknown;
   event?: unknown;
+  certainty?: unknown;
+  urgency?: unknown;
   severity?: unknown;
   onset?: unknown;
   expires?: unknown;
@@ -66,7 +68,11 @@ export function parseDhmzCap(xml: string): FeedPayload {
       severity: CAP_SEVERITY[xmlText(info.severity)] ?? 'info',
       ...(isoOrUndefined(xmlText(info.onset)) ? { at: isoOrUndefined(xmlText(info.onset)) } : {}),
       ...(isoOrUndefined(xmlText(info.expires)) ? { until: isoOrUndefined(xmlText(info.expires)) } : {}),
-      data: compactData({ language, area: area.areaDesc, emmaId: area.emmaId }),
+      data: compactData({
+        event: xmlText(info.event) || undefined,
+        certainty: xmlText(info.certainty) || undefined,
+        urgency: xmlText(info.urgency) || undefined,
+      }),
     });
   }
 

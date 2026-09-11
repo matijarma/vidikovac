@@ -159,8 +159,8 @@ export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
     case 'dhmz-now':
       return snapshot;
     case 'zet-rt': {
-      const vehicles = snapshot.items.filter((item) => item.kind === 'vehicle').length;
-      const delays = snapshot.items.filter((item) => item.kind === 'observation');
+      const vehicles = snapshot.items.filter((item) => item.id.startsWith('vehicle:')).length;
+      const delays = snapshot.items.filter((item) => item.id.startsWith('route:'));
       const count: FeedItem = {
         id: 'vozila',
         module: 'zet-rt',

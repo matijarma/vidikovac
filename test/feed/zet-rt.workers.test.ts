@@ -33,10 +33,10 @@ describe('fetchZetRt inside the Workers runtime', () => {
     });
 
     expect(payload.sourceUpdatedAt).toBe('2026-09-11T10:59:45.000Z');
-    const vehicle = payload.items.find((item) => item.kind === 'vehicle');
+    const vehicle = payload.items.find((item) => item.id.startsWith('vehicle:'));
     expect(vehicle?.geo).toEqual({ type: 'Point', coordinates: [15.9839, 45.8136] });
     expect(vehicle?.data).toMatchObject({ routeId: '12', tripId: 't1', vehicleId: '102216', bearing: 90 });
-    const delay = payload.items.find((item) => item.kind === 'observation');
-    expect(delay?.data).toEqual({ routeId: '12', medianDelaySeconds: -81, vehicles: 1 });
+    const delay = payload.items.find((item) => item.id.startsWith('route:'));
+    expect(delay?.data).toEqual({ routeId: '12', routeShortName: '12', medianDelaySeconds: -81, vehicles: 1 });
   });
 });

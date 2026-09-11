@@ -24,8 +24,10 @@ describe('routeLabel and delayWords', () => {
 
 describe('parseZetRt', () => {
   const payload = parseZetRt(bytes, routes);
-  const vehicles = payload.items.filter((item) => item.kind === 'vehicle');
-  const delays = payload.items.filter((item) => item.kind === 'observation');
+  // Both shapes are kind 'vehicle' (R-22); the id prefix separates the moving
+  // pins from the one delay summary per route.
+  const vehicles = payload.items.filter((item) => item.id.startsWith('vehicle:'));
+  const delays = payload.items.filter((item) => item.id.startsWith('route:'));
 
   it('decodes the real feed into positioned vehicles and per-route delay summaries', () => {
     expect(vehicles.length).toBe(332);
@@ -42,6 +44,7 @@ describe('parseZetRt', () => {
     expect(lat).toBeGreaterThan(45.5);
     expect(lat).toBeLessThan(46.2);
     expect(typeof first.data?.routeId).toBe('string');
+    expect(typeof first.data?.routeShortName).toBe('string');
     expect(first.id.startsWith('vehicle:')).toBe(true);
     expect(vehicles.every((item) => item.geo)).toBe(true);
   });
@@ -49,8 +52,10 @@ describe('parseZetRt', () => {
   it('summarises delays per route with a median and a vehicle count', () => {
     const route12 = delays.find((item) => item.data?.routeId === '12');
     expect(route12).toBeDefined();
-    expect(route12?.id).toBe('delay:12');
+    expect(route12?.id).toBe('route:12');
+    expect(route12?.kind).toBe('vehicle');
     expect(route12?.title).toBe('12 Ljubljanica - Dubec');
+    expect(route12?.data?.routeShortName).toBe('12');
     expect(typeof route12?.data?.medianDelaySeconds).toBe('number');
     expect(Number(route12?.data?.vehicles)).toBeGreaterThan(0);
     expect(route12?.summary).toMatch(/^(na vrijeme|kasni \d+ min|rani \d+ min)$/);

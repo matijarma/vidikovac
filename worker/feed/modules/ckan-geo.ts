@@ -15,6 +15,16 @@ export const ARCGIS_CETVRTI_URL =
 export const ZBORNA_MJESTA_DATASET = 'zborna-mjesta-civilne-zastite-grada-zagreba';
 export const CETVRTI_DATASET = 'gradske-cetvrti';
 
+// FeedItem.data.layer is the stable slug a consumer filters on (/hitno picks
+// the assembly points out of the mixed poi stream with it); data.category is
+// the Croatian label the panel prints under the name. Both are the whole poi
+// vocabulary (R-22, R-50).
+export const ZBORNA_MJESTA_LAYER = 'zborna-mjesta';
+export const POI_CATEGORIES: Record<string, string> = {
+  [CETVRTI_DATASET]: 'Gradska četvrt',
+  [ZBORNA_MJESTA_LAYER]: 'Zborno mjesto civilne zaštite',
+};
+
 export function titleCaseHr(value: string): string {
   return value
     .toLocaleLowerCase('hr')
@@ -87,7 +97,7 @@ export function parseGradskeCetvrti(json: unknown): ItemInput[] {
       title: titleCaseHr(name),
       ...(seat ? { summary: seat } : {}),
       geo: { type: 'Point', coordinates: centroid },
-      data: compactData({ layer: CETVRTI_DATASET, dataset: CETVRTI_DATASET, number, seat }),
+      data: { layer: CETVRTI_DATASET, category: POI_CATEGORIES[CETVRTI_DATASET]! },
     });
   }
 
@@ -133,7 +143,7 @@ function pickNumber(record: Record<string, unknown>, keys: string[]): number | u
   return undefined;
 }
 
-export function parseCkanRecords(json: unknown, layer: string, dataset: string): ItemInput[] {
+export function parseCkanRecords(json: unknown, layer: string): ItemInput[] {
   const rows: unknown[] = Array.isArray(json)
     ? json
     : Array.isArray((json as { features?: unknown })?.features)
@@ -157,7 +167,7 @@ export function parseCkanRecords(json: unknown, layer: string, dataset: string):
       title,
       ...(address ? { summary: address } : {}),
       ...(centroid ? { geo: { type: 'Point' as const, coordinates: centroid } } : {}),
-      data: compactData({ layer, dataset, address }),
+      data: compactData({ layer, category: POI_CATEGORIES[layer] }),
     });
   }
   return items;
@@ -186,7 +196,7 @@ export async function fetchCkanGeo(ctx: FetchContext): Promise<FeedPayload> {
     if (!url) throw new Error('ckan-geo: no JSON resource for the assembly points');
     const records = await (await ctx.fetch(url)).json();
     return {
-      items: parseCkanRecords(records, 'zborna-mjesta', ZBORNA_MJESTA_DATASET),
+      items: parseCkanRecords(records, ZBORNA_MJESTA_LAYER),
       modified: ckanTimestampIso((meta as { result?: { metadata_modified?: string } })?.result?.metadata_modified),
     };
   })();

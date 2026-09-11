@@ -76,7 +76,7 @@ describe('parseAkti', () => {
       title: 'Odluka o proračunu Grada Zagreba',
       link: `${GLASNIK_ACT_URL}a1b2`,
       at: '2026-09-06T22:00:00.000Z',
-      data: { issue: 'Broj 29 od 7. rujna 2026.', issueNumber: 29, year: '2026' },
+      data: { broj: 29, godina: '2026' },
     });
     expect(payload.sourceUpdatedAt).toBe('2026-09-06T22:00:00.000Z');
   });

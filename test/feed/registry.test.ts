@@ -108,12 +108,12 @@ describe('teaserSubset', () => {
       snapshot('zet-rt', [
         item({ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 12' }),
         item({ id: 'vehicle:2', kind: 'vehicle', title: 'Linija 12' }),
-        item({ id: 'delay:12', kind: 'observation', title: 'Linija 12', data: { routeId: '12', medianDelaySeconds: -102, vehicles: 2 } }),
+        item({ id: 'route:12', kind: 'vehicle', title: 'Linija 12', data: { routeId: '12', medianDelaySeconds: -102, vehicles: 2 } }),
       ]),
     );
     expect(reduced.items).toHaveLength(2);
     expect(reduced.items[0]).toMatchObject({ id: 'vozila', kind: 'vehicle', title: '2 vozila u pokretu', data: { vehicles: 2 } });
-    expect(reduced.items[1].id).toBe('delay:12');
+    expect(reduced.items[1].id).toBe('route:12');
     expect(reduced.items.some((i) => i.geo)).toBe(false);
   });
 

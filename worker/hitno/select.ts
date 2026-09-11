@@ -9,9 +9,9 @@ export const QUAKE_WINDOW_MS = 72 * 60 * 60 * 1000;
 /** A quake stamped slightly in the future (clock skew at the source) is still shown. */
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
-/** CKAN package name on data.zagreb.hr (read 11 Sept 2026). Area A's ckan-geo
- *  module writes it into FeedItem.data.dataset for every feature of that layer. */
-export const ZBORNA_MJESTA_DATASET = 'zborna-mjesta-civilne-zastite-grada-zagreba';
+/** The poi layer slug Area A's ckan-geo module stamps on every civil-protection
+ *  assembly point (FeedItem.data.layer, the poi vocabulary of R-22). */
+export const ZBORNA_MJESTA_LAYER = 'zborna-mjesta';
 
 /** CAP severity in words. Colour never carries this alone (design section 2). */
 export const SEVERITY_WORDS: Readonly<Record<Severity, string>> = {
@@ -110,7 +110,7 @@ export function selectClosures(snapshot: ModuleSnapshot | null, now: Date): Feed
 export function selectAssemblyPoints(snapshot: ModuleSnapshot | null): FeedItem[] {
   if (snapshot === null) return [];
   return snapshot.items
-    .filter((i) => i.kind === 'poi' && i.data?.dataset === ZBORNA_MJESTA_DATASET)
+    .filter((i) => i.kind === 'poi' && i.data?.layer === ZBORNA_MJESTA_LAYER)
     .sort(byTitle);
 }
 
