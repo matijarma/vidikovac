@@ -14,6 +14,7 @@ export default defineConfig({
         index: resolve(__dirname, 'app/index.html'),
         s: resolve(__dirname, 'app/s/index.html'),
         d: resolve(__dirname, 'app/d/index.html'),
+        kiosk: resolve(__dirname, 'app/kiosk/index.html'),
       },
     },
   },
