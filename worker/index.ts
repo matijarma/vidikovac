@@ -1,5 +1,6 @@
 import type { Env } from './env';
 import { VERSION, networkCheck } from './config';
+import { json } from './http';
 import { handleFeed } from './routes/feed';
 import { handlePairing } from './routes/pairing';
 import { handleAdmin } from './routes/admin';
@@ -14,6 +15,7 @@ export { BeaconDO } from './do/beacon-do';
 export { RoomDO } from './do/room-do';
 export { IndexDO } from './do/index-do';
 export { MetricsDO } from './metrics-do';
+export { json } from './http';
 
 export type RouteHandler = (
   request: Request,
@@ -50,14 +52,3 @@ export default {
     await warmFeeds(env, ctx);
   },
 } satisfies ExportedHandler<Env>;
-
-export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-      ...headers,
-    },
-  });
-}

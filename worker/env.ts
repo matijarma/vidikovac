@@ -22,4 +22,10 @@ export interface Env {
   SCAN_TURNSTILE?: string; // on | off
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
+  /**
+   * Test-only admin bypass: verifyAccess accepts a request carrying header
+   * `x-e2e-admin-bypass` equal to this value, and ONLY when networkCheck(env)
+   * is 'off' (never in production, where NETWORK_CHECK is enforce).
+   */
+  E2E_ADMIN_BYPASS?: string;
 }

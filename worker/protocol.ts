@@ -13,6 +13,9 @@ export const CODES_PER_BATCH = 20;
 export const CODE_EARLY_MS = 5_000;
 export const CODE_GRACE_MS = 30_000;
 
+/** Beacon ids are 8 characters from CODE_ALPHABET (same alphabet as codes, not secret). */
+export const BEACON_ID_LENGTH = 8;
+
 export type BeaconKind = 'kiosk' | 'phone';
 export type VenueType = 'kafic' | 'knjiznica' | 'cetvrt' | 'udruga' | 'zet' | 'ostalo';
 export type Role = 'kiosk' | 'scanner' | 'phone';
@@ -142,17 +145,20 @@ export const LAYERS: readonly LayerId[] = [
 ];
 
 /** Client-side counter events; anything else is dropped by the room. */
-export type ClientEvent = 'panel_open' | 'export';
+export const CLIENT_EVENTS = ['panel_open', 'export'] as const;
+export type ClientEvent = (typeof CLIENT_EVENTS)[number];
 
 /** Server-truth counter events written by the Worker and the DOs. */
-export type ServerEvent =
-  | 'session_start'
-  | 'session_end'
-  | 'scan_fail'
-  | 'kiosk_online'
-  | 'source_fetch'
-  | 'hitno_view'
-  | 'over_cap';
+export const SERVER_EVENTS = [
+  'session_start',
+  'session_end',
+  'scan_fail',
+  'kiosk_online',
+  'source_fetch',
+  'hitno_view',
+  'over_cap',
+] as const;
+export type ServerEvent = (typeof SERVER_EVENTS)[number];
 
 // ---- Data token (stateless, verified by the Worker) -------------------------
 

@@ -28,13 +28,6 @@
   <div class="status" id="status" role="status">Prototip u izgradnji. <span class="muted">Stanje: <code id="health">…</code></span></div>
   <p class="muted">Izvorni kod: AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
 </main>
-<script type="module">
-  const el = document.getElementById('health');
-  try {
-    const r = await fetch('/api/health', { cache: 'no-store' });
-    const j = await r.json();
-    el.textContent = j.ok ? `worker ${j.version} · ${new Date(j.time).toLocaleTimeString('hr-HR')}` : 'greška';
-  } catch { el.textContent = 'nedostupno'; }
-</script>
+<script type="module" src="/src/health.ts"></script>
 </body>
 </html>
