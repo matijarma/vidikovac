@@ -88,7 +88,7 @@ export function createPanel(options: PanelOptions): PanelHandle {
   const level = options.headingLevel ?? 3;
 
   const element = createElementFromHTML(
-    `<section class="panel" data-testid="panel" data-freshness="${fresh}" aria-labelledby="${safeId}-title">
+    `<section class="panel" id="${safeId}" data-testid="panel" data-freshness="${fresh}" aria-labelledby="${safeId}-title">
       <header class="panel-head">
         <h${level} class="panel-title" id="${safeId}-title">${escapeHtml(options.title)}</h${level}>
         <p class="panel-fresh" data-testid="panel-freshness"><span class="fresh-shape" aria-hidden="true"></span>${escapeHtml(i18n.t(`freshness.${fresh}`))}</p>
