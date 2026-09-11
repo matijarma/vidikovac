@@ -1,0 +1,13 @@
+{
+  "sources": [
+    { "module": "zet-rt", "naziv": "ZET, GTFS-Realtime (vozila i kašnjenja)", "tier": "session", "url": "http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669", "text": "Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "prometnice", "naziv": "Zatvaranje prometnica na području Grada Zagreba", "tier": "open", "url": "https://data.zagreb.hr/dataset/prometnice", "text": "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena {datum}", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "dhmz-now", "naziv": "DHMZ, trenutačna mjerenja", "tier": "open", "url": "https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici", "text": "Izvor: DHMZ, Otvorena dozvola, {vrijeme}", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "dhmz-forecast", "naziv": "DHMZ, prognoza za danas", "tier": "open", "url": "https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici", "text": "Izvor: DHMZ, Otvorena dozvola, {vrijeme}", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "dhmz-cap", "naziv": "DHMZ, upozorenja (CAP, područje HR002)", "tier": "open", "url": "https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici", "text": "Izvor: DHMZ, Otvorena dozvola, {vrijeme}", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "emsc", "naziv": "EMSC, potresi u okolici Zagreba", "tier": "open", "url": "https://www.seismicportal.eu/", "text": "Izvor: EMSC, seismicportal.eu", "licence": "EMSC terms" },
+    { "module": "hrt-news", "naziv": "HRT, vijesti (naslovi i poveznice)", "tier": "open", "url": "https://feed.hrt.hr/vijesti/page.xml", "text": "Izvor: HRT, {naslov}, poveznica na izvornik", "licence": "HRT uvjeti korištenja, tekst uz navođenje izvora i poveznicu" },
+    { "module": "glasnik", "naziv": "Službeni glasnik Grada Zagreba", "tier": "open", "url": "https://www1.zagreb.hr/sluzbeni-glasnik/", "text": "Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}", "licence": "Otvorena dozvola (NN 67/17)" },
+    { "module": "ckan-geo", "naziv": "data.zagreb.hr, geoprostorni skupovi (zborna mjesta, ljekarne, zdenci, javni WC)", "tier": "open", "url": "https://data.zagreb.hr/", "text": "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup '{naziv}', posljednja izmjena {datum}", "licence": "Otvorena dozvola (NN 67/17)" }
+  ]
+}
