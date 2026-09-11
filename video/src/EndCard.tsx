@@ -1,14 +1,9 @@
 import React from 'react';
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { loadFont as loadSpaceGrotesk } from '@remotion/google-fonts/SpaceGrotesk';
-import { loadFont as loadInter } from '@remotion/google-fonts/Inter';
-import { COLORS, SAFE } from './theme';
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
+import { CLAMP, COLORS, EASE_OUT, SAFE, loadBodyFont, loadDisplayFont } from './theme';
 
-const display = loadSpaceGrotesk('normal', { weights: ['700'], subsets: ['latin', 'latin-ext'] });
-const body = loadInter('normal', { weights: ['400', '500'], subsets: ['latin', 'latin-ext'] });
-
-const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
-const CLAMP = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
+const display = loadDisplayFont();
+const body = loadBodyFont(['400', '500']);
 
 // Verbatim strings from docs/izvori.md; the end card is one of the four
 // attribution places the plan requires.
