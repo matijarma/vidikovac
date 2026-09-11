@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { moduleIdsFromSchema } from '../../scripts/lib/module-ids.mjs';
 
+const NL = String.fromCharCode(10);
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 
 describe('docs/izvori.md', () => {
@@ -20,6 +21,23 @@ describe('docs/izvori.md', () => {
     expect(izvori).toContain('Izvor: EMSC, seismicportal.eu');
     expect(izvori).toContain('Izvor: HRT,');
     expect(izvori).toContain('https://data.zagreb.hr/dataset/7ff5514d-0a1f-4f6c-86bd-8ed9a3c55eee/resource/e48b6992-add0-45a1-ae95-c5d97d8db259/download/data.json');
+  });
+  // R-08 and R-58: the registry is the single source, so both columns are its
+  // strings character for character. The glasnik row used to drop the "Izvor: "
+  // prefix and the emsc row used its own words for the licence.
+  it('quotes the registry attribution and licence of every module verbatim', async () => {
+    const { MODULES, MODULE_IDS } = await import('../../worker/feed/registry');
+    for (const id of MODULE_IDS) {
+      const row = izvori.split(NL).find((line) => line.startsWith('| `' + id + '` |'))!;
+      expect(row, `no row for ${id}`).toBeDefined();
+      const cells = row.split('|').map((cell) => cell.trim());
+      expect(cells[cells.length - 2], `attribution of ${id}`).toBe(MODULES[id].attribution.text);
+    }
+    // The licence column carries the registry's own value where the registry
+    // has one that is not a plain Croatian licence name; the other rows may
+    // still add the context a reader of the document needs.
+    const emsc = izvori.split(NL).find((line) => line.startsWith('| `emsc` |'))!;
+    expect(emsc.split('|').map((cell) => cell.trim())[4]).toBe(MODULES.emsc.attribution.licence);
   });
   it('states TTL and maxStale for the nine modules exactly as the plan does', () => {
     for (const pair of ['30 / 300', '180 / 1800', '60 / 3600', '300 / 7200', '600 / 7200', '1800 / 86400', '3600 / 604800', '86400 / 2592000']) {

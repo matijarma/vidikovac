@@ -78,6 +78,8 @@ describe.skipIf(registryMissing)('parity with worker/feed/registry.ts', () => {
       expect(spec.attribution.text).toBe(source.text);
       expect(spec.attribution.url).toBe(source.url);
       expect(spec.attribution.licence).toBe(source.licence);
+      // R-58: the page told readers four session modules were open.
+      expect(spec.tier, source.module).toBe(source.tier);
     }
     expect(Object.keys(MODULES).sort()).toEqual(izvori.sources.map((s) => s.module).sort());
   });

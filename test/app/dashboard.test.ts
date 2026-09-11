@@ -159,15 +159,18 @@ describe('unlock, countdown and announcements', () => {
     expect(time.getAttribute('datetime')).toBe('PT600S');
     expect(root.querySelector('[data-testid=session-ring]')?.getAttribute('aria-hidden')).toBe('true');
   });
-  it('warns at 60 s politely and at 15 s assertively, with the approved sentences', () => {
+  // R-58: the room sends 'expiring' at 60 s and at 20 s, and the accessibility
+  // statement promises exactly those two marks. The 20 s frame used to fall
+  // through the 60 s branch and was never announced at all.
+  it('warns at 60 s politely and at 20 s assertively, with the approved sentences', () => {
     const { root, session } = mount();
     session.join();
     session.expiring(60);
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
-    session.expiring(15);
+    session.expiring(20);
     const alert = root.querySelector('[data-testid=announce-assertive]')!;
     expect(alert.getAttribute('role')).toBe('alert');
-    expect(text(alert)).toBe('Još petnaest sekundi.');
+    expect(text(alert)).toBe('Još dvadeset sekundi.');
   });
 });
 

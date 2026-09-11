@@ -74,7 +74,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let paused = false;
   let countdownHidden = false;
   let warned60 = false;
-  let warned15 = false;
+  let warned20 = false;
   let timer: unknown = null;
   // Captured once, the moment a live expiry first appears (join or resume):
   // the denominator for the ring's fill fraction. The wire contract carries
@@ -205,16 +205,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const total = totalSeconds ?? Math.max(1, seconds);
     ring.setAttribute('stroke-dashoffset', String(Math.round(RING_LENGTH * (1 - seconds / total))));
     // A session with no expiry yet (still connecting) is not "about to expire";
-    // only an actual live countdown may trip the 60 s/15 s warnings.
+    // only an actual live countdown may trip the warnings. 60 s and 20 s are
+    // the room's own 'expiring' frames and what the accessibility statement
+    // promises, so the local clock uses the same two marks (R-58).
     if (!frozen && expiresAt !== null && seconds <= 60) announce(60);
-    if (!frozen && expiresAt !== null && seconds <= 15) announce(15);
+    if (!frozen && expiresAt !== null && seconds <= 20) announce(20);
   }
 
   function announce(secondsLeft: number): void {
-    if (secondsLeft <= 15) {
-      if (warned15) return;
-      warned15 = true;
-      assertive.textContent = i18n.t('session.expiring15');
+    if (secondsLeft <= 20) {
+      if (warned20) return;
+      warned20 = true;
+      assertive.textContent = i18n.t('session.expiring20');
       return;
     }
     if (warned60) return;

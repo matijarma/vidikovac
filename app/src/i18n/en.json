@@ -139,7 +139,7 @@
     "labelPhone": "phone",
     "remaining": "Remaining",
     "expiring60": "One minute left. What you are looking at stays on screen after the session ends.",
-    "expiring15": "Fifteen seconds left.",
+    "expiring20": "Twenty seconds left.",
     "expired": "The session has ended. The view is frozen. A nearby screen unlocks another ten minutes.",
     "connecting": "Connecting…",
     "disconnected": "Connection lost. Reconnecting…",

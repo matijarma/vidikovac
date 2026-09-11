@@ -49,10 +49,17 @@ describe('static pages', () => {
     expect(html).toContain('<!--IZVORI-->');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
-  it('/privatnost lists the eight privacy points and no inline script', () => {
+  it('/privatnost lists the nine privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
-    for (let i = 1; i <= 8; i += 1) expect(html).toContain(`id="tocka-${i}"`);
+    for (let i = 1; i <= 9; i += 1) expect(html).toContain(`id="tocka-${i}"`);
     expect(html).toContain('Ne pohranjujemo IP adresu, korisnički agent, identifikator uređaja, kolačić ni koordinate.');
+    // R-58: the map tile request is the single third-party call, and the list
+    // view carries the same data without it.
+    expect(html).toContain('tile.openstreetmap.org');
+    expect(html).toContain('jedini poziv izvan ovog poslužitelja');
+    // Every browser-stored value, named (the data token is new in this wave).
+    expect(html).toContain('token za nastavak sesije i token kojim ta sesija dohvaća podatke');
+    expect(html).toContain('U localStorage ostaju samo dvije postavke prikaza, tema i jezik');
     expect(html).toContain('zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo”');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
