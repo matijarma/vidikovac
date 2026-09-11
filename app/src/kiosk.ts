@@ -15,6 +15,7 @@ import {
   type BeaconCredentials,
 } from './beacon';
 import { codeUrl, formatCode, speakableCode } from './code';
+import { zagrebTime } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import type { MapFactory } from './map/city-map';
@@ -143,8 +144,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         <div class="code-ring" data-testid="code-ring" data-motion="${deps.reducedMotion ? 'segments' : 'sweep'}"></div>
         <div class="kiosk-qr" data-testid="kiosk-qr"></div>
         <p class="kiosk-code-label">${escapeHtml(i18n.t('kiosk.codeLabel'))}</p>
-        <p class="kiosk-code-value"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
+        <p class="kiosk-code-value" data-testid="pair-code"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
         <p class="kiosk-code-hint">${escapeHtml(i18n.t('kiosk.typeCode'))}</p>
+        <!-- The QR's payload as text: what the camera reads, for anyone who
+             cannot read the QR (and the end-to-end contract, R-52). -->
+        <a class="visually-hidden" data-testid="pair-url" href=""></a>
       </aside>
       <div class="kiosk-layer" data-testid="kiosk-layer" hidden></div>
       <div class="corner-qr" data-testid="corner-qr" hidden></div>
@@ -159,8 +163,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const ring = element.querySelector<HTMLElement>('[data-testid=code-ring]')!;
   const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]')!;
   const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]')!;
+  const codeLink = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]')!;
   const layerBox = element.querySelector<HTMLElement>('[data-testid=kiosk-layer]')!;
   const strip = element.querySelector<HTMLElement>('[data-testid=safety-strip]')!;
+  const stage = element.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!;
 
   let teaser: ModuleSnapshot[] = [];
   let cards: TeaserCard[] = [];
@@ -171,6 +177,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let sessionSnapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
   let activeLayer: LayerId = 'grad-sada';
   let unlockedToken: string | null = null;
+  // Only present while a session is open, so a screen back on the teaser has no
+  // stale "unlocked until" line anywhere in the page (R-52).
+  let sessionLabel: HTMLElement | null = null;
 
   // The teaser fetch and the beacon socket are two independent failure
   // domains sharing one alert line. Each keeps its own entry in this map
@@ -240,6 +249,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const display = formatCode(currentCode);
     codeA.textContent = display.slice(0, 4);
     codeB.textContent = display.slice(5);
+    const payload = codeUrl(currentCode, deps.codeBase);
+    codeLink.href = payload;
+    codeLink.textContent = payload;
     const spoken = speakableCode(currentCode);
     const qr = createQr({
       payload: codeUrl(currentCode, deps.codeBase),
@@ -271,12 +283,24 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     );
   }
 
+  /** The one line the room is open for, on the screen and in the DOM contract. */
+  function showSessionLabel(expiresAt: number | null): void {
+    if (expiresAt === null) return;
+    sessionLabel ??= stage.insertBefore(document.createElement('p'), stage.firstChild);
+    sessionLabel.className = 'kiosk-session';
+    sessionLabel.dataset.testid = 'session-label';
+    sessionLabel.dataset.expiresAt = String(expiresAt);
+    sessionLabel.textContent = i18n.t('kiosk.unlockedUntil', { time: zagrebTime(expiresAt) });
+  }
+
   function setMode(mode: 'teaser' | 'unlocked'): void {
     element.dataset.mode = mode;
     layerBox.hidden = mode !== 'unlocked';
     cornerQr.hidden = mode !== 'unlocked';
     if (mode === 'teaser') {
       layerBox.replaceChildren();
+      sessionLabel?.remove();
+      sessionLabel = null;
       paintTeaser();
     }
   }
@@ -337,6 +361,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         session.onJoined((snapshot) => {
           unlockedToken = snapshot.dataToken;
           setMode('unlocked');
+          showSessionLabel(snapshot.expiresAt);
           paintCode();
           void refreshSessionData();
         });

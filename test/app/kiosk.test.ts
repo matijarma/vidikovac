@@ -127,6 +127,11 @@ describe('mountKiosk', () => {
     expect(qr.getAttribute('role')).toBe('img');
     expect(qr.getAttribute('aria-label')).toContain('A B C D, E F G 0');
     expect(root.querySelector('svg')).not.toBeNull();
+    // The end-to-end contract (R-52): the whole code in one element, and the
+    // QR's payload as a real link carrying it in the fragment.
+    expect(text(root.querySelector('[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    const link = root.querySelector<HTMLAnchorElement>('[data-testid=pair-url]')!;
+    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
   });
   it('asks the beacon for more codes when the rotation runs low', () => {
     const { beacon, handlers } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
@@ -170,8 +175,15 @@ describe('mountKiosk', () => {
     await flush();
     expect(k.root.querySelector('[data-layer=vijesti]')).not.toBeNull();
     expect(k.root.querySelector('[data-testid=corner-qr] .qr')).not.toBeNull();
+    const label = k.root.querySelector<HTMLElement>('[data-testid=session-label]')!;
+    expect(label).not.toBeNull();
+    expect(label.dataset.expiresAt).toBe(String(NOW + 600_000));
+    expect(text(label)).toBe('Otključano do 14:42');
     k.expire();
     expect(k.root.querySelector('[data-testid=kiosk]')?.getAttribute('data-mode')).toBe('teaser');
+    // Gone from the DOM, not merely hidden: a screen back on the teaser must
+    // not still claim it is unlocked (R-52).
+    expect(k.root.querySelector('[data-testid=session-label]')).toBeNull();
     expect(text(k.root.querySelector('[data-testid=teaser-card]'))).toContain('Vrijeme sada');
   });
   it('closes the previous session before opening the next one on a mid-session hand-off', async () => {

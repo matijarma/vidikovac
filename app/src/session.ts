@@ -12,6 +12,14 @@ import {
 } from '../../worker/protocol';
 
 export const RESUME_KEY = 'vidikovac-resume';
+/**
+ * The session's own data token, mirrored into sessionStorage so a reload keeps
+ * reading the session tier and so the end-to-end suite can prove the token
+ * gates /api/data (R-52). Strictly necessary for the session the person just
+ * opened, carries no identifier, and dies with the tab or with the session,
+ * whichever comes first.
+ */
+export const DATA_TOKEN_KEY = 'vidikovac.dataToken';
 
 export interface WebSocketLike {
   readonly readyState: number;
@@ -124,6 +132,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     expiredFired = true;
     phase = 'expired';
     try { storage?.removeItem(RESUME_KEY); } catch { /* ignore */ }
+    try { storage?.removeItem(DATA_TOKEN_KEY); } catch { /* ignore */ }
     expired.forEach((l) => l());
   }
 
@@ -137,6 +146,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         offset = message.serverNow - now();
         phase = 'live';
         try { storage?.setItem(RESUME_KEY, JSON.stringify({ roomId: deps.roomId, resumeToken: message.resumeToken } satisfies StoredResume)); } catch { /* ignore */ }
+        try { storage?.setItem(DATA_TOKEN_KEY, message.dataToken); } catch { /* ignore */ }
         joined.forEach((l) => l(snapshot()));
         return;
       case 'view': view.forEach((l) => l(message.layer, message.params)); return;

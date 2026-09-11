@@ -12,6 +12,8 @@
 .dash-countdown { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .dash-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-inline-start: auto; }
 .dash-alert:empty { display: none; }
+/* The closing line after an expiry: visible, not only announced. */
+.dash-frozen { margin: 0; padding: 0.75rem 1rem; border-radius: 10px; background: var(--tone-surface-2, color-mix(in oklab, Canvas 85%, CanvasText 15%)); font-weight: 600; }
 .dash-alert { margin: 0; padding: 0.75rem 1rem; border-radius: 10px; background: var(--tone-surface-2, color-mix(in oklab, Canvas 85%, CanvasText 15%)); }
 .dash-tabs { display: flex; gap: 0.25rem; overflow-x: auto; padding-block: 0.25rem; }
 .dash-tabs [role='tab'] { flex: 0 0 auto; padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 18%, transparent)); background: transparent; color: inherit; font: inherit; }

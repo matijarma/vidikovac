@@ -56,8 +56,11 @@ test.describe('pairing: a public screen and a phone', () => {
       ]);
       expect(kioskExpiry).toMatch(/^\d{13}$/);
       expect(phoneExpiry).toBe(kioskExpiry);
-      await expect(kioskLabel).toContainText(/Otključano do \d{1,2}:\d{2}/);
-      await expect(phoneLabel).toContainText(/Otključano do \d{1,2}:\d{2}/);
+      // The screen says "Otključano do HH:MM"; the phone names the venue in
+      // between ("Otključano · Kavana Velebit · do HH:MM", hr.json
+      // session.unlocked), so the shared shape is the word and the time.
+      await expect(kioskLabel).toContainText(/Otključano.*do \d{1,2}:\d{2}/);
+      await expect(phoneLabel).toContainText(/Otključano.*do \d{1,2}:\d{2}/);
 
       // The phone's stateless data token opens the session tier; nothing else does.
       const token = await readDataToken(phone);

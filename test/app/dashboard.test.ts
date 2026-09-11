@@ -133,7 +133,10 @@ describe('unlock, countdown and announcements', () => {
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
     expect(root.querySelector('[data-testid=announce-polite]')?.getAttribute('role')).toBe('status');
     expect(document.activeElement).toBe(root.querySelector('#layer-title-grad-sada'));
-    expect(text(root.querySelector('[data-testid=session-label]'))).toBe('Otključano · Kavana Velebit · do 14:42');
+    const label = root.querySelector<HTMLElement>('[data-testid=session-label]')!;
+    expect(text(label)).toBe('Otključano · Kavana Velebit · do 14:42');
+    // The same expiry the screen carries, to the millisecond (R-52).
+    expect(label.dataset.expiresAt).toBe(String(EXPIRES));
   });
   it('shows a minute-grain countdown and the session ring', () => {
     const { root, session } = mount();
@@ -212,7 +215,9 @@ describe('expiry freeze', () => {
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
     for (const tab of root.querySelectorAll<HTMLButtonElement>('[role=tab]')) expect(tab.disabled).toBe(true);
-    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');
+    const frozen = root.querySelector<HTMLElement>('[data-testid=frozen-line]');
+    expect(frozen?.hidden).toBe(false);
+    expect(text(frozen)).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');
     expect(root.querySelector('[data-testid=countdown]')?.textContent).toBe('0 minuta');
     expect(copy?.disabled).toBe(false);
     copy?.click();

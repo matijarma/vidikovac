@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CLOSE_SESSION_EXPIRED } from '../../worker/protocol';
-import { createSessionClient, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
+import { createSessionClient, DATA_TOKEN_KEY, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
 import { FakeSocket } from './helpers';
 
 function storage(initial: Record<string, string> = {}) {
@@ -40,6 +40,8 @@ describe('createSessionClient', () => {
     expect(client.serverNow()).toBe(1_010_000);
     expect(client.secondsLeft()).toBe(590);
     expect(JSON.parse(st.raw[RESUME_KEY]!)).toEqual({ roomId: 'room1', resumeToken: 'res1' });
+    // Strictly necessary for this session, and gone the moment it ends (R-52).
+    expect(st.raw[DATA_TOKEN_KEY]).toBe('dt1');
   });
   it('resumes from sessionStorage when a resume token exists for this room', () => {
     const { sock } = boot({ ticket: null, store: storage({ [RESUME_KEY]: JSON.stringify({ roomId: 'room1', resumeToken: 'res1' }) }) });
@@ -86,6 +88,7 @@ describe('createSessionClient', () => {
     expect(expired).toHaveBeenCalledTimes(1);
     expect(client.snapshot().phase).toBe('expired');
     expect(st.raw[RESUME_KEY]).toBeUndefined();
+    expect(st.raw[DATA_TOKEN_KEY]).toBeUndefined();
   });
   it('treats a 4000 close without a prior message as expiry too', () => {
     const { client, sock } = boot();

@@ -96,6 +96,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     </header>
     <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
     <p class="dash-alert" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
+    <p class="dash-frozen" role="alert" data-testid="frozen-line" hidden></p>
     <nav class="dash-tabs" role="tablist" aria-label="${escapeHtml(i18n.t('session.tabsLabel'))}"></nav>
     <div class="dash-view" data-testid="dash-view" data-wide="${wide ? 'true' : 'false'}"></div>
     <footer class="dash-foot panel-sub">${escapeHtml(i18n.t('session.openTier'))}</footer>`;
@@ -105,6 +106,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const view = element.querySelector<HTMLElement>('[data-testid=dash-view]')!;
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
+  const frozenLine = element.querySelector<HTMLElement>('[data-testid=frozen-line]')!;
   const label = element.querySelector<HTMLElement>('[data-testid=session-label]')!;
   const timeEl = element.querySelector<HTMLTimeElement>('[data-testid=countdown]')!;
   const ring = element.querySelector<SVGCircleElement>('.ring-fill')!;
@@ -243,6 +245,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       label: deps.label ?? i18n.t('session.labelScreen'),
       time: zagrebTime(snapshot.expiresAt ?? now()),
     });
+    // Both unlocked surfaces carry the same expiry to the millisecond (R-52).
+    if (snapshot.expiresAt !== null) label.dataset.expiresAt = String(snapshot.expiresAt);
     polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
     totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     paintTimer();
@@ -255,7 +259,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     frozen = true;
     paintTabs();
     paintTimer();
-    assertive.textContent = i18n.t('session.expired');
+    // The closing line is its own visible element, not another announcement in
+    // the assertive region: the izjava promises the person is told the session
+    // ended and that what is on the screen stays (R-52, WCAG 2.2.1).
+    frozenLine.hidden = false;
+    frozenLine.textContent = i18n.t('session.expired');
     if (timer !== null) {
       clearTimer(timer);
       timer = null;

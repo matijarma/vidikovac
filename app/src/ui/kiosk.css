@@ -32,5 +32,7 @@
 
 @container kiosk (min-aspect-ratio: 16/9) { .kiosk-stage { grid-template-columns: 3fr 2fr; } }
 @container kiosk (max-aspect-ratio: 1/1) { .kiosk-stage { grid-template-rows: 1fr auto; justify-items: center; text-align: center; } }
+/* The one line an unlocked screen carries besides the layer itself. */
+.kiosk-session { margin: 0; font-size: 2.6cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
 [data-mode='unlocked'] .kiosk-teaser, [data-mode='unlocked'] .kiosk-code { display: none; }
 [data-mode='unlocked'] .kiosk-stage { grid-template-columns: 1fr; position: relative; }
