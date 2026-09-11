@@ -8,6 +8,7 @@ import type { Env } from '../env';
 import { METRICS_DO_NAME, type MetricsDO, type MetricsDailyRow } from '../metrics-do';
 import { zagrebDay } from '../open/time';
 import { verifyAccess } from '../pairing/access';
+import { STATS_SECURITY_HEADERS, withSecurityHeaders } from '../security-headers';
 import { cityCsv, rawCsv } from '../stats/export';
 import { DAY_MS, DEFAULT_DAYS, MAX_DAYS, renderStatsPage } from '../stats/page';
 
@@ -58,7 +59,7 @@ function csv(body: string, filename: string): Response {
   });
 }
 
-export async function handleStats(
+async function handleStatsInner(
   request: Request,
   env: Env,
   _ctx: ExecutionContext,
@@ -101,4 +102,16 @@ export async function handleStats(
     );
   }
   return notFound();
+}
+
+/** Every response under /stats, the fail-closed 404 included, carries STATS_SECURITY_HEADERS. */
+export async function handleStats(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  url: URL,
+  deps: StatsDeps = {},
+): Promise<Response | null> {
+  const response = await handleStatsInner(request, env, ctx, url, deps);
+  return response === null ? null : withSecurityHeaders(response, STATS_SECURITY_HEADERS);
 }
