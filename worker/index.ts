@@ -1,21 +1,33 @@
 import type { Env } from './env';
 import { VERSION, networkCheck } from './config';
+import { handleFeed } from './routes/feed';
+import { handlePairing } from './routes/pairing';
+import { handleAdmin } from './routes/admin';
+import { handleOpen } from './routes/open';
+import { handleStats } from './routes/stats';
+import { warmFeeds } from './feed/cache';
 
-// Durable Object classes are exported from the entry module so the migration in
-// wrangler.jsonc can bind them. The real implementations replace these stubs
-// task by task; storage survives because the class names never change.
-export class BeaconDO implements DurableObject {
-  constructor(_state: DurableObjectState, _env: Env) {}
-  async fetch(): Promise<Response> {
-    return json({ error: 'not-implemented' }, 501);
-  }
-}
-export class RoomDO extends BeaconDO {}
-export class IndexDO extends BeaconDO {}
-export class MetricsDO extends BeaconDO {}
+// Durable Object classes are re-exported from the entry module so the migration
+// in wrangler.jsonc can bind them. Storage survives because the class names
+// never change.
+export { BeaconDO } from './do/beacon-do';
+export { RoomDO } from './do/room-do';
+export { IndexDO } from './do/index-do';
+export { MetricsDO } from './metrics-do';
+
+export type RouteHandler = (
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  url: URL,
+) => Promise<Response | null>;
+
+// Order matters only for overlapping prefixes; each handler returns null when
+// the path is not its own. Static assets answer everything the Worker declines.
+const ROUTES: RouteHandler[] = [handleFeed, handlePairing, handleAdmin, handleOpen, handleStats];
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/health') {
       return json({
@@ -25,21 +37,27 @@ export default {
         time: new Date().toISOString(),
       });
     }
+    for (const handler of ROUTES) {
+      const response = await handler(request, env, ctx, url);
+      if (response) return response;
+    }
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) {
       return json({ error: 'not-found' }, 404);
     }
-    // Server-rendered routes (/hitno, /open, /stats) arrive in later tasks; until
-    // then the asset store answers with its 404 page.
     return env.ASSETS.fetch(request);
   },
-  async scheduled(): Promise<void> {
-    // Feed warming arrives with the feed layer.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    await warmFeeds(env, ctx);
   },
 } satisfies ExportedHandler<Env>;
 
-function json(body: unknown, status = 200): Response {
+export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      ...headers,
+    },
   });
 }
