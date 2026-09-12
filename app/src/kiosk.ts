@@ -894,6 +894,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // The stage's live map (T9 / R-P1): mounted after the first paints above,
   // so its network fetch starts after first paint, never before it (R-L4).
   liveBox.appendChild(stageSchematic.mount());
+  // R-F4: the panorama band shrinks once the stage is live. CSS reads this
+  // attribute rather than `:has(.kiosk-live:not(:empty))`, which no 2017
+  // engine understands.
+  element.dataset.live = '1';
   void loadTeaser();
 
   // Canvas colours are read off computed style (`tone()`), so a theme flip

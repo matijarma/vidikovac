@@ -3,6 +3,8 @@
 html { font-family: var(--font-body); font-size: 100%; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
+  /* R-F4: the 2017 line first; an engine that knows dvh takes the second. */
+  min-height: 100vh;
   min-height: 100dvh;
   background: var(--tone-surface-canvas);
   color: var(--tone-text-primary);

@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot } from '../../worker/protocol';
@@ -727,5 +729,76 @@ describe('the live stage (T9 / R-P1)', () => {
     expect(live.querySelector('[data-testid=schematic-list]')).not.toBeNull();
     expect(text(live.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+});
+
+// R-F4: a 2017 engine must lay the kiosk out. These read the stylesheets as
+// text because the shape being guarded -- a fallback line *before* the modern
+// one, an attribute selector instead of :has(), margins instead of flex gap
+// on the lightweight-rendered lists -- is a property of the source, not of
+// happy-dom's (absent) layout.
+describe('a 2017 engine lays the kiosk out (R-F4)', () => {
+  // node:path, not `new URL(..., import.meta.url)`: under happy-dom the URL
+  // global is the DOM's own and resolves a relative path against the page.
+  const css = (path: string): string => readFileSync(resolve(import.meta.dirname, '../../app/src/ui', path), 'utf8');
+  // Comments stripped: the sheet's own notes name the features it avoids.
+  const uncommented = (sheet: string): string => sheet.replace(/\/\*[\s\S]*?\*\//g, '');
+  const kioskCss = uncommented(css('kiosk.css'));
+  const baseCss = uncommented(css('base.css'));
+  /** Every rule block whose selector list is exactly `selector` (no regex:
+   *  the selectors carry dots and spaces). */
+  const rulesFor = (sheet: string, selector: string): string[] => {
+    const rules: string[] = [];
+    for (const line of sheet.split('\n')) {
+      const open = line.indexOf('{');
+      if (open === -1) continue;
+      if (line.slice(0, open).trim() !== selector) continue;
+      const from = sheet.indexOf(line);
+      rules.push(sheet.slice(from, sheet.indexOf('}', from) + 1));
+    }
+    return rules;
+  };
+
+  it('marks the root data-live once the stage schematic is mounted, so CSS never needs :has()', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true });
+    await flush();
+    const root = k.root.querySelector<HTMLElement>('[data-testid=kiosk]')!;
+    expect(root.querySelector('[data-testid=kiosk-live]')!.childElementCount).toBeGreaterThan(0);
+    expect(root.dataset.live).toBe('1');
+    expect(kioskCss).not.toContain(':has(');
+    expect(kioskCss).toMatch(/\[data-live='1'\]/);
+  });
+
+  it('writes 100vh before 100dvh on the kiosk and on body', () => {
+    const kioskRule = /\.kiosk\s*\{[^}]*\}/.exec(kioskCss)![0];
+    expect(kioskRule.indexOf('height: 100vh')).toBeGreaterThan(-1);
+    expect(kioskRule.indexOf('height: 100vh')).toBeLessThan(kioskRule.indexOf('height: 100dvh'));
+    const bodyRule = /\nbody\s*\{[^}]*\}/.exec(baseCss)![0];
+    expect(bodyRule.indexOf('min-height: 100vh')).toBeGreaterThan(-1);
+    expect(bodyRule.indexOf('min-height: 100vh')).toBeLessThan(bodyRule.indexOf('min-height: 100dvh'));
+  });
+
+  it('gives the lightweight meander bar a physical top, bottom and height beside inset-block', () => {
+    const bar = /\.kiosk-meander \.meander-bar\s*\{[^}]*\}/.exec(kioskCss)![0];
+    for (const decl of ['top: 0', 'bottom: 0', 'height: 100%', 'inset-block: 0']) expect(bar, decl).toContain(decl);
+  });
+
+  it('spaces the lightweight-rendered lists with margins, never flex gap alone', () => {
+    // Every rule for these selectors: none may rely on `gap`, and each list
+    // has a sibling-margin rule so rows never touch on an engine without
+    // flex gap (Chrome before 84, Safari before 14.1, 2020 -- there is no
+    // reliable @supports probe for flex gap, so margins carry the spacing
+    // on every engine).
+    for (const [list, item] of [
+      ['.ess-rows', '.ess-row + .ess-row'],
+      ['.kiosk-catalogue', '.cat-row + .cat-row'],
+      ['.kiosk-live .schematic-list', '.kiosk-live .schematic-stop + .schematic-stop'],
+    ]) {
+      const rules = rulesFor(kioskCss, list);
+      console.log('DBG', JSON.stringify(list), rules.length, JSON.stringify(kioskCss.split('\n').filter((l) => l.includes('.ess-rows'))));
+      expect(rules.length, `${list} has a rule`).toBeGreaterThan(0);
+      for (const rule of rules) expect(rule, `${list} must not space with gap`).not.toMatch(/(^|[\s;{])(row-|column-)?gap:(?!\s*0\s*[;}])/);
+      expect(kioskCss, `${item} carries the spacing`).toContain(`${item} {`);
+    }
   });
 });

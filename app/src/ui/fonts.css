@@ -2,6 +2,12 @@
    Push Latte v2 — Self-hosted fonts (design-bible "Typography")
    Space Grotesk (display), Manrope (body), JetBrains Mono (mono).
 
+   Loaded only on the modern path: every entry that decides `lightweight`
+   imports this sheet dynamically (`import('../ui/fonts.css')`) and only
+   when the flag is false, so Vite emits it as its own chunk that the
+   lightweight graph never references (R-F3; test/app/budget.test.ts). The
+   /s/ phone page, which has no lightweight path, keeps a static import.
+
    All three families are REAL woff2 binaries fetched once from Google
    Fonts' CSS2 API and committed under `../fonts/` — nothing here is a
    remote/CDN reference at build or run time (no `fonts.googleapis.com` /
