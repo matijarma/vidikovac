@@ -45,7 +45,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>; loadNetwork?: () => Promise<null>; mapFactory?: unknown } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -76,6 +76,10 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     reducedMotion: opts.reducedMotion ?? false,
     lightweight: opts.lightweight ?? false,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })),
+    // The network artefact is never fetched under test; null is loadNetwork()'s
+    // own honest answer to a failed load (every vehicle free-planes).
+    loadNetwork: opts.loadNetwork ?? (async () => null),
+    mapFactory: opts.mapFactory as never,
     fetchData,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -630,5 +634,98 @@ describe('essentialsRows (R-P7 / M3b)', () => {
     const expected = [{ id: 'empty', label: '', value: i18n.t('kiosk.essentialsEmpty') }];
     expect(essentialsRows(allDown, i18n, NOW)).toEqual(expected);
     expect(essentialsRows([], i18n, NOW)).toEqual(expected);
+  });
+});
+
+// --- T9: the moving map on the open screen (R-P1) ---------------------------
+describe('the live stage (T9 / R-P1)', () => {
+  const NOTE = 'Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.';
+  const frame = () => new Promise((r) => requestAnimationFrame(r));
+  /** The teaser's zet-rt after teaserSubset (R-P1): the fleet count, the pins
+   *  inside the kiosk box with their route type, and the per-route delays. */
+  const boxedTeaser = (): ModuleSnapshot[] => [
+    ...MODULES.filter((m) => m.module !== 'zet-rt'),
+    snap('zet-rt', [
+      { id: 'vozila', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '156 vozila u pokretu', data: { vehicles: 156 } },
+      { id: 'vehicle:t1', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '6', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0 } },
+      { id: 'vehicle:b1', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '109', geo: { type: 'Point', coordinates: [15.977, 45.8135] }, data: { routeId: '109', routeType: 3 } },
+      { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '6', data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 40, vehicles: 12 } },
+    ]),
+  ];
+  it('mounts the schematic into the stage slot with the honesty note, and draws the teaser\u2019s trams only', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), fetchTeaser: async () => ({ modules: boxedTeaser() }), loadNetwork });
+    await flush();
+    const live = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
+    expect(live.querySelector('[data-testid=schematic-host]')).not.toBeNull();
+    expect(text(live.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    await frame();
+    // Two pins inside the crop, one of them a bus: a locked kiosk keeps to trams (R-P1).
+    expect(text(live.querySelector('[data-testid=schematic-legend]'))).toBe('1 od 2 vozila s položajem');
+    // The whole-fleet count still drives the panorama and the catalogue.
+    expect(text(k.root.querySelector('[data-testid=kiosk-catalogue]'))).toContain('156');
+  });
+  it('pauses the stage while a session owns the screen and resumes it on the way back to the teaser', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), fetchTeaser: async () => ({ modules: boxedTeaser() }) });
+    await flush();
+    const view = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live] [data-testid=schematic]')!;
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.root.querySelector('[data-testid=kiosk]')?.getAttribute('data-mode')).toBe('unlocked');
+    const paused = view.dataset.frames;
+    await frame();
+    await frame();
+    expect(view.dataset.frames).toBe(paused);
+    k.expire();
+    await frame();
+    await frame();
+    expect(Number(view.dataset.frames)).toBeGreaterThan(Number(paused));
+  });
+  it('gives the unlocked U pokretu layer its own whole-network schematic, on the same one network load', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), loadNetwork });
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    k.view('u-pokretu');
+    await flush();
+    const hosts = k.root.querySelectorAll('[data-testid=schematic-host]');
+    expect(hosts).toHaveLength(2); // the paused stage and the session layer
+    expect(k.root.querySelector('[data-testid=kiosk-layer] #u-pokretu-schematic [data-testid=schematic-note]')).not.toBeNull();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+  // T10: the full map on the unlocked kiosk layer.
+  it('gives the unlocked layer’s map the same one network load, and never creates a map in lightweight mode (R-L2)', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const mapFactory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), loadNetwork, mapFactory });
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    k.view('u-pokretu');
+    await flush();
+    expect(mapFactory).toHaveBeenCalledTimes(1);
+    const options = (mapFactory.mock.calls[0] as unknown as [{ loadNetwork?: () => Promise<null> }])[0];
+    await options.loadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+
+    const light = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true, mapFactory });
+    light.handlers.onCodes(batch(NOW), NOW);
+    light.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    light.view('u-pokretu');
+    await flush();
+    expect(mapFactory).toHaveBeenCalledTimes(1); // no second map: the lightweight kiosk renders none
+    expect(light.root.querySelector('[data-testid=kiosk-layer] #u-pokretu-map')).toBeNull();
+  });
+  it('lightweight: the stage carries the list and the note, and still no canvas anywhere', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true });
+    await flush();
+    const live = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
+    expect(live.querySelector('[data-testid=schematic-list]')).not.toBeNull();
+    expect(text(live.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
+    expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
   });
 });

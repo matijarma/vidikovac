@@ -79,9 +79,17 @@
   padding: calc(var(--kiosk-scale) * 30px) calc(var(--kiosk-scale) * 80px) 0;
 }
 .kiosk-teaser { display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; }
-/* T's live map lands here in wave 2 (R-P1); until then it stays empty and
-   takes no space, so the headline sits where the mockup has it. */
+/* ── The live stage (T9 / R-P1): T's schematic in the teaser column, above
+   the headline. Empty only before mountKiosk fills it, when it takes no
+   space. The canvas pair is a wide band (the crop circle fits its height,
+   the wider canvas shows more of the city either side); the lightweight
+   list and every caption scale with the kiosk like the legends do. ───── */
 .kiosk-live:empty { display: none; }
+.kiosk-live { margin-block-end: calc(var(--kiosk-scale) * 24px); }
+.kiosk-live .schematic-canvases { aspect-ratio: auto; min-block-size: 0; block-size: calc(var(--kiosk-scale) * 300px); }
+.kiosk-live .schematic-legend, .kiosk-live .schematic-note { font-size: calc(var(--kiosk-scale) * 19px); }
+.kiosk-live .schematic-card { font-size: calc(var(--kiosk-scale) * 24px); }
+.kiosk-live .schematic-stop-name, .kiosk-live .schematic-lines { font-size: calc(var(--kiosk-scale) * 24px); }
 
 .teaser-card { opacity: 0; transition: opacity 600ms ease; }
 .teaser-card.is-in { opacity: 1; }

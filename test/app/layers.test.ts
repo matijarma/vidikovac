@@ -5,7 +5,7 @@ import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
 import { cultureEvents, cultureEventsEmptyText } from '../../app/src/layers/kultura';
-import { vehicleCount } from '../../app/src/layers/shared';
+import { delayWord, vehicleCount } from '../../app/src/layers/shared';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import { createMapSlots } from '../../app/src/map/map-slots';
@@ -136,9 +136,69 @@ describe('u-pokretu', () => {
     expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
+  // T9: the moving map. The page owns one SchematicHost for its whole life
+  // (motion/schematic-host.ts); the layer mounts its stable element into a
+  // panel on every render and hands it this poll's evidence -- fixes from
+  // the vehicle: pins and the route: median delays -- never a position of
+  // its own making.
+  it('mounts the page’s schematic host into the first panel and feeds it this snapshot’s fixes and delays', () => {
+    const element = document.createElement('div');
+    element.dataset.testid = 'schematic-host';
+    const schematic = { element, mount: vi.fn(() => element), update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() };
+    const section = renderLayer('u-pokretu', ctx({ schematic }));
+    const panel = section.querySelector('#u-pokretu-schematic')!;
+    expect(text(panel.querySelector('.panel-title'))).toBe('Tramvaji i autobusi sada');
+    expect(panel.querySelector('[data-testid=schematic-host]')).toBe(element);
+    expect(section.querySelectorAll('[data-testid=panel]')[0]).toBe(panel);
+    expect(schematic.update).toHaveBeenCalledTimes(1);
+    const [data, at] = schematic.update.mock.calls[0]!;
+    expect(at).toBe(NOW);
+    expect(data.fixes.map((f: { id: string }) => f.id)).toEqual(['vehicle:1', 'vehicle:2', 'vehicle:3']);
+    expect(data.fixes[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
+    expect([...data.delays!]).toEqual([['6', 90], ['11', -30]]);
+    // A second render (the next poll) reuses the very same element.
+    const again = renderLayer('u-pokretu', ctx({ schematic }));
+    expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);
+    expect(schematic.update).toHaveBeenCalledTimes(2);
+  });
+  it('renders no schematic panel when the page has no host (unit contexts, the kiosk essentials)', () => {
+    const section = renderLayer('u-pokretu', ctx());
+    expect(section.querySelector('#u-pokretu-schematic')).toBeNull();
+  });
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');
+  });
+  // T10: the full map.
+  it('hands the map each vehicle report as evidence, dated, with its trip and route type (R-P2)', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never) }));
+    const point = factory.mock.calls[0]![0].points[0];
+    // No `at` on the pin: dated at the snapshot's own fetch time, never `now`.
+    expect(point).toMatchObject({ id: 'vehicle:1', lon: 15.97, lat: 45.81, routeId: '6', at: NOW - 60_000 });
+    expect(point.title).toContain('6');
+  });
+  it('renders no map panel at all in lightweight mode: no map, no fallback line, no button (R-L2)', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const section = renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never), lightweight: true, mapView: { full: false, toggle: vi.fn() } }));
+    expect(section.querySelector('#u-pokretu-map')).toBeNull();
+    expect(section.querySelector('[data-testid=map-fallback]')).toBeNull();
+    expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    expect(factory).not.toHaveBeenCalled();
+  });
+  it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const maps = createMapSlots(factory as never);
+    const toggle = vi.fn();
+    const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full: false, toggle } }));
+    const button = section.querySelector<HTMLButtonElement>('#u-pokretu-map [data-testid=map-full-toggle]')!;
+    expect(text(button)).toBe('Proširi kartu');
+    button.click();
+    expect(toggle).toHaveBeenCalledTimes(1);
+    const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
+    expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
+    // No view-mode owner (the kiosk, a unit context): no button.
+    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector('[data-testid=map-full-toggle]')).toBeNull();
   });
 });
 
@@ -183,6 +243,24 @@ describe('vehicleCount', () => {
   });
   it('is null when there is no snapshot yet', () => {
     expect(vehicleCount(undefined)).toBeNull();
+  });
+});
+
+describe('delayWord', () => {
+  // The single ±15 s on-time band u-pokretu.ts, kiosk.ts and
+  // schematic-view.ts all call this for, so the three surfaces can never
+  // disagree about whether the same live route is running on time.
+  const i18n = createDefaultI18n('hr');
+  it('reads on time inside the ±15 s band, both boundaries inclusive', () => {
+    expect(delayWord(i18n, 0)).toBe('po redu');
+    expect(delayWord(i18n, 15)).toBe('po redu');
+    expect(delayWord(i18n, -15)).toBe('po redu');
+  });
+  it('reads late past +15 s, with the seconds in the word', () => {
+    expect(delayWord(i18n, 16)).toBe('+16 s');
+  });
+  it('reads early past -15 s, with the seconds made positive in the word', () => {
+    expect(delayWord(i18n, -16)).toBe('−16 s');
   });
 });
 

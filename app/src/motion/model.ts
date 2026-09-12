@@ -25,6 +25,11 @@ export interface Fix {
   at: number;
   tripId?: string;
   routeId?: string;
+  /** GTFS route_type as the wire carries it (R-P1, zet-rt.ts's routeType):
+   *  the fallback for a route the network artefact does not know, or
+   *  before/without the artefact (lightweight mode never loads it). The
+   *  artefact's own answer wins when it has one. */
+  type?: number;
 }
 
 export interface Drawn {
@@ -298,12 +303,13 @@ function selectShape(net: Network, candidates: readonly number[], q: XY, dirVec:
 export function createModel(net: Network | null): Model {
   const vehicles = new Map<string, VehicleState>();
 
-  function routeMeta(routeId: string | undefined): { short?: string; type: number } {
-    const route = net && routeId !== undefined ? net.routes.get(routeId) : undefined;
-    // -1: genuinely unknown, when there is no network or the route id does
-    // not resolve -- never a guessed GTFS route_type that could visibly lie
-    // about tram vs. bus.
-    return { short: route?.short, type: route?.type ?? -1 };
+  function routeMeta(fix: Pick<Fix, 'routeId' | 'type'>): { short?: string; type: number } {
+    const route = net && fix.routeId !== undefined ? net.routes.get(fix.routeId) : undefined;
+    // -1: genuinely unknown, when neither the network nor the wire says --
+    // never a guessed GTFS route_type that could visibly lie about tram vs.
+    // bus. The wire's type is the same static GTFS the artefact was built
+    // from, so it is an answer, not a guess.
+    return { short: route?.short, type: route?.type ?? fix.type ?? -1 };
   }
 
   function nextStopCeiling(shapeIdx: number, s: number): number {
@@ -315,7 +321,7 @@ export function createModel(net: Network | null): Model {
 
   function initVehicle(fix: Fix, now: number): VehicleState {
     const p = toPlane(fix.lon, fix.lat);
-    const meta = routeMeta(fix.routeId);
+    const meta = routeMeta(fix);
     const candidates = (net && fix.routeId !== undefined ? net.routes.get(fix.routeId)?.shapes : undefined) ?? [];
     let shapeIdx: number | null = null;
     let s = 0;
@@ -362,7 +368,7 @@ export function createModel(net: Network | null): Model {
     if (fix.at <= v.lastFixAt) return; // no new evidence: a repeat or out-of-order fix
 
     if (fix.routeId !== v.routeId) {
-      const meta = routeMeta(fix.routeId);
+      const meta = routeMeta(fix);
       v.short = meta.short;
       v.type = meta.type;
       v.routeId = fix.routeId;

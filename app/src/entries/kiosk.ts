@@ -16,6 +16,7 @@ import '../ui/panel.css';
 import '../ui/layers.css';
 import '../ui/qr.css';
 import '../ui/kiosk.css';
+import '../motion/schematic.css';
 
 const { i18n, theme } = bootPage({ page: 'kiosk' });
 const root = document.querySelector<HTMLElement>('#kiosk')!;

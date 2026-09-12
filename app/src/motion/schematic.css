@@ -1,0 +1,123 @@
+/* The schematic: a route-and-vehicle canvas pair on the modern path, a stop
+   list on the lightweight one (R-L2). Shared by the U pokretu panel and the
+   kiosk's `.kiosk-live` stage slot (T9), so nothing here assumes a host's own
+   scale mechanism -- no --kiosk-scale, no container query (R-L3), only
+   tokens.css's role tokens and relative units. */
+
+.schematic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.schematic-canvases {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 12rem;
+  aspect-ratio: 1 / 1;
+}
+
+.schematic-routes,
+.schematic-vehicles {
+  position: absolute;
+  inset: 0;
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.schematic-legend {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.05em;
+  color: var(--tone-label, var(--tone-text-muted));
+}
+
+/* --- The host (schematic-host.ts): the view's slot and, under it, the
+   honesty note -- R-P2's one sentence, on both surfaces. --- */
+
+.schematic-host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.schematic-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--tone-text-muted);
+}
+
+/* --- The tap card (T9): a small non-modal sheet over the canvas corner,
+   one line each for the line, the direction and the delay. Ink on the
+   nearest surface tone; the canvas is the same ink at lower alpha, so the
+   card reads as paper laid on the drawing, not a second drawing. --- */
+
+.schematic-card {
+  position: absolute;
+  inset-block-end: var(--sp-2);
+  inset-inline-start: var(--sp-2);
+  max-inline-size: calc(100% - 2 * var(--sp-2));
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--tone-stroke-strong);
+  border-radius: var(--radius-sm);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  box-shadow: var(--shadow-soft);
+}
+
+.schematic-card[hidden] { display: none; }
+
+.schematic-card-line {
+  margin: 0;
+  font-weight: var(--weight-semi);
+}
+
+.schematic-card-row {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--tone-text-muted);
+}
+
+.schematic-card-close { margin-block-start: var(--sp-2); }
+
+/* --- The lightweight list (R-L2): the honest degrade of the canvas pair,
+   never a smaller or slower version of it. --- */
+
+.schematic-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schematic-stop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.schematic-stop-name {
+  margin: 0;
+  font-weight: var(--weight-semi);
+  color: var(--tone-text-primary);
+}
+
+.schematic-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schematic-empty {
+  margin: 0;
+  color: var(--tone-text-muted);
+}

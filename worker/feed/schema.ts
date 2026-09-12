@@ -111,7 +111,9 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // Both the per-vehicle pin and the one summary row per route (id 'route:<routeId>').
   // No 'bearing' and no 'speed' (R-P3): ZET's feed never sends either, and the
   // motion model derives its own speed from fix history instead of trusting one.
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'medianDelaySeconds', 'vehicles'],
+  // 'routeType' is the GTFS route_type on the pin (R-P1: a locked kiosk keeps
+  // to trams before, or without, the network artefact).
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles'],
   closure: ['type', 'subtype', 'direction', 'street'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],

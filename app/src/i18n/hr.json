@@ -58,6 +58,10 @@
     "closuresCount_other": "{count} zatvaranja",
     "map": "Karta",
     "mapUnavailable": "Karta nije dostupna u ovom pregledniku; popis je ispod.",
+    "mapExpand": "Proširi kartu",
+    "mapCollapse": "Skupi kartu",
+    "schematic": "Tramvaji i autobusi sada",
+    "schematicLegend": "{drawn} od {tracked} vozila s položajem",
     "delays": "Kašnjenja po linijama",
     "delayOnTime": "po redu",
     "delayLate": "+{seconds} s",
@@ -97,10 +101,10 @@
     "tminTmax": "od {min} do {max} °C",
     "direction": { "BOTH_DIRECTIONS": "oba smjera", "ONE_DIRECTION": "jedan smjer" },
     "closureType": {
-      "ROAD_CLOSED": "zatvoreno",
-      "ROAD_CLOSED_CONSTRUCTION": "radovi",
-      "ROAD_CLOSED_EVENT": "događanje",
-      "ROAD_CLOSED_HAZARD": "opasnost"
+    "ROAD_CLOSED": "zatvoreno",
+    "ROAD_CLOSED_CONSTRUCTION": "radovi",
+    "ROAD_CLOSED_EVENT": "događanje",
+    "ROAD_CLOSED_HAZARD": "opasnost"
     },
     "severity": { "info": "obavijest", "minor": "zeleno", "moderate": "žuto upozorenje", "severe": "narančasto upozorenje", "extreme": "crveno upozorenje" },
     "until": "do {time}",
@@ -124,27 +128,27 @@
     "cancel": "Odustani",
     "venue": { "kafic": "kafić", "knjiznica": "knjižnica", "cetvrt": "gradska četvrt", "udruga": "udruga", "zet": "ZET", "ostalo": "javni zaslon" },
     "errors": {
-      "network": "Nema veze s poslužiteljem. Provjeri mrežu i pokušaj ponovno.",
-      "incomplete": "Kod nije potpun. Upiši svih osam znakova.",
-      "notOurs": "To nije kod s Vidikovca. Skeniraj QR kod sa zaslona.",
-      "bad-request": "Kod nije u ispravnom obliku.",
-      "code-unknown": "Taj kod ne postoji ili je prošao. Pogledaj zaslon i skeniraj ponovno.",
-      "code-expired": "Kod je istekao. Zaslon već pokazuje novi.",
-      "code-used": "Taj je kod već iskorišten. Pričekaj novi na zaslonu.",
-      "screen-offline": "Zaslon je trenutačno bez veze. Pokušaj za minutu.",
-      "same-network": "Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.",
-      "slow-down": "Previše pokušaja. Pričekaj minutu.",
-      "rate-limited": "Previše pokušaja s ove mreže. Pričekaj minutu.",
-      "revoked": "Ovaj je zaslon isključen."
+    "network": "Nema veze s poslužiteljem. Provjeri mrežu i pokušaj ponovno.",
+    "incomplete": "Kod nije potpun. Upiši svih osam znakova.",
+    "notOurs": "To nije kod s Vidikovca. Skeniraj QR kod sa zaslona.",
+    "bad-request": "Kod nije u ispravnom obliku.",
+    "code-unknown": "Taj kod ne postoji ili je prošao. Pogledaj zaslon i skeniraj ponovno.",
+    "code-expired": "Kod je istekao. Zaslon već pokazuje novi.",
+    "code-used": "Taj je kod već iskorišten. Pričekaj novi na zaslonu.",
+    "screen-offline": "Zaslon je trenutačno bez veze. Pokušaj za minutu.",
+    "same-network": "Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.",
+    "slow-down": "Previše pokušaja. Pričekaj minutu.",
+    "rate-limited": "Previše pokušaja s ove mreže. Pričekaj minutu.",
+    "revoked": "Ovaj je zaslon isključen."
     },
     "scanner": {
-      "hint": "Usmjeri kameru prema QR kodu na zaslonu.",
-      "cancel": "Odustani",
-      "denied": "Pristup kameri je odbijen. Upiši kod ručno.",
-      "unavailable": "Kamera nije dostupna. Upiši kod ručno.",
-      "videoLabel": "Slika s kamere",
-      "struggling": "Drži mirno ili se malo približi.",
-      "torch": "Svjetlo"
+    "hint": "Usmjeri kameru prema QR kodu na zaslonu.",
+    "cancel": "Odustani",
+    "denied": "Pristup kameri je odbijen. Upiši kod ručno.",
+    "unavailable": "Kamera nije dostupna. Upiši kod ručno.",
+    "videoLabel": "Slika s kamere",
+    "struggling": "Drži mirno ili se malo približi.",
+    "torch": "Svjetlo"
     }
   },
   "session": {
@@ -222,6 +226,25 @@
     "essentialsHint": "Ovaj zaslon odgovara i bez telefona. Skeniranje otključava cijeli grad na tvom uređaju.",
     "essentialsClose": "Natrag",
     "essentialsEmpty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno."
+  },
+  "motion": {
+    "note": "Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.",
+    "direction": "smjer {towards}",
+    "directionUnknown": "smjer nepoznat",
+    "delay": "kašnjenje linije: {word}",
+    "delayUnknown": "kašnjenje linije nepoznato",
+    "lineUnknown": "linija nepoznata",
+    "canvasHint": "Strelicama biraj vozilo; Escape zatvara karticu.",
+    "compass": {
+      "N": "sjever",
+      "NE": "sjeveroistok",
+      "E": "istok",
+      "SE": "jugoistok",
+      "S": "jug",
+      "SW": "jugozapad",
+      "W": "zapad",
+      "NW": "sjeverozapad"
+    }
   },
   "export": {
     "copied": "Kopirano s navodom izvora.",

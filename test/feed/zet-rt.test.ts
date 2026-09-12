@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ZET_RT_URL, delayWords, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
+import { TEASER_BOX_CENTRE, TEASER_BOX_HALF_M, ZET_RT_URL, delayWords, inTeaserBox, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
 
 const bytes = new Uint8Array(readFileSync(new URL('../fixtures/zet-rt.pb', import.meta.url)));
 const routes = { '12': { shortName: '12', longName: 'Ljubljanica - Dubec', type: 0 } };
@@ -63,6 +63,17 @@ describe('parseZetRt', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  // R-P1: the locked kiosk filters trams by route type before it has (or,
+  // in lightweight mode, ever gets) the network artefact, so the type rides
+  // on the pin itself, from the same static GTFS the short name comes from.
+  it('carries the GTFS route type on every pin whose route the static GTFS knows', () => {
+    const known = vehicles.filter((item) => item.data?.routeId === '12');
+    expect(known.length).toBeGreaterThan(0);
+    for (const item of known) expect(item.data?.routeType).toBe(0);
+    const unknown = vehicles.find((item) => item.data?.routeId !== '12');
+    expect(unknown?.data).not.toHaveProperty('routeType');
+  });
+
   it('names the ZET realtime endpoint', () => {
     expect(ZET_RT_URL).toBe('https://www.zet.hr/gtfs-rt-protobuf');
   });
@@ -83,5 +94,21 @@ describe('parseZetRt', () => {
 
   it('returns nothing for an empty feed rather than throwing', () => {
     expect(parseZetRt(new Uint8Array(0), {}).items).toEqual([]);
+  });
+});
+
+// R-P1: teaserSubset keeps the vehicles "inside that box" around the
+// default screen centre (Trg bana Jelačića), not the whole fleet.
+describe('inTeaserBox', () => {
+  it('is centred on Trg bana Jelačića with a half-side that covers the default crop plus one stop spacing', () => {
+    expect(TEASER_BOX_CENTRE).toEqual({ lon: 15.9769, lat: 45.813 });
+    expect(TEASER_BOX_HALF_M).toBe(1400);
+  });
+  it('keeps the square itself and a point 1 km east, and drops Dubrava and Črnomerec', () => {
+    expect(inTeaserBox(15.9769, 45.813)).toBe(true);
+    expect(inTeaserBox(15.9898, 45.813)).toBe(true); // ~1.0 km east
+    expect(inTeaserBox(16.06, 45.83)).toBe(false); // Dubrava, ~6.5 km east
+    expect(inTeaserBox(15.94, 45.813)).toBe(false); // Črnomerec, ~2.9 km west
+    expect(inTeaserBox(15.9769, 45.83)).toBe(false); // ~1.9 km north
   });
 });

@@ -54,6 +54,10 @@
     "closuresCount_other": "{count} closures",
     "map": "Map",
     "mapUnavailable": "The map is not available in this browser; the list is below.",
+    "mapExpand": "Expand the map",
+    "mapCollapse": "Shrink the map",
+    "schematic": "Trams and buses now",
+    "schematicLegend": "{drawn} of {tracked} vehicles with a position",
     "delays": "Delays by route",
     "delayOnTime": "on time",
     "delayLate": "+{seconds} s",
@@ -93,10 +97,10 @@
     "tminTmax": "{min} to {max} °C",
     "direction": { "BOTH_DIRECTIONS": "both directions", "ONE_DIRECTION": "one direction" },
     "closureType": {
-      "ROAD_CLOSED": "closed",
-      "ROAD_CLOSED_CONSTRUCTION": "roadworks",
-      "ROAD_CLOSED_EVENT": "event",
-      "ROAD_CLOSED_HAZARD": "hazard"
+    "ROAD_CLOSED": "closed",
+    "ROAD_CLOSED_CONSTRUCTION": "roadworks",
+    "ROAD_CLOSED_EVENT": "event",
+    "ROAD_CLOSED_HAZARD": "hazard"
     },
     "severity": { "info": "notice", "minor": "green", "moderate": "yellow warning", "severe": "orange warning", "extreme": "red warning" },
     "until": "until {time}",
@@ -120,27 +124,27 @@
     "cancel": "Cancel",
     "venue": { "kafic": "café", "knjiznica": "library", "cetvrt": "district office", "udruga": "association", "zet": "ZET", "ostalo": "public screen" },
     "errors": {
-      "network": "No connection to the server. Check the network and try again.",
-      "incomplete": "The code is incomplete. Type all eight characters.",
-      "notOurs": "That is not a Vidikovac code. Scan the QR code on the screen.",
-      "bad-request": "The code is not in the right form.",
-      "code-unknown": "That code does not exist or has passed. Look at the screen and scan again.",
-      "code-expired": "The code has expired. The screen already shows a new one.",
-      "code-used": "That code has already been used. Wait for the next one on the screen.",
-      "screen-offline": "The screen is offline right now. Try again in a minute.",
-      "same-network": "This screen and your phone share a network. Turn off Wi-Fi and scan on mobile data.",
-      "slow-down": "Too many attempts. Wait a minute.",
-      "rate-limited": "Too many attempts from this network. Wait a minute.",
-      "revoked": "This screen has been switched off."
+    "network": "No connection to the server. Check the network and try again.",
+    "incomplete": "The code is incomplete. Type all eight characters.",
+    "notOurs": "That is not a Vidikovac code. Scan the QR code on the screen.",
+    "bad-request": "The code is not in the right form.",
+    "code-unknown": "That code does not exist or has passed. Look at the screen and scan again.",
+    "code-expired": "The code has expired. The screen already shows a new one.",
+    "code-used": "That code has already been used. Wait for the next one on the screen.",
+    "screen-offline": "The screen is offline right now. Try again in a minute.",
+    "same-network": "This screen and your phone share a network. Turn off Wi-Fi and scan on mobile data.",
+    "slow-down": "Too many attempts. Wait a minute.",
+    "rate-limited": "Too many attempts from this network. Wait a minute.",
+    "revoked": "This screen has been switched off."
     },
     "scanner": {
-      "hint": "Point the camera at the QR code on the screen.",
-      "cancel": "Cancel",
-      "denied": "Camera access was refused. Type the code instead.",
-      "unavailable": "No camera is available. Type the code instead.",
-      "videoLabel": "Camera viewfinder",
-      "struggling": "Hold steady, or move a little closer.",
-      "torch": "Light"
+    "hint": "Point the camera at the QR code on the screen.",
+    "cancel": "Cancel",
+    "denied": "Camera access was refused. Type the code instead.",
+    "unavailable": "No camera is available. Type the code instead.",
+    "videoLabel": "Camera viewfinder",
+    "struggling": "Hold steady, or move a little closer.",
+    "torch": "Light"
     }
   },
   "session": {
@@ -217,6 +221,25 @@
     "essentialsHint": "This screen answers even without a phone. Scanning unlocks the whole city on your own device.",
     "essentialsClose": "Back",
     "essentialsEmpty": "The source isn't answering right now. The safety layer runs at /hitno."
+  },
+  "motion": {
+    "note": "Each position is computed from that vehicle’s own reports and the line’s geometry; ZET publishes neither heading nor speed.",
+    "direction": "towards {towards}",
+    "directionUnknown": "direction unknown",
+    "delay": "route delay: {word}",
+    "delayUnknown": "route delay unknown",
+    "lineUnknown": "line unknown",
+    "canvasHint": "Use the arrow keys to pick a vehicle; Escape closes the card.",
+    "compass": {
+      "N": "north",
+      "NE": "north-east",
+      "E": "east",
+      "SE": "south-east",
+      "S": "south",
+      "SW": "south-west",
+      "W": "west",
+      "NW": "north-west"
+    }
   },
   "export": {
     "copied": "Copied with the source line.",

@@ -1,5 +1,6 @@
 import type { Attribution, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { MapSlots } from '../map/map-slots';
+import type { SchematicHost } from '../motion/schematic-host';
 import type { I18n } from '../i18n/i18n';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
@@ -23,7 +24,25 @@ export interface LayerContext {
    * marker HTML reached through these maps; only static, hard-coded strings.
    */
   maps?: MapSlots;
+  /**
+   * The page's one schematic (T9, motion/schematic-host.ts), owned by the
+   * page and reused across renders exactly like `maps`, so a poll never
+   * throws away the motion model's fix history. Absent in unit tests and on
+   * the kiosk's essentials view; the U pokretu layer then renders no
+   * schematic panel.
+   */
+  schematic?: SchematicHost;
+  /**
+   * The page's full-map view mode (T10): a CSS state on the dashboard, never
+   * the Fullscreen API, so the session meander stays above the map by
+   * construction. `full` is the current state; the layer renders one button
+   * labelled for the state `toggle()` leads to. Absent on the kiosk and in
+   * unit contexts, and the layer then renders no button.
+   */
+  mapView?: { readonly full: boolean; toggle(): void };
   reducedMotion?: boolean;
+  /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
+  lightweight?: boolean;
   /** Kiosk layout: bigger type, no action buttons (no touch). */
   kiosk?: boolean;
 }

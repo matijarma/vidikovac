@@ -76,7 +76,7 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean; loadNetwork?: () => Promise<null> } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
@@ -92,6 +92,9 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
     onCopy: opts.onCopy,
     mapFactory: opts.mapFactory as never,
     lightweight: opts.lightweight ?? false,
+    // The network artefact is never fetched under test (there is no server);
+    // null is loadNetwork()'s own honest answer to a failed load.
+    loadNetwork: opts.loadNetwork ?? (async () => null),
     setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
     clearInterval: () => { ticks.length = 0; },
   });
@@ -440,5 +443,143 @@ describe('remembering the last layer (R-60)', () => {
     sessionStorage.setItem(LAYER_STORAGE_KEY, 'not-a-real-layer');
     const { root } = mount();
     expect(selectedLayer(root)).toBe('grad-sada');
+  });
+});
+
+// --- T9: the moving map on the dashboard ------------------------------------
+describe('the schematic on U pokretu (T9)', () => {
+  const NOTE = 'Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.';
+  it('mounts one schematic host with the honesty note, keeps it across polls and across tab switches, and asks for the network only once', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const { root, handle, session, ticks } = mount({ loadNetwork });
+    session.join();
+    await flush();
+    expect(loadNetwork).not.toHaveBeenCalled(); // grad-sada is up: nothing fetched for a layer nobody is looking at (R-L4, and no e-waste)
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const host = root.querySelector('[data-testid=schematic-host]');
+    expect(host).not.toBeNull();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    expect(text(root.querySelector('#u-pokretu-schematic [data-testid=schematic-note]'))).toBe(NOTE);
+    ticks[0]!(); // the poll: a re-render
+    await flush();
+    expect(root.querySelector('[data-testid=schematic-host]')).toBe(host);
+    handle.selectLayer('vijesti');
+    expect(root.querySelector('[data-testid=schematic-host]')).toBeNull(); // detached with its panel, not destroyed
+    handle.selectLayer('u-pokretu');
+    expect(root.querySelector('[data-testid=schematic-host]')).toBe(host);
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+  it('renders the list and no canvas on U pokretu in lightweight mode, note included (R-L2)', async () => {
+    const { root, handle, session } = mount({ lightweight: true });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
+  });
+  it('stops the motion when the session freezes: the frozen view stays where it was', async () => {
+    const { root, handle, session } = mount();
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const view = root.querySelector<HTMLElement>('[data-testid=schematic]')!;
+    await new Promise((r) => requestAnimationFrame(r));
+    session.expire();
+    const frozenAt = view.dataset.frames;
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
+    expect(view.dataset.frames).toBe(frozenAt);
+  });
+});
+
+// --- T10: the full map ------------------------------------------------------
+describe('the full map (T10)', () => {
+  const fakeMap = () => vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+  async function onUPokretu(opts: Parameters<typeof mount>[0]) {
+    const mounted = mount(opts);
+    mounted.session.join();
+    await flush();
+    mounted.handle.selectLayer('u-pokretu');
+    await flush();
+    return mounted;
+  }
+
+  it('full-screen is a view mode on the dashboard itself, never the Fullscreen API: the meander stays above the map, Escape leaves', async () => {
+    const { root } = await onUPokretu({ mapFactory: fakeMap() });
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    expect(dash.dataset.view).toBe('layers');
+    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    button.focus();
+    button.click();
+    expect(dash.dataset.view).toBe('map');
+    expect(document.fullscreenElement ?? null).toBeNull();
+    // The meander figure is still a child of the same dashboard, before the
+    // map in document order, and not hidden: pinned above it by construction.
+    const meander = root.querySelector<HTMLElement>('.dash-meander')!;
+    const canvas = root.querySelector<HTMLElement>('[data-testid=map-canvas]')!;
+    expect(meander.closest('.dash')).toBe(dash);
+    expect(meander.hidden).toBe(false);
+    expect(Boolean(meander.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const again = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    expect(text(again)).toBe('Skupi kartu');
+    expect(document.activeElement).toBe(again); // focus survives the re-render
+    dash.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(dash.dataset.view).toBe('layers');
+    expect(text(root.querySelector('[data-testid=map-full-toggle]'))).toBe('Proširi kartu');
+  });
+
+  it('leaves the full map when another layer is opened', async () => {
+    const { root, handle } = await onUPokretu({ mapFactory: fakeMap() });
+    root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.click();
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    expect(dash.dataset.view).toBe('map');
+    handle.selectLayer('vijesti');
+    expect(dash.dataset.view).toBe('layers');
+  });
+
+  // Fix round 1: on the wide grid select() does not re-render (all seven
+  // layers are already in the DOM), so a programmatic tab change that left
+  // the view mode used to keep a button still reading "Skupi kartu".
+  it('on the wide grid, leaving the full map through a tab change re-renders so the button reads the state it leads to', async () => {
+    const { root, handle } = await onUPokretu({ mapFactory: fakeMap(), wide: true });
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    button.click();
+    expect(dash.dataset.view).toBe('map');
+    expect(text(root.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
+    handle.selectLayer('vijesti');
+    expect(dash.dataset.view).toBe('layers');
+    // The wide grid still holds the U pokretu panel and its button; it must
+    // have been re-rendered, not left stale.
+    const after = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    expect(after).not.toBeNull();
+    expect(text(after)).toBe('Proširi kartu');
+    expect(root.querySelectorAll('.layer')).toHaveLength(7);
+  });
+
+  it('lightweight: never creates a map, renders no map panel and no button (R-L2)', async () => {
+    const mapFactory = fakeMap();
+    const { root } = await onUPokretu({ mapFactory, lightweight: true });
+    expect(mapFactory).not.toHaveBeenCalled();
+    expect(root.querySelector('#u-pokretu-map')).toBeNull();
+    expect(root.querySelector('[data-testid=map-fallback]')).toBeNull();
+    expect(root.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull(); // the honest face stands in
+  });
+
+  it('the map and the schematic share one network fetch', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const mapFactory = fakeMap();
+    await onUPokretu({ mapFactory, loadNetwork });
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    const options = (mapFactory.mock.calls[0] as unknown as [{ loadNetwork?: () => Promise<null> }])[0];
+    expect(options.loadNetwork).toBeTypeOf('function');
+    await options.loadNetwork!();
+    await options.loadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,7 +8,7 @@ import { fetchEmsc } from './modules/emsc';
 import { fetchGlasnik } from './modules/glasnik';
 import { fetchHrtNews } from './modules/hrt-news';
 import { fetchPrometnice } from './modules/prometnice';
-import { fetchZetRt } from './modules/zet-rt';
+import { fetchZetRt, inTeaserBox } from './modules/zet-rt';
 import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
 import { KOMUNALNE_URL } from './modules/dogadanja/komunalne';
 import { openLicenceEvents } from './modules/dogadanja/licence';
@@ -197,7 +197,16 @@ export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
     case 'dhmz-now':
       return snapshot;
     case 'zet-rt': {
-      const vehicles = snapshot.items.filter((item) => item.id.startsWith('vehicle:')).length;
+      const pins = snapshot.items.filter((item) => item.id.startsWith('vehicle:'));
+      const vehicles = pins.length;
+      // R-P1: the pins inside the default screen's box travel with the
+      // teaser, geo and all, so the locked kiosk's motion model has
+      // evidence; the rest of the fleet stays behind the scan.
+      const boxed = pins.filter((item) => {
+        if (item.geo?.type !== 'Point') return false;
+        const [lon, lat] = item.geo.coordinates as [number, number];
+        return inTeaserBox(lon, lat);
+      });
       const delays = snapshot.items.filter((item) => item.id.startsWith('route:'));
       const count: FeedItem = {
         id: 'vozila',
@@ -207,7 +216,7 @@ export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
         title: `${vozila(vehicles)} u pokretu`,
         data: { vehicles },
       };
-      return { ...snapshot, items: [count, ...delays] };
+      return { ...snapshot, items: [count, ...boxed, ...delays] };
     }
     case 'hrt-news':
       return { ...snapshot, items: snapshot.items.slice(0, TEASER_NEWS_LIMIT) };

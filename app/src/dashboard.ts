@@ -10,8 +10,10 @@ import type { I18n } from './i18n/i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
 import { vehicleCount } from './layers/shared';
 import type { ExportKind } from './layers/types';
-import type { MapFactory } from './map/city-map';
+import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
+import { loadNetwork, type Network } from './motion/network';
+import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { tone } from './ui/canvas';
@@ -81,6 +83,10 @@ export interface DashboardDeps {
    *  in tests that don't care about theme/resize repainting. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
+  /** The network artefact for the schematic (T9); defaults to
+   *  motion/network.ts's loadNetwork over the page's own fetch, and is
+   *  never called in lightweight mode (R-L4). Injected so tests never fetch. */
+  loadNetwork?: () => Promise<Network | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
   onShare?: (url: string, title: string) => void;
   onExport?: (kind: ExportKind, module: ModuleId) => void;
@@ -105,9 +111,37 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const lightweight = Boolean(deps.lightweight);
 
   const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
-  const maps = createMapSlots(deps.mapFactory);
+  // One network artefact for the page: the schematic and the full map both
+  // snap to it, so it is fetched once (R-L4) -- memoised here, since
+  // network.ts's loadNetwork deliberately is not. Never called in
+  // lightweight mode: the schematic host does not ask, and there is no map.
+  let networkPromise: Promise<Network | null> | null = null;
+  const loadNetworkOnce = (): Promise<Network | null> => {
+    networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
+    return networkPromise;
+  };
+  // T10 / R-L2: the full MapLibre map is not rendered at all on the
+  // lightweight path -- no factory, so no slot ever yields a container.
+  const maps = createMapSlots(lightweight ? undefined : withNetwork(deps.mapFactory, loadNetworkOnce));
+  // T9: one schematic for the page, handed to the U pokretu layer through
+  // the context exactly like `maps`, so a poll never throws away the motion
+  // model's fix history (R-P2). A session sees the whole network; the host
+  // fetches the artefact lazily, on that layer's first render (R-L4).
+  const schematic = createSchematicHost({
+    i18n,
+    scope: { kind: 'network' },
+    lightweight,
+    reducedMotion: deps.reducedMotion,
+    now,
+    onRepaint: deps.onRepaint,
+    loadNetwork: loadNetworkOnce,
+  });
   let active: LayerId = readStoredLayer() ?? LAYERS[0]!;
   let frozen = false;
+  // T10: the full-map view mode, a CSS state on this element (data-view),
+  // never the Fullscreen API -- so the header with the session meander is
+  // still in the flow above the map, pinned there by construction.
+  let mapFull = false;
   let paused = false;
   let countdownHidden = false;
   let warned60 = false;
@@ -132,6 +166,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   const element = document.createElement('div');
   element.className = 'dash';
+  element.dataset.view = 'layers';
   element.innerHTML = `
     <figure class="dash-panorama">${panoramaInner}</figure>
     <header class="dash-head">
@@ -221,8 +256,20 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onShare: deps.onShare,
       onExport: deps.onExport,
       maps,
+      schematic,
+      mapView: lightweight ? undefined : { full: mapFull, toggle: () => setMapView(!mapFull) },
       reducedMotion: deps.reducedMotion,
+      lightweight,
     };
+  }
+
+  /** Enters or leaves the full-map view mode and re-renders so the button
+   *  reads the state it now leads to; render() hands focus back to it. */
+  function setMapView(full: boolean): void {
+    if (mapFull === full) return;
+    mapFull = full;
+    element.dataset.view = full ? 'map' : 'layers';
+    render();
   }
 
   /** The panorama's vehicle count comes from the zet-rt snapshot already
@@ -262,6 +309,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function select(layer: LayerId, fromUser: boolean): void {
     if (frozen) return;
     active = layer;
+    // Another layer has no full map to show: leave the view mode with it.
+    if (layer !== 'u-pokretu' && mapFull) {
+      mapFull = false;
+      element.dataset.view = 'layers';
+      // The narrow path re-renders just below; the wide grid would otherwise
+      // keep a button still reading "Skupi kartu".
+      if (wide) render();
+    }
     paintTabs();
     updateDocumentTitle();
     if (!wide) render();
@@ -427,6 +482,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (!paused) void refresh();
   });
 
+  // Escape leaves the full map from anywhere inside the dashboard (the map
+  // canvas, its button, the header controls), the way a dialog closes.
+  element.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !mapFull) return;
+    event.preventDefault();
+    setMapView(false);
+  });
+
   tablist.addEventListener('keydown', (event) => {
     const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'];
     if (!keys.includes(event.key) || frozen) return;
@@ -460,6 +523,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     frozen = true;
     closeShare();
+    // "Prikaz je zamrznut": the drawn vehicles stop where they are, rather
+    // than dead-reckoning on for another five minutes under a frozen clock.
+    schematic.pause();
     shareButton.hidden = true;
     paintTabs();
     paintTimer();
@@ -522,6 +588,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopRepaint?.();
       closeShare();
       maps.destroy();
+      schematic.destroy();
       element.remove();
     },
   };
