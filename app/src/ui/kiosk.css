@@ -174,18 +174,16 @@
   .kiosk-live .schematic-card { inset-block-end: auto; inset-block-start: calc(var(--kiosk-scale) * 8px); }
 }
 .kiosk-live .schematic-card { font-size: calc(var(--kiosk-scale) * 24px); }
-.kiosk-live .schematic-stop-name, .kiosk-live .schematic-lines { font-size: calc(var(--kiosk-scale) * 24px); }
-/* R-F4: the lightweight list's spacing as sibling margins (schematic.css
-   spaces it with flex gap for the phone panel; here that gap is zeroed and
-   the same distances are margins, so the rows never touch on an engine
-   without flex gap). The line row wraps, so it takes the classic
-   negative-margin form: the list pulls back what every item adds. */
-.kiosk-live .schematic-list { gap: 0; }
-.kiosk-live .schematic-stop + .schematic-stop { margin-top: var(--sp-3); }
-.kiosk-live .schematic-stop { gap: 0; }
-.kiosk-live .schematic-stop > * + * { margin-top: var(--sp-1); }
-.kiosk-live .schematic-lines { gap: 0; margin: 0 0 0 calc(-1 * var(--sp-4)); } /* the chips' own margin-top is both the name-to-lines gap and the wrap-row gap */
-.kiosk-live .schematic-lines > * { margin: var(--sp-1) 0 0 var(--sp-4); }
+/* R-V1 / R-F8: ten rows at 24 px with the base file's own 8 px sibling
+   margin is 320 px, inside the ~380 px the stage's schematic row leaves --
+   schematic.css already spaces every row with margins, never flex `gap`
+   (R-F4), so nothing here needs to zero or re-derive that spacing. */
+.kiosk-live .schematic-route-label,
+.kiosk-live .schematic-route-value,
+.kiosk-live .schematic-more,
+.kiosk-live .schematic-empty {
+  font-size: calc(var(--kiosk-scale) * 24px);
+}
 
 /* ── Headline row (R-V1): 96 tall for every card -- a kicker line, one
    52 px line of title, and one small line under it: the card's attribution,
@@ -330,7 +328,12 @@
 .ess-row:first-child { padding-block-start: 0; border-block-start: none; }
 .ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 24px); letter-spacing: 0.06em; color: var(--tone-label); }
 .ess-value { margin: calc(var(--kiosk-scale) * 8px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 56px); line-height: 1.08; }
-.ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); }
+/* R-P7 / F5: one line, ellipsised rather than wrapped -- the same budget
+   discipline as .cat-value and the teaser headline. The routes row's own
+   detail can carry up to seven joined entries ("6 kasni 2 min · 11 na
+   vrijeme · …"); the eight-route cap bounds the string, this bounds the
+   box, so the board fits at 1920x1080 whatever a live feed sends. */
+.ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ess-attr { margin: calc(var(--kiosk-scale) * 10px) 0 0; font-size: calc(var(--kiosk-scale) * 17px); color: var(--tone-text-subtle); }
 
 /* ── Safety strip: 120 tall (R-V1), its text at most two lines of 26 ──── */

@@ -56,12 +56,18 @@ export function vehicleCount(snapshot: ModuleSnapshot | undefined): number | nul
  * `medianDelaySeconds` (or an equivalent per-route delay figure): the single
  * ±15 s on-time band every surface that shows a route's delay must agree on
  * — u-pokretu.ts's delay panel, kiosk.ts's essentials row and the schematic's
- * lightweight stop list all call this instead of each carrying their own
+ * lightweight route list all call this instead of each carrying their own
  * copy of the threshold, so a future change to the band changes all three
  * at once instead of risking three answers to "is this route on time?".
+ *
+ * R-F8 / R-P7: raw seconds never appear on a screen -- a rider reads "kasni
+ * 2 min", never "+120 s". Minutes are rounded to the nearest and floored at
+ * one once a route is off the band at all, so "kasni 0 min" (16 s late)
+ * never prints a claim of punctuality the band itself already denied.
  */
 export function delayWord(i18n: I18n, seconds: number): string {
-  if (seconds > 15) return i18n.t('panels.delayLate', { seconds });
-  if (seconds < -15) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
+  const minutes = Math.max(1, Math.round(Math.abs(seconds) / 60));
+  if (seconds > 15) return i18n.t('panels.delayLate', { minutes });
+  if (seconds < -15) return i18n.t('panels.delayEarly', { minutes });
   return i18n.t('panels.delayOnTime');
 }

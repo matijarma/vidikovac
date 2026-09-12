@@ -563,10 +563,10 @@ describe('essentialsRows (R-P7 / M3b)', () => {
   const i18n = createDefaultI18n('hr');
   it('builds the CAP warning, the closure count with its nearest street, and the Maksimir observation from the fixture, each with a filled attribution and no raw brace', () => {
     const rows = essentialsRows(MODULES, i18n, NOW);
-    // The fixture's zet-rt teaser subset carries only the vehicle count, no
-    // per-route rows, so 'departures' is legitimately absent here (skipped
-    // outright, not shown empty) — a dedicated test below covers it once a
-    // route row is present.
+    // The fixture's zet-rt teaser subset carries only the whole-fleet vehicle
+    // count, no pins inside the box, so 'routes' is legitimately absent here
+    // (skipped outright, not shown empty) — a dedicated test below covers it
+    // once vehicle pins are present.
     expect(rows.map((r) => r.id)).toEqual(['cap', 'closures', 'weather', 'pharmacy']);
     const cap = rows.find((r) => r.id === 'cap')!;
     expect(cap.label).toBe('Upozorenja');
@@ -594,35 +594,42 @@ describe('essentialsRows (R-P7 / M3b)', () => {
     expect(cap.attribution).not.toContain('{');
   });
 
-  it('shows the per-route delay rows in words once zet-rt carries them: the first route is the headline value, the rest join the detail line', () => {
-    const withRoutes = MODULES.map((m) =>
-      m.module === 'zet-rt'
-        ? snap('zet-rt', [
-            ...m.items,
-            { id: 'route:12', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 150, vehicles: 3 } },
-            { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 6', data: { routeId: '6', routeShortName: '6', medianDelaySeconds: -10, vehicles: 1 } },
-          ])
-        : m,
+  // R-P7 / R-F8: the row reads "Linije u blizini" from the vehicle pins the
+  // teaser's zet-rt subset already carries inside the kiosk's own box
+  // (R-P1) -- never the 'route:' summary rows alone, which the production
+  // bug (12 September) showed cover every route in the whole city.
+  function vehiclePin(id: string, routeId: string, routeType = 0) {
+    return { id: `vehicle:${id}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: routeId, geo: { type: 'Point' as const, coordinates: [15.977, 45.813] as [number, number] }, data: { routeId, routeType } };
+  }
+  function routeSummary(routeId: string, medianDelaySeconds: number) {
+    return { id: `route:${routeId}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: `Linija ${routeId}`, data: { routeId, routeShortName: routeId, medianDelaySeconds, vehicles: 1 } };
+  }
+
+  it('shows the routes among the vehicle pins in the box in words, numeric order: the first is the headline value, the rest join the detail line, and no raw seconds appear anywhere', () => {
+    const withPins = MODULES.map((m) =>
+      m.module === 'zet-rt' ? snap('zet-rt', [...m.items, vehiclePin('t6', '6'), vehiclePin('t12', '12'), routeSummary('6', -10), routeSummary('12', 120)]) : m,
     );
-    const departures = essentialsRows(withRoutes, i18n, NOW).find((r) => r.id === 'departures')!;
-    expect(departures.label).toBe('Sljedeći polasci');
-    expect(departures.value).toBe('12: +150 s');
-    expect(departures.detail).toBe('6: po redu');
+    const routes = essentialsRows(withPins, i18n, NOW).find((r) => r.id === 'routes')!;
+    expect(routes.label).toBe('Linije u blizini');
+    expect(routes.value).toBe('6 na vrijeme'); // '6' before '12': numeric order, not lexicographic
+    expect(routes.detail).toBe('12 kasni 2 min');
+    expect(`${routes.value} ${routes.detail}`).not.toMatch(/\d s\b/); // never a raw-seconds figure
   });
 
-  it('classifies a route delay on the same ±15s on-time band u-pokretu.ts already uses for the identical medianDelaySeconds field (app/src/layers/u-pokretu.ts routeDelays rendering), so the two views of the same live number never disagree', () => {
-    const withRoutes = MODULES.map((m) =>
-      m.module === 'zet-rt'
-        ? snap('zet-rt', [
-            ...m.items,
-            { id: 'route:12', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 20, vehicles: 3 } },
-          ])
-        : m,
+  it('prints nothing beyond eight routes: the wall-of-text bug (12 September) had every route in the city on one row', () => {
+    const routeIds = Array.from({ length: 10 }, (_, i) => String(i + 1));
+    const withPins = MODULES.map((m) =>
+      m.module === 'zet-rt' ? snap('zet-rt', [...m.items, ...routeIds.map((id) => vehiclePin(`t${id}`, id))]) : m,
     );
-    const departures = essentialsRows(withRoutes, i18n, NOW).find((r) => r.id === 'departures')!;
-    // +20s sits outside u-pokretu.ts's ±15s band, so this must read "late",
-    // not "po redu" the way a ±30s band (this file's former threshold) would.
-    expect(departures.value).toBe('12: +20 s');
+    const routes = essentialsRows(withPins, i18n, NOW).find((r) => r.id === 'routes')!;
+    expect(routes.value).toBe('1 na vrijeme');
+    expect(routes.detail).toBe('2 na vrijeme · 3 na vrijeme · 4 na vrijeme · 5 na vrijeme · 6 na vrijeme · 7 na vrijeme · 8 na vrijeme');
+    expect(routes.detail).not.toContain('9');
+    expect(routes.detail).not.toContain('10');
+  });
+
+  it('is absent when zet-rt has no vehicle pin in the box at all, even with route summaries present (the fixture case: only the fleet count ships)', () => {
+    expect(essentialsRows(MODULES, i18n, NOW).some((r) => r.id === 'routes')).toBe(false);
   });
 
   it('falls back to the curated on-duty pharmacy, attributed to LJEKARNE_SOURCE, when a live ckan-geo snapshot has no ljekarne-tagged item — the real-world case, since ckan-geo never tags one (see the comment on the LJEKARNE import in kiosk.ts)', () => {
@@ -800,6 +807,10 @@ describe('a 2017 engine lays the kiosk out (R-F4)', () => {
   const uncommented = (sheet: string): string => sheet.replace(/\/\*[\s\S]*?\*\//g, '');
   const kioskCss = uncommented(css('kiosk.css'));
   const baseCss = uncommented(css('base.css'));
+  // R-F8: the schematic's own lightweight list is spaced in motion/schematic.css
+  // now (one rule for both the kiosk and the phone panel, no kiosk-only
+  // override needed any more), not in kiosk.css -- read alongside it below.
+  const schematicCss = uncommented(readFileSync(resolve(import.meta.dirname, '../../app/src/motion/schematic.css'), 'utf8'));
   /** Every rule block whose selector list is exactly `selector` (no regex:
    *  the selectors carry dots and spaces). */
   const rulesFor = (sheet: string, selector: string): string[] => {
@@ -844,15 +855,15 @@ describe('a 2017 engine lays the kiosk out (R-F4)', () => {
     // flex gap (Chrome before 84, Safari before 14.1, 2020 -- there is no
     // reliable @supports probe for flex gap, so margins carry the spacing
     // on every engine).
-    for (const [list, item] of [
-      ['.ess-rows', '.ess-row + .ess-row'],
-      ['.kiosk-catalogue', '.cat-row + .cat-row'],
-      ['.kiosk-live .schematic-list', '.kiosk-live .schematic-stop + .schematic-stop'],
-    ]) {
-      const rules = rulesFor(kioskCss, list);
+    for (const [sheet, list, item] of [
+      [kioskCss, '.ess-rows', '.ess-row + .ess-row'],
+      [kioskCss, '.kiosk-catalogue', '.cat-row + .cat-row'],
+      [schematicCss, '.schematic-list', '.schematic-route + .schematic-route'],
+    ] as const) {
+      const rules = rulesFor(sheet, list);
       expect(rules.length, `${list} has a rule`).toBeGreaterThan(0);
       for (const rule of rules) expect(rule, `${list} must not space with gap`).not.toMatch(/(^|[\s;{])(row-|column-)?gap:(?!\s*0\s*[;}])/);
-      expect(kioskCss, `${item} carries the spacing`).toContain(`${item} {`);
+      expect(sheet, `${item} carries the spacing`).toContain(`${item} {`);
     }
   });
 });

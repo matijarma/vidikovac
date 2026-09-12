@@ -113,13 +113,17 @@ describe('createSchematicHost', () => {
     expect(legend(root)).toBe('1 od 2 praćenih vozila u kadru');
   });
 
-  it('in lightweight mode never asks for the network, mounts the list synchronously, and still carries the note', () => {
+  it('in lightweight mode never asks for the network, mounts the list synchronously (with the honest loading line before the first poll, R-F8), and still carries the note', () => {
     const { h, root, loadNetwork } = host({ lightweight: true });
     root.appendChild(h.mount());
     expect(loadNetwork).not.toHaveBeenCalled();
     expect(root.querySelector('canvas')).toBeNull();
     expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull();
-    expect(root.querySelector('[data-testid=schematic-loading]')).toBeNull();
+    // R-F8: the list is built from the poll's own vehicles now, not from
+    // network-artefact stops that were known before any poll landed -- so,
+    // like the legend right beside it, it says "loading" rather than a
+    // false empty until the first update() actually arrives.
+    expect(root.querySelector('[data-testid=schematic-loading]')).not.toBeNull();
     expect(root.querySelector('[data-testid=schematic-note]')!.textContent).toBe(HONESTY_NOTE_HR);
   });
 

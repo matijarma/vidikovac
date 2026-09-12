@@ -1,7 +1,9 @@
 // Mounts the schematic onto a page: the two stacked canvases on the modern
 // path (routes under vehicles, T7's paintRoutes/paintVehicles), the honest
-// list of nearby stops on the lightweight one (R-L2), the legend both
-// faces share, and -- on the canvas path -- the tap card for one vehicle
+// list of the lines in frame on the lightweight one (R-L2, R-F8 -- not the
+// stops, which live in the geometry file this path never fetches, R-L4),
+// the legend both faces share, and -- on the canvas path -- the tap card
+// for one vehicle
 // (T9) with its text path for people who cannot see the canvas (R-F5): a
 // visually hidden list of the drawn vehicles as real buttons that open the
 // same card, which is a real dialog that takes focus and hands it back.
@@ -19,7 +21,7 @@
 import { dist, type XY } from './geo';
 import { createLoop, type Loop } from './loop';
 import { createModel, type Drawn, type Fix, type Model } from './model';
-import type { Network, Stop } from './network';
+import type { Network } from './network';
 import {
   DEFAULT_CROP,
   hitVehicle,
@@ -33,10 +35,13 @@ import {
   type VehicleTones,
 } from './schematic';
 import { describeVehicle, type VehicleCard } from './vehicle-card';
+import { ZET_ROUTES } from '../data/routes';
 import type { I18n } from '../i18n/i18n';
-import { delayWord } from '../layers/shared';
+import { summariseRoutes, type RouteVehicle } from '../layers/route-summary';
+import { statusText } from '../panels/panel';
 import { DENSITY, prepareCanvas, tone } from '../ui/canvas';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import type { ModuleSnapshot } from '../../../worker/feed/schema';
 
 /** A network with nothing in it, standing in for `net === null` (not yet
  *  fetched -- network.ts's loadNetwork() resolves after first paint and
@@ -60,14 +65,18 @@ const EMPTY_NETWORK: Network = {
  *  `crop`/`types`/`net` fields matter before then, since nothing paints yet. */
 const NOMINAL_PX = 800;
 
-/** R-P1's own words: "about five to six stops around the screen's configured
- *  centre" -- the same figure schematic.ts's DEFAULT_RADIUS_M was tuned to
- *  show on the canvas. The lightweight list keeps the same scope so the two
- *  faces read as "same data": a stop that would not have fit in the crop
- *  circle at all is dropped first, and this cap only ever trims a crop that
- *  is itself large (the whole-network session view), never the locked
- *  kiosk's own small one. */
-const NEAREST_STOPS_LIMIT = 6;
+/** R-F8: ten rows on a locked screen's own small crop (R-P1's own box,
+ *  rarely more than a handful of distinct routes anyway), twenty on the
+ *  whole-network view every session shares (u-pokretu.ts's own layer, on a
+ *  phone or inside an unlocked kiosk). This view has no other signal for
+ *  "which screen is this" -- crop/types are the whole of its own contract
+ *  -- so the cap is decided from the crop's own radius: a crop this wide
+ *  can only be wholeNetworkCrop()'s bounding circle (several km, the whole
+ *  city), never a locked screen's own configured one (R-P1's few hundred
+ *  metres, DEFAULT_RADIUS_M's own 900 m included). */
+const WHOLE_NETWORK_RADIUS_THRESHOLD_M = 2_000;
+const LIST_CAP_CROP = 10;
+const LIST_CAP_NETWORK = 20;
 
 export interface SchematicUpdate {
   fixes: readonly Fix[];
@@ -77,6 +86,14 @@ export interface SchematicUpdate {
    *  derived from position data, which carries no delay information at all;
    *  omitted keeps whatever the view already had. */
   delays?: ReadonlyMap<string, number>;
+  /** The zet-rt module's own snapshot (R-F8), read only by the lightweight
+   *  list: when it isn't 'live' the list prints the exact sentence
+   *  panels/panel.ts's statusText already renders elsewhere for the same
+   *  status, instead of the empty-list sentence a real outage must never
+   *  wear (the same honesty rule as R-X1). Absent or 'live' falls through
+   *  to the ordinary rows/empty rendering; the canvas path never reads
+   *  this field at all. */
+  snapshot?: ModuleSnapshot;
 }
 
 export interface SchematicViewDeps {
@@ -126,50 +143,33 @@ export interface SchematicViewHandle {
   destroy(): void;
 }
 
-interface StopLine {
-  routeId: string;
-  label: string;
-  type: number;
-  word: string;
+/** The bare route label a rider reads on the front of the vehicle, resolved
+ *  from the static GTFS routes table (data/routes.ts's own ZET_ROUTES) --
+ *  never the network artefact, which the lightweight path never fetches
+ *  (R-L4) and which this view may not even hold yet on the canvas path
+ *  either. Unknown to the table (a fixture id in a test, a route GTFS
+ *  dropped) falls back to the bare id itself, same as routeName() does for
+ *  its own fuller form. */
+function routeChip(routeId: string): string {
+  return ZET_ROUTES[routeId]?.shortName || routeId;
 }
 
-/** Every distinct route calling at `stop`, restricted to `types`, tram rows
- *  first (decision: R-L2's own words) then by route label. A route with more
- *  than one shape through this stop (a short-turn variant, the two
- *  directions) appears once: the zet-rt module publishes one delay figure
- *  per route, not per shape, so a second row would have nothing new to say. */
-function stopLines(net: Network, stop: Stop, types: ReadonlySet<number> | null, delays: ReadonlyMap<string, number>, i18n: I18n): StopLine[] {
-  const seen = new Set<string>();
-  const out: StopLine[] = [];
-  for (const { shape: shapeIdx } of stop.on) {
-    const shape = net.shapes[shapeIdx];
-    if (!shape || seen.has(shape.route)) continue;
-    const route = net.routes.get(shape.route);
-    if (!route || (types && !types.has(route.type))) continue;
-    seen.add(shape.route);
-    out.push({ routeId: shape.route, label: route.short, type: route.type, word: delayWord(i18n, delays.get(shape.route) ?? 0) });
+/** Every fresh, type-matching vehicle in the crop, as the plain shape
+ *  route-summary.ts's summariseRoutes() wants -- the same three filters
+ *  vehicleMarks() applies for the canvas path (type, then the crop
+ *  circle), so the lightweight list and the legend's own "drawn" figure
+ *  can never disagree about which vehicles are "in frame" (R-F8). A fix
+ *  with no routeId at all names no route and is dropped: R-F8 lists
+ *  routes, not shapeless vehicles. */
+function routeVehiclesInFrame(drawnList: readonly Drawn[], crop: Crop, types: ReadonlySet<number> | null): RouteVehicle[] {
+  const out: RouteVehicle[] = [];
+  for (const v of drawnList) {
+    if (v.routeId === undefined) continue;
+    if (types && !types.has(v.type)) continue;
+    if (dist(v.p, crop.centre) > crop.radius) continue;
+    out.push({ routeId: v.routeId, label: routeChip(v.routeId), type: v.type });
   }
-  out.sort((a, b) => a.type - b.type || a.label.localeCompare(b.label, 'hr', { numeric: true }));
   return out;
-}
-
-interface NearestStop {
-  stop: Stop;
-  lines: StopLine[];
-}
-
-/** The nearest stops to the crop centre that actually have a qualifying line
- *  (a stop with only a filtered-out bus line, on a trams-only kiosk, is not
- *  "nearby" for this view's purposes) -- capped at NEAREST_STOPS_LIMIT so a
- *  whole-network crop (a session's dashboard) still reads as a short list,
- *  not the whole stops table. */
-function nearestStops(net: Network, crop: Crop, types: ReadonlySet<number> | null, delays: ReadonlyMap<string, number>, i18n: I18n): NearestStop[] {
-  return net.stops
-    .map((stop) => ({ stop, d: dist(stop.p, crop.centre), lines: stopLines(net, stop, types, delays, i18n) }))
-    .filter((s) => s.d <= crop.radius && s.lines.length > 0)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, NEAREST_STOPS_LIMIT)
-    .map(({ stop, lines }) => ({ stop, lines }));
 }
 
 /** Coarse enough that the model's own floating-point convergence noise never
@@ -247,6 +247,10 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
   const model: Model = createModel(deps.net);
   let delays: ReadonlyMap<string, number> = new Map();
   let hasData = false; // before the first update(): "loading", never a false zero (R-P2's own honesty discipline elsewhere in this area)
+  // R-F8: the lightweight list's own status line, read only from the caller's
+  // most recent update() (kiosk.ts is the only caller that passes one today).
+  let latestSnapshot: ModuleSnapshot | undefined;
+  const listCap = crop.radius > WHOLE_NETWORK_RADIUS_THRESHOLD_M ? LIST_CAP_NETWORK : LIST_CAP_CROP;
 
   const id = ++uid;
   const element = document.createElement('div');
@@ -293,23 +297,40 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     if (sizedRoutes) paintRoutes(sizedRoutes.ctx, layout, lineTone);
   }
 
+  /** R-F8: the honest lightweight face of seeing the trams around you --
+   *  one row per route among the fresh vehicles in frame, never the stops
+   *  R-L2 first asked for (the geometry file that would name them is
+   *  exactly what R-L4 forbids this path to fetch). Before the first
+   *  update() this says "loading", the same honesty gate the legend
+   *  already keeps (hasData); once data has arrived a snapshot that isn't
+   *  live prints the panels' own stale/down sentence, never the empty
+   *  one -- an outage must never read as "nothing running" (R-X1). */
   function renderList(): void {
     if (!listEl) return;
-    const rows = nearestStops(netOrEmpty, crop, types, delays, i18n);
-    if (rows.length === 0) {
+    if (!hasData) {
+      listEl.innerHTML = `<li class="schematic-empty" data-testid="schematic-loading">${escapeHtml(i18n.t('status.loading'))}</li>`;
+      return;
+    }
+    if (latestSnapshot && latestSnapshot.status !== 'live') {
+      listEl.innerHTML = `<li class="schematic-empty" data-testid="schematic-status">${escapeHtml(statusText(latestSnapshot, i18n, now()))}</li>`;
+      return;
+    }
+    const routes = summariseRoutes(routeVehiclesInFrame(model.step(now()), crop, types), delays, i18n);
+    if (routes.length === 0) {
       listEl.innerHTML = `<li class="schematic-empty" data-testid="schematic-empty">${escapeHtml(i18n.t('status.empty'))}</li>`;
       return;
     }
-    listEl.innerHTML = rows
-      .map(
-        ({ stop, lines }) => `<li class="schematic-stop" data-testid="schematic-stop">
-          <p class="schematic-stop-name">${escapeHtml(stop.name)}</p>
-          <ul class="schematic-lines">
-            ${lines.map((l) => `<li data-testid="schematic-line"><strong>${escapeHtml(l.label)}</strong> <span class="panel-sub">${escapeHtml(l.word)}</span></li>`).join('')}
-          </ul>
+    const shown = routes.slice(0, listCap);
+    const overflow = routes.length - shown.length;
+    listEl.innerHTML =
+      shown
+        .map(
+          (r) => `<li class="schematic-route" data-testid="schematic-route">
+          <span class="schematic-route-label">${escapeHtml(r.label)}</span> <span class="schematic-route-value">${escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))} · ${escapeHtml(r.word)}</span>
         </li>`,
-      )
-      .join('');
+        )
+        .join('') +
+      (overflow > 0 ? `<li class="schematic-more" data-testid="schematic-more">${escapeHtml(i18n.t('panels.moreRoutes', { count: overflow }))}</li>` : '');
   }
 
   let lastLegendText: string | null = null;
@@ -693,6 +714,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
       const t = nowArg ?? now();
       model.update(data.fixes, t);
       if (data.delays) delays = data.delays;
+      latestSnapshot = data.snapshot;
       hasData = true;
       if (lightweight) renderList();
       else renderVehicleList(model.step(t));

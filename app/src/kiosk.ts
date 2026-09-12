@@ -20,7 +20,8 @@ import { zagrebTime, zagrebWeekdayDate } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import { cityTeaserAttribution, cityTeaserBody, cityTeaserRows } from './layers/grad-teaser';
-import { delayWord, vehicleCount } from './layers/shared';
+import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from './layers/route-summary';
+import { vehicleCount } from './layers/shared';
 import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { routeDelayMap, vehicleFixes } from './motion/fixes';
@@ -52,6 +53,10 @@ export const MEANDER_TICK_MS = 1_000;
  *  once; short enough that the next passer-by finds the invitation, not a
  *  stranger's reading session. */
 export const ESSENTIALS_IDLE_MS = 90_000;
+/** R-P7: "nothing beyond eight routes is printed" -- the essentials board
+ *  must never scroll, and the wall-of-text bug this cap fixes (12
+ *  September) was exactly a route line with no ceiling at all. */
+export const ESSENTIALS_ROUTE_CAP = 8;
 /** Design width the whole kiosk is laid out against; applyScale() turns the
  *  element's real width into a --kiosk-scale multiplier of this (R-L3). */
 const KIOSK_DESIGN_WIDTH = 1920;
@@ -261,21 +266,45 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, _
     });
   }
 
-  // registry.teaserSubset already reduces zet-rt to the vehicle count plus
-  // one 'route:<id>' summary per route (median delay, R-P1); the count item
-  // is the panorama/catalogue's business, not this row's.
+  // R-F8 / R-P7: "what's running near here" is the vehicle pins already
+  // inside the kiosk's own box (registry.teaserSubset, R-P1) -- never the
+  // 'route:<id>' summary rows alone, which cover every route the whole
+  // network still runs regardless of the box (the wall-of-text bug found
+  // on production 12 September: every route in the city, in raw seconds).
+  // summariseRoutes (shared with the lightweight schematic list's own
+  // route rows, R-F8) turns the pins into one row per route; the 'route:'
+  // rows are read only for their own delay figure.
   const zetSnap = map['zet-rt'];
-  const routeItems = isLive(zetSnap) ? zetSnap.items.filter((item) => item.id.startsWith('route:')) : [];
-  const [firstRoute, ...restRoutes] = routeItems;
+  const zetItems = isLive(zetSnap) ? zetSnap.items : [];
+  const routeDelayById = new Map(
+    zetItems
+      .filter((item) => item.id.startsWith('route:'))
+      .map((item): [string, number] => [dataText(item, 'routeId'), dataNumber(item, 'medianDelaySeconds') ?? 0])
+      .filter(([routeId]) => routeId !== ''),
+  );
+  const nearbyVehicles: RouteVehicle[] = zetItems
+    .filter((item) => item.id.startsWith('vehicle:'))
+    .map((item) => ({
+      routeId: dataText(item, 'routeId'),
+      label: dataText(item, 'routeShortName') || dataText(item, 'routeId'),
+      type: dataNumber(item, 'routeType') ?? -1,
+    }))
+    .filter((v) => v.routeId !== '');
+  const nearbyRoutes = summariseRoutes(nearbyVehicles, routeDelayById, i18n).slice(0, ESSENTIALS_ROUTE_CAP);
+  const [firstRoute, ...restRoutes] = nearbyRoutes;
   if (isLive(zetSnap) && firstRoute) {
-    const routeLine = (item: FeedItem): string =>
-      `${dataText(item, 'routeShortName') || item.title}: ${delayWord(i18n, dataNumber(item, 'medianDelaySeconds') ?? 0)}`;
+    const routeLine = (r: RouteSummaryRow): string => `${r.label} ${r.word}`;
+    // The representative item for {naslov}/{id} template placeholders
+    // (R-08): the top route's own summary row when the wire carries one,
+    // else any vehicle pin, so a bare attribution template never falls
+    // back to an empty brace for lack of a FeedItem to read.
+    const representative = zetItems.find((item) => item.id === `route:${firstRoute.routeId}`) ?? zetItems.find((item) => item.id.startsWith('vehicle:'));
     rows.push({
-      id: 'departures',
-      label: i18n.t('kiosk.teaserDepartures'),
+      id: 'routes',
+      label: i18n.t('kiosk.linesNearby'),
       value: routeLine(firstRoute),
       detail: restRoutes.length > 0 ? restRoutes.map(routeLine).join(' · ') : undefined,
-      attribution: fillAttribution(zetSnap.attribution, zetSnap, firstRoute),
+      attribution: fillAttribution(zetSnap.attribution, zetSnap, representative),
     });
   }
 
