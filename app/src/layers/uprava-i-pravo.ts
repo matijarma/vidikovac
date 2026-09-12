@@ -11,6 +11,7 @@ import type { DogadanjaSourceId } from '../../../worker/feed/modules/dogadanja';
 import { SKUPSTINA_YOUTUBE_URL } from '../../../worker/feed/modules/dogadanja/skupstina';
 import { zagrebDateTime, zagrebWeekdayDate } from '../format';
 import type { I18n } from '../i18n/i18n';
+import { filterBySource, sourceStatusEmptyText } from './kultura';
 import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import type { LayerContext } from './types';
@@ -30,26 +31,15 @@ const SOURCE_ATTRIBUTION: Record<CityWorkSource, string> = {
   komunalne: 'Plan komunalnih aktivnosti, Grad Zagreb (Otvorena dozvola)',
 };
 
-function isCityWorkSource(source: string): source is CityWorkSource {
-  return (CITY_WORK_SOURCE_TUPLE as readonly string[]).includes(source);
-}
-
-/** Exported for its own direct test: the city-administration subset of the merged dogadanja snapshot, in the module's own order. */
+/** Exported for its own direct test: the city-administration subset of the merged dogadanja snapshot, in the module's own order.
+ *  Filtering itself is shared with kultura.ts's identically-shaped cultureEvents -- see filterBySource there. */
 export function cityWorkEvents(snapshot: ModuleSnapshot | undefined): FeedItem[] {
-  return (snapshot?.items ?? []).filter((item) => isCityWorkSource(dataText(item, 'source')));
+  return filterBySource(snapshot, CITY_WORK_SOURCE_TUPLE);
 }
 
-/** Same honesty rule as kultura.ts's cultureEventsEmptyText, for this panel's own two sources. */
+/** The honest "which sources answered" empty line for Grad radi's own two sources -- see kultura.ts's sourceStatusEmptyText, shared verbatim. */
 export function cityWorkEmptyText(i18n: I18n, snapshot: ModuleSnapshot | undefined): string {
-  const counts = (snapshot as (ModuleSnapshot & { sourceCounts?: Partial<Record<string, number>> }) | undefined)
-    ?.sourceCounts;
-  if (!counts) return i18n.t('status.empty');
-  const responded = CITY_WORK_SOURCE_TUPLE.filter((s) => (counts[s] ?? 0) > 0).map((s) => SOURCE_NAME[s]);
-  const quiet = CITY_WORK_SOURCE_TUPLE.filter((s) => (counts[s] ?? 0) === 0).map((s) => SOURCE_NAME[s]);
-  const parts = [i18n.t('panels.cityWorkEmpty')];
-  if (responded.length) parts.push(i18n.t('panels.sourcesResponded', { list: responded.join(', ') }));
-  if (quiet.length) parts.push(i18n.t('panels.sourcesQuiet', { list: quiet.join(', ') }));
-  return parts.join(' ');
+  return sourceStatusEmptyText(i18n, snapshot, CITY_WORK_SOURCE_TUPLE, SOURCE_NAME, 'panels.cityWorkEmpty');
 }
 
 function skupstinaRow(item: FeedItem, i18n: I18n): string {

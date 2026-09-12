@@ -35,35 +35,66 @@ const SOURCE_ATTRIBUTION: Record<CultureEventSource, string> = {
   kvartovske: 'Kvartovske novosti, Grad Zagreb (Otvorena dozvola)',
 };
 
-function isCultureSource(source: string): source is CultureEventSource {
-  return (CULTURE_EVENT_SOURCE_TUPLE as readonly string[]).includes(source);
+/**
+ * Shared by kultura.ts and uprava-i-pravo.ts (fix round 1: this pair used to
+ * be duplicated verbatim as isCultureSource/cultureEvents and
+ * isCityWorkSource/cityWorkEvents -- same shape, closing over a different
+ * source tuple each time). Exported here and imported by
+ * uprava-i-pravo.ts so both panels' file-scoped source lists still live where
+ * the brief's own file list puts them (kultura.ts, uprava-i-pravo.ts), with
+ * one algorithm instead of two kept in lockstep by hand.
+ *
+ * The subset of the merged dogadanja snapshot whose `data.source` is one of
+ * `sources`, in the module's own order.
+ */
+export function filterBySource(snapshot: ModuleSnapshot | undefined, sources: readonly string[]): FeedItem[] {
+  const set = new Set(sources);
+  return (snapshot?.items ?? []).filter((item) => set.has(dataText(item, 'source')));
+}
+
+/**
+ * Shared by kultura.ts and uprava-i-pravo.ts (fix round 1: this used to be
+ * duplicated verbatim as cultureEventsEmptyText/cityWorkEmptyText -- same
+ * sourceCounts cast, same "no counts -> status.empty" fallback, same
+ * responded/quiet partition, same two-i18n-key join, differing only in which
+ * source tuple, name map and i18n empty-key each closed over).
+ *
+ * "A day with no events says so plainly and names which sources answered"
+ * (E7 brief): when a panel's own relevant sources have nothing that survives
+ * `filterBySource` above, sourceCounts (R-E2 -- an extra property on the
+ * snapshot fetchDogadanja itself sets, not part of ModuleSnapshot's own
+ * declared shape) says whether each one was silent because it had nothing
+ * this cycle, or came back with items that simply weren't this panel's kind
+ * of row. Falls back to the ordinary empty text when sourceCounts isn't
+ * there at all (no snapshot yet, or a plain unit-test fixture with no extra
+ * property).
+ */
+export function sourceStatusEmptyText(
+  i18n: I18n,
+  snapshot: ModuleSnapshot | undefined,
+  sources: readonly string[],
+  names: Record<string, string>,
+  emptyKey: string,
+): string {
+  const counts = (snapshot as (ModuleSnapshot & { sourceCounts?: Partial<Record<string, number>> }) | undefined)
+    ?.sourceCounts;
+  if (!counts) return i18n.t('status.empty');
+  const responded = sources.filter((s) => (counts[s] ?? 0) > 0).map((s) => names[s]);
+  const quiet = sources.filter((s) => (counts[s] ?? 0) === 0).map((s) => names[s]);
+  const parts = [i18n.t(emptyKey)];
+  if (responded.length) parts.push(i18n.t('panels.sourcesResponded', { list: responded.join(', ') }));
+  if (quiet.length) parts.push(i18n.t('panels.sourcesQuiet', { list: quiet.join(', ') }));
+  return parts.join(' ');
 }
 
 /** Exported for its own direct test: the culture/community subset of the merged dogadanja snapshot, in the module's own order. */
 export function cultureEvents(snapshot: ModuleSnapshot | undefined): FeedItem[] {
-  return (snapshot?.items ?? []).filter((item) => isCultureSource(dataText(item, 'source')));
+  return filterBySource(snapshot, CULTURE_EVENT_SOURCE_TUPLE);
 }
 
-/**
- * "A day with no events says so plainly and names which sources answered"
- * (E7 brief): when none of these three sources' own items survive the
- * filter above, sourceCounts (R-E2 -- an extra property on the snapshot
- * fetchDogadanja itself sets, not part of ModuleSnapshot's own declared
- * shape) says whether each one was silent because it had nothing this cycle,
- * or came back with items that simply were not culture/community rows.
- * Falls back to the ordinary empty text when sourceCounts isn't there at all
- * (no snapshot yet, or a plain unit-test fixture with no extra property).
- */
+/** The honest "which sources answered" empty line for Događanja's own three sources -- see sourceStatusEmptyText above. */
 export function cultureEventsEmptyText(i18n: I18n, snapshot: ModuleSnapshot | undefined): string {
-  const counts = (snapshot as (ModuleSnapshot & { sourceCounts?: Partial<Record<string, number>> }) | undefined)
-    ?.sourceCounts;
-  if (!counts) return i18n.t('status.empty');
-  const responded = CULTURE_EVENT_SOURCE_TUPLE.filter((s) => (counts[s] ?? 0) > 0).map((s) => SOURCE_NAME[s]);
-  const quiet = CULTURE_EVENT_SOURCE_TUPLE.filter((s) => (counts[s] ?? 0) === 0).map((s) => SOURCE_NAME[s]);
-  const parts = [i18n.t('panels.eventsEmpty')];
-  if (responded.length) parts.push(i18n.t('panels.sourcesResponded', { list: responded.join(', ') }));
-  if (quiet.length) parts.push(i18n.t('panels.sourcesQuiet', { list: quiet.join(', ') }));
-  return parts.join(' ');
+  return sourceStatusEmptyText(i18n, snapshot, CULTURE_EVENT_SOURCE_TUPLE, SOURCE_NAME, 'panels.eventsEmpty');
 }
 
 /**
