@@ -49,6 +49,22 @@ describe('feed store', () => {
     await request;
     expect(store.snapshot().snapshots['dhmz-now']).toBeUndefined();
   });
+  it('resumes with a new request even while a pre-pause request is stuck', async () => {
+    let release!: (v: ModuleSnapshot) => void;
+    const fetchData = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+      .mockResolvedValueOnce({ ...weather, fetchedAt: '2026-09-12T12:01:00Z' });
+    const store = createFeedStore({ token: () => 'test', fetchData });
+    const obsolete = store.refresh(['dhmz-now']);
+    store.pause(true);
+    store.pause(false);
+    await store.refresh(['dhmz-now']);
+    release(weather);
+    await obsolete;
+    expect(fetchData).toHaveBeenCalledTimes(2);
+    expect(store.snapshot().snapshots['dhmz-now']?.fetchedAt).toBe('2026-09-12T12:01:00Z');
+    expect(store.snapshot().loading.size).toBe(0);
+  });
 });
 
 describe('view store', () => {

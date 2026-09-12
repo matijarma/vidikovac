@@ -109,23 +109,20 @@ export class BeaconDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      const sql = ctx.storage.sql;
-      sql.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
-      sql.exec(
-        `CREATE TABLE IF NOT EXISTS codes (
-           code TEXT PRIMARY KEY,
-           slot_start INTEGER NOT NULL,
-           slot_end INTEGER NOT NULL,
-           used INTEGER NOT NULL DEFAULT 0
-         )`,
-      );
-      sql.exec(`CREATE TABLE IF NOT EXISTS sessions (started_at INTEGER NOT NULL)`);
-      sql.exec(`CREATE TABLE IF NOT EXISTS fails (at INTEGER NOT NULL)`);
+      this.ensureSchema();
     });
     // Keepalive answered by the runtime without waking a hibernated object
     // (R-43: the pair is KEEPALIVE_REQUEST/KEEPALIVE_RESPONSE from protocol.ts,
     // shared with RoomDO and the browser).
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(KEEPALIVE_REQUEST, KEEPALIVE_RESPONSE));
+  }
+
+  private ensureSchema(): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, slot_start INTEGER NOT NULL, slot_end INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)');
+    sql.exec('CREATE TABLE IF NOT EXISTS sessions (started_at INTEGER NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS fails (at INTEGER NOT NULL)');
   }
 
   now(): number {
@@ -487,6 +484,7 @@ export class BeaconDO extends DurableObject<Env> {
       await this.ctx.storage.setAlarm(expiry + 15 * 60_000);
     } else {
       await this.ctx.storage.deleteAll();
+      this.ensureSchema();
     }
   }
 

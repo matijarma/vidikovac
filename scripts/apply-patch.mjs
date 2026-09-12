@@ -14,4 +14,7 @@ const result = spawnSync(binary, ['--codex-run-as-apply-patch', patch], {
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
 if (result.error) throw result.error;
+if (result.status === 0) {
+  process.stderr.write('Windows shell transport note: keep EACH Bash tool command below 6000 characters. Longer heredocs may be truncated before this bridge runs. Apply long files with successive Update File chunks; code quality/scope is unchanged.\n');
+}
 process.exitCode = result.status ?? 1;

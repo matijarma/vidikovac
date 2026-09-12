@@ -176,8 +176,8 @@ function hourTable(rows: readonly MetricsDailyRow[]): string {
 }
 
 const STYLE = `
-:root{color-scheme:dark light;--bg:#16226b;--fg:#f2ead8;--muted:#c3cdf5;--accent:#9db4ff;--line:rgba(242,234,216,.22);--card:#0f1a52}
-@media (prefers-color-scheme:light){:root{--bg:#f2ead8;--fg:#16226b;--muted:#4553a8;--accent:#3a49b0;--line:rgba(22,34,107,.24);--card:#faf5e9}}
+:root{color-scheme:light dark;--bg:#f6f8f7;--fg:#182423;--muted:#526461;--accent:#08777b;--line:#d6e1de;--card:#fcfdfc}
+@media (prefers-color-scheme:dark){:root{--bg:#17201f;--fg:#eff6f3;--muted:#acbdb6;--accent:#63d7c3;--line:#3b4b45;--card:#202d29}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 a{color:var(--accent)}
@@ -225,13 +225,13 @@ function shell(view: StatsView, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
-<title>Vidikovac · Statistika</title>
+<title>Kaj ima? · Statistika</title>
 <style>${STYLE}</style>
 </head>
 <body>
 <div class="wrap">
 <header>
-<h1>Vidikovac <span>/ Statistika</span></h1>
+<h1>Kaj ima? <span>/ Statistika</span></h1>
 <p class="window">${view.days} dana do ${escapeHtml(view.today)} · od ${escapeHtml(view.since)} · Europe/Zagreb</p>
 ${rangeSwitcher(view.days)}
 <p class="exports"><a href="/stats/export.csv?days=${view.days}">export.csv</a> · <a href="/stats/grad.csv?days=${view.days}">grad.csv (za Grad, zaokruženo)</a> · <a href="/stats/data.json?days=${view.days}">data.json</a></p>

@@ -253,6 +253,8 @@ export class RoomDO extends DurableObject<Env> {
     return raw ? JSON.parse(raw) as ScreenMetadata : undefined;
   }
 
+  isEvaluation(): boolean { return this.screenMetadata()?.kind === 'temporary'; }
+
   private metric(event: ServerEvent | ClientEvent, dim1 = '', dim2 = ''): void {
     if (this.screenMetadata()?.kind === 'temporary') {
       recordMetric(this.env, 'evaluation', event, dim1);

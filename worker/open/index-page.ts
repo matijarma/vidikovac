@@ -21,22 +21,23 @@ export function cadenceWords(ttl: number): string {
 }
 
 const STYLE = `
-:root{color-scheme:dark light;--bg:#16226b;--fg:#f2ead8;--muted:#c3cdf5;--accent:#9db4ff;--line:rgba(242,234,216,.22);--card:#0f1a52}
-@media (prefers-color-scheme:light){:root{--bg:#f2ead8;--fg:#16226b;--muted:#4553a8;--accent:#3a49b0;--line:rgba(22,34,107,.24);--card:#faf5e9}}
+:root{color-scheme:light dark;--bg:#f6f8f7;--fg:#182423;--muted:#526461;--accent:#08777b;--line:#d6e1de;--card:#fcfdfc}
+@media (prefers-color-scheme:dark){:root{--bg:#17201f;--fg:#eff6f3;--muted:#acbdb6;--accent:#63d7c3;--line:#3b4b45;--card:#202d29}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font:1.125rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 a{color:var(--accent)}
-.wrap{max-width:46rem;margin:0 auto;padding:1.25rem 1.25rem 4rem}
-.brand{font-weight:600;letter-spacing:.02em;text-decoration:none;color:var(--muted)}
+.wrap{max-width:64rem;margin:0 auto;padding:2rem 1.5rem 4rem}
+.brand{display:inline-block;margin-bottom:1.75rem;font-size:1.35rem;font-weight:800;letter-spacing:-.06em;text-decoration:none;color:var(--fg)}
 h1{font-size:clamp(2rem,6vw,3rem);line-height:1.05;margin:.4rem 0 .5rem;letter-spacing:-.02em}
 .lede{margin:0 0 1.5rem}
-article{margin:0 0 1.5rem;padding:1rem 1.1rem;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+article{margin:0;padding:2rem 0;border-top:1px solid var(--line)}
 h2{margin:0 0 .35rem;font-size:1.35rem;line-height:1.25}
 .meta{color:var(--muted);font-size:1rem;margin:0 0 .5rem}
 ul.dl{list-style:none;padding:0;margin:.5rem 0 0;display:flex;flex-wrap:wrap;gap:.5rem}
-ul.dl a{display:inline-block;padding:.3rem .75rem;border:1px solid var(--line);border-radius:999px;text-decoration:none}
-.src{margin:.75rem 0 0;padding-top:.5rem;border-top:1px dashed var(--line);color:var(--muted);font-size:.95rem}
-.offer{margin:2rem 0;padding:1rem 1.1rem;border-left:4px solid var(--accent)}
+ul.dl a{display:inline-flex;align-items:center;min-height:44px;padding:.45rem 1rem;border:1px solid var(--line);border-radius:9px;text-decoration:none;font-weight:650}
+a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.src{margin:1rem 0 0;padding-top:.5rem;color:var(--muted);font-size:.8rem}
+.offer{margin:2rem 0;padding:1.5rem;border:1px solid var(--line);border-radius:16px;background:var(--card)}
 footer{color:var(--muted);font-size:.95rem}
 `;
 
@@ -64,14 +65,14 @@ export function renderOpenIndex(origin: string, now: Date): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>Otvoreni podaci · Vidikovac</title>
-<meta name="description" content="Izvedeni otvoreni podaci o Zagrebu koje Vidikovac koristi u stvarnom vremenu: upozorenja DHMZ-a, potresi, prometnice, sigurnosne točke. Otvorena dozvola, DCAT katalog.">
+<title>Otvoreni podaci · Kaj ima?</title>
+<meta name="description" content="Otvoreni podaci o Zagrebu u Kaj ima?: upozorenja DHMZ-a, potresi, prometnice i zborna mjesta. Izvori, licence i DCAT katalog.">
 <style>${STYLE}</style>
 </head>
 <body>
 <div class="wrap">
 <header>
-<a class="brand" href="/">Vidikovac</a>
+<a class="brand" href="/">Kaj ima?</a>
 <h1>Otvoreni podaci</h1>
 <p class="lede">Svaki modul otvorene razine objavljen je i kao strojno čitljiv skup: isti podaci, isti izvori, ista atribucija, bez ograničenja trajanja. Iznimka je kartica "Grad javlja" na javnom zaslonu prije skeniranja: dolazi iz modula sesijske razine i ovdje se ne objavljuje. Katalog u obliku DCAT-AP: <a href="/open/catalog.json">catalog.json</a>.</p>
 </header>

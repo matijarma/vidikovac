@@ -28,10 +28,15 @@ export async function provisionScreen(env: Env, input: ProvisionInput, origin: s
       ...(input.expiresAt ? { screenExpiresAt: input.expiresAt } : {}),
     };
     if (!(await beaconStub(env, beaconId).create(record)).created) continue;
-    await indexStub(env).registerBeacon({
-      beaconId, venueType: input.venueType, area: input.area, operatorLabel: input.operatorLabel,
-      stopId: input.stopId, createdAt: Date.now(), kind: input.kind, expiresAt: screen.expiresAt,
-    });
+    try {
+      await indexStub(env).registerBeacon({
+        beaconId, venueType: input.venueType, area: input.area, operatorLabel: input.operatorLabel,
+        stopId: input.stopId, createdAt: Date.now(), kind: input.kind, expiresAt: screen.expiresAt,
+      });
+    } catch (error) {
+      await beaconStub(env, beaconId).revoke().catch(() => {});
+      throw error;
+    }
     return { beaconId, secret, provisionUrl: `${origin}/kiosk/#${beaconId}.${secret}`, screen };
   }
   throw new Error('screen-id-collision');

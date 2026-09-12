@@ -9,7 +9,7 @@ import { logError } from '../log';
 export const MAP_VERSION = 'zagreb-v1';
 export const MAP_ARCHIVE = `${MAP_VERSION}.pmtiles`;
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-const TILE = /^\/maps\/zagreb-v1\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})\.mvt$/;
+const TILE = /^\/maps\/zagreb-v1\/(0|[1-9]\d?)\/(0|[1-9]\d{0,5})\/(0|[1-9]\d{0,5})\.mvt$/;
 
 async function decompress(data: ArrayBuffer, compression: Compression): Promise<ArrayBuffer> {
   if (compression === Compression.None || compression === Compression.Unknown) return data;
@@ -24,7 +24,7 @@ class R2Source implements Source {
   getKey(): string { return `vidikovac-maps/${MAP_ARCHIVE}`; }
   async getBytes(offset: number, length: number, _signal?: AbortSignal, etag?: string): Promise<RangeResponse> {
     const key = new Request(`https://maps.vidikovac.internal/${MAP_VERSION}/range/${offset}/${length}`);
-    const cached = await caches.default.match(key);
+    const cached = offset > 0 ? await caches.default.match(key) : undefined;
     if (cached) {
       const cachedEtag = cached.headers.get('etag') ?? undefined;
       if (!etag || etag === cachedEtag) return { data: await cached.arrayBuffer(), etag: cachedEtag };
@@ -37,7 +37,7 @@ class R2Source implements Source {
     if (!('body' in result)) throw new EtagMismatch();
     const data = await result.arrayBuffer();
     // Archive header/directories survive isolate eviction without repeat R2 reads.
-    if (length <= 512_000) this.ctx.waitUntil(caches.default.put(key, new Response(data, {
+    if (offset > 0 && length <= 512_000) this.ctx.waitUntil(caches.default.put(key, new Response(data, {
       headers: { 'cache-control': IMMUTABLE, etag: result.etag },
     })));
     return { data, etag: result.etag };

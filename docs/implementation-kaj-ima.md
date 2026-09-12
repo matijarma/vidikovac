@@ -42,8 +42,53 @@ Application documents and README reflect Kaj ima?, actual capabilities and revis
 
 - [x] Owner approved product direction, name, scope, selfservice screens, R2 and Fable implementation.
 - [x] Baseline inspected and approved brief recorded.
-- [ ] Shared contracts and isolated worktrees.
-- [ ] Security, screen creation, source truth.
+- [x] Shared contracts and isolated worktrees.
+- [x] Security, screen creation, source truth.
 - [ ] Fable visual foundation, map, domains and kiosk.
 - [ ] Cross-review and browser refinement.
 - [ ] Tests, application materials and protected deployment.
+
+## Implementation evidence
+
+Baseline commits: b035057 (approved brief and contracts), 8ae414f (real screens,
+same-Wi-Fi, R2 and QR fallback), 3983482 (source correctness). The R2 regional
+archive and self-hosted glyphs/sprites have been checked through the local Worker.
+No implementation commits have been pushed to the evaluation deployment yet.
+
+Fable's first independent security review found seven concrete issues: evaluation
+failure provenance, post-cleanup DO schema, rolling-hour quotas, release of failed
+creation reservations, feed resume after a stuck request, stale archive range
+headers and noncanonical tile coordinates. Codex implemented corrections and
+added regression tests; the final full-suite and cross-review remain required.
+
+The Windows Bash transport truncates very long command strings. Fable edits use
+the native apply_patch stdin bridge in scripts/apply-patch.mjs, with command-sized
+chunks. This is a tooling constraint, not a reduction in code or design scope.
+
+## Resume checkpoint
+
+Codex-side changes are implemented: real temporary screens and same-Wi-Fi pairing,
+explicit secret requirements, Access validation, source date/availability fixes,
+R2-backed vector tiles, QR fallback, independent source recovery, partial-teaser
+coverage, no-JS safety design and application-copy updates. Latest full baseline
+before the final source-recovery tests: 119 files / 1483 passing tests. The added
+source recovery and screen cleanup/reservation tests pass in targeted runs.
+
+Frontend implementation is NOT finished or integrated. Fable's preserved changes:
+
+- `kaj-ui`: tokens, baseline, fonts, icons and partially completed HR/EN catalogues
+  (`@@chunk3` marker). Dashboard, domain renderers, landing and scan still need work.
+- `kaj-map`: basemap styling, badge geometry, extended map contracts, route/stop
+  catalogues/search and tests. The replacement city-map implementation and
+  transport workspace remain incomplete.
+- `kaj-kiosk`: strings, screen setup, credentials, layout, map adapter, local data,
+  invitation and paired-view helpers. Paired view/CSS have continuation markers;
+  the main kiosk controller and entry integration remain incomplete.
+
+The renewed Fable calls were rejected with `Fable 5.1 requires usage credits`
+before execution, including a minimal call using the normal CLI configuration.
+This is an external blocker, not permission to change model, scope or quality.
+Do not treat unfinished Fable work as reviewed or deploy it. Resume the three
+assigned worktrees at maximum effort once the CLI can execute Fable again.
+The original Fable security review is complete; a final review after corrections
+and the rendered frontend cross-review are still required.

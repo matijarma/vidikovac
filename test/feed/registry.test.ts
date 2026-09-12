@@ -190,9 +190,10 @@ describe('teaserSubset', () => {
     expect(reduced.items.map((i) => i.id)).toEqual(Array.from({ length: 10 }, (_, n) => `r${2 * n}`));
   });
 
-  it('leaves an open module untouched', () => {
+  it('keeps open module data intact and describes the displayed coverage', () => {
     const open = snapshot('emsc', [item({ id: 'q1', kind: 'quake', title: 'Potres', module: 'emsc', tier: 'open' })]);
-    expect(teaserSubset(open)).toEqual(open);
+    expect(teaserSubset(open)).toMatchObject(open);
+    expect(teaserSubset(open).coverage?.shown).toBe(1);
   });
 
   it('cuts emsc to the ten most recent quakes, newest first', () => {

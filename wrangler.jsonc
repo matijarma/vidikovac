@@ -41,5 +41,8 @@
   ],
   "triggers": { "crons": ["*/5 * * * *"] }, // warms the slow feed modules into KV
   "observability": { "enabled": true, "head_sampling_rate": 0.05 },
-  "build": { "command": "npm run build" }
+  "build": {
+    "command": "npm run build",
+    "watch_dir": ["worker", "app/src", "app/index.html", "app/d", "app/s", "app/kiosk", "app/izvori", "app/privatnost", "app/pristupacnost"]
+  }
 }

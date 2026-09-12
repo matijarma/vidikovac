@@ -7,6 +7,7 @@ import { recordMetric } from '../metrics';
 import { DOGADANJA_AVAILABILITY_IDS } from './modules/dogadanja';
 import { HRT_FEEDS } from './modules/hrt-news';
 import { CETVRTI_DATASET, ZBORNA_MJESTA_LAYER } from './modules/ckan-geo';
+import { expireStaleSources, recoverPartialSources } from './source-recovery';
 
 // Three states, never blank. A module is live while the Cache API holds a copy
 // younger than its ttl; stale while the KV last-good copy is younger than
@@ -66,7 +67,7 @@ export async function getModule(
     // Older composite caches have no independent availability evidence.
     // Refresh them once; on failure KV remains available through the normal path.
     if (snapshot.status !== 'live' || sourceKeys(id).every((key) => snapshot.sources?.[key])) {
-      return withoutSyntheticNoticeDates(snapshot);
+      return expireStaleSources(withoutSyntheticNoticeDates(snapshot), (deps.now ?? (() => new Date()))().getTime(), spec.maxStale);
     }
   }
   return refresh(env, ctx, spec, deps);
@@ -106,11 +107,15 @@ async function refresh(
   try {
     const fresh = await spec.fetcher(makeFetchContext(clock));
     const partial = Object.values(fresh.sources ?? {}).some((source) => source.status !== 'live');
-    const snapshot: ModuleSnapshot = {
+    let snapshot: ModuleSnapshot = {
       ...fresh,
       status: partial ? 'stale' : 'live',
       ...(partial ? { staleSince: now.toISOString() } : {}),
     };
+    if (partial) {
+      const previous = await env.FEED.get<ModuleSnapshot>(kvKey(spec.id), 'json').catch(() => null);
+      snapshot = recoverPartialSources(snapshot, previous ? withoutSyntheticNoticeDates(previous) : null, now.getTime(), spec.maxStale);
+    }
     const body = JSON.stringify(snapshot);
     ctx.waitUntil(store(spec.id, body, partial ? DEGRADED_CACHE_SECONDS : spec.ttl));
     ctx.waitUntil(env.FEED.put(kvKey(spec.id), body, { expirationTtl: Math.max(60, spec.maxStale) }));
@@ -123,7 +128,7 @@ async function refresh(
     // maxStale is measured from the last good fetch, not from the first failure:
     // data nobody could refresh for an hour is useless even if it failed a second ago.
     if (lastGood && Number.isFinite(fetchedAt) && now.getTime() - fetchedAt <= spec.maxStale * 1000) {
-      const snapshot: ModuleSnapshot = {
+      const snapshot: ModuleSnapshot = expireStaleSources({
         ...lastGood,
         status: 'stale',
         staleSince: new Date(fetchedAt).toISOString(),
@@ -135,7 +140,7 @@ async function refresh(
           ])),
         } : {}),
         ...(lastGood.coverage ? { coverage: { ...lastGood.coverage, limited: true } } : {}),
-      };
+      }, now.getTime(), spec.maxStale);
       ctx.waitUntil(store(spec.id, JSON.stringify(snapshot), DEGRADED_CACHE_SECONDS));
       metric(env, 'source_fetch', spec.id, 'stale');
       return snapshot;

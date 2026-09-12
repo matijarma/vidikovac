@@ -82,6 +82,8 @@ export function cityRows(rows: readonly MetricsDailyRow[]): CityRow[] {
   const cells = new Map<CellKey, Cell>();
   for (const r of rows) {
     if (CITY_EXCLUDED_EVENTS.has(r.event)) continue;
+    // Without a resolved screen, a failed scan cannot be attributed to a venue.
+    if (r.event === 'scan_fail' && r.dim2 === 'unattributed') continue;
     add(cells, { day: r.day, hour: String(r.hour), event: r.event, dim1: r.dim1, dim2: r.dim2, count: r.count });
   }
 

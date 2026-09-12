@@ -68,8 +68,30 @@ describe('real temporary screens', () => {
     expect((await stub.status()).revoked).toBe(true);
     expect(await stub.redeem('ABCDEFGH')).toEqual({ ok: false, error: 'revoked' });
   });
+  it('keeps an expired object callable after its cleanup alarm drops stored data', async () => {
+    const response = await SELF.fetch('https://vidikovac.test/api/screens', { method: 'POST', body: '{}' });
+    const screen = await response.json<CreateBeaconResponse>();
+    const stub = beaconStub(testEnv, screen.beaconId);
+    await runInDurableObject(stub, async (instance: BeaconDO) => {
+      vi.spyOn(instance, 'now').mockReturnValue(Date.now() + 25 * 60 * 60_000);
+      await instance.alarm();
+    });
+    expect(await stub.status()).toMatchObject({ exists: false, revoked: false, kioskOnline: false, codes: 0 });
+    expect(await stub.redeem('ABCDEFGH')).toEqual({ ok: false, error: 'code-unknown' });
+  });
+  it('releases exactly a failed provisioning reservation', async () => {
+    const index = indexStub(testEnv);
+    const key = 'e'.repeat(64);
+    const first = await index.reserveScreen(key);
+    for (let i = 0; i < 4; i++) await index.reserveScreen(key);
+    expect((await index.reserveScreen(key)).allowed).toBe(false);
+    await index.releaseScreen(first.reservation!);
+    expect((await index.reserveScreen(key)).allowed).toBe(true);
+    expect((await index.reserveScreen(key)).allowed).toBe(false);
+  });
 
   it('never includes evaluation activity in a City venue-demand export', () => {
     expect(cityRows([{ day: '2026-09-12', hour: 12, event: 'evaluation', dim1: 'session_start', dim2: '', count: 100 }])).toEqual([]);
+    expect(cityRows([{ day: '2026-09-12', hour: 12, event: 'scan_fail', dim1: 'code-unknown', dim2: 'unattributed', count: 100 }])).toEqual([]);
   });
 });

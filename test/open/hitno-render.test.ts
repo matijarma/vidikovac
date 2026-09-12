@@ -87,8 +87,9 @@ describe('renderHitnoPage', () => {
     expect(html).toContain('Količina oborine &gt; 20 mm');
   });
 
-  it('says honestly when there is no quake and shows the active closure', () => {
-    expect(html).toContain('U posljednja 72 sata EMSC nije zabilježio potres u okolici Zagreba.');
+  it('does not turn a missing quake source into an all-clear and shows the active closure', () => {
+    expect(html).toContain('Podaci o potresima trenutačno nisu potvrđeni.');
+    expect(html).not.toContain('EMSC nije zabilježio potres');
     expect(html).toContain('Izvor trenutačno nedostupan'); // emsc snapshot missing
     expect(html).toContain('Sarajevska cesta');
     expect(html).toContain('Zatvoreno zbog radova, oba smjera');
@@ -169,7 +170,8 @@ describe('renderHitnoPage', () => {
     const stale = snapshot('prometnice', [], 'stale');
     const out = renderHitnoPage(selectHitno([stale], NOW), NOW);
     expect(out).toContain('Zastarjelo');
-    expect(out).toContain('Nema aktivnih zatvaranja.');
+    expect(out).toContain('Stanje prometnica nije potvrđeno.');
+    expect(out).not.toContain('Nema aktivnih zatvaranja.');
   });
 
   it('fills every attribution template at render time so no brace reaches the page (R-62)', () => {

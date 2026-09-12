@@ -16,6 +16,7 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
   if (url.pathname !== '/api/screens') return null;
   if (request.method !== 'POST') return json({ error: 'method-not-allowed' }, 405, { allow: 'POST' });
   if (!isSameOrigin(request, url)) return json({ error: 'forbidden' }, 403);
+  let reservation: string | undefined;
   try {
     let principal = await accessPrincipal(env, request);
     // Local development exercises the same self-service path, without an Access
@@ -36,12 +37,14 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     if (!label || label.length > 80) return json({ error: 'bad-request', field: 'operatorLabel' }, 400);
     const quota = await indexStub(env).reserveScreen(principal);
     if (!quota.allowed) return json({ error: 'screen-limit', retryAfter: quota.retryAfter }, 429, { 'retry-after': String(quota.retryAfter) });
+    reservation = quota.reservation;
     const result = await provisionScreen(env, {
       venueType: 'ostalo', area, operatorLabel: label, stopId,
       kind: 'temporary', expiresAt: Date.now() + TEMPORARY_SCREEN_MS,
     }, url.origin);
     return json(result, 201, { 'cache-control': 'no-store' });
   } catch (error) {
+    if (reservation) await indexStub(env).releaseScreen(reservation).catch(() => {});
     logError('screen-create-failed', error);
     return json({ error: 'screen-create-failed' }, 503, { 'cache-control': 'no-store' });
   }

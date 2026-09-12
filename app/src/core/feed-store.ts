@@ -31,7 +31,7 @@ export function createFeedStore(deps: FeedStoreDeps): FeedStore {
   let modules: readonly ModuleId[] = [];
   let disposed = false;
   let epoch = 0;
-  const pending = new Set<ModuleId>();
+  const pending = new Map<ModuleId, number>();
   const listeners = new Set<(state: FeedStoreState) => void>();
   const emit = () => { if (!disposed) for (const listener of listeners) listener(state); };
   return {
@@ -44,8 +44,8 @@ export function createFeedStore(deps: FeedStoreDeps): FeedStore {
       const generation = epoch;
       const wanted = [...new Set(ids)].filter((id) => !pending.has(id));
       if (!wanted.length) return;
-      wanted.forEach((id) => pending.add(id));
-      state = { ...state, loading: new Set(pending) };
+      wanted.forEach((id) => pending.set(id, generation));
+      state = { ...state, loading: new Set(pending.keys()) };
       emit();
       await Promise.all(wanted.map(async (id) => {
         try {
@@ -66,9 +66,11 @@ export function createFeedStore(deps: FeedStoreDeps): FeedStore {
           };
           state = { ...state, snapshots, errors: { ...state.errors, [id]: error instanceof Error ? error.message : 'request-failed' } };
         } finally {
-          pending.delete(id);
-          state = { ...state, loading: new Set(pending) };
-          emit();
+          if (pending.get(id) === generation) {
+            pending.delete(id);
+            state = { ...state, loading: new Set(pending.keys()) };
+            emit();
+          }
         }
       }));
     },
@@ -83,7 +85,8 @@ export function createFeedStore(deps: FeedStoreDeps): FeedStore {
     pause(value) {
       if (state.paused === value) return;
       epoch++;
-      state = { ...state, paused: value };
+      pending.clear();
+      state = { ...state, paused: value, loading: new Set() };
       emit();
     },
     destroy() { disposed = true; epoch++; listeners.clear(); },

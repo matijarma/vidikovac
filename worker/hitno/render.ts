@@ -17,53 +17,65 @@ import { SEVERITY_WORDS, isActiveWarning, type HitnoData, type HitnoPanel } from
 export const LIVE_WINDOW_MS = 5 * 60 * 1000;
 
 const STYLE = `
-:root{color-scheme:dark light;--bg:#16226b;--fg:#f2ead8;--muted:#c3cdf5;--accent:#9db4ff;
---line:rgba(242,234,216,.22);--card:#0f1a52;--amber:#f2c078;--red:#ff9d9d;--ok:#7fd6a8}
-@media (prefers-color-scheme:light){:root{--bg:#f2ead8;--fg:#16226b;--muted:#4553a8;
---accent:#3a49b0;--line:rgba(22,34,107,.24);--card:#faf5e9;--amber:#8a5800;--red:#b3271e;--ok:#1e6f47}}
+:root{color-scheme:light dark;--bg:#f6f8f7;--fg:#182423;--muted:#526461;--accent:#08777b;
+--line:#d6e1de;--card:#fcfdfc;--soft:#e9efec;--amber:#845807;--red:#b63750;--ok:#237151}
+@media (prefers-color-scheme:dark){:root{--bg:#17201f;--fg:#eff6f3;--muted:#acbdb6;
+--accent:#63d7c3;--line:#3b4b45;--card:#202d29;--soft:#2b3a34;--amber:#f5c978;--red:#ff9dad;--ok:#7ddeaf}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);
-font:1.125rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-a{color:var(--accent)}
-.wrap{max-width:46rem;margin:0 auto;padding:1.25rem 1.25rem 4rem}
-.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:var(--card);padding:.5rem}
-header .brand{display:inline-block;font-weight:600;letter-spacing:.02em;text-decoration:none;color:var(--muted)}
-h1{font-size:clamp(2rem,6vw,3rem);line-height:1.05;margin:.4rem 0 .5rem;letter-spacing:-.02em}
-.lede{margin:0 0 .5rem;font-size:1.125rem}
-.stamp{color:var(--muted);margin:0 0 1.25rem}
-nav.toc ul{display:flex;flex-wrap:wrap;gap:.5rem 1rem;list-style:none;margin:0 0 1.5rem;padding:0}
-nav.toc a{text-decoration:none;border-bottom:1px solid var(--line)}
-section{margin:0 0 2rem;padding:1rem 1.1rem;border:1px solid var(--line);border-radius:14px;background:var(--card)}
-h2{margin:0 0 .35rem;font-size:1.5rem;line-height:1.2;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
-.check{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
-color:var(--amber);border:1px solid currentColor;border-radius:999px;padding:.05rem .5rem}
-.status{margin:0 0 .75rem;color:var(--muted);font-size:1rem}
+font:1rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html{scroll-padding-top:6rem}
+a{color:var(--accent);text-underline-offset:.2em}
+a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.wrap{max-width:76rem;margin:0 auto;padding:2rem 2.5rem 4rem}
+.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;z-index:3;background:var(--card);padding:.75rem}
+header{padding-bottom:1rem}
+header .brand{display:inline-block;margin-bottom:2rem;font-size:1.35rem;font-weight:800;letter-spacing:-.06em;text-decoration:none;color:var(--fg)}
+h1{font-size:2.5rem;line-height:1.1;margin:0 0 .75rem;letter-spacing:-.04em}
+.lede{max-width:60ch;margin:0 0 .75rem;font-size:1.125rem}
+.stamp{color:var(--muted);margin:0;font-size:.875rem}
+nav.toc{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);margin-bottom:2rem}
+nav.toc ul{display:flex;flex-wrap:wrap;gap:.25rem 1rem;list-style:none;margin:0;padding:.4rem 0}
+nav.toc a{display:inline-flex;align-items:center;min-height:44px;font-size:.875rem;font-weight:650;text-decoration:none}
+main{display:block}
+.safety-columns{display:grid;grid-template-columns:1.2fr 1fr;gap:2.5rem;margin-top:2rem;align-items:start}
+.safety-columns>div>section+section{margin-top:1.75rem}
+section{min-width:0;margin:0;padding:1.5rem 0;border-top:1px solid var(--line)}
+#brojevi{border:0;padding:0 0 1.75rem}
+#upozorenja{border-radius:18px;background:var(--card);padding:1.5rem;border:1px solid var(--line)}
+h2{margin:0 0 .65rem;font-size:1.4rem;line-height:1.25;letter-spacing:-.025em;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.check{font-size:.75rem;font-weight:650;color:var(--amber);border:1px solid currentColor;border-radius:999px;padding:.1rem .55rem}
+.status{margin:0 0 1rem;color:var(--muted);font-size:.875rem}
 .status.stale .dot{color:var(--amber)}.status.down .dot{color:var(--red)}.status.live .dot{color:var(--ok)}
 ul.items{list-style:none;margin:0;padding:0}
-ul.items>li{padding:.7rem 0;border-top:1px solid var(--line)}
+ul.items>li{padding:1rem 0;border-top:1px solid var(--line)}
 ul.items>li:first-child{border-top:0}
-.title{font-weight:600}
-.meta{color:var(--muted);font-size:1rem}
+.title{font-weight:700}
+.meta{color:var(--muted);font-size:.875rem;margin-top:.3rem}
 .sev{display:inline-block;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.8rem;
 border-radius:999px;padding:.1rem .6rem;border:1px solid currentColor;margin-right:.4rem}
 .sev-moderate,.sev-minor{color:var(--amber)}.sev-severe,.sev-extreme{color:var(--red)}
 .sev-info{color:var(--muted)}
 .empty{margin:.25rem 0;color:var(--muted)}
-.src{margin-top:.75rem;padding-top:.5rem;border-top:1px dashed var(--line);color:var(--muted);font-size:.95rem}
+.src{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--line);color:var(--muted);font-size:.75rem;line-height:1.55}
 .src p{margin:0}
-table{width:100%;border-collapse:collapse;font-size:1rem}
-th,td{text-align:left;vertical-align:top;padding:.45rem .4rem;border-top:1px solid var(--line)}
-th{font-weight:600}
-thead th{border-top:0;color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.06em}
-.numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.6rem;list-style:none;margin:0;padding:0}
-.numbers a{display:block;text-decoration:none;border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;color:var(--fg)}
-.numbers b{display:block;font-size:1.75rem;line-height:1.1;letter-spacing:-.01em}
-.numbers span{color:var(--muted);font-size:.95rem}
-details summary{cursor:pointer;font-weight:600;padding:.3rem 0}
-footer.page{color:var(--muted);font-size:.95rem}
-@media (max-width:480px){.wrap{padding:1rem .9rem 3rem}section{padding:.9rem .85rem}}
+.numbers{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:.75rem;list-style:none;margin:0;padding:0}
+.numbers a{display:flex;flex-direction:column;justify-content:space-between;gap:.75rem;min-height:140px;text-decoration:none;border-radius:16px;padding:1.15rem;background:var(--soft);color:var(--fg)}
+.numbers li:first-child a{background:var(--fg);color:var(--bg)}
+.numbers b{display:block;font-size:2rem;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+.numbers li:first-child b{font-size:2.75rem}
+.numbers span{font-size:.875rem;line-height:1.35}
+.pharmacies{list-style:none;margin:0;padding:0}
+.pharmacies li{padding:1.15rem 0;border-top:1px solid var(--line)}
+.pharmacies h3{font-size:1rem;margin:0 0 .2rem;letter-spacing:-.01em}
+.pharmacies p{margin:.25rem 0}
+.pharmacy-call{display:inline-flex;align-items:center;min-height:44px;margin-top:.5rem;padding:.4rem .9rem;border:1px solid var(--line);border-radius:9px;text-decoration:none;font-weight:650}
+details summary{cursor:pointer;font-weight:600;padding:.65rem 0;min-height:44px}
+footer.page{border-top:1px solid var(--line);margin-top:3rem;padding-top:1.5rem;color:var(--muted);font-size:.8rem;max-width:75ch}
+@media (max-width:850px){.wrap{padding:1.25rem 1.25rem 3rem}.numbers{grid-template-columns:repeat(4,1fr)}.numbers li:first-child{grid-column:1/-1}.numbers li:first-child a{min-height:100px;flex-direction:row;align-items:center}.numbers li:first-child span{max-width:18ch}.numbers a{min-height:125px;padding:1rem}.safety-columns{display:block}section{margin-bottom:1.5rem}header .brand{margin-bottom:1.5rem}}
+@media (max-width:480px){h1{font-size:2rem}.numbers{grid-template-columns:repeat(2,1fr)}.numbers a{min-height:112px}nav.toc ul{gap:.2rem 1rem}#upozorenja{padding:1.1rem}.wrap{padding:1rem 1rem 3rem}}
 @media print{html,body{background:#fff;color:#000;font-size:11pt}section{border-color:#999;background:#fff;break-inside:avoid}
-nav.toc,.skip{display:none}a{color:#000}.src a[href]::after,.numbers a[href]::after{content:""}
+main,.safety-columns{display:block}nav.toc,.skip{display:none}a{color:#000}.numbers a,.numbers li:first-child a{background:transparent;color:#000;border:1px solid #999}.src a[href]::after,.numbers a[href]::after{content:""}
 a.ext[href]::after{content:" (" attr(href) ")";font-size:.8em;color:#555}}
 `;
 
@@ -204,18 +216,13 @@ function closuresSection(panel: HitnoPanel, now: Date): string {
       ? 'Nema aktivnih zatvaranja.'
       : 'Stanje prometnica nije potvrđeno. Provjeri službeni izvor.'}</p>`;
   } else {
-    list =
-      `<ul class="items">` +
-      panel.items
-        .map(
-          (c) =>
+    const rows = panel.items.map((c) =>
             `<li><span class="title">${escapeHtml(c.title)}</span>` +
             (c.summary ? `<div>${escapeHtml(c.summary)}</div>` : '') +
             `<div class="meta">od ${timeTag(c.at)} · ${c.until ? `očekivano otvaranje ${timeTag(c.until)}` : 'kraj nije najavljen'}</div>` +
-            `</li>`,
-        )
-        .join('') +
-      `</ul>`;
+            `</li>`);
+    list = `<ul class="items">${rows.slice(0, 5).join('')}</ul>`;
+    if (rows.length > 5) list += `<details><summary>Prikaži preostala zatvaranja (${rows.length - 5})</summary><ul class="items">${rows.slice(5).join('')}</ul></details>`;
   }
   return section(
     'prometnice',
@@ -254,10 +261,10 @@ function assemblySection(panel: HitnoPanel, now: Date): string {
 function pharmaciesSection(): string {
   const rows = LJEKARNE.map(
     (p) =>
-      `<tr><th scope="row">${escapeHtml(p.label)}</th>` +
-      `<td>${escapeHtml(p.address)}</td>` +
-      `<td>${p.phoneE164 && p.phoneDisplay ? `<a href="tel:${escapeHtml(p.phoneE164)}">${escapeHtml(p.phoneDisplay)}</a>` : '<span class="meta">nije naveden</span>'}</td>` +
-      `<td>${escapeHtml(p.hours)}<div class="meta">${escapeHtml(p.operator)}</div></td></tr>`,
+      `<li><h3>${escapeHtml(p.label)}</h3>` +
+      `<p>${escapeHtml(p.address)}</p>` +
+      `<p class="meta">${escapeHtml(p.hours)}</p><p class="meta">${escapeHtml(p.operator)}</p>` +
+      `${p.phoneE164 && p.phoneDisplay ? `<a class="pharmacy-call" href="tel:${escapeHtml(p.phoneE164)}">Nazovi ${escapeHtml(p.phoneDisplay)}</a>` : '<p class="meta">Telefon nije naveden u izvoru.</p>'}</li>`,
   ).join('');
   const checked = parseIso(`${LJEKARNE_CHECKED_ON}T12:00:00Z`);
   const checkedText = checked === null ? LJEKARNE_CHECKED_ON : formatZagrebDateTime(checked).replace(/ \d\d:\d\d$/, '');
@@ -266,8 +273,7 @@ function pharmaciesSection(): string {
     'Dežurne ljekarne',
     `<p class="status"><span aria-hidden="true">▣</span> Ručno održavan popis, provjeren ${escapeHtml(checkedText)} ` +
       `prema stranici Grada Zagreba. Prije puta provjeri na izvorniku ili nazovi ljekarnu.</p>` +
-      `<table><thead><tr><th scope="col">Ljekarna</th><th scope="col">Adresa</th>` +
-      `<th scope="col">Telefon</th><th scope="col">Radno vrijeme</th></tr></thead><tbody>${rows}</tbody></table>` +
+      `<ul class="pharmacies">${rows}</ul>` +
       `<footer class="src"><p>${escapeHtml(LJEKARNE_SOURCE.text)} · ` +
       `<a class="ext" href="${escapeHtml(LJEKARNE_SOURCE.url)}" rel="noopener">izvornik</a></p></footer>`,
     ` <span class="check">provjeriti</span>`,
@@ -298,7 +304,7 @@ export function renderHitnoPage(data: HitnoData, now: Date): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>Hitno · Zagreb</title>
+<title>Hitno · Kaj ima?</title>
 <meta name="description" content="Sigurnosne informacije za Zagreb: upozorenja DHMZ-a, potresi, zatvorene prometnice, zborna mjesta civilne zaštite, dežurne ljekarne i brojevi za hitne slučajeve. Otvoreno svima, bez skeniranja.">
 <style>${STYLE}</style>
 </head>
@@ -306,10 +312,10 @@ export function renderHitnoPage(data: HitnoData, now: Date): string {
 <a class="skip" href="#brojevi">Preskoči na brojeve za hitne slučajeve</a>
 <div class="wrap">
 <header>
-<a class="brand" href="/">Vidikovac</a>
+<a class="brand" href="/">Kaj ima?</a>
 <h1>Hitno</h1>
-<p class="lede">Sigurnosne informacije za Zagreb. Otvoreno svima, bez skeniranja i bez vremenskog ograničenja. Radi i bez JavaScripta; može se ispisati.</p>
-<p class="stamp">Stanje <time datetime="${escapeHtml(now.toISOString())}">${escapeHtml(stamp)}</time>, vrijeme Zagreb. Stranica se osvježava svake minute.</p>
+<p class="lede">Brojevi, upozorenja i pomoć u Zagrebu. Bez skeniranja i vremenskog ograničenja.</p>
+<p class="stamp">Stanje <time datetime="${escapeHtml(now.toISOString())}">${escapeHtml(stamp)}</time>, vrijeme Zagreb. <a href="/hitno">Osvježi stanje</a></p>
 </header>
 <nav class="toc" aria-label="Sadržaj"><ul>
 <li><a href="#brojevi">Brojevi</a></li>
@@ -322,10 +328,13 @@ export function renderHitnoPage(data: HitnoData, now: Date): string {
 <main>
 ${numbersSection()}
 ${warningsSection(data.warnings, now)}
-${quakesSection(data.quakes, now)}
+<div class="safety-columns"><div>
 ${closuresSection(data.closures, now)}
-${assemblySection(data.assembly, now)}
+</div><div>
 ${pharmaciesSection()}
+${quakesSection(data.quakes, now)}
+${assemblySection(data.assembly, now)}
+</div></div>
 </main>
 <footer class="page">
 <p>Sadrži informacije tijela javne vlasti u skladu s Otvorenom dozvolom. Prikaz je prilagodba izvora; izvorni podaci i vrijeme zadnje izmjene navedeni su uz svaki panel. Ova stranica ne predstavlja službenu obavijest ni tijela koja podatke objavljuju.</p>
@@ -342,8 +351,8 @@ export function renderTooManyRequests(): Response {
   const html = `<!doctype html>
 <html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Previše zahtjeva · Hitno</title>
-<style>body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 system-ui,sans-serif;background:#16226b;color:#f2ead8}
-@media (prefers-color-scheme:light){body{background:#f2ead8;color:#16226b}}main{max-width:36rem;margin:0 auto}</style></head>
+<style>body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 system-ui,sans-serif;background:#f6f8f7;color:#182423}
+@media (prefers-color-scheme:dark){body{background:#17201f;color:#eff6f3}}main{max-width:36rem;margin:0 auto}a{color:inherit}</style></head>
 <body><main><h1>Previše zahtjeva</h1><p>S ove mreže stiglo je više od 120 zahtjeva u minuti. Pokušaj ponovno za minutu.</p>
 <p>U hitnom slučaju nazovi <a href="tel:112">112</a>.</p></main></body></html>
 `;

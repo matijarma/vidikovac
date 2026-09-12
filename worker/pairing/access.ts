@@ -198,12 +198,12 @@ export async function verifyAccess(env: Env, request: Request, deps: AccessDeps 
   }
 }
 
-/** Hour-scoped pseudonymous quota key. No email/sub/token is persisted or logged. */
+/** Pseudonymous quota key, stored only in rolling-hour quota rows, never logged. */
 export async function accessPrincipal(
   env: Env,
   request: Request,
   deps: AccessDeps = {},
-  now = Date.now(),
+  _now = Date.now(),
 ): Promise<string | null> {
   if (!(await verifyAccess(env, request, deps))) return null;
   let identity = 'test-evaluator';
@@ -215,5 +215,5 @@ export async function accessPrincipal(
     if (typeof subject !== 'string' || subject.length === 0 || subject.length > 1024) return null;
     identity = subject;
   }
-  return hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), `screen-quota|${Math.floor(now / 3_600_000)}|${identity}`));
+  return hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), `screen-quota|${identity}`));
 }

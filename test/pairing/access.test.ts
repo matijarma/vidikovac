@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/env';
-import { verifyAccess, type JwksDocument } from '../../worker/pairing/access';
+import { accessPrincipal, verifyAccess, type JwksDocument } from '../../worker/pairing/access';
 
 const TEAM = 'vidikovac.cloudflareaccess.com';
 const AUD = 'aud-0123456789abcdef';
@@ -96,6 +96,14 @@ describe('verifyAccess with a real Access signature', () => {
 });
 
 describe('the test-only bypass (R-02)', () => {
+  it('uses a stable rolling-hour quota principal across a clock-hour boundary', async () => {
+    const env = accessEnv({ APP_ENV: 'test', SESSION_SECRET: 'test-principal-signing-secret', E2E_ADMIN_BYPASS: BYPASS });
+    const request = requestWith({ 'x-e2e-admin-bypass': BYPASS });
+    const before = await accessPrincipal(env, request, {}, 3_599_999);
+    const after = await accessPrincipal(env, request, {}, 3_600_001);
+    expect(before).toMatch(/^[a-f0-9]{64}$/);
+    expect(after).toBe(before);
+  });
   it('is accepted only with APP_ENV=test, a long enough value and an exact match', async () => {
     const off = { APP_ENV: 'test', E2E_ADMIN_BYPASS: BYPASS };
     expect(await verifyAccess(accessEnv(off), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(true);

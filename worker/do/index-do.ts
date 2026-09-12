@@ -81,7 +81,9 @@ export class IndexDO extends DurableObject<Env> {
       const columns = new Set(sql.exec<{ name: string }>('PRAGMA table_info(beacons)').toArray().map((c) => c.name));
       if (!columns.has('screen_kind')) sql.exec("ALTER TABLE beacons ADD COLUMN screen_kind TEXT NOT NULL DEFAULT 'venue'");
       if (!columns.has('expires_at')) sql.exec('ALTER TABLE beacons ADD COLUMN expires_at INTEGER');
-      sql.exec('CREATE TABLE IF NOT EXISTS screen_creations (principal TEXT NOT NULL, at INTEGER NOT NULL)');
+      sql.exec('CREATE TABLE IF NOT EXISTS screen_creations (principal TEXT NOT NULL, at INTEGER NOT NULL, reservation TEXT)');
+      const quotaColumns = new Set(sql.exec<{ name: string }>('PRAGMA table_info(screen_creations)').toArray().map((c) => c.name));
+      if (!quotaColumns.has('reservation')) sql.exec('ALTER TABLE screen_creations ADD COLUMN reservation TEXT');
       sql.exec('CREATE INDEX IF NOT EXISTS screen_creations_at ON screen_creations(at)');
     });
   }
@@ -139,8 +141,8 @@ export class IndexDO extends DurableObject<Env> {
     return result.rowsWritten;
   }
 
-  /** Atomic, one-hour quota; only hour-scoped HMACs are stored, never identities. */
-  async reserveScreen(principal: string): Promise<{ allowed: boolean; retryAfter: number }> {
+  /** Atomic rolling-hour quota; HMACs are deleted after one hour, never logged. */
+  async reserveScreen(principal: string): Promise<{ allowed: boolean; retryAfter: number; reservation?: string }> {
     if (!/^[a-f0-9]{64}$/.test(principal)) return { allowed: false, retryAfter: 3600 };
     const now = this.now();
     const result = this.ctx.storage.transactionSync(() => {
@@ -149,11 +151,17 @@ export class IndexDO extends DurableObject<Env> {
       const own = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM screen_creations WHERE principal = ?', principal).one().n;
       const global = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM screen_creations').one().n;
       if (own >= 5 || global >= 30) return { allowed: false, retryAfter: 3600 };
-      sql.exec('INSERT INTO screen_creations (principal, at) VALUES (?, ?)', principal, now);
-      return { allowed: true, retryAfter: 0 };
+      const reservation = crypto.randomUUID();
+      sql.exec('INSERT INTO screen_creations (principal, at, reservation) VALUES (?, ?, ?)', principal, now, reservation);
+      return { allowed: true, retryAfter: 0, reservation };
     });
     await this.ensurePurgeAlarm();
     return result;
+  }
+
+  releaseScreen(reservation: string): void {
+    if (!/^[0-9a-f-]{36}$/.test(reservation)) return;
+    this.ctx.storage.sql.exec('DELETE FROM screen_creations WHERE reservation = ?', reservation);
   }
 
   registerBeacon(record: Omit<BeaconRecord, 'revokedAt'>): void {

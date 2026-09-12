@@ -11,7 +11,7 @@ import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt, inTeaserBox } from './modules/zet-rt';
 import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
 import { KOMUNALNE_URL } from './modules/dogadanja/komunalne';
-import { openLicenceEvents } from './modules/dogadanja/licence';
+import { openLicenceEvents, OPEN_LICENCE_EVENT_SOURCES } from './modules/dogadanja/licence';
 
 // The registry is the single source of truth for tier, refresh windows and
 // attribution. Module files know only how to parse their own source.
@@ -219,14 +219,19 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
       return { ...snapshot, items: [count, ...boxed, ...delays] };
     }
     case 'hrt-news':
-      return { ...snapshot, items: snapshot.items.slice(0, TEASER_NEWS_LIMIT) };
-    case 'dogadanja':
+      return limitedSnapshot(snapshot, snapshot.items.slice(0, TEASER_NEWS_LIMIT));
+    case 'dogadanja': {
       // The licence boundary (modules/dogadanja/licence.ts): Kulturpunkt
       // (CC BY-SA 3.0 HR) and Etnografski rows never leave the session tier.
       // Filtered first, then cut, so the cap never eats the open rows.
       // `sourceCounts`, the module's own extra property, is deliberately not
       // carried: the open copy states nothing about the sources it may not show.
-      return {
+      const allowed = new Set<string>(OPEN_LICENCE_EVENT_SOURCES);
+      const items = openLicenceEvents(snapshot.items).slice(0, TEASER_EVENTS_LIMIT);
+      const sources = snapshot.sources
+        ? Object.fromEntries(Object.entries(snapshot.sources).filter(([id]) => allowed.has(id)))
+        : undefined;
+      const result: ModuleSnapshot = {
         module: snapshot.module,
         tier: snapshot.tier,
         status: snapshot.status,
@@ -234,13 +239,39 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
         ...(snapshot.staleSince ? { staleSince: snapshot.staleSince } : {}),
         ...(snapshot.sourceUpdatedAt ? { sourceUpdatedAt: snapshot.sourceUpdatedAt } : {}),
         attribution: DOGADANJA_OPEN_ATTRIBUTION,
-        items: openLicenceEvents(snapshot.items).slice(0, TEASER_EVENTS_LIMIT),
+        items,
+        ...(sources ? { sources } : {}),
       };
+      if (sources && Object.keys(sources).length) {
+        const states = Object.values(sources);
+        result.status = states.every((source) => source.status === 'live') ? 'live'
+          : states.every((source) => source.status === 'down') ? 'down' : 'stale';
+      }
+      return limitedSnapshot(result, items, openLicenceEvents(snapshot.items).length);
+    }
     case 'emsc': {
       const newestFirst = [...snapshot.items].sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));
-      return { ...snapshot, items: newestFirst.slice(0, TEASER_EMSC_LIMIT) };
+      return limitedSnapshot(snapshot, newestFirst.slice(0, TEASER_EMSC_LIMIT));
     }
     default:
       return snapshot;
   }
+}
+
+/** Reduced displays must not retain full-feed item counts or claim full coverage. */
+function limitedSnapshot(snapshot: ModuleSnapshot, items: FeedItem[], available = snapshot.items.length): ModuleSnapshot {
+  const sources = snapshot.sources
+    ? Object.fromEntries(Object.entries(snapshot.sources).map(([id, source]) => [
+        id, { ...source, itemCount: items.filter((item) => item.data?.source === id).length },
+      ]))
+    : undefined;
+  const sourceTotalsKnown = sources && Object.values(sources).every((source) => source.totalItems !== undefined);
+  const total = sourceTotalsKnown
+    ? Object.values(sources).reduce((sum, source) => sum + source.totalItems!, 0)
+    : snapshot.coverage?.total;
+  return {
+    ...snapshot, items, ...(sources ? { sources } : {}),
+    coverage: { shown: items.length, ...(total !== undefined ? { total } : {}),
+      limited: items.length < available || snapshot.coverage?.limited === true || total === undefined },
+  };
 }

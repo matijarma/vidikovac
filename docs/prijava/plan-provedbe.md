@@ -8,7 +8,7 @@ Isporuke: https://zagreb.aningfilm.hr s otvorenim slojem `/hitno`, javnim zaslon
 
 ### M1 Učvršćivanje protokola, izjave, prva revizija pristupačnosti (mjeseci 1 do 2)
 
-Isporuke: dovršena provjera iste mreže u načinu enforce na stvarnim mrežama (kafić Wi-Fi, tri mobilna operatera, iPhone i Android), WASM rezervni skener za preglednike bez BarcodeDetectora, Turnstile iza zastavice, ograničenja po zaslonu (30 sesija na sat, 200 na dan), prva revizija pristupačnosti s korisnicima s invaliditetom i izjava o pristupačnosti v1 s deklariranim odstupanjem, izjava o privatnosti nakon pravnog pregleda. Mjera: revizijski izvještaj i dvije izjave objavljene na stranici.
+Isporuke: terenska provjera uparivanja na istoj i različitim mrežama (kafić Wi-Fi, tri mobilna operatera, iPhone i Android), provjera rezervnog QR dekodera, Turnstile iza zastavice, provjera ograničenja po zaslonu, prva revizija pristupačnosti s korisnicima s invaliditetom i izjava o pristupačnosti v1 s deklariranim odstupanjem, izjava o privatnosti nakon pravnog pregleda. Ista mreža nije razlog odbijanja. Mjera: revizijski izvještaj i dvije izjave objavljene na stranici.
 
 ### M1b Lagani način rada za stare uređaje (mjesec 2)
 

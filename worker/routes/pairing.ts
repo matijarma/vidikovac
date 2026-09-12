@@ -112,7 +112,7 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
   if (request.method !== 'POST') return json({ error: 'method-not-allowed' }, 405, { allow: 'POST' });
   // The key is the address itself and never leaves this line: not logged, not stored.
   if (await overLimit(env.RL_SCAN, clientIp(request) || 'no-ip')) {
-    recordMetric(env, 'scan_fail', 'rate-limited');
+    recordMetric(env, 'scan_fail', 'rate-limited', 'unattributed');
     return scanFail('rate-limited');
   }
 
@@ -127,13 +127,13 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
     }
   }
   if (code === null) {
-    recordMetric(env, 'scan_fail', 'bad-request');
+    recordMetric(env, 'scan_fail', 'bad-request', 'unattributed');
     return scanFail('bad-request');
   }
 
   const owner = await indexStub(env).resolve(code);
   if (owner === null) {
-    recordMetric(env, 'scan_fail', 'code-unknown');
+    recordMetric(env, 'scan_fail', 'code-unknown', 'unattributed');
     return scanFail('code-unknown');
   }
   const result =
@@ -141,7 +141,12 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
       ? await beaconStub(env, owner.ownerId).redeem(code)
       : await roomStub(env, owner.ownerId).redeemPeer(code);
   if (!result.ok) {
-    recordMetric(env, 'scan_fail', result.error, owner.kind);
+    // Resolve provenance only on failure; no extra RPC on successful pairing.
+    const evaluation = owner.kind === 'kiosk'
+      ? (await beaconStub(env, owner.ownerId).screenMetadata()).kind === 'temporary'
+      : await roomStub(env, owner.ownerId).isEvaluation();
+    recordMetric(env, evaluation ? 'evaluation' : 'scan_fail', evaluation ? 'scan_fail' : result.error,
+      evaluation ? result.error : owner.kind);
     return scanFail(result.error);
   }
   const ok: ScanOk = result.scan;

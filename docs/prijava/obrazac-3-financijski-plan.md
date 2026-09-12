@@ -1,6 +1,6 @@
 # Obrazac 3. Financijski plan i izračun troškova
 
-Prijavitelj: Aning Film d.o.o. · Projekt: Vidikovac. Zagreb, povezan. · Svi iznosi su u eurima **bez PDV-a**. Ukupno zatraženo: **20.000,00 EUR**.
+Prijavitelj: Aning Film d.o.o. · Projekt: Kaj ima?. Zagreb, povezan. · Svi iznosi su u eurima **bez PDV-a**. Ukupno zatraženo: **20.000,00 EUR**.
 
 | Redak | Stavka | Izračun | Iznos (EUR) |
 |---|---|---|---|
