@@ -1,5 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/env';
 import type { ServerEvent } from '../../worker/protocol';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
@@ -38,7 +38,7 @@ async function reset(...ids: ModuleId[]): Promise<void> {
 beforeEach(async () => {
   events = [];
   clearFetcherOverrides();
-  await reset('emsc', 'prometnice', 'zet-rt', 'dhmz-cap');
+  await reset('emsc', 'prometnice', 'zet-rt', 'dhmz-cap', 'dogadanja');
 });
 
 describe('getModule', () => {
@@ -167,5 +167,59 @@ describe('getModules and warmFeeds', () => {
     expect(touched).not.toContain('zet-rt');
     expect(touched).not.toContain('prometnice');
     expect(touched).not.toContain('emsc');
+  });
+});
+
+// R-X1: this exercises `dogadanja`'s own real fetcher (no setFetcherForTest
+// stand-in), with every one of its six sub-fetchers' real upstream calls
+// failing, so the regression is caught at the layer a person would actually
+// see it break: the cache falling back to the KV last-good copy instead of
+// silently overwriting it with a zero-item 'live' snapshot.
+describe('dogadanja honest failure (R-X1)', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('serves the KV last-good copy as stale, instead of overwriting it with a live empty snapshot, when every real source is down', async () => {
+    const fetchedAt = new Date(NOW.getTime() - 600_000).toISOString(); // 10 min old, maxStale 86400 s
+    await testEnv.FEED.put(
+      kvKey('dogadanja'),
+      JSON.stringify({ ...goodSnapshot('dogadanja', fetchedAt), status: 'live' }),
+    );
+    globalThis.fetch = (async () => {
+      throw new Error('upstream unreachable');
+    }) as unknown as typeof fetch;
+
+    const ctx = createExecutionContext();
+    const result = await getModule(testEnv, ctx, 'dogadanja', deps);
+    await waitOnExecutionContext(ctx);
+
+    expect(result.status).toBe('stale');
+    expect(result.staleSince).toBe(fetchedAt);
+    // The KV copy's real item survives -- not silently replaced by an empty,
+    // 'live'-stamped snapshot, which is exactly the bug R-X1 describes.
+    expect(result.items).toHaveLength(1);
+    expect(events).toEqual([['source_fetch', 'dogadanja', 'stale']]);
+  });
+
+  it('goes down with no items when the KV copy is older than maxStale and every real source is down', async () => {
+    const fetchedAt = new Date(NOW.getTime() - 90_000_000).toISOString(); // > 86400 s
+    await testEnv.FEED.put(
+      kvKey('dogadanja'),
+      JSON.stringify({ ...goodSnapshot('dogadanja', fetchedAt), status: 'live' }),
+    );
+    globalThis.fetch = (async () => {
+      throw new Error('upstream unreachable');
+    }) as unknown as typeof fetch;
+
+    const ctx = createExecutionContext();
+    const result = await getModule(testEnv, ctx, 'dogadanja', deps);
+    await waitOnExecutionContext(ctx);
+
+    expect(result.status).toBe('down');
+    expect(result.items).toEqual([]);
+    expect(events).toEqual([['source_fetch', 'dogadanja', 'error']]);
   });
 });

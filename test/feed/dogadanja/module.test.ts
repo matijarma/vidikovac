@@ -125,24 +125,33 @@ describe('fetchDogadanja', () => {
     }
   });
 
-  it('sorts by start time, most imminent/most recent first, with the dateless ZET notices last', async () => {
+  it('sorts by start time, most imminent/most recent first, with no item left dateless after R-E1', async () => {
     const result = await fetchDogadanja(makeContext());
-    const dated = result.items.filter((item) => item.at !== undefined);
-    const undated = result.items.filter((item) => item.at === undefined);
-    expect(dated.length + undated.length).toBe(result.items.length);
-    // Every dateless item is a ZET notice (the only source with no `at` at all).
-    for (const item of undated) {
-      expect(['zet-novosti', 'zet-promet']).toContain(item.data?.source);
+    // Ruling R-E1: ZET notices now carry a real `at` from <pubDate>, so the
+    // -Infinity dateless fallback no longer describes any real source.
+    for (const item of result.items) {
+      expect(item.at, `${item.id} has no at`).toBeTypeOf('string');
     }
-    // Descending: each dated item's start time is at or before the previous one's.
-    for (let i = 1; i < dated.length; i += 1) {
-      expect(Date.parse(dated[i - 1].at!)).toBeGreaterThanOrEqual(Date.parse(dated[i].at!));
+    // Descending: each item's start time is at or before the previous one's.
+    for (let i = 1; i < result.items.length; i += 1) {
+      expect(Date.parse(result.items[i - 1].at!)).toBeGreaterThanOrEqual(Date.parse(result.items[i].at!));
     }
-    // The dateless items sit after every dated item, never interleaved.
-    const firstUndatedIndex = result.items.findIndex((item) => item.at === undefined);
-    if (firstUndatedIndex !== -1) {
-      expect(result.items.slice(firstUndatedIndex).every((item) => item.at === undefined)).toBe(true);
-    }
+  });
+
+  it('places the newest ZET notice above an older communal-works row (R-E1)', async () => {
+    const result = await fetchDogadanja(makeContext());
+    const zetItems = result.items.filter((item) => item.data?.source === 'zet-novosti' || item.data?.source === 'zet-promet');
+    const komunalneItems = result.items.filter((item) => item.data?.source === 'komunalne');
+    expect(zetItems.length).toBeGreaterThan(0);
+    expect(komunalneItems.length).toBeGreaterThan(0);
+
+    const newestZet = zetItems[0]; // list is already sorted desc, so the first one encountered is the newest.
+    const olderKomunalne = komunalneItems.find((item) => Date.parse(item.at!) < Date.parse(newestZet.at!));
+    expect(olderKomunalne, 'no komunalne row is older than the newest ZET notice in this fixture').toBeDefined();
+
+    const newestZetIndex = result.items.indexOf(newestZet);
+    const olderKomunalneIndex = result.items.indexOf(olderKomunalne!);
+    expect(newestZetIndex).toBeLessThan(olderKomunalneIndex);
   });
 
   it('contributes nothing from a source that rejects, without throwing the module down, and reports it in sourceCounts', async () => {
@@ -155,18 +164,31 @@ describe('fetchDogadanja', () => {
     expect(result.items.some((item) => item.data?.source === 'komunalne')).toBe(false);
   });
 
-  it('never throws even when every one of the six sources rejects', async () => {
-    const throwing: Route = ['', () => { throw new Error('all down'); }];
-    const result = await fetchDogadanja(makeContext([throwing]));
-    expect(result.items).toEqual([]);
+  it('returns only the sixth source when the other five reject, each at zero in sourceCounts (R-X1)', async () => {
+    const ctx: FetchContext = {
+      now: () => FETCH_NOW,
+      fetch: async (url) => {
+        if (url.includes('wp/v2/dogadjanja')) return new Response(etnografskiDogadjanja);
+        if (url.includes('wp/v2/izlozbe')) return new Response(etnografskiIzlozbe);
+        throw new Error(`upstream down: ${url}`);
+      },
+    };
+    const result = await fetchDogadanja(ctx);
     expect(result.sourceCounts).toEqual({
       kulturpunkt: 0,
       skupstina: 0,
       kvartovske: 0,
       komunalne: 0,
       'zet-rss': 0,
-      etnografski: 0,
+      etnografski: REAL_RAW_COUNTS.etnografski,
     });
+    expect(result.items).toHaveLength(REAL_RAW_COUNTS.etnografski);
+    expect(result.items.every((item) => item.data?.source === 'etnografski')).toBe(true);
+  });
+
+  it('throws when every one of the six sources rejects, so the cache layer can serve the KV last-good copy (R-X1)', async () => {
+    const throwing: Route = ['', () => { throw new Error('all down'); }];
+    await expect(fetchDogadanja(makeContext([throwing]))).rejects.toThrow(/dogadanja/);
   });
 
   it('requests only the real, already-verified sub-fetcher URLs, never a Guru za kulturu or YouTube feed path (R-P5)', async () => {
