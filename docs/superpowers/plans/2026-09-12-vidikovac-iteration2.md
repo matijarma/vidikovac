@@ -1,72 +1,7 @@
 # Vidikovac, iteration 2 — implementation plan (12 September 2026)
 
-Built on `main` at tag `sdd-final`. Three areas run as subagent-driven loops in their own worktrees: M (Modrotisak restyle), T (smooth ZET motion), E (Tier-1 events). Wave 1 is M1 to M9, T1 to T6 and E1 to E6 in parallel; wave 2 is T7 to T11 and E7 to E9 after M merges.
+Built on `main` at tag `sdd-final`. Three areas ran as subagent-driven loops in their own worktrees: M (Modrotisak restyle), T (smooth ZET motion), E (Tier-1 events). A whole-iteration adversarial review then produced area F (the fix wave). Every controller ruling is in the companion file `2026-09-12-vidikovac-iteration2-rulings.md`.
 
-
-
----
-
-# Controller rulings, Vidikovac iteration 2 (12 September 2026)
-
-Binding on every implementer and reviewer. They override the task text they name. The approved plan is `C:\Users\MatijaRadeljak\.claude\plans\lets-work-on-this-ethereal-beacon.md`; the design spec is `design.md`; the layout reference is `Vidikovac.dc.html`.
-
-## Lightweight mode (from Matija's own commit 9e0702e, section 1.10 of the proposal)
-
-The filed proposal commits the project to a measurable lightweight mode: `?lagano=1` plus automatic weak-device detection, with **no map, no WebGL, no canvas animation, no container queries and nothing newer than 2017**, the layout breakpoint computed in JavaScript rather than in CSS, a separate ES2017 build beside the modern one, `/hitno` working without JavaScript and without styles, and published measurements of under 200 kB transferred per screen load, under 300 MB of memory, running on a 1 GB device. Everything below follows from that document, which is the authority.
-
-R-L1 Two paths for every new visual capability, decided once at each entry and passed down as a dependency exactly as `reducedMotion` already is. `lightweight` is true when the URL carries `?lagano=1`, or when `navigator.deviceMemory <= 1`, or when a WebGL context cannot be created, or when `matchMedia('(prefers-reduced-data: reduce)')` matches. The flag is written to `document.documentElement.dataset.lagano` so CSS can answer too, and it is remembered in `localStorage` under `vidikovac-lagano` once auto-detected, so the detection runs once per device.
-
-R-L2 What each capability degrades to, with no apology in the copy:
-- Panorama: no canvas. The legend text stands alone in mono under the header (it already carries the vehicle count and the time), and the band becomes a 2 px ink rule. The page still says what the panorama would have said.
-- Meander: no canvas. A `div` with a background width in percent, stepped in ten quantised steps, inside the same figure with the same legend. No transition.
-- Schematic map: no canvas. The same data as a list: the nearest stops with the lines calling at them, tram rows first, each with the route label and the route's median delay in words. It is the honest lightweight face of seeing the trams around you.
-- Full MapLibre map: hidden entirely; its button is not rendered.
-
-R-L3 No container queries on a path lightweight mode uses. The kiosk sizes itself from a JavaScript-computed scale written once to a CSS custom property on the kiosk root (`--kiosk-scale`, from the element's own width), and every size is `calc(var(--kiosk-scale) * N)`. Modern browsers get the identical result; 2016 browsers get a working layout. `cqh` and `cqw` units are not used anywhere in kiosk.css.
-
-R-L4 Budget: a lightweight screen load transfers under 200 kB, fonts included. `app/public/data/zet-network.json` is never fetched in lightweight mode, and in modern mode it is fetched after first paint, never as part of the entry chunk. A test sums the built lightweight entry chunk, its CSS and the fonts it references and fails over 200 kB.
-
-R-L5 The separate ES2017 build target and the tested-device matrix in `docs/kiosk.md` are project commitments with their own tasks later in the grant period, not iteration-2 deliverables. What iteration 2 must guarantee is that no new code makes them impossible: no syntax newer than ES2017 in the app source, no CSS feature newer than 2017 on a lightweight path, and every new capability already has its lightweight twin. Implementers state in their report which of the two paths they exercised.
-
-## Area ownership (three parallel loops, wave 1)
-
-M (restyle): `app/src/ui/**`, `app/src/kiosk.ts`, `app/src/dashboard.ts`, `app/src/panels/**`, `app/src/scan.ts`, `app/index.html`, `app/s/index.html`, `app/src/entries/**`, `app/src/format.ts`, `worker/hitno/render.ts`, `worker/open/index-page.ts`, `worker/stats/page.ts`, `test/app/*` for the files it owns, `e2e/a11y.spec.ts`.
-
-T (motion): `scripts/**`, `app/public/data/**`, `app/src/motion/**`, `app/src/map/**`, `app/src/layers/u-pokretu.ts`, `worker/feed/modules/zet-rt.ts`, `worker/feed/schema.ts` (the `vehicle` key list only), `test/motion/**`, `test/scripts/**`, `e2e/motion.spec.ts`.
-
-E (events): `worker/feed/modules/dogadanja/**`, `worker/feed/html.ts`, `worker/feed/hr-date.ts`, `worker/feed/schema.ts` (the `ModuleId`, `ItemKind` and `event` additions only), `worker/feed/registry.ts`, `app/src/layers/kultura.ts`, `app/src/layers/uprava-i-pravo.ts`, `app/src/layers/index.ts`, `docs/izvori.md`, `app/src/data/izvori.json`, `test/feed/**`, `test/docs/**`.
-
-R-O1 `app/src/map/city-map.ts` belongs to T alone. T applies the Modrotisak colours there (closures `#ff9d9d`, vehicles `#f2ead8`, stroke `#16226b`) as part of its own work; M does not touch the file.
-
-R-O2 `app/src/format.ts` belongs to M alone. M adds **both** `zagrebWeekdayDate` (its own need) and `zagrebDayKey` (E's need) in the same task, and E imports them.
-
-R-O3 `worker/feed/schema.ts` is edited by T and E on different lines (T removes two keys from `DATA_KEYS.vehicle`; E adds a `ModuleId`, an `ItemKind` and the `event` key list). Both keep their edits minimal so the merge is mechanical.
-
-R-O4 `app/src/kiosk.ts` is the choke point: M restructures it (wave 1), then T adds the locked schematic and E adds the teaser card (wave 2, after M merges to main).
-
-R-O5 Wave 1 runs M1 to M9, T1 to T6 and E1 to E6 in parallel worktrees. Wave 2 runs T7 to T11 and E7 to E9 after M is merged, on branches rebased onto that main.
-
-R-O6 Line endings are LF (`.gitattributes`); after a merge, re-checkout with `git rm --cached -r . && git reset --hard` before running the suite, exactly as stage 1 did.
-
-## Product rulings carried from the plan
-
-R-P1 The locked kiosk is a public service. Its stage shows the live cropped tram map (trams only by default, about five to six stops around the screen's configured centre, default Trg bana Jelačića), the panorama shrinks to roughly a third of its drawn height directly under the header, and the invitation headline moves under the map above the catalogue row. `teaserSubset('zet-rt')` keeps the vehicles inside that box with their route type and the per-route delay rows instead of stripping them to a count. T9's sentence about the locked kiosk keeping only the panorama is overridden. The centre, radius and mode are beacon properties with a default, and the proposal offers per-screen configuration in the full version.
-
-R-P2 Never display a reported position. Every vehicle is drawn where the motion model computes it: fixes snapped to the route geometry, speed from that vehicle's own fix times, animation at the screen's refresh rate, and gentle convergence onto a new fix instead of a jump. The panel says so in one sentence.
-
-R-P3 The Worker stops publishing `bearing` and `speed`: ZET never sends them and the module was emitting a fabricated zero for every vehicle.
-
-R-P4 Light `--tone-text-subtle` is `#575f7d`, not the spec's `#5d6890`, which fails the contrast gate on the light `surface-2`.
-
-R-P5 Two sources named in the events brief are dropped for robots.txt reasons and the documents must say so: Guru za kulturu (its events come only from a disallowed `/api/` path) and the Skupstina YouTube Atom feed (`Disallow: /feeds/videos.xml`); the channel's live page is linked from plenary sessions, because linking is not crawling.
-
-R-P6 Every source keeps headline-level metadata only: title, time, venue, organiser, link, category. Descriptions are never copied, with the single exception of the communal-works activity field, which is Otvorena dozvola data rather than a borrowed description.
-
-## Core message and the kiosk's own usefulness (Matija, 12 September, two corrections)
-
-R-P7 The gate unlocks the city **on your own device**, and never withholds it from the screen in front of you. A kiosk with a touchscreen therefore carries its own essentials view, reachable with one touch and no phone: the safety layer, the next departures at that screen's stop, the weather, the closures. It needs no session and runs no timer; after ninety seconds without a touch it returns to the invitation. This is not a concession to the mechanic, it is the same principle `/hitno` already follows, and the proposal can say so plainly. Implementation lives with area M (it edits kiosk.ts, which M owns in wave 1) as task M3b.
-
-R-P8 The proposition is not "you pay with attention". It is: a premium view of the city, whose limits exist to push you back into it. You accept a short window and a scan that needs another screen or another person, and in exchange you get everything; the limits are the point, not the price. They raise real encounters between people, businesses, culture and institutions, and they cut screen time rather than farm it. The app is deliberately good enough to stand in for the infinite feed, and deliberately short enough to hand you back to the street. Every surface and the filed proposal must carry that reading; the phrase "Placas paznjom, ne novcem" is retired wherever it appears (kiosk invitation, landing page, `docs/prijava/prijedlog-projekta.md`, design.md).
 
 
 ---
@@ -446,6 +381,7 @@ These pages stay zero-JS with one inline style block and no new request. `city-m
 **Files:** Modify `e2e/a11y.spec.ts`.
 
 - [ ] Extend the page table so every surface is checked at the two sizes the design was drawn for, in both schemes: `/` at 1920 and at 390, `/hitno` at 390, `/kiosk/` at 1920, `/s/` at 390, `/d/` at 390 and at 1920. Put the viewport width in the test title so the repeated paths do not collide.
+- [ ] **Ruling R-M1, before the sweep.** `/d` has no `h1`. Add one to `app/src/dashboard.ts` as the first child of `.dash-head`, `class="visually-hidden"` with `data-testid="dash-title"` and `tabindex="-1"`, reading the app name and the active layer's label (a new i18n key `session.documentTitle` = `{app} · {layer}`). Update it wherever the active layer changes, and make it the element `focus()` moves to on unlock, in place of whatever the header focuses today. Test: it exists, it names the layer, it changes when a tab is chosen, and it receives focus on join. Then assert in the axe sweep that every page in the matrix has exactly one `h1`.
 - [ ] Run the full verification: both vitest projects, typecheck, build, the pairing spec, the axe sweep (fourteen runs), and screenshots of both faces at both sizes checked against the mockup (the 2 px header rule, one bead row, the tower never a cross, the 4 px code frame with its cream plate, the catalogue numbers in label blue, the `/hitno` pill inverting, the meander emptying from the right, the tab underline with no pills, and with reduced motion forced the meander stepping in ten visible jumps).
 
 **Commit:** `Check every surface at both sizes in both faces`
@@ -534,7 +470,17 @@ So: a reported position is evidence, never output. Every drawn vehicle sits wher
 
 **Files:** Create `scripts/gtfs-shapes.mjs`, `app/public/data/zet-network.json` (generated, committed), `app/src/motion/network-meta.ts` (generated constants). Modify `package.json` (one script entry). Test: `test/scripts/gtfs-shapes.test.ts`.
 
-**Interfaces.** The artefact's shape, which every later task reads:
+**Interfaces.** The artefact's shape, which every later task reads. T1 shipped a
+struct-of-arrays (columnar) wire format rather than the row-major sketch this
+section originally carried; the controller accepted the deviation (R-T3) as a
+byte-budget necessity (repeating `"id":`, `"name":`, `"p":`, `"on":` … as
+literal text on every one of 524 shapes and 2,529 stops costs real,
+gzip-resistant kilobytes). Every field below is the same field the row-major
+sketch named, only transposed: one flat array per key, index-aligned, built
+by `toColumnar` and read back by `fromColumnar` (both exported from
+`scripts/gtfs-shapes.mjs`; T4's `decodeNetwork` is the consumer). `routes`,
+`shapes` and `stops` are further delta- or chain-encoded (see below); nothing
+a caller needs is lost, only how it sits on disk:
 
 ```jsonc
 {
@@ -543,10 +489,59 @@ So: a reported position is evidence, never output. Every drawn vehicle sits wher
   "builtAt": "2026-09-12T…Z",
   "origin": [15.9, 45.75],          // lon, lat of the delta origin
   "scale": 1e-5,                    // delta unit in degrees
-  "routes": [{ "id": "…", "short": "2", "type": 0, "rank": 3, "shapes": [0, 4] }],
-  "shapes": [{ "id": "…", "route": "…", "d": [dx, dy, dx, dy, …], "len": 8241.3 }],
-  "stops":  [{ "id": "…", "name": "…", "p": [dx, dy], "on": [[shapeIdx, frac], …] }],
-  "diagram": { "lines": [{ "route": "…", "pts": [[x, y], …] }], "box": [w, h] }
+
+  // Struct-of-arrays: ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes'].
+  // routes.id[i], routes.short[i], … all describe the same i-th route.
+  "routes": {
+    "id":     ["…", …],
+    "short":  ["2", …],
+    "type":   [0, …],       // GTFS route_type (0 = tram)
+    "rank":   [3, …],       // dense 1..N, trams first, then buses by trip count
+    "shapes": [[0, 4], …]   // this route's shape indices, ascending
+  },
+
+  // SHAPE_KEYS = ['id', 'route', 'd', 'len']. `d` is chain-delta-encoded
+  // (chainEncodeXY/chainDecodeXY): each point is the integer (x, y) unit
+  // offset from the *previous* point in the same shape, not from `origin`
+  // directly -- consecutive shape points are metres apart, far smaller
+  // numbers than their multi-kilometre offset from origin, which is what
+  // actually keeps the file small.
+  "shapes": {
+    "id":    ["…", …],
+    "route": ["…", …],
+    "d":     [[dx, dy, dx, dy, …], …],
+    "len":   [8241.3, …]   // metres, one decimal
+  },
+
+  // STOP_KEYS = ['id', 'name', 'p', 'on']. `p` is chain-delta-encoded across
+  // the *whole* stops array (not per-stop): decode the concatenation of every
+  // stop's `p` in array order with chainDecodeXY to recover absolute units.
+  // `on` links a stop to every shape passing within 40 m of it (R-T1: no cap
+  // -- every such association is kept), plus any stop-transfer override from
+  // stop_times.txt (a verified terminus further than 40 m from the recorded
+  // shape). Each entry is itself delta/scaled: [shapeIdx delta from the
+  // previous (ascending) entry in this stop's own list, fraction along the
+  // shape * ON_FRAC_SCALE (50), rounded to the nearest integer]. decodeStopOn
+  // is the exact inverse, returning absolute [shapeIdx, frac 0..1] pairs.
+  "stops": {
+    "id":   ["…", …],
+    "name": ["…", …],
+    "p":    [[dx, dy], …],
+    "on":   [[[dShapeIdx, scaledFrac], …], …]
+  },
+
+  // LINE_KEYS = ['route', 'pts']. One octilinear-diagram line per shape of
+  // every diagram-cut route (trams + the busiest DIAGRAM_BUS_COUNT buses),
+  // scaled into a unit box; `pts` here are plain [x, y] pairs (not delta-
+  // encoded), since the diagram is already reduced to a handful of points
+  // per line by the 120 m simplification pass.
+  "diagram": {
+    "lines": {
+      "route": ["…", …],
+      "pts":   [[[x, y], …], …]
+    },
+    "box": [w, h]
+  }
 }
 ```
 
@@ -557,7 +552,7 @@ So: a reported position is evidence, never output. Every drawn vehicle sits wher
 - [ ] Delta-encode coordinates as integers against `origin` at `scale`, which is what keeps the file inside its budget.
 - [ ] Emit `app/src/motion/network-meta.ts` with the feed version, the build time, the route count and the byte size as plain exported constants, so the app can state its data age without parsing the artefact.
 - [ ] `package.json` gains `"build:network": "node scripts/gtfs-shapes.mjs"`. It is a local step, exactly like `gtfs-routes`, never part of the Workers build.
-- [ ] Tests run the script against a small synthetic zip built inside the test: the artefact validates against the shape above, every `d` array has even length, every stop fraction lies within 0 and 1, every diagram point is octilinear against its predecessor, and the real committed artefact is under 500 KB raw with a recorded gzip size under 130 KB. That size assertion is not housekeeping: R-L4 is a promise in a filed document.
+- [ ] Tests run the script against a small synthetic zip built inside the test: the artefact validates against the shape above, every `d` array has even length, every stop fraction lies within 0 and 1, every diagram point is octilinear against its predecessor, and the real committed artefact is under 500 KB raw with a recorded gzip size under 130 KB. That size assertion is not housekeeping: R-L4 is a promise in a filed document. (T6b/R-T2 later moved the raw gate to 600 KiB, keeping gzip at 130 KiB as the primary one, to make room for removing `ON_MAX_PER_STOP`; see that task below.)
 
 **Commit:** `Build the ZET network artefact: simplified shapes, stop fractions, an octilinear diagram`
 
@@ -756,6 +751,19 @@ export function createLoop(draw: (now: number) => boolean, deps?: LoopDeps): Loo
 
 **Commit:** `Prove the motion end to end and write down why every constant is what it is`
 
+## Task T6b: keep every stop on every shape (rulings R-T1 to R-T3)
+
+**Files:** Modify `scripts/gtfs-shapes.mjs`, `app/public/data/zet-network.json` (regenerated), `app/src/motion/network-meta.ts` (regenerated), `test/scripts/gtfs-shapes.test.ts`, and the "artefact's shape" block near the top of this file (area-T.md, in the workspace, not the repo).
+
+- [ ] Remove `ON_MAX_PER_STOP` and the code path that applies it. Every stop records its arc-fraction on every shape passing within 40 m, as the brief always said.
+- [ ] Regenerate the artefact with `npm run build:network` against the same GTFS zip T1 used (its feed version is in `network-meta.ts`; if the zip is gone, fetch the latest and record the new version).
+- [ ] Budget test: gzip stays the primary gate at 130 KiB; raw gate becomes 600 KiB; constant names say KiB. Report both measured sizes in your report.
+- [ ] Add a test on the real artefact that the stop for Trg bana Jelačića (find its id by name) appears in the `on` list of every tram shape passing within 40 m of it, and that the count exceeds 12, which is the regression this task exists to prevent.
+- [ ] Confirm `test/motion/network.test.ts` and `test/motion/model.test.ts` still pass; `nextStop` now sees more stops on busy shapes, which is the intended effect.
+- [ ] Replace the JSON sketch in area-T.md's T1 section with the real columnar layout, briefly, so the document matches the file.
+
+**Commit:** `Keep every stop on every shape: the stop gate must see the main square`
+
 
 ---
 
@@ -915,5 +923,173 @@ export function selectAll(html: string, pattern: RegExp): string[];
 - [ ] Every new source appears in all three places with the same licence and the same URL. The test asserts the three-way parity, as it already does for the stage-1 sources.
 - [ ] The two dropped sources are named in `docs/izvori.md` **with the reason**, so a reader of the filed application can see the robots.txt decision rather than wonder why the obvious source is missing (R-P5).
 - [ ] Run `npm run check:izvori` and record the answer for every new URL.
+- [ ] **Ruling R-X2.** The sentence in `docs/izvori.md` promising that everything derived from the listed sources appears at `/open` under the Otvorena dozvola is now above a CC BY-SA 3.0 HR row. Make it precise: open-tier sources are republished at `/open` under the Otvorena dozvola, session-tier sources are not republished at all, and say which is which. Check the same wording in `app/src/data/izvori.json`, `worker/open/index-page.ts` and the DCAT catalogue description, and in section 5 of `docs/prijava/prijedlog-projekta.md`. This is a licence statement in a filed application, so it has to be exactly true.
 
 **Commit:** `Document the event sources, including the two we chose not to take`
+
+## Task E6b: give the ZET notices their publish time (ruling R-E1)
+
+**Files:** Modify `worker/feed/modules/dogadanja/zet-rss.ts`, `worker/feed/modules/dogadanja/index.ts`. Test: `test/feed/dogadanja/zet-rss.test.ts`, `test/feed/dogadanja/module.test.ts`.
+
+- [ ] Read `<pubDate>` on each item into `at` (ISO, converted through the existing RSS date handling `worker/feed/xml.ts` or `hrt-news.ts` already uses) with `precision: 'time'`. An item with an unparseable `pubDate` keeps no `at`, and the test proves that path too.
+- [ ] In the module, remove the `-Infinity` dateless special case if no source is dateless any more; if Kvartovske items are still dateless, keep the case but assert in the test that ZET items no longer fall into it.
+- [ ] Tests against the saved fixtures: every ZET item carries an `at` matching its `pubDate`; the merged list places the newest ZET notice above an older communal-works row.
+
+- [ ] **Ruling R-X1, the same task.** `fetchDogadanja` throws when every source fails, exactly as `hrt-news.ts:71` does. One source failing still contributes nothing and never empties the panel; all six failing must raise, so the cache layer serves the KV last-good copy as `stale` and, past `maxStale`, reports `down`. The module's file header comment ("never throws, regardless of how many, even all six") is corrected in the same edit.
+- [ ] Test both halves against the injected fetch: five sources rejecting still returns the sixth's items with the others at zero in `sourceCounts`; all six rejecting throws. Add the honest-degradation assertion at the cache layer too, so the regression is caught where a person would see it.
+
+**Commit:** `Give ZET notices their publish time, and fail honestly when every source is down`
+
+
+---
+
+# Area F — the fix wave after the whole-iteration review (F1 to F4)
+
+Source: the adversarial review of merged main `68ef9c3` (six seams on Fable, every finding attacked by three refuters; 20 confirmed, 5 refuted, 2 of the 20 already fixed on main as `a509820`). Rulings R-F1 to R-F7 in `rulings.md` bind these tasks. Every task ends with the full suite, both typechecks, the build and `npx playwright test` green, and reports RED and GREEN evidence.
+
+---
+
+## Task F1: the motion model in steady state, and the loops that must stop (rulings R-F1, R-F2, R-F6)
+
+**Files:** Modify `app/src/motion/model.ts`, `app/src/motion/schematic-view.ts`, `app/src/motion/schematic.ts` (`tramDirection` only), `app/src/motion/loop.ts`, `app/src/kiosk.ts` (the essentials open/close and the poll timer only), `app/src/dashboard.ts` (freeze and the poll timer only), `app/src/map/city-map.ts` (pause/resume only). Tests: `test/motion/model.test.ts`, `test/motion/schematic-view.test.ts`, `test/motion/loop.test.ts`, `test/app/kiosk.test.ts`, `test/app/dashboard.test.ts`.
+
+**The critical finding, verified by the controller in the code.** `convergeScalar` (model.ts:218) snaps whenever `|target - cur| > DISCREPANCY_LIMIT_M` (150 m). The stop gate (model.ts:481) clamps dead reckoning at the next stop while the real tram keeps going; the next fix's target then sits more than 150 m past the held position and the tram teleports in one frame. Reproduced by the reviewer against the real `createModel`: stops every 450 m, fixes every 30 s delivered on a 20 s poll with 25 s latency, 7 to 10 m/s, gives 210 to 465 m single-frame jumps roughly once a minute and a tram gate-held for over half of all frames. That is R-P2 violated on the surface people watch.
+
+- [ ] **R-F1a. An along-track gap on the same shape never snaps.** In `convergeScalar`, remove the 150 m snap. The snap belongs where the model is *wrong* (cross-track residual `proj.d` beyond the limit, or a shape change) and that logic already lives in `selectShape`; being *behind* along the line is what gentle catch-up exists for. Replace the catch-up cap with `max(2 * speed, 8 m/s)` whenever the gap exceeds 50 m, falling back to the current `max(4, speed)` under 50 m, so a 300 m gap closes in about 15 to 20 s at tram speed: one poll interval, believable to a person on the pavement. `lastSnapAt` is still recorded for the cross-track and shape-change cases.
+- [ ] **R-F1b. The gate holds for a dwell, not forever.** A vehicle held at a stop by the gate continues after `GATE_DWELL_S = 25` s at half its estimated speed with confidence lowered by 0.2, still bounded by the *following* stop. The gate keeps its purpose (a bad speed estimate cannot carry a tram three blocks past a stop nobody saw it pass) without manufacturing the lag that R-F1a then has to close.
+- [ ] **R-F2. Eviction and an honest denominator.** A vehicle absent from the incoming fixes for longer than `STALE_S` is deleted from the model's map, not merely flagged; `size()` shrinks. `schematic-view`'s legend denominator becomes the count of *fresh* vehicles matching the crop's type filter (trams only on the locked kiosk), so `{drawn} od {tracked} praćenih vozila u kadru` is exactly true: tracked trams, of which this many are in frame. Per-frame cost stops growing with uptime.
+- [ ] **Poller.** `nextPollDelay` in loop.ts is dead code; both surfaces poll on a fixed 20 s. Wire it into the kiosk teaser poll and the dashboard poll so the next request lands 2 s after the feed's next 30 s tick when `sourceUpdatedAt` is known, else 20 s. Tests inject the clock.
+- [ ] **`tramDirection`** re-projects every heading-less tram onto its full shape every frame with a hintless O(n) scan and allocations. Compute it once per `update()` and cache on the vehicle, or pass the vehicle's `proj.idx` as the hint.
+- [ ] **R-F6. Nothing animates off screen.** `dashboard.freeze()` pauses the schematic but leaves the MapLibre map's loop and its model stepping; pause both, and resume nothing after a freeze. `kiosk.openEssentials()` hides the stage but the stage schematic keeps painting at full rate; pause it on open, resume on close. The lightweight and reduced-motion loops in loop.ts request a frame at refresh rate for the whole session without ever parking; they must use the 1 s timer path only, and park like the full loop does.
+- [ ] Tests: port the reviewer's simulation into `test/motion/model.test.ts` as a named scenario (450 m stops, 30 s fixes on a 20 s poll, 25 s and 2 s latency, 7 and 10 m/s, 20 minutes): assert no single frame moves a vehicle more than the catch-up cap times `dt` plus 0.01 m, that `snapped` is never set after the first fix, that gate-held frames are under 15 percent, and that the drawn position lags the true position by under 60 m at the 95th percentile. Eviction: a vehicle absent for `STALE_S + 1` is gone from `size()`. Legend: buses in the box do not count on a trams-only crop. Lifecycle: after `freeze()` no `requestAnimationFrame` or timer is pending on either map; after `openEssentials()` the stage loop is parked; the lightweight loop issues zero `requestAnimationFrame` calls in 10 simulated seconds.
+
+**Commit:** `Catch up instead of snapping, evict what has gone quiet, and stop every loop that is off screen`
+
+---
+
+## Task F2: the lightweight promise, measured (rulings R-F3, R-F4)
+
+**Files:** Modify `app/src/entries/kiosk.ts`, `app/src/entries/dashboard.ts`, `app/src/entries/landing.ts`, `app/src/ui/fonts.css` (import sites only), `app/src/ui/kiosk.css`, `app/src/ui/base.css`, `app/src/kiosk.ts` (only if a data attribute replaces `:has()`), `docs/kiosk.md`. Create `test/app/budget.test.ts`. **This task starts only after T12 has merged**, because both edit `kiosk.css`.
+
+The filed proposal (§1.10) promises under 200 kB transferred per screen load. The review measured the lightweight kiosk at about 57 kB compressed *before* fonts and 207 to 248 kB of woff2 after them, because Croatian text pulls both the latin and latin-ext subsets of every face. The budget test R-L4 mandated does not exist, which is why a green suite never noticed.
+
+- [ ] **R-F3. Lightweight loads no webfonts.** The three faces are the Modrotisak typography and stay on the modern path. On the lightweight path the system stack the token layer already names is the honest degradation, exactly as the canvas-free panorama and meander are. Move the `fonts.css` import out of the shared CSS graph into each entry, loaded dynamically only when `lightweight` is false, so Vite emits it as its own chunk that the lightweight graph never references. The legend and code faces fall back to the monospace system stack; check the kiosk code value and the legends still align (tabular figures via `font-variant-numeric` where the fallback supports it).
+- [ ] **The budget test.** `test/app/budget.test.ts` builds (or reads the existing `app/dist`) and sums, for each of `/kiosk/` and `/d/`, the entry HTML, every JS chunk reachable from the entry without following the MapLibre or fonts dynamic imports, and every CSS file those import; compress each with gzip at level 6 and assert the total is under 200 kB, printing the breakdown. A second assertion walks the same graph and fails if it references `fonts.css`'s chunk or `zet-network.json` or the MapLibre chunk. Document the measured numbers in `docs/kiosk.md` under the lightweight section.
+- [ ] **R-F4. A 2017 baseline that lays out.** `100dvh` on `.kiosk` and `body` gets a `100vh` line before it (older engines keep the first, newer take the second). The lightweight meander bar gets explicit `top: 0; bottom: 0; height: 100%` alongside `inset-block: 0`. The `:has()` selector that shrinks the panorama in an unlocked or live state is replaced by the `data-mode` attribute the kiosk root already carries. Flex `gap` on the lightweight-rendered lists (`.schematic-list`, the essentials rows, the catalogue) gets margin fallbacks so text does not run together on engines without flex gap. Check `docs/kiosk.md`'s lightweight paragraph says what degrades and what does not.
+- [ ] R-L5 stands: the separate ES2017 build and the device matrix remain later project tasks. Note in `docs/kiosk.md` which DOM APIs in the app source have no 2017 equivalent (the review named `ResizeObserver`, `element.closest`, optional chaining reaching the browser) so that task has a starting list.
+- [ ] Proof: the budget test green with the numbers in the report; a Playwright run at 1920 by 1080 with `?lagano=1` saving a screenshot to `test-results/kiosk-lagano.png` and asserting no `<canvas>`, no font request, the pairing code visible without scrolling, and the meander bar taller than 20 px.
+
+**Commit:** `Keep the lightweight promise: no webfonts, a measured budget, and a layout a 2017 browser can draw`
+
+---
+
+## Task F3: what the documents promise, the pages must show (ruling R-F7)
+
+**Files:** Modify `app/src/izvori-render.ts`, `worker/open/index-page.ts`, `docs/izvori.md`, `docs/prijava/prijedlog-projekta.md` (§5 sentence only). Tests: `test/app/izvori.test.ts`, `test/docs/izvori.test.ts`, the `/open` page test.
+
+- [ ] Section 5 of the proposal says the full per-source list with addresses and licences is on `/izvori`. The page renders only `data.sources`; the `dogadanjaSources` array E9 added to `app/src/data/izvori.json` is referenced nowhere. Render it: under the `dogadanja` entry, one row per source with its address, licence (including "Licenca nije navedena" for Etnografski muzej) and the two robots-dropped sources with their reason. Test that every `dogadanjaSources` URL and licence string appears in the rendered HTML.
+- [ ] The `/open` index lede says everything shown without scanning is republished as a dataset; the kiosk's city-events card is shown without scanning and is not republished (session-tier module, licence-filtered on the way to the teaser). Make the sentence exactly true: the open-tier *modules* are republished; the events card is drawn from a session-tier module and is not.
+- [ ] Re-read every licence sentence in `docs/izvori.md`, `app/src/data/izvori.json`, `worker/open/index-page.ts` and §5 of the proposal against `worker/feed/modules/dogadanja/licence.ts` and `registry.ts`; list each in the report with the line it is now true of.
+
+**Commit:** `Show on /izvori what the application says is there, and make the /open lede exactly true`
+
+---
+
+## Task F4: the moving map for people who cannot see it (ruling R-F5)
+
+**Files:** Modify `app/src/motion/schematic-view.ts`, `app/src/ui/schematic.css`, `app/src/map/city-map.ts`, both i18n catalogues. Tests: `test/motion/schematic-view.test.ts`, `e2e/a11y.spec.ts` (one added assertion per surface).
+
+- [ ] **The vehicle card is unreachable and silent for screen-reader users.** The only keyboard route is arrow keys on a canvas with `role="img"`; readers stay in browse mode and swallow the arrows, and the card opens without moving focus or announcing. Ruling R-F5: the canvas keeps `role="img"` and its legend as `aria-label`, and gains a **visually hidden list** of the drawn vehicles as real `<button>` elements ("linija 6, smjer Sopot, kasni 2 min"), rebuilt on each `update()` (not per frame), that opens the same card. The card becomes `role="dialog"` with `aria-modal="false"`, `aria-labelledby` its line heading, focus moves to it on open, `Escape` and the close button return focus to the button that opened it, and the 90 s idle close on the kiosk returns focus to the list rather than dropping it to `body`. The arrow-key handler on the canvas stays for sighted keyboard users.
+- [ ] **The map container's `role="img"` hides MapLibre's controls.** Zoom buttons and the OpenStreetMap attribution link sit inside a `role="img"` element and are dropped from the accessibility tree while staying in the tab order. Move the role and label to an inner presentation element covering only the canvas, and give the container `role="region"` with the same label, so the controls and the licence-required attribution link are exposed by name.
+- [ ] Add to the axe sweep, for `/d/` (session) and `/kiosk/`: no `nested-interactive` violations, every focusable element has an accessible name, and the vehicle list is reachable by Tab.
+
+**Commit:** `Give the moving map a text path: a list of vehicles, a real dialog, and named map controls`
+
+
+---
+
+# Task T12: the open screen must fit and the vehicles must be seen (rulings R-V1, R-V2)
+
+Found on the production screenshot of the locked kiosk at 1920 by 1080 after T9 landed (`.superpowers/sdd/2026-09-11-vidikovac-stage1/kiosk-prod.png`, taken 12 September 15:58). Two defects, both invisible to the unit suite and to axe, both obvious to a person standing in front of the screen.
+
+**Files:** Modify `app/src/ui/kiosk.css`, `app/src/ui/schematic.css`, `app/src/motion/schematic.ts` (colours and mark sizes only), `app/src/motion/schematic-view.ts` (only if the two-canvas mount needs a class or a tone), `app/src/kiosk.ts` (only if the stage markup needs one wrapper). Create `e2e/kiosk-layout.spec.ts`. Test additions to `test/motion/schematic.test.ts` where the mark geometry changes.
+
+## Defect 1: the stage overflows into the strip (R-V1)
+
+What the screenshot shows: the left column stacks the schematic, its legend and honesty note, the rotating headline with its attribution, the meander with its legend, and then the catalogue rows. The catalogue's three rows land on top of the safety strip: "01 · MAKSIMIR SADA / 23.1 °C" is printed over the Osnovno button and the SIGURNOST label, "02 · ZET U POKRETU" over the warnings text. The schematic, meanwhile, is a small square of roughly 300 px in a column with room for far more. The stage was laid out as a flowing stack; at 1080p it needs budgets.
+
+Ruling R-V1, the layout at 1920 by 1080 (every size `calc(var(--kiosk-scale) * N)`, no container queries, per R-L3):
+- Header 120 and its rule; panorama strip 88 (R-P1); safety strip 120 at the bottom. What remains for the stage is about 750, and the stage must never grow past it: `.kiosk-stage { overflow: hidden }` is the last defence, but nothing should reach it.
+- Left column, top to bottom, as a grid with explicit rows: schematic `1fr` with `min-height: 0` and its legend and honesty note directly under it (mono 19, two lines maximum, honesty note 17); headline row 96 (title 52, one line, `text-overflow: ellipsis`, attribution 17 under it); meander row 72 plus its legend 19; catalogue row 96 with its top rule. The schematic gets everything the fixed rows do not take, which at 1080p is roughly 380 px, and it is the dominant element of the stage, as R-P1 intended.
+- The teaser title drops from 68 to 52 on the kiosk. The two-line invitation still splits on its first full stop, the second line in `--tone-label`, and both lines fit in the 96 row.
+- Right column: the code card as today, vertically centred in the stage.
+- In an unlocked session the driver's layer takes the whole stage as before; nothing in this task changes that path.
+- On `/d` (390 wide) the schematic is not on the kiosk grid at all; check it once by screenshot and leave it if nothing overlaps.
+
+## Defect 2: the vehicles do not read (R-V2)
+
+What the screenshot shows: the route lines are drawn in ink and the vehicles are drawn in ink. A tram is a 12 by 3.5 px rectangle lying along a line of nearly the same width and colour; fifteen trams are in frame according to the legend and not one is visible. Matija's words: *"both bus and tram should be a blue square but tram visibly thinner. direction is visible from movement."* Blue against cream, not ink against ink.
+
+Ruling R-V2:
+- Route lines are drawn in `--tone-label` (label blue) at alpha 0.55 and 2 px, which is the third shade the design permits and reads as the printed network diagram. Vehicles are drawn in `--tone-text-primary` (ink in the dark face, indigo in the light face) at alpha `0.55 + 0.45 * confidence`, so even the least confident vehicle is clearly darker than the line it sits on.
+- Minimum on-screen mark size regardless of `--kiosk-scale` and density: bus 10 px square, tram 14 by 5 px. A tram must be visibly thinner than a bus and still be a shape, not a hairline.
+- A one-pixel cream halo (`--tone-canvas`) around each mark, drawn first, separates a vehicle from the line under it and from a neighbour at the same stop. This is one extra `fillRect` or rotated rect per mark per frame; the frame loop already parks when nothing moves.
+- Read the tones through `tone()` from `app/src/ui/canvas.ts` at mount and on theme change, never as literals in `schematic.ts`.
+
+## Proof
+
+- `e2e/kiosk-layout.spec.ts` at 1920 by 1080 in both faces: the bounding box of `[data-testid=kiosk-catalogue]` ends above the top of `[data-testid=safety-strip]` with at least 8 px between them; the schematic canvas is at least 360 px tall; no two of the stage's direct children overlap (compare bounding boxes pairwise); the headline is one line. Save a screenshot per face to `test-results/kiosk-1080p-<face>.png` so the controller can look at it.
+- Vehicle legibility, in the same spec, with the teaser stubbed to place three trams inside the crop: read the vehicle canvas back with `getImageData` at each mark's projected screen position and assert the pixel is closer to the ink tone than to the line tone; assert the same pixel on the route canvas alone is the line tone. That is the difference between "the legend says 15" and "a person can see 15".
+- The existing motion spec and the axe sweep stay green. `npx playwright test` passes in full.
+
+**Commit:** `Make the open screen fit at 1080p and make every vehicle legible`
+
+
+---
+
+# Task F5: the lightweight list must show the lines it counts (ruling R-F8)
+
+Found on production at `/kiosk/?lagano=1` (screenshot `.superpowers/sdd/2026-09-12-vidikovac-iteration2/kiosk-lagano-prod.png`, 12 September 18:17): the legend reads "18 od 45 praćenih vozila u kadru" and directly under it the lightweight list says "Trenutačno nema stavki." The stage's whole `1fr` row is empty. R-L2 specified the lightweight twin as "the nearest stops with the lines calling at them", but stops come from `zet-network.json`, which the lightweight path never fetches by rule R-L4, so `schematic-view`'s list has nothing to render and always prints the empty sentence. The promise in the filed proposal is a screen that answers on a ten-year-old device; today that screen answers with a count and an empty list.
+
+**Files:** Modify `app/src/motion/schematic-view.ts` (the lightweight `renderList` path only), `app/src/ui/schematic.css` and `app/src/ui/kiosk.css` (list rows only), both i18n catalogues, `docs/kiosk.md`. Tests: `test/motion/schematic-view.test.ts`, `e2e/lagano.spec.ts`.
+
+Ruling R-F8. Without geometry the honest list is **the lines in frame, not the stops**: everything the wire already carries. The kiosk's teaser subset for `zet-rt` (R-P1, T9) delivers every vehicle inside the box around the screen's centre with `routeShortName`, `routeType` and the per-route delay rows; the dashboard's session snapshot carries the same for the whole network. Build the list from that:
+
+- [ ] One row per route present among the fresh, type-matching vehicles in the crop (the same set the legend's `tracked` counts after R-F2), trams first, then buses, each sorted by route number as a person would read them (numeric, then text). Row content: the route label as the chip the phone panel already uses, the number of vehicles of that route in frame ("2 vozila"), and that route's median delay in words through the existing `delayWord` helper ("kasni 2 min", "na vrijeme", "rani 1 min"), with "smjer nepoznat" never appearing here because direction is not a per-route fact.
+- [ ] Cap the list at ten rows on the kiosk and twenty on the dashboard; below the cap say nothing, above it add one final row "još {n} linija" so the count and the list agree.
+- [ ] When there are genuinely no vehicles in frame, keep the current empty sentence; when the snapshot is `stale` or `down`, say so in the same words the panels use, never "nema stavki" for an outage (the same honesty rule as R-X1).
+- [ ] The rows use the catalogue geometry (mono label in `--tone-label`, body value) with margins, not flex gap, on this path (R-F4). Rows must fit the stage row budget of R-V1 at 1080p: at ten rows of 24 px with 8 px spacing that is 320 px, inside the roughly 380 px available; assert it in the layout test.
+- [ ] `docs/kiosk.md`: correct the lightweight paragraph to say the list shows the lines in frame with their delay rather than named stops, and why (the geometry file is not loaded on this path), with no apology in the copy.
+- [ ] Tests: unit, from a fixture snapshot with three trams on two routes and one bus in the crop under a trams-only crop, the list has two rows in numeric order with counts 2 and 1 and the right delay words, and the bus is absent; a whole-network crop includes the bus row after the trams; a `stale` snapshot renders the stale sentence, not the empty one; eleven routes render ten rows plus "još 1 linija". End to end, `e2e/lagano.spec.ts` with the teaser stubbed to place vehicles in the box: the list has at least one `li`, no `canvas` exists, and the list's bounding box stays above the headline row.
+
+## The same defect on the essentials board (R-P7), fixed by the same helper
+
+Found on production by pressing Osnovno (screenshot `kiosk-essentials-prod.png` in this folder, 12 September 18:41): the row "Sljedeći polasci" shows "101: po redu" as its value and then every route in the city as a wall of text ("102: +42 s · 103: po redu · … · 135: +3240 s · …"), pushing the Maksimir and pharmacy rows below the fold of a board that must never need scrolling. There are no departures on the wire at all (stop_times is never shipped, R-T decision), so the row's title is also untrue.
+
+- [ ] Additional files: `app/src/kiosk.ts` (`essentialsRows` only), `test/app/kiosk.test.ts`, `e2e/kiosk-layout.spec.ts`.
+- [ ] Build the route summary once, in one exported helper in `app/src/motion/schematic-view.ts` or a new `app/src/layers/route-summary.ts` (routes among fresh vehicles in the crop, trams first, count in frame, median delay in words through `delayWord`), and use it in both places: the lightweight list above and the essentials row.
+- [ ] The essentials row is retitled `Linije u blizini` (en `Lines nearby`), its value is the first route's chip and delay in words, its detail is the next seven routes as "6 kasni 2 min · 11 na vrijeme · 12 rani 1 min", and nothing beyond eight routes is printed. Raw seconds never appear anywhere on a screen; `delayWord` is the only formatter for delay.
+- [ ] The board must fit: in `e2e/kiosk-layout.spec.ts`, press Osnovno at 1920 by 1080 in both faces and assert every essentials row's bounding box ends above the safety strip with the panel's `scrollHeight` equal to its `clientHeight`, and save `test-results/kiosk-1080p-essentials-<face>.png`.
+- [ ] Test in `test/app/kiosk.test.ts`: with the fixture snapshot the row title is `Linije u blizini`, the value names the lowest tram route with a delay word, the detail holds at most seven more, and no digit is followed by " s".
+
+**Commit:** `Give the lightweight screen and the essentials board the lines they count, not an empty list or a wall of seconds`
+
+
+---
+
+# Task F6: the constants the lag comes from (ruling R-F9), and F1's leftovers
+
+F1's reviewer measured the steady-state scenario with the constants R-F1 fixed and found the brief's targets unreachable: gate-held frames 21 to 26 percent (target under 15), lag at the 95th percentile 116 to 271 m (target under 60 m). The implementer pinned the test to the measured envelope rather than silently relaxing it, which was right. The reviewer named the levers, and the controller has now ruled on them.
+
+**Files:** Modify `app/src/motion/model.ts`, `test/motion/model.test.ts`, `app/src/dashboard.ts` (poll re-arm only), `app/src/map/city-map.ts` (`tramDirection` and the `stale` branch only), `app/src/motion/schematic.ts` and `app/src/motion/schematic-view.ts` (the dead `stale` branch only), `test/app/dashboard.test.ts`, `test/motion/city-map.test.ts`.
+
+Ruling R-F9:
+
+- [ ] **Release at full speed.** After the 25 s dwell the vehicle continues at its estimated speed, not half of it. After 25 s at a platform the likelier truth is that the tram left; half speed was the controller's own caution and it is where most of the lag is built (the reviewer measured 87 to 375 m per stop at 25 s latency). Confidence on release is `min(confidence - 0.2, STOP_GATE_CONFIDENCE_CAP)` so a release never reads as more certain than the hold it follows (the reviewer's suggestion; today a release can brighten the mark and show a heading at the exact moment the model starts guessing).
+- [ ] **Gain on a cruising target.** Under 50 m of gap the settle cap becomes `max(1.5 × speed, 6 m/s)` so the drawn mark can close on a target that is itself moving at `speed`; at exactly `speed` it could never gain. Over 50 m the cap stays `max(2 × speed, 8 m/s)`. The dead zone stays 15 m.
+- [ ] **Measure, then pin.** Re-run the eight named scenario runs with these constants and record held share and p95 lag per run in the report. Set the test thresholds to the worst measured value plus a fifth of it, rounded up, and write both the brief's original targets and the measured values in the test's comment so the next reader knows what was aimed at and what was reached. The two invariants stay absolute: no frame beyond the catch-up cap, no snap after the first fix. If p95 lag with these constants is still above 120 m, stop and report the numbers; the controller decides the next lever.
+- [ ] **Monotonic reckoning test.** F1's ruling 3 made dead reckoning monotonic (the old formula pulled a vehicle backwards after about 135 s of silence). No test asserts it. Add one: a single vehicle, 300 s of silence sampled every second, drawn `p` never moves backwards along the shape.
+- [ ] **F1 leftovers.** `dashboard.ts` re-arms the poll after the join's `refresh()` fills `sourceUpdatedAt`, so the first poll of a session is aligned too, and the delay lookup is keyed on the active layer's own modules rather than whatever zet-rt snapshot an earlier layer left. `city-map.ts`'s `tramDirection` uses `Drawn.track` instead of re-projecting per frame, and the map's loop takes the injected `setTimer`/`clearTimer` pair like the schematic view. `Drawn.stale` is documented as always false since eviction; remove the three dead branches on it and the field, or keep the field and delete the branches, but do not leave a documented-dead condition in three consumers. `test/app/kiosk.test.ts:710` counts two timers by the coincidence that `TEASER_ROTATE_MS` equals the poll fallback; assert the two registrations separately.
+- [ ] Full suite, both typechecks, build and Playwright green, with `.dev.vars` copied from the example for the run and deleted before the commit.
+
+**Commit:** `Release at full speed and gain on a moving target, with the scenario pinned to what was measured`
