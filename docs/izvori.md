@@ -19,6 +19,24 @@ Ovaj popis je jedini izvor istine o tome odakle Vidikovac uzima podatke, pod koj
 
 Pomoćni skup izvan modula: ZET statični GTFS https://www.zet.hr/gtfs-scheduled/latest (oko 15 MB) čita se lokalno skriptom `scripts/gtfs-routes.mjs` i pretvara u `app/src/data/zet-routes.json` (imena linija). Ista atribucija kao za `zet-rt`.
 
+### Šest izvora modula `dogadanja`, pojedinačno
+
+Redak `dogadanja` iznad predstavlja modul kao cjelinu jednom adresom; ovdje je puni popis, jedan redak po izvoru, s vlastitom adresom i licencom svakog. ZET-ova dva feeda i Etnografski muzejova dva REST krajnja tijela dijele po jedan redak jer dijele istu licencu i isti sub-fetcher (`worker/feed/modules/dogadanja/*.ts`); polje `data.source` koje svaka stavka nosi ima sedam vrijednosti (ZET-ova dva feeda imaju svaki svoju: `zet-novosti`, `zet-promet`), navedenih u zagradi uz svaki redak.
+
+| Izvor | Adresa | Licenca |
+|---|---|---|
+| Kulturpunkt (najave), `source: kulturpunkt` | https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc | CC BY-SA 3.0 HR |
+| Skupština Grada Zagreba (rokovnik sjednica), `source: skupstina` | https://skupstina.zagreb.hr/rokovnik-sjednica/76 | Otvorena dozvola |
+| Kvartovske novosti (mjesna samouprava), `source: kvartovske` | https://aktivnosti.zagreb.hr/kvartovske-novosti/134585 | Otvorena dozvola |
+| Plan komunalnih aktivnosti, `source: komunalne` | https://data.zagreb.hr/dataset/fddb4f87-c002-4e3c-b988-adf013997ecc/resource/f90738b6-8bfa-4dd9-9db7-b3c532d90c97/download/data.json | Otvorena dozvola |
+| ZET, obavijesti, `source: zet-novosti` / `zet-promet` | https://www.zet.hr/rss_novosti.aspx i https://www.zet.hr/rss_promet.aspx | Otvorena dozvola |
+| Etnografski muzej (događanja i izložbe), `source: etnografski` | https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc i https://emz.hr/wp-json/wp/v2/izlozbe?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc | Licenca nije navedena (muzej ne navodi uvjete ponovne uporabe; stavke ostaju isključivo u sesiji, nikad na `/open`) |
+
+Dva izvora navedena u ranijem prijedlogu ostaju izvan modula, isključena zbog robots.txt (R-P5):
+
+- **Guru za kulturu** (https://kultura.zagreb.hr/) -- njegovi podaci o događanjima dostupni su samo preko putanje `kultura.zagreb.hr/api/`, koju robots.txt te domene izričito zabranjuje (uz `_next/`). Ostatak domene je dopušten, ali bez `/api/` nema strojno čitljivih podataka za čitanje.
+- **YouTube Atom feed kanala Skupštine Grada Zagreba**, na putanji `youtube.com/feeds/videos.xml`, koju YouTube-ov robots.txt također zabranjuje. Umjesto zabranjenog feeda, uz svaku sjednicu u prijenosu prikazuje se poveznica na sam kanal (https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA) -- poveznica (linking) nije isto što i dohvat (crawling), pa je to i dalje dopušteno i prikazuje se.
+
 ## Izvori planirani za financirano razdoblje
 
 | Izvor | Adresa | Stanje | Licenca ili uvjet | Kako ćemo ga navesti |
@@ -45,4 +63,8 @@ Atribucija se prikazuje na četiri mjesta i nikad se ne izostavlja: (1) u podno�
 
 ## Izvedeni podaci
 
-Sve što Vidikovac izvede iz gornjih izvora (na primjer zatvorene prometnice kao GeoJSON, sažeci upozorenja, stanje izvora) objavljuje se na `/open/*.json` pod Otvorenom dozvolom, s katalogom DCAT-AP na `/open/catalog.json` i dnevnim snimkama. Time je ispunjen uvjet data.zagreb.hr "omogući dijeljenje pod sličnim uvjetima". Statistika korištenja (brojači bez identifikatora) isporučuje se Gradu Zagrebu pod posebnom licencom opisanom u `docs/prijava/prijedlog-projekta.md`; mi je ne objavljujemo.
+Svaki modul u `worker/feed/schema.ts` nosi jednu od dvije razine (`tier`): **open** ili **session**. Samo ono što Vidikovac izvede iz *open*-razine modula (`prometnice`, `dhmz-cap`, `emsc`, `ckan-geo` -- na primjer zatvorene prometnice kao GeoJSON, sažeci meteoroloških upozorenja, sigurnosne točke) objavljuje se strojno čitljivo na `/open/*.json` pod Otvorenom dozvolom, s katalogom DCAT-AP na `/open/catalog.json` i dnevnim snimkama; time je ispunjen uvjet data.zagreb.hr "omogući dijeljenje pod sličnim uvjetima". **Session**-razina modula (`zet-rt`, `dhmz-now`, `dhmz-forecast`, `hrt-news`, `glasnik` i `dogadanja`) se na `/open` ne objavljuje nikako, ni djelomično -- ti podaci postoje samo unutar sesije koju otvara skeniranje.
+
+Modul `dogadanja` je u cijelosti session razine, jer jedan od njegovih šest izvora, Kulturpunkt, nosi licencu CC BY-SA 3.0 HR koju bi republikacija na `/open` pogrešno prikazala kao Otvorenu dozvolu (a Etnografski muzej ne navodi nikakvu licencu za ponovnu uporabu, pa ni on ne smije napustiti sesiju). Iznimka koju treba čitati doslovno: pet njegovih izvora koji jesu pod Otvorenom dozvolom (Skupština Grada Zagreba, kvartovske novosti, plan komunalnih aktivnosti, ZET-ove obavijesti) ipak se uživo prikazuju na javnom zaslonu prije skeniranja, na kiosk kartici "Grad javlja" -- to je zaseban mehanizam od `/open/*.json` izvoza, ne republiciranje: ti retci se ondje ne arhiviraju niti nude za strojno preuzimanje, samo se prikažu na zaslonu i nestanu sljedećim osvježavanjem. Ni Kulturpunkt ni Etnografski muzej se na toj kartici nikad ne prikazuju.
+
+Statistika korištenja (brojači bez identifikatora) isporučuje se Gradu Zagrebu pod posebnom licencom opisanom u `docs/prijava/prijedlog-projekta.md`; mi je ne objavljujemo.

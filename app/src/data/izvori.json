@@ -10,5 +10,14 @@
     { "module": "glasnik", "naziv": "Službeni glasnik Grada Zagreba", "tier": "session", "url": "https://www1.zagreb.hr/sluzbeni-glasnik/", "text": "Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}", "licence": "Otvorena dozvola (NN 67/17)" },
     { "module": "ckan-geo", "naziv": "data.zagreb.hr, geoprostorni skupovi (zborna mjesta, ljekarne, zdenci, javni WC)", "tier": "open", "url": "https://data.zagreb.hr/", "text": "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup '{naziv}', posljednja izmjena {datum}", "licence": "Otvorena dozvola (NN 67/17)" },
     { "module": "dogadanja", "naziv": "Događanja u Zagrebu (šest izvora)", "tier": "session", "url": "https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc", "text": "Šest izvora zagrebačkih događanja: Kulturpunkt (CC BY-SA 3.0 HR), Skupština Grada Zagreba, kvartovske novosti, plan komunalnih aktivnosti i ZET (Otvorena dozvola), Etnografski muzej; licenca i poveznica navedeni uz svaku stavku prema polju \"source\"", "licence": "Više licenci, vidi izvor uz svaku stavku" }
+  ],
+  "dogadanjaSources": [
+    { "source": "kulturpunkt", "naziv": "Kulturpunkt", "url": "https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc", "licence": "CC BY-SA 3.0 HR" },
+    { "source": "skupstina", "naziv": "Skupština Grada Zagreba", "url": "https://skupstina.zagreb.hr/rokovnik-sjednica/76", "licence": "Otvorena dozvola" },
+    { "source": "kvartovske", "naziv": "Kvartovske novosti", "url": "https://aktivnosti.zagreb.hr/kvartovske-novosti/134585", "licence": "Otvorena dozvola" },
+    { "source": "komunalne", "naziv": "Plan komunalnih aktivnosti", "url": "https://data.zagreb.hr/dataset/fddb4f87-c002-4e3c-b988-adf013997ecc/resource/f90738b6-8bfa-4dd9-9db7-b3c532d90c97/download/data.json", "licence": "Otvorena dozvola" },
+    { "source": "zet-novosti", "naziv": "ZET, obavijesti (opće)", "url": "https://www.zet.hr/rss_novosti.aspx", "licence": "Otvorena dozvola" },
+    { "source": "zet-promet", "naziv": "ZET, obavijesti (promet)", "url": "https://www.zet.hr/rss_promet.aspx", "licence": "Otvorena dozvola" },
+    { "source": "etnografski", "naziv": "Etnografski muzej", "url": "https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc", "licence": "Licenca nije navedena" }
   ]
 }

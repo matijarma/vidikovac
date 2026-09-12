@@ -111,11 +111,21 @@ Potpuni popis s licencama, adresama, učestalošću i doslovnim atribucijama je 
 | Grad Zagreb | Službeni glasnik Grada Zagreba (JSON API) | službeni tekstovi | 1 h |
 | Narodne novine | API s ELI identifikatorima | službeni tekstovi | dnevno |
 | HRT | RSS Vijesti i Radio Sljeme (tekst s poveznicom) | uz navođenje HRT-a i poveznicu | 5 min |
+| Zagrebački događaji (šest izvora: Kulturpunkt, Skupština, kvartovske novosti, plan komunalnih aktivnosti, ZET, Etnografski muzej) | Najave, sjednice, mjesna samouprava, komunalni radovi, prometne obavijesti, izložbe | CC BY-SA 3.0 HR (Kulturpunkt) i Otvorena dozvola (ostalih četvero); Etnografski muzej ne navodi licencu | 15 min |
 | Europeana, NSK, Wikidata, Wikimedia Commons | Baština Zagreba, metapodaci | CC0 / javno vlasništvo / CC BY-SA | dnevno |
 | HAK | Stanje na cestama (tekst) | uz izvor, poveznicu i izvorno vrijeme | 10 min |
 | HEP ODS, HEP Toplinarstvo, VIO | Planirani prekidi (neslužbeni prikaz) | uvjeti u provjeri | dnevno |
 
 Izvori su ocijenjeni zeleno (otvorena licenca, strojno čitljivo, bez ključa), žuto (službeni HTML, uz oprez i oznaku "neslužbeni prikaz") i crveno (zatvoreno; prikazuje se samo poveznica dok pisano odobrenje ne stigne). U prototipu su isključivo zeleni izvori. Pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT feedu), HRT-u i HAK-u te upit HŽPP-u o licenci dio su plana provedbe.
+
+Redak "Zagrebački događaji" iznad sažima šest izvora čiji puni popis, s adresom i licencom svakog pojedinačno, čuva `docs/izvori.md`:
+
+- **Kulturpunkt** (najave) -- `https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc` -- CC BY-SA 3.0 HR
+- **Skupština Grada Zagreba** (rokovnik sjednica) -- `https://skupstina.zagreb.hr/rokovnik-sjednica/76` -- Otvorena dozvola
+- **Kvartovske novosti** (mjesna samouprava) -- `https://aktivnosti.zagreb.hr/kvartovske-novosti/134585` -- Otvorena dozvola
+- **Plan komunalnih aktivnosti** -- `https://data.zagreb.hr/dataset/fddb4f87-c002-4e3c-b988-adf013997ecc/resource/f90738b6-8bfa-4dd9-9db7-b3c532d90c97/download/data.json` -- Otvorena dozvola
+- **ZET, obavijesti** -- `https://www.zet.hr/rss_novosti.aspx` i `https://www.zet.hr/rss_promet.aspx` -- Otvorena dozvola
+- **Etnografski muzej** (događanja i izložbe) -- `https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc` i `https://emz.hr/wp-json/wp/v2/izlozbe?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc` -- Licenca nije navedena
 
 ## 6. Kriteriji iz Priloga 1. Programa
 
