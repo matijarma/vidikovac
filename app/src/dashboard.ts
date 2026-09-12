@@ -313,6 +313,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (layer !== 'u-pokretu' && mapFull) {
       mapFull = false;
       element.dataset.view = 'layers';
+      // The narrow path re-renders just below; the wide grid would otherwise
+      // keep a button still reading "Skupi kartu".
+      if (wide) render();
     }
     paintTabs();
     updateDocumentTitle();
