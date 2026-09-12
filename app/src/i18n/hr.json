@@ -187,7 +187,17 @@
     "teaserAir": "Zrak",
     "teaserSoon": "Uskoro u sljedećoj fazi.",
     "tapHint": "Dodirni za cijeli zaslon",
-    "sources": "Izvori"
+    "sources": "Izvori",
+    "legendPanorama": "SL. 1 — ZAGREBAČKA PANORAMA: MEDVEDNICA I GRAD · NA PRUZI JEDNA TOČKA = JEDNO VOZILO ZET-a · {count} U POKRETU, {time}",
+    "legendPanoramaLoading": "SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA",
+    "legendQr": "SL. 2 — OTISAK ZA KAMERU",
+    "legendMeander": "SL. 3 — MEANDAR KODA · ISPRAZNI SE SVAKIH 30 s, PA SE IZDA NOVI KOD",
+    "safetyLabel": "SIGURNOST — OTVORENO SVIMA",
+    "catalogueWeather": "MAKSIMIR SADA",
+    "catalogueVehicles": "ZET U POKRETU",
+    "catalogueClosures": "PROMETNICE",
+    "unitVehicles_one": "vozilo", "unitVehicles_few": "vozila", "unitVehicles_other": "vozila",
+    "unitClosed_one": "zatvorena", "unitClosed_few": "zatvorene", "unitClosed_other": "zatvorenih"
   },
   "export": {
     "copied": "Kopirano s navodom izvora.",

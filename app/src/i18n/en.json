@@ -182,7 +182,17 @@
     "teaserAir": "Air",
     "teaserSoon": "Coming in the next stage.",
     "tapHint": "Tap for full screen",
-    "sources": "Sources"
+    "sources": "Sources",
+    "legendPanorama": "FIG. 1 — ZAGREB PANORAMA: MEDVEDNICA AND THE CITY · ONE DOT ON THE TRACK = ONE ZET VEHICLE · {count} MOVING, {time}",
+    "legendPanoramaLoading": "FIG. 1 — ZAGREB PANORAMA · LOADING DATA",
+    "legendQr": "FIG. 2 — PRINT FOR THE CAMERA",
+    "legendMeander": "FIG. 3 — CODE MEANDER · EMPTIES EVERY 30 s, THEN A NEW CODE IS ISSUED",
+    "safetyLabel": "SAFETY — OPEN TO EVERYONE",
+    "catalogueWeather": "MAKSIMIR NOW",
+    "catalogueVehicles": "ZET ON THE MOVE",
+    "catalogueClosures": "ROADS",
+    "unitVehicles_one": "vehicle", "unitVehicles_other": "vehicles",
+    "unitClosed_one": "closed", "unitClosed_other": "closed"
   },
   "export": {
     "copied": "Copied with the source line.",

@@ -55,6 +55,45 @@ export function zagrebDateTimeWithYear(value: TimeInput): string {
   return `${Number(p.day)}. ${Number(p.month)}. ${p.year}. ${zagrebTime(date)}`;
 }
 
+const WEEKDAY_PARTS = new Intl.DateTimeFormat('hr-HR', {
+  timeZone: ZAGREB_TZ,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'numeric',
+  year: 'numeric',
+});
+
+// en-CA's date order is already ISO's (year-month-day), so formatting through
+// that locale is a documented trick for "YYYY-MM-DD" without hand-padding —
+// the same one worker/feed/time.ts uses (ZAGREB_PARTS there) to read Zagreb
+// wall-clock parts back out of a formatter.
+const DAY_KEY_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: ZAGREB_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** 'pet 11. 9. 2026.' — short weekday + the Croatian day-month-year order
+ *  (with year, unlike zagrebDateTime): the kiosk header's date line, paired
+ *  with a separate clock that already states the time. */
+export function zagrebWeekdayDate(value: TimeInput): string {
+  const date = parseIso(value);
+  if (!date) return '';
+  const p: Record<string, string> = {};
+  for (const part of WEEKDAY_PARTS.formatToParts(date)) {
+    if (part.type !== 'literal') p[part.type] = part.value;
+  }
+  return `${p.weekday} ${Number(p.day)}. ${Number(p.month)}. ${p.year}.`;
+}
+
+/** 'YYYY-MM-DD' in Zagreb local time (R-O2): a stable per-day grouping key,
+ *  not a display string — E's events module groups by this. */
+export function zagrebDayKey(value: TimeInput): string {
+  const date = parseIso(value);
+  return date ? DAY_KEY_PARTS.format(date) : '';
+}
+
 /** Whole minutes of age; null when the instant is unparseable. */
 export function minutesSince(value: TimeInput, now: number): number | null {
   const date = parseIso(value);

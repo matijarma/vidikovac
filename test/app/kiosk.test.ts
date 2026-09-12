@@ -4,7 +4,8 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
-import { mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
+import { catalogueRows, mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
+import { zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
 import { LJEKARNE } from '../../worker/hitno/ljekarne';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -20,6 +21,10 @@ const MODULES: ModuleSnapshot[] = [
   snap('emsc', [{ id: 'q1', module: 'emsc', kind: 'quake', tier: 'open', title: 'Potres magnitude 1,6', at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } }]),
   snap('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', link: 'https://vijesti.hrt.hr/clanak' }]),
   snap('ckan-geo', [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Ljekarna Centar, Ilica 1', data: { category: 'ljekarne', duty: 'da' } }]),
+  // The teaser's reduced zet-rt shape (registry.teaserSubset): one summary
+  // item carrying the live count, the same shape vehicleCount() and the
+  // panorama/catalogue read.
+  snap('zet-rt', [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '156 vozila u pokretu', data: { vehicles: 156 } }]),
 ];
 
 // Every code in a real batch is distinct; the rotation merges batches by code
@@ -33,7 +38,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -56,6 +61,7 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     now: () => NOW,
     codeBase: 'https://zagreb.aningfilm.hr',
     reducedMotion: opts.reducedMotion ?? false,
+    lightweight: opts.lightweight ?? false,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })),
     fetchData,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -172,15 +178,23 @@ describe('mountKiosk', () => {
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('žuto upozorenje');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('Ljekarna Centar, Ilica 1');
   });
-  it('the ring animates by default and becomes static segments under reduced motion', () => {
+  it('the meander is a canvas that sweeps by default, on a fresh slot', () => {
     const plain = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
     plain.handlers.onCodes(batch(NOW), NOW);
-    expect(plain.root.querySelector('[data-testid=code-ring]')?.getAttribute('data-motion')).toBe('sweep');
+    const ring = plain.root.querySelector('[data-testid=code-ring]')!;
+    expect(ring.tagName).toBe('CANVAS');
+    expect(ring.getAttribute('data-motion')).toBe('sweep');
+    // A fresh slot has just started (elapsed 0), so the full interval remains.
+    expect(ring.getAttribute('data-pct')).toBe('1.00');
+  });
+  it('quantises to ten steps under reduced motion, still on a canvas', () => {
     const still = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), reducedMotion: true });
-    still.handlers.onCodes(batch(NOW), NOW);
+    // The batch's first slot started 7s ago: 7/30 of the interval elapsed.
+    still.handlers.onCodes(batch(NOW - 7_000), NOW);
     const ring = still.root.querySelector('[data-testid=code-ring]')!;
+    expect(ring.tagName).toBe('CANVAS');
     expect(ring.getAttribute('data-motion')).toBe('segments');
-    expect(ring.querySelectorAll('[data-testid=ring-segment]')).toHaveLength(6);
+    expect(ring.getAttribute('data-pct')).toBe('0.70');
   });
   it('asks for fullscreen and a wake lock on the first tap only', () => {
     const { root, requestFullscreen, requestWakeLock } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
@@ -278,5 +292,62 @@ describe('mountKiosk', () => {
     timers.forEach((tick) => tick());
     await flush();
     expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(true);
+  });
+  it('the header shows the clock and the Croatian weekday date', () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    expect(text(root.querySelector('[data-testid=kiosk-date]'))).toBe(zagrebWeekdayDate(NOW));
+    expect(text(root.querySelector('[data-testid=kiosk-clock]'))).toBe(zagrebTime(NOW));
+  });
+  it("the panorama's caption and its aria-label are identical and both name the live vehicle count", async () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    await flush();
+    const canvas = root.querySelector('[data-testid=panorama]')!;
+    const legend = root.querySelector('[data-testid=panorama-legend]')!;
+    expect(text(legend)).toContain('156 U POKRETU');
+    expect(text(legend)).toContain('14:32');
+    expect(canvas.getAttribute('aria-label')).toBe(text(legend));
+  });
+  it('shows the honest loading legend, with no count, before the first teaser poll resolves', () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    expect(text(root.querySelector('[data-testid=panorama-legend]'))).toBe('SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA');
+  });
+  it("the catalogue renders three rows with the fixture's values", async () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    await flush();
+    const catalogue = text(root.querySelector('[data-testid=kiosk-catalogue]'));
+    expect(catalogue).toContain('MAKSIMIR SADA');
+    expect(catalogue).toContain('21 °C');
+    expect(catalogue).toContain('vedro');
+    expect(catalogue).toContain('ZET U POKRETU');
+    expect(catalogue).toContain('156');
+    expect(catalogue).toContain('vozila');
+    expect(catalogue).toContain('PROMETNICE');
+    expect(catalogue).toContain('zatvorena');
+  });
+  it('lightweight mode renders no canvas anywhere in the kiosk, and the meander bar carries the quantised width', () => {
+    const { root, handlers } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true });
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    // 9s of a 30s slot elapsed -> 70% of the interval remains, quantised to
+    // ten steps even though reducedMotion was never set (R-L1/R-L2: lightweight
+    // alone forces quantisation).
+    handlers.onCodes(batch(NOW - 9_000), NOW);
+    const bar = root.querySelector<HTMLElement>('[data-testid=code-ring]')!;
+    expect(bar.tagName).toBe('DIV');
+    expect(bar.style.width).toBe('70%');
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+});
+
+describe('catalogueRows', () => {
+  const i18n = createDefaultI18n('hr');
+  it('returns Maksimir, ZET and Prometnice with the fixture values and Croatian plural units', () => {
+    const rows = catalogueRows(MODULES, i18n);
+    expect(rows.map((r) => r.label)).toEqual(['MAKSIMIR SADA', 'ZET U POKRETU', 'PROMETNICE']);
+    expect(rows[0]!.value).toBe('21 °C');
+    expect(rows[0]!.unit).toBe('vedro');
+    expect(rows[1]!.value).toBe('156');
+    expect(rows[1]!.unit).toBe('vozila');
+    expect(rows[2]!.value).toBe('1');
+    expect(rows[2]!.unit).toBe('zatvorena'); // count 1 -> Croatian "one" category
   });
 });

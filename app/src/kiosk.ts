@@ -16,14 +16,18 @@ import {
   type BeaconCredentials,
 } from './beacon';
 import { codeUrl, formatCode, speakableCode } from './code';
-import { zagrebTime } from './format';
+import { zagrebTime, zagrebWeekdayDate } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
+import { vehicleCount } from './layers/shared';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { createRotation, slotProgress } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { dataNumber, dataText } from './panels/panel';
+import { applyScale, tone } from './ui/canvas';
+import { MEANDER_STEPS, paintMeander, paintMeanderBar, quantise } from './ui/meander';
+import { paintPanorama } from './ui/panorama';
 import { createQr } from './ui/qr';
 import { escapeHtml } from './ui/dom/escape';
 // Task A10's ckan-geo module (the only open-tier feed poi items come from)
@@ -36,8 +40,11 @@ import { LJEKARNE } from '../../worker/hitno/ljekarne';
 
 /** Cross-fade interval for the teaser cards. */
 export const TEASER_ROTATE_MS = 20_000;
-/** Segments drawn instead of a sweep under prefers-reduced-motion. */
-export const RING_SEGMENTS = 6;
+/** Meander repaint cadence (design.md §3.2: "1 s korak, linearno"). */
+export const MEANDER_TICK_MS = 1_000;
+/** Design width the whole kiosk is laid out against; applyScale() turns the
+ *  element's real width into a --kiosk-scale multiplier of this (R-L3). */
+const KIOSK_DESIGN_WIDTH = 1920;
 
 export interface TeaserCard {
   id: 'weather' | 'quake' | 'closures' | 'news' | 'invitation';
@@ -107,6 +114,50 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
   ];
 }
 
+export interface CatalogueEntry {
+  id: 'weather' | 'vehicles' | 'closures';
+  /** '01 · MAKSIMIR SADA' etc.; the '01 ·' prefix is a CSS counter (§4 kiosk.css), never part of this string. */
+  label: string;
+  /** The headline figure: '21 °C', a bare vehicle count, or a bare closure count. */
+  value: string;
+  /** The secondary word beside `value`: the weather word, or a plural unit ('vozila', 'zatvorena'). */
+  unit: string;
+}
+
+/** The three catalogue rows under the kiosk headline (design.md §4): Maksimir's
+ *  temperature and weather word, ZET's live vehicle count, and the closure
+ *  count — each with its plural unit resolved through i18n, never hand-pluralised. */
+export function catalogueRows(modules: readonly ModuleSnapshot[], i18n: I18n): CatalogueEntry[] {
+  const map = byModule(modules);
+  const observation = map['dhmz-now']?.items[0];
+  const temp = dataNumber(observation, 'temp');
+  const vehicles = vehicleCount(map['zet-rt']);
+  const closures = (map.prometnice?.items ?? []).filter((item) => item.kind === 'closure').length;
+  return [
+    {
+      id: 'weather',
+      label: i18n.t('kiosk.catalogueWeather'),
+      // Mirrors teaserCards' weather card: no observation yet is "loading",
+      // an observation with no temperature reading is "unavailable" — two
+      // different honest states, not one.
+      value: !observation ? i18n.t('status.loading') : temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp }),
+      unit: observation ? dataText(observation, 'weather') : '',
+    },
+    {
+      id: 'vehicles',
+      label: i18n.t('kiosk.catalogueVehicles'),
+      value: vehicles === null ? i18n.t('status.loading') : String(vehicles),
+      unit: vehicles === null ? '' : i18n.t('kiosk.unitVehicles', { count: vehicles }),
+    },
+    {
+      id: 'closures',
+      label: i18n.t('kiosk.catalogueClosures'),
+      value: String(closures),
+      unit: i18n.t('kiosk.unitClosed', { count: closures }),
+    },
+  ];
+}
+
 export function safetyStripText(
   modules: readonly ModuleSnapshot[],
   i18n: I18n,
@@ -137,6 +188,12 @@ export interface KioskDeps {
   now?: () => number;
   codeBase?: string;
   reducedMotion?: boolean;
+  /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
+  lightweight?: boolean;
+  /** Re-runs the canvas repaints on theme change (fires once immediately) and
+   *  on resize, coalesced onto one frame (ui/canvas.ts's `repaintOn`). Absent
+   *  in tests that don't care about theme/resize repainting. */
+  onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
@@ -153,28 +210,44 @@ export interface KioskHandle {
   destroy(): void;
 }
 
-export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
-  const { i18n } = deps;
-  const now = deps.now ?? (() => Date.now());
-  const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
-  const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
-
-  const element = document.createElement('div');
-  element.className = 'kiosk';
-  element.dataset.testid = 'kiosk';
-  element.dataset.mode = 'teaser';
-  element.innerHTML = `
+/** The kiosk's whole DOM, built once at mount from the lightweight flag (R-L1/R-L2):
+ *  the panorama and the meander each have exactly one path, chosen here, never
+ *  toggled with CSS after the fact. Everything dynamic (date, clock, legends,
+ *  the code, the catalogue, the teaser) is painted into these elements afterwards. */
+function kioskMarkup(i18n: I18n, lightweight: boolean): string {
+  const panoramaInner = lightweight
+    ? `<div class="panorama-rule" aria-hidden="true"></div>`
+    : `<canvas class="panorama" data-testid="panorama" role="img" aria-label=""></canvas>`;
+  const meanderInner = lightweight
+    ? `<div class="meander-track" aria-hidden="true"><div class="meander-bar" data-testid="code-ring"></div></div>`
+    : `<canvas class="meander" data-testid="code-ring" data-motion="sweep" aria-hidden="true"></canvas>`;
+  return `
     <p class="kiosk-alert" role="alert" data-testid="kiosk-alert" hidden></p>
+    <header class="kiosk-head">
+      <p class="kiosk-wordmark">${escapeHtml(i18n.t('common.appName'))} <span class="kiosk-tagline">${escapeHtml(i18n.t('common.tagline'))}</span></p>
+      <p class="kiosk-when"><span class="kiosk-date" data-testid="kiosk-date"></span>
+        <time class="kiosk-clock" data-testid="kiosk-clock"></time></p>
+    </header>
+    <figure class="kiosk-fig kiosk-panorama">
+      ${panoramaInner}
+      <figcaption class="legend" data-testid="panorama-legend"></figcaption>
+    </figure>
     <section class="kiosk-stage" data-testid="kiosk-stage">
       <div class="kiosk-teaser">
+        <div class="kiosk-live" data-testid="kiosk-live"></div>
         <article class="teaser-card" data-testid="teaser-card"></article>
+        <figure class="kiosk-fig kiosk-meander">
+          ${meanderInner}
+          <figcaption class="legend">${escapeHtml(i18n.t('kiosk.legendMeander'))}</figcaption>
+        </figure>
+        <div class="kiosk-catalogue" data-testid="kiosk-catalogue"></div>
       </div>
-      <aside class="kiosk-code">
-        <div class="code-ring" data-testid="code-ring" data-motion="${deps.reducedMotion ? 'segments' : 'sweep'}"></div>
-        <div class="kiosk-qr" data-testid="kiosk-qr"></div>
-        <p class="kiosk-code-label">${escapeHtml(i18n.t('kiosk.codeLabel'))}</p>
-        <p class="kiosk-code-value" data-testid="pair-code"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
-        <p class="kiosk-code-hint">${escapeHtml(i18n.t('kiosk.typeCode'))}</p>
+      <aside class="kiosk-code" aria-label="${escapeHtml(i18n.t('kiosk.codeLabel'))}">
+        <div class="code-card">
+          <div class="kiosk-qr" data-testid="kiosk-qr"></div>
+          <p class="kiosk-code-value" data-testid="pair-code"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
+          <p class="legend kiosk-code-hint">${escapeHtml(i18n.t('kiosk.legendQr'))}<br><span class="hint-emphasis">${escapeHtml(i18n.t('kiosk.typeCode'))}</span></p>
+        </div>
         <!-- The QR's payload as text: what the camera reads, for anyone who
              cannot read the QR (and the end-to-end contract, R-52). Hidden
              until a code exists, because a link with no text is a serious
@@ -185,10 +258,30 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       <div class="corner-qr" data-testid="corner-qr" hidden></div>
     </section>
     <footer class="kiosk-safety" data-testid="safety-strip"></footer>`;
+}
+
+export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
+  const { i18n } = deps;
+  const now = deps.now ?? (() => Date.now());
+  const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
+  const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
+
+  const lightweight = Boolean(deps.lightweight);
+
+  const element = document.createElement('div');
+  element.className = 'kiosk';
+  element.dataset.testid = 'kiosk';
+  element.dataset.mode = 'teaser';
+  element.innerHTML = kioskMarkup(i18n, lightweight);
   root.appendChild(element);
 
   const alertBox = element.querySelector<HTMLElement>('[data-testid=kiosk-alert]')!;
+  const dateEl = element.querySelector<HTMLElement>('[data-testid=kiosk-date]')!;
+  const clockEl = element.querySelector<HTMLElement>('[data-testid=kiosk-clock]')!;
+  const panoramaCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=panorama]');
+  const panoramaLegend = element.querySelector<HTMLElement>('[data-testid=panorama-legend]')!;
   const teaserCard = element.querySelector<HTMLElement>('[data-testid=teaser-card]')!;
+  const catalogueBox = element.querySelector<HTMLElement>('[data-testid=kiosk-catalogue]')!;
   const qrBox = element.querySelector<HTMLElement>('[data-testid=kiosk-qr]')!;
   const cornerQr = element.querySelector<HTMLElement>('[data-testid=corner-qr]')!;
   const ring = element.querySelector<HTMLElement>('[data-testid=code-ring]')!;
@@ -246,12 +339,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     renderAlert();
   }
 
+  /** M3b's note: the invitation's two sentences split onto two lines, the
+   *  first in ink and the second in `--tone-label` (Vidikovac.dc.html:69) —
+   *  written generically off the first full stop, never hard-coded to one
+   *  card id, so it applies to whichever card the rotation is showing. */
+  function splitHeadline(text: string): { lead: string; tail: string } {
+    const cut = text.indexOf('. ');
+    return cut === -1 ? { lead: text, tail: '' } : { lead: text.slice(0, cut + 1), tail: text.slice(cut + 2) };
+  }
+
   function paintTeaser(): void {
     const card = cards[cardIndex % Math.max(1, cards.length)];
     if (!card) return;
     teaserCard.classList.remove('is-in');
-    teaserCard.innerHTML = `<h2 class="teaser-title">${escapeHtml(card.title)}</h2>
-      <p class="teaser-body">${escapeHtml(card.body)}</p>
+    const { lead, tail } = splitHeadline(card.body);
+    teaserCard.innerHTML = `<p class="teaser-kicker">${escapeHtml(card.title)}</p>
+      <h1 class="teaser-title">${escapeHtml(lead)}${tail ? `<br><span class="teaser-tagline">${escapeHtml(tail)}</span>` : ''}</h1>
       ${card.attribution ? `<p class="teaser-attr">${escapeHtml(card.attribution.text)}</p>` : ''}`;
     // Restart the cross-fade by forcing a reflow before re-adding the class.
     void teaserCard.offsetWidth;
@@ -260,21 +363,72 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   function paintStrip(): void {
     const parts = safetyStripText(teaser, i18n);
-    strip.innerHTML = `<span>${escapeHtml(i18n.t('kiosk.teaserCap'))}: ${escapeHtml(parts.cap)}</span>
+    strip.innerHTML = `<span class="strip-label">${escapeHtml(i18n.t('kiosk.safetyLabel'))}</span>
+      <span>${escapeHtml(i18n.t('kiosk.teaserCap'))}: ${escapeHtml(parts.cap)}</span>
       <span>${escapeHtml(i18n.t('kiosk.teaserClosures'))}: ${escapeHtml(parts.closures)}</span>
-      <span>${escapeHtml(i18n.t('kiosk.safety'))}: ${escapeHtml(parts.pharmacy)}</span>`;
+      <span>${escapeHtml(i18n.t('kiosk.safety'))}: ${escapeHtml(parts.pharmacy)}</span>
+      <a class="strip-hitno" href="/hitno">/hitno</a>`;
   }
 
-  function paintRing(): void {
-    if (deps.reducedMotion) {
-      const filled = currentSlotRef ? Math.round(slotProgress(currentSlotRef, rotation.serverNow()) * RING_SEGMENTS) : 0;
-      ring.innerHTML = Array.from(
-        { length: RING_SEGMENTS },
-        (_, i) => `<span class="ring-segment" data-testid="ring-segment" data-on="${i < filled ? 'true' : 'false'}"></span>`,
-      ).join('');
+  function paintHeader(): void {
+    dateEl.textContent = zagrebWeekdayDate(now());
+    clockEl.textContent = zagrebTime(now());
+    clockEl.setAttribute('datetime', new Date(now()).toISOString());
+  }
+
+  function paintPanoramaFigure(): void {
+    const count = vehicleCount(byModule(teaser)['zet-rt']);
+    const legendText =
+      count === null
+        ? i18n.t('kiosk.legendPanoramaLoading')
+        : i18n.t('kiosk.legendPanorama', { count, time: zagrebTime(now()) });
+    panoramaLegend.textContent = legendText;
+    // R-L2: lightweight has no canvas at all; the legend line stands alone
+    // and the band is a plain 2px rule (kiosk.css), so there is nothing more
+    // to paint here on that path.
+    if (!panoramaCanvas) return;
+    panoramaCanvas.setAttribute('aria-label', legendText);
+    paintPanorama(panoramaCanvas, {
+      fg: tone(panoramaCanvas, '--tone-text-primary', '#f2ead8'),
+      count: count ?? 0,
+    });
+  }
+
+  function paintCatalogue(): void {
+    const rows = catalogueRows(teaser, i18n);
+    catalogueBox.innerHTML = rows
+      .map(
+        (row) => `<div class="cat-row">
+          <p class="cat-label">${escapeHtml(row.label)}</p>
+          <p class="cat-value">${escapeHtml(row.value)}${row.unit ? ` <span class="cat-unit">${escapeHtml(row.unit)}</span>` : ''}</p>
+        </div>`,
+      )
+      .join('');
+  }
+
+  /** Replaces the old sweeping/segmented ring: chooses its path once
+   *  (lightweight -> the bar div, otherwise the canvas), quantises `pct`
+   *  under reduced motion or lightweight (R-L1/R-L2), and always writes
+   *  `data-motion`/`data-pct` so tests (and, on the canvas path, nothing
+   *  else) can read the current state without touching pixels. `pct` is the
+   *  interval REMAINING — 1 on a fresh slot, draining to 0 — matching
+   *  drawMeander's "empties linearly from the right". */
+  function paintCodeMeander(): void {
+    const progress = currentSlotRef ? slotProgress(currentSlotRef, rotation.serverNow()) : 0;
+    const raw = 1 - progress;
+    const pct = deps.reducedMotion || lightweight ? quantise(raw, MEANDER_STEPS) : raw;
+    ring.dataset.pct = pct.toFixed(2);
+    if (lightweight) {
+      paintMeanderBar(ring, pct);
       return;
     }
-    ring.innerHTML = '<span class="ring-sweep"></span>';
+    const canvas = ring as HTMLCanvasElement;
+    canvas.dataset.motion = deps.reducedMotion ? 'segments' : 'sweep';
+    paintMeander(canvas, {
+      ink: tone(canvas, '--tone-stroke', 'rgba(242,234,216,.2)'),
+      fill: tone(canvas, '--tone-text-primary', '#f2ead8'),
+      pct,
+    });
   }
 
   function paintCode(): void {
@@ -301,7 +455,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       });
       cornerQr.replaceChildren(small.element);
     }
-    paintRing();
+    paintCodeMeander();
   }
 
   function paintLayer(): void {
@@ -370,6 +524,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       cards = teaserCards(teaser, i18n, now());
       paintTeaser();
       paintStrip();
+      paintPanoramaFigure();
+      paintCatalogue();
     } catch {
       showAlert('status.down', 'teaser');
     }
@@ -441,10 +597,34 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   };
   element.addEventListener('pointerdown', onFirstTap);
 
-  paintRing();
+  // R-L3: the kiosk sizes itself from a JS-computed scale (--kiosk-scale)
+  // instead of container queries, from the element's own width — works even
+  // if `onRepaint` is absent (falls back to scale 1 with no layout box, e.g.
+  // under happy-dom).
+  applyScale(element, KIOSK_DESIGN_WIDTH);
+  paintHeader();
+  paintPanoramaFigure();
+  paintCodeMeander();
+  paintCatalogue();
   paintStrip();
   void loadTeaser();
+
+  // Canvas colours are read off computed style (`tone()`), so a theme flip
+  // needs a repaint even with no new data; a resize needs one because the
+  // canvas backing store itself is sized off the box. `onRepaint` (fires
+  // once immediately, per its own contract) covers both in one subscription;
+  // the plain-text paints above don't depend on either and are not repeated
+  // here.
+  const stopRepaint = deps.onRepaint?.(() => {
+    applyScale(element, KIOSK_DESIGN_WIDTH);
+    paintPanoramaFigure();
+    paintCodeMeander();
+  });
+
+  const meanderTimer = setTimer(() => paintCodeMeander(), MEANDER_TICK_MS);
+
   const rotateTimer = setTimer(() => {
+    paintHeader();
     if (element.dataset.mode === 'teaser') {
       cardIndex += 1;
       paintTeaser();
@@ -465,6 +645,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     destroy() {
       rotation.stop();
       clearTimer(rotateTimer);
+      clearTimer(meanderTimer);
+      stopRepaint?.();
       beacon?.close();
       session?.close();
       maps.destroy();
