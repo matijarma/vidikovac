@@ -39,6 +39,11 @@ export function meanderGeometry(w: number, h: number): MeanderGeometry {
   const bottom = h - half;
   const step = bottom - top;
   const points: Array<readonly [number, number]> = [[half, bottom], [half, top]];
+  // h<=0 (reachable: a CSS height in (0,0.25) at density 2 rounds to exactly
+  // 0 in prepareCanvas) makes step<=0, and `while (x < w - step)` would never
+  // advance x — an infinite loop. Bail out with the degenerate two-point
+  // geometry instead of hanging the caller.
+  if (step <= 0) return { lineWidth, points };
   let x = half;
   let atTop = true;
   while (x < w - step) {

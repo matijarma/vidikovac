@@ -37,6 +37,20 @@ describe('meanderGeometry', () => {
   it('is deterministic for the same w and h', () => {
     expect(meanderGeometry(437, 61)).toEqual(meanderGeometry(437, 61));
   });
+
+  it('returns immediately instead of hanging when h is 0 (step <= 0)', () => {
+    // A CSS height in (0, 0.25) at density 2 rounds to exactly 0 (canvas.ts's
+    // prepareCanvas passes cssH<=0 while unrounded, then Math.round(cssH*2)
+    // yields h=0), so this is reachable in production, not just directly.
+    const g = meanderGeometry(400, 0);
+    expect(g.lineWidth).toBe(0);
+    expect(g.points).toEqual([[0, 0], [0, 0]]);
+  }, 2000);
+
+  it('returns immediately instead of hanging for a negative h too', () => {
+    const g = meanderGeometry(400, -10);
+    expect(g.points.length).toBeLessThanOrEqual(2);
+  }, 2000);
 });
 
 describe('quantise', () => {
