@@ -320,7 +320,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
    *  trams-only kiosk: tracked trams, of which this many are in frame. */
   function trackedCount(drawnList: readonly Drawn[]): number {
     let n = 0;
-    for (const v of drawnList) if (!v.stale && (!types || types.has(v.type))) n++;
+    for (const v of drawnList) if (!types || types.has(v.type)) n++;
     return n;
   }
 

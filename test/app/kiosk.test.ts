@@ -9,6 +9,7 @@ import type { I18n } from '../../app/src/i18n/i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { catalogueRows, ESSENTIALS_IDLE_MS, essentialsRows, mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
 import { zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
+import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { LJEKARNE, LJEKARNE_SOURCE } from '../../worker/hitno/ljekarne';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -371,9 +372,12 @@ describe('mountKiosk', () => {
     const real = createDefaultI18n('hr');
     const i18n: I18n = { ...real, t: (key, vars) => { if (key === 'status.down') throw new Error('copy unavailable'); return real.t(key, vars); } };
     const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), i18n, fetchTeaser: async () => { throw new Error('down'); } });
+    // The rotation is armed synchronously at mount; the poll only once the first load has settled.
+    const rotation = k.timers.filter((t) => t.ms === TEASER_ROTATE_MS);
+    expect(rotation).toHaveLength(1);
     await flush();
-    // The 20 s rotation and the 20 s fallback teaser poll: the chain is alive.
-    expect(k.timers.filter((t) => !t.cleared && t.ms === TEASER_ROTATE_MS)).toHaveLength(2);
+    // The chain is alive: a fallback poll registered beside the rotation, not counted through it.
+    expect(k.timers.filter((t) => !t.cleared && t.ms === POLL_FALLBACK_MS && t !== rotation[0])).toHaveLength(1);
     expect(errorSpy).toHaveBeenCalledTimes(1); // and the failure was reported, not swallowed
     errorSpy.mockRestore();
   });
@@ -722,9 +726,23 @@ describe('the live stage (T9 / R-P1)', () => {
 
   it('polls the teaser again 2 s after the feed\'s next 30 s tick when zet-rt carries a source timestamp, else after 20 s', async () => {
     const plain = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    // The 20 s rotation is armed synchronously at mount; the teaser poll is
+    // not yet -- it arms once the first load has settled.
+    const rotation = plain.timers.filter((t) => t.ms === TEASER_ROTATE_MS);
+    expect(rotation).toHaveLength(1);
     await flush();
-    // The 20 s rotation and the 20 s fallback teaser poll: two registrations at that delay.
-    expect(plain.timers.filter((t) => !t.cleared && t.ms === TEASER_ROTATE_MS)).toHaveLength(2);
+    // That load carried no source timestamp, so the poll armed at the 20 s
+    // fallback: a second registration, told apart from the rotation by
+    // identity, never by the coincidence that the two delays are equal.
+    const fallbackPoll = plain.timers.filter((t) => !t.cleared && t.ms === POLL_FALLBACK_MS && t !== rotation[0]);
+    expect(fallbackPoll).toHaveLength(1);
+    // And they behave differently: the poll is a one-shot that re-arms
+    // itself when it fires; the rotation is an interval and stays.
+    fallbackPoll[0]!.fn();
+    await flush();
+    expect(fallbackPoll[0]!.cleared).toBe(true);
+    expect(rotation[0]!.cleared).toBe(false);
+    expect(plain.timers.filter((t) => !t.cleared && t.ms === POLL_FALLBACK_MS && t !== rotation[0])).toHaveLength(1);
 
     const stamped = boxedTeaser().map((m) => (m.module === 'zet-rt' ? { ...m, sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : m));
     const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), fetchTeaser: async () => ({ modules: stamped }) });

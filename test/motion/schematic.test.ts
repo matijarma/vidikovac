@@ -71,7 +71,7 @@ function crossNetwork(): Network {
 }
 
 function drawn(over: Partial<Drawn> & { id: string; p: XY; type: number }): Drawn {
-  return { heading: null, speed: 0, confidence: 1, onShape: null, stale: false, ...over };
+  return { heading: null, speed: 0, confidence: 1, onShape: null, ...over };
 }
 
 interface Call { op: string; args: unknown[] }
@@ -316,10 +316,9 @@ describe('vehicleMarks', () => {
     expect(none.alpha).toBe(MIN_VEHICLE_ALPHA);
   });
 
-  it('leaves out stale vehicles, vehicles outside the crop, and types the layout excludes', () => {
+  it('leaves out vehicles outside the crop and types the layout excludes', () => {
     const l = layoutSchematic(crossNetwork(), crop, 400, 400, 1, new Set([GTFS_TRAM]));
     const marks = vehicleMarks(l, [
-      drawn({ id: 'stale', p: CENTRE, type: GTFS_TRAM, stale: true }),
       drawn({ id: 'far', p: { x: 1500, y: 0 }, type: GTFS_TRAM }),
       drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS }),
       drawn({ id: 'ok', p: { x: 100, y: 0 }, type: GTFS_TRAM }),
