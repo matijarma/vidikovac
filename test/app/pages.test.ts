@@ -32,6 +32,9 @@ describe('static pages', () => {
     // working product, not on an "under construction" notice.
     expect(html).not.toContain('Prototip u izgradnji');
     expect(html).not.toContain('bit će otvoren');
+    // R-P8: the retired proposition never reappears on the landing page.
+    expect(html).not.toContain('Plaća se pažnjom');
+    expect(html).toContain('Nitko ništa ne plaća, ni novcem ni pažnjom');
     expect(html).toContain('otvoren je svima, bez skeniranja i bez ograničenja trajanja');
     for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/']) {
       expect(html, href).toContain(`href="${href}"`);
@@ -43,6 +46,28 @@ describe('static pages', () => {
     expect(html).toContain("'Manrope'");
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
     expect(html).toContain('id="health"');
+    // M7: modrotisak palette, both faces of the cloth (design.md §1).
+    expect(html).toContain('#16226b');
+    expect(html).toContain('#f2ead8');
+    expect(html).toContain('#c3cdf5');
+    expect(html).toContain('#9db4ff');
+    expect(html).toContain('#4553a8');
+    expect(html).toContain('#3a49b0');
+    // M7: the panorama figure sits right after the h1, sized per the brief.
+    const h1End = html.indexOf('</h1>');
+    const panoramaAt = html.indexOf('data-testid="panorama"');
+    const legendAt = html.indexOf('data-testid="panorama-legend"');
+    const leadAt = html.indexOf('class="lead"');
+    expect(h1End).toBeGreaterThan(-1);
+    expect(panoramaAt).toBeGreaterThan(h1End);
+    expect(legendAt).toBeGreaterThan(panoramaAt);
+    expect(leadAt).toBeGreaterThan(legendAt);
+    expect(html).toContain('clamp(120px, 22vw, 180px)');
+    expect(html).toMatch(/<canvas[^>]*role="img"/);
+    // The teaser fetch and the panorama paint live in the external module
+    // entry, never inline (CSP: script-src 'self').
+    expect(html).toContain('src="/src/entries/landing.ts"');
+    expect(html).not.toContain('/src/health.ts');
   });
   it('/izvori carries the placeholder and no inline script', () => {
     const html = read('app/izvori/index.html');
