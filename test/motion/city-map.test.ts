@@ -8,6 +8,9 @@ import {
   STROKE_INK,
   VEHICLE_INK,
   vehiclesToGeoJson,
+  withNetwork,
+  withTimers,
+  type MapFactory,
   type MapLine,
   type MapPoint,
 } from '../../app/src/map/city-map';
@@ -94,14 +97,22 @@ async function harness(opts: { points?: MapPoint[]; lines?: MapLine[]; reducedMo
   document.body.appendChild(container);
   const loadNetwork = opts.loadNetwork ?? vi.fn(async () => null);
   const handle = createCityMap(
-    { container, ariaLabel: 'Karta', points: opts.points ?? [A], lines: opts.lines ?? [CLOSURE], reducedMotion: opts.reducedMotion, loadNetwork },
+    {
+      container,
+      ariaLabel: 'Karta',
+      points: opts.points ?? [A],
+      lines: opts.lines ?? [CLOSURE],
+      reducedMotion: opts.reducedMotion,
+      loadNetwork,
+      // On the options, where a page's `withTimers` puts it (R-F12).
+      setTimer: (fn, ms) => { const timer = { fn, ms, cleared: false }; timers.push(timer); return timer; },
+      clearTimer: (h) => { (h as { cleared: boolean }).cleared = true; },
+    },
     {
       loadMaplibre: async () => lib as never,
       raf: (cb) => { queue.set(++nextHandle, cb); return nextHandle; },
       cancel: (h) => { queue.delete(h); },
       now: () => t,
-      setTimer: (fn, ms) => { const timer = { fn, ms, cleared: false }; timers.push(timer); return timer; },
-      clearTimer: (h) => { (h as { cleared: boolean }).cleared = true; },
     },
   );
   await flush();
@@ -348,5 +359,48 @@ describe('the map for people who cannot see it (R-F5)', () => {
     // The style's own source attribution stays the plain text, which MapLibre
     // drops as a substring of the link, so the credit is shown exactly once.
     expect(html).toContain(OSM_ATTRIBUTION);
+  });
+});
+
+// --- R-F12: the page binds its timer pair into the production factory the
+// way it binds the network loader, so the reduced-motion loop of the real
+// map ticks on the pair the page injects, never on the globals. ----------
+describe('the page binds its timer pair into the production factory (R-F12)', () => {
+  it('withTimers hands the pair through the MapFactory contract: under reduced motion the loop arms, clears and re-arms its clock tick on the injected pair and never touches the global setTimeout', async () => {
+    const globalTimer = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      const setTimer = vi.fn((fn: () => void, ms: number) => ({ fn, ms }));
+      const clearTimer = vi.fn();
+      // The production factory is createCityMap itself (entries/kiosk.ts and
+      // entries/dashboard.ts pass it as `mapFactory`); only the library
+      // import and the frame primitives are stubbed, as the harness above
+      // stubs them, so what runs is the exact composition the two pages
+      // apply: withTimers(withNetwork(factory, load), setTimer, clearTimer).
+      const factory: MapFactory = (options) => createCityMap(options, { loadMaplibre: async () => lib as never, raf: () => 1, cancel: () => {}, now: () => T0 });
+      const loadNetwork = vi.fn(async () => null);
+      const bound = withTimers(withNetwork(factory, loadNetwork), setTimer, clearTimer)!;
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const handle = bound({ container, ariaLabel: 'Karta', points: [A], lines: [], reducedMotion: true });
+      await flush();
+      const map = FakeMap.instances[FakeMap.instances.length - 1]!;
+      map.load();
+      // The loop started on 'load' and armed its first tick through the page's pair.
+      expect(setTimer).toHaveBeenCalledTimes(1);
+      const first = setTimer.mock.results[0]!.value as { fn: () => void; ms: number };
+      first.fn(); // the tick fires: withdrawn as a one-shot, one step drawn, the next armed a second out
+      expect(clearTimer).toHaveBeenCalledWith(first);
+      expect(setTimer).toHaveBeenCalledTimes(2);
+      expect(setTimer.mock.calls[1]![1]).toBe(1000);
+      expect(loadNetwork).toHaveBeenCalledTimes(1); // the network binding survived the composition
+      expect(globalTimer).not.toHaveBeenCalled();
+      handle.destroy();
+    } finally {
+      globalTimer.mockRestore();
+    }
+  });
+
+  it('undefined in stays undefined out, exactly like withNetwork: a lightweight page with no factory binds nothing', () => {
+    expect(withTimers(undefined, () => 0, () => {})).toBeUndefined();
   });
 });

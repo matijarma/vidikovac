@@ -58,7 +58,7 @@ const FRAME_BUDGET_MS = 12;
  *  the device telling us it cannot sustain this rate. */
 const SLOW_STREAK_TO_HALVE = 3;
 /** Nothing has moved for this many frames straight: every vehicle is either
- *  stale or already converged onto its target, and continuing to paint an
+ *  evicted or already converged onto its target, and continuing to paint an
  *  unchanged frame would only burn battery on a screen nobody is watching
  *  right now. */
 const PARK_AFTER_UNCHANGED = 8;

@@ -22,7 +22,7 @@ import { LAYER_MODULES, renderLayer } from './layers';
 import { cityTeaserAttribution, cityTeaserBody, cityTeaserRows } from './layers/grad-teaser';
 import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from './layers/route-summary';
 import { vehicleCount } from './layers/shared';
-import { withNetwork, type MapFactory } from './map/city-map';
+import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { routeDelayMap, vehicleFixes } from './motion/fixes';
 import { loadNetwork, type Network } from './motion/network';
@@ -507,8 +507,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return networkPromise;
   };
   // T10 / R-L2: the unlocked layers' full map shares that one network load,
+  // ticks its reduced-motion loop on this page's own timer pair (R-F12),
   // and is not rendered at all in lightweight mode (no factory, so no slot).
-  const maps = createMapSlots(lightweight ? undefined : withNetwork(deps.mapFactory, loadNetworkOnce));
+  const maps = createMapSlots(
+    lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
+  );
   const schematicDeps = {
     i18n,
     lightweight,

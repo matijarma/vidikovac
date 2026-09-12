@@ -14,6 +14,9 @@
 // along-track gap of any size is closed by catching up (R-F1); the model is
 // only ever wrong about *which* line, or where across it, and that is
 // decided -- and recorded -- in selectShape, never by teleporting the mark.
+// The speed it reckons with is the speed of the moving part of each fix
+// interval, not distance over the whole of it: a tram standing at a
+// platform is not a slow tram (R-F10).
 
 import { dist, toPlane, type XY } from './geo';
 import { at, project, tangent } from './polyline';
@@ -142,6 +145,17 @@ const GATE_DWELL_S = 25;
  *  release cannot brighten the mark or show a heading at the exact moment
  *  the model starts guessing (R-F9). */
 const GATE_RELEASE_CONFIDENCE_PENALTY = 0.2;
+/** The standing time charged against a fix interval whose along-track
+ *  segment passed a stop the network knows about: doors open, people off
+ *  and on, is 15 to 30 s at a ZET inner-city stop, so a 30 s interval that
+ *  crossed one was two thirds standing, and dividing its distance by the
+ *  whole duration read a tram cruising at 10 m/s as 7 -- F6 measured that
+ *  underestimate as where the steady-state lag came from, since reckoning
+ *  at 7 falls behind on every cruise (R-F10). Never charged past two
+ *  thirds of the interval: the moving part is at least a third of the
+ *  measured duration, so a stop crossed on a short interval cannot make a
+ *  tram look three times faster than it is. */
+const DWELL_ASSUMED_S = 20;
 
 /** A candidate shape whose implied direction of travel disagrees with the
  *  vehicle's own last movement is probably the wrong one even when its raw
@@ -173,8 +187,13 @@ const STOP_GATE_CONFIDENCE_CAP = 0.25;
 const HEADING_CONFIDENCE_THRESHOLD = 0.3;
 
 interface Interval {
-  dt: number; // seconds
-  ds: number; // metres, along-track (arc length on the shape, or straight line off it)
+  /** Metres along the track between two fixes: arc length on the shape, or
+   *  a straight line off it. */
+  ds: number;
+  /** Seconds the vehicle is judged to have been moving between them: the
+   *  measured duration less the dwell assumed at every known stop the
+   *  segment passed, never under a third of it (R-F10). */
+  movingS: number;
 }
 
 interface VehicleState {
@@ -184,7 +203,7 @@ interface VehicleState {
   short?: string;
   type: number;
 
-  intervals: Interval[]; // most recent last, capped at 3
+  intervals: Interval[]; // the last three *moving* intervals, most recent last (R-F10)
 
   shapeIdx: number | null; // null = free-plane
   // The currently-chosen shape's own score, as of the last fix it won on --
@@ -233,15 +252,17 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/** Decision 4: the feed repeats a stationary vehicle's coordinates
- *  byte-identically, so this fix's speed is 0 immediately -- overriding the
- *  median, which would otherwise lag behind an actual stop by up to two
- *  more fixes. */
+/** The median speed of the last three moving intervals, clamped. A standing
+ *  vehicle (decision 4: the feed repeats its coordinates byte-identically)
+ *  never reaches here -- applyFix reads it as 0 for as long as it stands
+ *  and leaves this history untouched, so the first fix that moves again is
+ *  estimated from movement alone (R-F10); as a 0 in the history it used to
+ *  drag the median down for two more fixes after the tram had left. With
+ *  fewer than three intervals the median is of what there is; with none,
+ *  the vehicle holds at its fix. */
 function computeSpeed(intervals: readonly Interval[]): number {
   if (intervals.length === 0) return 0;
-  if (intervals[intervals.length - 1].ds === 0) return 0;
-  const speeds = intervals.map((iv) => iv.ds / iv.dt);
-  return Math.min(median(speeds), MAX_SPEED_MS);
+  return Math.min(median(intervals.map((iv) => iv.ds / iv.movingS)), MAX_SPEED_MS);
 }
 
 /** The silence-decay envelope shared by speed and confidence: unchanged
@@ -396,6 +417,33 @@ export function createModel(net: Network | null): Model {
     return Math.min(net.nextStop(shapeIdx, s)?.s ?? shapeLen, shapeLen);
   }
 
+  /** R-F10: the standing time to charge against a fix interval on one
+   *  shape, judged from its along-track segment alone. A stop strictly
+   *  inside the segment was passed through, doors and all: one whole
+   *  assumed dwell. A stop within the dead zone of either end is the stop
+   *  the vehicle was reported *at* -- standing for some unknown part of the
+   *  dwell, which the two intervals meeting at that fix share between them,
+   *  and the unbiased share is half each. That is the common case, not the
+   *  corner: on a 30 s cadence a fix lands inside a 20 s dwell two times in
+   *  three, and which side of the platform's arc length a standing tram
+   *  projects to is a few metres of GPS, not evidence of which interval did
+   *  the standing. */
+  function dwellSeconds(shapeIdx: number, fromS: number, toS: number): number {
+    if (!net) return 0;
+    const lo = Math.min(fromS, toS);
+    const hi = Math.max(fromS, toS);
+    let dwell = 0;
+    let s = lo - DEAD_ZONE_M;
+    for (;;) {
+      const next = net.nextStop(shapeIdx, s);
+      if (!next || next.s > hi + DEAD_ZONE_M) break;
+      const atAnEnd = next.s <= lo + DEAD_ZONE_M || next.s >= hi - DEAD_ZONE_M;
+      dwell += atAnEnd ? DWELL_ASSUMED_S / 2 : DWELL_ASSUMED_S;
+      s = next.s;
+    }
+    return dwell;
+  }
+
   function initVehicle(fix: Fix, now: number): VehicleState {
     const p = toPlane(fix.lon, fix.lat);
     const meta = routeMeta(fix);
@@ -481,19 +529,29 @@ export function createModel(net: Network | null): Model {
       ? selectShape(net, candidates, newP, dirVec, v.shapeIdx)
       : { shapeIdx: null, shapeScore: Infinity, proj: null, changed: v.shapeIdx !== null };
 
-    let ds: number;
-    if (isStationary) {
-      ds = 0;
-    } else if (!sel.changed && sel.shapeIdx !== null) {
-      ds = Math.abs(sel.proj!.s - v.targetS); // same shape as before: a real arc-length delta
-    } else {
-      ds = dist(newP, v.lastFixP); // a shape switch, or free-plane: arc length is not comparable
-    }
-
     const dtSeconds = (fix.at - v.lastFixAt) / 1000;
-    v.intervals.push({ dt: dtSeconds, ds });
-    if (v.intervals.length > 3) v.intervals.shift();
-    v.speed = computeSpeed(v.intervals);
+    if (isStationary) {
+      // Standing: speed 0 for as long as it stands, and nothing enters the
+      // history -- the moving intervals stay as they are, so the fix that
+      // moves again is estimated from movement alone (R-F10).
+      v.speed = 0;
+    } else {
+      let ds: number;
+      let dwell = 0;
+      if (!sel.changed && sel.shapeIdx !== null) {
+        // Same shape as before: a real arc-length delta, and a segment that
+        // can be checked for the stops it passed.
+        ds = Math.abs(sel.proj!.s - v.targetS);
+        dwell = dwellSeconds(sel.shapeIdx, v.targetS, sel.proj!.s);
+      } else {
+        // A shape switch, or free-plane: arc lengths are not comparable, so
+        // a straight line -- and no stop to charge a dwell for.
+        ds = dist(newP, v.lastFixP);
+      }
+      v.intervals.push({ ds, movingS: Math.max(dtSeconds - dwell, dtSeconds / 3) });
+      if (v.intervals.length > 3) v.intervals.shift();
+      v.speed = computeSpeed(v.intervals);
+    }
 
     // The one place the model can be *wrong* rather than behind: it changed
     // its mind about which line (or left the geometry because no line fits

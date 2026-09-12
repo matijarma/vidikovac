@@ -10,7 +10,7 @@ import type { I18n } from './i18n/i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
 import { vehicleCount } from './layers/shared';
 import type { ExportKind } from './layers/types';
-import { withNetwork, type MapFactory } from './map/city-map';
+import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { loadNetwork, type Network } from './motion/network';
 import { continuePoll, nextPollDelay } from './motion/loop';
@@ -118,8 +118,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     return networkPromise;
   };
   // T10 / R-L2: the full MapLibre map is not rendered at all on the
-  // lightweight path -- no factory, so no slot ever yields a container.
-  const maps = createMapSlots(lightweight ? undefined : withNetwork(deps.mapFactory, loadNetworkOnce));
+  // lightweight path -- no factory, so no slot ever yields a container --
+  // and ticks its reduced-motion loop on this page's own timer pair (R-F12).
+  const maps = createMapSlots(
+    lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
+  );
   // T9: one schematic for the page, handed to the U pokretu layer through
   // the context exactly like `maps`, so a poll never throws away the motion
   // model's fix history (R-P2). A session sees the whole network; the host

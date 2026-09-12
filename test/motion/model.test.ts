@@ -205,6 +205,33 @@ describe('repeated identical coordinates (brief test 3, decision 4)', () => {
       expect(drawn.p.y).toBeCloseTo(p.y, 9);
     }
   });
+
+  it('a standing interval never enters the speed history: the first fix that moves again reads the cruise speed, not a median the stop dragged down (R-F10)', () => {
+    const net = straightNetwork();
+    const model = createModel(net);
+    let t = T0;
+    let y = 0;
+    model.update([fixAt('v1', { x: 0, y }, t)], t);
+    for (let i = 0; i < 2; i++) {
+      t += 30_000;
+      y += 300;
+      model.update([fixAt('v1', { x: 0, y }, t)], t); // two moving intervals at 10 m/s
+    }
+    expect(model.step(t)[0].speed).toBeCloseTo(10, 6);
+    for (let i = 0; i < 2; i++) {
+      t += 30_000;
+      model.update([fixAt('v1', { x: 0, y }, t)], t); // then two byte-identical repeats: standing
+      expect(model.step(t)[0].speed).toBe(0);
+    }
+    t += 30_000;
+    y += 300;
+    model.update([fixAt('v1', { x: 0, y }, t)], t); // and it moves again, 300 m in 30 s
+    // The history is the moving intervals alone -- 10, 10 and now 10 -- so
+    // the estimate is 10 the moment it moves. With the two standing
+    // intervals in the history as zeros the median read 0 here, and the
+    // mark stood at the platform for one more fix while the tram was gone.
+    expect(model.step(t)[0].speed).toBeCloseTo(10, 6);
+  });
 });
 
 describe('a 200 m along-track discrepancy (brief test 4, R-F1a)', () => {
@@ -375,6 +402,54 @@ describe('gain on a cruising target (R-F9)', () => {
     expect(catchUpCap(50, speedMs)).toBe(1.5 * speedMs);
     expect(catchUpCap(50, 1)).toBe(6); // and never under 6 m/s, so a slow estimate still settles
     expect(catchUpCap(51, speedMs)).toBe(2 * speedMs); // over 50 m the raised cap stays
+  });
+});
+
+describe('speed from the moving part of each interval (R-F10)', () => {
+  // A stop at 450 m, and the next far enough on that only the one at 450 is
+  // ever in play. Stepping straight after `update` (silence 0) reads the
+  // baseline estimate itself, undecayed.
+  const stopped = () => createModel(straightNetwork([{ id: 'ST', name: 'Stop', shape: 0, s: 450 }, { id: 'ST2', name: 'Far', shape: 0, s: 1500 }]));
+  const speedAfter = (model: ReturnType<typeof createModel>, y: number, t: number): number => {
+    model.update([fixAt('v1', { x: 0, y }, t)], t);
+    return model.step(t)[0].speed;
+  };
+
+  it('an interval whose segment passed a known stop is charged the assumed 20 s dwell: 100 m past the stop 30 s after 100 m before it reads 10 m/s, not 3.3', () => {
+    const model = stopped();
+    speedAfter(model, 100, T0);
+    expect(speedAfter(model, 400, T0 + 30_000)).toBeCloseTo(10, 6); // no stop between 100 and 400: the whole 30 s was travel
+    // 400 -> 500 crosses the stop at 450: 10 s of travel and a 20 s dwell.
+    // The median of the two moving intervals is 10 only if this one reads
+    // 10 too; charged the whole 30 s it read 3.3, and the median 6.7.
+    expect(speedAfter(model, 500, T0 + 60_000)).toBeCloseTo(10, 6);
+  });
+
+  it('the charge never takes more than two thirds of the interval: 80 m in 24 s across a stop keeps 8 s of travel, not 4', () => {
+    const model = stopped();
+    speedAfter(model, 400, T0);
+    // 24 - 20 = 4 s would read 20 m/s, a tram doing 72 km/h on the strength
+    // of one short interval; the floor keeps a third of the measured
+    // duration, 8 s, and reads 10.
+    expect(speedAfter(model, 480, T0 + 24_000)).toBeCloseTo(10, 6);
+  });
+
+  it('a fix taken at the stop itself splits the dwell between the interval that reached it and the one that left it, within the dead zone of the platform', () => {
+    // A tram at 10 m/s reaches the stop at +20 s and stands 20 s; the fix at
+    // +30 s finds it there, 5 m past the stop's own arc length (a standing
+    // tram's report is never byte-exactly on the platform). Each of the two
+    // intervals meeting at that fix was 20 s of travel and 10 s of standing.
+    const model = stopped();
+    speedAfter(model, 250, T0);
+    const reached = speedAfter(model, 455, T0 + 30_000);
+    const left = speedAfter(model, 655, T0 + 60_000);
+    // Half a dwell each: 205 m over 20 s, then 200 m over 20 s, and the
+    // estimate after the second is the median of the two. Had the 5 m
+    // decided which interval "crossed" the stop, the first would have read
+    // 20.5 and the second 6.7; charged nothing, both read 6.7 -- the
+    // underestimate F6 measured.
+    expect(reached).toBeCloseTo(10.25, 6);
+    expect(left).toBeCloseTo((10.25 + 10) / 2, 6);
   });
 });
 
@@ -716,28 +791,40 @@ interface SteadyStateStats {
  * `latencyS` old. Frames run at 60 Hz for `minutes`. Measurement starts two
  * minutes in, once the model has fix-to-fix evidence to reckon with.
  */
-function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: number; minutes?: number }): SteadyStateStats {
-  const STOP_SPACING_M = 450;
+/** A straight 20 km shape on route R1 with a stop every `spacingM`, the
+ *  first one `spacingM` from the origin. */
+function stopsEvery(spacingM: number): Network {
   const SHAPE_LEN_M = 20_000;
-  const FIX_EVERY_MS = 30_000;
-  const POLL_EVERY_MS = 20_000;
-  const FRAME_MS = 1000 / 60;
-  const minutes = opts.minutes ?? 20;
   const stops: StopSpec[] = [];
-  for (let s = STOP_SPACING_M; s < SHAPE_LEN_M; s += STOP_SPACING_M) stops.push({ id: `ST${s}`, name: `Stop ${s}`, shape: 0, s });
-  const net = buildNetwork(
+  for (let s = spacingM; s < SHAPE_LEN_M; s += spacingM) stops.push({ id: `ST${s}`, name: `Stop ${s}`, shape: 0, s });
+  return buildNetwork(
     [{ id: 'S0', route: 'R1', pts: [{ x: 0, y: 0 }, { x: 0, y: SHAPE_LEN_M }] }],
     stops,
     [{ id: 'R1', short: '1', type: 0, shapes: [0] }],
   );
-  const cruiseS = STOP_SPACING_M / opts.speedMs;
-  const cycleS = cruiseS + opts.dwellS;
-  const trueS = (tMs: number): number => {
+}
+
+/** Truth for a tram that cruises at `speedMs` between stops `spacingM`
+ *  apart and stands `dwellS` at every one (0: a tram that never stops),
+ *  leaving the origin at t = 0: its arc length at wall-clock `tMs`. */
+function dwellingTruth(speedMs: number, dwellS: number, spacingM: number): (tMs: number) => number {
+  const cycleS = spacingM / speedMs + dwellS;
+  return (tMs) => {
     const t = tMs / 1000;
     const k = Math.floor(t / cycleS);
     const phase = t - k * cycleS;
-    return k * STOP_SPACING_M + Math.min(STOP_SPACING_M, opts.speedMs * phase);
+    return k * spacingM + Math.min(spacingM, speedMs * phase);
   };
+}
+
+function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: number; minutes?: number }): SteadyStateStats {
+  const STOP_SPACING_M = 450;
+  const FIX_EVERY_MS = 30_000;
+  const POLL_EVERY_MS = 20_000;
+  const FRAME_MS = 1000 / 60;
+  const minutes = opts.minutes ?? 20;
+  const net = stopsEvery(STOP_SPACING_M);
+  const trueS = dwellingTruth(opts.speedMs, opts.dwellS, STOP_SPACING_M);
 
   const model = createModel(net);
   const totalMs = minutes * 60_000;
@@ -793,18 +880,34 @@ function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: numbe
  *  p95 lag under 60 m. Neither was reachable with the constants R-F1 fixed
  *  (task-F1-report.md, Rulings 7): a 25 s hold at a stop every 65 to 84 s
  *  is a quarter of all frames by itself unless a fix cuts it short, and the
- *  fix that confirms a departure arrives 25 to 75 s after it. R-F9 then
- *  changed the two constants the lag comes from -- the gate releases at
- *  full speed, not half, and the settle cap under 50 m of gap is 1.5 x the
- *  vehicle's speed, not exactly its speed -- and this is what they reach
+ *  fix that confirms a departure arrives 25 to 75 s after it. R-F9 changed
+ *  the two constants the lag came from -- the gate releases at full speed,
+ *  the settle cap is 1.5 x the vehicle's speed -- and took the p95 down by
+ *  7 to 120 m per run without moving the held share, which neither lever
+ *  touches. R-F10 then changed the estimate the reckoning runs on: speed
+ *  from the moving part of each interval, not distance over the whole of
+ *  it, since a 30 s interval across a 20 s dwell read a 10 m/s tram as 7
+ *  and reckoning at 7 fell behind on every cruise. Reckoning at the true
+ *  cruise speed reaches each stop when the tram does, so the hold now runs
+ *  on nearly every stop and for its full dwell, where the late reckoning
+ *  used to arrive after the confirming fix had lifted the gate: the held
+ *  share rises as the lag falls. The three constant sets side by side
  *  (60 Hz, 20 minutes, measured from minute 2; gate-held share, then p95
  *  lag):
  *
- *                            doors open 20 s     a tram that never stops
- *    25 s latency,  7 m/s    25.34 %, 121.7 m    38.69 %, 190.0 m
- *    25 s latency, 10 m/s    21.29 %, 247.1 m    50.01 %, 264.9 m
- *     2 s latency,  7 m/s    26.13 %,  92.2 m    36.83 %, 189.9 m
- *     2 s latency, 10 m/s    21.99 %, 253.7 m    44.42 %, 264.9 m
+ *    doors open 20 s at every stop
+ *                            R-F1 (F1)          R-F9 (F6)          R-F10 (F7)
+ *    25 s latency,  7 m/s    25.34 %, 183.7 m   25.34 %, 121.7 m   30.69 %,  50.0 m
+ *    25 s latency, 10 m/s    21.29 %, 270.6 m   21.29 %, 247.1 m   47.41 %,  93.4 m
+ *     2 s latency,  7 m/s    26.13 %, 116.1 m   26.13 %,  92.2 m   27.77 %,  55.1 m
+ *     2 s latency, 10 m/s    21.99 %, 260.7 m   21.99 %, 253.7 m   35.05 %, 157.8 m
+ *
+ *    a tram that never stops (charged the assumed dwell for stops it did not make)
+ *                            R-F1 (F1)          R-F9 (F6)          R-F10 (F7)
+ *    25 s latency,  7 m/s    38.69 %, 294 m     38.69 %, 190.0 m   33.81 %, 291.8 m
+ *    25 s latency, 10 m/s    50.01 %, 385 m     50.01 %, 264.9 m   38.92 %, 179.3 m
+ *     2 s latency,  7 m/s    36.83 %, 224 m     36.83 %, 189.9 m   65.61 %, 189.9 m
+ *     2 s latency, 10 m/s    44.42 %, 285 m     44.42 %, 264.9 m   63.87 %, 204.4 m
  *
  *  The thresholds below are each truth model's worst measured value plus a
  *  fifth of it, rounded up (R-F9), so a regression of the size that
@@ -813,11 +916,11 @@ function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: numbe
  *  The two invariants -- no frame beyond the catch-up cap, no snap after
  *  the first fix -- are absolute and asserted for every run. */
 const STEADY_STATE_ENVELOPE = {
-  dwelling: { heldUnder: 0.32, lagP95UnderM: 305 },
-  nonStop: { heldUnder: 0.61, lagP95UnderM: 318 },
+  dwelling: { heldUnder: 0.57, lagP95UnderM: 190 },
+  nonStop: { heldUnder: 0.79, lagP95UnderM: 351 },
 };
 
-describe('the public kiosk in steady state (R-F1, R-F9: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
+describe('the public kiosk in steady state (R-F1, R-F9, R-F10: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
   const latencies = [25, 2];
   const speeds = [7, 10];
   const pct = (share: number) => Math.round(share * 100);
@@ -841,6 +944,45 @@ describe('the public kiosk in steady state (R-F1, R-F9: 450 m stops, 30 s fixes 
       });
     }
   }
+});
+
+describe("the speed estimate on the brief's tram (R-F10): 10 m/s between stops 450 m apart, 20 s at each", () => {
+  /** Fixes every 30 s, handed over as they are taken, `fixes` of them after
+   *  the first: the estimate after each. A 20 s dwell on a 30 s cadence
+   *  never yields a byte-identical repeat, so every interval is a moving
+   *  one and the third estimate is the median of the first three. */
+  const estimates = (speedMs: number, fixes: number): number[] => {
+    const model = createModel(stopsEvery(450));
+    const trueS = dwellingTruth(speedMs, 20, 450);
+    const out: number[] = [];
+    for (let k = 0; k <= fixes; k++) {
+      const t = k * 30_000;
+      model.update([fixAt('tram', { x: 0, y: trueS(t) }, T0 + t)], T0 + t);
+      if (k > 0) out.push(model.step(T0 + t)[0].speed);
+    }
+    return out;
+  };
+  const off = (estimate: number, truth: number): number => Math.abs(estimate - truth) / truth;
+
+  it('reads within 15 % of 10 m/s after the third moving interval, where dividing by the whole interval read 8.3 and settled near 7', () => {
+    expect(off(estimates(10, 3)[2], 10)).toBeLessThan(0.15);
+  });
+
+  it('and stays there: over 26 fixes at 10 and at 7 m/s the median estimate is the cruise speed itself, three quarters of the estimates are within 15 % of it and none is 30 % off', () => {
+    for (const speedMs of [10, 7]) {
+      const run = estimates(speedMs, 26);
+      const sorted = [...run].sort((a, b) => a - b);
+      expect(sorted[sorted.length >> 1]).toBeCloseTo(speedMs, 3);
+      expect(run.filter((e) => off(e, speedMs) < 0.15).length / run.length).toBeGreaterThanOrEqual(0.75);
+      // The excursions (7.5 and 12.5 at 10 m/s) are a fix that lands at the
+      // very start or end of a dwell and charges half of one to an interval
+      // that stood for all of it or none: 25 % off, and the median absorbs
+      // them. Charged nothing, the same run read 5 to 8.3 with a median of
+      // 8.3; charged a whole dwell at the platform too, 10 to 22 with a
+      // median of 15.
+      for (const e of run) expect(off(e, speedMs)).toBeLessThan(0.3);
+    }
+  });
 });
 
 describe('eviction (R-F2)', () => {
