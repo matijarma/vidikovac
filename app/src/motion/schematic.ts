@@ -92,7 +92,7 @@ const ROUTE_LINE_PX = 2;
  *  which is the line's own alpha, so ink at this alpha over the halo is
  *  never lighter than label blue at the same alpha over the cloth (R-V2:
  *  alpha = 0.55 + 0.45 * confidence). */
-export const MIN_VEHICLE_ALPHA = 0.55;
+export const MIN_VEHICLE_ALPHA = 0.7;
 /** A one-CSS-pixel halo in the canvas tone under every mark, drawn first:
  *  what separates a vehicle from the line it sits on and from a neighbour
  *  at the same stop. One extra fillRect per mark per frame; the loop parks

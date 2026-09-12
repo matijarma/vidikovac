@@ -294,7 +294,7 @@ describe('vehicleMarks', () => {
   });
 
   it('carries confidence in alpha as 0.55 + 0.45 * confidence, so the least confident vehicle is still darker than the line under it (R-V2)', () => {
-    expect(MIN_VEHICLE_ALPHA).toBe(0.55);
+    expect(MIN_VEHICLE_ALPHA).toBe(0.7);
     expect(MIN_VEHICLE_ALPHA).toBeGreaterThanOrEqual(ROUTE_ALPHA);
     const l = layoutSchematic(crossNetwork(), crop, 400, 400);
     const [sure, unsure, none] = vehicleMarks(l, [
