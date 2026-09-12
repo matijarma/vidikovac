@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toLonLat, type XY } from '../../app/src/motion/geo';
 import { at, cumulative } from '../../app/src/motion/polyline';
 import type { Network, Shape, Stop } from '../../app/src/motion/network';
-import { catchUpCap, createModel, type Fix } from '../../app/src/motion/model';
+import { catchUpCap, createModel, STALE_S, type Fix } from '../../app/src/motion/model';
 
 // ---------------------------------------------------------------------------
 // A small hand-built Network, built directly from the same primitives
@@ -137,19 +137,21 @@ describe('perfect 30 s fixes along a straight shape (brief test 1)', () => {
       // dead-reckon with (there is nothing to derive a speed from before a
       // second fix exists), so the second fix lands 300 m ahead of a mark
       // that has not moved; tick 1 is that gap being caught up at the raised
-      // cap (R-F1a, "brief test 4" below exercises it on its own). This
-      // test's own claim is about *steady-state* motion once the model is
-      // level with its evidence, so ticks 0 and 1 warm it up and are not
-      // sampled.
+      // cap (R-F1a, "brief test 4" below exercises it on its own), and tick
+      // 2 is the last 50 m being gained at the settle cap (R-F9, "gain on a
+      // cruising target" below). This test's own claim is about
+      // *steady-state* motion once the model is level with its evidence, so
+      // ticks 0 to 2 warm it up and are not sampled.
       const tick = Math.floor((i - 1) / framesPerTick);
-      if (tick > 1) samples.push(drawn.p.y);
+      if (tick > 2) samples.push(drawn.p.y);
     }
 
     for (let i = 1; i < samples.length; i++) {
       const delta = samples[i] - samples[i - 1];
       expect(delta).toBeGreaterThanOrEqual(-1e-6); // monotonic: never goes backward
-      // One frame's travel at the model's own catch-up cap: max(4, speed) * dt.
-      expect(delta).toBeLessThanOrEqual(Math.max(4, speedMs) * (frameMs / 1000) + 1e-6);
+      // One frame's travel of the tram itself: level with its evidence, the
+      // mark moves exactly as fast as the vehicle it stands for.
+      expect(delta).toBeLessThanOrEqual(speedMs * (frameMs / 1000) + 1e-6);
     }
     // And it actually made progress -- not stuck at the dead zone forever.
     expect(samples[samples.length - 1]).toBeGreaterThan(1300);
@@ -292,12 +294,13 @@ describe('the stop gate (brief test 5, R-F1b)', () => {
     expect(lastY).toBeGreaterThan(140); // it did get close to the stop, not stuck at 120
   });
 
-  it('after the dwell it goes on at half speed with confidence lowered, and never past the following stop', () => {
+  it('after the dwell it goes on at full speed, reads no more certain than the hold did, and never passes the following stop (R-F9)', () => {
     const { model, t: fixAtMs } = gated();
     // Reckoning passed the stop at +10 s and the dwell ends at +35 s. At
-    // +55 s it has been released for 20 s: 2 m/s (half of 4) times 20 s is
-    // 40 m past the stop, give or take the convergence dead zone -- clearly
-    // moving, clearly not at full speed (80 m).
+    // +55 s it has been released for 20 s: 4 m/s times 20 s is 80 m past
+    // the stop, less the convergence dead zone the mark trails by -- the
+    // tram has most likely left, and the drawn one goes with it at the
+    // speed the evidence gave it, not half of it.
     const settle = at(model, fixAtMs + 34_000);
     expect(settle.held).toBe(true);
     let t = fixAtMs + 35_000;
@@ -310,11 +313,14 @@ describe('the stop gate (brief test 5, R-F1b)', () => {
     }
     const released = at(model, t);
     expect(released.held).toBeUndefined();
-    expect(released.p.y).toBeGreaterThan(170);
-    expect(released.p.y).toBeLessThan(200);
-    // Evidence for the departure is a guess: the 0.6 one confirming
-    // movement earned, less the 0.2 release penalty.
-    expect(released.confidence).toBeCloseTo(0.4, 2);
+    expect(released.p.y).toBeGreaterThan(210);
+    expect(released.p.y).toBeLessThan(240);
+    // The departure is a guess nobody has confirmed: the 0.6 one confirming
+    // movement earned, less the 0.2 release penalty, and never above the
+    // 0.25 the hold itself was capped at -- a release must not brighten the
+    // mark or show a heading at the exact moment the model starts guessing.
+    expect(released.confidence).toBeCloseTo(0.25, 6);
+    expect(released.heading).toBeNull();
 
     // Nobody has confirmed it past the following stop either: the released
     // reckoning ends there, held again (sampled to +255 s, inside the five
@@ -325,6 +331,79 @@ describe('the stop gate (brief test 5, R-F1b)', () => {
       expect(drawn.p.y).toBeLessThanOrEqual(300 + 1e-6);
     }
     expect(at(model, t).held).toBe(true);
+  });
+});
+
+describe('gain on a cruising target (R-F9)', () => {
+  it('a mark left 50 m behind a tram cruising at 10 m/s closes to the dead zone: under 50 m of gap the settle cap is 1.5 x speed, never exactly speed', () => {
+    const net = straightNetwork();
+    const model = createModel(net);
+    const speedMs = 10;
+    const frameMs = 100;
+    const framesPerTick = 30_000 / frameMs;
+    let t = T0;
+    let y = 0;
+    model.update([fixAt('v1', { x: 0, y }, t)], t);
+    // Ticks 0 and 1 leave the mark 50 m behind (see brief test 1): the first
+    // 250 m of the 300 m warm-up gap close at the raised cap, and from 50 m
+    // down the settle cap takes over. At exactly the tram's own speed the
+    // mark could never gain on a target moving at that speed and would sit
+    // 50 m back for the rest of the run; at 1.5 x speed it closes to the
+    // dead zone within tick 2 and stays there.
+    let gapAtEnd = Infinity;
+    let worstDelta = 0;
+    let last: number | null = null;
+    for (let i = 1; i <= 6 * framesPerTick; i++) {
+      t += frameMs;
+      if (i % framesPerTick === 0) {
+        y += speedMs * 30;
+        model.update([fixAt('v1', { x: 0, y }, t)], t);
+      }
+      const [drawn] = model.step(t);
+      const tick = Math.floor((i - 1) / framesPerTick);
+      if (tick >= 4) {
+        if (last !== null) worstDelta = Math.max(worstDelta, drawn.p.y - last);
+        gapAtEnd = speedMs * ((t - T0) / 1000) - drawn.p.y;
+      }
+      last = drawn.p.y;
+    }
+    // Within the 15 m dead zone plus the settle equilibrium, never 50 m back.
+    expect(gapAtEnd).toBeGreaterThanOrEqual(0);
+    expect(gapAtEnd).toBeLessThan(20);
+    // The gain itself never outran the settle cap for a 50 m gap.
+    expect(worstDelta).toBeLessThanOrEqual(catchUpCap(50, speedMs) * (frameMs / 1000) + 1e-6);
+    expect(catchUpCap(50, speedMs)).toBe(1.5 * speedMs);
+    expect(catchUpCap(50, 1)).toBe(6); // and never under 6 m/s, so a slow estimate still settles
+    expect(catchUpCap(51, speedMs)).toBe(2 * speedMs); // over 50 m the raised cap stays
+  });
+});
+
+describe('dead reckoning under silence is monotonic (F1, ruling 3)', () => {
+  it('a vehicle silent for 300 s, sampled every second, never moves backwards along its shape and eases to a halt before it is evicted', () => {
+    const net = straightNetwork();
+    const model = createModel(net);
+    let t = T0;
+    model.update([fixAt('v1', { x: 0, y: 0 }, t)], t);
+    t += 30_000;
+    model.update([fixAt('v1', { x: 0, y: 300 }, t)], t); // 10 m/s, then silence
+    let last = model.step(t).find((d) => d.id === 'v1')!.p.y;
+    const deltas: number[] = [];
+    for (let s = 1; s < STALE_S; s++) {
+      const drawn = model.step(t + s * 1000).find((d) => d.id === 'v1');
+      expect(drawn).toBeDefined();
+      deltas.push(drawn!.p.y - last);
+      last = drawn!.p.y;
+    }
+    for (const delta of deltas) expect(delta).toBeGreaterThanOrEqual(-1e-6);
+    // It went somewhere -- the 90 s hold at full speed alone is 900 m ...
+    expect(last).toBeGreaterThan(1000);
+    // ... and by the end it has eased to a standstill rather than sliding
+    // back (the decayed-speed-times-elapsed formula pulled it back some 450
+    // m over this run).
+    expect(deltas[deltas.length - 1]).toBeGreaterThanOrEqual(0);
+    expect(deltas[deltas.length - 1]).toBeLessThan(0.05);
+    // At STALE_S it is evicted (R-F2): the run above is the whole life of the silence.
+    expect(model.step(t + STALE_S * 1000)).toHaveLength(0);
   });
 });
 
@@ -423,7 +502,6 @@ describe('silence for 310 s (brief test 8, R-F2)', () => {
     const fading = model.step(t).find((d) => d.id === 'v1')!;
     expect(fading).toBeDefined();
     expect(fading.speed).toBeLessThan(100 / 30);
-    expect(fading.stale).toBe(false);
 
     t += 110_000;
     expect(model.step(t)).toHaveLength(0);
@@ -694,7 +772,7 @@ function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: numbe
       lags.push(Math.abs(trueS(t) - drawn.p.y));
       if (prev) {
         const dt = (t - prev.t) / 1000;
-        const cap = Math.max(2 * drawn.speed, 8) * dt + 0.01;
+        const cap = catchUpCap(Infinity, drawn.speed) * dt + 0.01;
         worstOvershootM = Math.max(worstOvershootM, Math.abs(drawn.p.y - prev.y) - cap);
       }
     }
@@ -709,42 +787,57 @@ function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: numbe
   };
 }
 
-/** The acceptance envelope for the dwelling tram, per latency/speed run
- *  (task-F1-report.md, Rulings 7, amending the brief's 15 % and 60 m, which
- *  the constants R-F1 fixes cannot deliver: a 25 s hold at a stop every 65
- *  to 84 s is 30 to 38 % of frames by itself unless a fix cuts it short,
- *  and the fix that confirms a departure arrives 25 to 75 s after it, with
- *  the release at half speed until then -- a sweep of the release factor up
- *  to 1.0 and the sub-50 m cap up to twice the speed left the held share
- *  unchanged and the p95 lag at 92 to 254 m at best). Each bound sits about
- *  one percentage point and five to ten metres above the measured value,
- *  so a regression of the size that matters fails here (the old model held
- *  over half of all frames and lagged 166 to 353 m at p95) and a benign
- *  reordering of arithmetic does not. */
-const DWELLING_TRAM_ENVELOPE: Record<string, { heldUnder: number; lagP95UnderM: number }> = {
-  '25/7': { heldUnder: 0.26, lagP95UnderM: 190 }, // measured 25.34 %, 183.7 m
-  '25/10': { heldUnder: 0.22, lagP95UnderM: 280 }, // measured 21.29 %, 270.6 m
-  '2/7': { heldUnder: 0.27, lagP95UnderM: 125 }, // measured 26.13 %, 116.1 m
-  '2/10': { heldUnder: 0.23, lagP95UnderM: 270 }, // measured 21.99 %, 260.7 m
+/** What the steady-state scenario was aimed at, and what it reaches.
+ *
+ *  Aimed (task-F1-brief.md): the gate holding under 15 % of frames and a
+ *  p95 lag under 60 m. Neither was reachable with the constants R-F1 fixed
+ *  (task-F1-report.md, Rulings 7): a 25 s hold at a stop every 65 to 84 s
+ *  is a quarter of all frames by itself unless a fix cuts it short, and the
+ *  fix that confirms a departure arrives 25 to 75 s after it. R-F9 then
+ *  changed the two constants the lag comes from -- the gate releases at
+ *  full speed, not half, and the settle cap under 50 m of gap is 1.5 x the
+ *  vehicle's speed, not exactly its speed -- and this is what they reach
+ *  (60 Hz, 20 minutes, measured from minute 2; gate-held share, then p95
+ *  lag):
+ *
+ *                            doors open 20 s     a tram that never stops
+ *    25 s latency,  7 m/s    25.34 %, 121.7 m    38.69 %, 190.0 m
+ *    25 s latency, 10 m/s    21.29 %, 247.1 m    50.01 %, 264.9 m
+ *     2 s latency,  7 m/s    26.13 %,  92.2 m    36.83 %, 189.9 m
+ *     2 s latency, 10 m/s    21.99 %, 253.7 m    44.42 %, 264.9 m
+ *
+ *  The thresholds below are each truth model's worst measured value plus a
+ *  fifth of it, rounded up (R-F9), so a regression of the size that
+ *  matters fails here and a benign reordering of arithmetic does not; the
+ *  old model held over half of all frames and lagged 166 to 353 m at p95.
+ *  The two invariants -- no frame beyond the catch-up cap, no snap after
+ *  the first fix -- are absolute and asserted for every run. */
+const STEADY_STATE_ENVELOPE = {
+  dwelling: { heldUnder: 0.32, lagP95UnderM: 305 },
+  nonStop: { heldUnder: 0.61, lagP95UnderM: 318 },
 };
 
-describe('the public kiosk in steady state (R-F1: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
+describe('the public kiosk in steady state (R-F1, R-F9: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
   const latencies = [25, 2];
   const speeds = [7, 10];
+  const pct = (share: number) => Math.round(share * 100);
   for (const latencyS of latencies) {
     for (const speedMs of speeds) {
-      const envelope = DWELLING_TRAM_ENVELOPE[`${latencyS}/${speedMs}`]!;
-      it(`${latencyS} s latency, ${speedMs} m/s, doors open 20 s at every stop: no frame outruns the catch-up cap, nothing snaps, the gate holds under ${Math.round(envelope.heldUnder * 100)} % of frames and the p95 lag is under ${envelope.lagP95UnderM} m`, () => {
+      const dwelling = STEADY_STATE_ENVELOPE.dwelling;
+      it(`${latencyS} s latency, ${speedMs} m/s, doors open 20 s at every stop: no frame outruns the catch-up cap, nothing snaps, the gate holds under ${pct(dwelling.heldUnder)} % of frames and the p95 lag is under ${dwelling.lagP95UnderM} m`, () => {
         const stats = runSteadyState({ speedMs, latencyS, dwellS: 20 });
         expect(stats.worstOvershootM).toBeLessThanOrEqual(0);
         expect(stats.snapped).toBe(false);
-        expect(stats.heldShare).toBeLessThan(envelope.heldUnder);
-        expect(stats.lagP95M).toBeLessThan(envelope.lagP95UnderM);
+        expect(stats.heldShare).toBeLessThan(dwelling.heldUnder);
+        expect(stats.lagP95M).toBeLessThan(dwelling.lagP95UnderM);
       });
-      it(`${latencyS} s latency, ${speedMs} m/s, a tram that never stops: still no frame outruns the catch-up cap and nothing snaps`, () => {
+      const nonStop = STEADY_STATE_ENVELOPE.nonStop;
+      it(`${latencyS} s latency, ${speedMs} m/s, a tram that never stops: no frame outruns the catch-up cap, nothing snaps, the gate holds under ${pct(nonStop.heldUnder)} % of frames and the p95 lag is under ${nonStop.lagP95UnderM} m`, () => {
         const stats = runSteadyState({ speedMs, latencyS, dwellS: 0 });
         expect(stats.worstOvershootM).toBeLessThanOrEqual(0);
         expect(stats.snapped).toBe(false);
+        expect(stats.heldShare).toBeLessThan(nonStop.heldUnder);
+        expect(stats.lagP95M).toBeLessThan(nonStop.lagP95UnderM);
       });
     }
   }

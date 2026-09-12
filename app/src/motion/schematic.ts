@@ -286,15 +286,15 @@ function tramDirection(v: Drawn): XY | null {
 }
 
 /**
- * Turns the model's output into marks: one per vehicle that is not stale,
- * lies inside the crop and is of a type the layout draws. Positions are the
+ * Turns the model's output into marks: one per vehicle that lies inside the
+ * crop and is of a type the layout draws (the model evicts what has gone
+ * quiet, R-F2, so everything it hands over is fresh). Positions are the
  * model's own estimates, never a reported fix (R-P2).
  */
 export function vehicleMarks(layout: SchematicLayout, vehicles: readonly Drawn[]): VehicleMark[] {
   const marks: VehicleMark[] = [];
   const { crop, density, types } = layout;
   for (const v of vehicles) {
-    if (v.stale) continue;
     if (types && !types.has(v.type)) continue;
     if (dist(v.p, crop.centre) > crop.radius) continue;
     const { x, y } = layout.toPx(v.p);

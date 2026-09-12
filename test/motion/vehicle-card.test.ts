@@ -28,7 +28,7 @@ function net(): Network {
 }
 
 function drawn(over: Partial<Drawn> & { id: string }): Drawn {
-  return { type: 0, p: { x: 1000, y: 0 }, heading: null, speed: 0, confidence: 1, onShape: 0, stale: false, routeId: '6', ...over };
+  return { type: 0, p: { x: 1000, y: 0 }, heading: null, speed: 0, confidence: 1, onShape: 0, routeId: '6', ...over };
 }
 
 const i18n = createDefaultI18n('hr');

@@ -86,22 +86,35 @@ async function harness(opts: { points?: MapPoint[]; lines?: MapLine[]; reducedMo
   // Frame requests by handle, so cancelAnimationFrame really withdraws one.
   const queue = new Map<number, (ts: number) => void>();
   let nextHandle = 0;
+  // The injected timer pair (motion/loop.ts's LoopDeps), the same
+  // interval-shaped double kiosk.ts and dashboard.ts are tested with: the
+  // handle IS the entry, so clearing just flags it.
+  const timers: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const container = document.createElement('div');
   document.body.appendChild(container);
   const loadNetwork = opts.loadNetwork ?? vi.fn(async () => null);
   const handle = createCityMap(
     { container, ariaLabel: 'Karta', points: opts.points ?? [A], lines: opts.lines ?? [CLOSURE], reducedMotion: opts.reducedMotion, loadNetwork },
-    { loadMaplibre: async () => lib as never, raf: (cb) => { queue.set(++nextHandle, cb); return nextHandle; }, cancel: (h) => { queue.delete(h); }, now: () => t },
+    {
+      loadMaplibre: async () => lib as never,
+      raf: (cb) => { queue.set(++nextHandle, cb); return nextHandle; },
+      cancel: (h) => { queue.delete(h); },
+      now: () => t,
+      setTimer: (fn, ms) => { const timer = { fn, ms, cleared: false }; timers.push(timer); return timer; },
+      clearTimer: (h) => { (h as { cleared: boolean }).cleared = true; },
+    },
   );
   await flush();
   const map = FakeMap.instances[FakeMap.instances.length - 1]!;
   map.load();
   /** Advances the clock and runs every frame callback that was waiting. */
   const frame = (dt = FRAME_MS): void => { t += dt; const due = [...queue.values()]; queue.clear(); for (const cb of due) cb(t); };
+  /** Fires every still-armed injected timer once, whatever its delay. */
+  const tickTimers = (): void => { for (const timer of [...timers]) if (!timer.cleared) timer.fn(); };
   const vehicles = (): FakeSource => map.getSource('vehicles')!;
   /** Frame requests outstanding: 0 means nothing will paint until asked. */
   const pending = (): number => queue.size;
-  return { handle, map, container, frame, vehicles, loadNetwork, pending };
+  return { handle, map, container, frame, vehicles, loadNetwork, pending, timers, tickTimers };
 }
 
 afterEach(() => { FakeMap.instances.length = 0; document.body.replaceChildren(); });
@@ -160,18 +173,23 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(places.features[0]!.geometry.coordinates).toEqual([14.36, 45.45]);
   });
 
-  it('skips stale vehicles and rotates a tram to its heading, clockwise from north', () => {
+  it('rotates a tram to its heading, clockwise from north, and never re-projects it onto its shape: with no heading the icon lies along the model\'s own track, with neither it stays unrotated', () => {
     const drawn: Drawn[] = [
-      { id: 'a', type: 0, p: toPlane(15.97, 45.81), heading: { x: 1, y: 0 }, speed: 5, confidence: 1, onShape: null, stale: false },
-      { id: 'b', type: 3, p: toPlane(15.98, 45.82), heading: null, speed: 0, confidence: 0.2, onShape: null, stale: false },
-      { id: 'c', type: 0, p: toPlane(15.99, 45.83), heading: null, speed: 0, confidence: 1, onShape: null, stale: true },
+      { id: 'a', type: 0, p: toPlane(15.97, 45.81), heading: { x: 1, y: 0 }, speed: 5, confidence: 1, onShape: null },
+      { id: 'b', type: 3, p: toPlane(15.98, 45.82), heading: null, speed: 0, confidence: 0.2, onShape: null },
+      // Held at a stop: facing unknown, rails known -- the model hands the
+      // tangent over as `track` so the renderer has nothing to project.
+      { id: 'c', type: 0, p: toPlane(15.99, 45.83), heading: null, speed: 0, confidence: 0.25, onShape: 0, track: { x: 0, y: -1 }, held: true },
+      { id: 'd', type: 0, p: toPlane(16.0, 45.84), heading: null, speed: 0, confidence: 0.1, onShape: 0 },
     ];
-    const fc = vehiclesToGeoJson(drawn, null);
-    expect(fc.features.map((f) => f.properties.id)).toEqual(['a', 'b']);
+    const fc = vehiclesToGeoJson(drawn);
+    expect(fc.features.map((f) => f.properties.id)).toEqual(['a', 'b', 'c', 'd']);
     expect(fc.features[0]!.properties).toMatchObject({ icon: 'vehicle-tram', bearing: 90 });
     expect(fc.features[0]!.geometry.coordinates[0]).toBeCloseTo(15.97, 6);
     expect(fc.features[1]!.properties).toMatchObject({ icon: 'vehicle-bus', bearing: 0 });
     expect(fc.features[1]!.properties.alpha).toBeLessThan(fc.features[0]!.properties.alpha);
+    expect(fc.features[2]!.properties).toMatchObject({ icon: 'vehicle-tram', bearing: 180 });
+    expect(fc.features[3]!.properties).toMatchObject({ icon: 'vehicle-tram', bearing: 0 });
   });
 });
 
@@ -188,20 +206,25 @@ describe('12 Hz source updates, not one per frame', () => {
     expect(Number(container.dataset.frames)).toBeGreaterThanOrEqual(59);
   });
 
-  it('under reduced motion steps once a second on a timer, with no interpolation and no frame requests at all (R-F6)', async () => {
-    vi.useFakeTimers();
+  it('under reduced motion steps once a second on the injected timer pair, with no interpolation, no frame requests and no global setTimeout (R-F6)', async () => {
+    const globalTimer = vi.spyOn(globalThis, 'setTimeout');
     try {
-      const { handle, frame, vehicles, pending } = await harness({ reducedMotion: true });
+      const { handle, frame, vehicles, pending, timers, tickTimers } = await harness({ reducedMotion: true });
       expect(pending()).toBe(0); // never asked the compositor for a frame
+      expect(timers.filter((timer) => !timer.cleared)).toHaveLength(1); // the first clock tick, armed through the pair the page injects
       handle.update([B], [CLOSURE]);
       const before = vehicles().calls.length;
       for (let i = 0; i < 60; i++) frame(); // a second of would-be frames: nothing is listening to them
       expect(vehicles().calls.length - before).toBe(0);
-      vi.advanceTimersByTime(1000); // one clock tick
-      expect(vehicles().calls.length - before).toBeLessThanOrEqual(2);
+      tickTimers(); // the clock tick: one plain step, then the next tick armed a second out
+      expect(vehicles().calls.length - before).toBe(1);
+      const armed = timers.filter((timer) => !timer.cleared);
+      expect(armed).toHaveLength(1);
+      expect(armed[0]!.ms).toBe(1000);
       expect(pending()).toBe(0);
+      expect(globalTimer).not.toHaveBeenCalled();
     } finally {
-      vi.useRealTimers();
+      globalTimer.mockRestore();
     }
   });
 

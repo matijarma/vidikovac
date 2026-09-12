@@ -44,7 +44,6 @@ export interface Drawn {
   speed: number; // m/s, the model's own estimate
   confidence: number; // 0 to 1, drives alpha
   onShape: number | null; // null means free-plane mode
-  stale: boolean;
   /** The track's own direction at the drawn position, on-shape only --
    *  the same tangent `heading` is derived from, before the confidence
    *  threshold decides whether the facing is known. A renderer that lays
@@ -102,10 +101,18 @@ const TAU_FORWARD_S = 1.5;
  *  assumed has usually been stuck (traffic, a red light, a longer dwell),
  *  and easing backward reads as a correction, not a stutter. */
 const TAU_BACKWARD_S = 4;
+/** Under CATCHUP_GAP_M the mark settles onto a target that is itself moving
+ *  at the vehicle's speed, so the settle cap must exceed that speed or the
+ *  mark could never gain on it: at exactly `speed` a 15 to 50 m lag was a
+ *  permanent fixture, and it was where much of the steady-state lag sat
+ *  (R-F9). Half again the vehicle's speed closes the last 50 m in about
+ *  ten seconds while still reading as a tram, not a dart. */
+const SETTLE_GAIN_FACTOR = 1.5;
 /** Even at zero estimated speed the model may still correct at up to this
  *  rate, or a genuinely stopped-but-slightly-mismatched vehicle would never
- *  visibly settle onto its own stop. */
-const MIN_CATCHUP_MS = 4;
+ *  visibly settle onto its own stop (R-F9 raised it from 4 alongside the
+ *  factor, for the same reason: a slow estimate must still gain). */
+const SETTLE_MIN_MS = 6;
 /** An along-track gap wider than this is a poll interval's worth of lag
  *  (a fix delivered 25 to 45 s late, a gate that held through a dwell), not
  *  a vehicle a few metres off its mark; from here the catch-up cap rises so
@@ -124,16 +131,16 @@ const CATCHUP_BEHIND_MIN_MS = 8;
 const DISCREPANCY_LIMIT_M = 150;
 /** How long the stop gate holds a vehicle whose dead reckoning has reached
  *  the next stop nobody has confirmed it past: one dwell -- doors open,
- *  people off and on -- after which a real tram has usually left. */
+ *  people off and on -- after which a real tram has usually left, so the
+ *  gate lets go at the full estimated speed (R-F9: a half-speed release
+ *  was measured to build 87 to 375 m of lag per stop, since the fix that
+ *  confirms the departure arrives 25 to 75 s after it). */
 const GATE_DWELL_S = 25;
-/** After the dwell the gate lets go at half the estimated speed: the model
- *  still has no fix past the stop, so it neither pins the tram to a
- *  platform it has probably left (manufacturing the lag catch-up then has
- *  to close) nor carries it on at full speed on no evidence (R-F1b). */
-const GATE_RELEASE_SPEED_FACTOR = 0.5;
 /** The evidence discount on that released motion: it is a guess about a
  *  departure nobody saw, so the mark fades by this much until a fix past
- *  the stop confirms it. */
+ *  the stop confirms it -- and never above STOP_GATE_CONFIDENCE_CAP, so a
+ *  release cannot brighten the mark or show a heading at the exact moment
+ *  the model starts guessing (R-F9). */
 const GATE_RELEASE_CONFIDENCE_PENALTY = 0.2;
 
 /** A candidate shape whose implied direction of travel disagrees with the
@@ -269,11 +276,12 @@ function silenceToReckon(reckoned: number): number {
 }
 
 /** The most the drawn arc length may move in one second toward a target
- *  `gap` metres away: the ordinary settle rate under CATCHUP_GAP_M, the
- *  raised catch-up rate beyond it (R-F1a). Exported for the test that
- *  bounds every frame of the steady-state scenario by it. */
+ *  `gap` metres away: the settle rate under CATCHUP_GAP_M -- half again
+ *  the vehicle's speed, so the mark gains on a target moving at that speed
+ *  (R-F9) -- and the raised catch-up rate beyond it (R-F1a). Exported for
+ *  the tests that bound every frame of the steady-state scenario by it. */
 export function catchUpCap(gap: number, speed: number): number {
-  return gap > CATCHUP_GAP_M ? Math.max(CATCHUP_BEHIND_MIN_MS, 2 * speed) : Math.max(MIN_CATCHUP_MS, speed);
+  return gap > CATCHUP_GAP_M ? Math.max(CATCHUP_BEHIND_MIN_MS, 2 * speed) : Math.max(SETTLE_MIN_MS, SETTLE_GAIN_FACTOR * speed);
 }
 
 /**
@@ -572,8 +580,9 @@ export function createModel(net: Network | null): Model {
           if (rawDeadReckon > gate && v.speed > 0) {
             // Reckoning reached the next stop this many seconds ago. For one
             // dwell the gate holds the vehicle there; after that it lets go
-            // at half speed -- along the same envelope, from the moment the
-            // dwell ended -- still never past the stop after it (R-F1b).
+            // at the estimated speed -- along the same envelope, from the
+            // moment the dwell ended -- still never past the stop after it
+            // (R-F1b, R-F9).
             const reachedAt = silenceToReckon((gate - v.targetS) / v.speed);
             const heldFor = silence - reachedAt;
             if (heldFor <= GATE_DWELL_S) {
@@ -581,13 +590,15 @@ export function createModel(net: Network | null): Model {
               heldByGate = true;
             } else {
               const following = Math.min(v.followingStopS, shapeLen);
-              const released = gate + GATE_RELEASE_SPEED_FACTOR * v.speed * (reckoned - reckonedSeconds(reachedAt + GATE_DWELL_S));
+              const released = gate + v.speed * (reckoned - reckonedSeconds(reachedAt + GATE_DWELL_S));
               if (released >= following) {
                 effTarget = following;
                 heldByGate = true;
               } else {
                 effTarget = released;
-                confidence -= GATE_RELEASE_CONFIDENCE_PENALTY;
+                // A guess about a departure nobody saw reads no more certain
+                // than the hold it follows.
+                confidence = Math.min(confidence - GATE_RELEASE_CONFIDENCE_PENALTY, STOP_GATE_CONFIDENCE_CAP);
               }
             }
           }
@@ -620,9 +631,6 @@ export function createModel(net: Network | null): Model {
           speed: effSpeed,
           confidence,
           onShape: v.shapeIdx,
-          // Never true any more: a vehicle that old was evicted above (R-F2).
-          // Kept because Drawn is a contract renderers already filter on.
-          stale: false,
         };
         if (track) drawn.track = track;
         if (heldByGate) drawn.held = true;

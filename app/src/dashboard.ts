@@ -328,11 +328,26 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     }
   }
 
+  /** The modules the visible layer polls -- every layer's on the wide grid,
+   *  the active layer's own otherwise: what refresh() fetches, and the only
+   *  snapshots whose timestamps may aim the next poll. */
+  function activeModules(): readonly ModuleId[] {
+    return wide ? ALL_LAYER_MODULES : LAYER_MODULES[active];
+  }
+
+  /** The timestamp the poll aligns to: zet-rt's, while the visible layer
+   *  actually polls zet-rt. A snapshot an earlier layer left behind describes
+   *  a 30 s tick that says nothing about when this layer's own modules
+   *  change, so the poll falls back to the fixed delay instead. */
+  function pollAnchor(): string | undefined {
+    return activeModules().includes('zet-rt') ? snapshots['zet-rt']?.sourceUpdatedAt : undefined;
+  }
+
   async function refresh(): Promise<void> {
     const token = session.snapshot().dataToken;
     const fetchData = deps.fetchData;
     if (!token || !fetchData || frozen || paused) return;
-    const ids = wide ? ALL_LAYER_MODULES : LAYER_MODULES[active];
+    const ids = activeModules();
     const results = await Promise.allSettled(ids.map((id) => fetchData(id, token)));
     // The session may have expired while these were in flight; a frozen view
     // must not be repainted by a fetch that started before the freeze.
@@ -515,7 +530,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     paintTimer();
     titleEl.focus();
-    void refresh();
+    // The poll armed at mount had no data to align to; once this refresh has
+    // filled the snapshots it is re-aimed, so the first poll of the session
+    // lands on the feed's tick like every later one (and a refresh that
+    // throws still leaves the chain armed, continuePoll).
+    continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
   });
   function freeze(): void {
     if (frozen) return;
@@ -551,10 +570,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   /** The poll, aligned to the feed's own tick (motion/loop.ts's
    *  nextPollDelay): the next request lands 2 s after the realtime feed's
-   *  next 30 s tick when the zet-rt snapshot says when it last ticked, else
-   *  20 s out. A one-shot re-armed after each refresh -- whether it rendered
-   *  or threw (continuePoll) -- rather than a fixed interval, since every
-   *  delay is computed from the freshest snapshot. */
+   *  next 30 s tick when the visible layer polls zet-rt and its snapshot
+   *  says when it last ticked (pollAnchor), else 20 s out. A one-shot
+   *  re-armed after each refresh -- whether it rendered or threw
+   *  (continuePoll) -- rather than a fixed interval, since every delay is
+   *  computed from the freshest snapshot. */
   function armPoll(): void {
     if (frozen || disposed || timer !== null) return;
     timer = setTimer(() => {
@@ -565,7 +585,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       continuePoll(refresh(), armPoll, 'dashboard refresh');
-    }, nextPollDelay(snapshots['zet-rt']?.sourceUpdatedAt, now()));
+    }, nextPollDelay(pollAnchor(), now()));
+  }
+
+  /** Withdraws the armed poll and arms it again from the freshest
+   *  snapshots -- for the moment the join's refresh lands, when the delay
+   *  computed before any data (the fixed fallback) can first be aligned. */
+  function rearmPoll(): void {
+    if (timer !== null) {
+      clearTimer(timer);
+      timer = null;
+    }
+    armPoll();
   }
 
   /** The clock decides, not the socket: a phone whose socket died on the way

@@ -322,6 +322,30 @@ describe('polling and the two toggles', () => {
     await flush();
     expect(aligned.armed()).toEqual([1_000, 27_000]);
   });
+  it('aligns the first poll of a session too: the join\'s own refresh fills the timestamp and the poll is re-armed from it, not left on the fallback armed before any data', async () => {
+    const { session, armed } = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]); // before the join there is nothing to align to
+    session.join();
+    await flush();
+    // No poll has fired yet: the join's refresh alone re-aimed the chain 2 s
+    // past the feed's next tick, and exactly one poll is armed.
+    expect(armed()).toEqual([1_000, 27_000]);
+  });
+  it('keys the delay on the active layer\'s own modules: a layer that never fetches zet-rt polls on the fallback, whatever snapshot an earlier layer left behind', async () => {
+    const { root, session, tick, armed, fetchData } = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
+    session.join();
+    await flush();
+    expect(armed()).toEqual([1_000, 27_000]); // grad-sada fetches zet-rt: aligned
+    [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')][6]!.click(); // vijesti: hrt-news only
+    await flush();
+    fetchData.mockClear();
+    tick(); // the pending poll fires for the layer now active
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
+    // The zet-rt snapshot grad-sada left is not this layer's evidence: the
+    // 30 s tick it describes says nothing about when hrt-news changes.
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+  });
   it('keeps polling when one refresh throws: a renderer choking on one bad snapshot is logged and the next poll is still armed, never a session that quietly stops updating', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     // The second poll answers dhmz-now with a snapshot whose items are not a

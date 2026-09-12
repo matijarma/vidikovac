@@ -19,7 +19,6 @@ import { toLonLat } from '../motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createModel, type Drawn, type Fix, type Model } from '../motion/model';
 import type { Network } from '../motion/network';
-import { project, tangent } from '../motion/polyline';
 import { BUS_SIDE_PX, ROUTE_TYPE_TRAM, TRAM_LENGTH_PX, TRAM_WIDTH_PX } from '../motion/schematic';
 import { SDF_PIXEL_RATIO, sdfRectangle } from './sdf';
 
@@ -175,15 +174,13 @@ export function pointsToFixes(points: readonly MapPoint[]): Fix[] {
 }
 
 /** Direction a tram icon lies along, mirroring schematic.ts's tramDirection:
- *  the model's heading when it has one; else the track's tangent at the
- *  drawn position (the rails are known even when the facing is not); else
+ *  the model's heading when it has one; else the track the model already
+ *  computed at the drawn position (`Drawn.track`: the rails are known even
+ *  when the facing is not, and re-projecting `p` onto the shape every frame
+ *  to find them again would be a hintless scan per tram per frame); else
  *  nothing, and the icon stays unrotated. */
-function tramDirection(net: Network | null, v: Drawn): { x: number; y: number } | null {
-  if (v.heading) return v.heading;
-  if (v.onShape === null || !net) return null;
-  const shape = net.shapes[v.onShape];
-  if (!shape || shape.pts.length < 2) return null;
-  return tangent(shape.pts, shape.cum, project(shape.pts, shape.cum, v.p).s);
+function tramDirection(v: Drawn): { x: number; y: number } | null {
+  return v.heading ?? v.track ?? null;
 }
 
 /** Plane direction (x east, y north) to compass degrees clockwise from north. */
@@ -194,14 +191,14 @@ function bearingOf(dir: { x: number; y: number } | null): number {
 }
 
 /**
- * The model's output as the vehicle source: one feature per vehicle that is
- * not stale, at the model's own position (R-P2), with the icon for its
- * shape, its bearing and its confidence as alpha.
+ * The model's output as the vehicle source: one feature per vehicle (the
+ * model evicts what has gone quiet, R-F2, so everything it draws is fresh),
+ * at the model's own position (R-P2), with the icon for its shape, its
+ * bearing and its confidence as alpha.
  */
-export function vehiclesToGeoJson(drawn: readonly Drawn[], net: Network | null): VehicleFeatureCollection {
+export function vehiclesToGeoJson(drawn: readonly Drawn[]): VehicleFeatureCollection {
   const features: VehicleFeatureCollection['features'] = [];
   for (const v of drawn) {
-    if (v.stale) continue;
     const tram = v.type === ROUTE_TYPE_TRAM;
     features.push({
       type: 'Feature',
@@ -209,7 +206,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], net: Network | null):
       properties: {
         id: v.id,
         icon: tram ? 'vehicle-tram' : 'vehicle-bus',
-        bearing: tram ? bearingOf(tramDirection(net, v)) : 0,
+        bearing: tram ? bearingOf(tramDirection(v)) : 0,
         alpha: MIN_ICON_ALPHA + (1 - MIN_ICON_ALPHA) * Math.min(1, Math.max(0, v.confidence)),
       },
     });
@@ -266,12 +263,16 @@ export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => 
 type MaplibreModule = typeof import('./maplibre-entry');
 
 /** Injectable internals: the library import (never loaded under test), and
- *  the loop's own clock and frame primitive (motion/loop.ts's LoopDeps). */
+ *  the loop's own clock, frame primitive and clock-tick timer pair
+ *  (motion/loop.ts's LoopDeps -- the reduced-motion loop runs on the timer
+ *  pair, never on frames, R-F6). */
 export interface CityMapDeps {
   loadMaplibre?: () => Promise<MaplibreModule>;
   raf?: (cb: (t: number) => void) => number;
   cancel?: (h: number) => void;
   now?: () => number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
 }
 
 let mapUid = 0;
@@ -309,7 +310,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // paint nothing, report no change, let the loop park; the next render's
     // update() nudges it awake.
     if (!model || !pushVehicles || !container.isConnected) return false;
-    const fc = vehiclesToGeoJson(model.step(t), net);
+    const fc = vehiclesToGeoJson(model.step(t));
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
     const changed = signature !== lastPushedSignature;
@@ -323,7 +324,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return changed;
   }
 
-  const loop: Loop = createLoop(draw, { raf: deps.raf, cancel: deps.cancel, now, reducedMotion: options.reducedMotion });
+  const loop: Loop = createLoop(draw, {
+    raf: deps.raf,
+    cancel: deps.cancel,
+    now,
+    setTimer: deps.setTimer,
+    clearTimer: deps.clearTimer,
+    reducedMotion: options.reducedMotion,
+  });
 
   void (async () => {
     // Both arrive after first paint; the model wants the geometry from its
