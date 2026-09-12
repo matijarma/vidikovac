@@ -541,6 +541,26 @@ describe('the full map (T10)', () => {
     expect(dash.dataset.view).toBe('layers');
   });
 
+  // Fix round 1: on the wide grid select() does not re-render (all seven
+  // layers are already in the DOM), so a programmatic tab change that left
+  // the view mode used to keep a button still reading "Skupi kartu".
+  it('on the wide grid, leaving the full map through a tab change re-renders so the button reads the state it leads to', async () => {
+    const { root, handle } = await onUPokretu({ mapFactory: fakeMap(), wide: true });
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    button.click();
+    expect(dash.dataset.view).toBe('map');
+    expect(text(root.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
+    handle.selectLayer('vijesti');
+    expect(dash.dataset.view).toBe('layers');
+    // The wide grid still holds the U pokretu panel and its button; it must
+    // have been re-rendered, not left stale.
+    const after = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    expect(after).not.toBeNull();
+    expect(text(after)).toBe('Proširi kartu');
+    expect(root.querySelectorAll('.layer')).toHaveLength(7);
+  });
+
   it('lightweight: never creates a map, renders no map panel and no button (R-L2)', async () => {
     const mapFactory = fakeMap();
     const { root } = await onUPokretu({ mapFactory, lightweight: true });
