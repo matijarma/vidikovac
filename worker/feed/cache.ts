@@ -4,6 +4,9 @@ import type { ModuleId, ModuleSnapshot, ModuleSpec } from './schema';
 import { MODULES, WARM_MODULES, moduleSpec } from './registry';
 import { makeFetchContext } from './http';
 import { recordMetric } from '../metrics';
+import { DOGADANJA_AVAILABILITY_IDS } from './modules/dogadanja';
+import { HRT_FEEDS } from './modules/hrt-news';
+import { CETVRTI_DATASET, ZBORNA_MJESTA_LAYER } from './modules/ckan-geo';
 
 // Three states, never blank. A module is live while the Cache API holds a copy
 // younger than its ttl; stale while the KV last-good copy is younger than
@@ -23,6 +26,26 @@ export function kvKey(id: ModuleId): string {
   return `${KV_PREFIX}${id}`;
 }
 
+function sourceKeys(id: ModuleId): readonly string[] {
+  return id === 'dogadanja' ? DOGADANJA_AVAILABILITY_IDS
+    : id === 'hrt-news' ? HRT_FEEDS.map((feed) => feed.source)
+      : id === 'ckan-geo' ? [CETVRTI_DATASET, ZBORNA_MJESTA_LAYER] : [];
+}
+
+/** Old last-good copies must not reintroduce the retired positional calendar. */
+function withoutSyntheticNoticeDates(snapshot: ModuleSnapshot): ModuleSnapshot {
+  if (snapshot.module !== 'dogadanja') return snapshot;
+  return {
+    ...snapshot,
+    items: snapshot.items.map((item) => {
+      if (item.data?.source !== 'kvartovske') return item;
+      const { at: _at, until: _until, ...notice } = item;
+      const { precision: _precision, ...data } = item.data;
+      return { ...notice, dateBasis: 'unknown', data };
+    }),
+  };
+}
+
 export interface FeedCacheDeps {
   /** Counter sink; defaults to worker/metrics.ts. */
   recordMetric?: (env: Env, event: ServerEvent, dim1?: string, dim2?: string) => void;
@@ -38,7 +61,14 @@ export async function getModule(
 ): Promise<ModuleSnapshot> {
   const spec = moduleSpec(id);
   const cached = await caches.default.match(new Request(cacheKey(id)));
-  if (cached) return (await cached.json()) as ModuleSnapshot;
+  if (cached) {
+    const snapshot = (await cached.json()) as ModuleSnapshot;
+    // Older composite caches have no independent availability evidence.
+    // Refresh them once; on failure KV remains available through the normal path.
+    if (snapshot.status !== 'live' || sourceKeys(id).every((key) => snapshot.sources?.[key])) {
+      return withoutSyntheticNoticeDates(snapshot);
+    }
+  }
   return refresh(env, ctx, spec, deps);
 }
 
@@ -75,14 +105,20 @@ async function refresh(
 
   try {
     const fresh = await spec.fetcher(makeFetchContext(clock));
-    const snapshot: ModuleSnapshot = { ...fresh, status: 'live' };
+    const partial = Object.values(fresh.sources ?? {}).some((source) => source.status !== 'live');
+    const snapshot: ModuleSnapshot = {
+      ...fresh,
+      status: partial ? 'stale' : 'live',
+      ...(partial ? { staleSince: now.toISOString() } : {}),
+    };
     const body = JSON.stringify(snapshot);
-    ctx.waitUntil(store(spec.id, body, spec.ttl));
+    ctx.waitUntil(store(spec.id, body, partial ? DEGRADED_CACHE_SECONDS : spec.ttl));
     ctx.waitUntil(env.FEED.put(kvKey(spec.id), body, { expirationTtl: Math.max(60, spec.maxStale) }));
-    metric(env, 'source_fetch', spec.id, 'ok');
+    metric(env, 'source_fetch', spec.id, partial ? 'partial' : 'ok');
     return snapshot;
   } catch {
-    const lastGood = await env.FEED.get<ModuleSnapshot>(kvKey(spec.id), 'json').catch(() => null);
+    const saved = await env.FEED.get<ModuleSnapshot>(kvKey(spec.id), 'json').catch(() => null);
+    const lastGood = saved ? withoutSyntheticNoticeDates(saved) : null;
     const fetchedAt = lastGood ? Date.parse(lastGood.fetchedAt) : Number.NaN;
     // maxStale is measured from the last good fetch, not from the first failure:
     // data nobody could refresh for an hour is useless even if it failed a second ago.
@@ -91,6 +127,14 @@ async function refresh(
         ...lastGood,
         status: 'stale',
         staleSince: new Date(fetchedAt).toISOString(),
+        // A source from the old copy is no longer live merely because another
+        // source happened to work during that old fetch. Keep previous downs.
+        ...(lastGood.sources ? {
+          sources: Object.fromEntries(Object.entries(lastGood.sources).map(([key, source]) => [
+            key, { ...source, status: source.status === 'down' ? 'down' : 'stale' },
+          ])),
+        } : {}),
+        ...(lastGood.coverage ? { coverage: { ...lastGood.coverage, limited: true } } : {}),
       };
       ctx.waitUntil(store(spec.id, JSON.stringify(snapshot), DEGRADED_CACHE_SECONDS));
       metric(env, 'source_fetch', spec.id, 'stale');
@@ -116,6 +160,7 @@ async function store(id: ModuleId, body: string, seconds: number): Promise<void>
 }
 
 function down(spec: ModuleSpec, now: Date): ModuleSnapshot {
+  const keys = sourceKeys(spec.id);
   return {
     module: spec.id,
     tier: spec.tier,
@@ -123,5 +168,9 @@ function down(spec: ModuleSpec, now: Date): ModuleSnapshot {
     fetchedAt: now.toISOString(),
     attribution: spec.attribution,
     items: [],
+    ...(keys.length ? {
+      sources: Object.fromEntries(keys.map((key) => [key, { status: 'down' as const, itemCount: 0 }])),
+      coverage: { shown: 0, limited: true },
+    } : {}),
   };
 }

@@ -47,6 +47,7 @@ describe('fetchZetRss', () => {
       link: 'https://www.zet.hr/default.aspx?id=10123',
       // <pubDate>Tue, 08 Sep 2026 22:00:00 +0200</pubDate> (see the fixture).
       at: '2026-09-08T20:00:00.000Z',
+      dateBasis: 'published',
       data: { source: 'zet-novosti', precision: 'time' },
     });
   });
@@ -60,6 +61,7 @@ describe('fetchZetRss', () => {
       link: 'https://www.zet.hr/default.aspx?id=10146',
       // <pubDate>Fri, 11 Sep 2026 09:00:00 +0200</pubDate> (see the fixture).
       at: '2026-09-11T07:00:00.000Z',
+      dateBasis: 'published',
       data: { source: 'zet-promet', precision: 'time' },
     });
   });
@@ -97,6 +99,7 @@ describe('fetchZetRss', () => {
     expect(result.items).toHaveLength(2);
     for (const item of result.items) {
       expect(item).not.toHaveProperty('at');
+      expect(item.dateBasis).toBe('unknown');
       expect(item.data.precision).toBe('time');
     }
   });
@@ -107,6 +110,8 @@ describe('fetchZetRss', () => {
     );
     expect(result.items).toHaveLength(18);
     expect(result.items.every((item) => item.data.source === 'zet-novosti')).toBe(true);
+    expect(result.sources['zet-novosti']).toMatchObject({ status: 'live', itemCount: 18, totalItems: 18 });
+    expect(result.sources['zet-promet']).toMatchObject({ status: 'down', itemCount: 0 });
   });
 
   it('throws when both feeds fail, so the cache layer can fall back', async () => {
@@ -131,6 +136,7 @@ describe('fetchZetRss', () => {
       }),
     );
     expect(result.items.map((item) => item.title)).toEqual(['S poveznicom']);
+    expect(result.sources['zet-promet'].status).toBe('down');
   });
 
   it('links every item back to a real www.zet.hr notice', async () => {

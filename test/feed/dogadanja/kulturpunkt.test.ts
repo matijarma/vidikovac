@@ -42,6 +42,19 @@ describe('fetchKulturpunkt', () => {
     const result = await fetchKulturpunkt(makeContext());
     expect(result.items).toHaveLength(39);
     expect(result.droppedCount).toBe(1);
+    expect(result.items.every((item) => item.dateBasis === 'event')).toBe(true);
+    expect(result.totalItems).toBeUndefined();
+  });
+
+  it('reports eligible totals only when WordPress confirms that the fetched page is complete', async () => {
+    const complete = await fetchKulturpunkt({
+      ...makeContext(), fetch: async () => new Response(fixture, { headers: { 'x-wp-total': '40' } }),
+    });
+    expect(complete.totalItems).toBe(39);
+    const morePages = await fetchKulturpunkt({
+      ...makeContext(), fetch: async () => new Response(fixture, { headers: { 'x-wp-total': '400' } }),
+    });
+    expect(morePages.totalItems).toBeUndefined();
   });
 
   it('reads a day range with day precision at both ends ("od 22. do 29. rujna")', async () => {

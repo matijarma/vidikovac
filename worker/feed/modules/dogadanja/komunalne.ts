@@ -1,5 +1,5 @@
 import type { FetchContext } from '../../schema';
-import { decodeEntities } from '../../html';
+import { decodeEntities, stripTags } from '../../html';
 import { parseHrDate, type Precision } from '../../hr-date';
 
 // data.zagreb.hr's "Plan komunalnih aktivnosti" -- the live register of
@@ -97,6 +97,7 @@ export interface KomunalneEvent {
   summary: string;
   /** ISO 8601, Europe/Zagreb midnight -- the register's own last-change date. Always day precision (see file header). */
   at: string;
+  dateBasis: 'updated';
   /** [lon, lat], 5 decimals. Omitted, never guessed, for the 51/700 records with no coordinates at all. */
   geo?: { type: 'Point'; coordinates: [number, number] };
   data: {
@@ -112,10 +113,12 @@ export interface KomunalneResult {
   items: KomunalneEvent[];
   /** Rows with no last-change date, or a phase/status/amount this module cannot verify -- dropped, never guessed. */
   droppedCount: number;
+  totalItems: number;
 }
 
 export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult> {
   const response = await ctx.fetch(KOMUNALNE_URL);
+  if (!response.ok) throw new Error(`komunalne: HTTP ${response.status}`);
   const rows: unknown = await response.json();
   if (!Array.isArray(rows)) throw new Error('komunalne: unexpected response shape');
 
@@ -146,8 +149,9 @@ export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult
     items.push({
       id: `komunalne:${row.ID}`,
       title: decodeEntities(row.Lokacija ?? '').trim(),
-      summary: decodeEntities(row.Aktivnost ?? '').trim(),
+      summary: typeof row.Aktivnost === 'string' ? stripTags(decodeEntities(row.Aktivnost)) : '',
       at: changed.startIso,
+      dateBasis: 'updated',
       ...(lat !== null && lon !== null
         ? { geo: { type: 'Point' as const, coordinates: [roundCoord(lon), roundCoord(lat)] as [number, number] } }
         : {}),
@@ -161,5 +165,5 @@ export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult
     });
   }
 
-  return { items, droppedCount };
+  return { items, droppedCount, totalItems: items.length };
 }

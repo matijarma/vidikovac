@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { FetchContext } from '../../../worker/feed/schema';
-import { zagrebIso } from '../../../worker/feed/time';
 import { KVARTOVSKE_URL, fetchKvartovske } from '../../../worker/feed/modules/dogadanja/kvartovske';
 
 // The instant test/fixtures/dogadanja/sources.json records for this fetch.
@@ -34,20 +33,27 @@ describe('fetchKvartovske', () => {
     ]);
   });
 
-  it('dates the first item today and each later item one day further back at day precision, since the page states no date for any item', async () => {
+  it('never invents dates or date precision for the undated listing', async () => {
     const result = await fetchKvartovske(makeContext());
-    expect(result.items[0]).toMatchObject({ at: zagrebIso(2026, 9, 12, 0, 0), data: { precision: 'day' } });
-    expect(result.items[1]).toMatchObject({ at: zagrebIso(2026, 9, 11, 0, 0), data: { precision: 'day' } });
-    expect(result.items[2]).toMatchObject({ at: zagrebIso(2026, 9, 10, 0, 0), data: { precision: 'day' } });
+    for (const item of result.items) {
+      expect(item.dateBasis).toBe('unknown');
+      expect(item).not.toHaveProperty('at');
+      expect(item.data).not.toHaveProperty('precision');
+    }
+    expect(result.totalItems).toBeUndefined(); // paginated source, not the city's whole archive
   });
 
-  it('keeps every later item exactly one day further back than the one before it, all the way to the last of the 20', async () => {
-    const result = await fetchKvartovske(makeContext());
-    for (let i = 1; i < result.items.length; i += 1) {
-      const previous = Date.parse(result.items[i - 1].at);
-      const current = Date.parse(result.items[i].at);
-      expect(previous - current, `gap between item ${i - 1} and ${i}`).toBe(24 * 60 * 60 * 1000);
-    }
+  it('keeps identical IDs, order and content across fetch dates and DST changes', async () => {
+    const first = await fetchKvartovske(makeContext());
+    const later = await fetchKvartovske(makeContext(kvartovskeHtml, new Date('2026-11-01T23:30:00Z')));
+    expect(later.items).toEqual(first.items);
+  });
+
+  it('distinguishes an empty listing from an error page or failed request', async () => {
+    expect(await fetchKvartovske(makeContext('<h1>Kvartovske novosti</h1>'))).toEqual({ items: [], totalItems: 0 });
+    await expect(fetchKvartovske(makeContext('<html>maintenance</html>'))).rejects.toThrow(/listing/);
+    await expect(fetchKvartovske({ ...makeContext(), fetch: async () => new Response(kvartovskeHtml, { status: 503 }) }))
+      .rejects.toThrow(/503/);
   });
 
   it('links every item back to its real, absolute aktivnosti.zagreb.hr page, with a stable id', async () => {

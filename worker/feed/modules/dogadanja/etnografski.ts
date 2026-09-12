@@ -1,4 +1,5 @@
-import type { FetchContext } from '../../schema';
+import type { FetchContext, SourceAvailability } from '../../schema';
+import { pageTotal } from '../../payload';
 import { decodeEntities, stripTags } from '../../html';
 import type { Precision } from '../../hr-date';
 
@@ -43,8 +44,8 @@ export const ETNOGRAFSKI_IZLOZBE_URL =
 // row, but this way a row can never mislabel itself even if that field were
 // ever missing or wrong.
 const ETNOGRAFSKI_FEEDS = [
-  { url: ETNOGRAFSKI_DOGADJANJA_URL, category: 'dogadjanje' },
-  { url: ETNOGRAFSKI_IZLOZBE_URL, category: 'izlozba' },
+  { url: ETNOGRAFSKI_DOGADJANJA_URL, category: 'dogadjanje', source: 'etnografski-dogadjanja' },
+  { url: ETNOGRAFSKI_IZLOZBE_URL, category: 'izlozba', source: 'etnografski-izlozbe' },
 ] as const;
 
 export type EtnografskiCategory = (typeof ETNOGRAFSKI_FEEDS)[number]['category'];
@@ -55,6 +56,7 @@ export interface EtnografskiEvent {
   link: string;
   /** ISO 8601, straight from webmz_event_date_start (Unix seconds) -- never parseHrDate. */
   at: string;
+  dateBasis: 'event';
   /** ISO 8601, straight from webmz_event_date_end. Always present in the real fixture; required here since an event with no known end can never be judged "still current" below. */
   until: string;
   data: {
@@ -69,6 +71,7 @@ export interface EtnografskiResult {
   items: EtnografskiEvent[];
   /** Rows with no readable start/end meta, plus any row whose event window has already fully passed -- dropped, never guessed or shown as if still current. */
   droppedCount: number;
+  sources: Record<string, SourceAvailability>;
 }
 
 interface EtnografskiApiItem {
@@ -85,7 +88,8 @@ interface EtnografskiApiItem {
 /** Unix seconds -> ISO 8601 instant, or null when the field is missing or not a finite number. */
 function isoFromUnixSeconds(value: number | undefined): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  return new Date(value * 1000).toISOString();
+  const date = new Date(value * 1000);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 function parseEtnografskiFeed(rows: EtnografskiApiItem[], category: EtnografskiCategory, nowMs: number): { items: EtnografskiEvent[]; droppedCount: number } {
@@ -116,6 +120,7 @@ function parseEtnografskiFeed(rows: EtnografskiApiItem[], category: EtnografskiC
       title,
       link: row.link,
       at,
+      dateBasis: 'event',
       until,
       data: { source: 'etnografski', category, venue, precision: 'time' },
     });
@@ -129,17 +134,30 @@ export async function fetchEtnografski(ctx: FetchContext): Promise<EtnografskiRe
   const results = await Promise.allSettled(
     ETNOGRAFSKI_FEEDS.map(async (feed) => {
       const response = await ctx.fetch(feed.url);
+      if (!response.ok) throw new Error(`etnografski: HTTP ${response.status}`);
       const rows: unknown = await response.json();
       if (!Array.isArray(rows)) throw new Error(`etnografski: unexpected response shape from ${feed.url}`);
-      return parseEtnografskiFeed(rows as EtnografskiApiItem[], feed.category, nowMs);
+      const parsed = parseEtnografskiFeed(rows as EtnografskiApiItem[], feed.category, nowMs);
+      // Further pages may contain current events. Their eligible count is unknown.
+      return { ...parsed, totalItems: pageTotal(response, rows.length, 20) === rows.length ? parsed.items.length : undefined };
     }),
   );
 
   const ok = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
   if (ok.length === 0) throw new Error('etnografski: both endpoints failed');
 
+  const sources: Record<string, SourceAvailability> = {};
+  results.forEach((result, index) => {
+    sources[ETNOGRAFSKI_FEEDS[index].source] = result.status === 'fulfilled'
+      ? {
+          status: 'live', itemCount: result.value.items.length, fetchedAt: ctx.now().toISOString(),
+          ...(result.value.totalItems !== undefined ? { totalItems: result.value.totalItems } : {}),
+        }
+      : { status: 'down', itemCount: 0 };
+  });
   return {
     items: ok.flatMap((result) => result.items),
     droppedCount: ok.reduce((sum, result) => sum + result.droppedCount, 0),
+    sources,
   };
 }

@@ -100,6 +100,8 @@ function defineModule(def: ModuleDefinition): ModuleSpec {
         tier: def.tier,
         fetchedAt: ctx.now().toISOString(),
         ...(payload.sourceUpdatedAt ? { sourceUpdatedAt: payload.sourceUpdatedAt } : {}),
+        ...(payload.sources ? { sources: payload.sources } : {}),
+        ...(payload.coverage ? { coverage: payload.coverage } : {}),
         attribution,
         items: payload.items.map((item) => ({ ...item, module: def.id, tier: def.tier })),
       };
@@ -118,10 +120,8 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: fetchGlasnik }),
   'ckan-geo': defineModule({ id: 'ckan-geo', tier: 'open', ttl: 86400, maxStale: 2592000, load: fetchCkanGeo }),
   // Not built through defineModule: its own fetcher already returns the
-  // complete snapshot (module/tier/fetchedAt/attribution/items stamped
-  // itself), plus `sourceCounts`, which defineModule's generic wrapper would
-  // silently drop (it constructs a fresh object literal from a plain
-  // FeedPayload and never spreads one through). See dogadanja/index.ts.
+  // complete snapshot and the legacy `sourceCounts`. Generic payload metadata
+  // (sources/coverage) is preserved by defineModule for the other modules too.
   dogadanja: {
     id: 'dogadanja',
     tier: 'session',

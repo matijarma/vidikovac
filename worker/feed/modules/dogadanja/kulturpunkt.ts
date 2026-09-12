@@ -1,6 +1,7 @@
 import type { FetchContext } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
 import { parseHrDate, type Precision } from '../../hr-date';
+import { pageTotal } from '../../payload';
 
 // Kulturpunkt (kulturpunkt.hr), WordPress REST, custom post type
 // kp_22_announcement, CC BY-SA 3.0 HR -- this is the reason the whole
@@ -84,6 +85,7 @@ export interface KulturpunktEvent {
   link: string;
   /** ISO 8601, Europe/Zagreb, from parseHrDate over the excerpt. */
   at: string;
+  dateBasis: 'event';
   until?: string;
   data: {
     source: 'kulturpunkt';
@@ -96,10 +98,12 @@ export interface KulturpunktResult {
   items: KulturpunktEvent[];
   /** Announcements whose excerpt carried no readable date -- dropped, not guessed. */
   droppedCount: number;
+  totalItems?: number;
 }
 
 export async function fetchKulturpunkt(ctx: FetchContext): Promise<KulturpunktResult> {
   const response = await ctx.fetch(KULTURPUNKT_URL);
+  if (!response.ok) throw new Error(`kulturpunkt: HTTP ${response.status}`);
   const rows: unknown = await response.json();
   if (!Array.isArray(rows)) throw new Error('kulturpunkt: unexpected response shape');
 
@@ -119,6 +123,7 @@ export async function fetchKulturpunkt(ctx: FetchContext): Promise<KulturpunktRe
       title: decodeEntities(stripTags(row.title?.rendered ?? '')),
       link: row.link,
       at: parsed.startIso,
+      dateBasis: 'event',
       ...(parsed.endIso ? { until: parsed.endIso } : {}),
       data: {
         source: 'kulturpunkt',
@@ -128,5 +133,5 @@ export async function fetchKulturpunkt(ctx: FetchContext): Promise<KulturpunktRe
     });
   }
 
-  return { items, droppedCount };
+  return { items, droppedCount, totalItems: pageTotal(response, rows.length, 40) === rows.length ? items.length : undefined };
 }

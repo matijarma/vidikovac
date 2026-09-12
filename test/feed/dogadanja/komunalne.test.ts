@@ -47,6 +47,7 @@ describe('fetchKomunalne', () => {
       title: 'Horvati, ulica Širanovići, odvojak prema k.br. 34',
       summary: 'izrada projektne dokumentacije za gradnju 50 m vodoopskrbnog cjevovoda',
       at: zagrebIso(2026, 6, 1, 0, 0),
+      dateBasis: 'updated',
       data: { source: 'komunalne', phase: 'Ugovaranje', status: 'Gotovo', amount: 1500, precision: 'day' },
     });
   });
@@ -109,6 +110,20 @@ describe('fetchKomunalne', () => {
     const result = await fetchKomunalne(makeContext());
     expect(result.items).toHaveLength(510);
     expect(result.droppedCount).toBe(190);
+    expect(result.totalItems).toBe(510);
+  });
+
+  it('only emits string activity summaries, without treating last-change notices as events', async () => {
+    const row = JSON.parse(fixture).find((entry: { ID: string }) => entry.ID === '7525EA7F67309623C1258DCC0043728F');
+    const result = await fetchKomunalne({
+      ...makeContext(),
+      fetch: async () => new Response(JSON.stringify([
+        { ...row, Aktivnost: { text: 'not a string' } },
+        { ...row, ID: 'html', Aktivnost: '<p>Popravak &amp; obnova</p>' },
+      ])),
+    });
+    expect(result.items.map((item) => item.summary)).toEqual(['', 'Popravak & obnova']);
+    expect(result.items.every((item) => item.dateBasis === 'updated')).toBe(true);
   });
 
   it('only ever emits phase and status values from the closed vocabulary the real fixture defines', async () => {

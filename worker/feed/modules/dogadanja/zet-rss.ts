@@ -1,4 +1,5 @@
-import type { FetchContext } from '../../schema';
+import { XMLValidator } from 'fast-xml-parser';
+import type { FetchContext, SourceAvailability } from '../../schema';
 import { parseXml, xmlArray, xmlText } from '../../xml';
 import { isoOrUndefined } from '../../time';
 import type { Precision } from '../../hr-date';
@@ -51,6 +52,7 @@ export interface ZetRssEvent {
   link: string;
   /** From <pubDate> (R-E1); absent when it's missing or doesn't parse. */
   at?: string;
+  dateBasis: 'published' | 'unknown';
   data: {
     source: ZetRssSource;
     precision: Precision;
@@ -59,6 +61,7 @@ export interface ZetRssEvent {
 
 export interface ZetRssResult {
   items: ZetRssEvent[];
+  sources: Record<string, SourceAvailability>;
 }
 
 const ARRAY_PATHS = ['rss.channel.item'];
@@ -85,10 +88,13 @@ function idFromLink(link: string): string {
 }
 
 function parseZetRss(xml: string, source: ZetRssSource): ZetRssEvent[] {
+  if (XMLValidator.validate(xml.trim()) !== true) throw new Error('zet-rss: invalid XML');
   const channel = parseXml<RssDocument>(xml, { arrayPaths: ARRAY_PATHS }).rss?.channel;
+  if (channel === undefined || channel === null) throw new Error('zet-rss: expected RSS channel');
   const items: ZetRssEvent[] = [];
 
   for (const entry of xmlArray(channel?.item)) {
+    if (!entry || typeof entry !== 'object') continue;
     const link = xmlText(entry.link) || xmlText(entry.guid);
     const title = xmlText(entry.title);
     if (!link || !title) continue;
@@ -98,6 +104,7 @@ function parseZetRss(xml: string, source: ZetRssSource): ZetRssEvent[] {
       title,
       link,
       ...(at ? { at } : {}),
+      dateBasis: at ? 'published' : 'unknown',
       data: { source, precision: 'time' },
     });
   }
@@ -109,6 +116,7 @@ export async function fetchZetRss(ctx: FetchContext): Promise<ZetRssResult> {
   const results = await Promise.allSettled(
     ZET_FEEDS.map(async (feed) => {
       const response = await ctx.fetch(feed.url);
+      if (!response.ok) throw new Error(`zet-rss: HTTP ${response.status}`);
       const xml = await response.text();
       return parseZetRss(xml, feed.source);
     }),
@@ -117,5 +125,12 @@ export async function fetchZetRss(ctx: FetchContext): Promise<ZetRssResult> {
   const ok = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
   if (ok.length === 0) throw new Error('zet-rss: both feeds failed');
 
-  return { items: ok.flat() };
+  const fetchedAt = ctx.now().toISOString();
+  const sources: Record<string, SourceAvailability> = {};
+  results.forEach((result, index) => {
+    sources[ZET_FEEDS[index].source] = result.status === 'fulfilled'
+      ? { status: 'live', itemCount: result.value.length, totalItems: result.value.length, fetchedAt }
+      : { status: 'down', itemCount: 0 };
+  });
+  return { items: ok.flat(), sources };
 }

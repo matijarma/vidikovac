@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ARCGIS_CETVRTI_URL,
   CETVRTI_DATASET,
+  CKAN_GEO_SOURCE_LIMIT,
   CKAN_PACKAGE_SHOW,
   POI_CATEGORIES,
   ZBORNA_MJESTA_DATASET,
@@ -15,9 +16,35 @@ import {
   ringCentroid,
   titleCaseHr,
 } from '../../worker/feed/modules/ckan-geo';
+import type { FetchContext } from '../../worker/feed/schema';
 
 const cetvrti = JSON.parse(readFileSync(new URL('../fixtures/gradske_cetvrti.geojson', import.meta.url), 'utf8'));
 const packageShow = JSON.parse(readFileSync(new URL('../fixtures/prometnice_package_show.json', import.meta.url), 'utf8'));
+const NOW = '2026-09-11T10:00:00.000Z';
+const ASSEMBLY_URL = 'https://data.zagreb.hr/zborna.json';
+const emptyCollection = { type: 'FeatureCollection', features: [] };
+const goodMeta = {
+  success: true,
+  result: {
+    name: ZBORNA_MJESTA_DATASET,
+    metadata_modified: '2026-09-01T08:00:00.000000',
+    resources: [{ format: 'GeoJSON', url: ASSEMBLY_URL }],
+  },
+};
+const goodAssembly = [{ naziv: 'Zrinjevac', lat: 45.811, lon: 15.978 }];
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+function context(overrides: { districts?: () => Response; meta?: () => Response; assembly?: () => Response } = {}): FetchContext {
+  return {
+    now: () => new Date(NOW),
+    fetch: async (url) => {
+      if (url === ARCGIS_CETVRTI_URL) return overrides.districts?.() ?? response(cetvrti);
+      if (url === `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`) return overrides.meta?.() ?? response(goodMeta);
+      if (url === ASSEMBLY_URL) return overrides.assembly?.() ?? response(goodAssembly);
+      throw new Error(`unexpected source URL: ${url}`);
+    },
+  };
+}
 
 describe('geometry helpers', () => {
   it('computes the centroid of a closed ring by area, not by vertex count', () => {
@@ -30,6 +57,30 @@ describe('geometry helpers', () => {
     expect(featureCentroid({ type: 'MultiPolygon', coordinates: [square] })).toEqual([1, 1]);
     expect(featureCentroid({ type: 'Point', coordinates: [15.9, 45.8] })).toEqual([15.9, 45.8]);
     expect(featureCentroid(null)).toBeNull();
+  });
+
+  it.each([
+    { type: 'Point', coordinates: null },
+    { type: 'Point', coordinates: [null, null] },
+    { type: 'Point', coordinates: ['15.9', '45.8'] },
+    { type: 'Point', coordinates: [181, 45.8] },
+    { type: 'Point', coordinates: [15.9, -91] },
+    { type: 'Point', coordinates: [Infinity, 45.8] },
+    { type: 'Point', coordinates: {} },
+    { type: 'Polygon', coordinates: [null] },
+    { type: 'Polygon', coordinates: [[null, [0, 1], [1, 1], null]] },
+    { type: 'Polygon', coordinates: [[['', 0], [1, 0], [1, 1], ['', 0]]] },
+    { type: 'MultiPolygon', coordinates: [null] },
+    { type: 'MultiPolygon', coordinates: {} },
+  ])('rejects malformed or non-WGS84 geometry without throwing: %j', (geometry) => {
+    expect(featureCentroid(geometry)).toBeNull();
+  });
+
+  it('chooses the largest exterior by area, without treating a hole as a district', () => {
+    const large = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
+    const denseSmall = [[6, 6], [6.5, 6], [7, 6], [7, 6.5], [7, 7], [6.5, 7], [6, 7], [6, 6]];
+    expect(featureCentroid({ type: 'MultiPolygon', coordinates: [[large], [denseSmall]] })).toEqual([2, 2]);
+    expect(featureCentroid({ type: 'Polygon', coordinates: [large, denseSmall] })).toEqual([2, 2]);
   });
 });
 
@@ -61,6 +112,20 @@ describe('parseGradskeCetvrti', () => {
     expect(lon).toBeLessThan(16.2);
     expect(lat).toBeGreaterThan(45.6);
     expect(lat).toBeLessThan(45.9);
+  });
+
+  it('never coerces missing district ids or object-valued seats into valid fields', () => {
+    const geometry = { type: 'Point', coordinates: [15.9, 45.8] };
+    const parsed = parseGradskeCetvrti({ features: [
+      null,
+      { properties: { IME_GC: 'DUBRAVA', RBR_GC: null }, geometry },
+      { properties: { IME_GC: 'DUBRAVA', RBR_GC: false }, geometry },
+      { properties: { IME_GC: { value: 'DUBRAVA' }, RBR_GC: 1 }, geometry },
+      { properties: { IME_GC: 'DUBRAVA', RBR_GC: '1', sjediste_G: { address: 'unknown' } }, geometry },
+    ] });
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({ id: 'cetvrt:1', title: 'Dubrava' });
+    expect(parsed[0].summary).toBeUndefined();
   });
 });
 
@@ -101,6 +166,79 @@ describe('ckanResourceUrl and parseCkanRecords', () => {
     expect(flat[1].geo).toBeUndefined();
     expect(parseCkanRecords(null, 'x')).toEqual([]);
   });
+
+  it('reads the exact official assembly schema and preserves source spelling and ids', () => {
+    // Samples from the successful official GeoJSON download, resource
+    // d30eb215-3ce2-48f8-88b2-6ffac82d46b5. These are not invented POIs.
+    const features = [
+      { type: 'Feature', id: 1, geometry: { type: 'Point', coordinates: [15.9807010621406, 45.8157108589494] },
+        properties: { OBJECTID: 1, gradska_ce: 'Gornji Grad-Medveščak', zboriste: 'Park Ribnjak' } },
+      { type: 'Feature', id: 4, geometry: { type: 'Point', coordinates: [16.0140627292642, 45.8742610441023] },
+        properties: { OBJECTID: 4, gradska_ce: 'Podsljeme', zboriste: 'OŠ Markueevec' } },
+    ];
+    const items = parseCkanRecords({ type: 'FeatureCollection', features }, ZBORNA_MJESTA_LAYER);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      id: 'zborna-mjesta:1', title: 'Park Ribnjak', summary: 'Gornji Grad-Medveščak',
+      geo: { type: 'Point', coordinates: [15.9807010621406, 45.8157108589494] },
+    });
+    expect(items[1].title).toBe('OŠ Markueevec');
+    expect(parseCkanRecords({ features: [...features].reverse() }, ZBORNA_MJESTA_LAYER).map((item) => item.id))
+      .toEqual(['zborna-mjesta:4', 'zborna-mjesta:1']);
+  });
+
+  it.each([null, undefined, '', ' ', false, true, {}, [], [0], 'NaN', Infinity])(
+    'does not manufacture coordinates from %j', (value) => {
+      const items = parseCkanRecords([{ naziv: 'Bez koordinata', lon: value, lat: value }], ZBORNA_MJESTA_LAYER);
+      expect(items).toHaveLength(1);
+      expect(items[0].geo).toBeUndefined();
+    },
+  );
+
+  it('accepts explicit numeric strings and real zeroes, but rejects invalid coordinate ranges', () => {
+    const items = parseCkanRecords([
+      { naziv: 'Str', lon: '15.98', lat: '45.81' },
+      { naziv: 'Zero', lon: 0, lat: 0 },
+      { naziv: 'Projected', x: 459000, y: 5073000 },
+      { naziv: 'Fallback', lon: null, lng: '15.98', lat: null, latitude: '45.81' },
+    ], ZBORNA_MJESTA_LAYER);
+    expect(items[0].geo?.coordinates).toEqual([15.98, 45.81]);
+    expect(items[1].geo?.coordinates).toEqual([0, 0]);
+    expect(items[2].geo).toBeUndefined();
+    expect(items[3].geo?.coordinates).toEqual([15.98, 45.81]);
+  });
+
+  it('only emits string names and summaries', () => {
+    const items = parseCkanRecords([
+      { naziv: { name: 'object' }, adresa: 'wrong' },
+      { naziv: ' Named ', adresa: { value: 'object' } },
+      { naziv: 'District', adresa: [], gradska_ce: ' Podsljeme ' },
+      { naziv: 'No summary', adresa: 123 },
+      { naziv: 'Blank summary', adresa: '  ' },
+    ], ZBORNA_MJESTA_LAYER);
+    expect(items.map((item) => item.title)).toEqual(['Named', 'District', 'No summary', 'Blank summary']);
+    expect(items.map((item) => item.summary)).toEqual([undefined, 'Podsljeme', undefined, undefined]);
+  });
+
+  it.each([
+    null,
+    { result: goodMeta.result },
+    { success: false, result: goodMeta.result },
+    { success: true, error: { message: 'failed' }, result: goodMeta.result },
+    { success: true, result: { resources: [null, { format: {}, url: ASSEMBLY_URL }] } },
+    ...['javascript:alert(1)', 'http://data.zagreb.hr/test.json', 'https://example.org/test.json', 'https://data.zagreb.hr@example.org/test.json', 'not a url']
+      .map((url) => ({ success: true, result: { resources: [{ format: 'JSON', url }] } })),
+  ])('rejects failed envelopes and unverified distribution URLs: %j', (meta) => {
+    expect(ckanResourceUrl(meta)).toBeNull();
+  });
+
+  it('prefers a valid official GeoJSON distribution over JSON', () => {
+    expect(ckanResourceUrl({ success: true, result: { resources: [
+      { format: 'JSON', url: ASSEMBLY_URL },
+      { format: 'GeoJSON', url: 'https://example.org/not-official.json' },
+      { format: ' geojson ', url: 'https://data.zagreb.hr/official.geojson' },
+    ] } })).toBe('https://data.zagreb.hr/official.geojson');
+  });
 });
 
 describe('fetchCkanGeo', () => {
@@ -134,7 +272,14 @@ describe('fetchCkanGeo', () => {
     ]);
     expect(payload.items.filter((item) => item.data?.layer === CETVRTI_DATASET)).toHaveLength(17);
     expect(payload.items.filter((item) => item.data?.layer === ZBORNA_MJESTA_LAYER)).toHaveLength(1);
-    expect(payload.sourceUpdatedAt).toBe('2026-09-01T08:00:00.000Z');
+    expect(payload.sourceUpdatedAt).toBeUndefined();
+    expect(payload.sources).toEqual({
+      'gradske-cetvrti': { status: 'live', itemCount: 17, totalItems: 17, fetchedAt: NOW },
+      'zborna-mjesta': {
+        status: 'live', itemCount: 1, totalItems: 1, fetchedAt: NOW, sourceUpdatedAt: '2026-09-01T08:00:00.000Z',
+      },
+    });
+    expect(payload.coverage).toEqual({ shown: 18, total: 18, limited: false });
   });
 
   it('keeps the districts when CKAN is unreachable, and throws only when both layers fail', async () => {
@@ -146,6 +291,8 @@ describe('fetchCkanGeo', () => {
       },
     });
     expect(partial.items).toHaveLength(17);
+    expect(partial.sources?.['zborna-mjesta']).toEqual({ status: 'down', itemCount: 0 });
+    expect(partial.coverage).toEqual({ shown: 17, limited: true });
 
     await expect(
       fetchCkanGeo({
@@ -155,5 +302,150 @@ describe('fetchCkanGeo', () => {
         },
       }),
     ).rejects.toThrow(/ckan-geo/);
+  });
+
+  it('keeps assembly availability independent when the district request fails', async () => {
+    const payload = await fetchCkanGeo(context({ districts: () => response(emptyCollection, 503) }));
+    expect(payload.items).toHaveLength(1);
+    expect(payload.sources?.['gradske-cetvrti']).toEqual({ status: 'down', itemCount: 0 });
+    expect(payload.sources?.['zborna-mjesta']).toMatchObject({ status: 'live', itemCount: 1, totalItems: 1 });
+    expect(payload.coverage).toEqual({ shown: 1, limited: true });
+  });
+
+  it('accepts successful empty collections for both sources', async () => {
+    const payload = await fetchCkanGeo(context({
+      districts: () => response(emptyCollection),
+      assembly: () => response(emptyCollection),
+    }));
+    expect(payload.items).toEqual([]);
+    expect(payload.sources?.['gradske-cetvrti']).toEqual({ status: 'live', itemCount: 0, totalItems: 0, fetchedAt: NOW });
+    expect(payload.sources?.['zborna-mjesta']).toMatchObject({ status: 'live', itemCount: 0, totalItems: 0, fetchedAt: NOW });
+    expect(payload.coverage).toEqual({ shown: 0, total: 0, limited: false });
+  });
+
+  it.each(['districts', 'assembly'] as const)('does not throw when only %s succeeds with an empty collection', async (source) => {
+    const payload = await fetchCkanGeo(context({
+      districts: () => response(source === 'districts' ? emptyCollection : { error: { code: 500 } }),
+      assembly: () => response(source === 'assembly' ? [] : { error: { code: 500 } }),
+    }));
+    expect(payload.items).toEqual([]);
+    expect(payload.sources?.[source === 'districts' ? CETVRTI_DATASET : ZBORNA_MJESTA_LAYER])
+      .toMatchObject({ status: 'live', itemCount: 0, totalItems: 0 });
+    expect(payload.coverage).toEqual({ shown: 0, limited: true });
+  });
+
+  it.each([
+    ['HTTP 503 with valid-looking JSON', () => response(emptyCollection, 503)],
+    ['HTTP 404 with valid-looking JSON', () => response(emptyCollection, 404)],
+    ['HTTP 204 with no JSON', () => new Response(null, { status: 204 })],
+    ['invalid JSON', () => new Response('<html>upstream failed</html>')],
+    ['API error', () => response({ error: { code: 400 }, features: [] })],
+    ['API errors array', () => response({ errors: ['failed'], features: [] })],
+    ['API failure flag', () => response({ success: false, features: [] })],
+    ['missing collection', () => response({})],
+    ['null collection', () => response(null)],
+    ['wrong features shape', () => response({ features: {} })],
+    ['wrong GeoJSON type', () => response({ type: 'Feature', features: [] })],
+    ['unreadable nonempty collection', () => response({ type: 'FeatureCollection', features: [{ unexpected: true }] })],
+  ] as const)('treats %s as failure, not successful zero', async (_label, failedResponse) => {
+    const partial = await fetchCkanGeo(context({ assembly: failedResponse }));
+    expect(partial.items).toHaveLength(17);
+    expect(partial.sources?.['zborna-mjesta']).toEqual({ status: 'down', itemCount: 0 });
+    expect(partial.coverage).toEqual({ shown: 17, limited: true });
+    await expect(fetchCkanGeo(context({ districts: failedResponse, assembly: failedResponse }))).rejects.toThrow(/ckan-geo/);
+  });
+
+  it.each([
+    () => response(goodMeta, 503),
+    () => response({ success: false, result: goodMeta.result }),
+    () => response({ result: goodMeta.result }),
+    () => response({ success: true, result: { resources: [] } }),
+    () => response({ success: true, result: { resources: 'broken' } }),
+  ])('does not equate unavailable metadata with an empty assembly layer', async (meta) => {
+    const payload = await fetchCkanGeo(context({ meta }));
+    expect(payload.sources?.['zborna-mjesta']).toEqual({ status: 'down', itemCount: 0 });
+    expect(payload.coverage).toEqual({ shown: 17, limited: true });
+  });
+
+  it('prefers the resource modification time, never the fetch time or a shared district timestamp', async () => {
+    const payload = await fetchCkanGeo(context({ meta: () => response({
+      ...goodMeta,
+      result: { ...goodMeta.result, resources: [{ format: 'GeoJSON', url: ASSEMBLY_URL, last_modified: '2025-01-02T12:39:07.558409' }] },
+    }) }));
+    expect(payload.sources?.['zborna-mjesta']?.sourceUpdatedAt).toBe('2025-01-02T12:39:07.558Z');
+    expect(payload.sources?.['gradske-cetvrti']?.sourceUpdatedAt).toBeUndefined();
+    expect(payload.sourceUpdatedAt).toBeUndefined();
+  });
+
+  it('omits invalid source dates without replacing them with fetchedAt', async () => {
+    const payload = await fetchCkanGeo(context({ meta: () => response({
+      ...goodMeta, result: { ...goodMeta.result, metadata_modified: { bad: 'timestamp' } },
+    }) }));
+    expect(payload.sources?.['zborna-mjesta']?.sourceUpdatedAt).toBeUndefined();
+    expect(payload.sources?.['zborna-mjesta']?.fetchedAt).toBe(NOW);
+  });
+
+  it('reports pre-cap row counts rather than pretending the cap is the whole collection', async () => {
+    const total = CKAN_GEO_SOURCE_LIMIT + 3;
+    const payload = await fetchCkanGeo(context({ assembly: () => response(
+      Array.from({ length: total }, (_, index) => ({ id: index, naziv: `Test ${index}`, lon: 15.98, lat: 45.81 })),
+    ) }));
+    expect(payload.sources?.['zborna-mjesta']).toMatchObject({ status: 'live', itemCount: CKAN_GEO_SOURCE_LIMIT, totalItems: total });
+    expect(payload.coverage).toEqual({ shown: 17 + CKAN_GEO_SOURCE_LIMIT, total: 17 + total, limited: true });
+  });
+
+  it('reports omitted malformed rows as incomplete coverage', async () => {
+    const payload = await fetchCkanGeo(context({ assembly: () => response([...goodAssembly, null, { adresa: 'No name' }]) }));
+    expect(payload.sources?.['zborna-mjesta']).toMatchObject({ status: 'live', itemCount: 1, totalItems: 3 });
+    expect(payload.coverage).toEqual({ shown: 18, total: 20, limited: true });
+  });
+
+  it.each([
+    { exceededTransferLimit: true },
+    { properties: { exceededTransferLimit: true } },
+    { totalFeatures: 'unknown' },
+    { numberMatched: -1 },
+    { numberMatched: 1.5 },
+    { numberMatched: 0 },
+    { exceededTransferLimit: true, numberMatched: 17 },
+  ])('omits unknown or implausible upstream totals: %j', async (metadata) => {
+    const payload = await fetchCkanGeo(context({ districts: () => response({ ...cetvrti, ...metadata }) }));
+    expect(payload.sources?.['gradske-cetvrti']?.totalItems).toBeUndefined();
+    expect(payload.coverage).toEqual({ shown: 18, limited: true });
+  });
+
+  it('can report an explicit upstream total larger than the received page', async () => {
+    const payload = await fetchCkanGeo(context({ districts: () => response({
+      ...cetvrti, exceededTransferLimit: true, numberMatched: 30,
+    }) }));
+    expect(payload.sources?.['gradske-cetvrti']?.totalItems).toBe(30);
+    expect(payload.coverage).toEqual({ shown: 18, total: 31, limited: true });
+  });
+});
+
+describe('spatial and gazette catalogue descriptions', () => {
+  const catalogue = JSON.parse(readFileSync(new URL('../../app/src/data/izvori.json', import.meta.url), 'utf8'));
+  const docs = readFileSync(new URL('../../docs/izvori.md', import.meta.url), 'utf8');
+
+  it('describes exactly the implemented spatial layers, not unimplemented POI categories', () => {
+    const name = catalogue.sources.find((source: { module: string }) => source.module === 'ckan-geo').naziv;
+    const row = docs.split('\n').find((line) => line.startsWith('| `ckan-geo` |'))!;
+    for (const description of [name, row]) {
+      expect(description).toContain('gradske četvrti');
+      expect(description).toContain('zborna mjesta');
+      expect(description).not.toMatch(/ljekarne|vatrogasci|policija|zdenci|knjižnice|muzeji|javni WC/);
+    }
+    expect(row).toContain(`${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`);
+    expect(row).toContain(ARCGIS_CETVRTI_URL);
+    expect(docs).toContain(`najviše ${CKAN_GEO_SOURCE_LIMIT} čitljivih stavki po sloju`);
+  });
+
+  it('makes clear the gazette supplies names/links, not full text', () => {
+    const name = catalogue.sources.find((source: { module: string }) => source.module === 'glasnik').naziv;
+    const row = docs.split('\n').find((line) => line.startsWith('| `glasnik` |'))!;
+    expect(name).toContain('nazivi akata najnovijeg broja');
+    expect(name).toContain('bez punog teksta');
+    expect(row).toContain('bez dohvata punog teksta');
+    expect(row).not.toContain('šifarnici, pretraga akata, puni tekst akta');
   });
 });

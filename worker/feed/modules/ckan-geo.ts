@@ -1,6 +1,6 @@
-import type { FetchContext } from '../schema';
+import type { FetchContext, SourceAvailability } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
-import { compactData } from '../payload';
+import { compactData, sourceCoverage } from '../payload';
 import { isoOrUndefined } from '../time';
 
 // Two spatial layers, two access paths. The seventeen city districts come from
@@ -14,6 +14,8 @@ export const ARCGIS_CETVRTI_URL =
   'https://services8.arcgis.com/Usi0jGQwMmBUpFjr/arcgis/rest/services/Gradske_cetvrti/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson';
 export const ZBORNA_MJESTA_DATASET = 'zborna-mjesta-civilne-zastite-grada-zagreba';
 export const CETVRTI_DATASET = 'gradske-cetvrti';
+/** Per layer, after parsing. Coverage counts the source rows before this cap. */
+export const CKAN_GEO_SOURCE_LIMIT = 500;
 
 // FeedItem.data.layer is the stable slug a consumer filters on (/hitno picks
 // the assembly points out of the mixed poi stream with it); data.category is
@@ -31,9 +33,25 @@ export function titleCaseHr(value: string): string {
     .replace(/(^|[\s\-/])(\p{L})/gu, (_match, prefix: string, letter: string) => prefix + letter.toLocaleUpperCase('hr'));
 }
 
-/** Area-weighted centroid of a closed ring; null when the ring is degenerate. */
-export function ringCentroid(ring: number[][]): [number, number] | null {
-  if (!Array.isArray(ring) || ring.length < 3) return null;
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function coordinate(value: unknown): value is [number, number] {
+  return Array.isArray(value)
+    && typeof value[0] === 'number' && Number.isFinite(value[0]) && Math.abs(value[0]) <= 180
+    && typeof value[1] === 'number' && Number.isFinite(value[1]) && Math.abs(value[1]) <= 90;
+}
+
+function ringMeasure(ring: unknown): { centroid: [number, number]; area: number } | null {
+  if (!Array.isArray(ring) || ring.length < 4 || !ring.every(coordinate)) return null;
+  if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) return null;
   let twiceArea = 0;
   let x = 0;
   let y = 0;
@@ -45,39 +63,41 @@ export function ringCentroid(ring: number[][]): [number, number] | null {
     x += (x0 + x1) * cross;
     y += (y0 + y1) * cross;
   }
-  if (twiceArea === 0) return null;
-  return [x / (3 * twiceArea), y / (3 * twiceArea)];
+  if (!Number.isFinite(twiceArea) || twiceArea === 0) return null;
+  const centroid: [number, number] = [x / (3 * twiceArea), y / (3 * twiceArea)];
+  return coordinate(centroid) ? { centroid, area: Math.abs(twiceArea) / 2 } : null;
+}
+
+/** Area-weighted centroid of a closed WGS84 ring; null for invalid geometry. */
+export function ringCentroid(ring: unknown): [number, number] | null {
+  return ringMeasure(ring)?.centroid ?? null;
 }
 
 export function featureCentroid(geometry: unknown): [number, number] | null {
-  const geo = geometry as { type?: string; coordinates?: unknown };
-  if (!geo || typeof geo.type !== 'string') return null;
+  const geo = recordOf(geometry);
+  if (!geo) return null;
   if (geo.type === 'Point') {
-    const [lon, lat] = (geo.coordinates as number[]) ?? [];
-    return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+    return coordinate(geo.coordinates) ? [geo.coordinates[0], geo.coordinates[1]] : null;
   }
-  const rings: number[][][] =
+  if (!Array.isArray(geo.coordinates)) return null;
+  // Holes are not standalone polygons. For a multipolygon use the largest
+  // exterior by area, never the most densely sampled ring.
+  const rings: unknown[] =
     geo.type === 'Polygon'
-      ? ((geo.coordinates as number[][][]) ?? [])
+      ? [geo.coordinates[0]]
       : geo.type === 'MultiPolygon'
-        ? ((geo.coordinates as number[][][][]) ?? []).map((polygon) => polygon[0])
+        ? geo.coordinates.map((polygon: unknown) => Array.isArray(polygon) ? polygon[0] : undefined)
         : [];
   let best: [number, number] | null = null;
   let bestSize = -1;
   for (const ring of rings) {
-    const centroid = ringCentroid(ring);
-    if (centroid && ring.length > bestSize) {
-      best = centroid;
-      bestSize = ring.length;
+    const measured = ringMeasure(ring);
+    if (measured && measured.area > bestSize) {
+      best = measured.centroid;
+      bestSize = measured.area;
     }
   }
   return best;
-}
-
-interface CetvrtProperties {
-  IME_GC?: string;
-  RBR_GC?: number;
-  sjediste_G?: string;
 }
 
 export function parseGradskeCetvrti(json: unknown): ItemInput[] {
@@ -85,12 +105,15 @@ export function parseGradskeCetvrti(json: unknown): ItemInput[] {
   if (!Array.isArray(features)) return [];
   const items: ItemInput[] = [];
 
-  for (const feature of features as { properties?: CetvrtProperties; geometry?: unknown }[]) {
-    const name = feature.properties?.IME_GC;
-    const number = Number(feature.properties?.RBR_GC);
-    const centroid = featureCentroid(feature.geometry);
-    if (!name || !Number.isFinite(number) || !centroid) continue;
-    const seat = feature.properties?.sjediste_G;
+  for (const feature of features) {
+    const object = recordOf(feature);
+    const properties = recordOf(object?.properties);
+    if (!properties) continue;
+    const name = text(properties.IME_GC);
+    const number = pickNumber(properties, ['RBR_GC']);
+    const centroid = featureCentroid(object?.geometry);
+    if (!name || number === undefined || !Number.isSafeInteger(number) || number <= 0 || !centroid) continue;
+    const seat = text(properties.sjediste_G);
     items.push({
       id: `cetvrt:${number}`,
       kind: 'poi',
@@ -106,38 +129,59 @@ export function parseGradskeCetvrti(json: unknown): ItemInput[] {
 }
 
 interface CkanResource {
-  format?: string;
-  url?: string;
+  url: string;
+  last_modified?: unknown;
 }
 
-export function ckanResourceUrl(packageShow: unknown): string | null {
-  const resources = (packageShow as { result?: { resources?: CkanResource[] } })?.result?.resources;
+function ckanResource(packageShow: unknown): CkanResource | null {
+  const envelope = recordOf(packageShow);
+  if (envelope?.success !== true || envelope.error != null || envelope.errors != null) return null;
+  const resources = recordOf(envelope.result)?.resources;
   if (!Array.isArray(resources)) return null;
   const preferred = ['GEOJSON', 'JSON'];
   for (const format of preferred) {
-    const found = resources.find((resource) => (resource.format ?? '').toUpperCase() === format && resource.url);
-    if (found?.url) return found.url;
+    for (const entry of resources) {
+      const resource = recordOf(entry);
+      if (text(resource?.format)?.toUpperCase() !== format) continue;
+      const url = text(resource?.url);
+      if (!url) continue;
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'https:' || parsed.hostname !== 'data.zagreb.hr' || parsed.username || parsed.password || parsed.port) continue;
+        return { url: parsed.href, last_modified: resource?.last_modified };
+      } catch {
+        // A malformed distribution is not a usable resource.
+      }
+    }
   }
   return null;
 }
 
-const NAME_KEYS = ['naziv', 'NAZIV', 'ime', 'IME', 'name', 'NAME', 'lokacija', 'LOKACIJA'];
+export function ckanResourceUrl(packageShow: unknown): string | null {
+  return ckanResource(packageShow)?.url ?? null;
+}
+
+// The official assembly GeoJSON uses zboriste / gradska_ce / OBJECTID.
+const NAME_KEYS = ['zboriste', 'ZBORISTE', 'naziv', 'NAZIV', 'ime', 'IME', 'name', 'NAME', 'lokacija', 'LOKACIJA'];
 const ADDRESS_KEYS = ['adresa', 'ADRESA', 'address', 'ulica', 'ULICA'];
+const DISTRICT_KEYS = ['gradska_ce', 'GRADSKA_CE'];
 const LON_KEYS = ['lon', 'LON', 'lng', 'longitude', 'x', 'X'];
 const LAT_KEYS = ['lat', 'LAT', 'latitude', 'y', 'Y'];
 
 function pick(record: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number') return String(value);
+    const value = text(record[key]);
+    if (value) return value;
   }
   return undefined;
 }
 
 function pickNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
   for (const key of keys) {
-    const value = Number(record[key]);
+    const raw = record[key];
+    // Number(null), Number('') and Number(false) are zero, not coordinates.
+    if (typeof raw !== 'number' && (typeof raw !== 'string' || !raw.trim())) continue;
+    const value = Number(raw);
     if (Number.isFinite(value)) return value;
   }
   return undefined;
@@ -152,17 +196,20 @@ export function parseCkanRecords(json: unknown, layer: string): ItemInput[] {
 
   const items: ItemInput[] = [];
   for (const [index, row] of rows.entries()) {
-    if (!row || typeof row !== 'object') continue;
-    const feature = row as { properties?: Record<string, unknown>; geometry?: unknown };
-    const record = (feature.properties ?? row) as Record<string, unknown>;
+    const feature = recordOf(row);
+    if (!feature) continue;
+    const record = recordOf(feature.properties) ?? feature;
     const title = pick(record, NAME_KEYS);
     if (!title) continue;
-    const address = pick(record, ADDRESS_KEYS);
+    const address = pick(record, ADDRESS_KEYS) ?? pick(record, DISTRICT_KEYS);
     const lon = pickNumber(record, LON_KEYS);
     const lat = pickNumber(record, LAT_KEYS);
-    const centroid = featureCentroid(feature.geometry) ?? (lon !== undefined && lat !== undefined ? [lon, lat] : null);
+    const point = [lon, lat];
+    const centroid = featureCentroid(feature.geometry) ?? (coordinate(point) ? point : null);
+    const sourceId = feature.id ?? record.OBJECTID ?? record.objectid ?? record.id;
+    const id = text(sourceId) ?? (typeof sourceId === 'number' && Number.isFinite(sourceId) ? String(sourceId) : String(index));
     items.push({
-      id: `${layer}:${index}`,
+      id: `${layer}:${id}`,
       kind: 'poi',
       title,
       ...(address ? { summary: address } : {}),
@@ -179,38 +226,93 @@ export function parseCkanRecords(json: unknown, layer: string): ItemInput[] {
  * time. Append the missing `Z` before normalising so the result never depends on the runtime's
  * time zone (this codebase's own host is Europe/Zagreb, which silently shifts the naive parse).
  */
-function ckanTimestampIso(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`;
+function ckanTimestampIso(value: unknown): string | undefined {
+  const timestamp = text(value);
+  if (!timestamp) return undefined;
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(timestamp) ? timestamp : `${timestamp}Z`;
   return isoOrUndefined(withZone);
 }
 
+async function readJson(ctx: FetchContext, url: string): Promise<unknown> {
+  const response = await ctx.fetch(url);
+  if (!response.ok) throw new Error(`ckan-geo: HTTP ${response.status}`);
+  const json: unknown = await response.json();
+  const envelope = recordOf(json);
+  if (envelope?.success === false || envelope?.error != null || envelope?.errors != null) {
+    throw new Error('ckan-geo: upstream API error');
+  }
+  return json;
+}
+
+interface SpatialResult {
+  items: ItemInput[];
+  availability: SourceAvailability;
+}
+
+function spatialResult(json: unknown, layer: string, ctx: FetchContext, sourceUpdatedAt?: string): SpatialResult {
+  const collection = recordOf(json);
+  const rows = Array.isArray(json) && layer === ZBORNA_MJESTA_LAYER
+    ? json
+    : collection?.features;
+  if (!Array.isArray(rows) || (collection?.type !== undefined && collection.type !== 'FeatureCollection')) {
+    throw new Error('ckan-geo: invalid spatial collection');
+  }
+  const parsed = layer === CETVRTI_DATASET ? parseGradskeCetvrti(json) : parseCkanRecords(json, layer);
+  // Non-empty, wholly unreadable data is a schema failure, not an empty source.
+  if (rows.length > 0 && parsed.length === 0) throw new Error('ckan-geo: no readable spatial records');
+  const items = parsed.slice(0, CKAN_GEO_SOURCE_LIMIT);
+  const exceeded = collection?.exceededTransferLimit === true
+    || recordOf(collection?.properties)?.exceededTransferLimit === true;
+  // ArcGIS can truncate even a GeoJSON response. Never turn a partial page's
+  // length into an asserted dataset total. Explicit totals must be plausible.
+  const reportedTotal = collection?.numberMatched ?? collection?.totalFeatures;
+  const totalItems = reportedTotal !== undefined
+    ? typeof reportedTotal === 'number' && Number.isSafeInteger(reportedTotal) && reportedTotal >= rows.length
+      && (!exceeded || reportedTotal > rows.length)
+      ? reportedTotal : undefined
+    : exceeded ? undefined : rows.length;
+  return {
+    items,
+    availability: {
+      status: 'live',
+      itemCount: items.length,
+      fetchedAt: ctx.now().toISOString(),
+      ...(totalItems !== undefined ? { totalItems } : {}),
+      ...(sourceUpdatedAt ? { sourceUpdatedAt } : {}),
+    },
+  };
+}
+
 export async function fetchCkanGeo(ctx: FetchContext): Promise<FeedPayload> {
-  const districts = ctx
-    .fetch(ARCGIS_CETVRTI_URL)
-    .then(async (response) => parseGradskeCetvrti(await response.json()));
+  const districts = readJson(ctx, ARCGIS_CETVRTI_URL)
+    .then((json) => spatialResult(json, CETVRTI_DATASET, ctx));
 
   const assembly = (async () => {
-    const meta = await (await ctx.fetch(`${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`)).json();
-    const url = ckanResourceUrl(meta);
-    if (!url) throw new Error('ckan-geo: no JSON resource for the assembly points');
-    const records = await (await ctx.fetch(url)).json();
-    return {
-      items: parseCkanRecords(records, ZBORNA_MJESTA_LAYER),
-      modified: ckanTimestampIso((meta as { result?: { metadata_modified?: string } })?.result?.metadata_modified),
-    };
+    const meta = await readJson(ctx, `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`);
+    const resource = ckanResource(meta);
+    if (!resource) throw new Error('ckan-geo: no official JSON resource for the assembly points');
+    const records = await readJson(ctx, resource.url);
+    const modified = ckanTimestampIso(resource.last_modified)
+      ?? ckanTimestampIso(recordOf(recordOf(meta)?.result)?.metadata_modified);
+    return spatialResult(records, ZBORNA_MJESTA_LAYER, ctx, modified);
   })();
 
   const [districtResult, assemblyResult] = await Promise.allSettled([districts, assembly]);
+  if (districtResult.status === 'rejected' && assemblyResult.status === 'rejected') {
+    throw new Error('ckan-geo: no spatial layer could be read');
+  }
   const items: ItemInput[] = [];
-  if (districtResult.status === 'fulfilled') items.push(...districtResult.value);
-  if (assemblyResult.status === 'fulfilled') items.push(...assemblyResult.value.items);
-  if (items.length === 0) throw new Error('ckan-geo: no spatial layer could be read');
+  const sources: Record<string, SourceAvailability> = {};
+  for (const [layer, result] of [[CETVRTI_DATASET, districtResult], [ZBORNA_MJESTA_LAYER, assemblyResult]] as const) {
+    if (result.status === 'fulfilled') {
+      items.push(...result.value.items);
+      sources[layer] = result.value.availability;
+    } else {
+      sources[layer] = { status: 'down', itemCount: 0 };
+    }
+  }
 
-  return {
-    items,
-    ...(assemblyResult.status === 'fulfilled' && assemblyResult.value.modified
-      ? { sourceUpdatedAt: assemblyResult.value.modified }
-      : {}),
-  };
+  // There is no shared source timestamp: the CKAN resource date says nothing
+  // about when the independent district geometry was last updated.
+  return { items, sources, coverage: sourceCoverage(sources) };
 }

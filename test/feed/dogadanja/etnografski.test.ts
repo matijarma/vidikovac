@@ -116,6 +116,8 @@ describe('fetchEtnografski', () => {
     );
     expect(result.items).toHaveLength(1);
     expect(result.items[0].id).toBe('etnografski:22598');
+    expect(result.sources['etnografski-dogadjanja']).toMatchObject({ status: 'live', itemCount: 1 });
+    expect(result.sources['etnografski-izlozbe']).toMatchObject({ status: 'down', itemCount: 0 });
   });
 
   it('throws when both endpoints fail, so the cache layer can fall back', async () => {
@@ -148,5 +150,18 @@ describe('fetchEtnografski', () => {
     );
     expect(result.items).toHaveLength(0);
     expect(result.droppedCount).toBe(1);
+    expect(result.sources['etnografski-izlozbe']).toMatchObject({ status: 'live', itemCount: 0, totalItems: 0 });
+  });
+
+  it('does not claim a complete count when a full page has no overall total', async () => {
+    const result = await fetchEtnografski(makeContext());
+    expect(result.sources['etnografski-dogadjanja'].totalItems).toBeUndefined();
+    expect(result.sources['etnografski-izlozbe'].totalItems).toBeUndefined();
+    const complete = await fetchEtnografski(makeContext({
+      [ETNOGRAFSKI_DOGADJANJA_URL]: () => new Response(dogadjanja, { headers: { 'x-wp-total': '20' } }),
+      [ETNOGRAFSKI_IZLOZBE_URL]: () => new Response(izlozbe, { headers: { 'x-wp-total': '20' } }),
+    }));
+    expect(complete.sources['etnografski-dogadjanja'].totalItems).toBe(1);
+    expect(complete.sources['etnografski-izlozbe'].totalItems).toBe(5);
   });
 });

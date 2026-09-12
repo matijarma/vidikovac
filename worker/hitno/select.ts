@@ -1,6 +1,6 @@
 // Pure selection: from the four open-tier snapshots to exactly what /hitno
 // shows. No fetching, no HTML; render.ts turns the result into markup.
-import type { FeedItem, ModuleId, ModuleSnapshot, Severity } from '../feed/schema';
+import type { FeedItem, ModuleId, ModuleSnapshot, Severity, SourceAvailability } from '../feed/schema';
 import { parseIso } from '../open/time';
 
 export const HITNO_MODULES: readonly ModuleId[] = ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'];
@@ -33,6 +33,12 @@ const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
 export interface HitnoPanel {
   snapshot: ModuleSnapshot | null;
   items: FeedItem[];
+  /** The panel's own source health, not the health of an unrelated spatial layer.
+   *  null means the legacy/missing snapshot cannot establish this source's health. */
+  availability: SourceAvailability | null;
+  /** Only `empty` supports a current no-results message. Stale empty lists and
+   *  missing/failed sources must never be presented as an all-clear. */
+  state: 'ready' | 'empty' | 'stale' | 'unavailable';
 }
 
 export interface HitnoData {
@@ -114,15 +120,41 @@ export function selectAssemblyPoints(snapshot: ModuleSnapshot | null): FeedItem[
     .sort(byTitle);
 }
 
+function panel(snapshot: ModuleSnapshot | null, items: FeedItem[], source?: string): HitnoPanel {
+  let availability: SourceAvailability | null = null;
+  if (snapshot) {
+    const ownSource = source === undefined ? {
+      status: snapshot.status,
+      itemCount: snapshot.items.length,
+      ...(snapshot.status !== 'down' ? { fetchedAt: snapshot.fetchedAt } : {}),
+      ...(snapshot.sourceUpdatedAt ? { sourceUpdatedAt: snapshot.sourceUpdatedAt } : {}),
+    } : snapshot.sources?.[source];
+    if (ownSource) {
+      // A fresh partial composite is top-level stale even when this source
+      // succeeded. Trust its own status/timestamp: total-failure KV fallback
+      // explicitly marks formerly live sources stale. Legacy sources without
+      // a readable fetch timestamp cannot establish that independence.
+      const hasSourceFetch = source !== undefined && ms(ownSource.fetchedAt) !== null;
+      const status = snapshot.status === 'down' || ownSource.status === 'down' ? 'down'
+        : ownSource.status === 'stale' || (snapshot.status === 'stale' && !hasSourceFetch) ? 'stale' : 'live';
+      availability = { ...ownSource, status };
+    }
+  }
+  const state = !availability || availability.status === 'down' ? 'unavailable'
+    : availability.status === 'stale' ? 'stale'
+    : items.length > 0 ? 'ready' : 'empty';
+  return { snapshot, items, availability, state };
+}
+
 export function selectHitno(snapshots: readonly ModuleSnapshot[], now: Date): HitnoData {
   const cap = find(snapshots, 'dhmz-cap');
   const emsc = find(snapshots, 'emsc');
   const prometnice = find(snapshots, 'prometnice');
   const ckan = find(snapshots, 'ckan-geo');
   return {
-    warnings: { snapshot: cap, items: selectWarnings(cap, now) },
-    quakes: { snapshot: emsc, items: selectQuakes(emsc, now) },
-    closures: { snapshot: prometnice, items: selectClosures(prometnice, now) },
-    assembly: { snapshot: ckan, items: selectAssemblyPoints(ckan) },
+    warnings: panel(cap, selectWarnings(cap, now)),
+    quakes: panel(emsc, selectQuakes(emsc, now)),
+    closures: panel(prometnice, selectClosures(prometnice, now)),
+    assembly: panel(ckan, selectAssemblyPoints(ckan), ZBORNA_MJESTA_LAYER),
   };
 }

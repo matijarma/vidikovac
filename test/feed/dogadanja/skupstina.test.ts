@@ -129,6 +129,15 @@ describe('fetchSkupstina', () => {
     expect(result.items).toHaveLength(1);
     expect(byId(result.items, 'skupstina:8744')).toBeTruthy();
     expect(result.droppedCount).toBe(9);
+    expect(result.sources.skupstina).toMatchObject({ status: 'stale', itemCount: 1 });
+    expect(result.sources.skupstina.totalItems).toBeUndefined(); // first of two pages
+  });
+
+  it('throws when all dated session pages fail instead of declaring an empty programme', async () => {
+    await expect(fetchSkupstina(makeContext({
+      [PLENARY_SESSION_URL]: () => { throw new Error('down'); },
+      [COMMITTEE_SESSION_URL]: () => { throw new Error('down'); },
+    }))).rejects.toThrow(/all session pages failed/);
   });
 
   it('drops a row whose session page answers with a non-2xx status, counting it', async () => {

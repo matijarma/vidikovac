@@ -1,4 +1,4 @@
-import type { FetchContext } from '../../schema';
+import type { FetchContext, SourceAvailability } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
 import { parseHrDate, type Precision } from '../../hr-date';
 
@@ -41,6 +41,7 @@ export interface SkupstinaEvent {
   /** The materials (invite/agenda) link when the session page states one, else the session page itself. */
   link: string;
   at: string;
+  dateBasis: 'event';
   until?: string;
   data: {
     source: 'skupstina';
@@ -57,6 +58,8 @@ export interface SkupstinaResult {
   items: SkupstinaEvent[];
   /** Undated rokovnik rows, plus any dated row whose own session page could not be read -- dropped, never guessed. */
   droppedCount: number;
+  totalItems?: number;
+  sources: Record<string, SourceAvailability>;
 }
 
 // One rokovnik row: <a href='URL' class='news-result'>[<span><i class='news-date'>DD.MM.YYYY.</i>TITLE</span>]</a>.
@@ -173,12 +176,17 @@ function idFromLink(link: string): string {
 
 export async function fetchSkupstina(ctx: FetchContext): Promise<SkupstinaResult> {
   const rokovnikResponse = await ctx.fetch(SKUPSTINA_ROKOVNIK_URL);
+  if (!rokovnikResponse.ok) throw new Error(`skupstina: HTTP ${rokovnikResponse.status}`);
   const rokovnikHtml = await rokovnikResponse.text();
+  if (!/<h1\b[^>]*>\s*Rokovnik sjednica\s*<\/h1>/i.test(rokovnikHtml)) {
+    throw new Error('skupstina: expected session listing');
+  }
   const now = ctx.now();
   const { rows, droppedCount: undatedCount } = parseRokovnik(rokovnikHtml, now);
 
   const items: SkupstinaEvent[] = [];
   let droppedCount = undatedCount;
+  let failedCount = 0;
 
   for (const row of rows) {
     let sessionHtml: string;
@@ -188,6 +196,7 @@ export async function fetchSkupstina(ctx: FetchContext): Promise<SkupstinaResult
       sessionHtml = await sessionResponse.text();
     } catch {
       droppedCount += 1;
+      failedCount += 1;
       continue;
     }
 
@@ -203,6 +212,7 @@ export async function fetchSkupstina(ctx: FetchContext): Promise<SkupstinaResult
       title: row.title,
       link: materialsLink ?? row.link,
       at: hrDate?.startIso ?? row.at,
+      dateBasis: 'event',
       ...(hrDate?.endIso ? { until: hrDate.endIso } : {}),
       data: {
         source: 'skupstina',
@@ -215,5 +225,18 @@ export async function fetchSkupstina(ctx: FetchContext): Promise<SkupstinaResult
     });
   }
 
-  return { items, droppedCount };
+  if (rows.length > 0 && failedCount === rows.length) throw new Error('skupstina: all session pages failed');
+  // The source's first page may have a "Next" link. It supplies no count of
+  // dated sessions on the unseen pages, so a page length is not a total.
+  const paginated = /aria-label=["']Next["']/i.test(rokovnikHtml);
+  const totalItems = paginated ? undefined : rows.length;
+  return {
+    items, droppedCount, totalItems,
+    sources: {
+      skupstina: {
+        status: failedCount ? 'stale' : 'live',
+        itemCount: items.length, ...(totalItems !== undefined ? { totalItems } : {}), fetchedAt: now.toISOString(),
+      },
+    },
+  };
 }

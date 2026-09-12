@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import { FIXTURE_CONTEXTS } from './fixture-contexts';
 import {
   ATTRIBUTION,
   DOGADANJA_OPEN_ATTRIBUTION,
@@ -16,6 +17,14 @@ import {
 } from '../../worker/feed/registry';
 
 describe('module registry', () => {
+  it('preserves subsource health and coverage through generic and dogadanja wrappers', async () => {
+    for (const id of ['hrt-news', 'ckan-geo', 'dogadanja'] as const) {
+      const snapshot = await MODULES[id].fetcher(FIXTURE_CONTEXTS[id]);
+      expect(Object.keys(snapshot.sources ?? {}).length).toBeGreaterThan(1);
+      expect(snapshot.coverage?.shown).toBe(snapshot.items.length);
+      expect(Object.values(snapshot.sources!).reduce((sum, source) => sum + source.itemCount, 0)).toBe(snapshot.items.length);
+    }
+  });
   it('carries all ten modules with the refresh windows the plan fixes', () => {
     expect(MODULE_IDS).toHaveLength(10);
     const windows: Record<ModuleId, [number, number]> = {

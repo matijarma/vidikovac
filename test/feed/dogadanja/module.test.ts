@@ -13,6 +13,7 @@ import {
   DOGADANJA_SOURCE_CAP,
   DOGADANJA_SOURCE_TIMEOUT_MS,
   capSource,
+  compareDogadanja,
   fetchDogadanja,
   raceTimeout,
 } from '../../../worker/feed/modules/dogadanja';
@@ -125,17 +126,46 @@ describe('fetchDogadanja', () => {
     }
   });
 
-  it('sorts by start time, most imminent/most recent first, with no item left dateless after R-E1', async () => {
+  it('sorts by explicit date semantics and preserves undated source order', async () => {
     const result = await fetchDogadanja(makeContext());
-    // Ruling R-E1: ZET notices now carry a real `at` from <pubDate>, so the
-    // -Infinity dateless fallback no longer describes any real source.
     for (const item of result.items) {
-      expect(item.at, `${item.id} has no at`).toBeTypeOf('string');
+      expect(item.dateBasis).toBe(item.data?.source === 'kvartovske' ? 'unknown'
+        : item.data?.source === 'komunalne' ? 'updated'
+          : String(item.data?.source).startsWith('zet-') ? 'published' : 'event');
     }
-    // Descending: each item's start time is at or before the previous one's.
-    for (let i = 1; i < result.items.length; i += 1) {
-      expect(Date.parse(result.items[i - 1].at!)).toBeGreaterThanOrEqual(Date.parse(result.items[i].at!));
-    }
+    expect(result.items).toEqual([...result.items].sort((a, b) => compareDogadanja(a, b, FETCH_NOW)));
+    const notices = result.items.filter((item) => item.data?.source === 'kvartovske');
+    expect(notices.slice(0, 3).map((item) => item.title)).toEqual([
+      'Hop-in kino na Jarunu', 'Dani Remetinca', 'Dan Mjesnog odbora Horvati-Srednjaci - Druženje za sve generacije',
+    ]);
+    expect(notices.every((item) => !item.at)).toBe(true);
+  });
+
+  it('reports the per-publisher cap and does not invent an overall total for paginated sources', async () => {
+    const result = await fetchDogadanja(makeContext());
+    expect(result.sources?.komunalne).toMatchObject({ status: 'live', itemCount: 40, totalItems: 510 });
+    expect(result.sources?.kvartovske).toMatchObject({ status: 'live', itemCount: 20 });
+    expect(result.sources?.kvartovske.totalItems).toBeUndefined();
+    expect(result.sources?.kulturpunkt.totalItems).toBeUndefined(); // full WP page, no total header
+    expect(result.sources?.skupstina.totalItems).toBeUndefined(); // first of two HTML pages
+    expect(result.coverage).toEqual({ shown: result.items.length, limited: true });
+    expect(Object.values(result.sources!).reduce((sum, source) => sum + source.itemCount, 0)).toBe(result.items.length);
+  });
+
+  it('distinguishes a successfully empty source from a rejected one, including inner endpoints', async () => {
+    const result = await fetchDogadanja(makeContext([
+      ['kp_22_announcement', () => '[]'],
+      ['rss_novosti.aspx', () => '<rss><channel/></rss>'],
+      ['rss_promet.aspx', () => { throw new Error('down'); }],
+      ['wp/v2/izlozbe', () => { throw new Error('down'); }],
+    ]));
+    expect(result.sources?.kulturpunkt).toMatchObject({ status: 'live', itemCount: 0, totalItems: 0 });
+    expect(result.sources?.['zet-novosti']).toMatchObject({ status: 'live', itemCount: 0, totalItems: 0 });
+    expect(result.sources?.['zet-promet']).toMatchObject({ status: 'down', itemCount: 0 });
+    expect(result.sources?.['etnografski-dogadjanja'].status).toBe('live');
+    expect(result.sources?.['etnografski-izlozbe'].status).toBe('down');
+    expect(result.coverage?.limited).toBe(true);
+    expect(result.coverage?.total).toBeUndefined();
   });
 
   it('places the newest ZET notice above an older communal-works row (R-E1)', async () => {
@@ -249,6 +279,29 @@ describe('capSource', () => {
       { id: 'b', kind: 'event', title: 'b', at: new Date(Date.UTC(2026, 0, 3)).toISOString(), data: { source: 'test' } },
     ];
     expect(capSource(items).map((item) => item.id)).toEqual(['b', 'a']);
+  });
+
+  it('keeps soonest upcoming events before distant ones and undated notices in original order', () => {
+    const items: ItemInput[] = [
+      { id: 'far', kind: 'event', title: 'far', dateBasis: 'event', at: '2027-01-01T12:00:00Z' },
+      { id: 'notice-z', kind: 'event', title: 'Z', dateBasis: 'unknown' },
+      { id: 'soon', kind: 'event', title: 'soon', dateBasis: 'event', at: '2026-09-13T12:00:00Z' },
+      { id: 'notice-a', kind: 'event', title: 'A', dateBasis: 'unknown' },
+      { id: 'updated', kind: 'event', title: 'works', dateBasis: 'updated', at: '2026-09-11T12:00:00Z' },
+    ];
+    expect(capSource(items, FETCH_NOW).map((item) => item.id)).toEqual(['soon', 'far', 'updated', 'notice-z', 'notice-a']);
+    expect(items[0].id).toBe('far'); // does not mutate publisher input
+  });
+
+  it('keeps day-precision ranges current through their final Zagreb calendar day', () => {
+    const range: ItemInput = {
+      id: 'range', title: 'Range', kind: 'event', dateBasis: 'event',
+      at: '2026-09-09T22:00:00Z', until: '2026-09-11T22:00:00Z', data: { precision: 'range' },
+    };
+    const notice: ItemInput = {
+      id: 'news', title: 'News', kind: 'event', dateBasis: 'published', at: '2026-09-12T07:00:00Z',
+    };
+    expect(capSource([notice, range], new Date('2026-09-12T12:00:00Z')).map((item) => item.id)).toEqual(['range', 'news']);
   });
 });
 
