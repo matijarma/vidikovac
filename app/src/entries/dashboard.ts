@@ -10,7 +10,9 @@ import { mountDashboard, parseSessionHash } from '../dashboard';
 import { copyWithAttribution, geojsonFile, icsFile, printAct, shareLink } from '../export';
 import { createCityMap } from '../map/city-map';
 import { createSessionClient } from '../session';
+import { repaintOn } from '../ui/canvas';
 import { downloadFile } from '../ui/dom/download';
+import { detectLagano, markLagano } from '../ui/lagano';
 import '../ui/tokens.css';
 import '../ui/base.css';
 import '../ui/fonts.css';
@@ -22,9 +24,39 @@ import '../ui/dialog.css';
 import '../ui/qr.css';
 import '../ui/print.css';
 
-const { i18n, toasts } = bootPage({ page: 'dashboard' });
+const { i18n, theme, toasts } = bootPage({ page: 'dashboard' });
 const root = document.querySelector<HTMLElement>('#dash')!;
 const params = parseSessionHash(location.hash);
+
+function safeLocalStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+// A WebGL context is the cheapest real probe for "old/weak GPU or driver",
+// which deviceMemory and prefers-reduced-data both miss on their own (R-L1).
+function canWebgl(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return Boolean(canvas.getContext('webgl') ?? canvas.getContext('experimental-webgl'));
+  } catch {
+    return false;
+  }
+}
+
+// R-L1: decided once, here, and passed down as a dependency exactly like
+// reducedMotion below — mountDashboard never reads navigator/matchMedia itself.
+const lightweight = detectLagano({
+  search: location.search,
+  storage: safeLocalStorage(),
+  navigator: { deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory },
+  matchMedia: (query) => globalThis.matchMedia(query),
+  canWebgl,
+});
+markLagano(document.documentElement, lightweight);
 
 if (!params) {
   const p = document.createElement('p');
@@ -48,6 +80,8 @@ if (!params) {
     label: params.label,
     wide,
     reducedMotion,
+    lightweight,
+    onRepaint: repaintOn(theme),
     mapFactory: createCityMap,
     fetchData: async (module, token) => {
       const snapshot = await fetchData(module, token);

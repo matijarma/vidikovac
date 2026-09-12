@@ -76,7 +76,7 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
@@ -91,6 +91,7 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
     label: 'Kavana Velebit',
     onCopy: opts.onCopy,
     mapFactory: opts.mapFactory as never,
+    lightweight: opts.lightweight ?? false,
     setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
     clearInterval: () => { ticks.length = 0; },
   });
@@ -180,6 +181,52 @@ describe('unlock, countdown and announcements', () => {
     const alert = root.querySelector('[data-testid=announce-assertive]')!;
     expect(alert.getAttribute('role')).toBe('alert');
     expect(text(alert)).toBe('Još dvadeset sekundi.');
+  });
+});
+
+describe('the panorama and the session meander (M4)', () => {
+  it('shows the fine minutes:seconds line beside the promoted countdown after join', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(text(root.querySelector('[data-testid=countdown-fine]'))).toBe('· još 10:00');
+  });
+  it('names the expiry time in the meander legend', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(text(root.querySelector('[data-testid=meander-legend]'))).toBe('SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO 14:42');
+  });
+  it('gives the panorama an img role and a non-empty label', () => {
+    const { root } = mount();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.getAttribute('role')).toBe('img');
+    expect(panorama.getAttribute('aria-label')).not.toBe('');
+    expect(panorama.tagName).toBe('CANVAS');
+  });
+  it('renders no canvas anywhere in lightweight mode, and the meander bar carries the quantised width', () => {
+    const { root, session } = mount({ lightweight: true });
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.tagName).toBe('DIV');
+    expect(panorama.getAttribute('role')).toBe('img');
+    session.join();
+    // A fresh 10-minute join is a full meander; the bar is still a plain DIV.
+    const bar = root.querySelector<HTMLElement>('[data-testid=session-ring]')!;
+    expect(bar.tagName).toBe('DIV');
+    expect(bar.style.width).toBe('100%');
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+  it('"sakrij odbrojavanje" also hides the fine line and the whole meander figure, recorded on the root dataset', () => {
+    const { root, session, handle } = mount();
+    session.join();
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
+    toggle.click();
+    expect(handle.element.dataset.countdown).toBe('hidden');
+    expect(root.querySelector<HTMLElement>('[data-testid=countdown-fine]')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('.dash-meander')!.hidden).toBe(true);
+    toggle.click();
+    expect(handle.element.dataset.countdown).toBe('shown');
+    expect(root.querySelector<HTMLElement>('[data-testid=countdown-fine]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('.dash-meander')!.hidden).toBe(false);
   });
 });
 

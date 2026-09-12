@@ -8,19 +8,25 @@ import { codeUrl, formatCode, speakableCode } from './code';
 import { countdown, zagrebTime } from './format';
 import type { I18n } from './i18n/i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
+import { vehicleCount } from './layers/shared';
 import type { ExportKind } from './layers/types';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
+import { tone } from './ui/canvas';
 import { createDialog, type DialogHandle } from './ui/dialog';
 import { escapeHtml } from './ui/dom/escape';
+import { MEANDER_STEPS, paintMeander, paintMeanderBar, quantise } from './ui/meander';
+import { paintPanorama } from './ui/panorama';
 import { createQr } from './ui/qr';
 
 /** How often a visible layer refetches its modules. */
 export const POLL_MS = 20_000;
-/** Circumference of the r=45 ring in the SVG below. */
-const RING_LENGTH = 283;
+/** The meander's one-second step and the fine countdown line's own tick,
+ *  independent of `pollMs` (which only governs re-fetching city data) — the
+ *  same constant kiosk.ts keeps for its own code meander. */
+const MEANDER_TICK_MS = 1_000;
 
 /**
  * The layer last opened by the user, mirrored into sessionStorage so the next
@@ -68,6 +74,12 @@ export interface DashboardDeps {
   wide?: boolean;
   label?: string | null;
   reducedMotion?: boolean;
+  /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
+  lightweight?: boolean;
+  /** Re-runs the canvas repaints on theme change (fires once immediately) and
+   *  on resize, coalesced onto one frame (ui/canvas.ts's `repaintOn`). Absent
+   *  in tests that don't care about theme/resize repainting. */
+  onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   onCopy?: (text: string, attribution: Attribution) => void;
   onShare?: (url: string, title: string) => void;
@@ -90,6 +102,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
   const pollMs = deps.pollMs ?? POLL_MS;
   const wide = deps.wide ?? false;
+  const lightweight = Boolean(deps.lightweight);
 
   const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
   const maps = createMapSlots(deps.mapFactory);
@@ -100,28 +113,43 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let warned60 = false;
   let warned20 = false;
   let timer: unknown = null;
+  let meanderTimer: unknown = null;
   // Captured once, the moment a live expiry first appears (join or resume):
-  // the denominator for the ring's fill fraction. The wire contract carries
-  // no session-start timestamp, so a reload mid-session sees the ring start
+  // the denominator for the meander's fill fraction. The wire contract carries
+  // no session-start timestamp, so a reload mid-session sees the meander start
   // full at whatever time is left then — the best any client can infer.
   let totalSeconds: number | null = null;
+
+  // The panorama and the meander each have exactly one path, chosen here from
+  // the lightweight flag, never toggled with CSS after the fact (R-L1/R-L2) —
+  // the same shape as kiosk.ts's own kioskMarkup().
+  const panoramaInner = lightweight
+    ? `<div class="dash-panorama-rule" data-testid="panorama" role="img" aria-label=""></div>`
+    : `<canvas class="dash-panorama-canvas" data-testid="panorama" role="img" aria-label=""></canvas>`;
+  const meanderInner = lightweight
+    ? `<div class="dash-meander-track" aria-hidden="true"><div class="dash-meander-bar" data-testid="session-ring"></div></div>`
+    : `<canvas class="dash-meander-canvas" data-testid="session-ring" aria-hidden="true"></canvas>`;
 
   const element = document.createElement('div');
   element.className = 'dash';
   element.innerHTML = `
+    <figure class="dash-panorama">${panoramaInner}</figure>
     <header class="dash-head">
-      <p class="dash-label" data-testid="session-label"></p>
-      <div class="dash-timer">
-        <svg class="session-ring" data-testid="session-ring" viewBox="0 0 100 100" aria-hidden="true">
-          <circle class="ring-track" cx="50" cy="50" r="45" />
-          <circle class="ring-fill" cx="50" cy="50" r="45" stroke-dasharray="${RING_LENGTH}" stroke-dashoffset="0" />
-        </svg>
-        <time class="dash-countdown" data-testid="countdown"></time>
+      <div class="dash-head-top">
+        <p class="dash-label" data-testid="session-label"></p>
+        <button type="button" class="btn-ghost dash-share" data-testid="share-city" hidden>${escapeHtml(i18n.t('session.share'))}</button>
       </div>
+      <div class="dash-clock">
+        <time class="dash-countdown" data-testid="countdown"></time>
+        <span class="dash-countdown-fine" data-testid="countdown-fine"></span>
+      </div>
+      <figure class="dash-meander">
+        ${meanderInner}
+        <figcaption class="dash-legend" data-testid="meander-legend"></figcaption>
+      </figure>
       <div class="dash-toggles">
         <button type="button" class="btn-ghost" data-testid="toggle-countdown" aria-pressed="false">${escapeHtml(i18n.t('session.hideCountdown'))}</button>
         <button type="button" class="btn-ghost" data-testid="toggle-refresh" aria-pressed="false">${escapeHtml(i18n.t('session.pauseRefresh'))}</button>
-        <button type="button" class="btn" data-testid="share-city" hidden>${escapeHtml(i18n.t('session.share'))}</button>
         <span class="dash-refresh-state panel-sub" data-testid="refresh-state"></span>
       </div>
     </header>
@@ -140,7 +168,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const frozenLine = element.querySelector<HTMLElement>('[data-testid=frozen-line]')!;
   const label = element.querySelector<HTMLElement>('[data-testid=session-label]')!;
   const timeEl = element.querySelector<HTMLTimeElement>('[data-testid=countdown]')!;
-  const ring = element.querySelector<SVGCircleElement>('.ring-fill')!;
+  const fineEl = element.querySelector<HTMLElement>('[data-testid=countdown-fine]')!;
+  const panoramaEl = element.querySelector<HTMLElement>('[data-testid=panorama]')!;
+  const meanderFig = element.querySelector<HTMLElement>('.dash-meander')!;
+  const meanderEl = element.querySelector<HTMLElement>('[data-testid=session-ring]')!;
+  const meanderLegend = element.querySelector<HTMLElement>('[data-testid=meander-legend]')!;
   const refreshState = element.querySelector<HTMLElement>('[data-testid=refresh-state]')!;
   const countdownToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
   const refreshToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-refresh]')!;
@@ -181,6 +213,24 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     };
   }
 
+  /** The panorama's vehicle count comes from the zet-rt snapshot already
+   *  fetched for grad-sada, not a fetch of its own — repainted at the end of
+   *  every render() (a fresh snapshot may have just landed) and from
+   *  onRepaint (theme change, resize). Unknown is drawn honest-zero, same as
+   *  the kiosk's own panorama. */
+  function paintPanoramaFigure(): void {
+    const count = vehicleCount(snapshots['zet-rt']) ?? 0;
+    const alt = i18n.t('session.panoramaAlt', { count });
+    panoramaEl.setAttribute('aria-label', alt);
+    // R-L2: the lightweight rule carries the same label; there is nothing to
+    // paint on that path.
+    if (lightweight) return;
+    paintPanorama(panoramaEl as HTMLCanvasElement, {
+      fg: tone(panoramaEl, '--tone-text-primary', '#f2ead8'),
+      count,
+    });
+  }
+
   function render(): void {
     const focusId = document.activeElement instanceof HTMLElement ? document.activeElement.id : '';
     const ctx = layerContext();
@@ -190,6 +240,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // maps of a layer this render did not draw are torn down here (R-54).
     maps.sweep();
     if (focusId) document.getElementById(focusId)?.focus();
+    paintPanoramaFigure();
   }
 
   function select(layer: LayerId, fromUser: boolean): void {
@@ -227,8 +278,22 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     timeEl.textContent = i18n.t('common.minutes', { count: minutes });
     timeEl.dateTime = `PT${seconds}S`;
     timeEl.title = countdown(seconds);
+    fineEl.textContent = i18n.t('session.remainingFine', { time: countdown(seconds) });
+    meanderLegend.textContent = i18n.t('session.legendMeander', { time: zagrebTime(expiresAt ?? now()) });
     const total = totalSeconds ?? Math.max(1, seconds);
-    ring.setAttribute('stroke-dashoffset', String(Math.round(RING_LENGTH * (1 - seconds / total))));
+    const raw = total > 0 ? seconds / total : 0;
+    // Quantised under reduced motion or lightweight (R-L1/R-L2), same as the
+    // kiosk's own code meander.
+    const pct = deps.reducedMotion || lightweight ? quantise(raw, MEANDER_STEPS) : raw;
+    if (lightweight) {
+      paintMeanderBar(meanderEl, pct);
+    } else {
+      paintMeander(meanderEl as HTMLCanvasElement, {
+        ink: tone(meanderEl, '--tone-stroke', 'rgba(242,234,216,.2)'),
+        fill: tone(meanderEl, '--tone-text-primary', '#f2ead8'),
+        pct,
+      });
+    }
     // A session with no expiry yet (still connecting) is not "about to expire";
     // only an actual live countdown may trip the warnings. 60 s and 20 s are
     // the room's own 'expiring' frames and what the accessibility statement
@@ -327,7 +392,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   countdownToggle.addEventListener('click', () => {
     countdownHidden = !countdownHidden;
+    // One flag hides all three time-pressure tells at once: the countdown
+    // itself, the fine minutes:seconds line, and the whole meander figure.
+    element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
     timeEl.hidden = countdownHidden;
+    fineEl.hidden = countdownHidden;
+    meanderFig.hidden = countdownHidden;
     countdownToggle.setAttribute('aria-pressed', countdownHidden ? 'true' : 'false');
     countdownToggle.textContent = i18n.t(countdownHidden ? 'session.showCountdown' : 'session.hideCountdown');
   });
@@ -385,6 +455,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       clearTimer(timer);
       timer = null;
     }
+    if (meanderTimer !== null) {
+      clearTimer(meanderTimer);
+      meanderTimer = null;
+    }
   }
 
   session.onExpiring((secondsLeft) => announce(secondsLeft));
@@ -405,6 +479,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     paintTimer();
     void refresh();
   }, pollMs);
+  // A second, finer timer: the fine countdown line and the meander drain by
+  // the second, independent of pollMs (which only governs re-fetching city
+  // data) — cleared alongside `timer` in freeze() and destroy().
+  meanderTimer = setTimer(() => paintTimer(), MEANDER_TICK_MS);
+
+  // Canvas colours are read off computed style (`tone()`), so a theme flip
+  // needs a repaint even with no new data; a resize needs one because the
+  // canvas backing store itself is sized off the box. `onRepaint` (fires
+  // once immediately, per its own contract) covers both in one subscription.
+  const stopRepaint = deps.onRepaint?.(() => {
+    paintPanoramaFigure();
+    paintTimer();
+  });
 
   return {
     element,
@@ -412,6 +499,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     destroy() {
       if (timer !== null) clearTimer(timer);
       timer = null;
+      if (meanderTimer !== null) clearTimer(meanderTimer);
+      meanderTimer = null;
+      stopRepaint?.();
       closeShare();
       maps.destroy();
       element.remove();
