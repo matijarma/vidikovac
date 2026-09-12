@@ -38,32 +38,38 @@ describe('fetchZetRss', () => {
     expect(result.items).toHaveLength(35);
   });
 
-  it('reads the first real novosti item as headline and link only, tagged with its own feed', async () => {
+  it('reads the first real novosti item as headline, link and publish time, tagged with its own feed', async () => {
     const result = await fetchZetRss(makeContext());
     const item = byId(result.items, 'zet-novosti:10123');
     expect(item).toEqual({
       id: 'zet-novosti:10123',
       title: 'Dan otvorenih vrata ZET-a',
       link: 'https://www.zet.hr/default.aspx?id=10123',
-      data: { source: 'zet-novosti' },
+      // <pubDate>Tue, 08 Sep 2026 22:00:00 +0200</pubDate> (see the fixture).
+      at: '2026-09-08T20:00:00.000Z',
+      data: { source: 'zet-novosti', precision: 'time' },
     });
   });
 
-  it('reads the first real promet item as headline and link only, tagged with its own feed', async () => {
+  it('reads the first real promet item as headline, link and publish time, tagged with its own feed', async () => {
     const result = await fetchZetRss(makeContext());
     const item = byId(result.items, 'zet-promet:10146');
     expect(item).toEqual({
       id: 'zet-promet:10146',
       title: 'Radovi u subotu skreću linije 102 i 105',
       link: 'https://www.zet.hr/default.aspx?id=10146',
-      data: { source: 'zet-promet' },
+      // <pubDate>Fri, 11 Sep 2026 09:00:00 +0200</pubDate> (see the fixture).
+      at: '2026-09-11T07:00:00.000Z',
+      data: { source: 'zet-promet', precision: 'time' },
     });
   });
 
-  it('never carries a date, a summary or any description prose (R-P6, headline and link only)', async () => {
+  it('carries a publish time from <pubDate> (R-E1) but never a summary or any borrowed description prose (R-P6)', async () => {
     const result = await fetchZetRss(makeContext());
     for (const item of result.items) {
-      expect(item).not.toHaveProperty('at');
+      expect(item.at).toBeTypeOf('string');
+      expect(Number.isFinite(Date.parse(item.at as string))).toBe(true);
+      expect(item.data.precision).toBe('time');
       expect(item).not.toHaveProperty('until');
       expect(item).not.toHaveProperty('summary');
       expect(item).not.toHaveProperty('description');
@@ -75,6 +81,24 @@ describe('fetchZetRss', () => {
     expect(serialized).not.toContain('Remizi');
     // Real sentence from the first promet item's <description>.
     expect(serialized).not.toContain('Korisnike ljubazno molimo za razumijevanje');
+  });
+
+  it('keeps an item with no <pubDate>, or an unparseable one, but with no `at`', async () => {
+    const withoutPubDate =
+      '<rss><channel><item><title>Bez datuma</title><link>https://www.zet.hr/default.aspx?id=9001</link></item>' +
+      '<item><title>Neispravan datum</title><link>https://www.zet.hr/default.aspx?id=9002</link>' +
+      '<pubDate>not-a-date</pubDate></item></channel></rss>';
+    const result = await fetchZetRss(
+      makeContext({
+        [ZET_RSS_NOVOSTI_URL]: () => new Response(withoutPubDate),
+        [ZET_RSS_PROMET_URL]: () => new Response('<rss><channel></channel></rss>'),
+      }),
+    );
+    expect(result.items).toHaveLength(2);
+    for (const item of result.items) {
+      expect(item).not.toHaveProperty('at');
+      expect(item.data.precision).toBe('time');
+    }
   });
 
   it('keeps one feed when the other fails, the same allSettled shape as hrt-news', async () => {

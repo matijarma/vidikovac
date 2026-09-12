@@ -21,27 +21,33 @@ import type { ZetRssEvent } from './zet-rss';
 // preamble). Every item's nine-key `data` vocabulary is schema.ts's
 // `DATA_KEYS.event`, added in this same commit alongside this file.
 //
-// THE RESILIENCE CONTRACT (the brief's own words): "All six sub-fetchers run
-// behind one Promise.allSettled ... A rejected source contributes nothing ...
-// it never throws the module down." Concretely: `fetchDogadanja` NEVER
-// throws, regardless of how many (even all six) of its sources reject --
-// unlike every other module in this project, whose fetcher "must throw on any
-// upstream failure" (schema.ts) so `worker/feed/cache.ts` can fall back to a
-// KV last-good copy and mark the snapshot 'stale'/'down'. `cache.ts` stamps
-// `status: 'live'` onto ANY snapshot its fetcher call didn't throw for
-// (`{ ...fresh, status: 'live' }`, unconditionally) -- there is no way for a
-// module's own fetcher to ask for 'stale' through that field, and `cache.ts`
-// is neither owned by area E nor in this task's file list to change. So the
-// brief's "lowers the snapshot's status to stale" is implemented the one way
-// this task's own files can express it: `sourceCounts` on the snapshot (an
-// extra property beyond `ModuleSnapshot`'s own declared shape -- schema.ts's
-// edit here is pinned to `ModuleId`/`ItemKind`/`DATA_KEYS.event` only, R-O3,
-// so this can't be a new field on that interface either). A source that
-// contributed 0 items this cycle -- because it rejected, or because it
-// genuinely had nothing -- reads as exactly that in `sourceCounts`, which is
-// the actual, useful "did a source go quiet" signal `/stats` and the panel
-// need; a literal `status:'stale'` enum flip was never reachable from here.
-// See the task report's Rulings for the fuller reasoning.
+// THE RESILIENCE CONTRACT (the brief's own words, corrected by ruling R-X1):
+// "All six sub-fetchers run behind one Promise.allSettled ... A rejected
+// source contributes nothing ... it never throws the module down" describes
+// ONE source failing, not all of them at once. `fetchDogadanja` used to never
+// throw regardless of how many -- even all six -- of its sources rejected,
+// which broke the contract every other module's fetcher keeps (schema.ts,
+// "must throw on any upstream failure"): a total outage produced a
+// zero-item snapshot that `cache.ts` stamped `status: 'live'` and wrote over
+// the KV last-good copy, so a public screen read as "nothing is on in Zagreb
+// tonight" instead of "we could not reach the sources" for the full 900 s ttl.
+// Fixed exactly like `hrt-news.ts:71`: when every one of the six sources
+// rejects, `fetchDogadanja` now throws, so `cache.ts`'s existing catch branch
+// falls back to the KV copy as 'stale' and, past `maxStale`, to 'down' -- the
+// same path every other module already relies on (test/feed/cache.workers.test.ts
+// proves it end to end for this module too). One, two or five sources failing
+// still contribute nothing individually and never trip this: the module only
+// throws when NONE of the six produced anything.
+//
+// `sourceCounts` on the snapshot (an extra property beyond `ModuleSnapshot`'s
+// own declared shape -- schema.ts's edit here is pinned to
+// `ModuleId`/`ItemKind`/`DATA_KEYS.event` only, R-O3, so this can't be a new
+// field on that interface either) is the finer-grained signal underneath
+// that: which of the surviving sources, if any, went quiet this cycle, for
+// `/stats` and the panel to read. A source that contributed 0 items this
+// cycle -- because it rejected, or because it genuinely had nothing -- reads
+// as exactly that in `sourceCounts`, whether or not the module as a whole
+// throws. See the task report's Rulings for the fuller reasoning.
 //
 // THE PER-SOURCE CAP: none of these six sources is rate-limited by anything
 // this module controls, and one of them, komunalne (E4), fetches its whole
@@ -54,22 +60,24 @@ import type { ZetRssEvent } from './zet-rss';
 // only after merging would let komunalne's hundreds of old, already-settled
 // works entries crowd out every other source's few, dated items entirely
 // under an ascending sort, or (under the descending sort this file actually
-// uses) would still leave the *dateless* ZET notices structurally
-// disadvantaged, since they always sort last and would be the first thing a
-// single shared cap discarded. Capping per source first guarantees every one
-// of the six always gets its own reserved share of the snapshot, regardless
-// of how the other five behave that cycle.
+// uses) would still leave whichever source sorts last structurally
+// disadvantaged, since its items would be the first thing a single shared cap
+// discarded. Capping per source first guarantees every one of the six always
+// gets its own reserved share of the snapshot, regardless of how the other
+// five behave that cycle.
 //
 // THE SORT: descending by `at` -- most imminent/most recently touched first,
-// the same direction `hrt-news.ts` already merges its own two feeds by. Two
-// consequences worth naming: (1) a source with no `at` at all (ZET's two
-// notice feeds, E5 -- "headline and link only", never a date) sorts after
-// every dated item, via `-Infinity`; (2) this is what makes a purely
-// date-driven sort safe against komunalne's inherently past-only `at` (its
-// last-change date can never be in the future): any genuinely upcoming
-// Kulturpunkt/Skupština/Etnografski item, whose `at` is either today or in
-// the future, automatically outranks every komunalne row, with no
-// source-aware special-casing needed.
+// the same direction and the same `Date.parse(item.at ?? '')` comparator
+// `hrt-news.ts` already merges its own two feeds by (no dateless special
+// case). This module used to need a `-Infinity` fallback for "ZET's two
+// notice feeds never have a date"; ruling R-E1 gives ZET notices their own
+// `at` from <pubDate> (zet-rss.ts), so after that fix every item this module
+// emits carries one, and that fallback described nothing real any more and is
+// removed. What this sort is still safe against is komunalne's inherently
+// past-only `at` (its last-change date can never be in the future): any
+// genuinely upcoming Kulturpunkt/Skupština/Etnografski item, whose `at` is
+// either today or in the future, automatically outranks every komunalne row,
+// with no source-aware special-casing needed.
 
 export const DOGADANJA_SOURCE_TIMEOUT_MS = 6000;
 export const DOGADANJA_SOURCE_CAP = 40;
@@ -108,11 +116,9 @@ export interface DogadanjaSnapshot extends Omit<ModuleSnapshot, 'status' | 'stal
   sourceCounts: Record<DogadanjaSourceId, number>;
 }
 
-/** Milliseconds since the epoch to sort by; `-Infinity` for a dateless item, so it always sorts last. */
+/** Milliseconds since the epoch to sort by, the same `Date.parse(at ?? '')` hrt-news.ts uses inline. */
 function atMs(item: ItemInput): number {
-  if (!item.at) return -Infinity;
-  const parsed = Date.parse(item.at);
-  return Number.isFinite(parsed) ? parsed : -Infinity;
+  return Date.parse(item.at ?? '');
 }
 
 function byStartTimeDesc(a: ItemInput, b: ItemInput): number {
@@ -218,7 +224,8 @@ function fromZetRss(events: readonly ZetRssEvent[]): ItemInput[] {
     kind: 'event',
     title: event.title,
     link: event.link,
-    data: { source: event.data.source },
+    ...(event.at ? { at: event.at } : {}),
+    data: { source: event.data.source, precision: event.data.precision },
   }));
 }
 
@@ -259,6 +266,16 @@ export async function fetchDogadanja(ctx: FetchContext): Promise<DogadanjaSnapsh
   const settled = await Promise.allSettled(
     SOURCES.map((source) => raceTimeout(source.run(ctx), DOGADANJA_SOURCE_TIMEOUT_MS, source.id)),
   );
+
+  // R-X1: one, two or five sources rejecting still never empties the panel
+  // (handled below, per-source, via sourceCounts), but all six rejecting
+  // means the module has nothing honest to say -- throw exactly like
+  // hrt-news.ts:71 does when both of its feeds fail, so `cache.ts` falls back
+  // to the KV last-good copy as 'stale' instead of stamping a zero-item
+  // snapshot 'live' and overwriting it.
+  if (settled.every((result) => result.status === 'rejected')) {
+    throw new Error('dogadanja: all six sources failed');
+  }
 
   const sourceCounts = {} as Record<DogadanjaSourceId, number>;
   const merged: ItemInput[] = [];

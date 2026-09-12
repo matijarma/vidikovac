@@ -1,5 +1,7 @@
 import type { FetchContext } from '../../schema';
 import { parseXml, xmlArray, xmlText } from '../../xml';
+import { isoOrUndefined } from '../../time';
+import type { Precision } from '../../hr-date';
 
 // ZET (zet.hr) publishes two RSS 2.0 feeds under the Otvorena dozvola:
 // rss_novosti.aspx (general news) and rss_promet.aspx (traffic-disruption
@@ -11,14 +13,20 @@ import { parseXml, xmlArray, xmlText } from '../../xml';
 //
 // This is deliberately the thinnest sub-fetcher in the directory ("ZET
 // notices", the task's own title, next to "the one real museum API"): the
-// brief pins it to headline and link only. <description> carries the entire
-// notice body as raw HTML, and its first sentence is routinely Croatian date
-// prose exactly like Kulturpunkt's excerpt (sources.json's own note: "u
-// subotu, 12. rujna, od 9 do 19 sati") -- reading it, or parsing a date out of
-// it, would be exactly the borrowed-prose R-P6 forbids. <pubDate> is a
-// genuine machine field, not prose, but is deliberately left unread too: a
-// ZET notice is a link-out announcement, not a scheduled event with its own
-// start/end, and the brief's "headline and link only" draws the line there.
+// brief pins it to headline, link and -- since ruling R-E1 -- the item's own
+// publish time. <description> carries the entire notice body as raw HTML,
+// and its first sentence is routinely Croatian date prose exactly like
+// Kulturpunkt's excerpt (sources.json's own note: "u subotu, 12. rujna, od 9
+// do 19 sati") -- reading it, or parsing a date out of it, would be exactly
+// the borrowed-prose R-P6 forbids, so it stays untouched. <pubDate> is
+// different: a genuine machine field, not prose, so reading it into `at`
+// (precision 'time') is a machine fact, not a borrowed sentence -- R-E1
+// requires exactly this, because without it every ZET notice sorted to the
+// very end of the merged list via the dateless fallback, behind
+// communal-works rows last touched in July. An item whose <pubDate> is
+// missing or doesn't parse simply keeps no `at`, the same
+// `isoOrUndefined` (worker/feed/time.ts) contract every other RSS-backed
+// module in this project already follows (see hrt-news.ts).
 
 export const ZET_RSS_NOVOSTI_URL = 'https://www.zet.hr/rss_novosti.aspx';
 export const ZET_RSS_PROMET_URL = 'https://www.zet.hr/rss_promet.aspx';
@@ -41,8 +49,11 @@ export interface ZetRssEvent {
   id: string;
   title: string;
   link: string;
+  /** From <pubDate> (R-E1); absent when it's missing or doesn't parse. */
+  at?: string;
   data: {
     source: ZetRssSource;
+    precision: Precision;
   };
 }
 
@@ -56,6 +67,7 @@ interface RssItem {
   title?: unknown;
   link?: unknown;
   guid?: unknown;
+  pubDate?: unknown;
 }
 interface RssDocument {
   rss?: { channel?: { item?: RssItem | RssItem[] } };
@@ -80,11 +92,13 @@ function parseZetRss(xml: string, source: ZetRssSource): ZetRssEvent[] {
     const link = xmlText(entry.link) || xmlText(entry.guid);
     const title = xmlText(entry.title);
     if (!link || !title) continue;
+    const at = isoOrUndefined(xmlText(entry.pubDate));
     items.push({
       id: `${source}:${idFromLink(link)}`,
       title,
       link,
-      data: { source },
+      ...(at ? { at } : {}),
+      data: { source, precision: 'time' },
     });
   }
 
