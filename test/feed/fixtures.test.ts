@@ -14,6 +14,7 @@ const EXPECTED_KINDS: Record<ModuleId, ItemKind[]> = {
   'hrt-news': ['news'],
   glasnik: ['act'],
   'ckan-geo': ['poi'],
+  dogadanja: ['event'],
 };
 
 describe.each(MODULE_IDS)('module %s against its real upstream sample', (id) => {

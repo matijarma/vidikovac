@@ -13,8 +13,8 @@ import {
 } from '../../worker/feed/registry';
 
 describe('module registry', () => {
-  it('carries all nine modules with the refresh windows the plan fixes', () => {
-    expect(MODULE_IDS).toHaveLength(9);
+  it('carries all ten modules with the refresh windows the plan fixes', () => {
+    expect(MODULE_IDS).toHaveLength(10);
     const windows: Record<ModuleId, [number, number]> = {
       'zet-rt': [30, 300],
       prometnice: [180, 1800],
@@ -25,6 +25,7 @@ describe('module registry', () => {
       'hrt-news': [300, 7200],
       glasnik: [3600, 604800],
       'ckan-geo': [86400, 2592000],
+      dogadanja: [900, 86400],
     };
     for (const [id, [ttl, maxStale]] of Object.entries(windows) as [ModuleId, [number, number]][]) {
       expect(MODULES[id].ttl, `ttl of ${id}`).toBe(ttl);
@@ -36,10 +37,10 @@ describe('module registry', () => {
   it('puts the safety tier in the open tier and everything else behind a session', () => {
     expect([...OPEN_MODULES].sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
     expect(MODULE_IDS.filter((id) => MODULES[id].tier === 'session').sort()).toEqual(
-      ['dhmz-forecast', 'dhmz-now', 'glasnik', 'hrt-news', 'zet-rt'].sort(),
+      ['dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'hrt-news', 'zet-rt'].sort(),
     );
     expect([...WARM_MODULES].sort()).toEqual(
-      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'glasnik', 'hrt-news'].sort(),
+      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'hrt-news'].sort(),
     );
     expect(isModuleId('zet-rt')).toBe(true);
     expect(isModuleId('nepostojeci')).toBe(false);

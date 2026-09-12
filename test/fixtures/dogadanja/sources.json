@@ -1,0 +1,77 @@
+{
+  "_comment": "Every fixture in this directory was saved from its live source before worker/feed/hr-date.ts or worker/feed/html.ts existed (task E1), and again before any dogadanja/*.ts parser existed (E2-E5). Each entry names the exact request that produced the file, its HTTP status, and the UTC instant it was fetched, so a later reader can tell a stale fixture from a live regression. robots.txt for every host below was read first; none disallows the path fetched (data.zagreb.hr/api/ is disallowed and is why this fixture uses the direct CKAN resource download URL instead of the package_show endpoint).",
+  "fixtures": [
+    {
+      "file": "kulturpunkt.json",
+      "url": "https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc",
+      "fetchedAt": "2026-09-12T00:44:38Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://kulturpunkt.hr/robots.txt allows all paths (User-agent: * / Allow: /)",
+      "notes": "WordPress REST, custom post type kp_22_announcement, 40 most recent announcements. Confirms the research finding: no acf, no meta field carries a date. The date exists only as Croatian prose inside excerpt.rendered (e.g. item 85612: 'odrzava se od 22. do 29. rujna'), the year is never written, and the category comes from class_list (kp_22_announcement_cat-*)."
+    },
+    {
+      "file": "kvartovske-novosti.html",
+      "url": "https://aktivnosti.zagreb.hr/kvartovske-novosti/134585",
+      "fetchedAt": "2026-09-12T00:45:04Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://aktivnosti.zagreb.hr/robots.txt does not exist (server returns the site's own 200 HTML for the path, not a robots file) -> no crawl restriction declared",
+      "notes": "Plain HTML listing, no JSON/RSS alternative found on the site. Confirms the research finding: no per-item date and no district anywhere in the markup, only a title, a thumbnail and a link per item."
+    },
+    {
+      "file": "skupstina-rokovnik.html",
+      "url": "https://skupstina.zagreb.hr/rokovnik-sjednica/76",
+      "fetchedAt": "2026-09-12T00:45:28Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://skupstina.zagreb.hr/robots.txt does not exist (server returns the site's own 200 HTML, not a robots file) -> no crawl restriction declared",
+      "notes": "The Assembly's own schedule/calendar page ('Rokovnik sjednica'), page 1 of 2. Rows are <a class='news-result'> with an inner <span><i class='news-date'>dd.mm.yyyy.</i>title</span>; several rows near the top carry no <span> at all (older/committee sessions the page no longer dates), a real quirk a parser must tolerate rather than assume away."
+    },
+    {
+      "file": "skupstina-sjednica.html",
+      "url": "https://skupstina.zagreb.hr/poziv-na-13-sjednicu-gradske-skupstine-grada-zagreba/8711",
+      "fetchedAt": "2026-09-12T00:45:43Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://skupstina.zagreb.hr/robots.txt does not exist -> no crawl restriction declared",
+      "notes": "One plenary session page, linked from the rokovnik listing above ('Poziv na 13. sjednicu Gradske skupstine Grada Zagreba'). page-text carries the Croatian prose 'Srijeda, 16. rujna 2026. s pocetkom u 9:00 sati u Staroj gradskoj vijecnici...'. The static nav/footer on every page of this site links the Assembly's YouTube channel (https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA) as 'Prijenos sjednice' -- that is the linked live page R-P5 keeps, never the disallowed YouTube feeds/videos.xml path."
+    },
+    {
+      "file": "komunalne-aktivnosti.json",
+      "url": "https://data.zagreb.hr/dataset/fddb4f87-c002-4e3c-b988-adf013997ecc/resource/f90738b6-8bfa-4dd9-9db7-b3c532d90c97/download/data.json",
+      "fetchedAt": "2026-09-12T00:46:26Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://data.zagreb.hr/robots.txt disallows /api/, /revision/, /dataset/*/history and /dataset/rate/ (Crawl-Delay 10). The path fetched is /dataset/<id>/resource/<id>/download/data.json, which is none of those, so it is allowed; the package_show metadata endpoint (/api/3/action/package_show) is NOT fetched here for that reason -- the resource URL is already pinned in docs/izvori.md from stage 1.",
+      "notes": "700 records, 'Plan komunalnih aktivnosti'. Confirms two research findings: X_Koordinata sits at ~45.7 (Zagreb's latitude) and Y_Koordinata at ~15.8-15.9 (Zagreb's longitude) -- the axes are swapped versus the GeoJSON convention -- and string fields carry numeric HTML entities for Croatian diacritics (e.g. 'Brezovi\\u010dka' appears as 'Brezovi&#269;cka', S\\u030c as &#352;/&#353;, Z\\u030c as &#381;/&#382;, C\\u0301 as &#263;)."
+    },
+    {
+      "file": "zet-rss-novosti.xml",
+      "url": "https://www.zet.hr/rss_novosti.aspx",
+      "fetchedAt": "2026-09-12T00:45:58Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
+      "notes": "General ZET news feed, standard RSS 2.0 with CDATA titles/descriptions. Entities present: &amp; &nbsp; &quot; &#39; &bdquo; &bull; &euro; &ldquo; &rdquo; &rsquo;. First item's description again carries Croatian date prose ('u subotu, 12. rujna, od 9 do 19 sati')."
+    },
+    {
+      "file": "zet-rss-promet.xml",
+      "url": "https://www.zet.hr/rss_promet.aspx",
+      "fetchedAt": "2026-09-12T00:45:58Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
+      "notes": "Traffic-disruption notice feed, same RSS 2.0 shape as rss_novosti.aspx. Same entity set minus &#39; and &bull;."
+    },
+    {
+      "file": "etnografski-dogadjanja.json",
+      "url": "https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc",
+      "fetchedAt": "2026-09-12T00:46:49Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://emz.hr/robots.txt disallows only /wp-admin/ (explicitly allows /wp-admin/admin-ajax.php); the wp-json path fetched is unaffected",
+      "notes": "WordPress REST, custom post type 'dogadjanja' (events/activities). Confirms the research finding: real structured meta exists (webmz_event_date_start, webmz_event_date_end as Unix seconds, webmz_event_place), so this source is read directly and never through parseHrDate."
+    },
+    {
+      "file": "etnografski-izlozbe.json",
+      "url": "https://emz.hr/wp-json/wp/v2/izlozbe?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc",
+      "fetchedAt": "2026-09-12T00:46:50Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://emz.hr/robots.txt disallows only /wp-admin/; unaffected",
+      "notes": "Same custom-field shape as dogadjanja, post type 'izlozbe' (exhibitions). Contains several items whose webmz_event_date_end already lies in the past relative to this fetch (e.g. id 22339, 22334, ends 2026-08-16), which is exactly the case E5 must exclude."
+    }
+  ]
+}

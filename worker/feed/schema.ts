@@ -12,7 +12,8 @@ export type ModuleId =
   | 'emsc'
   | 'hrt-news'
   | 'glasnik'
-  | 'ckan-geo';
+  | 'ckan-geo'
+  | 'dogadanja';
 
 /** open: readable without a session (safety tier, kiosk teaser). session: needs a data token. */
 export type Tier = 'open' | 'session';
@@ -26,7 +27,8 @@ export type ItemKind =
   | 'quake'
   | 'news'
   | 'act'
-  | 'poi';
+  | 'poi'
+  | 'event';
 
 export type Severity = 'info' | 'minor' | 'moderate' | 'severe' | 'extreme';
 
@@ -116,4 +118,8 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   news: ['source'],
   act: ['broj', 'godina', 'category'],
   poi: ['layer', 'category'],
+  // The dogadanja module's six sub-fetchers between them use every one of
+  // these nine keys (worker/feed/modules/dogadanja/index.ts); no single
+  // source uses all nine itself, and none uses a key outside this set.
+  event: ['source', 'category', 'venue', 'organiser', 'live', 'phase', 'status', 'amount', 'precision'],
 };

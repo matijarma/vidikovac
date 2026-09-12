@@ -40,6 +40,28 @@ const ZBORNA_PACKAGE = JSON.stringify({
 });
 const ZBORNA_RECORDS = JSON.stringify([{ naziv: 'Zrinjevac', adresa: 'Trg N. Š. Zrinskog', lat: 45.811, lon: 15.978 }]);
 
+// dogadanja's own real, saved fixtures (test/fixtures/dogadanja/*, task E1),
+// one route per real URL fragment. Both real Skupština session-page URLs
+// answer with the one saved session-page fixture, exactly as
+// test/feed/dogadanja/skupstina.test.ts already does (only one was ever
+// fetched live; the two rokovnik rows share one CMS template).
+function dogadanjaFixtureContext(): FetchContext {
+  const at = (name: string) => text(`dogadanja/${name}`);
+  const routes: [string, () => BodyInit][] = [
+    ['kp_22_announcement', () => at('kulturpunkt.json')],
+    ['rokovnik-sjednica', () => at('skupstina-rokovnik.html')],
+    ['poziv-na-13-sjednicu-gradske-skupstine-grada-zagreba', () => at('skupstina-sjednica.html')],
+    ['15-sjednica-odbora-za-financije', () => at('skupstina-sjednica.html')],
+    ['kvartovske-novosti', () => at('kvartovske-novosti.html')],
+    ['f90738b6-8bfa-4dd9-9db7-b3c532d90c97', () => at('komunalne-aktivnosti.json')],
+    ['rss_novosti.aspx', () => at('zet-rss-novosti.xml')],
+    ['rss_promet.aspx', () => at('zet-rss-promet.xml')],
+    ['wp/v2/dogadjanja', () => at('etnografski-dogadjanja.json')],
+    ['wp/v2/izlozbe', () => at('etnografski-izlozbe.json')],
+  ];
+  return fixtureContext(routes);
+}
+
 export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
   'zet-rt': fixtureContext([['gtfs-rt-protobuf', () => bytes('zet-rt.pb')]]),
   prometnice: fixtureContext([['data.json', () => text('prometnice.json')]]),
@@ -60,4 +82,5 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
     [CKAN_PACKAGE_SHOW, () => ZBORNA_PACKAGE],
     ['zborna-mjesta.json', () => ZBORNA_RECORDS],
   ]),
+  dogadanja: dogadanjaFixtureContext(),
 };
