@@ -106,6 +106,30 @@ describe('R-P5: the two dropped sources are named in docs/izvori.md with the rob
   });
 });
 
+describe('R-F7: docs point readers to /izvori for the per-source list now that the page renders it', () => {
+  const izvori = read('docs/izvori.md');
+  const prijedlog = read('docs/prijava/prijedlog-projekta.md');
+
+  // The page reference, not the doc file: "/izvori" immediately followed by
+  // ".md" is a mention of the markdown file, not the live route.
+  const PAGE_REF = /\/izvori(?!\.md)/;
+
+  it('docs/izvori.md says the per-source dogadanja table is also on /izvori', () => {
+    const section = izvori.slice(izvori.indexOf('### Šest izvora modula'));
+    expect(section.slice(0, 400)).toMatch(PAGE_REF);
+  });
+
+  it('docs/izvori.md says the two robots-dropped sources are also named on /izvori', () => {
+    const section = izvori.slice(izvori.indexOf('Dva izvora navedena'));
+    expect(section.slice(0, 300)).toMatch(PAGE_REF);
+  });
+
+  it('section 5 of the proposal says the per-source list is on /izvori, not only in docs/izvori.md', () => {
+    const section = prijedlog.slice(prijedlog.indexOf('Redak "Zagrebački događaji"'));
+    expect(section.slice(0, 300)).toMatch(PAGE_REF);
+  });
+});
+
 describe('R-X2: docs/izvori.md states the /open licence boundary precisely', () => {
   const izvori = read('docs/izvori.md');
   const derivedSection = izvori.slice(izvori.indexOf('## Izvedeni podaci'));

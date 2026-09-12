@@ -21,7 +21,7 @@ Pomoćni skup izvan modula: ZET statični GTFS https://www.zet.hr/gtfs-scheduled
 
 ### Šest izvora modula `dogadanja`, pojedinačno
 
-Redak `dogadanja` iznad predstavlja modul kao cjelinu jednom adresom; ovdje je puni popis, jedan redak po izvoru, s vlastitom adresom i licencom svakog. ZET-ova dva feeda i Etnografski muzejova dva REST krajnja tijela dijele po jedan redak jer dijele istu licencu i isti sub-fetcher (`worker/feed/modules/dogadanja/*.ts`); polje `data.source` koje svaka stavka nosi ima sedam vrijednosti (ZET-ova dva feeda imaju svaki svoju: `zet-novosti`, `zet-promet`), navedenih u zagradi uz svaki redak.
+Redak `dogadanja` iznad predstavlja modul kao cjelinu jednom adresom; ovdje i na stranici `/izvori` je puni popis, jedan redak po izvoru, s vlastitom adresom i licencom svakog. ZET-ova dva feeda i Etnografski muzejova dva REST krajnja tijela dijele po jedan redak jer dijele istu licencu i isti sub-fetcher (`worker/feed/modules/dogadanja/*.ts`); polje `data.source` koje svaka stavka nosi ima sedam vrijednosti (ZET-ova dva feeda imaju svaki svoju: `zet-novosti`, `zet-promet`), navedenih u zagradi uz svaki redak.
 
 | Izvor | Adresa | Licenca |
 |---|---|---|
@@ -32,7 +32,7 @@ Redak `dogadanja` iznad predstavlja modul kao cjelinu jednom adresom; ovdje je p
 | ZET, obavijesti, `source: zet-novosti` / `zet-promet` | https://www.zet.hr/rss_novosti.aspx i https://www.zet.hr/rss_promet.aspx | Otvorena dozvola |
 | Etnografski muzej (događanja i izložbe), `source: etnografski` | https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc i https://emz.hr/wp-json/wp/v2/izlozbe?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc | Licenca nije navedena (muzej ne navodi uvjete ponovne uporabe; stavke ostaju isključivo u sesiji, nikad na `/open`) |
 
-Dva izvora navedena u ranijem prijedlogu ostaju izvan modula, isključena zbog robots.txt (R-P5):
+Dva izvora navedena u ranijem prijedlogu ostaju izvan modula, isključena zbog robots.txt (R-P5) i navedena, s razlogom, i na stranici `/izvori`:
 
 - **Guru za kulturu** (https://kultura.zagreb.hr/) -- njegovi podaci o događanjima dostupni su samo preko putanje `kultura.zagreb.hr/api/`, koju robots.txt te domene izričito zabranjuje (uz `_next/`). Ostatak domene je dopušten, ali bez `/api/` nema strojno čitljivih podataka za čitanje.
 - **YouTube Atom feed kanala Skupštine Grada Zagreba**, na putanji `youtube.com/feeds/videos.xml`, koju YouTube-ov robots.txt također zabranjuje. Umjesto zabranjenog feeda, uz svaku sjednicu u prijenosu prikazuje se poveznica na sam kanal (https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA) -- poveznica (linking) nije isto što i dohvat (crawling), pa je to i dalje dopušteno i prikazuje se.

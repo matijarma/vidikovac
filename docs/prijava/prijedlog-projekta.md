@@ -118,7 +118,7 @@ Potpuni popis s licencama, adresama, učestalošću i doslovnim atribucijama je 
 
 Izvori su ocijenjeni zeleno (otvorena licenca, strojno čitljivo, bez ključa), žuto (službeni HTML, uz oprez i oznaku "neslužbeni prikaz") i crveno (zatvoreno; prikazuje se samo poveznica dok pisano odobrenje ne stigne). U prototipu su isključivo zeleni izvori. Pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT feedu), HRT-u i HAK-u te upit HŽPP-u o licenci dio su plana provedbe.
 
-Redak "Zagrebački događaji" iznad sažima šest izvora čiji puni popis, s adresom i licencom svakog pojedinačno, čuva `docs/izvori.md`:
+Redak "Zagrebački događaji" iznad sažima šest izvora čiji puni popis, s adresom i licencom svakog pojedinačno, čuva `docs/izvori.md` i stranica `/izvori`:
 
 - **Kulturpunkt** (najave) -- `https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc` -- CC BY-SA 3.0 HR
 - **Skupština Grada Zagreba** (rokovnik sjednica) -- `https://skupstina.zagreb.hr/rokovnik-sjednica/76` -- Otvorena dozvola
