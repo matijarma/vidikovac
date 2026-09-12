@@ -4,6 +4,7 @@ import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
+import { vehicleCount } from '../../app/src/layers/shared';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import type { LayerContext } from '../../app/src/layers/types';
@@ -119,6 +120,25 @@ describe('u-pokretu', () => {
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');
+  });
+});
+
+describe('vehicleCount', () => {
+  it('counts the vehicle: pins on the full session snapshot (three moving, two route summaries ignored)', () => {
+    expect(vehicleCount(SNAPSHOTS['zet-rt'])).toBe(3);
+  });
+  it('reads the teaser summary item (id "vozila") via its data.vehicles instead of counting', () => {
+    const teaser: ModuleSnapshot = {
+      ...SNAPSHOTS['zet-rt']!,
+      items: [
+        { id: 'vozila', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '5 vozila u pokretu', data: { vehicles: 5 } },
+        { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '6', data: { routeId: '6' } },
+      ],
+    };
+    expect(vehicleCount(teaser)).toBe(5);
+  });
+  it('is null when there is no snapshot yet', () => {
+    expect(vehicleCount(undefined)).toBeNull();
   });
 });
 
