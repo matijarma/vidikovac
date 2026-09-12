@@ -16,7 +16,7 @@ import { Readable } from 'node:stream';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { extractEntry, parseCsv, readZipEntries } from './gtfs-routes.mjs';
+import { compareRouteIds, extractEntry, localFileDataOffset, parseCsv, readZipEntries } from './gtfs-routes.mjs';
 
 export const GTFS_URL = 'https://www.zet.hr/gtfs-scheduled/latest';
 export const OUTPUT_PATH = 'app/public/data/zet-network.json';
@@ -69,6 +69,11 @@ export const ON_FRAC_SCALE = 50;
 // untouched, and leaves the artefact with real headroom under the R-L4
 // budget rather than skimming it, since the live feed grows between
 // rebuilds.
+// FLAGGED FOR CONTROLLER SIGN-OFF (not settled by this task alone): this cap
+// trades against DIAGRAM_BUS_COUNT below for the same byte budget, and it is
+// exactly the busiest interchanges -- real p90 20, max 63 links/stop -- that
+// a later, mandated lightweight list (R-L2, "the nearest stops with the
+// lines calling at them") would read. See task-T1-report.md's Rulings.
 export const ON_MAX_PER_STOP = 12;
 
 // Column order for the struct-of-arrays wire format (see toColumnar).
@@ -80,6 +85,9 @@ export const LINE_KEYS = ['route', 'pts'];
 // bus routes by trip count (154 routes total would not read as a schematic
 // map; 19 trams + the top 20 buses mirrors how ZET's own printed network map
 // picks its "trunk" lines).
+// FLAGGED FOR CONTROLLER SIGN-OFF: kept generous over ON_MAX_PER_STOP above
+// (a lower bus count was the live alternative that would have bought room to
+// raise the per-stop cap instead) -- see task-T1-report.md's Rulings.
 export const DIAGRAM_BUS_COUNT = 20;
 
 /** Converts lon/lat degrees to a local metre-space plane (translation
@@ -169,6 +177,13 @@ function clamp01(x) {
  * exported for tests and for T4's future decodeNetwork) is its exact
  * inverse, so nothing the interface promises is lost, only how it is laid
  * out on disk.
+ *
+ * FLAGGED FOR CONTROLLER SIGN-OFF before T4 begins: this is a documented-
+ * interface deviation (the brief's sketch is row-major array-of-objects),
+ * not merely an implementation detail -- T4/T7/T8 must read this artefact
+ * via fromColumnar/decodeStopOn/chainDecodeXY, never the brief's illustrative
+ * JSON directly. See task-T1-report.md's Rulings for why a literal reading
+ * is mathematically incompatible with the R-L4 byte budget.
  */
 export function toColumnar(rows, keys) {
   const out = {};
@@ -436,13 +451,6 @@ function feedInfoField(rows, field) {
   return v === '' ? null : v;
 }
 
-function compareIds(a, b) {
-  const na = Number(a);
-  const nb = Number(b);
-  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
 // ---------------------------------------------------------------------------
 // stop_times.txt: 92 MB uncompressed, never held in memory as one string.
 // Streamed as inflate -> line reader, keeping only a Map<tripId, {first,
@@ -451,18 +459,14 @@ function compareIds(a, b) {
 // terminus reachable only from a driveway or loop set back from the road
 // (a real GTFS pattern, and further than 40 m from the recorded shape) still
 // gets linked to its shape rather than silently missing from `on`.
-const SIG_LOCAL = 0x04034b50;
-
-function localFileDataOffset(buf, entry) {
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const p = entry.localHeaderOffset;
-  if (p + 30 > view.byteLength || view.getUint32(p, true) !== SIG_LOCAL) {
-    throw new Error(`Bad local file header for ${entry.name} at offset ${p}`);
-  }
-  const nameLength = view.getUint16(p + 26, true);
-  const extraLength = view.getUint16(p + 28, true);
-  return p + 30 + nameLength + extraLength;
-}
+//
+// localFileDataOffset (the header/offset arithmetic that locates where the
+// entry's compressed bytes start) is imported from gtfs-routes.mjs rather
+// than duplicated here: extractEntry there needs the identical offset, but
+// inflates the whole entry synchronously, which would defeat the point of
+// streaming this specific 92 MB file. compareRouteIds is imported for the
+// same reason -- gtfs-shapes.mjs's own tram/bus ranking below needs the
+// exact same numeric-aware id ordering gtfs-routes.mjs already implements.
 
 /** Streams stop_times.txt and returns Map<tripId, {firstStop, lastStop}>,
  *  determined by stop_sequence rather than file order (correct even if a
@@ -603,8 +607,8 @@ export async function buildNetwork(zipBuf, opts = {}) {
     short: meta.short,
     count: tripCountByRoute.get(id) ?? 0,
   }));
-  const trams = withCounts.filter((r) => r.type === 0).sort((a, b) => b.count - a.count || compareIds(a.id, b.id));
-  const others = withCounts.filter((r) => r.type !== 0).sort((a, b) => b.count - a.count || compareIds(a.id, b.id));
+  const trams = withCounts.filter((r) => r.type === 0).sort((a, b) => b.count - a.count || compareRouteIds(a.id, b.id));
+  const others = withCounts.filter((r) => r.type !== 0).sort((a, b) => b.count - a.count || compareRouteIds(a.id, b.id));
   const ranked = [...trams, ...others];
   const diagramCutRank = trams.length + diagramBusCount;
 

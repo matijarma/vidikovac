@@ -41,6 +41,30 @@ function linesOf(net: any): any[] {
   return fromColumnar(net.diagram.lines, LINE_KEYS);
 }
 
+/** Inverse of buildNetwork's own deltaEncode: turns one chain-decoded integer
+ *  (x, y) unit pair back into lon/lat degrees, so a shape's `d` (or a run of
+ *  stops' `p`) can be checked against known fixture coordinates, not just
+ *  against its own array length. */
+function unitsToLonLat([x, y]: [number, number]): { lon: number; lat: number } {
+  return { lon: ORIGIN[0] + x * SCALE, lat: ORIGIN[1] + y * SCALE };
+}
+
+/** Every stop's `p` is chain-delta encoded across the *whole* stops array
+ *  (see buildNetwork), not per-stop, so decoding one stop's position means
+ *  chain-decoding the concatenation of every stop's `p` up to and including
+ *  it, in array order -- exactly what chainDecodeXY expects. Returns each
+ *  stop's absolute lon/lat keyed by stop id. */
+function stopLonLatById(net: any): Record<string, { lon: number; lat: number }> {
+  const stops = fromColumnar(net.stops, STOP_KEYS);
+  const flatP = stops.flatMap((s: any) => s.p as [number, number]);
+  const units = chainDecodeXY(flatP);
+  const out: Record<string, { lon: number; lat: number }> = {};
+  stops.forEach((s: any, i: number) => {
+    out[s.id] = unitsToLonLat(units[i] as [number, number]);
+  });
+  return out;
+}
+
 interface ZipInput {
   name: string;
   data: string;
@@ -209,12 +233,21 @@ const S_FAR = { id: 'S_far', name: 'Daleko', lon: 16.2, lat: 45.9 };
 const S_T2_START = { id: 'S_t2_start', name: 'T2 pocetak', lon: T2_A.lon, lat: T2_A.lat - 0.0018 };
 // ~200 m east of T2_C.
 const S_T2_END = { id: 'S_t2_end', name: 'T2 kraj', lon: T2_C.lon + 0.0026, lat: T2_C.lat };
+// A blank location_type (GTFS default: 0, an actual boarding stop) and an
+// explicit location_type=1 (a parent "station" grouping several boarding
+// stops, never itself a place a vehicle stops) -- parseStopsTxt's filter
+// must keep the former and drop the latter. Positioned far from every
+// defined shape; only their presence/absence in the built artefact matters.
+const S_BLANK_TYPE = { id: 'S_blank_type', name: 'Prazan location_type', lon: 16.05, lat: 45.85 };
+const S_PARENT = { id: 'S_parent', name: 'Cvoriste (nadredena postaja)', lon: 16.06, lat: 45.86 };
 
 const STOPS_TXT =
   'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' +
   [S_CLOSE, S_FAR, S_T2_START, S_T2_END]
     .map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`)
-    .join('');
+    .join('') +
+  `${S_BLANK_TYPE.id},,${S_BLANK_TYPE.name},,${S_BLANK_TYPE.lat},${S_BLANK_TYPE.lon},,,,\n` +
+  `${S_PARENT.id},,${S_PARENT.name},,${S_PARENT.lat},${S_PARENT.lon},,,1,\n`;
 
 // Only T2's trip gets stop_times rows: enough to prove the override fires
 // for both the first and last stop, and that trips lacking any stop_times
@@ -341,7 +374,9 @@ describe('buildNetwork', () => {
     // brief's interface names is present as its own column, index-aligned.
     for (const key of ROUTE_KEYS) expect(net.routes[key]).toHaveLength(4);
     for (const key of SHAPE_KEYS) expect(net.shapes[key]).toHaveLength(4);
-    for (const key of STOP_KEYS) expect(net.stops[key]).toHaveLength(4);
+    // 4 original stops + S_blank_type (blank location_type keeps its default
+    // boarding-stop status); S_parent (location_type=1) is filtered out.
+    for (const key of STOP_KEYS) expect(net.stops[key]).toHaveLength(5);
 
     const routes = routesOf(net);
     for (const r of routes) {
@@ -375,6 +410,25 @@ describe('buildNetwork', () => {
     const t2Shape = shapes.find((s: any) => s.id === 'T2_shape');
     expect(t2Shape.d).toHaveLength(6);
 
+    // Decode d back to lon/lat (chainDecodeXY, then ORIGIN/SCALE) and check
+    // it against the known fixture coordinates, not just its array length --
+    // this is the only thing that would catch a swapped axis, a wrong first-
+    // point anchor, or double-scaling in how deltaEncode and chainEncodeXY
+    // compose, all of which would still pass a length-only check.
+    const t1Points = chainDecodeXY(t1Shape.d).map(unitsToLonLat);
+    expect(t1Points[0].lon).toBeCloseTo(T1_LON, 4);
+    expect(t1Points[0].lat).toBeCloseTo(T1_LAT_0, 4);
+    expect(t1Points[1].lon).toBeCloseTo(T1_LON, 4);
+    expect(t1Points[1].lat).toBeCloseTo(T1_LAT_1, 4);
+
+    const t2Points = chainDecodeXY(t2Shape.d).map(unitsToLonLat);
+    expect(t2Points[0].lon).toBeCloseTo(T2_A.lon, 4);
+    expect(t2Points[0].lat).toBeCloseTo(T2_A.lat, 4);
+    expect(t2Points[1].lon).toBeCloseTo(T2_B.lon, 4);
+    expect(t2Points[1].lat).toBeCloseTo(T2_B.lat, 4);
+    expect(t2Points[2].lon).toBeCloseTo(T2_C.lon, 4);
+    expect(t2Points[2].lat).toBeCloseTo(T2_C.lat, 4);
+
     const stops = stopsOf(net); // decodeStopOn already applied: on is [shapeIdx, frac][]
     for (const st of stops) {
       expect(st.on.length).toBeLessThanOrEqual(ON_MAX_PER_STOP);
@@ -385,6 +439,11 @@ describe('buildNetwork', () => {
     }
     const byId = Object.fromEntries(stops.map((s: any) => [s.id, s]));
 
+    // location_type filtering (parseStopsTxt): blank keeps its GTFS-default
+    // boarding-stop status, an explicit 1 (a parent "station") is dropped.
+    expect(byId.S_blank_type).toBeDefined();
+    expect(byId.S_parent).toBeUndefined();
+
     // The stop sitting on T1's line is linked to it near its midpoint.
     const t1Idx = shapes.indexOf(t1Shape);
     const closeOn = byId.S_close.on.find((e: any) => e[0] === t1Idx);
@@ -393,6 +452,16 @@ describe('buildNetwork', () => {
 
     // The far-away stop is near no shape at all.
     expect(byId.S_far.on).toEqual([]);
+
+    // Decode a couple of stops.p entries the same way, against the fixture's
+    // own lon/lat -- p is chain-delta encoded across the whole stops array
+    // (not per-stop), so this also proves that composition, not just the
+    // per-shape one above.
+    const stopLonLat = stopLonLatById(net);
+    expect(stopLonLat.S_close.lon).toBeCloseTo(S_CLOSE.lon, 4);
+    expect(stopLonLat.S_close.lat).toBeCloseTo(S_CLOSE.lat, 4);
+    expect(stopLonLat.S_far.lon).toBeCloseTo(S_FAR.lon, 4);
+    expect(stopLonLat.S_far.lat).toBeCloseTo(S_FAR.lat, 4);
 
     // Stop-transfer override: stops 200 m from T2's geometry are still linked
     // to it, at its start (frac 0) and end (frac 1), because stop_times.txt
@@ -531,11 +600,32 @@ describe('main', () => {
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');
 
+  // The brief states the budget as "under 500 KB raw ... under 130 KB gzip"
+  // without saying whether that means binary units (KiB, x1024) or decimal
+  // units (KB, x1000); the source planning note it traces to doesn't
+  // disambiguate either. This is not a housekeeping detail to guess at
+  // silently: at the real committed artefact's size the two readings
+  // disagree on whether the raw budget is even met.
+  //   - KiB (x1024): RAW_BUDGET_BYTES below -> committed artefact (503,975 B)
+  //     is UNDER budget by 8,025 B (1.6%).
+  //   - decimal KB (x1000, i.e. 500_000 B): the committed artefact is OVER
+  //     that stricter reading by 3,975 B (0.8%).
+  //   - The gzip budget is met under EITHER reading with >15 KB margin, so
+  //     only the raw threshold's unit is actually in dispute.
+  // This test enforces the looser (KiB) reading, matching what the
+  // artefact was built against -- flagged for controller/product-owner
+  // sign-off rather than silently assumed; see the fix-round Rulings in
+  // task-T1-report.md. Whichever reading is confirmed, only this constant
+  // (and, if it must tighten, a byte-budget lever in gtfs-shapes.mjs) needs
+  // to change.
+  const RAW_BUDGET_BYTES = 500 * 1024;
+  const GZIP_BUDGET_BYTES = 130 * 1024;
+
   it('exists, decodes, and stays inside the R-L4 budget: under 500 KB raw and 130 KB gzipped', () => {
     const raw = readFileSync(artefactPath);
-    expect(raw.byteLength).toBeLessThan(500 * 1024);
+    expect(raw.byteLength).toBeLessThan(RAW_BUDGET_BYTES);
     const gz = gzipSync(raw);
-    expect(gz.byteLength).toBeLessThan(130 * 1024);
+    expect(gz.byteLength).toBeLessThan(GZIP_BUDGET_BYTES);
 
     const parsed = JSON.parse(raw.toString('utf8'));
     expect(parsed.version).toBe(1);
