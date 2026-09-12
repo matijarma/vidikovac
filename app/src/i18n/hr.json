@@ -100,6 +100,7 @@
     "title": "Otključaj pogled na Zagreb",
     "intro": "Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.",
     "scanButton": "Skeniraj kamerom",
+    "or": "ili",
     "scanDialogTitle": "Skeniraj QR kod",
     "codeLabel": "Kod sa zaslona",
     "codeHint": "Osam znakova, npr. ABCD-EFGH. Slova I, L i O ne postoje: upiši 1 ili 0.",

@@ -96,6 +96,7 @@
     "title": "Unlock a view of Zagreb",
     "intro": "Scan the QR code on the screen or type the code below. Ten minutes from a screen, five from another person's phone.",
     "scanButton": "Scan with the camera",
+    "or": "or",
     "scanDialogTitle": "Scan the QR code",
     "codeLabel": "Code from the screen",
     "codeHint": "Eight characters, e.g. ABCD-EFGH. The letters I, L and O do not exist: type 1 or 0.",

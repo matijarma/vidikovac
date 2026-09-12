@@ -21,7 +21,7 @@
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
 }
 .scan { display: grid; gap: var(--sp-4); }
-.scan-title { font-size: var(--text-2xl); }
+.scan-title { font-size: 2rem; }
 .scan-intro { color: var(--tone-text-muted); }
 
 .scan-error {
@@ -39,14 +39,39 @@
 .scan-input {
   width: 100%;
   min-height: 3.25rem;
+  border: 2px solid var(--tone-stroke-strong);
+  background: var(--tone-surface-1);
   font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  letter-spacing: 0.18em;
+  font-size: 1.75rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .scan-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
-.scan-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
-.scan-actions .btn, .scan-actions .btn-ghost { flex: 1 1 12rem; }
+
+/* Submit and camera share one row, an "ili" hairline strip between them; with
+   no camera (platform can't decode) the row collapses to the one control. */
+.scan-actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.scan-actions--single { grid-template-columns: 1fr; }
+.scan-actions .btn, .scan-actions .btn-ghost { min-height: 3.25rem; }
+.scan-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--tone-text-subtle);
+  font-size: var(--text-sm);
+}
+.scan-or::before, .scan-or::after {
+  content: '';
+  width: 1.5rem;
+  height: 1px;
+  background: var(--tone-stroke);
+}
 .scan-status { min-height: 1.5rem; color: var(--tone-text-muted); font-size: var(--text-sm); }
 
 .scan-camera { border-radius: var(--r-lg); overflow: hidden; }
@@ -60,7 +85,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-3xl);
   letter-spacing: 0.22em;
-  color: var(--tone-text-brand);
+  color: var(--tone-text-primary);
 }
 .scan-confirm-label { font-weight: var(--weight-medium); }
 .scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }

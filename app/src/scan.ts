@@ -93,8 +93,9 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
           inputmode="text" autocomplete="one-time-code" autocapitalize="characters" autocorrect="off"
           spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-describedby="scan-hint">
         <p id="scan-hint" class="scan-hint">${escapeHtml(i18n.t('scan.codeHint'))}</p>
-        <div class="scan-actions">
+        <div class="scan-actions${cameraOffered ? '' : ' scan-actions--single'}">
           <button type="submit" class="btn" data-testid="code-submit" disabled>${escapeHtml(i18n.t('scan.check'))}</button>
+          ${cameraOffered ? `<span class="scan-or">${escapeHtml(i18n.t('scan.or'))}</span>` : ''}
           ${cameraOffered ? `<button type="button" class="btn-ghost" data-testid="scan-camera" aria-expanded="false" aria-controls="scan-camera-region">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('scan.scanButton'))}</span></button>` : ''}
         </div>
       </form>
