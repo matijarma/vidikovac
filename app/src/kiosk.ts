@@ -842,7 +842,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // box; they are evidence for the stage's motion model, never drawn as
       // reported (R-P2).
       const zet = byModule(teaser)['zet-rt'];
-      stageSchematic.update({ fixes: vehicleFixes(zet, now()), delays: routeDelayMap(zet) }, now());
+      stageSchematic.update({ fixes: vehicleFixes(zet, now()), delays: routeDelayMap(zet), snapshot: zet }, now());
       if (!essentialsPanel.hidden) paintEssentials(); // stays live while open, same source as the teaser
     } catch {
       showAlert('status.down', 'teaser');

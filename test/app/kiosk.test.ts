@@ -792,6 +792,36 @@ describe('the live stage (T9 / R-P1)', () => {
     expect(text(live.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
   });
+  // R-F8/R-X1: loadTeaser() must hand the stage's own update() the zet-rt
+  // snapshot itself, not just the fixes/delays derived from it -- otherwise
+  // a genuine zet-rt outage still prints the empty-list sentence on the
+  // exact production surface (/kiosk/?lagano=1) the bug report was filed
+  // against, just for a different trigger than the missing-geometry one
+  // R-F8 was written for. This exercises mountKiosk's real loadTeaser call
+  // site end to end (no mock of stageSchematic/createSchematicHost), so it
+  // fails if that wiring ever regresses again.
+  it('lightweight: a stale zet-rt in the teaser prints the honest stale sentence on the stage list, never "nema stavki"', async () => {
+    const staleTeaser = (): ModuleSnapshot[] => [
+      ...MODULES.filter((m) => m.module !== 'zet-rt'),
+      { ...snap('zet-rt', []), status: 'stale', sourceUpdatedAt: new Date(NOW - 400_000).toISOString() },
+    ];
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true, fetchTeaser: async () => ({ modules: staleTeaser() }) });
+    await flush();
+    const live = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
+    expect(text(live.querySelector('[data-testid=schematic-status]'))).toContain('izvor trenutačno ne odgovara');
+    expect(live.querySelector('[data-testid=schematic-empty]')).toBeNull();
+  });
+  it('lightweight: a down zet-rt in the teaser prints the honest down sentence on the stage list, never "nema stavki"', async () => {
+    const downTeaser = (): ModuleSnapshot[] => [
+      ...MODULES.filter((m) => m.module !== 'zet-rt'),
+      { ...snap('zet-rt', []), status: 'down' },
+    ];
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true, fetchTeaser: async () => ({ modules: downTeaser() }) });
+    await flush();
+    const live = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
+    expect(text(live.querySelector('[data-testid=schematic-status]'))).toBe('izvor nedostupan');
+    expect(live.querySelector('[data-testid=schematic-empty]')).toBeNull();
+  });
 });
 
 // R-F4: a 2017 engine must lay the kiosk out. These read the stylesheets as

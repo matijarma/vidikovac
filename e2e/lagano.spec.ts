@@ -153,4 +153,51 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     expect(headline).not.toBeNull();
     expect(listBox!.y + listBox!.height, 'the route list ends above the headline row, never over it').toBeLessThanOrEqual(headline!.y + 0.5);
   });
+
+  // R-V1: "at ten rows of 24 px with 8 px spacing that is 320 px, inside the
+  // roughly 380 px available" -- a number that was never measured in a real
+  // engine (the same category of gap that produced the original R-V1
+  // production incident). This puts eleven routes in the box -- the same
+  // "ten rows + još 1 linija" scenario schematic-view.test.ts already proves
+  // in jsdom -- through a real Chromium layout, so the cap's arithmetic is
+  // checked against a real box model (fonts, borders, line-height) rather
+  // than assumed to add up.
+  test('R-F8/R-V1: eleven routes in the box render ten rows plus "još 1 linija", still ending above the headline row', async ({ page, request }) => {
+    const routeIds = Array.from({ length: 11 }, (_, i) => String(i + 1));
+    const zet = {
+      module: 'zet-rt',
+      tier: 'open',
+      status: 'live',
+      fetchedAt: new Date().toISOString(),
+      sourceUpdatedAt: new Date().toISOString(),
+      attribution: {
+        text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669',
+        url: 'https://www.zet.hr/gtfs-rt-protobuf',
+        licence: 'Otvorena dozvola',
+      },
+      items: [...routeIds.map((id) => vehiclePin(`e2e-lagano-many-${id}`, id)), ...routeIds.map((id) => routeSummary(id, 0))],
+    };
+    await page.route('**/api/teaser', async (route: Route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules: [zet] }) });
+    });
+
+    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    await page.setViewportSize(KIOSK);
+    await page.goto(kioskUrl.replace('#', '?lagano=1#'));
+    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+
+    const list = page.locator('[data-testid=kiosk-live] [data-testid=schematic-list]');
+    await expect(list).toBeAttached();
+    // Eleven distinct routes in the box, ten shown plus the overflow row --
+    // the count and the list agree (R-F8's own words), proven here in the
+    // real DOM, not just jsdom.
+    await expect(page.locator('[data-testid=schematic-route]')).toHaveCount(10);
+    await expect(page.locator('[data-testid=schematic-more]')).toHaveText('još 1 linija');
+
+    const listBox = await list.boundingBox();
+    const headline = await page.locator('[data-testid=teaser-card]').boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(headline).not.toBeNull();
+    expect(listBox!.y + listBox!.height, 'ten rows plus the overflow row still end above the headline row (R-V1’s row budget, measured for real)').toBeLessThanOrEqual(headline!.y + 0.5);
+  });
 });
