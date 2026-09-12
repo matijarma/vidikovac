@@ -202,6 +202,31 @@ describe('the panorama and the session meander (M4)', () => {
     expect(panorama.getAttribute('aria-label')).not.toBe('');
     expect(panorama.tagName).toBe('CANVAS');
   });
+  // Fix round 1: a returning user whose stored layer never fetches zet-rt
+  // (e.g. 'vijesti') must not have the panorama claim zero vehicles — it
+  // must say the count is unknown, exactly like kiosk.ts's own panorama
+  // distinguishes "no snapshot yet" from "snapshot says zero".
+  it('names the panorama "loading data", never a false zero, on a layer that never fetches zet-rt', async () => {
+    sessionStorage.setItem(LAYER_STORAGE_KEY, 'vijesti');
+    const { root, session } = mount();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    // True even before join: the very first render() paints before any
+    // fetch has resolved, so this must never read as a real zero either.
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: učitavanje podataka');
+    session.join();
+    await flush();
+    // Still unknown after the layer's own refresh() lands: 'vijesti' only
+    // ever fetches hrt-news, never zet-rt, for the whole session.
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: učitavanje podataka');
+  });
+  it('reports an honest zero once a zet-rt snapshot has actually loaded', async () => {
+    // Default layer is grad-sada, whose module list includes zet-rt.
+    const { root, session } = mount();
+    session.join();
+    await flush();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: 0 vozila ZET-a u pokretu');
+  });
   it('renders no canvas anywhere in lightweight mode, and the meander bar carries the quantised width', () => {
     const { root, session } = mount({ lightweight: true });
     expect(root.querySelectorAll('canvas')).toHaveLength(0);

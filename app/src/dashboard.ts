@@ -214,20 +214,24 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   /** The panorama's vehicle count comes from the zet-rt snapshot already
-   *  fetched for grad-sada, not a fetch of its own — repainted at the end of
-   *  every render() (a fresh snapshot may have just landed) and from
-   *  onRepaint (theme change, resize). Unknown is drawn honest-zero, same as
-   *  the kiosk's own panorama. */
+   *  fetched for grad-sada/u-pokretu, not a fetch of its own — repainted at
+   *  the end of every render() (a fresh snapshot may have just landed) and
+   *  from onRepaint (theme change, resize). A returning user can sit on a
+   *  stored layer (e.g. vijesti) that never fetches zet-rt for the whole
+   *  session, so "no snapshot yet" must read as unknown, not a false zero —
+   *  same distinction the kiosk's own panorama makes. The canvas draw itself
+   *  still falls back to zero beads for "unknown", which is visually
+   *  correct either way. */
   function paintPanoramaFigure(): void {
-    const count = vehicleCount(snapshots['zet-rt']) ?? 0;
-    const alt = i18n.t('session.panoramaAlt', { count });
+    const count = vehicleCount(snapshots['zet-rt']);
+    const alt = count === null ? i18n.t('session.panoramaAltLoading') : i18n.t('session.panoramaAlt', { count });
     panoramaEl.setAttribute('aria-label', alt);
     // R-L2: the lightweight rule carries the same label; there is nothing to
     // paint on that path.
     if (lightweight) return;
     paintPanorama(panoramaEl as HTMLCanvasElement, {
       fg: tone(panoramaEl, '--tone-text-primary', '#f2ead8'),
-      count,
+      count: count ?? 0,
     });
   }
 

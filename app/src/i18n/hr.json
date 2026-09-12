@@ -164,7 +164,8 @@
     "openTier": "Sigurnosni sloj ostaje otvoren na /hitno.",
     "legendMeander": "SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO {time}",
     "remainingFine": "· još {time}",
-    "panoramaAlt": "Zagrebačka panorama: {count} vozila ZET-a u pokretu"
+    "panoramaAlt": "Zagrebačka panorama: {count} vozila ZET-a u pokretu",
+    "panoramaAltLoading": "Zagrebačka panorama: učitavanje podataka"
   },
   "kiosk": {
     "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
