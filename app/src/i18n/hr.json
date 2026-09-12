@@ -197,7 +197,12 @@
     "catalogueVehicles": "ZET U POKRETU",
     "catalogueClosures": "PROMETNICE",
     "unitVehicles_one": "vozilo", "unitVehicles_few": "vozila", "unitVehicles_other": "vozila",
-    "unitClosed_one": "zatvorena", "unitClosed_few": "zatvorene", "unitClosed_other": "zatvorenih"
+    "unitClosed_one": "zatvorena", "unitClosed_few": "zatvorene", "unitClosed_other": "zatvorenih",
+    "essentialsOpen": "Osnovno",
+    "essentialsTitle": "Osnovno, bez skeniranja",
+    "essentialsHint": "Ovaj zaslon odgovara i bez telefona. Skeniranje otključava cijeli grad na tvom uređaju.",
+    "essentialsClose": "Natrag",
+    "essentialsEmpty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno."
   },
   "export": {
     "copied": "Kopirano s navodom izvora.",

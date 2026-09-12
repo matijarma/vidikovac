@@ -135,6 +135,49 @@
 .kiosk-code-hint { font-size: calc(var(--kiosk-scale) * 18px); text-align: center; }
 .kiosk-code-hint .hint-emphasis { color: var(--tone-text-primary); }
 
+/* ── Essentials view (R-P7 / M3b): a locked kiosk answers without a phone.
+   A sibling of .kiosk-stage, in the same flow position — once .kiosk-stage
+   is [hidden] this simply takes its place, so the header and the safety
+   strip above and below it never move and stay visible while someone reads.
+   Row geometry is the M3 catalogue at a larger step: it is meant to be read
+   from a few steps back, like a departure board. ─────────────────────── */
+.kiosk-essentials {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: calc(var(--kiosk-scale) * 32px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 40px);
+}
+.kiosk-essentials > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: calc(var(--kiosk-scale) * 32px);
+  margin-block-end: calc(var(--kiosk-scale) * 28px);
+  padding-block-end: calc(var(--kiosk-scale) * 24px);
+  border-block-end: 2px solid var(--tone-text-primary);
+}
+.kiosk-essentials h2 { flex: 1; min-inline-size: calc(var(--kiosk-scale) * 320px); font-size: calc(var(--kiosk-scale) * 44px); }
+.kiosk-essentials header .legend { flex-basis: 100%; margin-block-start: calc(var(--kiosk-scale) * 10px); }
+.kiosk-essentials-close {
+  flex: none;
+  border: 2px solid var(--tone-text-primary);
+  min-block-size: calc(var(--kiosk-scale) * 44px);
+  padding-inline: calc(var(--kiosk-scale) * 28px);
+  font: inherit;
+  font-weight: 700;
+  font-size: calc(var(--kiosk-scale) * 22px);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  cursor: pointer;
+}
+.ess-rows { display: flex; flex-direction: column; gap: calc(var(--kiosk-scale) * 28px); }
+.ess-row { padding-block-start: calc(var(--kiosk-scale) * 22px); border-block-start: 2px solid var(--tone-stroke); }
+.ess-row:first-child { padding-block-start: 0; border-block-start: none; }
+.ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 24px); letter-spacing: 0.06em; color: var(--tone-label); }
+.ess-value { margin: calc(var(--kiosk-scale) * 8px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 56px); line-height: 1.08; }
+.ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); }
+.ess-attr { margin: calc(var(--kiosk-scale) * 10px) 0 0; font-size: calc(var(--kiosk-scale) * 17px); color: var(--tone-text-subtle); }
+
 /* ── Safety strip ──────────────────────────────────────────────────────── */
 .kiosk-safety {
   flex: none;
@@ -145,6 +188,22 @@
   font-size: calc(var(--kiosk-scale) * 26px);
   background: var(--tone-surface-2);
   color: var(--tone-text-primary);
+}
+/* The only other interactive control on a locked kiosk besides the /hitno
+   pill (M3b): a 44px target at scale 1, gone outright once a session is
+   live rather than merely dimmed — the driver's layer is already the full
+   thing (R-P7). */
+.kiosk-essentials-open {
+  flex: none;
+  border: 2px solid var(--tone-text-primary);
+  min-block-size: calc(var(--kiosk-scale) * 44px);
+  padding-inline: calc(var(--kiosk-scale) * 24px);
+  font: inherit;
+  font-weight: 700;
+  font-size: calc(var(--kiosk-scale) * 23px);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  cursor: pointer;
 }
 .strip-label { font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.08em; color: var(--tone-label); }
 .strip-hitno {

@@ -36,12 +36,17 @@ import { escapeHtml } from './ui/dom/escape';
 // filter below can never match a real snapshot. Until Area A ships a tagged
 // pharmacy layer, the curated on-duty list already built for /hitno (task
 // D1) is the honest stand-in: it is real Grad Zagreb data, not a fixture.
-import { LJEKARNE } from '../../worker/hitno/ljekarne';
+import { LJEKARNE, LJEKARNE_SOURCE } from '../../worker/hitno/ljekarne';
 
 /** Cross-fade interval for the teaser cards. */
 export const TEASER_ROTATE_MS = 20_000;
 /** Meander repaint cadence (design.md §3.2: "1 s korak, linearno"). */
 export const MEANDER_TICK_MS = 1_000;
+/** M3b / R-P7: how long the essentials panel waits, untouched, before it
+ *  hands the screen back to the invitation. Long enough to read every row
+ *  once; short enough that the next passer-by finds the invitation, not a
+ *  stranger's reading session. */
+export const ESSENTIALS_IDLE_MS = 90_000;
 /** Design width the whole kiosk is laid out against; applyScale() turns the
  *  element's real width into a --kiosk-scale multiplier of this (R-L3). */
 const KIOSK_DESIGN_WIDTH = 1920;
@@ -184,6 +189,127 @@ export function safetyStripText(
   };
 }
 
+export interface EssentialsRow {
+  id: string;
+  label: string;
+  value: string;
+  detail?: string;
+  attribution?: string;
+}
+
+/** A module counts as answering when it has a snapshot at all and that
+ *  snapshot isn't `down` — the same bar safetyStripText and catalogueRows
+ *  already apply, made a named predicate here because an essentials row is
+ *  skipped outright rather than shown with a placeholder (R-P7: the locked
+ *  screen only says what it actually knows). */
+function isLive(snapshot: ModuleSnapshot | undefined): snapshot is ModuleSnapshot {
+  return snapshot !== undefined && snapshot.status !== 'down';
+}
+
+/** panels.delayLate/delayEarly/delayOnTime in words, exactly as the u-pokretu
+ *  panel already phrases a route's median delay (app/src/layers/u-pokretu.ts). */
+function delayWord(i18n: I18n, seconds: number): string {
+  if (seconds > 30) return i18n.t('panels.delayLate', { seconds });
+  if (seconds < -30) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
+  return i18n.t('panels.delayOnTime');
+}
+
+/** The five things a locked screen can answer without a phone (R-P7 / M3b),
+ *  read from the very same open-tier ModuleSnapshot[] the teaser cards
+ *  already receive — no new endpoint, no new fetch. Each row is skipped
+ *  outright when its module is down or has nothing to say, rather than
+ *  shown with a placeholder; when none of the five has anything, the panel
+ *  says so honestly and points at /hitno instead of guessing (R-62's filled
+ *  attribution runs on every row that does render, because an open screen
+ *  is exactly where the Otvorena dozvola line has to appear). */
+export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, _now: number): EssentialsRow[] {
+  const map = byModule(modules);
+  const rows: EssentialsRow[] = [];
+
+  const capSnap = map['dhmz-cap'];
+  const warning = capSnap?.items[0];
+  if (isLive(capSnap) && warning) {
+    rows.push({
+      id: 'cap',
+      label: i18n.t('kiosk.teaserCap'),
+      value: i18n.t(`panels.severity.${warning.severity ?? 'info'}`),
+      detail: warning.title,
+      attribution: fillAttribution(capSnap.attribution, capSnap, warning),
+    });
+  }
+
+  const closuresSnap = map.prometnice;
+  const closureItems = isLive(closuresSnap) ? closuresSnap.items.filter((item) => item.kind === 'closure') : [];
+  // No per-kiosk location to rank by distance (same limit as safetyStripText's
+  // pharmacy pick): the first closure in a stable, always-open-tier order is
+  // a true answer, not an arbitrary one.
+  const nearestClosure = closureItems[0];
+  if (isLive(closuresSnap) && nearestClosure) {
+    rows.push({
+      id: 'closures',
+      label: i18n.t('kiosk.teaserClosures'),
+      value: i18n.t('panels.closuresCount', { count: closureItems.length }),
+      detail: nearestClosure.title,
+      attribution: fillAttribution(closuresSnap.attribution, closuresSnap, nearestClosure),
+    });
+  }
+
+  // registry.teaserSubset already reduces zet-rt to the vehicle count plus
+  // one 'route:<id>' summary per route (median delay, R-P1); the count item
+  // is the panorama/catalogue's business, not this row's.
+  const zetSnap = map['zet-rt'];
+  const routeItems = isLive(zetSnap) ? zetSnap.items.filter((item) => item.id.startsWith('route:')) : [];
+  const [firstRoute, ...restRoutes] = routeItems;
+  if (isLive(zetSnap) && firstRoute) {
+    const routeLine = (item: FeedItem): string =>
+      `${dataText(item, 'routeShortName') || item.title}: ${delayWord(i18n, dataNumber(item, 'medianDelaySeconds') ?? 0)}`;
+    rows.push({
+      id: 'departures',
+      label: i18n.t('kiosk.teaserDepartures'),
+      value: routeLine(firstRoute),
+      detail: restRoutes.length > 0 ? restRoutes.map(routeLine).join(' · ') : undefined,
+      attribution: fillAttribution(zetSnap.attribution, zetSnap, firstRoute),
+    });
+  }
+
+  const weatherSnap = map['dhmz-now'];
+  const observation = weatherSnap?.items[0];
+  if (isLive(weatherSnap) && observation) {
+    const temp = dataNumber(observation, 'temp');
+    rows.push({
+      id: 'weather',
+      label: i18n.t('kiosk.catalogueWeather'),
+      value: temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp }),
+      detail: dataText(observation, 'weather') || undefined,
+      attribution: fillAttribution(weatherSnap.attribution, weatherSnap, observation),
+    });
+  }
+
+  // ckan-geo never actually tags a pharmacy (see the import comment above);
+  // when it answers at all, the curated on-duty list is the honest stand-in,
+  // carrying its own source line (LJEKARNE_SOURCE) rather than a filled
+  // template, because it isn't ckan-geo's data. Gated on ckan-geo the same
+  // way as the rows above — when the feed itself is down, this panel points
+  // at /hitno rather than a client-side guess; /hitno's own render carries
+  // the same curated fallback server-side, so the safety answer is never
+  // actually unavailable, just not duplicated here while the feed is out.
+  const poiSnap = map['ckan-geo'];
+  if (isLive(poiSnap) && poiSnap.items.length > 0) {
+    const pharmacyItem = poiSnap.items.find((item) => dataText(item, 'category') === 'ljekarne');
+    const onDuty = LJEKARNE[0];
+    rows.push({
+      id: 'pharmacy',
+      label: i18n.t('kiosk.safety'),
+      value: pharmacyItem ? pharmacyItem.title : onDuty!.label,
+      attribution: pharmacyItem ? fillAttribution(poiSnap.attribution, poiSnap, pharmacyItem) : LJEKARNE_SOURCE.text,
+    });
+  }
+
+  if (rows.length === 0) rows.push({ id: 'empty', label: '', value: i18n.t('kiosk.essentialsEmpty') });
+
+  return rows;
+}
+
 export interface KioskDeps {
   i18n: I18n;
   hash: string;
@@ -260,6 +386,14 @@ function kioskMarkup(i18n: I18n, lightweight: boolean): string {
       <div class="kiosk-layer" data-testid="kiosk-layer" hidden></div>
       <div class="corner-qr" data-testid="corner-qr" hidden></div>
     </section>
+    <section class="kiosk-essentials" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
+      <header>
+        <h2 id="ess-title" tabindex="-1">${escapeHtml(i18n.t('kiosk.essentialsTitle'))}</h2>
+        <p class="legend">${escapeHtml(i18n.t('kiosk.essentialsHint'))}</p>
+        <button type="button" class="kiosk-essentials-close" data-testid="kiosk-essentials-close">${escapeHtml(i18n.t('kiosk.essentialsClose'))}</button>
+      </header>
+      <div class="ess-rows" data-testid="kiosk-essentials-rows"></div>
+    </section>
     <footer class="kiosk-safety" data-testid="safety-strip"></footer>`;
 }
 
@@ -294,6 +428,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const layerBox = element.querySelector<HTMLElement>('[data-testid=kiosk-layer]')!;
   const strip = element.querySelector<HTMLElement>('[data-testid=safety-strip]')!;
   const stage = element.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!;
+  const essentialsPanel = element.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
+  const essentialsHeading = element.querySelector<HTMLElement>('#ess-title')!;
+  const essentialsCloseBtn = element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-close]')!;
+  const essentialsRowsBox = element.querySelector<HTMLElement>('[data-testid=kiosk-essentials-rows]')!;
 
   let teaser: ModuleSnapshot[] = [];
   let cards: TeaserCard[] = [];
@@ -307,6 +445,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // Only present while a session is open, so a screen back on the teaser has no
   // stale "unlocked until" line anywhere in the page (R-52).
   let sessionLabel: HTMLElement | null = null;
+  // The essentials panel's own idle clock (R-P7 / M3b): no new KioskDeps
+  // member, just the same setInterval/clearInterval the meander tick and the
+  // teaser rotation already take, used as a resettable one-shot — always
+  // cleared before it is armed again, so it fires at most once per arming.
+  let essentialsIdleHandle: unknown = null;
 
   const maps = createMapSlots(deps.mapFactory);
 
@@ -369,11 +512,70 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   function paintStrip(): void {
     const parts = safetyStripText(teaser, i18n);
-    strip.innerHTML = `<span class="strip-label">${escapeHtml(i18n.t('kiosk.safetyLabel'))}</span>
+    // R-P7: the one other interactive control a locked kiosk carries besides
+    // the /hitno pill, before it in the DOM (the pill's own margin-inline-start:
+    // auto in kiosk.css keeps it pinned to the far end regardless). Rebuilt
+    // fully on every poll like the rest of the strip, so its `hidden` state
+    // (never appears once a session is live) is driven by a delegated click
+    // listener on `strip` itself, not a listener re-bound on each repaint.
+    const essentialsHidden = element.dataset.mode === 'unlocked';
+    strip.innerHTML = `<button type="button" class="kiosk-essentials-open" data-testid="kiosk-essentials-open"${essentialsHidden ? ' hidden' : ''}>${escapeHtml(i18n.t('kiosk.essentialsOpen'))}</button>
+      <span class="strip-label">${escapeHtml(i18n.t('kiosk.safetyLabel'))}</span>
       <span>${escapeHtml(i18n.t('kiosk.teaserCap'))}: ${escapeHtml(parts.cap)}</span>
       <span>${escapeHtml(i18n.t('kiosk.teaserClosures'))}: ${escapeHtml(parts.closures)}</span>
       <span>${escapeHtml(i18n.t('kiosk.safety'))}: ${escapeHtml(parts.pharmacy)}</span>
       <a class="strip-hitno" href="/hitno">/hitno</a>`;
+  }
+
+  function paintEssentials(): void {
+    essentialsRowsBox.innerHTML = essentialsRows(teaser, i18n, now())
+      .map(
+        (row) => `<div class="ess-row" data-testid="ess-row">
+          ${row.label ? `<p class="ess-label">${escapeHtml(row.label)}</p>` : ''}
+          <p class="ess-value">${escapeHtml(row.value)}</p>
+          ${row.detail ? `<p class="ess-detail">${escapeHtml(row.detail)}</p>` : ''}
+          ${row.attribution ? `<p class="ess-attr">${escapeHtml(row.attribution)}</p>` : ''}
+        </div>`,
+      )
+      .join('');
+  }
+
+  function disarmEssentialsIdle(): void {
+    if (essentialsIdleHandle === null) return;
+    clearTimer(essentialsIdleHandle);
+    essentialsIdleHandle = null;
+  }
+
+  function armEssentialsIdle(): void {
+    disarmEssentialsIdle();
+    essentialsIdleHandle = setTimer(() => closeEssentials(), ESSENTIALS_IDLE_MS);
+  }
+
+  /** R-P7: reachable with one touch, no phone, no session, no countdown, no
+   *  metric beyond the kiosk's existing open-tier counter. Never over a live
+   *  session — the driver's own layer already shows more than this. */
+  function openEssentials(): void {
+    if (element.dataset.mode === 'unlocked') return;
+    paintEssentials();
+    essentialsPanel.hidden = false;
+    stage.hidden = true;
+    essentialsHeading.focus();
+    armEssentialsIdle();
+  }
+
+  /** `restoreFocus` is false only when a scan closes the panel out from under
+   *  the reader (setMode('unlocked')): the open button is about to hide too,
+   *  so there is nothing useful to focus it back onto. */
+  function closeEssentials(restoreFocus = true): void {
+    disarmEssentialsIdle();
+    if (essentialsPanel.hidden) return;
+    essentialsPanel.hidden = true;
+    stage.hidden = false;
+    if (restoreFocus) essentialsBtn()?.focus();
+  }
+
+  function essentialsBtn(): HTMLButtonElement | null {
+    return element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]');
   }
 
   function paintHeader(): void {
@@ -495,6 +697,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     element.dataset.mode = mode;
     layerBox.hidden = mode !== 'unlocked';
     cornerQr.hidden = mode !== 'unlocked';
+    // R-P7: never render the essentials panel over a live session — the
+    // driver's own layer already shows more than this. `paintStrip()` below
+    // also hides the essentials-open button itself the moment a scan lands.
+    if (mode === 'unlocked') closeEssentials(false);
+    paintStrip();
     if (mode === 'teaser') {
       layerBox.replaceChildren();
       sessionLabel?.remove();
@@ -532,6 +739,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       paintStrip();
       paintPanoramaFigure();
       paintCatalogue();
+      if (!essentialsPanel.hidden) paintEssentials(); // stays live while open, same source as the teaser
     } catch {
       showAlert('status.down', 'teaser');
     }
@@ -603,6 +811,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   };
   element.addEventListener('pointerdown', onFirstTap);
 
+  // The essentials button lives inside `strip`, whose whole innerHTML is
+  // rebuilt on every paintStrip() call — a listener bound to the button
+  // itself would be lost on the next poll, so this one is bound to `strip`,
+  // which is never replaced, and delegates by testid instead.
+  strip.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
+  });
+  essentialsCloseBtn.addEventListener('click', () => closeEssentials());
+  // Any touch or key inside the open panel means someone is still reading it.
+  essentialsPanel.addEventListener('pointerdown', armEssentialsIdle);
+  essentialsPanel.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { closeEssentials(); return; }
+    armEssentialsIdle();
+  });
+
   // R-L3: the kiosk sizes itself from a JS-computed scale (--kiosk-scale)
   // instead of container queries, from the element's own width — works even
   // if `onRepaint` is absent (falls back to scale 1 with no layout box, e.g.
@@ -652,6 +875,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       rotation.stop();
       clearTimer(rotateTimer);
       clearTimer(meanderTimer);
+      disarmEssentialsIdle();
       stopRepaint?.();
       beacon?.close();
       session?.close();

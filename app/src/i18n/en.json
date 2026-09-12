@@ -192,7 +192,12 @@
     "catalogueVehicles": "ZET ON THE MOVE",
     "catalogueClosures": "ROADS",
     "unitVehicles_one": "vehicle", "unitVehicles_other": "vehicles",
-    "unitClosed_one": "closed", "unitClosed_other": "closed"
+    "unitClosed_one": "closed", "unitClosed_other": "closed",
+    "essentialsOpen": "Essentials",
+    "essentialsTitle": "Essentials, no scan needed",
+    "essentialsHint": "This screen answers even without a phone. Scanning unlocks the whole city on your own device.",
+    "essentialsClose": "Back",
+    "essentialsEmpty": "The source isn't answering right now. The safety layer runs at /hitno."
   },
   "export": {
     "copied": "Copied with the source line.",

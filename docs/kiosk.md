@@ -1,12 +1,18 @@
 # Javni zaslon (Prozor): postavljanje i održavanje
 
-Javni zaslon je bilo koji preglednik koji drži otvorenu stranicu `/kiosk/` na adresi https://zagreb.aningfilm.hr. Ne treba nikakav poseban softver: preporučeni uređaj je Raspberry Pi 5 s Chromiumom u kiosk načinu, ali jednako radi stari laptop, Windows PC iza televizora ili iPad u načinu "Vođeni pristup". Zaslon nema dodir (ako ga ima, dodir se ne koristi za navigaciju), prikazuje čitljiv javni pregled bez telefona i rotira QR kod koji otključava deset minuta nadzorne ploče.
+Javni zaslon je bilo koji preglednik koji drži otvorenu stranicu `/kiosk/` na adresi https://zagreb.aningfilm.hr. Ne treba nikakav poseban softver: preporučeni uređaj je Raspberry Pi 5 s Chromiumom u kiosk načinu, ali jednako radi stari laptop, Windows PC iza televizora ili iPad u načinu "Vođeni pristup". Zaslon ne treba dodir da bi radio (rotacija kartica, koda i meandra ide sama), ali ako ga zaslon ima, dodir otvara "Osnovno" — vidi niže — i ništa više: nijedna druga navigacija po zaslonu nije dodirom. Zaslon prikazuje čitljiv javni pregled bez telefona i rotira QR kod koji otključava deset minuta nadzorne ploče.
 
 ## Što zaslon radi
 
 - **Bez skeniranja (teaser):** uz donji rub stalno stoji sigurnosna traka (stanje upozorenja DHMZ-a, zatvorene prometnice u blizini, najbliža dežurna ljekarna); iznad nje se svakih 20 sekundi izmjenjuju kartice: vrijeme sada, sljedeći polasci na stanici koju je odabrao vlasnik prostora, zrak na najbližoj postaji, jedan naslov HRT-a, jedna arhivska slika "Zagreb, [godina]" s atribucijom i pozivna kartica ("Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba."). QR kod rotira svakih 30 sekundi, a pored njega se prazni meandar (Kniferov kvadratni val) koji odbrojava do sljedećeg koda; kod je ispisan u dvije skupine (`ABCD-EFGH`) da se može pročitati naglas ili utipkati.
 - **Nakon skeniranja:** zaslon prikazuje isti sloj koji gleda osoba koja je skenirala (ona upravlja), u rasporedu za velike zaslone, sa sigurnosnom trakom i malim QR kodom "pridruži se" uz rub. Jedan zaslon vodi jedna osoba; sljedeći koji skeniraju dobivaju vlastitu sesiju na telefonu, ali ne upravljaju zaslonom.
 - **Nakon deset minuta:** zaslon se vraća na teaser i novi QR kod. Nema hlađenja; ista osoba može odmah ponovno skenirati.
+
+## Osnovno, bez telefona
+
+Skeniranje otključava cijeli grad na vlastitom uređaju osobe koja skenira — ono nikada ne uskraćuje odgovor zaslonu ispred kojeg netko stoji bez telefona. Zato dodirni zaslon nosi vlastiti prikaz "Osnovno": gumb na početku sigurnosne trake, prije `/hitno` pilule koja ostaje krajnja desno, jedini drugi dodirni element na zaključanom zaslonu. Dodir otvara ploču preko istog prostora koji inače zauzima teaser (zaglavlje i sigurnosna traka ostaju vidljivi), sa sljedećim redcima — svaki izostavljen kad njegov izvor ne odgovara ili nema što reći: upozorenje DHMZ-a riječima, broj zatvorenih prometnica s najbližom imenovanom ulicom, sljedeći polasci ZET-a na liniji zaslona, opažanje s Maksimira, i najbliža dežurna ljekarna. Kad ni jedan izvor trenutačno ne odgovara, ploča to iskreno kaže i upućuje na `/hitno`, koji istu sigurnosnu liniju iscrtava na poslužitelju pa ne ovisi o istom dohvatu podataka na uređaju.
+
+Ploča ne otvara sesiju, ne broji unatrag i ne javlja se u nijednu sobu — to je isti sigurnosni sloj koji `/hitno` već nudi na webu, samo dostupan jednim dodirom na samom zaslonu. Devedeset sekundi bez dodira ili tipke unutar ploče vraća zaslon na poziv za skeniranje; to je namjerno kratko, ne kao kazna nego zato da sljedeći prolaznik zatekne poziv na skeniranje, a ne tuđe čitanje. Bilo koji dodir ili tipka unutar ploče produljuje tih devedeset sekundi; `Natrag`, `Escape` ili taj tajmer je zatvaraju i vraćaju fokus na gumb.
 
 ## Sklopovlje (preporuka)
 
