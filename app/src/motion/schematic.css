@@ -145,37 +145,38 @@
   cursor: pointer;
 }
 
-/* --- The lightweight list (R-L2): the honest degrade of the canvas pair,
-   never a smaller or slower version of it. --- */
+/* --- The lightweight list (R-L2, R-F8): the honest degrade of the canvas
+   pair, never a smaller or slower version of it -- one row per route among
+   the fresh vehicles in frame (not the stops the canvas never loaded a
+   geometry file for, R-L4). Sibling margins throughout, never flex `gap`
+   (R-F4: a 2017 engine must lay this list out); the "catalogue geometry"
+   R-F8 asks for -- a mono label in --tone-label, the value in the body
+   tone, same as kiosk.ts's own .cat-row/.ess-row. --- */
 
 .schematic-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.schematic-stop {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+.schematic-route + .schematic-route {
+  margin-block-start: var(--sp-2);
 }
 
-.schematic-stop-name {
+.schematic-more {
   margin: 0;
-  font-weight: var(--weight-semi);
+  margin-block-start: var(--sp-2);
+  color: var(--tone-text-muted);
+}
+
+.schematic-route-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+  color: var(--tone-label, var(--tone-text-muted));
+}
+
+.schematic-route-value {
   color: var(--tone-text-primary);
-}
-
-.schematic-lines {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .schematic-empty {

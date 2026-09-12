@@ -6,6 +6,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
 import { cultureEvents, cultureEventsEmptyText } from '../../app/src/layers/kultura';
 import { delayWord, vehicleCount } from '../../app/src/layers/shared';
+import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-summary';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import { createMapSlots } from '../../app/src/map/map-slots';
@@ -123,8 +124,8 @@ describe('u-pokretu', () => {
     expect(options.lines[0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
     expect(options.ariaLabel).toContain('Karta');
     const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
-    expect(rows[0]).toContain('+90 s');
-    expect(rows[1]).toContain('−30 s');
+    expect(rows[0]).toContain('kasni 2 min');
+    expect(rows[1]).toContain('rani 1 min');
 
     // R-54: a second render reuses the same live map, moving the one container
     // into the new section instead of allocating another WebGL context.
@@ -249,18 +250,62 @@ describe('vehicleCount', () => {
 describe('delayWord', () => {
   // The single ±15 s on-time band u-pokretu.ts, kiosk.ts and
   // schematic-view.ts all call this for, so the three surfaces can never
-  // disagree about whether the same live route is running on time.
+  // disagree about whether the same live route is running on time. R-F8:
+  // raw seconds never appear anywhere on a screen -- the word is always in
+  // minutes, rounded to the nearest and never fewer than one once a route
+  // is off the band at all.
   const i18n = createDefaultI18n('hr');
   it('reads on time inside the ±15 s band, both boundaries inclusive', () => {
-    expect(delayWord(i18n, 0)).toBe('po redu');
-    expect(delayWord(i18n, 15)).toBe('po redu');
-    expect(delayWord(i18n, -15)).toBe('po redu');
+    expect(delayWord(i18n, 0)).toBe('na vrijeme');
+    expect(delayWord(i18n, 15)).toBe('na vrijeme');
+    expect(delayWord(i18n, -15)).toBe('na vrijeme');
   });
-  it('reads late past +15 s, with the seconds in the word', () => {
-    expect(delayWord(i18n, 16)).toBe('+16 s');
+  it('reads late past +15 s, in whole minutes rounded to the nearest, never fewer than one', () => {
+    expect(delayWord(i18n, 16)).toBe('kasni 1 min');
+    expect(delayWord(i18n, 90)).toBe('kasni 2 min');
+    expect(delayWord(i18n, 60)).toBe('kasni 1 min');
   });
-  it('reads early past -15 s, with the seconds made positive in the word', () => {
-    expect(delayWord(i18n, -16)).toBe('−16 s');
+  it('reads early past -15 s, the same way with the sign in the word instead of the number', () => {
+    expect(delayWord(i18n, -16)).toBe('rani 1 min');
+    expect(delayWord(i18n, -90)).toBe('rani 2 min');
+  });
+  it('speaks English too', () => {
+    const en = createDefaultI18n('en');
+    expect(delayWord(en, 0)).toBe('on time');
+    expect(delayWord(en, 90)).toBe('2 min late');
+    expect(delayWord(en, -90)).toBe('2 min early');
+  });
+});
+
+// --- route-summary.ts: the one helper both R-F8's lightweight list and the
+// essentials board's "Linije u blizini" row read (kiosk.ts, motion/
+// schematic-view.ts), so a route's count and delay word can never disagree
+// between the two surfaces. ------------------------------------------------
+describe('summariseRoutes', () => {
+  const i18n = createDefaultI18n('hr');
+  const veh = (routeId: string, label: string, type: number): RouteVehicle => ({ routeId, label, type });
+
+  it('groups by route id, counting the vehicles of each, trams before buses and then by route number as a person reads it (numeric, not lexicographic)', () => {
+    const rows = summariseRoutes(
+      [veh('11', '11', 0), veh('6', '6', 0), veh('6', '6', 0), veh('109', '109', 3)],
+      new Map([['6', 130], ['11', 0], ['109', -20]]),
+      i18n,
+    );
+    // Lexicographically '11' < '6'; numerically 6 < 11 -- proving the sort
+    // reads route numbers the way a person does, not as plain strings.
+    expect(rows.map((r) => r.routeId)).toEqual(['6', '11', '109']);
+    expect(rows[0]).toMatchObject({ routeId: '6', label: '6', type: 0, count: 2, word: 'kasni 2 min' });
+    expect(rows[1]).toMatchObject({ routeId: '11', count: 1, word: 'na vrijeme' });
+    expect(rows[2]).toMatchObject({ routeId: '109', type: 3, count: 1, word: 'rani 1 min' });
+  });
+
+  it('reads a route with no delay figure at all as on time, the same fallback the old stop list used', () => {
+    const rows = summariseRoutes([veh('6', '6', 0)], new Map(), i18n);
+    expect(rows[0].word).toBe('na vrijeme');
+  });
+
+  it('is empty when there are no vehicles', () => {
+    expect(summariseRoutes([], new Map(), i18n)).toEqual([]);
   });
 });
 

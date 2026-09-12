@@ -36,12 +36,12 @@ const i18n = createDefaultI18n('hr');
 describe('describeVehicle', () => {
   it('names the line, the direction as the terminus of the shape it rides, and the route median delay in the shared word', () => {
     const card = describeVehicle(i18n, net(), drawn({ id: 'v1', heading: { x: 1, y: 0 } }), new Map([['6', 40]]));
-    expect(card).toEqual({ line: '6 · Črnomerec-Sopot', direction: 'smjer Sopot', delay: 'kašnjenje linije: +40 s' });
+    expect(card).toEqual({ line: '6 · Črnomerec-Sopot', direction: 'smjer Sopot', delay: 'kašnjenje linije: kasni 1 min' });
   });
   it('reads "smjer nepoznat" at a standstill (heading null), whatever shape it is on', () => {
     const card = describeVehicle(i18n, net(), drawn({ id: 'v1', heading: null }), new Map([['6', 0]]));
     expect(card.direction).toBe('smjer nepoznat');
-    expect(card.delay).toBe('kašnjenje linije: po redu');
+    expect(card.delay).toBe('kašnjenje linije: na vrijeme');
   });
   it('falls back to a compass word when the heading is known but there is no shape terminus to name', () => {
     const free = describeVehicle(i18n, net(), drawn({ id: 'v1', onShape: null, heading: { x: 0, y: 1 } }), new Map());
@@ -55,7 +55,7 @@ describe('describeVehicle', () => {
   it('speaks English too', () => {
     const en = createDefaultI18n('en');
     const card = describeVehicle(en, net(), drawn({ id: 'v1', heading: { x: 1, y: 0 } }), new Map([['6', -40]]));
-    expect(card).toEqual({ line: '6 · Črnomerec-Sopot', direction: 'towards Sopot', delay: 'route delay: −40 s' });
+    expect(card).toEqual({ line: '6 · Črnomerec-Sopot', direction: 'towards Sopot', delay: 'route delay: 1 min early' });
   });
 });
 

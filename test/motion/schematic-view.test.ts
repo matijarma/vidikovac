@@ -5,8 +5,9 @@ import { toPlane } from '../../app/src/motion/geo';
 import type { Fix } from '../../app/src/motion/model';
 import type { Network, Shape, Stop } from '../../app/src/motion/network';
 import { cumulative } from '../../app/src/motion/polyline';
-import { HIT_RADIUS_CSS_PX, ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
+import { DEFAULT_CROP, HIT_RADIUS_CSS_PX, ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
 import { mountSchematicView } from '../../app/src/motion/schematic-view';
+import type { ModuleSnapshot } from '../../worker/feed/schema';
 
 function shapeOf(id: string, route: string, lonlat: [number, number][]): Shape {
   const pts = lonlat.map(([lon, lat]) => toPlane(lon, lat));
@@ -91,6 +92,7 @@ function mount(opts: {
   lightweight?: boolean;
   reducedMotion?: boolean;
   types?: ReadonlySet<number> | null;
+  crop?: { centre: { x: number; y: number }; radius: number };
   stubSize?: { w: number; h: number };
   cardIdleMs?: number;
 } = {}) {
@@ -115,6 +117,7 @@ function mount(opts: {
     i18n,
     net: opts.net === undefined ? testNetwork() : opts.net,
     types: opts.types,
+    crop: opts.crop,
     lightweight: opts.lightweight ?? false,
     reducedMotion: opts.reducedMotion ?? false,
     now: () => clock,
@@ -239,58 +242,112 @@ describe('mountSchematicView, canvas path', () => {
   });
 });
 
-describe('mountSchematicView, lightweight path (R-L2)', () => {
+// A vehicle inside the default crop, near Trg bana Jelačića -- reused across
+// the R-F8 lightweight-list tests below with a distinct route id and type
+// per call.
+function inCrop(id: string, routeId: string, type: number, jitter = 0): Fix {
+  return fix({ id, lon: 15.977 + jitter, lat: 45.813 + jitter, routeId, type });
+}
+
+function minimalSnapshot(status: ModuleSnapshot['status']): ModuleSnapshot {
+  return {
+    module: 'zet-rt', tier: 'open', status,
+    fetchedAt: new Date(NOW).toISOString(),
+    sourceUpdatedAt: new Date(NOW - 120_000).toISOString(),
+    attribution: { text: '', url: '', licence: '' },
+    items: [],
+  };
+}
+
+describe('mountSchematicView, lightweight path (R-F8: the lines in frame, not the stops)', () => {
   it('renders no canvas at all', () => {
-    const { root } = mount({ lightweight: true });
+    const { root } = mount({ lightweight: true, net: null });
     expect(root.querySelector('canvas')).toBeNull();
     expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull();
   });
 
-  it('lists the nearest stops with the lines calling at them, tram rows first, each with its route label and delay word', () => {
-    const { handle, root } = mount({ lightweight: true });
-    handle.update({ fixes: [], delays: new Map([['R-tram', 40], ['R-bus', -20]]) });
-    const stops = root.querySelectorAll('[data-testid=schematic-stop]');
-    expect(stops.length).toBe(2);
-    const tramStop = [...stops].find((s) => s.textContent?.includes('6'))!;
-    const line = tramStop.querySelector('[data-testid=schematic-line]')!;
-    expect(line.textContent).toContain('6');
-    // panels.delayLate's own template ("+{seconds} s"), the identical word
-    // u-pokretu.ts's routeDelays rendering and kiosk.ts's delayWord produce
-    // for this same field.
-    expect(line.textContent).toContain('+40 s');
+  it('shows "učitavanje podataka" before the first update(), never an empty or a route row (never a false zero)', () => {
+    const { root } = mount({ lightweight: true, net: null });
+    expect(root.querySelector('[data-testid=schematic-loading]')!.textContent).toBe('učitavanje podataka');
+    expect(root.querySelector('[data-testid=schematic-route]')).toBeNull();
+    expect(root.querySelector('[data-testid=schematic-empty]')).toBeNull();
   });
 
-  it('shows the same legend text as the canvas path -- same data, same legend, no apology -- on the once-a-second timer tick, never a frame request (R-F6)', () => {
-    const { handle, tick, root, hasScheduled } = mount({ lightweight: true });
-    handle.update({ fixes: [fix({ id: 'v1', lon: 15.977, lat: 45.813, routeId: 'R-tram' })] });
-    expect(hasScheduled()).toBe(false); // no requestAnimationFrame on this path, ever
-    tick(NOW);
-    const legend = root.querySelector('[data-testid=schematic-legend]')!;
-    expect(legend.textContent).toBe('1 od 1 praćenih vozila u kadru');
+  it('lists one row per route among the fresh, type-matching vehicles in the crop -- trams first, numeric route order, counts and delay words -- and drops a bus under a trams-only crop, never touching the network artefact (net: null, R-L4)', () => {
+    const { handle, root } = mount({ lightweight: true, net: null, types: new Set([ROUTE_TYPE_TRAM]) });
+    handle.update({
+      fixes: [
+        inCrop('t1', '6', ROUTE_TYPE_TRAM),
+        inCrop('t2', '6', ROUTE_TYPE_TRAM, 0.0001),
+        inCrop('t3', '11', ROUTE_TYPE_TRAM, 0.0002),
+        inCrop('b1', '109', ROUTE_TYPE_BUS), // filtered out by the trams-only crop
+      ],
+      delays: new Map([['6', 130], ['11', 0]]),
+    });
+    const rows = [...root.querySelectorAll('[data-testid=schematic-route]')];
+    expect(rows.length).toBe(2); // the bus never counts here
+    expect(rows[0].textContent).toContain('6');
+    expect(rows[0].textContent).toContain('2 vozila');
+    expect(rows[0].textContent).toContain('kasni 2 min');
+    expect(rows[1].textContent).toContain('11');
+    expect(rows[1].textContent).toContain('1 vozilo');
+    expect(rows[1].textContent).toContain('na vrijeme');
+    expect(rows.some((r) => r.textContent?.includes('109'))).toBe(false);
   });
 
-  it('drops a route type the caller filtered out of the list, exactly as the canvas would drop it from the route layer', () => {
-    const { handle, root } = mount({ lightweight: true, types: new Set([ROUTE_TYPE_TRAM]) });
-    handle.update({ fixes: [], delays: new Map([['R-tram', 0], ['R-bus', 0]]) });
-    const stops = root.querySelectorAll('[data-testid=schematic-stop]');
-    expect(stops.length).toBe(1);
-    expect(stops[0].textContent).toContain('6');
-    expect(stops[0].textContent).not.toContain('109');
+  it('includes the bus row after the trams under a whole-network crop (no type filter)', () => {
+    const { handle, root } = mount({ lightweight: true, net: null });
+    handle.update({
+      fixes: [inCrop('t1', '6', ROUTE_TYPE_TRAM), inCrop('b1', '109', ROUTE_TYPE_BUS, 0.0001)],
+      delays: new Map([['6', 0], ['109', 0]]),
+    });
+    const rows = [...root.querySelectorAll('[data-testid=schematic-route]')];
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('6'); // tram first
+    expect(rows[1].textContent).toContain('109'); // bus after it
   });
 
-  it('falls back to the honest empty state, never an apology, when no stop qualifies', () => {
-    const { handle, root } = mount({ lightweight: true, types: new Set([99]) });
-    handle.update({ fixes: [] });
+  it('renders the stale sentence -- the same words statusText renders elsewhere -- rather than the empty one, when the snapshot the caller passed is not live (R-F8, the honesty rule of R-X1)', () => {
+    const { handle, root } = mount({ lightweight: true, net: null });
+    handle.update({ fixes: [inCrop('t1', '6', ROUTE_TYPE_TRAM)], snapshot: minimalSnapshot('stale') });
+    expect(root.querySelector('[data-testid=schematic-route]')).toBeNull();
+    expect(root.querySelector('[data-testid=schematic-empty]')).toBeNull();
+    const status = root.querySelector('[data-testid=schematic-status]');
+    expect(status).not.toBeNull();
+    expect(status!.textContent).toContain('izvor trenutačno ne odgovara');
+
+    handle.update({ fixes: [], snapshot: minimalSnapshot('down') });
+    expect(root.querySelector('[data-testid=schematic-status]')!.textContent).toBe('izvor nedostupan');
+  });
+
+  it('falls back to the honest empty state, never an apology, when there is genuinely no vehicle in frame', () => {
+    const { handle, root } = mount({ lightweight: true, net: null, types: new Set([99]) });
+    handle.update({ fixes: [inCrop('t1', '6', ROUTE_TYPE_TRAM)] });
     const empty = root.querySelector('[data-testid=schematic-empty]');
     expect(empty).not.toBeNull();
     expect(empty!.textContent).toBe('Trenutačno nema stavki.');
     expect(root.querySelector('[data-testid=schematic-list]')!.textContent).not.toMatch(/nažalost|ažao|sorry/i);
   });
 
-  it('tolerates a null network (not yet loaded) with the honest empty state rather than throwing', () => {
+  it('caps the list at ten rows on a locked screen\'s own small crop, adding "još {n} linija" so the count and the list agree', () => {
     const { handle, root } = mount({ lightweight: true, net: null });
-    expect(() => handle.update({ fixes: [] })).not.toThrow();
-    expect(root.querySelector('[data-testid=schematic-empty]')).not.toBeNull();
+    const routeIds = Array.from({ length: 11 }, (_, i) => String(i + 1));
+    handle.update({ fixes: routeIds.map((id, i) => inCrop(`v${i}`, id, ROUTE_TYPE_TRAM, i * 0.00001)) });
+    const rows = [...root.querySelectorAll('[data-testid=schematic-route]')];
+    expect(rows).toHaveLength(10);
+    expect(rows[9].textContent).toContain('10'); // '11' is the one that overflows, not '2' (numeric order)
+    const more = root.querySelector('[data-testid=schematic-more]');
+    expect(more!.textContent).toBe('još 1 linija');
+  });
+
+  it('caps the list at twenty rows on the whole-network crop the dashboard and the kiosk\'s own unlocked layer share', () => {
+    const wideCrop = { centre: DEFAULT_CROP.centre, radius: 5_000 };
+    const { handle, root } = mount({ lightweight: true, net: null, crop: wideCrop });
+    const routeIds = Array.from({ length: 21 }, (_, i) => String(i + 1));
+    handle.update({ fixes: routeIds.map((id, i) => inCrop(`v${i}`, id, ROUTE_TYPE_TRAM, i * 0.00001)) });
+    const rows = root.querySelectorAll('[data-testid=schematic-route]');
+    expect(rows).toHaveLength(20);
+    expect(root.querySelector('[data-testid=schematic-more]')!.textContent).toBe('još 1 linija');
   });
 });
 
@@ -349,7 +406,7 @@ describe('mountSchematicView, the tap card (T9)', () => {
     expect(c.getAttribute('role')).toBe('dialog');
     expect(c.querySelector('[data-testid=vehicle-line]')!.textContent).toBe('R-tram');
     expect(c.querySelector('[data-testid=vehicle-direction]')!.textContent).toBe('smjer Jelačić plac');
-    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: +40 s');
+    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: kasni 1 min');
   });
 
   it('reads "smjer nepoznat" for a vehicle at a standstill', () => {
@@ -485,7 +542,7 @@ describe('mountSchematicView, the text path (R-F5)', () => {
     expect(listButtons(root)).toHaveLength(0); // nothing drawn yet, nothing listed
     handle.update({ fixes: TWO_IN_CROP, delays: new Map([['R-tram', 40]]) });
     expect(listButtons(root).map((b) => b.dataset.vehicle)).toEqual(['v1', 'v2']); // v3 is tracked but not in frame
-    expect(listButtons(root)[1].textContent).toBe('R-tram, smjer nepoznat, kašnjenje linije: +40 s');
+    expect(listButtons(root)[1].textContent).toBe('R-tram, smjer nepoznat, kašnjenje linije: kasni 1 min');
     expect(listButtons(root)[0].textContent).toBe('R-bus, smjer nepoznat, kašnjenje linije nepoznato');
     const before = listButtons(root);
     fire(NOW);
@@ -514,7 +571,7 @@ describe('mountSchematicView, the text path (R-F5)', () => {
     const heading = root.querySelector('#' + c.getAttribute('aria-labelledby'))!;
     expect(heading.tagName).toBe('H3');
     expect(heading.textContent).toBe('R-tram');
-    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: +40 s');
+    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: kasni 1 min');
     expect(document.activeElement).toBe(c);
     key(c, 'Escape');
     expect(c.hidden).toBe(true);

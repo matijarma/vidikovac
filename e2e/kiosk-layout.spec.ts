@@ -373,3 +373,91 @@ test.describe('the open screen at 1920 by 1080 (T12)', () => {
     await page.screenshot({ path: `${SHOTS_DIR}/kiosk-1080p-light-invitation.png`, fullPage: false });
   });
 });
+
+// --- F5 / R-P7: the essentials board must never need scrolling ------------
+// Found on production (12 September, kiosk-essentials-prod.png): no CAP
+// warning that evening, but a live closures row ("Zatvorene prometnice /
+// 38 zatvaranja / Petra i Tome Erdödyja") sat right above "Sljedeći
+// polasci", whose unbounded value ("101: po redu") and detail (every route
+// in the city, in raw seconds, wrapping line after line) alone filled the
+// rest of the 1080 px viewport and ran past it -- Maksimir and the
+// pharmacy row were pushed off, not merely scrolled to, since the capture
+// itself cuts off mid-route ("214: +112 s ·"). This reproduces that same
+// pair -- a real closure, a dozen routes inside the box -- and proves the
+// retitled "Linije u blizini" row is now a normal, bounded row (R-F8: at
+// most eight routes, one line) that coexists with its neighbour instead of
+// swallowing the rest of the screen.
+
+function essentialsVehiclePin(id: string, routeId: string) {
+  return {
+    id: `vehicle:${id}`, module: 'zet-rt', kind: 'vehicle', tier: 'open', title: routeId,
+    geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId, routeType: ROUTE_TYPE_TRAM },
+  };
+}
+
+function essentialsRouteSummary(routeId: string, medianDelaySeconds: number) {
+  return {
+    id: `route:${routeId}`, module: 'zet-rt', kind: 'vehicle', tier: 'open', title: `Linija ${routeId}`,
+    data: { routeId, routeShortName: routeId, medianDelaySeconds, vehicles: 1 },
+  };
+}
+
+const ATTR = { text: 'Izvor: test', url: 'https://example.test', licence: 'Otvorena dozvola' };
+
+/** The production pair (no CAP warning that evening; a real closure) plus
+ *  a dozen distinct routes inside the box on zet-rt -- the same load the
+ *  wall-of-text bug hit, not an easy case. */
+function essentialsStressModules(): unknown[] {
+  const routeIds = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  return [
+    { module: 'dhmz-cap', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR, items: [] },
+    { module: 'prometnice', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR, items: [{ id: 'c1', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Petra i Tome Erdödyja' }] },
+    {
+      module: 'zet-rt', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), sourceUpdatedAt: new Date().toISOString(),
+      attribution: {
+        text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669',
+        url: 'https://www.zet.hr/gtfs-rt-protobuf', licence: 'Otvorena dozvola',
+      },
+      items: [...routeIds.map((id) => essentialsVehiclePin(`v${id}`, id)), ...routeIds.map((id) => essentialsRouteSummary(id, 90))],
+    },
+  ];
+}
+
+async function stubTeaserModules(page: Page, modules: unknown[]): Promise<void> {
+  await page.route('**/api/teaser', async (route: Route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules }) });
+  });
+}
+
+test.describe('the essentials board never scrolls under the production load (F5 / R-P7)', () => {
+  for (const face of FACES) {
+    test(`${face} face: "Osnovno" fits the closures row and the fixed routes row above the safety strip, no internal scroll -- screenshot saved`, async ({ page, request }) => {
+      await stubTeaserModules(page, essentialsStressModules());
+      const { kioskUrl } = await provisionKiosk(request, APP_URL);
+      await openLockedKiosk(page, face, kioskUrl);
+
+      await page.getByTestId('kiosk-essentials-open').click();
+      const panel = page.getByTestId('kiosk-essentials');
+      await expect(panel).toBeVisible();
+
+      const rows = page.locator('[data-testid=kiosk-essentials-rows] [data-testid=ess-row]');
+      const count = await rows.count();
+      expect(count, `${face}: closures and the routes row both rendered`).toBe(2);
+      const strip = await box(page, '[data-testid=safety-strip]');
+      for (let i = 0; i < count; i++) {
+        const r = await rows.nth(i).boundingBox();
+        expect(r, `${face}: essentials row ${i} has a box`).not.toBeNull();
+        expect(r!.y + r!.height, `${face}: essentials row ${i} ends above the safety strip`).toBeLessThanOrEqual(strip.y);
+      }
+
+      const fit = await panel.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
+      expect(fit.scrollHeight - fit.clientHeight, `${face}: the essentials panel needs no internal scroll`).toBeLessThanOrEqual(1);
+
+      const rowsText = await page.locator('[data-testid=kiosk-essentials-rows]').innerText();
+      expect(rowsText, 'the row is retitled').toContain('Linije u blizini');
+      expect(rowsText, 'never a raw-seconds figure anywhere on the board').not.toMatch(/\d s\b/);
+
+      await page.screenshot({ path: `${SHOTS_DIR}/kiosk-1080p-essentials-${face}.png`, fullPage: false });
+    });
+  }
+});
