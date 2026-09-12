@@ -55,54 +55,56 @@
 
   --z-sticky: 20; --z-drawer-backdrop: 40; --z-drawer: 50; --z-toast: 100;
 
-  /* ── Layer 1 palettes: deep night blue and warm paper white, one accent. ── */
-  --palette-dark-canvas: #0b1020;
-  --palette-dark-canvas-deep: #070b18;
-  --palette-dark-surface-1: #121a30;
-  --palette-dark-surface-2: #1a2440;
-  --palette-dark-surface-3: #22304f;
-  --palette-dark-text-primary: #eef2fb;
-  --palette-dark-text-muted: #a9b4cc;
-  --palette-dark-text-subtle: #8e9ab5;
-  --palette-dark-accent: #7cd4ff;
-  --palette-dark-accent-deep: #4fb8ee;
-  --palette-dark-on-accent: #0b1020;
-  --palette-dark-warning: #f2b544;
-  --palette-dark-danger: #ff7a7a;
-  --palette-dark-success: #62d39a;
-  --palette-dark-border: rgba(169, 180, 204, 0.14);
-  --palette-dark-border-strong: rgba(169, 180, 204, 0.28);
-  --palette-dark-glass: rgba(18, 26, 48, 0.78);
-  --palette-dark-scrim: rgba(4, 7, 18, 0.66);
-  --palette-dark-glow: rgba(124, 212, 255, 0.28);
+  /* Layer 1 palettes: modrotisak — indigo cloth, cream print. Two faces of one
+     bolt: dark is indigo ground with cream ink, light is the same cloth turned
+     over. `label` is the one permitted third shade. */
+  --palette-dark-canvas: #16226b;
+  --palette-dark-canvas-deep: #0b1440;
+  --palette-dark-surface-1: #0f1a52;
+  --palette-dark-surface-2: #0b1440;
+  --palette-dark-surface-3: #1d2f8a;
+  --palette-dark-text-primary: #f2ead8;
+  --palette-dark-text-muted: #c3cdf5;
+  --palette-dark-text-subtle: #a3aed8;
+  --palette-dark-label: #9db4ff;
+  --palette-dark-accent: #f2ead8;
+  --palette-dark-accent-deep: #ffffff;
+  --palette-dark-on-accent: #16226b;
+  --palette-dark-warning: #f2c078;
+  --palette-dark-danger: #ff9d9d;
+  --palette-dark-success: #7fd6a8;
+  --palette-dark-border: rgba(242, 234, 216, 0.22);
+  --palette-dark-border-strong: rgba(242, 234, 216, 0.45);
+  --palette-dark-glass: rgba(15, 26, 82, 0.78);
+  --palette-dark-scrim: rgba(4, 8, 32, 0.62);
+  --palette-dark-glow: rgba(157, 180, 255, 0.35);
   --palette-dark-shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.3);
   --palette-dark-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
   --palette-dark-shadow-heavy: 0 24px 64px rgba(0, 0, 0, 0.6);
-  --palette-dark-gradient: radial-gradient(1200px 620px at 50% -12%, rgba(124, 212, 255, 0.08), transparent 62%);
 
-  --palette-light-canvas: #f7f3ea;
-  --palette-light-canvas-deep: #efe9dc;
-  --palette-light-surface-1: #fffdf8;
-  --palette-light-surface-2: #f1ece1;
-  --palette-light-surface-3: #e6dfd0;
-  --palette-light-text-primary: #14181f;
-  --palette-light-text-muted: #4d5566;
-  --palette-light-text-subtle: #5b6475;
-  --palette-light-accent: #005f8a;
-  --palette-light-accent-deep: #004a6c;
-  --palette-light-on-accent: #ffffff;
-  --palette-light-warning: #8a5a00;
-  --palette-light-danger: #b3261e;
-  --palette-light-success: #1b6f45;
-  --palette-light-border: rgba(20, 24, 31, 0.12);
-  --palette-light-border-strong: rgba(20, 24, 31, 0.2);
-  --palette-light-glass: rgba(255, 253, 248, 0.78);
-  --palette-light-scrim: rgba(20, 24, 31, 0.4);
-  --palette-light-glow: rgba(0, 95, 138, 0.18);
+  --palette-light-canvas: #f2ead8;
+  --palette-light-canvas-deep: #e9dfc6;
+  --palette-light-surface-1: #faf5e9;
+  --palette-light-surface-2: #e9dfc6;
+  --palette-light-surface-3: #ded2b2;
+  --palette-light-text-primary: #16226b;
+  --palette-light-text-muted: #4553a8;
+  --palette-light-text-subtle: #575f7d;
+  --palette-light-label: #3a49b0;
+  --palette-light-accent: #16226b;
+  --palette-light-accent-deep: #0b1440;
+  --palette-light-on-accent: #f2ead8;
+  --palette-light-warning: #8a5800;
+  --palette-light-danger: #b3271e;
+  --palette-light-success: #1e6f47;
+  --palette-light-border: rgba(22, 34, 107, 0.24);
+  --palette-light-border-strong: rgba(22, 34, 107, 0.5);
+  --palette-light-glass: rgba(250, 245, 233, 0.78);
+  --palette-light-scrim: rgba(22, 34, 107, 0.4);
+  --palette-light-glow: rgba(22, 34, 107, 0.25);
   --palette-light-shadow-soft: 0 2px 12px rgba(20, 24, 31, 0.08);
   --palette-light-shadow-md: 0 8px 24px rgba(20, 24, 31, 0.12);
   --palette-light-shadow-heavy: 0 16px 48px rgba(20, 24, 31, 0.18);
-  --palette-light-gradient: radial-gradient(1200px 620px at 50% -12%, rgba(0, 95, 138, 0.05), transparent 62%);
 }
 
 /* ── Layer 1 assignment: dark is the default (no-JS first paint) ─────── */
@@ -128,10 +130,10 @@
   --color-glass: var(--palette-dark-glass);
   --color-scrim: var(--palette-dark-scrim);
   --color-glow: var(--palette-dark-glow);
+  --color-label: var(--palette-dark-label);
   --shadow-soft: var(--palette-dark-shadow-soft);
   --shadow-md: var(--palette-dark-shadow-md);
   --shadow-heavy: var(--palette-dark-shadow-heavy);
-  --gradient-canvas: var(--palette-dark-gradient);
 }
 
 :root[data-theme-resolved='light'] {
@@ -155,10 +157,10 @@
   --color-glass: var(--palette-light-glass);
   --color-scrim: var(--palette-light-scrim);
   --color-glow: var(--palette-light-glow);
+  --color-label: var(--palette-light-label);
   --shadow-soft: var(--palette-light-shadow-soft);
   --shadow-md: var(--palette-light-shadow-md);
   --shadow-heavy: var(--palette-light-shadow-heavy);
-  --gradient-canvas: var(--palette-light-gradient);
 }
 
 /* No-JS fallback: before theme.ts has set the attribute, follow the OS. */
@@ -184,10 +186,10 @@
     --color-glass: var(--palette-light-glass);
     --color-scrim: var(--palette-light-scrim);
     --color-glow: var(--palette-light-glow);
+    --color-label: var(--palette-light-label);
     --shadow-soft: var(--palette-light-shadow-soft);
     --shadow-md: var(--palette-light-shadow-md);
     --shadow-heavy: var(--palette-light-shadow-heavy);
-    --gradient-canvas: var(--palette-light-gradient);
   }
 }
 
@@ -198,7 +200,15 @@
   --tone-surface-1: var(--color-surface-1);
   --tone-surface-2: var(--color-surface-2);
   --tone-surface-3: var(--color-surface-3);
-  --tone-surface-gradient: var(--gradient-canvas);
+
+  /* Catalogue numbers, quiet caps labels, footer links. The only third shade. */
+  --tone-label: var(--color-label);
+
+  /* A QR is a printed object, not a themed surface: cream paper and indigo ink
+     in both faces. Pinned to the palette so the pair can never be half
+     overridden — see the note in qr.css. */
+  --tone-qr-plate: var(--palette-light-canvas);
+  --tone-qr-ink: var(--palette-dark-canvas);
 
   --tone-text-primary: var(--color-text-primary);
   --tone-text-muted: var(--color-text-muted);

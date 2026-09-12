@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ScanOk } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -336,5 +338,202 @@ describe('camera region', () => {
     scanner().deps.onCancel?.();
     expect(region.hidden).toBe(true);
     expect(document.activeElement).toBe(button);
+  });
+});
+
+// Reproduces the review finding on scan.css:39-47 vs base.css:43-47: a bare
+// `.scan-input` (specificity 0,1,0) loses every contested longhand to the
+// generic `input[type='text'], select` reset in base.css (0,1,1) — border,
+// min-height, font-family and font-size all silently fall back to the base
+// rule's values regardless of file/import order, since there is no @layer,
+// !important or :where() anywhere in the codebase. This computes real CSS
+// specificity (a, b, c) from the selector text so the check keeps holding
+// for whatever selector shape the fix takes, not just today's exact string.
+//
+// Fix round 2 reproduces a second-order finding on the round-1 fix itself:
+// raising `.scan-input` to `input[type='text'].scan-input` (0,2,1) made it
+// EXACTLY TIE base.css's `input[type='text']:focus-visible` rule, also
+// (0,2,1) — and because scan.css loads after base.css on every built page,
+// the tie resolves in scan.css's favour. `.scan-input`'s old `border: 2px
+// solid var(--tone-stroke-strong)` shorthand set border-color, which then
+// silently beat the focus-visible rule's `border-color: var(--tone-focus-ring)`
+// on every keyboard focus. The fix drops border-color from `.scan-input`
+// entirely (border-width/border-style only) so the two rules never contest
+// the same property; the tests below assert that directly and, more
+// generally, that no property `.scan-input` declares overlaps any property
+// base.css's `:focus-visible` rule declares — robust to whatever `.scan-input`
+// or the focus-visible rule declare next, not just today's property list.
+describe('scan-input CSS specificity (regression: base.css must not win)', () => {
+  const RAW_BASE_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'base.css'), 'utf8');
+  const RAW_SCAN_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'scan.css'), 'utf8');
+  // Comment-stripped so a code comment's prose (this test's own included —
+  // it names the selectors it's checking for readability) can never be
+  // mistaken for the CSS it describes.
+  const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const BASE_CSS = stripComments(RAW_BASE_CSS);
+  const SCAN_CSS = stripComments(RAW_SCAN_CSS);
+
+  /** CSS specificity of one simple (combinator-free) selector, as (id, class-like, type-like). */
+  function specificity(selector: string): [number, number, number] {
+    let working = selector.trim();
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    working = working.replace(/::?(before|after|first-line|first-letter)\b/g, () => {
+      c += 1;
+      return ' ';
+    });
+    working = working.replace(/::[\w-]+/g, () => {
+      c += 1;
+      return ' ';
+    });
+    working = working.replace(/\[[^\]]*\]/g, () => {
+      b += 1;
+      return ' ';
+    });
+    working = working.replace(/#[\w-]+/g, () => {
+      a += 1;
+      return ' ';
+    });
+    working = working.replace(/\.[\w-]+/g, () => {
+      b += 1;
+      return ' ';
+    });
+    working = working.replace(/:[\w-]+(\([^)]*\))?/g, () => {
+      b += 1;
+      return ' ';
+    });
+    c += (working.match(/[a-zA-Z][\w-]*/g) ?? []).length;
+    return [a, b, c];
+  }
+
+  function cmp(x: [number, number, number], y: [number, number, number]): number {
+    for (let i = 0; i < 3; i += 1) {
+      if (x[i] !== y[i]) return x[i]! - y[i]!;
+    }
+    return 0;
+  }
+
+  /** The exact selector line that opens the `.scan-input` rule in scan.css. */
+  function scanInputSelector(): string {
+    const m = /^([^{}]*\.scan-input[^{}]*)\{/m.exec(SCAN_CSS);
+    if (!m) throw new Error('scan.css has no rule targeting .scan-input');
+    return m[1]!.trim();
+  }
+
+  /** The comma-branch of base.css's generic reset that itself matches `input`. */
+  function baseInputSelector(): string {
+    const m = /^input\[type='text'\][^{]*,\s*select\s*\{/m.exec(BASE_CSS);
+    if (!m) throw new Error("base.css has no `input[type='text'], select` reset — has the generic rule moved?");
+    return "input[type='text']";
+  }
+
+  /** The `{ ... }` body immediately following the given rule's selector line. */
+  function ruleBody(css: string, selectorLine: RegExp): string {
+    const m = selectorLine.exec(css);
+    if (!m) throw new Error(`no rule found for ${selectorLine}`);
+    const start = m.index;
+    return css.slice(start, css.indexOf('}', start) + 1);
+  }
+
+  it('neither the .scan-input rule nor the base input reset is wrapped in @layer, !important or :where() — specificity math alone decides the winner', () => {
+    // Scoped to the two contending rules, not the whole file: base.css does
+    // use !important elsewhere (e.g. .visually-hidden), which is unrelated
+    // to this cascade fight. If this ever fires on either rule, cascade
+    // layers/!important/:where() have entered and the plain specificity
+    // comparison below is no longer the whole story.
+    const scanRule = ruleBody(SCAN_CSS, /^([^{}]*\.scan-input[^{}]*)\{/m);
+    const baseRule = ruleBody(BASE_CSS, /^input\[type='text'\][^{]*,\s*select\s*\{/m);
+    for (const body of [scanRule, baseRule]) {
+      expect(body).not.toMatch(/!important/);
+    }
+    expect(BASE_CSS).not.toMatch(/@layer/);
+    expect(SCAN_CSS).not.toMatch(/@layer/);
+    expect(BASE_CSS).not.toMatch(/:where\(/);
+    expect(SCAN_CSS).not.toMatch(/:where\(/);
+  });
+
+  it("base.css's generic input reset really does carry (0,1,1)", () => {
+    expect(specificity(baseInputSelector())).toEqual([0, 1, 1]);
+  });
+
+  it('.scan-input rule out-specifies (or ties and follows) the base reset, so its declarations actually win', () => {
+    const scanSel = scanInputSelector();
+    const scanSpec = specificity(scanSel);
+    const baseSpec = specificity(baseInputSelector());
+    // scan.css is imported after base.css (app/src/entries/scan.ts), so an
+    // exact tie would still win on source order — but only a strictly higher
+    // specificity is robust to that import order ever changing.
+    expect(cmp(scanSpec, baseSpec), `.scan-input selector "${scanSel}" must out-specify "input[type='text']"`).toBeGreaterThan(0);
+  });
+
+  it('the contested longhands are set directly on the .scan-input rule, not left to the generic reset', () => {
+    const start = SCAN_CSS.indexOf(scanInputSelector());
+    const body = SCAN_CSS.slice(start, SCAN_CSS.indexOf('}', start) + 1);
+    expect(body).toMatch(/border-width:\s*2px/);
+    expect(body).toMatch(/border-style:\s*solid/);
+    expect(body).toMatch(/min-height:\s*3\.25rem/);
+    expect(body).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(body).toMatch(/font-size:\s*1\.75rem/);
+  });
+
+  /** The exact selector line that opens base.css's `input[type='text']:focus-visible` rule. */
+  function baseFocusVisibleSelector(): string {
+    const m = /^input\[type='text'\]:focus-visible\s*\{/m.exec(BASE_CSS);
+    if (!m) throw new Error("base.css has no `input[type='text']:focus-visible` rule — has it moved or been renamed?");
+    return "input[type='text']:focus-visible";
+  }
+
+  /** Property names (before the `:`) declared directly in a `{ ... }` rule body, longhand or shorthand. */
+  function declaredProperties(body: string): string[] {
+    const inner = body.slice(body.indexOf('{') + 1, body.lastIndexOf('}'));
+    return inner
+      .split(';')
+      .map((decl) => decl.split(':')[0]?.trim())
+      .filter((prop): prop is string => !!prop);
+  }
+
+  // A shorthand and a longhand it covers are the same contested property for
+  // cascade purposes — `border: ...` sets border-color exactly as much as
+  // `border-color: ...` does. Expanding to the sub-properties each shorthand
+  // used in this codebase's input styling actually sets is what makes the
+  // overlap check below catch the shorthand-vs-longhand shape of this bug,
+  // not just an exact string match on the property name.
+  const SHORTHAND_EXPANSIONS: Record<string, string[]> = {
+    border: ['border-width', 'border-style', 'border-color'],
+    font: ['font-style', 'font-variant', 'font-weight', 'font-stretch', 'font-size', 'line-height', 'font-family'],
+  };
+
+  /** Declared properties, with any shorthand expanded to the longhands it sets. */
+  function effectiveProperties(body: string): Set<string> {
+    const out = new Set<string>();
+    for (const prop of declaredProperties(body)) {
+      for (const expanded of SHORTHAND_EXPANSIONS[prop] ?? [prop]) out.add(expanded);
+    }
+    return out;
+  }
+
+  it("base.css's :focus-visible rule really does carry (0,2,1), tying .scan-input's (0,2,1)", () => {
+    const focusSpec = specificity(baseFocusVisibleSelector());
+    expect(focusSpec).toEqual([0, 2, 1]);
+    expect(cmp(focusSpec, specificity(scanInputSelector()))).toBe(0);
+  });
+
+  it('.scan-input does not declare border-color (longhand or the `border` shorthand) — it must never contest the tied :focus-visible rule for that property', () => {
+    const start = SCAN_CSS.indexOf(scanInputSelector());
+    const body = SCAN_CSS.slice(start, SCAN_CSS.indexOf('}', start) + 1);
+    const props = declaredProperties(body);
+    expect(props).not.toContain('border-color');
+    expect(props).not.toContain('border'); // the shorthand implies a border-color sub-value too
+  });
+
+  it('no property .scan-input declares (shorthand expanded) overlaps a property the tied :focus-visible rule declares (the general form of the regression)', () => {
+    const scanBody = ruleBody(SCAN_CSS, /^([^{}]*\.scan-input[^{}]*)\{/m);
+    const focusBody = ruleBody(BASE_CSS, /^input\[type='text'\]:focus-visible\s*\{/m);
+    const scanProps = effectiveProperties(scanBody);
+    const focusProps = [...effectiveProperties(focusBody)];
+    expect(focusProps.length).toBeGreaterThan(0); // sanity: the extraction actually found the rule's declarations
+    const overlap = focusProps.filter((p) => scanProps.has(p));
+    expect(overlap, `.scan-input and the tied (0,2,1) :focus-visible rule both declare: ${overlap.join(', ')}`).toEqual([]);
   });
 });

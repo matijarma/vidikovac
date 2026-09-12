@@ -2,10 +2,10 @@
 // the CAP-warning or closure line shape only has to happen once: grad-sada,
 // sigurnost and zrak-i-nebo all show a warning line; sigurnost and u-pokretu
 // both show a closure line, sigurnost's alone adding the traffic direction.
-import type { FeedItem } from '../../../worker/feed/schema';
+import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
-import { dataText } from '../panels/panel';
+import { dataNumber, dataText } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
 
 export interface CapWarningRowOptions {
@@ -35,4 +35,18 @@ export function closureRow(c: FeedItem, i18n: I18n, options: ClosureRowOptions =
     : '';
   const until = escapeHtml(i18n.t('panels.until', { time: zagrebDateTime(c.until) }));
   return `<strong>${escapeHtml(c.title)}</strong><span class="panel-sub"> ${type}${direction} · ${until}</span>`;
+}
+
+/**
+ * Vehicles moving now, from either shape of a zet-rt snapshot: the teaser's
+ * reduced shape (one summary item, id 'vozila', carrying the count in
+ * data.vehicles) or the full session shape (one pin per moving vehicle, id
+ * prefixed 'vehicle:', counted directly). `null` when there is no snapshot
+ * yet — distinct from the panorama's honest zero.
+ */
+export function vehicleCount(snapshot: ModuleSnapshot | undefined): number | null {
+  if (!snapshot) return null;
+  const teaser = snapshot.items.find((item) => item.id === 'vozila');
+  if (teaser) return dataNumber(teaser, 'vehicles');
+  return snapshot.items.filter((item) => item.id.startsWith('vehicle:')).length;
 }

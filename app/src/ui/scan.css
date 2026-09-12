@@ -21,7 +21,7 @@
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
 }
 .scan { display: grid; gap: var(--sp-4); }
-.scan-title { font-size: var(--text-2xl); }
+.scan-title { font-size: 2rem; }
 .scan-intro { color: var(--tone-text-muted); }
 
 .scan-error {
@@ -36,17 +36,62 @@
 
 .scan-form { display: grid; gap: var(--sp-2); }
 .scan-label { font-weight: var(--weight-medium); }
-.scan-input {
+/* input[type='text'].scan-input, not bare .scan-input: base.css's generic
+   `input[type='text'], select` reset is (0,1,1) and would otherwise beat a
+   single-class selector's (0,1,0) on every contested longhand (border-width,
+   min-height, font-family, font-size) regardless of import order — there is
+   no @layer/!important/:where() in this codebase to arbitrate it instead.
+   `input[type='text'].scan-input` is (0,2,1), which wins unconditionally.
+
+   border-width/border-style only — NOT the `border` shorthand, and NOT
+   border-color: base.css's own `input[type='text']:focus-visible` rule is
+   ALSO (0,2,1) (an attribute selector plus a pseudo-class weighs the same as
+   an attribute selector plus a class), an exact tie that this stylesheet,
+   loading after base.css on every built page, would win. A border-color
+   declared here would therefore silently beat the focus-visible rule's
+   `border-color: var(--tone-focus-ring)` on every keyboard focus, leaving the
+   border-glow the only visible focus cue. Leaving border-color unset means
+   this rule never contests that property at all, so base.css's own two rules
+   (the unfocused default vs. :focus-visible) resolve it between themselves —
+   the default's border-color is already --tone-stroke-strong, so the
+   unfocused appearance is unchanged. */
+input[type='text'].scan-input {
   width: 100%;
   min-height: 3.25rem;
+  border-width: 2px;
+  border-style: solid;
+  background: var(--tone-surface-1);
   font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  letter-spacing: 0.18em;
+  font-size: 1.75rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .scan-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
-.scan-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
-.scan-actions .btn, .scan-actions .btn-ghost { flex: 1 1 12rem; }
+
+/* Submit and camera share one row, an "ili" hairline strip between them; with
+   no camera (platform can't decode) the row collapses to the one control. */
+.scan-actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.scan-actions--single { grid-template-columns: 1fr; }
+.scan-actions .btn, .scan-actions .btn-ghost { min-height: 3.25rem; }
+.scan-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--tone-text-subtle);
+  font-size: var(--text-sm);
+}
+.scan-or::before, .scan-or::after {
+  content: '';
+  width: 1.5rem;
+  height: 1px;
+  background: var(--tone-stroke);
+}
 .scan-status { min-height: 1.5rem; color: var(--tone-text-muted); font-size: var(--text-sm); }
 
 .scan-camera { border-radius: var(--r-lg); overflow: hidden; }
@@ -60,7 +105,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-3xl);
   letter-spacing: 0.22em;
-  color: var(--tone-text-brand);
+  color: var(--tone-text-primary);
 }
 .scan-confirm-label { font-weight: var(--weight-medium); }
 .scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }

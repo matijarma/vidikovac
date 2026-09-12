@@ -13,7 +13,7 @@ function palette(theme: 'dark' | 'light', name: string): string {
 }
 
 const SURFACES = ['canvas', 'surface-1', 'surface-2'];
-const TEXTS = ['text-primary', 'text-muted', 'text-subtle', 'accent', 'warning', 'danger', 'success'];
+const TEXTS = ['text-primary', 'text-muted', 'text-subtle', 'accent', 'warning', 'danger', 'success', 'label'];
 
 describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.5:1', (theme) => {
   for (const text of TEXTS) {

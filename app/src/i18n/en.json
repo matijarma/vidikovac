@@ -96,6 +96,7 @@
     "title": "Unlock a view of Zagreb",
     "intro": "Scan the QR code on the screen or type the code below. Ten minutes from a screen, five from another person's phone.",
     "scanButton": "Scan with the camera",
+    "or": "or",
     "scanDialogTitle": "Scan the QR code",
     "codeLabel": "Code from the screen",
     "codeHint": "Eight characters, e.g. ABCD-EFGH. The letters I, L and O do not exist: type 1 or 0.",
@@ -156,7 +157,12 @@
     "participants_one": "{count} device",
     "participants_other": "{count} devices",
     "tabsLabel": "Layers",
-    "openTier": "The safety layer stays open at /hitno."
+    "openTier": "The safety layer stays open at /hitno.",
+    "legendMeander": "FIG. 1 — SESSION MEANDER · EMPTIES BY {time}",
+    "remainingFine": "· {time} left",
+    "panoramaAlt": "Zagreb panorama: {count} ZET vehicles moving",
+    "panoramaAltLoading": "Zagreb panorama: loading data",
+    "documentTitle": "{app} · {layer}"
   },
   "kiosk": {
     "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
@@ -182,7 +188,22 @@
     "teaserAir": "Air",
     "teaserSoon": "Coming in the next stage.",
     "tapHint": "Tap for full screen",
-    "sources": "Sources"
+    "sources": "Sources",
+    "legendPanorama": "FIG. 1 — ZAGREB PANORAMA: MEDVEDNICA AND THE CITY · ONE DOT ON THE TRACK = ONE ZET VEHICLE · {count} MOVING, {time}",
+    "legendPanoramaLoading": "FIG. 1 — ZAGREB PANORAMA · LOADING DATA",
+    "legendQr": "FIG. 2 — PRINT FOR THE CAMERA",
+    "legendMeander": "FIG. 3 — CODE MEANDER · EMPTIES EVERY 30 s, THEN A NEW CODE IS ISSUED",
+    "safetyLabel": "SAFETY — OPEN TO EVERYONE",
+    "catalogueWeather": "MAKSIMIR NOW",
+    "catalogueVehicles": "ZET ON THE MOVE",
+    "catalogueClosures": "ROADS",
+    "unitVehicles_one": "vehicle", "unitVehicles_other": "vehicles",
+    "unitClosed_one": "closed", "unitClosed_other": "closed",
+    "essentialsOpen": "Essentials",
+    "essentialsTitle": "Essentials, no scan needed",
+    "essentialsHint": "This screen answers even without a phone. Scanning unlocks the whole city on your own device.",
+    "essentialsClose": "Back",
+    "essentialsEmpty": "The source isn't answering right now. The safety layer runs at /hitno."
   },
   "export": {
     "copied": "Copied with the source line.",

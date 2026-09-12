@@ -100,6 +100,7 @@
     "title": "Otključaj pogled na Zagreb",
     "intro": "Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.",
     "scanButton": "Skeniraj kamerom",
+    "or": "ili",
     "scanDialogTitle": "Skeniraj QR kod",
     "codeLabel": "Kod sa zaslona",
     "codeHint": "Osam znakova, npr. ABCD-EFGH. Slova I, L i O ne postoje: upiši 1 ili 0.",
@@ -161,7 +162,12 @@
     "participants_few": "{count} uređaja",
     "participants_other": "{count} uređaja",
     "tabsLabel": "Slojevi",
-    "openTier": "Sigurnosni sloj ostaje otvoren na /hitno."
+    "openTier": "Sigurnosni sloj ostaje otvoren na /hitno.",
+    "legendMeander": "SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO {time}",
+    "remainingFine": "· još {time}",
+    "panoramaAlt": "Zagrebačka panorama: {count} vozila ZET-a u pokretu",
+    "panoramaAltLoading": "Zagrebačka panorama: učitavanje podataka",
+    "documentTitle": "{app} · {layer}"
   },
   "kiosk": {
     "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
@@ -187,7 +193,22 @@
     "teaserAir": "Zrak",
     "teaserSoon": "Uskoro u sljedećoj fazi.",
     "tapHint": "Dodirni za cijeli zaslon",
-    "sources": "Izvori"
+    "sources": "Izvori",
+    "legendPanorama": "SL. 1 — ZAGREBAČKA PANORAMA: MEDVEDNICA I GRAD · NA PRUZI JEDNA TOČKA = JEDNO VOZILO ZET-a · {count} U POKRETU, {time}",
+    "legendPanoramaLoading": "SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA",
+    "legendQr": "SL. 2 — OTISAK ZA KAMERU",
+    "legendMeander": "SL. 3 — MEANDAR KODA · ISPRAZNI SE SVAKIH 30 s, PA SE IZDA NOVI KOD",
+    "safetyLabel": "SIGURNOST — OTVORENO SVIMA",
+    "catalogueWeather": "MAKSIMIR SADA",
+    "catalogueVehicles": "ZET U POKRETU",
+    "catalogueClosures": "PROMETNICE",
+    "unitVehicles_one": "vozilo", "unitVehicles_few": "vozila", "unitVehicles_other": "vozila",
+    "unitClosed_one": "zatvorena", "unitClosed_few": "zatvorene", "unitClosed_other": "zatvorenih",
+    "essentialsOpen": "Osnovno",
+    "essentialsTitle": "Osnovno, bez skeniranja",
+    "essentialsHint": "Ovaj zaslon odgovara i bez telefona. Skeniranje otključava cijeli grad na tvom uređaju.",
+    "essentialsClose": "Natrag",
+    "essentialsEmpty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno."
   },
   "export": {
     "copied": "Kopirano s navodom izvora.",

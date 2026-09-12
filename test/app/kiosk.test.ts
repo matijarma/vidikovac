@@ -4,8 +4,9 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
-import { mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
-import { LJEKARNE } from '../../worker/hitno/ljekarne';
+import { catalogueRows, ESSENTIALS_IDLE_MS, essentialsRows, mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
+import { zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
+import { LJEKARNE, LJEKARNE_SOURCE } from '../../worker/hitno/ljekarne';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const attr = (text: string) => ({ text, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
@@ -20,6 +21,10 @@ const MODULES: ModuleSnapshot[] = [
   snap('emsc', [{ id: 'q1', module: 'emsc', kind: 'quake', tier: 'open', title: 'Potres magnitude 1,6', at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } }]),
   snap('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', link: 'https://vijesti.hrt.hr/clanak' }]),
   snap('ckan-geo', [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Ljekarna Centar, Ilica 1', data: { category: 'ljekarne', duty: 'da' } }]),
+  // The teaser's reduced zet-rt shape (registry.teaserSubset): one summary
+  // item carrying the live count, the same shape vehicleCount() and the
+  // panorama/catalogue read.
+  snap('zet-rt', [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '156 vozila u pokretu', data: { vehicles: 156 } }]),
 ];
 
 // Every code in a real batch is distinct; the rotation merges batches by code
@@ -33,7 +38,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }> } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -41,7 +46,13 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
   const storage = { getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
   const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => 'live' as const, close: vi.fn() };
   let handlers: Parameters<NonNullable<Parameters<typeof mountKiosk>[1]['createBeacon']>>[0] | null = null;
-  const timers: (() => void)[] = [];
+  // Every setInterval registration keeps its own delay and its own cleared
+  // flag (the handle IS the entry, so clearInterval just flags it) instead of
+  // one flat list of callbacks: the essentials idle timer (ESSENTIALS_IDLE_MS)
+  // shares this same injected pair with the meander tick and the 20s
+  // rotation, and its arm/rearm/cancel behaviour has to be provable on its
+  // own, by delay, rather than firing every registered timer at once.
+  const timers: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const requestFullscreen = vi.fn(async () => {});
   const requestWakeLock = vi.fn(async () => {});
   let sessionExpired: (() => void) | null = null;
@@ -56,6 +67,7 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     now: () => NOW,
     codeBase: 'https://zagreb.aningfilm.hr',
     reducedMotion: opts.reducedMotion ?? false,
+    lightweight: opts.lightweight ?? false,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })),
     fetchData,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -64,8 +76,8 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
       sessions.push(s);
       return s as ReturnType<NonNullable<Parameters<typeof mountKiosk>[1]['createSession']>>;
     },
-    setInterval: (fn: () => void) => { timers.push(fn); return timers.length; },
-    clearInterval: () => {},
+    setInterval: (fn: () => void, ms: number) => { const t = { fn, ms, cleared: false }; timers.push(t); return t; },
+    clearInterval: (h: unknown) => { (h as { cleared: boolean }).cleared = true; },
     requestFullscreen,
     requestWakeLock,
   });
@@ -75,6 +87,11 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     expire: () => sessionExpired?.(),
     view: (layer: string) => sessionView?.(layer),
     runOut: () => { secondsLeft = 0; },
+    // The latest still-armed (not cleared) registration at a given delay —
+    // used to reach the essentials idle timer (ESSENTIALS_IDLE_MS)
+    // specifically, distinct from the meander tick and the 20s rotation that
+    // share this same injected setInterval/clearInterval pair.
+    fire: (ms: number) => [...timers].reverse().find((t) => t.ms === ms && !t.cleared),
   };
 }
 const flush = async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
@@ -167,20 +184,45 @@ describe('mountKiosk', () => {
     await flush();
     expect(TEASER_ROTATE_MS).toBe(20_000);
     expect(text(root.querySelector('[data-testid=teaser-card]'))).toContain('Vrijeme sada');
-    timers.forEach((tick) => tick());
+    timers.forEach((t) => { if (!t.cleared) t.fn(); });
     expect(text(root.querySelector('[data-testid=teaser-card]'))).toContain('Posljednji potres');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('žuto upozorenje');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('Ljekarna Centar, Ilica 1');
   });
-  it('the ring animates by default and becomes static segments under reduced motion', () => {
+  it('never splits a live news headline into a two-tone headline: only the invitation card gets that treatment', async () => {
+    // A realistic HRT headline with Croatian date notation ("11. rujna"),
+    // which contains a bare ". " that is not a sentence boundary.
+    const headline = 'Gradska skupština 11. rujna donijela odluku o prometnicama.';
+    const newsModules = MODULES.map((m) =>
+      m.module === 'hrt-news' ? { ...m, items: [{ ...m.items[0]!, title: headline }] } : m,
+    );
+    const { root, timers } = mount({ fetchTeaser: async () => ({ modules: newsModules }) });
+    await flush();
+    // Rotate weather -> quake -> closures -> news (three rotations).
+    timers.forEach((t) => { if (!t.cleared) t.fn(); });
+    timers.forEach((t) => { if (!t.cleared) t.fn(); });
+    timers.forEach((t) => { if (!t.cleared) t.fn(); });
+    const card = root.querySelector('[data-testid=teaser-card]')!;
+    expect(text(card)).toContain(headline);
+    expect(card.querySelector('.teaser-tagline')).toBeNull();
+  });
+  it('the meander is a canvas that sweeps by default, on a fresh slot', () => {
     const plain = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
     plain.handlers.onCodes(batch(NOW), NOW);
-    expect(plain.root.querySelector('[data-testid=code-ring]')?.getAttribute('data-motion')).toBe('sweep');
+    const ring = plain.root.querySelector('[data-testid=code-ring]')!;
+    expect(ring.tagName).toBe('CANVAS');
+    expect(ring.getAttribute('data-motion')).toBe('sweep');
+    // A fresh slot has just started (elapsed 0), so the full interval remains.
+    expect(ring.getAttribute('data-pct')).toBe('1.00');
+  });
+  it('quantises to ten steps under reduced motion, still on a canvas', () => {
     const still = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), reducedMotion: true });
-    still.handlers.onCodes(batch(NOW), NOW);
+    // The batch's first slot started 7s ago: 7/30 of the interval elapsed.
+    still.handlers.onCodes(batch(NOW - 7_000), NOW);
     const ring = still.root.querySelector('[data-testid=code-ring]')!;
+    expect(ring.tagName).toBe('CANVAS');
     expect(ring.getAttribute('data-motion')).toBe('segments');
-    expect(ring.querySelectorAll('[data-testid=ring-segment]')).toHaveLength(6);
+    expect(ring.getAttribute('data-pct')).toBe('0.70');
   });
   it('asks for fullscreen and a wake lock on the first tap only', () => {
     const { root, requestFullscreen, requestWakeLock } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
@@ -216,7 +258,7 @@ describe('mountKiosk', () => {
     k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
     await flush();
     k.fetchData.mockClear();
-    k.timers.forEach((tick) => tick());
+    k.timers.forEach((t) => { if (!t.cleared) t.fn(); });
     await flush();
     // R-55: the big screen is the one nobody touches, so it has to move itself.
     expect(k.fetchData).toHaveBeenCalled();
@@ -230,7 +272,7 @@ describe('mountKiosk', () => {
     await flush();
     // The room socket dies (Wi-Fi blip) so no 'expired' ever arrives (R-53).
     k.runOut();
-    k.timers.forEach((tick) => tick());
+    k.timers.forEach((t) => { if (!t.cleared) t.fn(); });
     await flush();
     expect(k.root.querySelector('[data-testid=kiosk]')?.getAttribute('data-mode')).toBe('teaser');
     expect(k.root.querySelector('[data-testid=session-label]')).toBeNull();
@@ -275,8 +317,283 @@ describe('mountKiosk', () => {
     await flush();
     expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(false);
     fail = false;
-    timers.forEach((tick) => tick());
+    timers.forEach((t) => { if (!t.cleared) t.fn(); });
     await flush();
     expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(true);
+  });
+  it('the header shows the clock and the Croatian weekday date', () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    expect(text(root.querySelector('[data-testid=kiosk-date]'))).toBe(zagrebWeekdayDate(NOW));
+    expect(text(root.querySelector('[data-testid=kiosk-clock]'))).toBe(zagrebTime(NOW));
+  });
+  it("the panorama's caption and its aria-label are identical and both name the live vehicle count", async () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    await flush();
+    const canvas = root.querySelector('[data-testid=panorama]')!;
+    const legend = root.querySelector('[data-testid=panorama-legend]')!;
+    expect(text(legend)).toContain('156 U POKRETU');
+    expect(text(legend)).toContain('14:32');
+    expect(canvas.getAttribute('aria-label')).toBe(text(legend));
+  });
+  it('shows the honest loading legend, with no count, before the first teaser poll resolves', () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    expect(text(root.querySelector('[data-testid=panorama-legend]'))).toBe('SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA');
+  });
+  it("the catalogue renders three rows with the fixture's values", async () => {
+    const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    await flush();
+    const catalogue = text(root.querySelector('[data-testid=kiosk-catalogue]'));
+    expect(catalogue).toContain('MAKSIMIR SADA');
+    expect(catalogue).toContain('21 °C');
+    expect(catalogue).toContain('vedro');
+    expect(catalogue).toContain('ZET U POKRETU');
+    expect(catalogue).toContain('156');
+    expect(catalogue).toContain('vozila');
+    expect(catalogue).toContain('PROMETNICE');
+    expect(catalogue).toContain('zatvorena');
+  });
+  it('lightweight mode renders no canvas anywhere in the kiosk, and the meander bar carries the quantised width', () => {
+    const { root, handlers } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true });
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    // 9s of a 30s slot elapsed -> 70% of the interval remains, quantised to
+    // ten steps even though reducedMotion was never set (R-L1/R-L2: lightweight
+    // alone forces quantisation).
+    handlers.onCodes(batch(NOW - 9_000), NOW);
+    const bar = root.querySelector<HTMLElement>('[data-testid=code-ring]')!;
+    expect(bar.tagName).toBe('DIV');
+    expect(bar.style.width).toBe('70%');
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+
+  describe('the essentials view (R-P7 / M3b: a locked kiosk answers without a phone)', () => {
+    it('carries the essentials-open button on a locked kiosk, and hides it the moment a session goes live', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      const btn = k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!;
+      expect(btn).not.toBeNull();
+      expect(btn.hidden).toBe(false);
+      k.handlers.onCodes(batch(NOW), NOW);
+      k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+      await flush();
+      expect(k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.hidden).toBe(true);
+      // A programmatic click can't be stopped by `hidden` alone (a real
+      // screen never dispatches one on a hidden button, but the guard in
+      // openEssentials() has to be the real reason, not just CSS): the panel
+      // stays shut even so, because the driver's own layer already shows
+      // more than this (R-P7).
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      expect(k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!.hidden).toBe(true);
+    });
+
+    it('clicking it reveals the panel, hides the stage, focuses the heading, and shows the rows with no raw brace in any attribution', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      const panel = k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
+      const stage = k.root.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!;
+      expect(panel.hidden).toBe(false);
+      expect(stage.hidden).toBe(true);
+      expect(document.activeElement?.getAttribute('id')).toBe('ess-title');
+      const rows = text(k.root.querySelector('[data-testid=kiosk-essentials-rows]'));
+      expect(rows).toContain('žuto upozorenje');
+      expect(rows).toContain('Grmljavina');
+      expect(rows).toContain('1 zatvaranje');
+      expect(rows).toContain('Grada Vukovara');
+      expect(rows).toContain('21 °C');
+      const attrs = [...k.root.querySelectorAll('[data-testid=kiosk-essentials-rows] .ess-attr')];
+      expect(attrs.length).toBeGreaterThan(0);
+      expect(attrs.every((el) => !(el.textContent ?? '').includes('{'))).toBe(true);
+    });
+
+    it('Escape closes the panel, restores the stage and returns focus to the open button', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      const btn = k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!;
+      btn.click();
+      const panel = k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
+      panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(panel.hidden).toBe(true);
+      expect(k.root.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!.hidden).toBe(false);
+      expect(document.activeElement).toBe(btn);
+    });
+
+    it('the close button also closes it', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-close]')!.click();
+      expect(k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!.hidden).toBe(true);
+    });
+
+    it('advancing the injected idle timer by 90 s closes the panel on its own', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      expect(ESSENTIALS_IDLE_MS).toBe(90_000);
+      const idle = k.fire(ESSENTIALS_IDLE_MS)!;
+      idle.fn();
+      expect(k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!.hidden).toBe(true);
+      expect(k.root.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!.hidden).toBe(false);
+    });
+
+    it('a pointerdown inside the panel cancels the ninety-second clock and arms a fresh one, postponing the close', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      const panel = k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
+      const firstIdle = k.fire(ESSENTIALS_IDLE_MS)!;
+      // Standing in at 80s of a 90s clock: the touch has to cancel that clock
+      // outright, not merely be ignored by it.
+      panel.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      expect(firstIdle.cleared).toBe(true);
+      expect(panel.hidden).toBe(false);
+      const secondIdle = k.fire(ESSENTIALS_IDLE_MS)!;
+      expect(secondIdle).not.toBe(firstIdle);
+      secondIdle.fn();
+      expect(panel.hidden).toBe(true);
+    });
+
+    it('a keydown inside the panel also rearms the idle clock, but Escape closes instead of rearming', async () => {
+      const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      const panel = k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
+      const firstIdle = k.fire(ESSENTIALS_IDLE_MS)!;
+      panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(firstIdle.cleared).toBe(true);
+      expect(panel.hidden).toBe(false);
+    });
+
+    it('with every module down, the panel renders exactly one row: the honest sentence', async () => {
+      const down = (module: ModuleId): ModuleSnapshot => ({
+        module, tier: 'open', status: 'down', fetchedAt: new Date(NOW).toISOString(), attribution: attr(''), items: [],
+      });
+      const k = mount({
+        stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }),
+        fetchTeaser: async () => ({ modules: (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down) }),
+      });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      const rowEls = k.root.querySelectorAll('[data-testid=kiosk-essentials-rows] [data-testid=ess-row]');
+      expect(rowEls).toHaveLength(1);
+      expect(text(k.root.querySelector('[data-testid=kiosk-essentials-rows]'))).toBe('Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno.');
+    });
+  });
+});
+
+describe('catalogueRows', () => {
+  const i18n = createDefaultI18n('hr');
+  it('returns Maksimir, ZET and Prometnice with the fixture values and Croatian plural units', () => {
+    const rows = catalogueRows(MODULES, i18n);
+    expect(rows.map((r) => r.label)).toEqual(['MAKSIMIR SADA', 'ZET U POKRETU', 'PROMETNICE']);
+    expect(rows[0]!.value).toBe('21 °C');
+    expect(rows[0]!.unit).toBe('vedro');
+    expect(rows[1]!.value).toBe('156');
+    expect(rows[1]!.unit).toBe('vozila');
+    expect(rows[2]!.value).toBe('1');
+    expect(rows[2]!.unit).toBe('zatvorena'); // count 1 -> Croatian "one" category
+  });
+  it('shows an honest loading state for closures when the prometnice module has not loaded, never a claimed zero', () => {
+    const rows = catalogueRows(MODULES.filter((m) => m.module !== 'prometnice'), i18n);
+    const row = rows.find((r) => r.id === 'closures')!;
+    // Mirrors the weather row two lines up and the vehicles row: an absent
+    // snapshot is "loading", not a rendered "0".
+    expect(row.value).toBe(i18n.t('status.loading'));
+    expect(row.unit).toBe('');
+  });
+});
+
+describe('essentialsRows (R-P7 / M3b)', () => {
+  const i18n = createDefaultI18n('hr');
+  it('builds the CAP warning, the closure count with its nearest street, and the Maksimir observation from the fixture, each with a filled attribution and no raw brace', () => {
+    const rows = essentialsRows(MODULES, i18n, NOW);
+    // The fixture's zet-rt teaser subset carries only the vehicle count, no
+    // per-route rows, so 'departures' is legitimately absent here (skipped
+    // outright, not shown empty) — a dedicated test below covers it once a
+    // route row is present.
+    expect(rows.map((r) => r.id)).toEqual(['cap', 'closures', 'weather', 'pharmacy']);
+    const cap = rows.find((r) => r.id === 'cap')!;
+    expect(cap.label).toBe('Upozorenja');
+    expect(cap.value).toBe('žuto upozorenje');
+    expect(cap.detail).toBe('Grmljavina');
+    const closures = rows.find((r) => r.id === 'closures')!;
+    expect(closures.label).toBe('Zatvorene prometnice');
+    expect(closures.value).toBe('1 zatvaranje');
+    expect(closures.detail).toBe('Grada Vukovara');
+    const weather = rows.find((r) => r.id === 'weather')!;
+    expect(weather.label).toBe('MAKSIMIR SADA');
+    expect(weather.value).toBe('21 °C');
+    expect(weather.detail).toBe('vedro');
+    const pharmacy = rows.find((r) => r.id === 'pharmacy')!;
+    expect(pharmacy.value).toBe('Ljekarna Centar, Ilica 1');
+    expect(rows.every((r) => !(r.attribution ?? '').includes('{'))).toBe(true);
+  });
+
+  it('fills a templated attribution from the snapshot and the item, leaving no raw brace behind', () => {
+    const templated = MODULES.map((m) =>
+      m.module === 'dhmz-cap' ? { ...m, attribution: { ...m.attribution, text: 'Izvor: {naslov}, {vrijeme}' } } : m,
+    );
+    const cap = essentialsRows(templated, i18n, NOW).find((r) => r.id === 'cap')!;
+    expect(cap.attribution).toContain('Grmljavina');
+    expect(cap.attribution).not.toContain('{');
+  });
+
+  it('shows the per-route delay rows in words once zet-rt carries them: the first route is the headline value, the rest join the detail line', () => {
+    const withRoutes = MODULES.map((m) =>
+      m.module === 'zet-rt'
+        ? snap('zet-rt', [
+            ...m.items,
+            { id: 'route:12', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 150, vehicles: 3 } },
+            { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 6', data: { routeId: '6', routeShortName: '6', medianDelaySeconds: -10, vehicles: 1 } },
+          ])
+        : m,
+    );
+    const departures = essentialsRows(withRoutes, i18n, NOW).find((r) => r.id === 'departures')!;
+    expect(departures.label).toBe('Sljedeći polasci');
+    expect(departures.value).toBe('12: +150 s');
+    expect(departures.detail).toBe('6: po redu');
+  });
+
+  it('classifies a route delay on the same ±15s on-time band u-pokretu.ts already uses for the identical medianDelaySeconds field (app/src/layers/u-pokretu.ts routeDelays rendering), so the two views of the same live number never disagree', () => {
+    const withRoutes = MODULES.map((m) =>
+      m.module === 'zet-rt'
+        ? snap('zet-rt', [
+            ...m.items,
+            { id: 'route:12', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 20, vehicles: 3 } },
+          ])
+        : m,
+    );
+    const departures = essentialsRows(withRoutes, i18n, NOW).find((r) => r.id === 'departures')!;
+    // +20s sits outside u-pokretu.ts's ±15s band, so this must read "late",
+    // not "po redu" the way a ±30s band (this file's former threshold) would.
+    expect(departures.value).toBe('12: +20 s');
+  });
+
+  it('falls back to the curated on-duty pharmacy, attributed to LJEKARNE_SOURCE, when a live ckan-geo snapshot has no ljekarne-tagged item — the real-world case, since ckan-geo never tags one (see the comment on the LJEKARNE import in kiosk.ts)', () => {
+    const withoutTag = MODULES.map((m) =>
+      m.module === 'ckan-geo'
+        ? snap('ckan-geo', [{ id: 'd1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Zborno mjesto Ribnjak', data: { category: 'okupljalista' } }])
+        : m,
+    );
+    const pharmacy = essentialsRows(withoutTag, i18n, NOW).find((r) => r.id === 'pharmacy')!;
+    expect(pharmacy.value).toBe(LJEKARNE[0]!.label);
+    expect(pharmacy.attribution).toBe(LJEKARNE_SOURCE.text);
+  });
+
+  it('skips a row outright when its module is down or has nothing to say, rather than an empty placeholder', () => {
+    const noWarning = MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', []) : m));
+    expect(essentialsRows(noWarning, i18n, NOW).some((r) => r.id === 'cap')).toBe(false);
+    const closuresDown = MODULES.map((m) => (m.module === 'prometnice' ? { ...m, status: 'down' as const } : m));
+    expect(essentialsRows(closuresDown, i18n, NOW).some((r) => r.id === 'closures')).toBe(false);
+  });
+
+  it('renders exactly one row, the honest sentence, when every module is down — or simply absent', () => {
+    const down = (module: ModuleId): ModuleSnapshot => ({
+      module, tier: 'open', status: 'down', fetchedAt: new Date(NOW).toISOString(), attribution: attr(''), items: [],
+    });
+    const allDown = (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down);
+    const expected = [{ id: 'empty', label: '', value: i18n.t('kiosk.essentialsEmpty') }];
+    expect(essentialsRows(allDown, i18n, NOW)).toEqual(expected);
+    expect(essentialsRows([], i18n, NOW)).toEqual(expected);
   });
 });

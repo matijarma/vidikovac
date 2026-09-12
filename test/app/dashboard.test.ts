@@ -76,7 +76,7 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
@@ -91,6 +91,7 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
     label: 'Kavana Velebit',
     onCopy: opts.onCopy,
     mapFactory: opts.mapFactory as never,
+    lightweight: opts.lightweight ?? false,
     setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
     clearInterval: () => { ticks.length = 0; },
   });
@@ -148,13 +149,36 @@ describe('layer switcher', () => {
   });
 });
 
+describe('the document title (R-M1: /d has no other h1)', () => {
+  it('is a visually-hidden, unfocusable-by-tab h1 naming the app and the active layer', () => {
+    const { root } = mount();
+    const title = root.querySelector<HTMLElement>('[data-testid=dash-title]')!;
+    expect(title.tagName).toBe('H1');
+    expect(title.parentElement).toBe(root.querySelector('.dash-head'));
+    expect(root.querySelector('.dash-head')?.firstElementChild).toBe(title);
+    expect(title.classList.contains('visually-hidden')).toBe(true);
+    expect(title.tabIndex).toBe(-1);
+    expect(text(title)).toBe('Vidikovac · Grad sada');
+  });
+  it('changes when a tab is chosen', () => {
+    const { root } = mount();
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+    tabs[1]!.click();
+    expect(text(root.querySelector('[data-testid=dash-title]'))).toBe('Vidikovac · U pokretu');
+  });
+  it('receives focus on join, in place of the layer heading', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(document.activeElement).toBe(root.querySelector('[data-testid=dash-title]'));
+  });
+});
+
 describe('unlock, countdown and announcements', () => {
-  it('announces the end time politely and moves focus to the layer heading', () => {
+  it('announces the end time politely', () => {
     const { root, session } = mount();
     session.join();
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
     expect(root.querySelector('[data-testid=announce-polite]')?.getAttribute('role')).toBe('status');
-    expect(document.activeElement).toBe(root.querySelector('#layer-title-grad-sada'));
     const label = root.querySelector<HTMLElement>('[data-testid=session-label]')!;
     expect(text(label)).toBe('Otključano · Kavana Velebit · do 14:42');
     // The same expiry the screen carries, to the millisecond (R-52).
@@ -180,6 +204,77 @@ describe('unlock, countdown and announcements', () => {
     const alert = root.querySelector('[data-testid=announce-assertive]')!;
     expect(alert.getAttribute('role')).toBe('alert');
     expect(text(alert)).toBe('Još dvadeset sekundi.');
+  });
+});
+
+describe('the panorama and the session meander (M4)', () => {
+  it('shows the fine minutes:seconds line beside the promoted countdown after join', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(text(root.querySelector('[data-testid=countdown-fine]'))).toBe('· još 10:00');
+  });
+  it('names the expiry time in the meander legend', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(text(root.querySelector('[data-testid=meander-legend]'))).toBe('SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO 14:42');
+  });
+  it('gives the panorama an img role and a non-empty label', () => {
+    const { root } = mount();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.getAttribute('role')).toBe('img');
+    expect(panorama.getAttribute('aria-label')).not.toBe('');
+    expect(panorama.tagName).toBe('CANVAS');
+  });
+  // Fix round 1: a returning user whose stored layer never fetches zet-rt
+  // (e.g. 'vijesti') must not have the panorama claim zero vehicles — it
+  // must say the count is unknown, exactly like kiosk.ts's own panorama
+  // distinguishes "no snapshot yet" from "snapshot says zero".
+  it('names the panorama "loading data", never a false zero, on a layer that never fetches zet-rt', async () => {
+    sessionStorage.setItem(LAYER_STORAGE_KEY, 'vijesti');
+    const { root, session } = mount();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    // True even before join: the very first render() paints before any
+    // fetch has resolved, so this must never read as a real zero either.
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: učitavanje podataka');
+    session.join();
+    await flush();
+    // Still unknown after the layer's own refresh() lands: 'vijesti' only
+    // ever fetches hrt-news, never zet-rt, for the whole session.
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: učitavanje podataka');
+  });
+  it('reports an honest zero once a zet-rt snapshot has actually loaded', async () => {
+    // Default layer is grad-sada, whose module list includes zet-rt.
+    const { root, session } = mount();
+    session.join();
+    await flush();
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.getAttribute('aria-label')).toBe('Zagrebačka panorama: 0 vozila ZET-a u pokretu');
+  });
+  it('renders no canvas anywhere in lightweight mode, and the meander bar carries the quantised width', () => {
+    const { root, session } = mount({ lightweight: true });
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    const panorama = root.querySelector('[data-testid=panorama]')!;
+    expect(panorama.tagName).toBe('DIV');
+    expect(panorama.getAttribute('role')).toBe('img');
+    session.join();
+    // A fresh 10-minute join is a full meander; the bar is still a plain DIV.
+    const bar = root.querySelector<HTMLElement>('[data-testid=session-ring]')!;
+    expect(bar.tagName).toBe('DIV');
+    expect(bar.style.width).toBe('100%');
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+  it('"sakrij odbrojavanje" also hides the fine line and the whole meander figure, recorded on the root dataset', () => {
+    const { root, session, handle } = mount();
+    session.join();
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
+    toggle.click();
+    expect(handle.element.dataset.countdown).toBe('hidden');
+    expect(root.querySelector<HTMLElement>('[data-testid=countdown-fine]')!.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>('.dash-meander')!.hidden).toBe(true);
+    toggle.click();
+    expect(handle.element.dataset.countdown).toBe('shown');
+    expect(root.querySelector<HTMLElement>('[data-testid=countdown-fine]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('.dash-meander')!.hidden).toBe(false);
   });
 });
 

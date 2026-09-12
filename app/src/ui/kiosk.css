@@ -1,38 +1,226 @@
-/* Prozor: no touch, readable across a room. Body >= 40 px and headline 72 px at
-   1080p come from container-height units, so the same file serves a 1080p
-   landscape screen and a portrait totem. */
+/* Prozor: the gallery sheet. Laid out against a 1920px design width; every
+   size below is calc(var(--kiosk-scale) * Npx), where --kiosk-scale is a
+   JS-computed multiplier (applyScale() in ui/canvas.ts, called from
+   kiosk.ts) written once to the .kiosk root from its own measured width.
+   That is R-L3's whole point: no @container rule anywhere in this file, so
+   the same layout serves a 2016 browser and a 4K TV alike. */
 .kiosk-body { margin: 0; overflow: hidden; }
-.kiosk { container-type: size; container-name: kiosk; block-size: 100dvh; display: grid; grid-template-rows: 1fr auto; font-size: clamp(24px, 3.7cqh, 48px); }
-.kiosk-stage { display: grid; gap: 2cqh; padding: 3cqh 3cqw; align-items: center; }
-.teaser-title { font-size: 6.7cqh; line-height: 1.05; margin: 0 0 1cqh; font-family: var(--font-display, 'Space Grotesk', system-ui, sans-serif); }
-.teaser-body { margin: 0; }
-.teaser-attr { font-size: 2.2cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+
+.kiosk {
+  --kiosk-scale: 1;
+  display: flex;
+  flex-direction: column;
+  block-size: 100dvh;
+  overflow: hidden;
+  font-family: var(--font-body);
+  color: var(--tone-text-primary);
+  background: var(--tone-surface-canvas);
+}
+
+.kiosk-alert { margin: 0; flex: none; padding: calc(var(--kiosk-scale) * 20px) calc(var(--kiosk-scale) * 80px); font-size: calc(var(--kiosk-scale) * 24px); }
+.kiosk-alert[hidden] { display: none; }
+
+/* ── Header: wordmark + tagline, date + clock, a 2px rule beneath ────── */
+.kiosk-head {
+  flex: none;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--kiosk-scale) * 24px);
+  padding: calc(var(--kiosk-scale) * 40px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 24px);
+  border-block-end: 2px solid var(--tone-text-primary);
+}
+.kiosk-wordmark {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--kiosk-scale) * 24px);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: calc(var(--kiosk-scale) * 38px);
+}
+.kiosk-tagline { font-family: var(--font-body); font-weight: 400; letter-spacing: 0; font-size: calc(var(--kiosk-scale) * 22px); color: var(--tone-text-muted); }
+.kiosk-when { margin: 0; display: flex; align-items: baseline; gap: calc(var(--kiosk-scale) * 28px); }
+.kiosk-date { font-size: calc(var(--kiosk-scale) * 22px); color: var(--tone-text-muted); }
+.kiosk-clock { font-family: var(--font-mono); font-weight: 500; font-size: calc(var(--kiosk-scale) * 38px); font-variant-numeric: tabular-nums; }
+
+/* ── Shared figure/legend look: the panorama and the meander both carry a
+   mono, tracked, muted caption (design.md §2: "legenda … jedino mjesto za
+   duhovitost"). ─────────────────────────────────────────────────────── */
+.kiosk-fig { margin: 0; }
+.legend { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.04em; color: var(--tone-text-muted); }
+
+/* ── Panorama band: canvas full width at 264px (88px once a session or T's
+   live map owns the stage); its lightweight twin is a plain 2px rule
+   (R-L2) — no canvas, no apology, the legend still says the count. ───── */
+.kiosk-panorama { flex: none; }
+.kiosk-panorama .panorama,
+.kiosk-panorama .panorama-rule { display: block; inline-size: 100%; }
+.kiosk-panorama .panorama { block-size: calc(var(--kiosk-scale) * 264px); }
+.kiosk-panorama .panorama-rule { block-size: 2px; background: var(--tone-text-primary); }
+[data-mode='unlocked'] .kiosk-panorama .panorama,
+[data-mode='unlocked'] .kiosk-panorama .panorama-rule,
+.kiosk:has(.kiosk-live:not(:empty)) .kiosk-panorama .panorama,
+.kiosk:has(.kiosk-live:not(:empty)) .kiosk-panorama .panorama-rule {
+  block-size: calc(var(--kiosk-scale) * 88px);
+}
+.kiosk-panorama .legend { margin-block-start: calc(var(--kiosk-scale) * 10px); padding-inline: calc(var(--kiosk-scale) * 80px); }
+
+/* ── Stage: the two-column gallery sheet ──────────────────────────────── */
+.kiosk-stage {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+  display: grid;
+  grid-template-columns: 1fr calc(var(--kiosk-scale) * 560px);
+  gap: calc(var(--kiosk-scale) * 64px);
+  padding: calc(var(--kiosk-scale) * 30px) calc(var(--kiosk-scale) * 80px) 0;
+}
+.kiosk-teaser { display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; }
+/* T's live map lands here in wave 2 (R-P1); until then it stays empty and
+   takes no space, so the headline sits where the mockup has it. */
+.kiosk-live:empty { display: none; }
+
 .teaser-card { opacity: 0; transition: opacity 600ms ease; }
 .teaser-card.is-in { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .teaser-card { transition: none; opacity: 1; } }
+.teaser-kicker { margin: 0 0 calc(var(--kiosk-scale) * 8px); font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.06em; color: var(--tone-label); }
+.teaser-title { margin: 0; font-family: var(--font-display); font-weight: 700; line-height: 1.06; letter-spacing: -0.02em; font-size: calc(var(--kiosk-scale) * 68px); }
+.teaser-tagline { color: var(--tone-label); }
+.teaser-attr { margin-block-start: calc(var(--kiosk-scale) * 12px); font-size: calc(var(--kiosk-scale) * 19px); color: var(--tone-text-muted); }
 
-.kiosk-code { display: grid; justify-items: center; gap: 1cqh; }
-.kiosk-qr { inline-size: 28cqh; block-size: 28cqh; }
-.kiosk-qr .qr svg { inline-size: 100%; block-size: 100%; }
-.kiosk-code-value { font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 7cqh; letter-spacing: 0.12em; margin: 0; }
-.code-dash { opacity: 0.5; padding-inline: 0.2em; }
-.kiosk-code-label, .kiosk-code-hint { margin: 0; font-size: 2.4cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+/* ── Meander (design.md §3.2): the 30s code countdown. Canvas by default;
+   the lightweight twin is a track + a bar whose width is the same
+   quantised percent, no canvas, no transition (R-L2). ─────────────────── */
+.kiosk-meander { margin-block-start: calc(var(--kiosk-scale) * 30px); }
+.kiosk-meander .meander { display: block; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 72px); }
+.kiosk-meander .meander-track { position: relative; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 24px); background: var(--tone-stroke); }
+.kiosk-meander .meander-bar { position: absolute; inset-block: 0; inset-inline-start: 0; background: var(--tone-text-primary); }
+.kiosk-meander .legend { margin-block-start: calc(var(--kiosk-scale) * 12px); }
 
-.code-ring { position: relative; inline-size: 30cqh; block-size: 1.2cqh; display: flex; gap: 0.4cqh; }
-.ring-sweep { display: block; inline-size: 100%; background: var(--tone-accent, #7cd4ff); transform-origin: left; animation: ring-sweep 30s linear infinite; }
-@keyframes ring-sweep { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-.ring-segment { flex: 1; background: var(--tone-border, color-mix(in oklab, CanvasText 25%, transparent)); }
-.ring-segment[data-on='true'] { background: var(--tone-accent, #7cd4ff); }
-[data-motion='segments'] .ring-sweep { display: none; }
+/* ── Catalogue: 01/02/03, a CSS counter (never the string itself) ────── */
+.kiosk-catalogue {
+  counter-reset: cat;
+  margin-block-start: auto;
+  display: flex;
+  gap: calc(var(--kiosk-scale) * 60px);
+  align-items: flex-end;
+  padding-block: calc(var(--kiosk-scale) * 24px) calc(var(--kiosk-scale) * 32px);
+  border-block-start: 2px solid var(--tone-text-primary);
+}
+.cat-row { counter-increment: cat; }
+.cat-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.08em; color: var(--tone-label); }
+.cat-label::before { content: counter(cat, decimal-leading-zero) ' · '; }
+.cat-value { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 48px); white-space: nowrap; }
+.cat-unit { font-weight: 500; font-size: calc(var(--kiosk-scale) * 30px); color: var(--tone-text-muted); }
 
-.kiosk-safety { display: flex; gap: 3cqw; padding: 1.5cqh 3cqw; font-size: 2.6cqh; border-block-start: 2px solid var(--tone-border, color-mix(in oklab, CanvasText 20%, transparent)); }
-.corner-qr { position: absolute; inset-block-end: 10cqh; inset-inline-end: 3cqw; inline-size: 12cqh; }
-.kiosk-alert[hidden] { display: none; }
-.kiosk-alert { margin: 0; padding: 2cqh 3cqw; font-size: 3cqh; }
+/* ── Code card ─────────────────────────────────────────────────────────── */
+.kiosk-code { display: flex; flex-direction: column; justify-content: flex-start; padding-block-start: calc(var(--kiosk-scale) * 6px); }
+.code-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--kiosk-scale) * 18px);
+  border: calc(var(--kiosk-scale) * 4px) solid var(--tone-text-primary);
+  background: var(--tone-surface-1);
+  padding: calc(var(--kiosk-scale) * 30px);
+}
+.kiosk-qr { inline-size: calc(var(--kiosk-scale) * 228px); block-size: calc(var(--kiosk-scale) * 228px); }
+.kiosk-qr .qr { width: 100%; height: 100%; max-width: none; border-radius: 0; padding: calc(var(--kiosk-scale) * 14px); }
+.kiosk-qr .qr svg { width: 100%; height: 100%; }
+.kiosk-code-value { margin: 0; font-family: var(--font-mono); font-weight: 500; font-size: calc(var(--kiosk-scale) * 52px); letter-spacing: 0.14em; font-variant-numeric: tabular-nums; }
+.code-dash { opacity: 0.45; padding-inline: 0.2em; }
+.kiosk-code-hint { font-size: calc(var(--kiosk-scale) * 18px); text-align: center; }
+.kiosk-code-hint .hint-emphasis { color: var(--tone-text-primary); }
 
-@container kiosk (min-aspect-ratio: 16/9) { .kiosk-stage { grid-template-columns: 3fr 2fr; } }
-@container kiosk (max-aspect-ratio: 1/1) { .kiosk-stage { grid-template-rows: 1fr auto; justify-items: center; text-align: center; } }
+/* ── Essentials view (R-P7 / M3b): a locked kiosk answers without a phone.
+   A sibling of .kiosk-stage, in the same flow position — once .kiosk-stage
+   is [hidden] this simply takes its place, so the header and the safety
+   strip above and below it never move and stay visible while someone reads.
+   Row geometry is the M3 catalogue at a larger step: it is meant to be read
+   from a few steps back, like a departure board. ─────────────────────── */
+.kiosk-essentials {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: calc(var(--kiosk-scale) * 32px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 40px);
+}
+.kiosk-essentials > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: calc(var(--kiosk-scale) * 32px);
+  margin-block-end: calc(var(--kiosk-scale) * 28px);
+  padding-block-end: calc(var(--kiosk-scale) * 24px);
+  border-block-end: 2px solid var(--tone-text-primary);
+}
+.kiosk-essentials h2 { flex: 1; min-inline-size: calc(var(--kiosk-scale) * 320px); font-size: calc(var(--kiosk-scale) * 44px); }
+.kiosk-essentials header .legend { flex-basis: 100%; margin-block-start: calc(var(--kiosk-scale) * 10px); }
+.kiosk-essentials-close {
+  flex: none;
+  border: 2px solid var(--tone-text-primary);
+  min-block-size: calc(var(--kiosk-scale) * 44px);
+  padding-inline: calc(var(--kiosk-scale) * 28px);
+  font: inherit;
+  font-weight: 700;
+  font-size: calc(var(--kiosk-scale) * 22px);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  cursor: pointer;
+}
+.ess-rows { display: flex; flex-direction: column; gap: calc(var(--kiosk-scale) * 28px); }
+.ess-row { padding-block-start: calc(var(--kiosk-scale) * 22px); border-block-start: 2px solid var(--tone-stroke); }
+.ess-row:first-child { padding-block-start: 0; border-block-start: none; }
+.ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 24px); letter-spacing: 0.06em; color: var(--tone-label); }
+.ess-value { margin: calc(var(--kiosk-scale) * 8px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 56px); line-height: 1.08; }
+.ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); }
+.ess-attr { margin: calc(var(--kiosk-scale) * 10px) 0 0; font-size: calc(var(--kiosk-scale) * 17px); color: var(--tone-text-subtle); }
+
+/* ── Safety strip ──────────────────────────────────────────────────────── */
+.kiosk-safety {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--kiosk-scale) * 44px);
+  padding: calc(var(--kiosk-scale) * 28px) calc(var(--kiosk-scale) * 80px);
+  font-size: calc(var(--kiosk-scale) * 26px);
+  background: var(--tone-surface-2);
+  color: var(--tone-text-primary);
+}
+/* The only other interactive control on a locked kiosk besides the /hitno
+   pill (M3b): a 44px target at scale 1, gone outright once a session is
+   live rather than merely dimmed — the driver's layer is already the full
+   thing (R-P7). */
+.kiosk-essentials-open {
+  flex: none;
+  border: 2px solid var(--tone-text-primary);
+  min-block-size: calc(var(--kiosk-scale) * 44px);
+  padding-inline: calc(var(--kiosk-scale) * 24px);
+  font: inherit;
+  font-weight: 700;
+  font-size: calc(var(--kiosk-scale) * 23px);
+  background: var(--tone-surface-1);
+  color: var(--tone-text-primary);
+  cursor: pointer;
+}
+.strip-label { font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.08em; color: var(--tone-label); }
+.strip-hitno {
+  margin-inline-start: auto;
+  border-radius: 999px;
+  padding: calc(var(--kiosk-scale) * 9px) calc(var(--kiosk-scale) * 24px);
+  font-size: calc(var(--kiosk-scale) * 23px);
+  font-weight: 700;
+  text-decoration: none;
+  background: var(--tone-action-brand);
+  color: var(--tone-action-brand-fg);
+}
+.strip-hitno:hover { background: var(--tone-action-brand-hover); }
+
+.corner-qr { position: absolute; inset-block-end: calc(var(--kiosk-scale) * 40px); inset-inline-end: calc(var(--kiosk-scale) * 80px); inline-size: calc(var(--kiosk-scale) * 120px); }
 /* The one line an unlocked screen carries besides the layer itself. */
-.kiosk-session { margin: 0; font-size: 2.6cqh; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+.kiosk-session { margin: 0; font-size: calc(var(--kiosk-scale) * 26px); color: var(--tone-text-muted); }
+
 [data-mode='unlocked'] .kiosk-teaser, [data-mode='unlocked'] .kiosk-code { display: none; }
-[data-mode='unlocked'] .kiosk-stage { grid-template-columns: 1fr; position: relative; }
+[data-mode='unlocked'] .kiosk-stage { grid-template-columns: 1fr; }

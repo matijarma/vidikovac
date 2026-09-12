@@ -17,10 +17,10 @@ import { SEVERITY_WORDS, isActiveWarning, type HitnoData, type HitnoPanel } from
 export const LIVE_WINDOW_MS = 5 * 60 * 1000;
 
 const STYLE = `
-:root{color-scheme:dark light;--bg:#0b1020;--fg:#e8ecf5;--muted:#9aa5bf;--accent:#7cd4ff;
---line:rgba(232,236,245,.16);--card:#121a30;--amber:#f5b942;--red:#ff7b7b;--ok:#7fe0a8}
-@media (prefers-color-scheme:light){:root{--bg:#f7f3ea;--fg:#14181f;--muted:#5a6172;
---accent:#005f8a;--line:rgba(20,24,31,.16);--card:#fffdf8;--amber:#8a5a00;--red:#b3261e;--ok:#1d6b3f}}
+:root{color-scheme:dark light;--bg:#16226b;--fg:#f2ead8;--muted:#c3cdf5;--accent:#9db4ff;
+--line:rgba(242,234,216,.22);--card:#0f1a52;--amber:#f2c078;--red:#ff9d9d;--ok:#7fd6a8}
+@media (prefers-color-scheme:light){:root{--bg:#f2ead8;--fg:#16226b;--muted:#4553a8;
+--accent:#3a49b0;--line:rgba(22,34,107,.24);--card:#faf5e9;--amber:#8a5800;--red:#b3271e;--ok:#1e6f47}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);
 font:1.125rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -336,8 +336,8 @@ export function renderTooManyRequests(): Response {
   const html = `<!doctype html>
 <html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Previše zahtjeva · Hitno</title>
-<style>body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 system-ui,sans-serif;background:#0b1020;color:#e8ecf5}
-@media (prefers-color-scheme:light){body{background:#f7f3ea;color:#14181f}}main{max-width:36rem;margin:0 auto}</style></head>
+<style>body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 system-ui,sans-serif;background:#16226b;color:#f2ead8}
+@media (prefers-color-scheme:light){body{background:#f2ead8;color:#16226b}}main{max-width:36rem;margin:0 auto}</style></head>
 <body><main><h1>Previše zahtjeva</h1><p>S ove mreže stiglo je više od 120 zahtjeva u minuti. Pokušaj ponovno za minutu.</p>
 <p>U hitnom slučaju nazovi <a href="tel:112">112</a>.</p></main></body></html>
 `;

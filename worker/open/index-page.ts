@@ -21,8 +21,8 @@ export function cadenceWords(ttl: number): string {
 }
 
 const STYLE = `
-:root{color-scheme:dark light;--bg:#0b1020;--fg:#e8ecf5;--muted:#9aa5bf;--accent:#7cd4ff;--line:rgba(232,236,245,.16);--card:#121a30}
-@media (prefers-color-scheme:light){:root{--bg:#f7f3ea;--fg:#14181f;--muted:#5a6172;--accent:#005f8a;--line:rgba(20,24,31,.16);--card:#fffdf8}}
+:root{color-scheme:dark light;--bg:#16226b;--fg:#f2ead8;--muted:#c3cdf5;--accent:#9db4ff;--line:rgba(242,234,216,.22);--card:#0f1a52}
+@media (prefers-color-scheme:light){:root{--bg:#f2ead8;--fg:#16226b;--muted:#4553a8;--accent:#3a49b0;--line:rgba(22,34,107,.24);--card:#faf5e9}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg);font:1.125rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 a{color:var(--accent)}
