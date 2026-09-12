@@ -19,5 +19,9 @@
     { "source": "zet-novosti", "naziv": "ZET, obavijesti (opće)", "url": "https://www.zet.hr/rss_novosti.aspx", "licence": "Otvorena dozvola" },
     { "source": "zet-promet", "naziv": "ZET, obavijesti (promet)", "url": "https://www.zet.hr/rss_promet.aspx", "licence": "Otvorena dozvola" },
     { "source": "etnografski", "naziv": "Etnografski muzej", "url": "https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc", "licence": "Licenca nije navedena" }
+  ],
+  "dogadanjaDropped": [
+    { "naziv": "Guru za kulturu", "url": "https://kultura.zagreb.hr/", "reason": "Isključeno (R-P5): događanja su dostupna samo preko putanje /api/, koju robots.txt te domene izričito zabranjuje." },
+    { "naziv": "YouTube kanal Skupštine Grada Zagreba (Atom feed)", "url": "https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA", "reason": "Isključeno (R-P5): putanju /feeds/videos.xml zabranjuje YouTube-ov robots.txt; kanal je i dalje poveznica ovdje, jer linkanje nije dohvat (crawling)." }
   ]
 }

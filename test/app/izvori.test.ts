@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import izvori from '../../app/src/data/izvori.json';
-import { renderIzvoriHtml } from '../../app/src/izvori-render';
+import { DOGADANJA_DROPPED, DOGADANJA_SOURCES, renderIzvoriHtml } from '../../app/src/izvori-render';
 
 const registryMissing = await import('../../worker/feed/registry').then(
   () => false,
@@ -113,5 +113,35 @@ describe('renderIzvoriHtml', () => {
     // escaping (as they would for any real URL containing that text) inside
     // the now-inert &quot;...&quot; wrapper.
     expect(html).not.toContain('"onload="');
+  });
+
+  // R-F7: §5 of the filed proposal points readers at /izvori for "the full
+  // per-source list with addresses and licences" of the dogadanja module;
+  // before this test the page rendered only the ten-row `sources` summary
+  // and never the seven-row `dogadanjaSources` breakdown or the two sources
+  // dropped for robots.txt reasons (R-P5), so the promise was false.
+  it('renders every dogadanjaSources row (address and licence) under the dogadanja article', () => {
+    const html = renderIzvoriHtml();
+    const article = html.slice(html.indexOf('id="izvor-dogadanja"'), html.indexOf('</article>', html.indexOf('id="izvor-dogadanja"')));
+    for (const source of DOGADANJA_SOURCES) {
+      expect(article, `${source.source} url`).toContain(source.url.replace(/&/g, '&amp;'));
+      expect(article, `${source.source} licence`).toContain(source.licence);
+    }
+    // The one source with no reuse licence at all must read exactly that,
+    // not a blank or an inherited "Otvorena dozvola".
+    const etnografski = DOGADANJA_SOURCES.find((s) => s.source === 'etnografski')!;
+    expect(etnografski.licence).toBe('Licenca nije navedena');
+    expect(article).toContain('Licenca nije navedena');
+  });
+
+  it('renders the two robots-dropped sources with their reason under the dogadanja article', () => {
+    const html = renderIzvoriHtml();
+    const article = html.slice(html.indexOf('id="izvor-dogadanja"'), html.indexOf('</article>', html.indexOf('id="izvor-dogadanja"')));
+    expect(DOGADANJA_DROPPED.length).toBe(2);
+    for (const dropped of DOGADANJA_DROPPED) {
+      expect(article, `${dropped.naziv} naziv`).toContain(dropped.naziv);
+      expect(article, `${dropped.naziv} reason`).toContain(dropped.reason);
+      expect(article, `${dropped.naziv} reason mentions robots.txt`).toMatch(/robots\.txt/);
+    }
   });
 });

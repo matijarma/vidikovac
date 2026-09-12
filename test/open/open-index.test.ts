@@ -41,4 +41,20 @@ describe('renderOpenIndex', () => {
     expect(robots).toContain('User-agent: *');
     expect(robots).toContain('Allow: /');
   });
+
+  // R-F7: the lede used to say "everything the dashboard shows without
+  // scanning is published as a machine-readable dataset too", which is false
+  // for the kiosk's pre-scan "Grad javlja" events card -- it is drawn from
+  // `dogadanja`, a session-tier module, licence-filtered on the way to the
+  // teaser (registry.ts teaserSubset), and never archived or offered at
+  // /open (docs/izvori.md "## Izvedeni podaci"). The lede must claim
+  // republication only for the open-tier modules that OPEN_DATASETS
+  // actually lists, and name the events-card exception plainly.
+  it('claims republication only for open-tier modules and names the events-card exception (R-F7)', () => {
+    expect(html).not.toMatch(/Sve što (nadzorna ploča|kiosk)[^.]*bez skeniranja[^.]*objavljeno/i);
+    expect(html).toMatch(/otvorene? razine[^.]*objavljen/i);
+    expect(html).toContain('Grad javlja');
+    expect(html).toMatch(/sesijske razine/i);
+    expect(html).toMatch(/(ne objavljuje|nije objavlj)/i);
+  });
 });

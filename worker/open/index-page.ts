@@ -73,7 +73,7 @@ export function renderOpenIndex(origin: string, now: Date): string {
 <header>
 <a class="brand" href="/">Vidikovac</a>
 <h1>Otvoreni podaci</h1>
-<p class="lede">Sve što nadzorna ploča prikazuje bez skeniranja objavljeno je i kao strojno čitljiv skup. Isti podaci, isti izvori, ista atribucija; bez ograničenja trajanja. Katalog u obliku DCAT-AP: <a href="/open/catalog.json">catalog.json</a>.</p>
+<p class="lede">Svaki modul otvorene razine objavljen je i kao strojno čitljiv skup: isti podaci, isti izvori, ista atribucija, bez ograničenja trajanja. Iznimka je kartica "Grad javlja" na javnom zaslonu prije skeniranja: dolazi iz modula sesijske razine i ovdje se ne objavljuje. Katalog u obliku DCAT-AP: <a href="/open/catalog.json">catalog.json</a>.</p>
 </header>
 <main>
 ${OPEN_DATASETS.map(datasetCard).join('\n')}
