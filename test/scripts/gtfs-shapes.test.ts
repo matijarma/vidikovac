@@ -8,12 +8,12 @@ import {
   DIAGRAM_SIMPLIFY_METRES,
   LINE_KEYS,
   ON_FRAC_SCALE,
-  ON_MAX_PER_STOP,
   ORIGIN,
   ROUTE_KEYS,
   SCALE,
   SHAPE_KEYS,
   STOP_KEYS,
+  STOP_SHAPE_MAX_METRES,
   buildNetwork,
   buildOctilinearLine,
   chainDecodeXY,
@@ -63,6 +63,27 @@ function stopLonLatById(net: any): Record<string, { lon: number; lat: number }> 
     out[s.id] = unitsToLonLat(units[i] as [number, number]);
   });
   return out;
+}
+
+/** Perpendicular distance from a point to the nearest segment of a polyline
+ *  (metre-space XY). An independent re-implementation of buildNetwork's own
+ *  internal pointSegmentDistance/nearestOnPolyline (not exported), so the
+ *  R-T1 regression test below checks the real artefact's `on` list against a
+ *  distance computed separately from the code under test, not against its
+ *  own logic circularly. */
+function distanceToPolyline(p: { x: number; y: number }, points: { x: number; y: number }[]): number {
+  let best = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+    const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 interface ZipInput {
@@ -431,7 +452,9 @@ describe('buildNetwork', () => {
 
     const stops = stopsOf(net); // decodeStopOn already applied: on is [shapeIdx, frac][]
     for (const st of stops) {
-      expect(st.on.length).toBeLessThanOrEqual(ON_MAX_PER_STOP);
+      // No cap (R-T1): a stop links to every shape within STOP_SHAPE_MAX_METRES,
+      // and this fixture never has more than 4 shapes total, so the only real
+      // assertion left here is that every recorded fraction is a valid 0..1.
       for (const [, frac] of st.on) {
         expect(frac).toBeGreaterThanOrEqual(0);
         expect(frac).toBeLessThanOrEqual(1);
@@ -513,11 +536,12 @@ describe('buildNetwork', () => {
     await expect(buildNetwork(zip, {})).rejects.toThrow(/feedVersion/);
   });
 
-  it('caps a stop at ON_MAX_PER_STOP shapes, keeping the geometrically closest', async () => {
+  it('keeps every shape within 40 m of a stop, with no cap (R-T1)', async () => {
     // 14 shapes, each a short east-west segment 3 m further north than the
-    // last, all within the stop's own 40 m radius (39 m at worst): more than
-    // ON_MAX_PER_STOP, so the cap must bite and keep exactly the closest
-    // ON_MAX_PER_STOP of them.
+    // last, all within the stop's own 40 m radius (39 m at worst). This used
+    // to exceed ON_MAX_PER_STOP (12) and lose the two farthest; the
+    // controller removed that cap as a correctness defect (R-T1), so all 14
+    // must now survive.
     const stop = { lon: 16.05, lat: 45.8 };
     const shapeCount = 14;
     const routesTxt =
@@ -551,12 +575,11 @@ describe('buildNetwork', () => {
     const net = await buildNetwork(zip, { diagramBusCount: 0 });
     const stops = stopsOf(net);
     expect(stops).toHaveLength(1);
-    expect(stops[0].on).toHaveLength(ON_MAX_PER_STOP);
-    // Shapes are output sorted by shape_id ("cap_00".."cap_13"), so shape
-    // index equals its position in the distance-ascending construction
-    // order above: the kept set must be exactly the ON_MAX_PER_STOP closest.
+    // No cap: every one of the 14 within-40m shapes is kept, not just the
+    // closest 12 -- this is the exact regression T6b exists to prevent.
+    expect(stops[0].on).toHaveLength(shapeCount);
     const keptShapeIdx = stops[0].on.map(([idx]: [number, number]) => idx).sort((a: number, b: number) => a - b);
-    expect(keptShapeIdx).toEqual(Array.from({ length: ON_MAX_PER_STOP }, (_, i) => i));
+    expect(keptShapeIdx).toEqual(Array.from({ length: shapeCount }, (_, i) => i));
   });
 });
 
@@ -600,31 +623,25 @@ describe('main', () => {
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');
 
-  // The brief states the budget as "under 500 KB raw ... under 130 KB gzip"
-  // without saying whether that means binary units (KiB, x1024) or decimal
-  // units (KB, x1000); the source planning note it traces to doesn't
-  // disambiguate either. This is not a housekeeping detail to guess at
-  // silently: at the real committed artefact's size the two readings
-  // disagree on whether the raw budget is even met.
-  //   - KiB (x1024): RAW_BUDGET_BYTES below -> committed artefact (503,975 B)
-  //     is UNDER budget by 8,025 B (1.6%).
-  //   - decimal KB (x1000, i.e. 500_000 B): the committed artefact is OVER
-  //     that stricter reading by 3,975 B (0.8%).
-  //   - The gzip budget is met under EITHER reading with >15 KB margin, so
-  //     only the raw threshold's unit is actually in dispute.
-  // This test enforces the looser (KiB) reading, matching what the
-  // artefact was built against -- flagged for controller/product-owner
-  // sign-off rather than silently assumed; see the fix-round Rulings in
-  // task-T1-report.md. Whichever reading is confirmed, only this constant
-  // (and, if it must tighten, a byte-budget lever in gtfs-shapes.mjs) needs
-  // to change.
-  const RAW_BUDGET_BYTES = 500 * 1024;
-  const GZIP_BUDGET_BYTES = 130 * 1024;
+  // R-T2: the gzip gate is the primary one (what the filed proposal actually
+  // cares about, what is transferred) and stays at 130 KiB. The raw gate
+  // moved to 600 KiB to make room for R-T1 (no per-stop cap, so `stops.on`
+  // is larger). Both constants name their unit (KiB, x1024) so the reading
+  // enforced is never ambiguous, per R-T2.
+  const RAW_BUDGET_KIB = 600;
+  const GZIP_BUDGET_KIB = 130;
+  const RAW_BUDGET_BYTES = RAW_BUDGET_KIB * 1024;
+  const GZIP_BUDGET_BYTES = GZIP_BUDGET_KIB * 1024;
 
-  it('exists, decodes, and stays inside the R-L4 budget: under 500 KB raw and 130 KB gzipped', () => {
+  it('exists, decodes, and stays inside the R-L4/R-T2 budget: gzip is the primary gate at 130 KiB, raw at 600 KiB', () => {
     const raw = readFileSync(artefactPath);
-    expect(raw.byteLength).toBeLessThan(RAW_BUDGET_BYTES);
     const gz = gzipSync(raw);
+    // Reported for the task record: both measured sizes against both budgets.
+    console.log(
+      `zet-network.json: ${raw.byteLength} B raw (budget ${RAW_BUDGET_BYTES} B / ${RAW_BUDGET_KIB} KiB), ` +
+        `${gz.byteLength} B gzipped (budget ${GZIP_BUDGET_BYTES} B / ${GZIP_BUDGET_KIB} KiB)`,
+    );
+    expect(raw.byteLength).toBeLessThan(RAW_BUDGET_BYTES);
     expect(gz.byteLength).toBeLessThan(GZIP_BUDGET_BYTES);
 
     const parsed = JSON.parse(raw.toString('utf8'));
@@ -635,11 +652,11 @@ describe('the committed artefact', () => {
     expect(parsed.stops.id.length).toBeGreaterThan(1000);
     for (const d of parsed.shapes.d) expect(d.length % 2).toBe(0);
     for (const wireOn of parsed.stops.on) {
-      // ON_MAX_PER_STOP caps the *geometric* matches; a stop-transfer
-      // override always survives it (see buildNetwork), so a handful of
-      // real, verified-terminus hubs legitimately exceed the cap -- this is
-      // a loose sanity ceiling against a genuine runaway, not the cap itself.
-      expect(wireOn.length).toBeLessThan(200);
+      // No cap any more (R-T1): a busy interchange can legitimately link to
+      // several dozen shapes. This is a loose sanity ceiling against a
+      // genuine runaway (a bug re-adding every shape to every stop), not a
+      // budget or a cap.
+      expect(wireOn.length).toBeLessThan(400);
       for (const [, frac] of decodeStopOn(wireOn)) {
         expect(frac).toBeGreaterThanOrEqual(0);
         expect(frac).toBeLessThanOrEqual(1);
@@ -657,5 +674,55 @@ describe('the committed artefact', () => {
     // Sanity: the file on disk is at least as large as what statSync sees
     // (guards against an accidental empty-file commit).
     expect(statSync(artefactPath).size).toBe(raw.byteLength);
+  });
+
+  // R-T1's own regression test: the stop gate must see the main square. A
+  // capped `on` list could silently drop Trg bana Jelačića from some of its
+  // own tram shapes' stop lists, letting a vehicle be dead-reckoned straight
+  // through it; this recomputes, independently of buildNetwork's own
+  // internals, which tram shapes actually pass within STOP_SHAPE_MAX_METRES
+  // of the real stop and checks every one of them is recorded.
+  it('keeps Trg bana Jelačića on every tram shape passing within 40 m of it (R-T1 regression)', () => {
+    const raw = JSON.parse(readFileSync(artefactPath, 'utf8'));
+    const routes = fromColumnar(raw.routes, ROUTE_KEYS);
+    const shapes = fromColumnar(raw.shapes, SHAPE_KEYS);
+    const stops = fromColumnar(raw.stops, STOP_KEYS);
+
+    // The GTFS feed's own stop_name for the square is "Trg bana J. Jelačića"
+    // (the Ruling in the task report explains the exact-name discrepancy);
+    // findIndex takes the first such stop, id 106_1, the square's own hub --
+    // not one of the unrelated feed rows that happen to share its name far
+    // from the square (id 1849_x) or a same-name-fragment street stop
+    // elsewhere in the city ("Bana Josipa Jelačića", id 791_x).
+    const stopIdx = stops.findIndex((s: any) => s.name === 'Trg bana J. Jelačića');
+    expect(stopIdx).toBeGreaterThanOrEqual(0);
+    const stop = stops[stopIdx];
+
+    // Stop positions are chain-delta encoded across the *whole* stops array
+    // (see buildNetwork), so decode the full chain and index into it.
+    const flatP = stops.flatMap((s: any) => s.p as [number, number]);
+    const stopUnits = chainDecodeXY(flatP);
+    const [ux, uy] = stopUnits[stopIdx];
+    const stopLon = raw.origin[0] + ux * raw.scale;
+    const stopLat = raw.origin[1] + uy * raw.scale;
+    const stopXY = toMetres(stopLon, stopLat);
+
+    const onSet = new Set(decodeStopOn(stop.on).map(([shapeIdx]: [number, number]) => shapeIdx));
+    const tramRouteIds = new Set(routes.filter((r: any) => r.type === 0).map((r: any) => r.id));
+
+    let nearTramCount = 0;
+    shapes.forEach((shape: any, shapeIdx: number) => {
+      if (!tramRouteIds.has(shape.route)) return;
+      const shapeXY = chainDecodeXY(shape.d).map(([x, y]: [number, number]) =>
+        toMetres(raw.origin[0] + x * raw.scale, raw.origin[1] + y * raw.scale),
+      );
+      if (distanceToPolyline(stopXY, shapeXY) <= STOP_SHAPE_MAX_METRES) {
+        nearTramCount++;
+        expect(onSet.has(shapeIdx)).toBe(true);
+      }
+    });
+    // The regression this task exists to prevent: ON_MAX_PER_STOP (12) used
+    // to silently drop every tram shape past the 12th-closest at this stop.
+    expect(nearTramCount).toBeGreaterThan(12);
   });
 });

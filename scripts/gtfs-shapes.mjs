@@ -62,19 +62,18 @@ export const DIAGRAM_SIMPLIFY_METRES = 120;
 // (one stop spacing, per the area's own motion-model tolerance), not to
 // place a stop precisely.
 export const ON_FRAC_SCALE = 50;
-// Cap on how many shapes one stop links to, keeping the geometrically
-// closest (see the stop-building loop below for the full reasoning). The
-// real feed's median is 4 and its 90th percentile is 20; 12 trims only the
-// long tail of the busiest interchanges while leaving the ordinary case
-// untouched, and leaves the artefact with real headroom under the R-L4
-// budget rather than skimming it, since the live feed grows between
-// rebuilds.
-// FLAGGED FOR CONTROLLER SIGN-OFF (not settled by this task alone): this cap
-// trades against DIAGRAM_BUS_COUNT below for the same byte budget, and it is
-// exactly the busiest interchanges -- real p90 20, max 63 links/stop -- that
-// a later, mandated lightweight list (R-L2, "the nearest stops with the
-// lines calling at them") would read. See task-T1-report.md's Rulings.
-export const ON_MAX_PER_STOP = 12;
+
+// There is deliberately no cap on how many shapes one stop links to. T1
+// shipped one (ON_MAX_PER_STOP = 12, trimming the geometrically farthest
+// matches at a stop once it exceeded 12), and the controller removed it
+// (ruling R-T1): a cap means the busiest interchanges -- Trg bana Jelačića
+// first among them, with real p90 20 and max 63 links/stop -- are missing
+// from some of their own shapes' stop lists, so a tram can be dead-reckoned
+// straight through the main square without the model ever seeing a stop to
+// gate on. That is a correctness defect at the one place every screen looks,
+// not a size optimisation worth keeping. Every association within
+// STOP_SHAPE_MAX_METRES is now kept; the byte budget below moved (R-T2) to
+// make room instead of trimming this list.
 
 // Column order for the struct-of-arrays wire format (see toColumnar).
 export const ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes'];
@@ -84,10 +83,9 @@ export const LINE_KEYS = ['route', 'pts'];
 // Diagram legibility cut: every tram route, plus this many of the busiest
 // bus routes by trip count (154 routes total would not read as a schematic
 // map; 19 trams + the top 20 buses mirrors how ZET's own printed network map
-// picks its "trunk" lines).
-// FLAGGED FOR CONTROLLER SIGN-OFF: kept generous over ON_MAX_PER_STOP above
-// (a lower bus count was the live alternative that would have bought room to
-// raise the per-stop cap instead) -- see task-T1-report.md's Rulings.
+// picks its "trunk" lines). This no longer trades against a per-stop cap
+// (there is none -- see the note above); it stands on its own legibility
+// reasoning alone.
 export const DIAGRAM_BUS_COUNT = 20;
 
 /** Converts lon/lat degrees to a local metre-space plane (translation
@@ -638,9 +636,10 @@ export async function buildNetwork(zipBuf, opts = {}) {
     };
   });
   // Stop-transfer overrides (see streamTripEndpoints above): computed first
-  // and kept per stop index, so the cap below can prioritise them -- a
-  // verified terminus link must survive even at a hub whose plain geometric
-  // match count alone would already fill ON_MAX_PER_STOP.
+  // and kept per stop index, so the geometric pass below can skip re-finding
+  // them (overrideShapeIdx) -- a verified terminus link (a real endpoint
+  // further than STOP_SHAPE_MAX_METRES from the recorded shape, e.g. a
+  // driveway or loop) is recorded once, not duplicated by the geometric scan.
   const overridesByStop = new Map(); // stopIdx -> [shapeIdx, frac][]
   for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
     const sampleTripId = shapeSampleTrip.get(shapes[shapeIdx].id);
@@ -662,7 +661,13 @@ export async function buildNetwork(zipBuf, opts = {}) {
     const p = stopPlane[si];
     const overrides = overridesByStop.get(si) ?? [];
     const overrideShapeIdx = new Set(overrides.map(([idx]) => idx));
-    const candidates = [];
+    for (const [shapeIdx, frac] of overrides) stops[si].on.push([shapeIdx, frac]);
+    // At a handful of big interchanges a stop sits within 40 m of dozens of
+    // overlapping lines (real, not a bug: Zagreb's dense core shares
+    // corridors between many routes, Trg bana Jelačića foremost). Every one
+    // of them is kept (R-T1): the stop gate (nextStop, dead reckoning) needs
+    // every such association to avoid carrying a vehicle straight through a
+    // stop it never actually passed unseen.
     for (let shapeIdx = 0; shapeIdx < planeByShapeIdx.length; shapeIdx++) {
       if (overrideShapeIdx.has(shapeIdx)) continue; // the override already links this pair
       const poly = planeByShapeIdx[shapeIdx];
@@ -673,21 +678,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
       if (dist <= STOP_SHAPE_MAX_METRES) {
         const len = cumByShapeIdx[shapeIdx][cumByShapeIdx[shapeIdx].length - 1];
         const frac = len > 0 ? clamp01(arc / len) : 0;
-        candidates.push([shapeIdx, frac, dist]);
+        stops[si].on.push([shapeIdx, frac]);
       }
     }
-    // At a handful of big interchanges a stop sits within 40 m of dozens of
-    // overlapping lines (real, not a bug: Zagreb's dense core shares
-    // corridors between many routes). ON_MAX_PER_STOP keeps only the
-    // closest ones per stop, so the byte budget holds. This can only trim
-    // the most marginal, near-the-40-m-edge, likely-coincidental geometric
-    // associations at a busy stop -- a stop's own serving route sits a few
-    // metres away and so is essentially always among the closest kept, and
-    // every stop-transfer override survives regardless of the cap.
-    candidates.sort((a, b) => a[2] - b[2]);
-    const geometricSlots = Math.max(0, ON_MAX_PER_STOP - overrides.length);
-    for (const [shapeIdx, frac] of overrides) stops[si].on.push([shapeIdx, frac]);
-    for (const [shapeIdx, frac] of candidates.slice(0, geometricSlots)) stops[si].on.push([shapeIdx, frac]);
   }
   // Encode each stop's `on` list: sort by shapeIdx (both passes above appended
   // in different orders), then chain-delta the index and scale the fraction
