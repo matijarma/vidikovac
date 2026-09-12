@@ -164,8 +164,8 @@
     "openTier": "Sigurnosni sloj ostaje otvoren na /hitno."
   },
   "kiosk": {
-    "invitation": "Skeniraj za 10 minuta pogleda na Zagreb. Plaćaš pažnjom, ne novcem.",
-    "invitationEn": "Scan for ten minutes of Zagreb. Pay with attention, not money.",
+    "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
+    "invitationEn": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
     "typeCode": "ili upiši kod na zagreb.aningfilm.hr/s",
     "codeLabel": "Kod",
     "qrLabel": "QR kod za otključavanje. Kod: {code}",

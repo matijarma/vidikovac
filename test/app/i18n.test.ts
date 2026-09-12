@@ -25,7 +25,7 @@ describe('catalogs', () => {
     expect(all).not.toMatch(/\bVi\b|\bVaš|\bVam\b|Skenirajte|Kopirajte|Podijelite|Plaćate/);
   });
   it('carries the approved copy verbatim', () => {
-    expect(hr.kiosk.invitation).toBe('Skeniraj za 10 minuta pogleda na Zagreb. Plaćaš pažnjom, ne novcem.');
+    expect(hr.kiosk.invitation).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
     expect(hr.session.unlocked).toBe('Otključano · {label} · do {time}');
     expect(hr.session.expiring60).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
     expect(hr.session.expired).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');

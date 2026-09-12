@@ -96,7 +96,7 @@ describe('teaser content', () => {
     expect(cards[2]!.attribution?.text).toBe('Izvor: prometnice');
     expect(cards[3]!.body).toBe('Naslov vijesti');
     expect(cards[3]!.attribution?.text).toBe('Izvor: hrt-news');
-    expect(cards[4]!.body).toBe('Skeniraj za 10 minuta pogleda na Zagreb. Plaćaš pažnjom, ne novcem.');
+    expect(cards[4]!.body).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
     expect(cards.some((c) => c.body === i18n.t('kiosk.teaserSoon'))).toBe(false);
   });
   it('says so honestly when the quake feed is empty or still loading', () => {
