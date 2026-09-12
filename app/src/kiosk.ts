@@ -22,6 +22,9 @@ import { LAYER_MODULES, renderLayer } from './layers';
 import { delayWord, vehicleCount } from './layers/shared';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
+import { routeDelayMap, vehicleFixes } from './motion/fixes';
+import { loadNetwork, type Network } from './motion/network';
+import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { dataNumber, dataText } from './panels/panel';
@@ -316,6 +319,10 @@ export interface KioskDeps {
    *  in tests that don't care about theme/resize repainting. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
+  /** The network artefact for the schematics (T9); defaults to
+   *  motion/network.ts's loadNetwork over the page's own fetch, never called
+   *  in lightweight mode (R-L4). Injected so tests never fetch. */
+  loadNetwork?: () => Promise<Network | null>;
   fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
   createBeacon?: (deps: BeaconClientDeps) => BeaconClient;
@@ -355,6 +362,7 @@ function kioskMarkup(i18n: I18n, lightweight: boolean): string {
     </figure>
     <section class="kiosk-stage" data-testid="kiosk-stage">
       <div class="kiosk-teaser">
+        <!-- T9 / R-P1: the live cropped tram map, mounted from mountKiosk. -->
         <div class="kiosk-live" data-testid="kiosk-live"></div>
         <article class="teaser-card" data-testid="teaser-card"></article>
         <figure class="kiosk-fig kiosk-meander">
@@ -409,6 +417,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const clockEl = element.querySelector<HTMLElement>('[data-testid=kiosk-clock]')!;
   const panoramaCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=panorama]');
   const panoramaLegend = element.querySelector<HTMLElement>('[data-testid=panorama-legend]')!;
+  const liveBox = element.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
   const teaserCard = element.querySelector<HTMLElement>('[data-testid=teaser-card]')!;
   const catalogueBox = element.querySelector<HTMLElement>('[data-testid=kiosk-catalogue]')!;
   const qrBox = element.querySelector<HTMLElement>('[data-testid=kiosk-qr]')!;
@@ -444,6 +453,32 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let essentialsIdleHandle: unknown = null;
 
   const maps = createMapSlots(deps.mapFactory);
+
+  // T9: two schematics on one screen -- the locked stage (the screen's own
+  // centre, trams only, R-P1) and the one the unlocked U pokretu layer gets
+  // (the whole network) -- sharing a single network load: the ~500 KB
+  // artefact is fetched once per screen life and never in lightweight mode
+  // (R-L4). Memoised here rather than in network.ts, whose loadNetwork
+  // deliberately does not. The kiosk's essentials idle (R-P7) is also how
+  // long a tapped vehicle's card may sit on a screen nobody is touching.
+  let networkPromise: Promise<Network | null> | null = null;
+  const loadNetworkOnce = (): Promise<Network | null> => {
+    networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
+    return networkPromise;
+  };
+  const schematicDeps = {
+    i18n,
+    lightweight,
+    reducedMotion: deps.reducedMotion,
+    now,
+    onRepaint: deps.onRepaint,
+    loadNetwork: loadNetworkOnce,
+    cardIdleMs: ESSENTIALS_IDLE_MS,
+    setTimer: setTimer as (fn: () => void, ms: number) => unknown,
+    clearTimer,
+  };
+  const stageSchematic = createSchematicHost({ ...schematicDeps, scope: { kind: 'crop' } });
+  const layerSchematic = createSchematicHost({ ...schematicDeps, scope: { kind: 'network' } });
 
   // The teaser fetch and the beacon socket are two independent failure
   // domains sharing one alert line. Each keeps its own entry in this map
@@ -666,7 +701,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         now: now(),
         kiosk: true,
         maps,
+        schematic: layerSchematic,
         reducedMotion: deps.reducedMotion,
+        lightweight,
       }),
     );
     // One live map per panel for the screen's whole session (R-54): a TV
@@ -693,6 +730,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // driver's own layer already shows more than this. `paintStrip()` below
     // also hides the essentials-open button itself the moment a scan lands.
     if (mode === 'unlocked') closeEssentials(false);
+    // The stage is display:none under a session and the layer box is empty
+    // outside one: whichever schematic is off screen stops asking for frames.
+    if (mode === 'unlocked') {
+      stageSchematic.pause();
+      layerSchematic.resume();
+    } else {
+      layerSchematic.pause();
+      stageSchematic.resume();
+    }
     paintStrip();
     if (mode === 'teaser') {
       layerBox.replaceChildren();
@@ -731,6 +777,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       paintStrip();
       paintPanoramaFigure();
       paintCatalogue();
+      // R-P1: the teaser's zet-rt now carries the pins inside this screen's
+      // box; they are evidence for the stage's motion model, never drawn as
+      // reported (R-P2).
+      const zet = byModule(teaser)['zet-rt'];
+      stageSchematic.update({ fixes: vehicleFixes(zet, now()), delays: routeDelayMap(zet) }, now());
       if (!essentialsPanel.hidden) paintEssentials(); // stays live while open, same source as the teaser
     } catch {
       showAlert('status.down', 'teaser');
@@ -828,6 +879,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   paintCodeMeander();
   paintCatalogue();
   paintStrip();
+  // The stage's live map (T9 / R-P1): mounted after the first paints above,
+  // so its network fetch starts after first paint, never before it (R-L4).
+  liveBox.appendChild(stageSchematic.mount());
   void loadTeaser();
 
   // Canvas colours are read off computed style (`tone()`), so a theme flip
@@ -872,6 +926,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       beacon?.close();
       session?.close();
       maps.destroy();
+      stageSchematic.destroy();
+      layerSchematic.destroy();
       element.remove();
     },
   };

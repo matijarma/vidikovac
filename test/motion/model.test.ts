@@ -512,6 +512,28 @@ describe('network === null', () => {
   });
 });
 
+describe('the wire route type (R-P1)', () => {
+  it('falls back to the fix type when there is no network, and to -1 when the fix has none either', () => {
+    const model = createModel(null);
+    model.update([fixAt('tram', { x: 0, y: 0 }, T0, { type: 0 }), fixAt('bus', { x: 50, y: 0 }, T0, { type: 3 }), fixAt('none', { x: 100, y: 0 }, T0)], T0);
+    const drawn = new Map(model.step(T0).map((d) => [d.id, d]));
+    expect(drawn.get('tram')!.type).toBe(0);
+    expect(drawn.get('bus')!.type).toBe(3);
+    expect(drawn.get('none')!.type).toBe(-1);
+  });
+  it('lets the network artefact win when it knows the route', () => {
+    const model = createModel(straightNetwork()); // R1 is type 0 there
+    model.update([fixAt('v1', { x: 0, y: 0 }, T0, { type: 3 })], T0);
+    expect(model.step(T0)[0].type).toBe(0);
+  });
+  it('is re-read on a route change, exactly like the network answer', () => {
+    const model = createModel(null);
+    model.update([fixAt('v1', { x: 0, y: 0 }, T0, { routeId: 'RA', type: 0 })], T0);
+    model.update([fixAt('v1', { x: 0, y: 100 }, T0 + 30_000, { routeId: 'RB', type: 3 })], T0 + 30_000);
+    expect(model.step(T0 + 30_000)[0].type).toBe(3);
+  });
+});
+
 describe('size()', () => {
   it('counts tracked vehicles', () => {
     const model = createModel(straightNetwork());

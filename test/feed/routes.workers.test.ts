@@ -73,8 +73,13 @@ describe('GET /api/teaser', () => {
       'hrt-news',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
-    expect(zet?.items.map((item) => item.id)).toEqual(['vozila', 'route:12']);
-    expect(zet?.items.some((item) => item.geo)).toBe(false);
+    // R-P1: the fleet count, then the pins inside the default screen's box
+    // (this fixture's one pin sits 250 m east of Trg bana Jelačića, geo and
+    // all, so the locked kiosk's motion model has evidence), then the
+    // per-route delay rows, which carry no geo.
+    expect(zet?.items.map((item) => item.id)).toEqual(['vozila', 'vehicle:1', 'route:12']);
+    expect(zet?.items.find((item) => item.id === 'vehicle:1')?.geo).toEqual({ type: 'Point', coordinates: [15.98, 45.81] });
+    expect(zet?.items.filter((item) => item.id !== 'vehicle:1').some((item) => item.geo)).toBe(false);
     expect(body.modules.find((m) => m.module === 'emsc')?.items).toHaveLength(1);
   });
 

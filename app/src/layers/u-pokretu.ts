@@ -3,6 +3,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
 import type { MapLine, MapPoint } from '../map/city-map';
+import { routeDelayMap, vehicleFixes } from '../motion/fixes';
 import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
 import { closureRow, delayWord } from './shared';
@@ -56,6 +57,19 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   const closures = snapshots.prometnice;
   const points = vehiclePoints(zet);
   const lines = closureLines(closures);
+
+  // T9: the moving map first -- the layer's face. The page owns the host;
+  // this render only moves its stable element into a fresh panel and hands
+  // it this poll's evidence (the pins as fixes, the route rows as delays).
+  // Every drawn position is the model's own (R-P2); the host's note under
+  // the map says so in one sentence.
+  const schematic = ctx.schematic;
+  if (schematic) {
+    schematic.update({ fixes: vehicleFixes(zet, now), delays: routeDelayMap(zet) }, now);
+    panels.appendChild(
+      createPanel({ i18n, now, id: 'u-pokretu-schematic', title: i18n.t('panels.schematic'), snapshot: zet, body: schematic.mount() }).element,
+    );
+  }
 
   const mapBody = document.createElement('div');
   mapBody.className = 'map-holder';

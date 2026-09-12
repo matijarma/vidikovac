@@ -12,6 +12,8 @@ import { vehicleCount } from './layers/shared';
 import type { ExportKind } from './layers/types';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
+import type { Network } from './motion/network';
+import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { tone } from './ui/canvas';
@@ -81,6 +83,10 @@ export interface DashboardDeps {
    *  in tests that don't care about theme/resize repainting. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
+  /** The network artefact for the schematic (T9); defaults to
+   *  motion/network.ts's loadNetwork over the page's own fetch, and is
+   *  never called in lightweight mode (R-L4). Injected so tests never fetch. */
+  loadNetwork?: () => Promise<Network | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
   onShare?: (url: string, title: string) => void;
   onExport?: (kind: ExportKind, module: ModuleId) => void;
@@ -106,6 +112,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
   const maps = createMapSlots(deps.mapFactory);
+  // T9: one schematic for the page, handed to the U pokretu layer through
+  // the context exactly like `maps`, so a poll never throws away the motion
+  // model's fix history (R-P2). A session sees the whole network; the host
+  // fetches the artefact lazily, on that layer's first render (R-L4).
+  const schematic = createSchematicHost({
+    i18n,
+    scope: { kind: 'network' },
+    lightweight,
+    reducedMotion: deps.reducedMotion,
+    now,
+    onRepaint: deps.onRepaint,
+    loadNetwork: deps.loadNetwork,
+  });
   let active: LayerId = readStoredLayer() ?? LAYERS[0]!;
   let frozen = false;
   let paused = false;
@@ -221,7 +240,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onShare: deps.onShare,
       onExport: deps.onExport,
       maps,
+      schematic,
       reducedMotion: deps.reducedMotion,
+      lightweight,
     };
   }
 
@@ -460,6 +481,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     frozen = true;
     closeShare();
+    // "Prikaz je zamrznut": the drawn vehicles stop where they are, rather
+    // than dead-reckoning on for another five minutes under a frozen clock.
+    schematic.pause();
     shareButton.hidden = true;
     paintTabs();
     paintTimer();
@@ -522,6 +546,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopRepaint?.();
       closeShare();
       maps.destroy();
+      schematic.destroy();
       element.remove();
     },
   };

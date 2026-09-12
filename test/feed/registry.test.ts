@@ -104,18 +104,22 @@ describe('teaserSubset', () => {
     expect(TEASER_NEWS_LIMIT).toBe(3);
   });
 
-  it('reduces zet-rt to a vehicle count and the per-route delay summaries', () => {
+  // R-P1: the whole-fleet count stays (the panorama and the catalogue read
+  // it), the per-route delay rows stay, and the pins inside the default
+  // screen's box come along with their geo so the locked kiosk's schematic
+  // has evidence to work from; pins elsewhere in the city are dropped.
+  it('reduces zet-rt to the fleet count, the pins inside the kiosk box, and the per-route delay summaries', () => {
     const reduced = teaserSubset(
       snapshot('zet-rt', [
-        item({ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 12' }),
-        item({ id: 'vehicle:2', kind: 'vehicle', title: 'Linija 12' }),
+        item({ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 12', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '12', routeType: 0 } }),
+        item({ id: 'vehicle:2', kind: 'vehicle', title: 'Linija 12', geo: { type: 'Point', coordinates: [16.06, 45.83] }, data: { routeId: '12', routeType: 0 } }),
+        item({ id: 'vehicle:3', kind: 'vehicle', title: 'Linija 12' }),
         item({ id: 'route:12', kind: 'vehicle', title: 'Linija 12', data: { routeId: '12', medianDelaySeconds: -102, vehicles: 2 } }),
       ]),
     );
-    expect(reduced.items).toHaveLength(2);
-    expect(reduced.items[0]).toMatchObject({ id: 'vozila', kind: 'vehicle', title: '2 vozila u pokretu', data: { vehicles: 2 } });
-    expect(reduced.items[1].id).toBe('route:12');
-    expect(reduced.items.some((i) => i.geo)).toBe(false);
+    expect(reduced.items.map((i) => i.id)).toEqual(['vozila', 'vehicle:1', 'route:12']);
+    expect(reduced.items[0]).toMatchObject({ id: 'vozila', kind: 'vehicle', title: '3 vozila u pokretu', data: { vehicles: 3 } });
+    expect(reduced.items[1]).toMatchObject({ geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '12', routeType: 0 } });
   });
 
   it('uses the Croatian singular for exactly one vehicle', () => {

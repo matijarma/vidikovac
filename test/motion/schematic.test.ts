@@ -7,6 +7,8 @@ import {
   BUS_SIDE_PX,
   clipToCircle,
   DEFAULT_CROP,
+  HIT_RADIUS_CSS_PX,
+  hitVehicle,
   layoutSchematic,
   paintRoutes,
   paintVehicles,
@@ -378,5 +380,61 @@ describe('paintVehicles', () => {
     const { ctx, calls } = recorder();
     paintVehicles(ctx, l, [], '#000');
     expect(calls.map((c) => c.op)).toEqual(['clearRect']);
+  });
+});
+
+describe('hitVehicle (T9: tap or click a vehicle)', () => {
+  const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400, 2);
+  const marks = vehicleMarks(l, [
+    drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS }),
+    drawn({ id: 'tram', p: CENTRE, type: GTFS_TRAM }),
+  ]);
+  // WCAG 2.5.8: a pointer target is at least 24 by 24 CSS px, so a 3.5 px
+  // tram is reached through a 12 px radius around its centre, not its ink.
+  it('reaches a mark through a 24 CSS px target, scaled by density', () => {
+    expect(HIT_RADIUS_CSS_PX).toBe(12);
+    const tram = marks.find((m) => m.id === 'tram')!;
+    expect(hitVehicle(marks, tram.x + 20, tram.y, l.density)?.id).toBe('tram'); // 20 device px = 10 CSS px at density 2
+    expect(hitVehicle(marks, tram.x + 30, tram.y, l.density)).toBeNull(); // 15 CSS px: outside the target
+  });
+  it('picks the nearest when two targets overlap, and null on empty canvas', () => {
+    const near = vehicleMarks(l, [
+      drawn({ id: 'a', p: { x: 0, y: 0 }, type: GTFS_BUS }),
+      drawn({ id: 'b', p: { x: 20, y: 0 }, type: GTFS_BUS }), // 20 m = 4 device px apart at this scale
+    ]);
+    const b = near.find((m) => m.id === 'b')!;
+    expect(hitVehicle(near, b.x + 1, b.y, l.density)?.id).toBe('b');
+    expect(hitVehicle([], 200, 200, l.density)).toBeNull();
+  });
+});
+
+describe('paintVehicles with a selection', () => {
+  it('strokes a square ring around the selected mark only, in ink, after its fill', () => {
+    const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
+    const marks = vehicleMarks(l, [
+      drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS }),
+      drawn({ id: 'tram', p: CENTRE, type: GTFS_TRAM, heading: { x: 1, y: 0 } }),
+    ]);
+    const { ctx, calls } = recorder();
+    paintVehicles(ctx, l, marks, '#16226b', 'tram');
+    const rects = calls.filter((c) => c.op === 'rect');
+    expect(rects).toHaveLength(1);
+    const side = TRAM_LENGTH_PX * 2;
+    expect(rects[0].args).toEqual([-side / 2, -side / 2, side, side]);
+    expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(1);
+    // The ring is drawn inside the tram's own save/translate/rotate frame, so
+    // it sits on the mark: rect comes after that mark's fillRect and before
+    // its restore.
+    const ops = calls.map((c) => c.op);
+    const fillIdx = ops.lastIndexOf('fillRect');
+    expect(ops.indexOf('rect')).toBeGreaterThan(fillIdx);
+    expect(ops.indexOf('rect')).toBeLessThan(ops.lastIndexOf('restore'));
+  });
+  it('draws no ring when the selected id is not among the marks', () => {
+    const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
+    const marks = vehicleMarks(l, [drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS })]);
+    const { ctx, calls } = recorder();
+    paintVehicles(ctx, l, marks, '#16226b', 'gone');
+    expect(calls.filter((c) => c.op === 'rect')).toHaveLength(0);
   });
 });

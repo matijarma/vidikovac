@@ -25,6 +25,41 @@ export function routeShortName(routeId: string, routes: ZetRoutes): string {
   return routes[routeId]?.shortName || routeId;
 }
 
+/** GTFS route_type (0 tram, 3 bus) from the static GTFS, or undefined when
+ *  the route is unknown there -- never a guessed type. It rides on every pin
+ *  (R-P1) so a locked kiosk can keep to trams before the network artefact
+ *  has loaded, and in lightweight mode, where that artefact never loads. */
+export function routeType(routeId: string, routes: ZetRoutes): number | undefined {
+  const raw = routes[routeId]?.type;
+  const parsed = raw === undefined ? NaN : Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// --- The teaser box (R-P1: "keeps the vehicles inside that box") ---
+
+/** Trg bana Jelačića, between the square's two tram platforms -- the same
+ *  point app/src/motion/schematic.ts's DEFAULT_CROP is centred on. The
+ *  Worker cannot import that file across the worker/app boundary, so the
+ *  value is repeated here and the two test suites each pin it. */
+export const TEASER_BOX_CENTRE = { lon: 15.9769, lat: 45.813 } as const;
+/** Half the box side, in metres: the kiosk's default crop radius (900 m,
+ *  schematic.ts DEFAULT_RADIUS_M) plus one inner-city stop spacing
+ *  (~400-500 m), so a tram approaching the drawn circle has already given
+ *  the motion model one interval of its own speed evidence by the time it
+ *  enters -- otherwise every vehicle would appear at the rim standing
+ *  still until its second fix. */
+export const TEASER_BOX_HALF_M = 1400;
+const METRES_PER_DEG_LAT = 111_320;
+const HALF_LAT_DEG = TEASER_BOX_HALF_M / METRES_PER_DEG_LAT;
+const HALF_LON_DEG = TEASER_BOX_HALF_M / (METRES_PER_DEG_LAT * Math.cos((TEASER_BOX_CENTRE.lat * Math.PI) / 180));
+
+/** Whether a coordinate lies in the default screen's teaser box. A square in
+ *  degrees, not the client's circle: the circle is the client's to clip
+ *  against real geometry; this only bounds what leaves the Worker. */
+export function inTeaserBox(lon: number, lat: number): boolean {
+  return Math.abs(lon - TEASER_BOX_CENTRE.lon) <= HALF_LON_DEG && Math.abs(lat - TEASER_BOX_CENTRE.lat) <= HALF_LAT_DEG;
+}
+
 export function delayWords(seconds: number): string {
   if (!Number.isFinite(seconds) || Math.abs(seconds) < ON_TIME_SECONDS) return 'na vrijeme';
   const minutes = Math.max(1, Math.round(Math.abs(seconds) / 60));
@@ -92,6 +127,7 @@ export function parseZetRt(bytes: Uint8Array, routes: ZetRoutes): FeedPayload {
             tripId: vehicle.trip?.tripId ?? undefined,
             vehicleId,
             routeShortName: routeId ? routeShortName(routeId, routes) : undefined,
+            routeType: routeId ? routeType(routeId, routes) : undefined,
           }),
         });
       }

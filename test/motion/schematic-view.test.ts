@@ -5,7 +5,7 @@ import { toPlane } from '../../app/src/motion/geo';
 import type { Fix } from '../../app/src/motion/model';
 import type { Network, Shape, Stop } from '../../app/src/motion/network';
 import { cumulative } from '../../app/src/motion/polyline';
-import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
+import { HIT_RADIUS_CSS_PX, ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
 import { mountSchematicView } from '../../app/src/motion/schematic-view';
 
 function shapeOf(id: string, route: string, lonlat: [number, number][]): Shape {
@@ -92,6 +92,7 @@ function mount(opts: {
   reducedMotion?: boolean;
   types?: ReadonlySet<number> | null;
   stubSize?: { w: number; h: number };
+  cardIdleMs?: number;
 } = {}) {
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -108,6 +109,8 @@ function mount(opts: {
   // force a second, properly-measured layout pass (exactly the resize path
   // a real theme change or window resize would drive).
   let repaint: (() => void) | null = null;
+  // One-shot timers the view arms for the card's idle close, fired by hand.
+  const timers: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const handle = mountSchematicView(root, {
     i18n,
     net: opts.net === undefined ? testNetwork() : opts.net,
@@ -118,6 +121,9 @@ function mount(opts: {
     raf,
     cancel,
     onRepaint: opts.stubSize ? (l) => { repaint = l; return () => {}; } : undefined,
+    cardIdleMs: opts.cardIdleMs,
+    setTimer: (fn, ms) => { const t = { fn, ms, cleared: false }; timers.push(t); return t; },
+    clearTimer: (h) => { (h as { cleared: boolean }).cleared = true; },
   });
   const routesCanvas = root.querySelector<HTMLCanvasElement>('[data-testid=schematic-routes]');
   const vehiclesCanvas = root.querySelector<HTMLCanvasElement>('[data-testid=schematic-vehicles]');
@@ -128,8 +134,17 @@ function mount(opts: {
     vehicleCalls = stubCanvas(vehiclesCanvas, opts.stubSize.w, opts.stubSize.h);
     repaint?.();
   }
-  return { root, handle, fire, hasScheduled, routesCanvas, vehiclesCanvas, routeCalls, vehicleCalls, i18n };
+  return { root, handle, fire, hasScheduled, routesCanvas, vehiclesCanvas, routeCalls, vehicleCalls, i18n, timers };
 }
+
+/** A click at CSS-pixel (x, y) inside the stubbed canvas box. */
+function clickAt(canvas: HTMLCanvasElement, x: number, y: number): void {
+  canvas.dispatchEvent(new MouseEvent('click', { clientX: x, clientY: y, bubbles: true }));
+}
+function key(el: HTMLElement, k: string): void {
+  el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+}
+const card = (root: HTMLElement) => root.querySelector<HTMLElement>('[data-testid=vehicle-card]');
 
 describe('mountSchematicView, canvas path', () => {
   it('mounts a route canvas and a vehicle canvas, and shows the loading legend before any update()', () => {
@@ -277,5 +292,147 @@ describe('mountSchematicView, destroy', () => {
     handle.destroy();
     fire(); // whatever was scheduled before destroy(), if anything, is inert now
     expect(hasScheduled()).toBe(false);
+  });
+});
+
+// --- T9: tap or click a vehicle -------------------------------------------
+// The default crop is centred on Trg bana Jelačića; a 400 CSS px box at
+// density 2 is 800 device px across 1800 m, so a vehicle drawn at the crop
+// centre sits at CSS (200, 200).
+const CENTRE_CSS = 200;
+
+describe('mountSchematicView, the tap card (T9)', () => {
+  it('opens a card with the line, the direction and the route median delay on a click over a vehicle', () => {
+    const { root, handle, fire, vehiclesCanvas, vehicleCalls } = mount({ stubSize: { w: 400, h: 400 } });
+    // Two fixes along the tram shape, 30 s and ~100 m apart (under the 150 m
+    // snap): real movement, so the model's confidence clears the heading
+    // threshold and the direction is the shape's terminus, not "nepoznat".
+    // A few frames run once a second right before the second fix (fewer
+    // than the loop's park streak, so the frame clock is fresh when it
+    // lands), and the fix is then something the mark glides toward, not a
+    // jump.
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9756, lat: 45.813, routeId: 'R-tram', at: NOW - 30_000 })] }, NOW - 30_000);
+    for (let t = NOW - 3_000; t < NOW; t += 1_000) fire(t);
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram', at: NOW })], delays: new Map([['R-tram', 40]]) }, NOW);
+    fire(NOW);
+    fire(NOW + 500);
+    expect(card(root)!.hidden).toBe(true);
+    // Tap where the last frame actually drew it (the translate that
+    // positions the mark, in device px, halved back to CSS px) -- never at
+    // the reported fix, which is not where the model has it (R-P2).
+    const [dx, dy] = vehicleCalls.filter((c) => c.op === 'translate').at(-1)!.args as [number, number];
+    expect(Math.abs(dx / 2 - CENTRE_CSS)).toBeGreaterThan(HIT_RADIUS_CSS_PX); // the fix itself is not under the mark
+    clickAt(vehiclesCanvas!, dx / 2, dy / 2);
+    const c = card(root)!;
+    expect(c.hidden).toBe(false);
+    expect(c.getAttribute('role')).toBe('dialog');
+    expect(c.querySelector('[data-testid=vehicle-line]')!.textContent).toBe('R-tram');
+    expect(c.querySelector('[data-testid=vehicle-direction]')!.textContent).toBe('smjer Jelačić plac');
+    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: +40 s');
+  });
+
+  it('reads "smjer nepoznat" for a vehicle at a standstill', () => {
+    const { root, handle, fire, vehiclesCanvas } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    clickAt(vehiclesCanvas!, CENTRE_CSS, CENTRE_CSS);
+    expect(card(root)!.hidden).toBe(false);
+    expect(card(root)!.querySelector('[data-testid=vehicle-direction]')!.textContent).toBe('smjer nepoznat');
+    expect(card(root)!.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije nepoznato');
+  });
+
+  it('rings the selected vehicle on the canvas, and a click on empty canvas closes the card', () => {
+    const { root, handle, fire, vehiclesCanvas, vehicleCalls } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    clickAt(vehiclesCanvas!, CENTRE_CSS, CENTRE_CSS);
+    fire(NOW + 16);
+    expect(vehicleCalls.some((c) => c.op === 'rect')).toBe(true);
+    clickAt(vehiclesCanvas!, 20, 20); // 180 CSS px away from the only vehicle
+    expect(card(root)!.hidden).toBe(true);
+    const before = vehicleCalls.length;
+    fire(NOW + 32);
+    expect(vehicleCalls.slice(before).some((c) => c.op === 'rect')).toBe(false);
+  });
+
+  it('is reachable by keyboard: the canvas is focusable, arrows pick a vehicle, Escape closes', () => {
+    const { root, handle, fire, vehiclesCanvas } = mount({ stubSize: { w: 400, h: 400 } });
+    expect(vehiclesCanvas!.getAttribute('tabindex')).toBe('0');
+    const hintId = vehiclesCanvas!.getAttribute('aria-describedby')!;
+    expect(root.querySelector('#' + hintId)!.textContent).toBe('Strelicama biraj vozilo; Escape zatvara karticu.');
+    handle.update({ fixes: [
+      fix({ id: 'v2', lon: 15.9769, lat: 45.813, routeId: 'R-tram' }),
+      fix({ id: 'v1', lon: 15.977, lat: 45.812, routeId: 'R-bus' }),
+    ] });
+    fire(NOW);
+    key(vehiclesCanvas!, 'ArrowRight');
+    expect(card(root)!.hidden).toBe(false);
+    expect(card(root)!.dataset.vehicle).toBe('v1'); // ordered by id, so the arrows walk the same list every frame
+    key(vehiclesCanvas!, 'ArrowRight');
+    expect(card(root)!.dataset.vehicle).toBe('v2');
+    key(vehiclesCanvas!, 'ArrowRight');
+    expect(card(root)!.dataset.vehicle).toBe('v1'); // wraps
+    key(vehiclesCanvas!, 'Escape');
+    expect(card(root)!.hidden).toBe(true);
+    card(root)!.querySelector('button'); // the close button exists for pointer users too
+    key(vehiclesCanvas!, 'Enter');
+    expect(card(root)!.hidden).toBe(false);
+    card(root)!.querySelector<HTMLButtonElement>('[data-testid=vehicle-card-close]')!.click();
+    expect(card(root)!.hidden).toBe(true);
+  });
+
+  it('closes the card when the selected vehicle is no longer drawn (stale after 300 s of silence)', () => {
+    const { root, handle, fire, vehiclesCanvas } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    clickAt(vehiclesCanvas!, CENTRE_CSS, CENTRE_CSS);
+    expect(card(root)!.hidden).toBe(false);
+    fire(NOW + 301_000);
+    expect(card(root)!.hidden).toBe(true);
+  });
+
+  it('closes the card by itself after cardIdleMs on a screen nobody is touching (R-P7: the next passer-by finds the invitation)', () => {
+    const { root, handle, fire, vehiclesCanvas, timers } = mount({ stubSize: { w: 400, h: 400 }, cardIdleMs: 90_000 });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    clickAt(vehiclesCanvas!, CENTRE_CSS, CENTRE_CSS);
+    const armed = timers.find((t) => t.ms === 90_000 && !t.cleared)!;
+    expect(armed).toBeDefined();
+    armed.fn();
+    expect(card(root)!.hidden).toBe(true);
+    expect(armed.cleared).toBe(true); // a one-shot: cleared when it fires
+  });
+
+  it('never renders a card or a focusable canvas on the lightweight path', () => {
+    const { root } = mount({ lightweight: true });
+    expect(card(root)).toBeNull();
+    expect(root.querySelector('[tabindex]')).toBeNull();
+  });
+});
+
+describe('mountSchematicView, pause and resume', () => {
+  it('pause() requests no further frame; resume() starts drawing again', () => {
+    const { handle, fire, hasScheduled } = mount({ stubSize: { w: 200, h: 200 } });
+    expect(hasScheduled()).toBe(true);
+    handle.pause();
+    fire();
+    expect(hasScheduled()).toBe(false);
+    handle.resume();
+    expect(hasScheduled()).toBe(true);
+  });
+  it('draws nothing while its element is detached from the document, and parks', () => {
+    const { root, handle, fire, hasScheduled, vehicleCalls } = mount({ stubSize: { w: 200, h: 200 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    root.remove(); // the dashboard swapped to another layer: the panel, and this view in it, left the DOM
+    const before = vehicleCalls.length;
+    for (let i = 0; i < 9; i++) fire(NOW + 16 * (i + 1));
+    expect(vehicleCalls.length).toBe(before);
+    expect(hasScheduled()).toBe(false); // parked, not spinning on an invisible canvas
+    document.body.appendChild(root);
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram', at: NOW + 30_000 })] }, NOW + 30_000);
+    expect(hasScheduled()).toBe(true); // the next render's update() wakes it
+    fire(NOW + 30_016);
+    expect(vehicleCalls.length).toBeGreaterThan(before);
   });
 });

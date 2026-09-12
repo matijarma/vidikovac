@@ -76,7 +76,7 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean; loadNetwork?: () => Promise<null> } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
@@ -92,6 +92,9 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
     onCopy: opts.onCopy,
     mapFactory: opts.mapFactory as never,
     lightweight: opts.lightweight ?? false,
+    // The network artefact is never fetched under test (there is no server);
+    // null is loadNetwork()'s own honest answer to a failed load.
+    loadNetwork: opts.loadNetwork ?? (async () => null),
     setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
     clearInterval: () => { ticks.length = 0; },
   });
@@ -440,5 +443,55 @@ describe('remembering the last layer (R-60)', () => {
     sessionStorage.setItem(LAYER_STORAGE_KEY, 'not-a-real-layer');
     const { root } = mount();
     expect(selectedLayer(root)).toBe('grad-sada');
+  });
+});
+
+// --- T9: the moving map on the dashboard ------------------------------------
+describe('the schematic on U pokretu (T9)', () => {
+  const NOTE = 'Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.';
+  it('mounts one schematic host with the honesty note, keeps it across polls and across tab switches, and asks for the network only once', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const { root, handle, session, ticks } = mount({ loadNetwork });
+    session.join();
+    await flush();
+    expect(loadNetwork).not.toHaveBeenCalled(); // grad-sada is up: nothing fetched for a layer nobody is looking at (R-L4, and no e-waste)
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const host = root.querySelector('[data-testid=schematic-host]');
+    expect(host).not.toBeNull();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    expect(text(root.querySelector('#u-pokretu-schematic [data-testid=schematic-note]'))).toBe(NOTE);
+    ticks[0]!(); // the poll: a re-render
+    await flush();
+    expect(root.querySelector('[data-testid=schematic-host]')).toBe(host);
+    handle.selectLayer('vijesti');
+    expect(root.querySelector('[data-testid=schematic-host]')).toBeNull(); // detached with its panel, not destroyed
+    handle.selectLayer('u-pokretu');
+    expect(root.querySelector('[data-testid=schematic-host]')).toBe(host);
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+  it('renders the list and no canvas on U pokretu in lightweight mode, note included (R-L2)', async () => {
+    const { root, handle, session } = mount({ lightweight: true });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelectorAll('canvas')).toHaveLength(0);
+    expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
+  });
+  it('stops the motion when the session freezes: the frozen view stays where it was', async () => {
+    const { root, handle, session } = mount();
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const view = root.querySelector<HTMLElement>('[data-testid=schematic]')!;
+    await new Promise((r) => requestAnimationFrame(r));
+    session.expire();
+    const frozenAt = view.dataset.frames;
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
+    expect(view.dataset.frames).toBe(frozenAt);
   });
 });

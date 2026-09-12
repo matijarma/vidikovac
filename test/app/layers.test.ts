@@ -117,6 +117,35 @@ describe('u-pokretu', () => {
     expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
+  // T9: the moving map. The page owns one SchematicHost for its whole life
+  // (motion/schematic-host.ts); the layer mounts its stable element into a
+  // panel on every render and hands it this poll's evidence -- fixes from
+  // the vehicle: pins and the route: median delays -- never a position of
+  // its own making.
+  it('mounts the page’s schematic host into the first panel and feeds it this snapshot’s fixes and delays', () => {
+    const element = document.createElement('div');
+    element.dataset.testid = 'schematic-host';
+    const schematic = { element, mount: vi.fn(() => element), update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() };
+    const section = renderLayer('u-pokretu', ctx({ schematic }));
+    const panel = section.querySelector('#u-pokretu-schematic')!;
+    expect(text(panel.querySelector('.panel-title'))).toBe('Tramvaji i autobusi sada');
+    expect(panel.querySelector('[data-testid=schematic-host]')).toBe(element);
+    expect(section.querySelectorAll('[data-testid=panel]')[0]).toBe(panel);
+    expect(schematic.update).toHaveBeenCalledTimes(1);
+    const [data, at] = schematic.update.mock.calls[0]!;
+    expect(at).toBe(NOW);
+    expect(data.fixes.map((f: { id: string }) => f.id)).toEqual(['vehicle:1', 'vehicle:2', 'vehicle:3']);
+    expect(data.fixes[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
+    expect([...data.delays!]).toEqual([['6', 90], ['11', -30]]);
+    // A second render (the next poll) reuses the very same element.
+    const again = renderLayer('u-pokretu', ctx({ schematic }));
+    expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);
+    expect(schematic.update).toHaveBeenCalledTimes(2);
+  });
+  it('renders no schematic panel when the page has no host (unit contexts, the kiosk essentials)', () => {
+    const section = renderLayer('u-pokretu', ctx());
+    expect(section.querySelector('#u-pokretu-schematic')).toBeNull();
+  });
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');

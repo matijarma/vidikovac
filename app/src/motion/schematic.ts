@@ -90,6 +90,16 @@ const MIN_VEHICLE_ALPHA = 0.35;
  *  terminus does not sit on the canvas edge. */
 const WHOLE_NETWORK_PADDING = 1.04;
 
+/** WCAG 2.5.8: a pointer target is at least 24 by 24 CSS px. A 3.5 px tram
+ *  is therefore reached through a 12 px radius around its centre, not
+ *  through its own ink; the nearest mark inside that radius wins. */
+export const HIT_RADIUS_CSS_PX = 12;
+/** The ring around a selected mark is a square twice the mark's longer
+ *  side: big enough to read as "this one" from a few steps back on a
+ *  kiosk, drawn in the mark's own frame so a tram's ring turns with it. */
+const RING_SCALE = 2;
+const RING_LINE_PX = 1.5;
+
 /** A route polyline in canvas pixels, already clipped to the crop. */
 export interface RouteLine {
   route: string;
@@ -287,6 +297,25 @@ export function vehicleMarks(layout: SchematicLayout, vehicles: readonly Drawn[]
   return marks;
 }
 
+/**
+ * The mark under a pointer at device-pixel (x, y), or null: the nearest one
+ * within HIT_RADIUS_CSS_PX (scaled by density). Pure, so the view's click
+ * and the tests share one answer to "which vehicle did that tap mean".
+ */
+export function hitVehicle(marks: readonly VehicleMark[], x: number, y: number, density: number): VehicleMark | null {
+  const radius = HIT_RADIUS_CSS_PX * density;
+  let best: VehicleMark | null = null;
+  let bestD = Infinity;
+  for (const m of marks) {
+    const d = Math.hypot(m.x - x, m.y - y);
+    if (d <= radius && d < bestD) {
+      best = m;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 /** The route layer: clear, then stroke every clipped run in ink at the
  *  route alpha. Called on theme, resize or crop change only. */
 export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, ink: string): void {
@@ -307,8 +336,15 @@ export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, ink:
 }
 
 /** The vehicle layer: clear, then fill each mark centred on its own
- *  position, rotated only when the mark carries an angle. Called per frame. */
-export function paintVehicles(ctx: SchematicContext, layout: SchematicLayout, marks: readonly VehicleMark[], ink: string): void {
+ *  position, rotated only when the mark carries an angle, and ring the one
+ *  mark whose id is `selectedId` (the tapped vehicle, T9). Called per frame. */
+export function paintVehicles(
+  ctx: SchematicContext,
+  layout: SchematicLayout,
+  marks: readonly VehicleMark[],
+  ink: string,
+  selectedId: string | null = null,
+): void {
   ctx.clearRect(0, 0, layout.w, layout.h);
   for (const m of marks) {
     ctx.save();
@@ -317,6 +353,16 @@ export function paintVehicles(ctx: SchematicContext, layout: SchematicLayout, ma
     ctx.globalAlpha = m.alpha;
     ctx.fillStyle = ink;
     ctx.fillRect(-m.w / 2, -m.h / 2, m.w, m.h);
+    if (m.id === selectedId) {
+      const side = Math.max(m.w, m.h) * RING_SCALE;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = RING_LINE_PX * layout.density;
+      ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      ctx.rect(-side / 2, -side / 2, side, side);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }
