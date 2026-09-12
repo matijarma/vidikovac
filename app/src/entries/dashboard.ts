@@ -59,11 +59,17 @@ const lightweight = detectLagano({
 markLagano(document.documentElement, lightweight);
 
 if (!params) {
+  // Reached with no room in the fragment (a bookmark, a stray share): the
+  // dashboard proper never mounts, so this terminal state needs its own h1
+  // (R-M1's axe sweep expects exactly one per page, including this one).
+  const heading = document.createElement('h1');
+  heading.className = 'visually-hidden';
+  heading.textContent = i18n.t('common.appName');
   const p = document.createElement('p');
   p.className = 'dash-alert';
   p.setAttribute('role', 'alert');
   p.textContent = i18n.t('session.noRoom');
-  root.appendChild(p);
+  root.append(heading, p);
 } else {
   const session = createSessionClient({ roomId: params.roomId, ticket: params.ticket });
   const wide = globalThis.matchMedia?.('(min-width: 60rem)').matches ?? false;

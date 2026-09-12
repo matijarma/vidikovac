@@ -161,7 +161,8 @@
     "legendMeander": "FIG. 1 — SESSION MEANDER · EMPTIES BY {time}",
     "remainingFine": "· {time} left",
     "panoramaAlt": "Zagreb panorama: {count} ZET vehicles moving",
-    "panoramaAltLoading": "Zagreb panorama: loading data"
+    "panoramaAltLoading": "Zagreb panorama: loading data",
+    "documentTitle": "{app} · {layer}"
   },
   "kiosk": {
     "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",

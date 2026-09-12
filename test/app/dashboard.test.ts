@@ -149,13 +149,36 @@ describe('layer switcher', () => {
   });
 });
 
+describe('the document title (R-M1: /d has no other h1)', () => {
+  it('is a visually-hidden, unfocusable-by-tab h1 naming the app and the active layer', () => {
+    const { root } = mount();
+    const title = root.querySelector<HTMLElement>('[data-testid=dash-title]')!;
+    expect(title.tagName).toBe('H1');
+    expect(title.parentElement).toBe(root.querySelector('.dash-head'));
+    expect(root.querySelector('.dash-head')?.firstElementChild).toBe(title);
+    expect(title.classList.contains('visually-hidden')).toBe(true);
+    expect(title.tabIndex).toBe(-1);
+    expect(text(title)).toBe('Vidikovac · Grad sada');
+  });
+  it('changes when a tab is chosen', () => {
+    const { root } = mount();
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+    tabs[1]!.click();
+    expect(text(root.querySelector('[data-testid=dash-title]'))).toBe('Vidikovac · U pokretu');
+  });
+  it('receives focus on join, in place of the layer heading', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(document.activeElement).toBe(root.querySelector('[data-testid=dash-title]'));
+  });
+});
+
 describe('unlock, countdown and announcements', () => {
-  it('announces the end time politely and moves focus to the layer heading', () => {
+  it('announces the end time politely', () => {
     const { root, session } = mount();
     session.join();
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
     expect(root.querySelector('[data-testid=announce-polite]')?.getAttribute('role')).toBe('status');
-    expect(document.activeElement).toBe(root.querySelector('#layer-title-grad-sada'));
     const label = root.querySelector<HTMLElement>('[data-testid=session-label]')!;
     expect(text(label)).toBe('Otključano · Kavana Velebit · do 14:42');
     // The same expiry the screen carries, to the millisecond (R-52).

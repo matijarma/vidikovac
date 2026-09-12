@@ -135,6 +135,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.innerHTML = `
     <figure class="dash-panorama">${panoramaInner}</figure>
     <header class="dash-head">
+      <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
       <div class="dash-head-top">
         <p class="dash-label" data-testid="session-label"></p>
         <button type="button" class="btn-ghost dash-share" data-testid="share-city" hidden>${escapeHtml(i18n.t('session.share'))}</button>
@@ -166,6 +167,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const frozenLine = element.querySelector<HTMLElement>('[data-testid=frozen-line]')!;
+  const titleEl = element.querySelector<HTMLElement>('[data-testid=dash-title]')!;
   const label = element.querySelector<HTMLElement>('[data-testid=session-label]')!;
   const timeEl = element.querySelector<HTMLTimeElement>('[data-testid=countdown]')!;
   const fineEl = element.querySelector<HTMLElement>('[data-testid=countdown-fine]')!;
@@ -190,6 +192,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     tablist.appendChild(tab);
     return tab;
   });
+
+  /** /d has no visible h1 (the invitation lives on /); this hidden one names
+   *  the app and the active layer so the axe sweep finds exactly one, and is
+   *  where focus lands on join (R-M1). Runs wherever `active` changes. */
+  function updateDocumentTitle(): void {
+    titleEl.textContent = i18n.t('session.documentTitle', {
+      app: i18n.t('common.appName'),
+      layer: i18n.t(`layers.${active}`),
+    });
+  }
 
   function paintTabs(): void {
     for (const tab of tabs) {
@@ -251,6 +263,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     active = layer;
     paintTabs();
+    updateDocumentTitle();
     if (!wide) render();
     const heading = document.getElementById(`layer-title-${layer}`);
     if (fromUser) {
@@ -440,7 +453,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
     totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     paintTimer();
-    document.getElementById(`layer-title-${active}`)?.focus();
+    titleEl.focus();
     void refresh();
   });
   function freeze(): void {
@@ -470,6 +483,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   session.onExpired(freeze);
 
   paintTabs();
+  updateDocumentTitle();
   render();
   paintTimer();
   timer = setTimer(() => {

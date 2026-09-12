@@ -166,7 +166,8 @@
     "legendMeander": "SL. 1 — MEANDAR SESIJE · ISPRAZNI SE DO {time}",
     "remainingFine": "· još {time}",
     "panoramaAlt": "Zagrebačka panorama: {count} vozila ZET-a u pokretu",
-    "panoramaAltLoading": "Zagrebačka panorama: učitavanje podataka"
+    "panoramaAltLoading": "Zagrebačka panorama: učitavanje podataka",
+    "documentTitle": "{app} · {layer}"
   },
   "kiosk": {
     "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
