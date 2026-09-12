@@ -2,11 +2,12 @@ import type { Attribution, ModuleId, ModuleSnapshot } from '../../../worker/feed
 import type { MapSlots } from '../map/map-slots';
 import type { SchematicHost } from '../motion/schematic-host';
 import type { I18n } from '../i18n/i18n';
+import type { ExperienceActions } from '../core/contracts';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
 
 /** Everything a layer renderer is allowed to know. No fetching, no timers. */
-export interface LayerContext {
+export interface LayerContext extends ExperienceActions {
   i18n: I18n;
   snapshots: Partial<Record<ModuleId, ModuleSnapshot>>;
   now: number;

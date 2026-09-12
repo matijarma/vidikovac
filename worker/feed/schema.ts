@@ -49,6 +49,8 @@ export interface FeedItem {
   severity?: Severity;
   /** ISO 8601 start or observation time. */
   at?: string;
+  /** What `at` means. Never substitute fetch time for a missing source date. */
+  dateBasis?: 'event' | 'published' | 'updated' | 'observed' | 'unknown';
   /** ISO 8601 end, expiry or expected reopening. */
   until?: string;
   geo?: Geo;
@@ -59,6 +61,15 @@ export interface FeedItem {
 }
 
 export type SnapshotStatus = 'live' | 'stale' | 'down';
+
+export interface SourceAvailability {
+  status: SnapshotStatus;
+  itemCount: number;
+  fetchedAt?: string;
+  sourceUpdatedAt?: string;
+  /** Number before a documented per-source cap, if known. */
+  totalItems?: number;
+}
 
 export interface Attribution {
   /** Rendered verbatim in the panel footer, /izvori and every export. */
@@ -79,6 +90,10 @@ export interface ModuleSnapshot {
   staleSince?: string;
   attribution: Attribution;
   items: FeedItem[];
+  /** Independent source health, including successful empty responses. */
+  sources?: Record<string, SourceAvailability>;
+  /** The shown collection is not necessarily the entire city's dataset. */
+  coverage?: { shown: number; total?: number; limited: boolean };
 }
 
 export interface FetchContext {
