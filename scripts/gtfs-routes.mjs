@@ -77,8 +77,15 @@ export function readZipEntries(buf) {
   return entries;
 }
 
-/** Decompresses one entry. Method 0 is stored, 8 is deflate; anything else is refused. */
-export function extractEntry(buf, entry) {
+/**
+ * Locates entry's local file header and returns the offset where its
+ * (still compressed) data begins, past the fixed 30-byte header and both
+ * variable-length name/extra fields. Shared by extractEntry (which inflates
+ * the whole entry synchronously) and gtfs-shapes.mjs's streamTripEndpoints
+ * (which needs the same offset to start a stream, but must not inflate a
+ * 92 MB entry into memory to get there).
+ */
+export function localFileDataOffset(buf, entry) {
   const view = viewOf(buf);
   const p = entry.localHeaderOffset;
   if (p + 30 > view.byteLength || view.getUint32(p, true) !== SIG_LOCAL) {
@@ -86,7 +93,12 @@ export function extractEntry(buf, entry) {
   }
   const nameLength = view.getUint16(p + 26, true);
   const extraLength = view.getUint16(p + 28, true);
-  const start = p + 30 + nameLength + extraLength;
+  return p + 30 + nameLength + extraLength;
+}
+
+/** Decompresses one entry. Method 0 is stored, 8 is deflate; anything else is refused. */
+export function extractEntry(buf, entry) {
+  const start = localFileDataOffset(buf, entry);
   const raw = buf.subarray(start, start + entry.compressedSize);
   if (entry.method === 0) return raw;
   if (entry.method === 8) {
@@ -142,7 +154,9 @@ export function parseCsv(text) {
   return rows.filter((r) => !(r.length === 1 && r[0] === ''));
 }
 
-function compareRouteIds(a, b) {
+/** Numeric-aware id comparator: "9" sorts before "10". Shared with
+ *  gtfs-shapes.mjs, which orders trams and buses by trip count then this. */
+export function compareRouteIds(a, b) {
   const na = Number(a);
   const nb = Number(b);
   if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;

@@ -67,6 +67,20 @@ describe('parseZetRt', () => {
     expect(ZET_RT_URL).toBe('https://www.zet.hr/gtfs-rt-protobuf');
   });
 
+  // R-P3: ZET's feed carries no bearing and no speed. protobufjs used to
+  // return 0 for both absent fields, which compactData kept because 0 is a
+  // defined number — every vehicle claimed to face due north and stand
+  // still. A reported position is evidence, never output (area T's rule);
+  // a fabricated heading and a fabricated stillness are exactly that kind
+  // of output, so neither key may ever reach a vehicle row again.
+  it('never carries a bearing or a speed: ZET does not send them', () => {
+    expect(vehicles.length).toBeGreaterThan(0);
+    for (const item of vehicles) {
+      expect(item.data).not.toHaveProperty('bearing');
+      expect(item.data).not.toHaveProperty('speed');
+    }
+  });
+
   it('returns nothing for an empty feed rather than throwing', () => {
     expect(parseZetRt(new Uint8Array(0), {}).items).toEqual([]);
   });
