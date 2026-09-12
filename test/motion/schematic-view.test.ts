@@ -428,6 +428,7 @@ describe('mountSchematicView, the tap card (T9)', () => {
     const { root } = mount({ lightweight: true });
     expect(card(root)).toBeNull();
     expect(root.querySelector('[tabindex]')).toBeNull();
+    expect(root.querySelector('[data-testid=vehicle-list]')).toBeNull();
   });
 });
 
@@ -455,5 +456,175 @@ describe('mountSchematicView, pause and resume', () => {
     expect(hasScheduled()).toBe(true); // the next render's update() wakes it
     fire(NOW + 30_016);
     expect(vehicleCalls.length).toBeGreaterThan(before);
+  });
+});
+
+// --- R-F5: the moving map for people who cannot see it -----------------------
+// The canvas keeps role="img" (its legend is the label) and gains a visually
+// hidden list of the drawn vehicles as real buttons, rebuilt on update() and
+// never per frame; the card is a real dialog that takes focus when opened
+// from a button or a tap and hands it back on close. The arrow-key walk on
+// the canvas stays for sighted keyboard users and never moves focus.
+const list = (root: HTMLElement) => root.querySelector<HTMLElement>('[data-testid=vehicle-list]')!;
+const listButtons = (root: HTMLElement) => [...list(root).querySelectorAll<HTMLButtonElement>('button')];
+/** Two vehicles inside the default crop (ids deliberately out of order, so
+ *  the list's id ordering is visible) and one tracked far outside it. */
+const TWO_IN_CROP: Fix[] = [
+  fix({ id: 'v2', lon: 15.9769, lat: 45.813, routeId: 'R-tram' }),
+  fix({ id: 'v1', lon: 15.977, lat: 45.812, routeId: 'R-bus' }),
+  fix({ id: 'v3', lon: 16.5, lat: 46.5, routeId: 'R-tram' }),
+];
+
+describe('mountSchematicView, the text path (R-F5)', () => {
+  it("lists every drawn vehicle as a button in the arrow keys' own id order, saying what the card would say, rebuilt on update() and never per frame", () => {
+    const { root, handle, fire } = mount({ stubSize: { w: 400, h: 400 } });
+    const ul = list(root);
+    expect(ul.tagName).toBe('UL');
+    expect(ul.getAttribute('aria-label')).toBe('Vozila u kadru');
+    expect(root.querySelector('#' + ul.getAttribute('aria-describedby'))!.textContent).toBe('Strelicama biraj vozilo; Enter otvara karticu.');
+    expect(listButtons(root)).toHaveLength(0); // nothing drawn yet, nothing listed
+    handle.update({ fixes: TWO_IN_CROP, delays: new Map([['R-tram', 40]]) });
+    expect(listButtons(root).map((b) => b.dataset.vehicle)).toEqual(['v1', 'v2']); // v3 is tracked but not in frame
+    expect(listButtons(root)[1].textContent).toBe('R-tram, smjer nepoznat, kašnjenje linije: +40 s');
+    expect(listButtons(root)[0].textContent).toBe('R-bus, smjer nepoznat, kašnjenje linije nepoznato');
+    const before = listButtons(root);
+    fire(NOW);
+    fire(NOW + 500);
+    fire(NOW + 1_000);
+    expect(listButtons(root)).toEqual(before); // the very same elements: frames never touch the list
+    // v1 falls silent for longer than STALE_S and is evicted (R-F2): its
+    // button goes, v2's survives as the same element (a reader parked on it
+    // is not thrown off by a poll).
+    handle.update({ fixes: [fix({ id: 'v2', lon: 15.9769, lat: 45.813, routeId: 'R-tram', at: NOW + 301_000 })] }, NOW + 301_000);
+    expect(listButtons(root).map((b) => b.dataset.vehicle)).toEqual(['v2']);
+    expect(listButtons(root)[0]).toBe(before[1]);
+  });
+
+  it('a button opens the same card as a real non-modal dialog labelled by its line heading, moves focus to it, and Escape returns focus to that button', () => {
+    const { root, handle } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: TWO_IN_CROP, delays: new Map([['R-tram', 40]]) });
+    const b = listButtons(root)[1];
+    b.focus();
+    b.click();
+    const c = card(root)!;
+    expect(c.hidden).toBe(false);
+    expect(c.dataset.vehicle).toBe('v2');
+    expect(c.getAttribute('role')).toBe('dialog');
+    expect(c.getAttribute('aria-modal')).toBe('false');
+    const heading = root.querySelector('#' + c.getAttribute('aria-labelledby'))!;
+    expect(heading.tagName).toBe('H3');
+    expect(heading.textContent).toBe('R-tram');
+    expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: +40 s');
+    expect(document.activeElement).toBe(c);
+    key(c, 'Escape');
+    expect(c.hidden).toBe(true);
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('the close button returns focus to the button that opened the card', () => {
+    const { root, handle } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: TWO_IN_CROP });
+    const b = listButtons(root)[0];
+    b.focus();
+    b.click();
+    const c = card(root)!;
+    expect(document.activeElement).toBe(c);
+    c.querySelector<HTMLButtonElement>('[data-testid=vehicle-card-close]')!.click();
+    expect(c.hidden).toBe(true);
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('the idle close on a public screen returns focus to the list, never dropping it to body (R-P7 meets R-F5)', () => {
+    const { root, handle, timers } = mount({ stubSize: { w: 400, h: 400 }, cardIdleMs: 90_000 });
+    handle.update({ fixes: TWO_IN_CROP });
+    const b = listButtons(root)[0];
+    b.focus();
+    b.click();
+    const c = card(root)!;
+    expect(document.activeElement).toBe(c);
+    const armed = timers.find((t) => t.ms === 90_000 && !t.cleared)!;
+    armed.fn();
+    expect(c.hidden).toBe(true);
+    expect(document.activeElement).toBe(list(root));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('a tap on the canvas moves focus to the dialog too, and closing it hands focus back to the canvas', () => {
+    const { root, handle, fire, vehiclesCanvas } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    vehiclesCanvas!.focus(); // what a real click does before the click event fires
+    clickAt(vehiclesCanvas!, CENTRE_CSS, CENTRE_CSS);
+    const c = card(root)!;
+    expect(c.hidden).toBe(false);
+    expect(document.activeElement).toBe(c);
+    c.querySelector<HTMLButtonElement>('[data-testid=vehicle-card-close]')!.click();
+    expect(c.hidden).toBe(true);
+    expect(document.activeElement).toBe(vehiclesCanvas);
+  });
+
+  it('the arrow keys on the canvas still walk the vehicles for sighted keyboard users, and never move focus off the canvas', () => {
+    const { root, handle, fire, vehiclesCanvas } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: TWO_IN_CROP });
+    fire(NOW);
+    vehiclesCanvas!.focus();
+    key(vehiclesCanvas!, 'ArrowRight');
+    expect(card(root)!.hidden).toBe(false);
+    expect(card(root)!.dataset.vehicle).toBe('v1');
+    expect(document.activeElement).toBe(vehiclesCanvas);
+    key(vehiclesCanvas!, 'ArrowRight');
+    expect(card(root)!.dataset.vehicle).toBe('v2');
+    expect(document.activeElement).toBe(vehiclesCanvas);
+    key(vehiclesCanvas!, 'Escape');
+    expect(card(root)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(vehiclesCanvas);
+  });
+
+  it('is one tab stop: the arrow keys move between the vehicle buttons and the reached button becomes the stop, so a whole network is not three hundred Tabs', () => {
+    const { root, handle } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: TWO_IN_CROP });
+    const tabindexes = () => listButtons(root).map((b) => b.getAttribute('tabindex'));
+    expect(tabindexes()).toEqual(['0', '-1']);
+    listButtons(root)[0].focus();
+    key(listButtons(root)[0], 'ArrowDown');
+    expect(document.activeElement).toBe(listButtons(root)[1]);
+    expect(tabindexes()).toEqual(['-1', '0']);
+    key(listButtons(root)[1], 'ArrowDown');
+    expect(document.activeElement).toBe(listButtons(root)[0]); // wraps
+    key(listButtons(root)[0], 'End');
+    expect(document.activeElement).toBe(listButtons(root)[1]);
+    key(listButtons(root)[1], 'Home');
+    expect(document.activeElement).toBe(listButtons(root)[0]);
+    key(listButtons(root)[0], 'ArrowUp');
+    expect(document.activeElement).toBe(listButtons(root)[1]); // wraps the other way
+    // The stop survives a poll: the same vehicle stays the one Tab reaches.
+    handle.update({ fixes: TWO_IN_CROP });
+    expect(tabindexes()).toEqual(['-1', '0']);
+  });
+
+  it("hands focus to the list when the focused button's vehicle leaves on a poll, instead of dropping it to body", () => {
+    const { root, handle } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: TWO_IN_CROP });
+    listButtons(root)[0].focus(); // v1
+    expect(document.activeElement).toBe(listButtons(root)[0]);
+    handle.update({ fixes: [fix({ id: 'v2', lon: 15.9769, lat: 45.813, routeId: 'R-tram', at: NOW + 301_000 })] }, NOW + 301_000);
+    expect(listButtons(root).map((b) => b.dataset.vehicle)).toEqual(['v2']);
+    expect(document.activeElement).toBe(list(root));
+  });
+
+  it('a button whose vehicle the frame loop has since evicted opens nothing and simply leaves the list', () => {
+    const { root, handle, fire } = mount({ stubSize: { w: 400, h: 400 } });
+    handle.update({ fixes: [fix({ id: 'v1', lon: 15.9769, lat: 45.813, routeId: 'R-tram' })] });
+    fire(NOW);
+    fire(NOW + 301_000); // evicted by step(), between two polls
+    expect(listButtons(root)).toHaveLength(1); // the list is rebuilt on update(), not per frame
+    listButtons(root)[0].click();
+    expect(card(root)!.hidden).toBe(true);
+    expect(listButtons(root)).toHaveLength(0);
+  });
+
+  it('renders no vehicle list on the lightweight path, whose whole face is already a list', () => {
+    const { root } = mount({ lightweight: true });
+    expect(root.querySelector('[data-testid=vehicle-list]')).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOSURE_INK,
   createCityMap,
+  OSM_ATTRIBUTION,
   SOURCE_UPDATE_HZ,
   STROKE_INK,
   VEHICLE_INK,
@@ -22,10 +23,31 @@ class FakeMap {
   readonly layers: Record<string, unknown>[] = [];
   readonly images = new Map<string, { image: FakeImage; options: Record<string, unknown> }>();
   removed = false;
+  readonly controls: unknown[] = [];
+  readonly canvas: HTMLCanvasElement;
   private readonly handlers: Record<string, (() => void)[]> = {};
-  constructor(public readonly options: Record<string, unknown>) { FakeMap.instances.push(this); }
+  constructor(public readonly options: Record<string, unknown>) {
+    FakeMap.instances.push(this);
+    // What maplibre-gl 5.24.0's Map._setupContainer builds: the canvas is a
+    // focusable region named "Map" in English, then the control container.
+    const container = options.container as HTMLElement;
+    container.classList.add('maplibregl-map');
+    const canvasContainer = document.createElement('div');
+    canvasContainer.className = 'maplibregl-canvas-container maplibregl-interactive';
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'maplibregl-canvas';
+    this.canvas.setAttribute('tabindex', '0');
+    this.canvas.setAttribute('aria-label', 'Map');
+    this.canvas.setAttribute('role', 'region');
+    canvasContainer.appendChild(this.canvas);
+    container.appendChild(canvasContainer);
+    const controls = document.createElement('div');
+    controls.className = 'maplibregl-control-container';
+    container.appendChild(controls);
+  }
   on(type: string, cb: () => void): void { (this.handlers[type] ??= []).push(cb); }
-  addControl(): void {}
+  addControl(control: unknown): void { this.controls.push(control); }
+  getCanvas(): HTMLCanvasElement { return this.canvas; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
   addSource(id: string, spec: { type: string; data: unknown }): void {
     const calls: unknown[] = [];
@@ -36,7 +58,8 @@ class FakeMap {
   remove(): void { this.removed = true; }
   load(): void { for (const cb of this.handlers.load ?? []) cb(); }
 }
-const lib = { Map: FakeMap, AttributionControl: class {}, NavigationControl: class {} };
+class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
+const lib = { Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl };
 
 const T0 = Date.parse('2026-09-12T10:00:00Z');
 const FRAME_MS = 1000 / 60;
@@ -230,7 +253,7 @@ describe('lifecycle', () => {
     map.load();
     expect((map.getSource('places')!.data as FC).features).toHaveLength(1);
     expect((map.getSource('closures')!.data as FC).features).toHaveLength(1);
-    expect(container.getAttribute('role')).toBe('img');
+    expect(container.getAttribute('role')).toBe('region');
     expect(container.getAttribute('aria-label')).toBe('Karta');
     handle.destroy();
     expect(map.removed).toBe(true);
@@ -245,5 +268,62 @@ describe('lifecycle', () => {
     const { handle } = await harness({ loadNetwork });
     handle.update([A], []);
     expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- R-F5: the map container is a region, so MapLibre's controls and the
+// attribution link are exposed by name; the image is the canvas alone. -----
+describe('the map for people who cannot see it (R-F5)', () => {
+  it('names the container as a region from the first moment, and puts role="img" with the same label on the canvas alone, which stays keyboard-operable', async () => {
+    let t = T0;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const handle = createCityMap(
+      { container, ariaLabel: 'Karta: 3 vozila, 1 zatvaranje', points: [], lines: [], loadNetwork: async () => null },
+      { loadMaplibre: async () => lib as never, raf: () => 1, cancel: () => {}, now: () => t },
+    );
+    // Before the library has even loaded: the landmark already exists.
+    expect(container.getAttribute('role')).toBe('region');
+    expect(container.getAttribute('aria-label')).toBe('Karta: 3 vozila, 1 zatvaranje');
+    await flush();
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas.maplibregl-canvas')!;
+    expect(canvas.getAttribute('role')).toBe('img');
+    // One source of truth for the label: map-slots.ts rewrites the container's
+    // aria-label on every poll, so the canvas points at the container.
+    expect(container.id).not.toBe('');
+    expect(canvas.getAttribute('aria-labelledby')).toBe(container.id);
+    expect(canvas.hasAttribute('aria-label')).toBe(false); // MapLibre's English "Map" is gone, not merely overridden
+    // The arrow keys still pan and +/- still zoom (WCAG 2.1.1): MapLibre's tab stop stays.
+    expect(canvas.getAttribute('tabindex')).toBe('0');
+    // No other element between the region and its controls carries a role
+    // whose children are presentational: nothing focusable is nested in an image.
+    for (const el of container.querySelectorAll('[role=img]')) expect(el.querySelector('[tabindex], button, a[href]')).toBeNull();
+    handle.destroy();
+  });
+
+  it('keeps an existing container id rather than renaming an element the page already refers to', async () => {
+    const container = document.createElement('div');
+    container.id = 'u-pokretu-map-slot';
+    document.body.appendChild(container);
+    createCityMap(
+      { container, ariaLabel: 'Karta', points: [], lines: [], loadNetwork: async () => null },
+      { loadMaplibre: async () => lib as never, raf: () => 1, cancel: () => {}, now: () => T0 },
+    );
+    await flush();
+    expect(container.id).toBe('u-pokretu-map-slot');
+    expect(container.querySelector('canvas')!.getAttribute('aria-labelledby')).toBe('u-pokretu-map-slot');
+  });
+
+  it('hands MapLibre the OpenStreetMap credit as a link to the copyright page, the one the licence asks for, and nothing feed-derived', async () => {
+    const { map } = await harness();
+    const attribution = map.controls.find((c) => (c as FakeControl).options.customAttribution !== undefined) as FakeControl;
+    expect(attribution).toBeDefined();
+    const html = String(attribution.options.customAttribution);
+    expect(html).toContain('href="https://www.openstreetmap.org/copyright"');
+    expect(html).toContain('© OpenStreetMap contributors');
+    expect(html).toContain('rel="noopener noreferrer"');
+    // The style's own source attribution stays the plain text, which MapLibre
+    // drops as a substring of the link, so the credit is shown exactly once.
+    expect(html).toContain(OSM_ATTRIBUTION);
   });
 });

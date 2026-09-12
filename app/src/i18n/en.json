@@ -230,6 +230,8 @@
     "delayUnknown": "route delay unknown",
     "lineUnknown": "line unknown",
     "canvasHint": "Use the arrow keys to pick a vehicle; Escape closes the card.",
+    "vehicleList": "Vehicles in frame",
+    "listHint": "Use the arrow keys to pick a vehicle; Enter opens the card.",
     "compass": {
       "N": "north",
       "NE": "north-east",
