@@ -19,6 +19,8 @@ Ovaj popis je jedini izvor istine o tome odakle Vidikovac uzima podatke, pod koj
 
 Pomoćni skup izvan modula: ZET statični GTFS https://www.zet.hr/gtfs-scheduled/latest (oko 15 MB) čita se lokalno skriptom `scripts/gtfs-routes.mjs` i pretvara u `app/src/data/zet-routes.json` (imena linija). Ista atribucija kao za `zet-rt`.
 
+Izvedeni podatak, mrežni artefakt za model kretanja (area T, `docs/arhitektura.md` §"Model kretanja vozila"): `app/public/data/zet-network.json` gradi lokalno skripta `scripts/gtfs-shapes.mjs`, iz istog ZET statičnog GTFS-a gore (geometrija linija pojednostavljena Douglas-Peuckerom na 5 m, oktilinearni dijagram na 120 m, stajališta s pozicijom na svakoj liniji). Klijent ga dohvaća kao statičku datoteku tek nakon prvog iscrtavanja, nikad u lagano načinu (R-L4) -- nikad iz Workera i nikad pod `/open`, jer je riječ o građevnom artefaktu aplikacije, a ne o objavljenom skupu. Njegova verzija putuje s njim (`feedVersion`, generatorova oznaka verzije ZET-ova GTFS-a) i čita se bez dohvaćanja ili raspakiravanja artefakta iz `app/src/motion/network-meta.ts`, koju skripta prepisuje pri svakoj gradnji; trenutno: feedVersion `000395`, izgrađeno 2026-09-12, 154 linije, 542 147 bajtova. Ista atribucija kao `zet-rt`; nije modul iz `worker/feed/schema.ts` pa nema svoj redak ni TTL/maxStale gore.
+
 ## Izvori planirani za financirano razdoblje
 
 | Izvor | Adresa | Stanje | Licenca ili uvjet | Kako ćemo ga navesti |
