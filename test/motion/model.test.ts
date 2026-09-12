@@ -709,25 +709,37 @@ function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: numbe
   };
 }
 
+/** The acceptance envelope for the dwelling tram, per latency/speed run
+ *  (task-F1-report.md, Rulings 7, amending the brief's 15 % and 60 m, which
+ *  the constants R-F1 fixes cannot deliver: a 25 s hold at a stop every 65
+ *  to 84 s is 30 to 38 % of frames by itself unless a fix cuts it short,
+ *  and the fix that confirms a departure arrives 25 to 75 s after it, with
+ *  the release at half speed until then -- a sweep of the release factor up
+ *  to 1.0 and the sub-50 m cap up to twice the speed left the held share
+ *  unchanged and the p95 lag at 92 to 254 m at best). Each bound sits about
+ *  one percentage point and five to ten metres above the measured value,
+ *  so a regression of the size that matters fails here (the old model held
+ *  over half of all frames and lagged 166 to 353 m at p95) and a benign
+ *  reordering of arithmetic does not. */
+const DWELLING_TRAM_ENVELOPE: Record<string, { heldUnder: number; lagP95UnderM: number }> = {
+  '25/7': { heldUnder: 0.26, lagP95UnderM: 190 }, // measured 25.34 %, 183.7 m
+  '25/10': { heldUnder: 0.22, lagP95UnderM: 280 }, // measured 21.29 %, 270.6 m
+  '2/7': { heldUnder: 0.27, lagP95UnderM: 125 }, // measured 26.13 %, 116.1 m
+  '2/10': { heldUnder: 0.23, lagP95UnderM: 270 }, // measured 21.99 %, 260.7 m
+};
+
 describe('the public kiosk in steady state (R-F1: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
   const latencies = [25, 2];
   const speeds = [7, 10];
   for (const latencyS of latencies) {
     for (const speedMs of speeds) {
-      it(`${latencyS} s latency, ${speedMs} m/s, doors open 20 s at every stop: no frame outruns the catch-up cap, nothing snaps, the gate holds under 30 % of frames and the p95 lag is under 300 m`, () => {
+      const envelope = DWELLING_TRAM_ENVELOPE[`${latencyS}/${speedMs}`]!;
+      it(`${latencyS} s latency, ${speedMs} m/s, doors open 20 s at every stop: no frame outruns the catch-up cap, nothing snaps, the gate holds under ${Math.round(envelope.heldUnder * 100)} % of frames and the p95 lag is under ${envelope.lagP95UnderM} m`, () => {
         const stats = runSteadyState({ speedMs, latencyS, dwellS: 20 });
         expect(stats.worstOvershootM).toBeLessThanOrEqual(0);
         expect(stats.snapped).toBe(false);
-        // The two figures below are the envelope the model's fixed constants
-        // actually deliver (measured 21 to 26 % and 116 to 271 m across
-        // these four runs; the old model teleported 225 to 465 m and lagged
-        // 166 to 353 m at p95), guarded here against regression. The brief
-        // asked for 15 % and 60 m; those are out of reach while the gate
-        // releases at half speed for up to a fix interval plus the feed's
-        // latency and the settle cap under 50 m equals the vehicle's own
-        // speed -- see task-F1-report.md, "Concerns".
-        expect(stats.heldShare).toBeLessThan(0.3);
-        expect(stats.lagP95M).toBeLessThan(300);
+        expect(stats.heldShare).toBeLessThan(envelope.heldUnder);
+        expect(stats.lagP95M).toBeLessThan(envelope.lagP95UnderM);
       });
       it(`${latencyS} s latency, ${speedMs} m/s, a tram that never stops: still no frame outruns the catch-up cap and nothing snaps`, () => {
         const stats = runSteadyState({ speedMs, latencyS, dwellS: 0 });

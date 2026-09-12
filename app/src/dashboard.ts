@@ -13,7 +13,7 @@ import type { ExportKind } from './layers/types';
 import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { loadNetwork, type Network } from './motion/network';
-import { nextPollDelay } from './motion/loop';
+import { continuePoll, nextPollDelay } from './motion/loop';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
@@ -552,8 +552,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The poll, aligned to the feed's own tick (motion/loop.ts's
    *  nextPollDelay): the next request lands 2 s after the realtime feed's
    *  next 30 s tick when the zet-rt snapshot says when it last ticked, else
-   *  20 s out. A one-shot re-armed after each refresh rather than a fixed
-   *  interval, since every delay is computed from the freshest snapshot. */
+   *  20 s out. A one-shot re-armed after each refresh -- whether it rendered
+   *  or threw (continuePoll) -- rather than a fixed interval, since every
+   *  delay is computed from the freshest snapshot. */
   function armPoll(): void {
     if (frozen || disposed || timer !== null) return;
     timer = setTimer(() => {
@@ -563,7 +564,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         freeze(); // never a fetch past the end of the session, whichever timer notices first
         return;
       }
-      void refresh().then(armPoll);
+      continuePoll(refresh(), armPoll, 'dashboard refresh');
     }, nextPollDelay(snapshots['zet-rt']?.sourceUpdatedAt, now()));
   }
 

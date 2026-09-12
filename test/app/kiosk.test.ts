@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import type { I18n } from '../../app/src/i18n/i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { catalogueRows, ESSENTIALS_IDLE_MS, essentialsRows, mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
 import { zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
@@ -45,7 +46,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>; loadNetwork?: () => Promise<null>; mapFactory?: unknown } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>; loadNetwork?: () => Promise<null>; mapFactory?: unknown; i18n?: I18n } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -68,7 +69,7 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
   const fetchData = vi.fn(async (module: ModuleId) => snap(module, []));
   const sessions: { close: ReturnType<typeof vi.fn> }[] = [];
   const handle = mountKiosk(root, {
-    i18n: createDefaultI18n('hr'),
+    i18n: opts.i18n ?? createDefaultI18n('hr'),
     hash: opts.hash ?? '',
     storage,
     now: () => NOW,
@@ -359,6 +360,20 @@ describe('mountKiosk', () => {
     timers.forEach((t) => { if (!t.cleared) t.fn(); });
     await flush();
     expect((root.querySelector('[data-testid=kiosk-alert]') as HTMLElement).hidden).toBe(true);
+  });
+  it('keeps polling the teaser even when the load rejects outright: a failure past its own catch is logged and the next poll is still armed', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The fetch is down and the outage alert cannot even be painted (its copy
+    // throws), so loadTeaser rejects past its own catch. The chain must not
+    // depend on that catch: the poll is re-armed regardless.
+    const real = createDefaultI18n('hr');
+    const i18n: I18n = { ...real, t: (key, vars) => { if (key === 'status.down') throw new Error('copy unavailable'); return real.t(key, vars); } };
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), i18n, fetchTeaser: async () => { throw new Error('down'); } });
+    await flush();
+    // The 20 s rotation and the 20 s fallback teaser poll: the chain is alive.
+    expect(k.timers.filter((t) => !t.cleared && t.ms === TEASER_ROTATE_MS)).toHaveLength(2);
+    expect(errorSpy).toHaveBeenCalledTimes(1); // and the failure was reported, not swallowed
+    errorSpy.mockRestore();
   });
   it('the header shows the clock and the Croatian weekday date', () => {
     const { root } = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });

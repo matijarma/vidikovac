@@ -322,6 +322,36 @@ describe('polling and the two toggles', () => {
     await flush();
     expect(aligned.armed()).toEqual([1_000, 27_000]);
   });
+  it('keeps polling when one refresh throws: a renderer choking on one bad snapshot is logged and the next poll is still armed, never a session that quietly stops updating', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The second poll answers dhmz-now with a snapshot whose items are not a
+    // list; grad-sada's renderer reads items[0] and throws inside render().
+    let poisoned = false;
+    const { session, fetchData, tick, armed } = mount({
+      snapshot: (module) => (poisoned && module === 'dhmz-now' ? { ...snapshotOf(module), items: null as never } : snapshotOf(module)),
+    });
+    session.join();
+    await flush();
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+
+    poisoned = true;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData).toHaveBeenCalled();
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]); // the chain is still alive
+    expect(errorSpy).toHaveBeenCalledTimes(1); // and the failure was reported, not swallowed
+
+    // The poll after it fetches a sound snapshot and renders again.
+    poisoned = false;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+    errorSpy.mockRestore();
+  });
   it('"zaustavi osvježavanje" stops the polling and flips its own label', async () => {
     const { root, session, fetchData, tick } = mount();
     session.join();

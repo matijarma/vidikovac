@@ -277,3 +277,21 @@ export function nextPollDelay(sourceUpdatedAt: string | undefined, now: number):
   }
   return POLL_FALLBACK_MS;
 }
+
+/**
+ * Re-arms a one-shot poll chain once `work` -- the poll's own handler -- has
+ * settled, whichever way it settled. The fixed interval the chain replaced
+ * retried every 20 s regardless of what the last handler did; a chain must
+ * keep that promise. A handler that throws (a renderer choking on one bad
+ * snapshot, an outage alert whose copy cannot be painted) must neither end
+ * polling for the rest of a ten-minute session nor leave its rejection
+ * unhandled: the next poll is armed *first*, then the failure is logged
+ * under `label`, so even a reporter that throws cannot be what breaks the
+ * chain.
+ */
+export function continuePoll(work: Promise<unknown>, arm: () => void, label: string): void {
+  void work.then(arm, (error: unknown) => {
+    arm();
+    console.error(`[poll] ${label} threw; the next poll is still armed`, error);
+  });
+}

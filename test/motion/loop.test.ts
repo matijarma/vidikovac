@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { continuePoll, createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 
 /**
  * A raf/cancel double the loop can be driven by hand: `fire()` invokes
@@ -316,5 +316,37 @@ describe('nextPollDelay', () => {
 
   it('falls back to the fixed cadence when sourceUpdatedAt cannot be parsed', () => {
     expect(nextPollDelay('not-a-date', 0)).toBe(POLL_FALLBACK_MS);
+  });
+});
+
+describe('continuePoll', () => {
+  it('re-arms the chain once the poll has settled, and does nothing else when it succeeded', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const arm = vi.fn();
+    continuePoll(Promise.resolve('fetched'), arm, 'test poll');
+    expect(arm).not.toHaveBeenCalled(); // never synchronously: the handler must have settled first
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(arm).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('re-arms the chain when the poll threw, logs the failure with its label, and leaves no rejection unhandled', async () => {
+    const order: string[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { order.push('log'); });
+    const arm = vi.fn(() => { order.push('arm'); });
+    const failure = new Error('renderer choked on one bad snapshot');
+    continuePoll(Promise.reject(failure), arm, 'test poll');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(arm).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0]![0]).toContain('test poll');
+    expect(errorSpy.mock.calls[0]![1]).toBe(failure);
+    // The next poll is armed before the failure is reported, so a reporter
+    // that itself throws can never be what ends the chain.
+    expect(order).toEqual(['arm', 'log']);
+    errorSpy.mockRestore();
   });
 });
