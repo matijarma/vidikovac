@@ -13,6 +13,7 @@ import type { ExportKind } from './layers/types';
 import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { loadNetwork, type Network } from './motion/network';
+import { continuePoll, nextPollDelay } from './motion/loop';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
@@ -23,10 +24,8 @@ import { MEANDER_STEPS, paintMeander, paintMeanderBar, quantise } from './ui/mea
 import { paintPanorama } from './ui/panorama';
 import { createQr } from './ui/qr';
 
-/** How often a visible layer refetches its modules. */
-export const POLL_MS = 20_000;
 /** The meander's one-second step and the fine countdown line's own tick,
- *  independent of `pollMs` (which only governs re-fetching city data) — the
+ *  independent of the poll (which only governs re-fetching city data) — the
  *  same constant kiosk.ts keeps for its own code meander. */
 const MEANDER_TICK_MS = 1_000;
 
@@ -92,7 +91,6 @@ export interface DashboardDeps {
   onExport?: (kind: ExportKind, module: ModuleId) => void;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
-  pollMs?: number;
 }
 
 export interface DashboardHandle {
@@ -106,7 +104,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const now = deps.now ?? (() => Date.now());
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
-  const pollMs = deps.pollMs ?? POLL_MS;
   const wide = deps.wide ?? false;
   const lightweight = Boolean(deps.lightweight);
 
@@ -146,8 +143,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let countdownHidden = false;
   let warned60 = false;
   let warned20 = false;
-  let timer: unknown = null;
+  let timer: unknown = null; // the armed poll: a one-shot re-armed after each refresh (see armPoll)
   let meanderTimer: unknown = null;
+  let disposed = false;
   // Captured once, the moment a live expiry first appears (join or resume):
   // the denominator for the meander's fill fraction. The wire contract carries
   // no session-start timestamp, so a reload mid-session sees the meander start
@@ -524,8 +522,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     frozen = true;
     closeShare();
     // "Prikaz je zamrznut": the drawn vehicles stop where they are, rather
-    // than dead-reckoning on for another five minutes under a frozen clock.
+    // than dead-reckoning on for another five minutes under a frozen clock --
+    // on the schematic and on the MapLibre map alike (R-F6). Nothing resumes
+    // after a freeze; the next session is a new page.
     schematic.pause();
+    maps.pause();
     shareButton.hidden = true;
     paintTabs();
     paintTimer();
@@ -548,25 +549,50 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   session.onCount(() => paintTimer());
   session.onExpired(freeze);
 
+  /** The poll, aligned to the feed's own tick (motion/loop.ts's
+   *  nextPollDelay): the next request lands 2 s after the realtime feed's
+   *  next 30 s tick when the zet-rt snapshot says when it last ticked, else
+   *  20 s out. A one-shot re-armed after each refresh -- whether it rendered
+   *  or threw (continuePoll) -- rather than a fixed interval, since every
+   *  delay is computed from the freshest snapshot. */
+  function armPoll(): void {
+    if (frozen || disposed || timer !== null) return;
+    timer = setTimer(() => {
+      clearTimer(timer); // the injected pair is interval-shaped
+      timer = null;
+      if (expiredByClock()) {
+        freeze(); // never a fetch past the end of the session, whichever timer notices first
+        return;
+      }
+      continuePoll(refresh(), armPoll, 'dashboard refresh');
+    }, nextPollDelay(snapshots['zet-rt']?.sourceUpdatedAt, now()));
+  }
+
+  /** The clock decides, not the socket: a phone whose socket died on the way
+   *  to the camera app still freezes on time and still shows the closing
+   *  line (R-53). */
+  function expiredByClock(): boolean {
+    return session.snapshot().expiresAt !== null && session.secondsLeft() === 0;
+  }
+
   paintTabs();
   updateDocumentTitle();
   render();
   paintTimer();
-  timer = setTimer(() => {
-    // The clock decides, not the socket: a phone whose socket died on the way
-    // to the camera app still freezes on time and still shows the closing
-    // line (R-53).
-    if (session.snapshot().expiresAt !== null && session.secondsLeft() === 0) {
+  armPoll();
+  // A second, finer timer: the fine countdown line and the meander drain by
+  // the second, independent of the poll (which only governs re-fetching city
+  // data) — cleared alongside `timer` in freeze() and destroy(). It is also
+  // where the end of the session is noticed to the second (expiredByClock),
+  // now that the poll itself is aligned to the feed and may be half a minute
+  // away.
+  meanderTimer = setTimer(() => {
+    if (expiredByClock()) {
       freeze();
       return;
     }
     paintTimer();
-    void refresh();
-  }, pollMs);
-  // A second, finer timer: the fine countdown line and the meander drain by
-  // the second, independent of pollMs (which only governs re-fetching city
-  // data) — cleared alongside `timer` in freeze() and destroy().
-  meanderTimer = setTimer(() => paintTimer(), MEANDER_TICK_MS);
+  }, MEANDER_TICK_MS);
 
   // Canvas colours are read off computed style (`tone()`), so a theme flip
   // needs a repaint even with no new data; a resize needs one because the
@@ -581,6 +607,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element,
     selectLayer: (layer) => select(layer, false),
     destroy() {
+      disposed = true;
       if (timer !== null) clearTimer(timer);
       timer = null;
       if (meanderTimer !== null) clearTimer(meanderTimer);

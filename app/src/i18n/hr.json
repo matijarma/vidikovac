@@ -235,6 +235,8 @@
     "delayUnknown": "kašnjenje linije nepoznato",
     "lineUnknown": "linija nepoznata",
     "canvasHint": "Strelicama biraj vozilo; Escape zatvara karticu.",
+    "vehicleList": "Vozila u kadru",
+    "listHint": "Strelicama biraj vozilo; Enter otvara karticu.",
     "compass": {
       "N": "sjever",
       "NE": "sjeveroistok",

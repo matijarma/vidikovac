@@ -4,7 +4,8 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
-import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, POLL_MS } from '../../app/src/dashboard';
+import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash } from '../../app/src/dashboard';
+import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { stubSessionStorage } from './helpers';
 
 // See stubSessionStorage's doc comment: Node's own `sessionStorage` global
@@ -76,12 +77,15 @@ const snapshotOf = (module: ModuleId): ModuleSnapshot => ({
   items: [],
 });
 
-function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean; loadNetwork?: () => Promise<null> } = {}) {
+function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void; mapFactory?: unknown; lightweight?: boolean; loadNetwork?: () => Promise<null>; snapshot?: (module: ModuleId) => ModuleSnapshot } = {}) {
   const root = document.createElement('main');
   document.body.replaceChildren(root);
   const session = fakeSession();
-  const ticks: (() => void)[] = [];
-  const fetchData = vi.fn(async (module: ModuleId) => snapshotOf(module));
+  // Every timer registration keeps its own delay and cleared flag (the handle
+  // IS the entry), so the poll chain's re-arming and freeze()'s clearing are
+  // each provable on their own.
+  const ticks: { fn: () => void; ms: number; cleared: boolean }[] = [];
+  const fetchData = vi.fn(async (module: ModuleId) => (opts.snapshot ?? snapshotOf)(module));
   const handle = mountDashboard(root, {
     i18n: createDefaultI18n('hr'),
     session: session.client,
@@ -95,10 +99,14 @@ function mount(opts: { wide?: boolean; onCopy?: (t: string, a: unknown) => void;
     // The network artefact is never fetched under test (there is no server);
     // null is loadNetwork()'s own honest answer to a failed load.
     loadNetwork: opts.loadNetwork ?? (async () => null),
-    setInterval: (fn: () => void) => { ticks.push(fn); return ticks.length; },
-    clearInterval: () => { ticks.length = 0; },
+    setInterval: (fn: () => void, ms: number) => { const t = { fn, ms, cleared: false }; ticks.push(t); return t; },
+    clearInterval: (h: unknown) => { (h as { cleared: boolean }).cleared = true; },
   });
-  return { root, session, handle, fetchData, ticks };
+  /** Fires every still-armed timer once, whatever its delay. */
+  const tick = (): void => { for (const t of [...ticks]) if (!t.cleared) t.fn(); };
+  /** The delays of the timers still armed, sorted. */
+  const armed = (): number[] => ticks.filter((t) => !t.cleared).map((t) => t.ms).sort((a, b) => a - b);
+  return { root, session, handle, fetchData, ticks, tick, armed };
 }
 const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -283,7 +291,7 @@ describe('the panorama and the session meander (M4)', () => {
 
 describe('polling and the two toggles', () => {
   it('fetches exactly the modules of the visible layer with the data token', async () => {
-    const { root, session, fetchData, ticks } = mount();
+    const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'prometnice', 'zet-rt']);
@@ -293,13 +301,59 @@ describe('polling and the two toggles', () => {
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
     fetchData.mockClear();
-    ticks.forEach((tick) => tick());
+    tick();
     await flush();
     expect(fetchData).toHaveBeenCalledTimes(1);
-    expect(POLL_MS).toBe(20_000);
+  });
+  it('polls again after the fallback 20 s while no snapshot carries a source timestamp, and 2 s after the feed\'s next tick once one does', async () => {
+    const { session, tick, armed } = mount();
+    session.join();
+    await flush();
+    // Armed at mount, before any data: the fixed fallback (beside the 1 s meander tick).
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+    expect(POLL_FALLBACK_MS).toBe(20_000);
+
+    // A poll whose zet-rt snapshot says the feed ticked 5 s ago: the next
+    // request is aimed 2 s past its next 30 s tick, 27 s from now.
+    const aligned = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
+    aligned.session.join();
+    await flush();
+    aligned.tick(); // the first poll fires and re-arms from what it fetched
+    await flush();
+    expect(aligned.armed()).toEqual([1_000, 27_000]);
+  });
+  it('keeps polling when one refresh throws: a renderer choking on one bad snapshot is logged and the next poll is still armed, never a session that quietly stops updating', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The second poll answers dhmz-now with a snapshot whose items are not a
+    // list; grad-sada's renderer reads items[0] and throws inside render().
+    let poisoned = false;
+    const { session, fetchData, tick, armed } = mount({
+      snapshot: (module) => (poisoned && module === 'dhmz-now' ? { ...snapshotOf(module), items: null as never } : snapshotOf(module)),
+    });
+    session.join();
+    await flush();
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+
+    poisoned = true;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData).toHaveBeenCalled();
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]); // the chain is still alive
+    expect(errorSpy).toHaveBeenCalledTimes(1); // and the failure was reported, not swallowed
+
+    // The poll after it fetches a sound snapshot and renders again.
+    poisoned = false;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+    errorSpy.mockRestore();
   });
   it('"zaustavi osvježavanje" stops the polling and flips its own label', async () => {
-    const { root, session, fetchData, ticks } = mount();
+    const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
     const pause = root.querySelector<HTMLButtonElement>('[data-testid=toggle-refresh]')!;
@@ -308,7 +362,7 @@ describe('polling and the two toggles', () => {
     expect(pause.getAttribute('aria-pressed')).toBe('true');
     expect(pause.textContent).toBe('nastavi osvježavanje');
     fetchData.mockClear();
-    ticks.forEach((tick) => tick());
+    tick();
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
     expect(text(root.querySelector('[data-testid=refresh-state]'))).toBe('osvježavanje zaustavljeno');
@@ -329,12 +383,12 @@ describe('expiry freeze', () => {
   it('keeps one live map across polls instead of re-creating it', async () => {
     const update = vi.fn();
     const destroy = vi.fn();
-    const mapFactory = vi.fn(() => ({ update, destroy }));
-    const { handle, session, ticks } = mount({ mapFactory });
+    const mapFactory = vi.fn(() => ({ update, destroy, pause: vi.fn() }));
+    const { handle, session, tick } = mount({ mapFactory });
     handle.selectLayer('u-pokretu');
     session.join();
     await flush();
-    ticks.forEach((tick) => tick());
+    tick();
     await flush();
     // R-54: every poll used to allocate a WebGL context, and Chrome drops the
     // oldest after about sixteen — the panel went black mid-session.
@@ -345,12 +399,12 @@ describe('expiry freeze', () => {
   });
 
   it('freezes on the clock alone when the socket died and no expired frame arrives', async () => {
-    const { root, session, fetchData, ticks } = mount();
+    const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
     fetchData.mockClear();
     session.runOut();
-    ticks.forEach((tick) => tick());
+    tick();
     await flush();
     // R-53: the izjava promises the closing line; the socket cannot be trusted
     // to deliver it from a phone that spent a minute in the camera app.
@@ -363,13 +417,13 @@ describe('expiry freeze', () => {
 
   it('stops polling, disables navigation, keeps exports and states the frozen view', async () => {
     const onCopy = vi.fn();
-    const { root, session, fetchData, ticks } = mount({ onCopy });
+    const { root, session, fetchData, tick } = mount({ onCopy });
     session.join();
     await flush();
     const copy = root.querySelector<HTMLButtonElement>('#grad-sada-observation-copy');
     fetchData.mockClear();
     session.expire();
-    ticks.forEach((tick) => tick());
+    tick();
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
     for (const tab of root.querySelectorAll<HTMLButtonElement>('[role=tab]')) expect(tab.disabled).toBe(true);
@@ -451,7 +505,7 @@ describe('the schematic on U pokretu (T9)', () => {
   const NOTE = 'Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.';
   it('mounts one schematic host with the honesty note, keeps it across polls and across tab switches, and asks for the network only once', async () => {
     const loadNetwork = vi.fn(async () => null);
-    const { root, handle, session, ticks } = mount({ loadNetwork });
+    const { root, handle, session, tick } = mount({ loadNetwork });
     session.join();
     await flush();
     expect(loadNetwork).not.toHaveBeenCalled(); // grad-sada is up: nothing fetched for a layer nobody is looking at (R-L4, and no e-waste)
@@ -461,7 +515,7 @@ describe('the schematic on U pokretu (T9)', () => {
     expect(host).not.toBeNull();
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     expect(text(root.querySelector('#u-pokretu-schematic [data-testid=schematic-note]'))).toBe(NOTE);
-    ticks[0]!(); // the poll: a re-render
+    tick(); // the poll: a re-render
     await flush();
     expect(root.querySelector('[data-testid=schematic-host]')).toBe(host);
     handle.selectLayer('vijesti');
@@ -480,6 +534,21 @@ describe('the schematic on U pokretu (T9)', () => {
     expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull();
     expect(text(root.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
   });
+  it('freeze pauses the map as well as the schematic and leaves no timer armed on the page (R-F6)', async () => {
+    const pause = vi.fn();
+    const mapFactory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn(), pause }));
+    const { handle, session, ticks } = mount({ mapFactory });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(mapFactory).toHaveBeenCalledTimes(1);
+    expect(ticks.some((t) => !t.cleared)).toBe(true);
+    session.expire();
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(ticks.every((t) => t.cleared)).toBe(true); // neither the poll chain nor the meander tick survives a freeze
+  });
+
   it('stops the motion when the session freezes: the frozen view stays where it was', async () => {
     const { root, handle, session } = mount();
     session.join();

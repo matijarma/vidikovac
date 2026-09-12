@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toLonLat, type XY } from '../../app/src/motion/geo';
 import { at, cumulative } from '../../app/src/motion/polyline';
 import type { Network, Shape, Stop } from '../../app/src/motion/network';
-import { createModel, type Fix } from '../../app/src/motion/model';
+import { catchUpCap, createModel, type Fix } from '../../app/src/motion/model';
 
 // ---------------------------------------------------------------------------
 // A small hand-built Network, built directly from the same primitives
@@ -135,12 +135,14 @@ describe('perfect 30 s fixes along a straight shape (brief test 1)', () => {
       const [drawn] = model.step(t);
       // The very first inter-fix gap (tick 0) has no prior speed estimate to
       // dead-reckon with (there is nothing to derive a speed from before a
-      // second fix exists), so it resolves via a one-time bootstrap snap --
-      // exactly what "brief test 4" exercises on its own. This test's own
-      // claim is about *steady-state* motion once a speed estimate exists,
-      // so tick 0 warms the model up and is not sampled.
+      // second fix exists), so the second fix lands 300 m ahead of a mark
+      // that has not moved; tick 1 is that gap being caught up at the raised
+      // cap (R-F1a, "brief test 4" below exercises it on its own). This
+      // test's own claim is about *steady-state* motion once the model is
+      // level with its evidence, so ticks 0 and 1 warm it up and are not
+      // sampled.
       const tick = Math.floor((i - 1) / framesPerTick);
-      if (tick > 0) samples.push(drawn.p.y);
+      if (tick > 1) samples.push(drawn.p.y);
     }
 
     for (let i = 1; i < samples.length; i++) {
@@ -155,32 +157,32 @@ describe('perfect 30 s fixes along a straight shape (brief test 1)', () => {
 });
 
 describe('a 20-minute-stale fix (brief test 2)', () => {
-  it('does not teleport anything', () => {
+  it('does not teleport anything: a report older than the last one is no new evidence', () => {
     const net = straightNetwork();
     const model = createModel(net);
-    model.update([fixAt('v1', { x: 0, y: 0 }, T0)], T0);
-    model.step(T0);
+    let t = T0;
+    model.update([fixAt('v1', { x: 0, y: 0 }, t)], t);
+    t += 30_000;
+    model.update([fixAt('v1', { x: 0, y: 100 }, t)], t);
+    t += 5_000;
+    const before = model.step(t).find((d) => d.id === 'v1')!.p.y;
 
-    // A fix arrives whose own timestamp is 20 minutes old relative to the
-    // last one (the probe's "a few fixes are up to 20 minutes stale"), and
-    // whose position has moved on only modestly -- a stale report, not a
-    // huge discrepancy (that is brief test 4's job).
-    const staleAt = T0 + 20 * 60_000;
-    const beforeDrawn = model.step(staleAt)[0].p.y;
-    model.update([fixAt('v1', { x: 0, y: 80 }, staleAt)], staleAt);
-    const rightAfter = model.step(staleAt)[0]; // zero elapsed frame time since the update
-    expect(rightAfter.p.y).toBeCloseTo(beforeDrawn, 6);
-    expect(rightAfter.p.y).not.toBeCloseTo(80, 3);
+    // A poll now carries a fix whose own timestamp is 20 minutes older than
+    // the evidence already folded in (the probe's "a few fixes are up to 20
+    // minutes stale"), reported far away. It is out of order, so it is not
+    // evidence at all: the drawn position does not move because of it.
+    model.update([fixAt('v1', { x: 0, y: 900 }, t - 20 * 60_000)], t);
+    const after = model.step(t).find((d) => d.id === 'v1')!;
+    expect(after.p.y).toBeCloseTo(before, 6);
+    expect(after.p.y).not.toBeCloseTo(900, 3);
+  });
 
-    // It still converges smoothly afterwards, never a single big jump.
-    let t = staleAt;
-    let last = rightAfter.p.y;
-    for (let f = 0; f < 100; f++) {
-      t += 100;
-      const y = model.step(t).find((d) => d.id === 'v1')!.p.y;
-      expect(y - last).toBeLessThanOrEqual(4 * 0.1 + 1e-6);
-      last = y;
-    }
+  it('a vehicle whose every report is 20 minutes stale on arrival is not drawn at all (R-F2: evicted, not carried)', () => {
+    const model = createModel(straightNetwork());
+    // The fix's own `at` is 20 minutes behind the wall clock it arrives on.
+    model.update([fixAt('v1', { x: 0, y: 0 }, T0 - 20 * 60_000)], T0);
+    expect(model.step(T0)).toHaveLength(0);
+    expect(model.size()).toBe(0);
   });
 });
 
@@ -203,8 +205,8 @@ describe('repeated identical coordinates (brief test 3, decision 4)', () => {
   });
 });
 
-describe('a 200 m discrepancy (brief test 4)', () => {
-  it('snaps once and then runs smooth', () => {
+describe('a 200 m along-track discrepancy (brief test 4, R-F1a)', () => {
+  it('catches up at the raised cap and never jumps: being behind on the same shape is lag, not error', () => {
     const net = straightNetwork();
     const model = createModel(net);
     let t = T0;
@@ -212,34 +214,49 @@ describe('a 200 m discrepancy (brief test 4)', () => {
     t += 1000;
     model.step(t);
 
-    // A fix 200 m ahead of the still-converged drawn position: beyond the
-    // 150 m snap threshold.
+    // A fix 200 m ahead of the still-converged drawn position, 1.1 s after
+    // the first: the interval reads as 22 m/s (the MAX_SPEED_MS clamp), so
+    // the raised cap is 44 m/s. The old model teleported here; this one
+    // closes the gap in bounded steps.
     t += 100;
     model.update([fixAt('v1', { x: 0, y: 200 }, t)], t);
 
-    const deltas: number[] = [];
-    let last = model.step(t).find((d) => d.id === 'v1')!.p.y;
-    const snapDelta = last - 0; // the very first step after the discrepancy fix
-    deltas.push(snapDelta);
-    expect(snapDelta).toBeCloseTo(200, 3); // snapped straight to the target
+    const first = model.step(t).find((d) => d.id === 'v1')!;
+    // 100 ms since the last frame: at most 4.4 m of movement, nowhere near the fix.
+    expect(first.p.y).toBeLessThanOrEqual(44 * 0.1 + 1e-6);
+    expect(first.p.y).not.toBeCloseTo(200, 3);
+    expect(first.lastSnapAt).toBeUndefined();
 
-    for (let f = 0; f < 20; f++) {
+    let last = first.p.y;
+    let arrivedAt: number | null = null;
+    for (let f = 0; f < 60; f++) {
       t += 500;
-      const y = model.step(t).find((d) => d.id === 'v1')!.p.y;
-      deltas.push(y - last);
-      last = y;
+      const drawn = model.step(t).find((d) => d.id === 'v1')!;
+      const delta = drawn.p.y - last;
+      expect(delta).toBeGreaterThanOrEqual(0);
+      expect(delta).toBeLessThanOrEqual(catchUpCap(Infinity, drawn.speed) * 0.5 + 1e-6);
+      expect(drawn.lastSnapAt).toBeUndefined();
+      last = drawn.p.y;
+      // The target itself dead-reckons on at 22 m/s, so "arrived" is being
+      // within the dead zone of where the fix says the tram now is.
+      const target = 200 + 22 * ((t - (T0 + 1100)) / 1000);
+      if (arrivedAt === null && target - drawn.p.y < 50) arrivedAt = t;
     }
-    // Exactly one large jump (the snap); everything after is bounded smooth
-    // convergence -- no further delta comes close to the snap's size.
-    const smoothDeltas = deltas.slice(1);
-    for (const d of smoothDeltas) expect(Math.abs(d)).toBeLessThan(30);
+    // About one poll interval to close the gap, the brief's own yardstick.
+    expect(arrivedAt).not.toBeNull();
+    expect((arrivedAt! - (T0 + 1100)) / 1000).toBeLessThanOrEqual(20);
   });
 });
 
-describe('the stop gate (brief test 5)', () => {
-  it('a vehicle whose next stop is 40 m ahead and whose speed says 120 m stops at the stop', () => {
-    // Stop sits 40 m ahead of the last confirmed fix (s = 120 + 40).
-    const net = straightNetwork([{ id: 'ST', name: 'Stop', shape: 0, s: 160 }]);
+describe('the stop gate (brief test 5, R-F1b)', () => {
+  // Stop sits 40 m ahead of the last confirmed fix (s = 120 + 40); the one
+  // after it 140 m on -- close enough for the released, decaying reckoning
+  // (it eases to a halt within about 155 s' worth of travel) to reach.
+  const gated = () => {
+    const net = straightNetwork([
+      { id: 'ST', name: 'Stop', shape: 0, s: 160 },
+      { id: 'ST2', name: 'Following', shape: 0, s: 300 },
+    ]);
     const model = createModel(net);
     let t = T0;
     // Two fixes 30 s apart, 120 m apart -- a 4 m/s baseline, so dead
@@ -249,18 +266,65 @@ describe('the stop gate (brief test 5)', () => {
     t += 30_000;
     model.update([fixAt('v1', { x: 0, y: 120 }, t)], t);
     model.step(t);
+    return { model, t };
+  };
+  const at = (model: ReturnType<typeof createModel>, t: number) => model.step(t).find((d) => d.id === 'v1')!;
 
-    // No further fixes: dead reckoning must carry the vehicle at most to the
-    // stop 40 m ahead, never past it, however far the speed estimate says.
+  it('a vehicle whose next stop is 40 m ahead and whose speed says 120 m stops at the stop, and stays for one dwell', () => {
+    const { model, t: fixAtMs } = gated();
+    let t = fixAtMs;
+    // Reckoning reaches the stop 10 s after the fix (40 m at 4 m/s); for the
+    // GATE_DWELL_S = 25 s after that the mark is held there, facing unknown.
+    // (Sampled to +34 s: the release at exactly +35 s is a floating-point
+    // knife edge, and the second test below covers what follows.)
     let lastY = 0;
-    for (let f = 0; f < 400; f++) {
+    for (let f = 0; f < 68; f++) {
       t += 500;
-      const drawn = model.step(t).find((d) => d.id === 'v1')!;
+      const drawn = at(model, t);
       expect(drawn.p.y).toBeLessThanOrEqual(160 + 1e-6);
+      if (t - fixAtMs > 10_000) {
+        expect(drawn.held).toBe(true);
+        expect(drawn.confidence).toBeLessThan(0.3);
+        expect(drawn.heading).toBeNull();
+      }
       lastY = drawn.p.y;
     }
     expect(lastY).toBeGreaterThan(140); // it did get close to the stop, not stuck at 120
-    expect(model.step(t)[0].confidence).toBeLessThan(0.3); // held, waiting for evidence
+  });
+
+  it('after the dwell it goes on at half speed with confidence lowered, and never past the following stop', () => {
+    const { model, t: fixAtMs } = gated();
+    // Reckoning passed the stop at +10 s and the dwell ends at +35 s. At
+    // +55 s it has been released for 20 s: 2 m/s (half of 4) times 20 s is
+    // 40 m past the stop, give or take the convergence dead zone -- clearly
+    // moving, clearly not at full speed (80 m).
+    const settle = at(model, fixAtMs + 34_000);
+    expect(settle.held).toBe(true);
+    let t = fixAtMs + 35_000;
+    let last = settle.p.y;
+    for (let f = 0; f < 40; f++) {
+      t += 500;
+      const drawn = at(model, t);
+      expect(drawn.p.y).toBeGreaterThanOrEqual(last - 1e-6); // forward only
+      last = drawn.p.y;
+    }
+    const released = at(model, t);
+    expect(released.held).toBeUndefined();
+    expect(released.p.y).toBeGreaterThan(170);
+    expect(released.p.y).toBeLessThan(200);
+    // Evidence for the departure is a guess: the 0.6 one confirming
+    // movement earned, less the 0.2 release penalty.
+    expect(released.confidence).toBeCloseTo(0.4, 2);
+
+    // Nobody has confirmed it past the following stop either: the released
+    // reckoning ends there, held again (sampled to +255 s, inside the five
+    // minutes after which the vehicle is evicted, R-F2).
+    for (let f = 0; f < 400; f++) {
+      t += 500;
+      const drawn = at(model, t);
+      expect(drawn.p.y).toBeLessThanOrEqual(300 + 1e-6);
+    }
+    expect(at(model, t).held).toBe(true);
   });
 });
 
@@ -343,8 +407,8 @@ describe('a routeless vehicle (brief test 7)', () => {
   });
 });
 
-describe('silence for 310 s (brief test 8)', () => {
-  it('is stale and still', () => {
+describe('silence for 310 s (brief test 8, R-F2)', () => {
+  it('is gone: evicted from the model, not drawn frozen', () => {
     const net = straightNetwork();
     const model = createModel(net);
     let t = T0;
@@ -353,16 +417,17 @@ describe('silence for 310 s (brief test 8)', () => {
     model.update([fixAt('v1', { x: 0, y: 100 }, t)], t);
     model.step(t);
 
-    t += 310_000;
-    const a = model.step(t).find((d) => d.id === 'v1')!;
-    expect(a.stale).toBe(true);
-    expect(a.speed).toBe(0);
+    // Under the 90 s hold and through the decay it is still drawn, slowing
+    // down; past five minutes it is not a vehicle any more.
+    t += 200_000;
+    const fading = model.step(t).find((d) => d.id === 'v1')!;
+    expect(fading).toBeDefined();
+    expect(fading.speed).toBeLessThan(100 / 30);
+    expect(fading.stale).toBe(false);
 
-    t += 15_000;
-    const b = model.step(t).find((d) => d.id === 'v1')!;
-    expect(b.stale).toBe(true);
-    expect(b.p.x).toBeCloseTo(a.p.x, 9);
-    expect(b.p.y).toBeCloseTo(a.p.y, 9);
+    t += 110_000;
+    expect(model.step(t)).toHaveLength(0);
+    expect(model.size()).toBe(0);
   });
 });
 
@@ -540,5 +605,167 @@ describe('size()', () => {
     expect(model.size()).toBe(0);
     model.update([fixAt('v1', { x: 0, y: 0 }, T0), fixAt('v2', { x: 0, y: 10 }, T0)], T0);
     expect(model.size()).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R-F1: the public kiosk in steady state -- the reviewer's reproduction, as a
+// named scenario. A tram runs a straight line with a stop every 450 m; the
+// feed samples it every 30 s; the kiosk polls every 20 s and each fix reaches
+// the model only after the feed's own latency. The old model held the tram at
+// the gate while the real one carried on, then teleported it onto the next
+// fix (210 to 465 m in one frame, about once a minute). Being behind along
+// the same shape is the model lagging, never the model being wrong, so it
+// must catch up and never snap.
+// ---------------------------------------------------------------------------
+
+interface SteadyStateStats {
+  /** The largest single-frame move beyond that frame's own catch-up cap. */
+  worstOvershootM: number;
+  /** Whether any drawn frame carried a snap timestamp after the first fix. */
+  snapped: boolean;
+  /** Share of frames the stop gate held the tram, in [0, 1]. */
+  heldShare: number;
+  /** 95th percentile of |true position - drawn position|, in metres. */
+  lagP95M: number;
+}
+
+/**
+ * Truth: cruise at `speedMs` between stops 450 m apart, standing `dwellS`
+ * at every stop (a real tram opens its doors; 0 is the harshest case for the
+ * gate, a tram that never stops). Fixes are the exact true position at 30 s
+ * ticks; a poll every 20 s hands the model the newest fix that is at least
+ * `latencyS` old. Frames run at 60 Hz for `minutes`. Measurement starts two
+ * minutes in, once the model has fix-to-fix evidence to reckon with.
+ */
+function runSteadyState(opts: { speedMs: number; latencyS: number; dwellS: number; minutes?: number }): SteadyStateStats {
+  const STOP_SPACING_M = 450;
+  const SHAPE_LEN_M = 20_000;
+  const FIX_EVERY_MS = 30_000;
+  const POLL_EVERY_MS = 20_000;
+  const FRAME_MS = 1000 / 60;
+  const minutes = opts.minutes ?? 20;
+  const stops: StopSpec[] = [];
+  for (let s = STOP_SPACING_M; s < SHAPE_LEN_M; s += STOP_SPACING_M) stops.push({ id: `ST${s}`, name: `Stop ${s}`, shape: 0, s });
+  const net = buildNetwork(
+    [{ id: 'S0', route: 'R1', pts: [{ x: 0, y: 0 }, { x: 0, y: SHAPE_LEN_M }] }],
+    stops,
+    [{ id: 'R1', short: '1', type: 0, shapes: [0] }],
+  );
+  const cruiseS = STOP_SPACING_M / opts.speedMs;
+  const cycleS = cruiseS + opts.dwellS;
+  const trueS = (tMs: number): number => {
+    const t = tMs / 1000;
+    const k = Math.floor(t / cycleS);
+    const phase = t - k * cycleS;
+    return k * STOP_SPACING_M + Math.min(STOP_SPACING_M, opts.speedMs * phase);
+  };
+
+  const model = createModel(net);
+  const totalMs = minutes * 60_000;
+  const measureFromMs = 2 * 60_000;
+  let deliveredUpTo = -1; // index of the newest fix handed to the model
+  let framesMeasured = 0;
+  let heldFrames = 0;
+  let worstOvershootM = 0;
+  let snapped = false;
+  const lags: number[] = [];
+  let prev: { y: number; t: number } | null = null;
+
+  for (let frame = 0; frame * FRAME_MS <= totalMs; frame++) {
+    const t = frame * FRAME_MS;
+    const now = T0 + t;
+    // A poll lands every 20 s and carries the newest fix old enough to have
+    // arrived: the same "latest VehiclePosition per vehicle" the feed sends.
+    if (frame > 0 && Math.floor(t / POLL_EVERY_MS) > Math.floor((t - FRAME_MS) / POLL_EVERY_MS)) {
+      const newest = Math.floor((t - opts.latencyS * 1000) / FIX_EVERY_MS);
+      if (newest > deliveredUpTo) {
+        deliveredUpTo = newest;
+        const fixT = newest * FIX_EVERY_MS;
+        model.update([fixAt('tram', { x: 0, y: trueS(fixT) }, T0 + fixT)], now);
+      }
+    }
+    const drawn = model.step(now).find((d) => d.id === 'tram');
+    if (!drawn) continue;
+    if (t >= measureFromMs) {
+      framesMeasured++;
+      if (drawn.held) heldFrames++;
+      if (drawn.lastSnapAt !== undefined) snapped = true;
+      lags.push(Math.abs(trueS(t) - drawn.p.y));
+      if (prev) {
+        const dt = (t - prev.t) / 1000;
+        const cap = Math.max(2 * drawn.speed, 8) * dt + 0.01;
+        worstOvershootM = Math.max(worstOvershootM, Math.abs(drawn.p.y - prev.y) - cap);
+      }
+    }
+    prev = { y: drawn.p.y, t };
+  }
+  lags.sort((a, b) => a - b);
+  return {
+    worstOvershootM,
+    snapped,
+    heldShare: framesMeasured ? heldFrames / framesMeasured : 0,
+    lagP95M: lags[Math.min(lags.length - 1, Math.floor(lags.length * 0.95))] ?? 0,
+  };
+}
+
+/** The acceptance envelope for the dwelling tram, per latency/speed run
+ *  (task-F1-report.md, Rulings 7, amending the brief's 15 % and 60 m, which
+ *  the constants R-F1 fixes cannot deliver: a 25 s hold at a stop every 65
+ *  to 84 s is 30 to 38 % of frames by itself unless a fix cuts it short,
+ *  and the fix that confirms a departure arrives 25 to 75 s after it, with
+ *  the release at half speed until then -- a sweep of the release factor up
+ *  to 1.0 and the sub-50 m cap up to twice the speed left the held share
+ *  unchanged and the p95 lag at 92 to 254 m at best). Each bound sits about
+ *  one percentage point and five to ten metres above the measured value,
+ *  so a regression of the size that matters fails here (the old model held
+ *  over half of all frames and lagged 166 to 353 m at p95) and a benign
+ *  reordering of arithmetic does not. */
+const DWELLING_TRAM_ENVELOPE: Record<string, { heldUnder: number; lagP95UnderM: number }> = {
+  '25/7': { heldUnder: 0.26, lagP95UnderM: 190 }, // measured 25.34 %, 183.7 m
+  '25/10': { heldUnder: 0.22, lagP95UnderM: 280 }, // measured 21.29 %, 270.6 m
+  '2/7': { heldUnder: 0.27, lagP95UnderM: 125 }, // measured 26.13 %, 116.1 m
+  '2/10': { heldUnder: 0.23, lagP95UnderM: 270 }, // measured 21.99 %, 260.7 m
+};
+
+describe('the public kiosk in steady state (R-F1: 450 m stops, 30 s fixes on a 20 s poll, 20 minutes)', () => {
+  const latencies = [25, 2];
+  const speeds = [7, 10];
+  for (const latencyS of latencies) {
+    for (const speedMs of speeds) {
+      const envelope = DWELLING_TRAM_ENVELOPE[`${latencyS}/${speedMs}`]!;
+      it(`${latencyS} s latency, ${speedMs} m/s, doors open 20 s at every stop: no frame outruns the catch-up cap, nothing snaps, the gate holds under ${Math.round(envelope.heldUnder * 100)} % of frames and the p95 lag is under ${envelope.lagP95UnderM} m`, () => {
+        const stats = runSteadyState({ speedMs, latencyS, dwellS: 20 });
+        expect(stats.worstOvershootM).toBeLessThanOrEqual(0);
+        expect(stats.snapped).toBe(false);
+        expect(stats.heldShare).toBeLessThan(envelope.heldUnder);
+        expect(stats.lagP95M).toBeLessThan(envelope.lagP95UnderM);
+      });
+      it(`${latencyS} s latency, ${speedMs} m/s, a tram that never stops: still no frame outruns the catch-up cap and nothing snaps`, () => {
+        const stats = runSteadyState({ speedMs, latencyS, dwellS: 0 });
+        expect(stats.worstOvershootM).toBeLessThanOrEqual(0);
+        expect(stats.snapped).toBe(false);
+      });
+    }
+  }
+});
+
+describe('eviction (R-F2)', () => {
+  it('a vehicle absent from the fixes for STALE_S + 1 seconds is gone from size(), not merely flagged', () => {
+    const model = createModel(straightNetwork());
+    model.update([fixAt('v1', { x: 0, y: 0 }, T0), fixAt('v2', { x: 0, y: 10 }, T0)], T0);
+    expect(model.size()).toBe(2);
+    const later = T0 + 301_000;
+    model.update([fixAt('v1', { x: 0, y: 100 }, later)], later);
+    expect(model.size()).toBe(1);
+    expect(model.step(later).map((d) => d.id)).toEqual(['v1']);
+  });
+
+  it('a vehicle nobody has polled for goes at the same age on step(), so a paused feed does not keep ghosts', () => {
+    const model = createModel(straightNetwork());
+    model.update([fixAt('v1', { x: 0, y: 0 }, T0)], T0);
+    expect(model.step(T0 + 299_000)).toHaveLength(1);
+    expect(model.step(T0 + 301_000)).toHaveLength(0);
+    expect(model.size()).toBe(0);
   });
 });

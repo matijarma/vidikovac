@@ -106,11 +106,11 @@ describe('createSchematicHost', () => {
     await flush();
     h.update({ fixes: [
       fix({ id: 'tram', lon: 15.977, lat: 45.813, routeId: 'R-tram' }),
-      fix({ id: 'bus-here', lon: 15.977, lat: 45.8135, routeId: 'R-bus' }), // inside the crop, wrong type
+      fix({ id: 'bus-here', lon: 15.977, lat: 45.8135, routeId: 'R-bus' }), // inside the crop, wrong type: in neither number (R-F2)
       fix({ id: 'tram-far', lon: 15.99, lat: 45.813, routeId: 'R-tram' }), // on the line, ~1 km east: outside the crop
     ] }, NOW);
     await frame();
-    expect(legend(root)).toBe('1 od 3 praćenih vozila u kadru');
+    expect(legend(root)).toBe('1 od 2 praćenih vozila u kadru');
   });
 
   it('in lightweight mode never asks for the network, mounts the list synchronously, and still carries the note', () => {

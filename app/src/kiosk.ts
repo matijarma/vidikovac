@@ -25,6 +25,7 @@ import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { routeDelayMap, vehicleFixes } from './motion/fixes';
 import { loadNetwork, type Network } from './motion/network';
+import { continuePoll, nextPollDelay } from './motion/loop';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
@@ -446,6 +447,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const essentialsRowsBox = element.querySelector<HTMLElement>('[data-testid=kiosk-essentials-rows]')!;
 
   let teaser: ModuleSnapshot[] = [];
+  let disposed = false;
   let cards: TeaserCard[] = [];
   let cardIndex = 0;
   let currentCode: string | null = null;
@@ -598,6 +600,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintEssentials();
     essentialsPanel.hidden = false;
     stage.hidden = true;
+    stageSchematic.pause(); // R-F6: a hidden stage paints nothing
     essentialsHeading.focus();
     armEssentialsIdle();
   }
@@ -610,6 +613,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (essentialsPanel.hidden) return;
     essentialsPanel.hidden = true;
     stage.hidden = false;
+    if (element.dataset.mode === 'teaser') stageSchematic.resume(); // under a session setMode keeps it paused
     if (restoreFocus) essentialsBtn()?.focus();
   }
 
@@ -778,6 +782,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintLayer();
   }
 
+  /** The teaser poll, aligned to the realtime feed's own tick
+   *  (motion/loop.ts's nextPollDelay): the next request lands 2 s after the
+   *  feed's next 30 s tick when the zet-rt snapshot says when it last
+   *  ticked, else 20 s out. A one-shot re-armed after every load -- success,
+   *  a caught failure, or a load that rejected outright (continuePoll) --
+   *  since each delay is computed from the freshest snapshot. */
+  let teaserTimer: unknown = null;
+  function armTeaserPoll(): void {
+    if (disposed || teaserTimer !== null) return;
+    teaserTimer = setTimer(() => {
+      clearTimer(teaserTimer); // the injected pair is interval-shaped
+      teaserTimer = null;
+      continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
+    }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now()));
+  }
+
   async function loadTeaser(): Promise<void> {
     const fetchTeaser = deps.fetchTeaser ?? (() => fetchTeaserImpl());
     try {
@@ -898,7 +918,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // attribute rather than `:has(.kiosk-live:not(:empty))`, which no 2017
   // engine understands.
   element.dataset.live = '1';
-  void loadTeaser();
+  continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
 
   // Canvas colours are read off computed style (`tone()`), so a theme flip
   // needs a repaint even with no new data; a resize needs one because the
@@ -928,15 +948,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
       else void refreshSessionData();
     }
-    void loadTeaser();
   }, TEASER_ROTATE_MS);
 
   return {
     element,
     destroy() {
+      disposed = true;
       rotation.stop();
       clearTimer(rotateTimer);
       clearTimer(meanderTimer);
+      if (teaserTimer !== null) clearTimer(teaserTimer);
+      teaserTimer = null;
       disarmEssentialsIdle();
       stopRepaint?.();
       beacon?.close();

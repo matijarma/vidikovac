@@ -10,10 +10,12 @@
 //
 // Alongside it, `nextPollDelay` is the tick-aligned poller: the realtime
 // feed updates on its own ~30s cadence (probe, 12 September), so polling on
-// a fixed 20s offset (`dashboard.ts`'s current `POLL_MS`) wastes roughly a
-// third of every request against a snapshot that has not changed yet.
-// Aligning to the feed's own tick, plus a cushion for jitter, halves that
-// waste -- the same "redundant traffic" objection Matija has raised before.
+// a fixed 20s offset (what both surfaces did before R-F6's fix wave) wastes
+// roughly a third of every request against a snapshot that has not changed
+// yet. Aligning to the feed's own tick, plus a cushion for jitter, halves
+// that waste -- the same "redundant traffic" objection Matija has raised
+// before. kiosk.ts's teaser poll and dashboard.ts's session poll both run
+// on it as a one-shot chain re-armed after every fetch.
 
 export interface LoopDeps {
   /** Defaults to `requestAnimationFrame`. */
@@ -25,6 +27,12 @@ export interface LoopDeps {
    *  timestamp, which is relative to navigation start and means nothing to
    *  the motion model. */
   now?: () => number;
+  /** The reduced-motion and lightweight path's clock tick (R-F6: those
+   *  loops never touch requestAnimationFrame). Default to the globals; the
+   *  same interval-shaped pair kiosk.ts and dashboard.ts inject fits, used
+   *  as a one-shot re-armed after each tick. */
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
   reducedMotion?: boolean;
   lightweight?: boolean;
 }
@@ -56,13 +64,18 @@ const SLOW_STREAK_TO_HALVE = 3;
 const PARK_AFTER_UNCHANGED = 8;
 /** R-L1/R-L2's "honest reading": reduced motion and lightweight both mean
  *  *do not animate*, not *animate slower*. Once a second is a live clock
- *  tick, not a slow filmstrip. */
+ *  tick, not a slow filmstrip -- and it is a *timer* tick: that path never
+ *  asks the compositor for a frame at all (R-F6), so a lightweight kiosk
+ *  is not woken sixty times a second to decide, fifty-nine times, to do
+ *  nothing. */
 const REDUCED_MOTION_INTERVAL_MS = 1000;
 
 export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}): Loop {
   const rafFn = deps.raf ?? ((cb: (t: number) => void) => requestAnimationFrame(cb));
   const cancelFn = deps.cancel ?? ((h: number) => cancelAnimationFrame(h));
   const clockNow = deps.now ?? (() => Date.now());
+  const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => globalThis.setTimeout(fn, ms));
+  const clearTimer = deps.clearTimer ?? ((h: unknown) => globalThis.clearTimeout(h as never));
   const reduced = Boolean(deps.reducedMotion || deps.lightweight);
 
   let running = false;
@@ -76,7 +89,9 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
   let slowStreak = 0;
   let unchangedStreak = 0;
 
-  // Reduced-motion / lightweight path state.
+  // Reduced-motion / lightweight path state: the armed tick, and when the
+  // last tick actually drew (null before the first).
+  let timer: unknown = null;
   let lastReducedDrawAt: number | null = null;
 
   function scheduleFull(): void {
@@ -138,24 +153,42 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     scheduleFull();
   }
 
+  /** Arms the next once-a-second tick: a full interval after the last draw,
+   *  or at once when nothing has been drawn yet (or the last draw is long
+   *  past, as after a park). */
   function scheduleReduced(): void {
-    handle = rafFn(onReducedFrame);
+    const due = lastReducedDrawAt === null ? 0 : Math.max(0, lastReducedDrawAt + REDUCED_MOTION_INTERVAL_MS - clockNow());
+    timer = setTimer(onReducedTick, due);
   }
 
-  function onReducedFrame(): void {
-    handle = null;
-    if (!running) return;
+  function onReducedTick(): void {
+    if (timer !== null) {
+      clearTimer(timer); // the injected pair is interval-shaped; this makes it a one-shot
+      timer = null;
+    }
+    if (!running || parked) return; // stop()/park raced a tick already due
     const now = clockNow();
-    if (lastReducedDrawAt === null || now - lastReducedDrawAt >= REDUCED_MOTION_INTERVAL_MS) {
-      lastReducedDrawAt = now;
-      try {
-        draw(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
-        frameCount++;
-      } catch (err) {
-        // Same reasoning as onFullFrame's catch: an uncaught throw here would
-        // abort before scheduleReduced() runs, freezing the once-a-second
-        // clock tick for good.
-        console.error('[motion loop] draw() threw; treating this frame as unchanged', err);
+    lastReducedDrawAt = now;
+    let changed = false;
+    try {
+      changed = draw(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
+      frameCount++;
+    } catch (err) {
+      // Same reasoning as onFullFrame's catch: an uncaught throw here would
+      // abort before scheduleReduced() runs, freezing the once-a-second
+      // clock tick for good.
+      console.error('[motion loop] draw() threw; treating this frame as unchanged', err);
+    }
+    // Parks exactly like the full loop: eight unchanged ticks (eight
+    // seconds of nothing moving) and the timer is simply not re-armed,
+    // until nudge() brings news.
+    if (changed) {
+      unchangedStreak = 0;
+    } else {
+      unchangedStreak++;
+      if (unchangedStreak >= PARK_AFTER_UNCHANGED) {
+        parked = true;
+        return;
       }
     }
     scheduleReduced();
@@ -183,13 +216,18 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
         cancelFn(handle);
         handle = null;
       }
+      if (timer !== null) {
+        clearTimer(timer);
+        timer = null;
+      }
     },
 
     nudge() {
       unchangedStreak = 0; // fresh evidence: give it a full run before parking again
       if (running && parked) {
         parked = false;
-        scheduleFull(); // reduced-motion mode never parks, so this only ever applies here
+        if (reduced) scheduleReduced();
+        else scheduleFull();
       }
     },
 
@@ -207,7 +245,7 @@ const FEED_TICK_MS = 30_000;
 /** Absorbs ordinary network and processing jitter around that tick without
  *  polling early enough to catch the same still-stale snapshot twice. */
 const POLL_CUSHION_MS = 2_000;
-/** The previous fixed cadence (`dashboard.ts`'s `POLL_MS`), kept as the
+/** The previous fixed cadence (20 s on both surfaces), kept as the
  *  fallback for a snapshot that carries no `sourceUpdatedAt` yet -- a cold
  *  start, or a source that is down -- so a poll with no timestamp evidence
  *  to align to still retries at a sane rate instead of guessing at a tick
@@ -220,16 +258,40 @@ export const POLL_FALLBACK_MS = 20_000;
  * cushion, minus `now`. Given a working timestamp this halves wasted
  * requests against a feed that changes twice a minute (the "redundant
  * traffic" objection Matija has raised); without one it falls back to the
- * previous fixed delay. Never returns a negative delay -- an aligned target
- * already in the past (a slow poll, a backgrounded tab) means "poll now",
- * not "poll less often than before".
+ * previous fixed delay. An aligned target already in the past (a slow poll,
+ * a backgrounded tab, a feed that is late or down) means the *next* tick on
+ * the feed's own phase, never "poll now": the poll is a self-rearming chain,
+ * and "now" against a feed that has stopped ticking would be a tight loop
+ * of requests. And never longer than one tick plus the cushion, whatever a
+ * timestamp from the future might claim.
  */
 export function nextPollDelay(sourceUpdatedAt: string | undefined, now: number): number {
   if (sourceUpdatedAt !== undefined) {
     const at = Date.parse(sourceUpdatedAt);
     if (Number.isFinite(at)) {
-      return Math.max(0, at + FEED_TICK_MS + POLL_CUSHION_MS - now);
+      const target = at + FEED_TICK_MS + POLL_CUSHION_MS;
+      let delay = target - now;
+      if (delay <= 0) delay = FEED_TICK_MS - ((now - target) % FEED_TICK_MS);
+      return Math.min(delay, FEED_TICK_MS + POLL_CUSHION_MS);
     }
   }
   return POLL_FALLBACK_MS;
+}
+
+/**
+ * Re-arms a one-shot poll chain once `work` -- the poll's own handler -- has
+ * settled, whichever way it settled. The fixed interval the chain replaced
+ * retried every 20 s regardless of what the last handler did; a chain must
+ * keep that promise. A handler that throws (a renderer choking on one bad
+ * snapshot, an outage alert whose copy cannot be painted) must neither end
+ * polling for the rest of a ten-minute session nor leave its rejection
+ * unhandled: the next poll is armed *first*, then the failure is logged
+ * under `label`, so even a reporter that throws cannot be what breaks the
+ * chain.
+ */
+export function continuePoll(work: Promise<unknown>, arm: () => void, label: string): void {
+  void work.then(arm, (error: unknown) => {
+    arm();
+    console.error(`[poll] ${label} threw; the next poll is still armed`, error);
+  });
 }

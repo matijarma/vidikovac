@@ -25,6 +25,13 @@ import { SDF_PIXEL_RATIO, sdfRectangle } from './sdf';
 
 export const OSM_RASTER_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 export const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
+/** The credit as the attribution control shows it: the same words as a
+ *  link to the copyright page, which is what the OpenStreetMap licence asks
+ *  for. Static markup, never feed text (see the MapFactory contract below);
+ *  MapLibre drops the style source's plain-text copy as a substring of this
+ *  one, so the credit shows exactly once. Opens like every other external
+ *  link in the app (izvori-render.ts, kultura.ts). */
+export const OSM_ATTRIBUTION_HTML = `<a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">${OSM_ATTRIBUTION}</a>`;
 /** [lon, lat], GeoJSON order, Trg bana Jelačića. */
 export const ZAGREB_CENTER: [number, number] = [15.98, 45.815];
 
@@ -234,6 +241,11 @@ export interface CityMapOptions {
 
 export interface CityMapHandle {
   update(points: MapPoint[], lines: MapLine[]): void;
+  /** Stops stepping the model and requesting frames (a frozen dashboard,
+   *  R-F6). The map itself and the model's history stay; `resume()` picks
+   *  the motion up again. */
+  pause(): void;
+  resume(): void;
   destroy(): void;
 }
 
@@ -241,7 +253,7 @@ export interface CityMapHandle {
 // bypass fixed only in 6.9.0+ — tracked as a separate major-version upgrade,
 // not done here). Until that upgrade lands, no caller of a MapFactory may pass
 // feed-derived (external) text into a MapLibre Popup or marker HTML; this
-// wrapper itself only ever hands MapLibre the static OSM_ATTRIBUTION string.
+// wrapper itself only ever hands MapLibre the static OSM_ATTRIBUTION_HTML anchor.
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
 /** Binds a network loader into a factory, so a page's map slots and its
@@ -262,6 +274,8 @@ export interface CityMapDeps {
   now?: () => number;
 }
 
+let mapUid = 0;
+
 export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): CityMapHandle {
   const { container } = options;
   const now = deps.now ?? (() => Date.now());
@@ -276,9 +290,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let destroyMap: (() => void) | null = null;
   let lastPushedSignature = '';
   let nextPushAt = -Infinity;
+  // The loop starts on MapLibre's 'load'; a pause() before that must still
+  // win, so 'load' consults this instead of starting unconditionally.
+  let paused = false;
 
-  container.setAttribute('role', 'img');
+  // R-F5: the container is a named region, so MapLibre's zoom buttons and
+  // the attribution link inside it are exposed by name. It used to be the
+  // image, which made everything inside it presentational for a reader
+  // while leaving it all in the tab order. The image is the canvas alone
+  // (set once the library has built it, below). The id is what the canvas
+  // points its label at; an id the page already gave the element is kept.
+  container.setAttribute('role', 'region');
   container.setAttribute('aria-label', options.ariaLabel);
+  if (!container.id) container.id = `city-map-${++mapUid}`;
 
   function draw(t: number): boolean {
     // Detached (the dashboard swapped layers and took the panel along):
@@ -319,7 +343,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       attributionControl: false,
       fadeDuration: options.reducedMotion ? 0 : 300,
     });
-    map.addControl(new lib.AttributionControl({ compact: false, customAttribution: OSM_ATTRIBUTION }));
+    // MapLibre names its canvas a focusable region called "Map" (English,
+    // whatever the page's language). It becomes the image with the same
+    // label as the region -- aria-labelledby, so the per-poll label rewrite
+    // in map-slots.ts reaches both -- and keeps its tab stop: the arrow
+    // keys pan and +/- zoom, and taking that away would fail WCAG 2.1.1.
+    // Nothing focusable is left inside an image, so nested-interactive
+    // cannot fire.
+    const canvas = map.getCanvas();
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-labelledby', container.id);
+    canvas.removeAttribute('aria-label');
+    map.addControl(new lib.AttributionControl({ compact: false, customAttribution: OSM_ATTRIBUTION_HTML }));
     map.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
     destroyMap = () => map.remove();
 
@@ -375,7 +410,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         source('closures')?.setData(linesToGeoJson(lines));
       };
       pushVehicles = (fc) => source('vehicles')?.setData(fc);
-      loop.start();
+      if (!paused) loop.start();
     });
   })();
 
@@ -389,6 +424,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       model?.update(pointsToFixes(points), now());
       applyStatic?.();
       loop.nudge();
+    },
+    pause() {
+      paused = true;
+      loop.stop();
+    },
+    resume() {
+      paused = false;
+      if (pushVehicles) loop.start(); // before 'load' the load handler starts it
     },
     destroy() {
       disposed = true;

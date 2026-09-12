@@ -46,9 +46,9 @@ describe('feed items to GeoJSON', () => {
 
 describe('map slots', () => {
   const spyFactory = () => {
-    const made: { update: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[] = [];
+    const made: { update: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn> }[] = [];
     const factory = vi.fn(() => {
-      const handle = { update: vi.fn(), destroy: vi.fn() };
+      const handle = { update: vi.fn(), destroy: vi.fn(), pause: vi.fn() };
       made.push(handle);
       return handle;
     });
@@ -73,6 +73,17 @@ describe('map slots', () => {
     expect(made[0]!.update).toHaveBeenCalledTimes(1);
     expect(made[0]!.destroy).not.toHaveBeenCalled();
     expect(first.getAttribute('aria-label')).toBe('karta a');
+  });
+
+  it('pauses every live map on pause() (R-F6: the frozen dashboard stops both of its maps)', () => {
+    const { factory, made } = spyFactory();
+    const maps = createMapSlots(factory as never);
+    ask(maps, 'a');
+    ask(maps, 'b');
+    maps.pause();
+    expect(made[0]!.pause).toHaveBeenCalledTimes(1);
+    expect(made[1]!.pause).toHaveBeenCalledTimes(1);
+    expect(() => createMapSlots(undefined).pause()).not.toThrow();
   });
 
   it('destroys a map no render asked for, and every map on destroy', () => {

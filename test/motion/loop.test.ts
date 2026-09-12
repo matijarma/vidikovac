@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { continuePoll, createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 
 /**
  * A raf/cancel double the loop can be driven by hand: `fire()` invokes
@@ -7,6 +7,23 @@ import { createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motio
  * says whether the loop asked for another frame (the way a test tells
  * "parked" from "still running" without a real browser).
  */
+/** A setTimeout/clearTimeout double for the reduced-motion path: `advance()`
+ *  moves the caller's clock and runs every armed timer that has come due. */
+function fakeTimers() {
+  const timers: { fn: () => void; at: number; cleared: boolean }[] = [];
+  let now = 0;
+  const setTimer = vi.fn((fn: () => void, ms: number) => { const t = { fn, at: now + ms, cleared: false }; timers.push(t); return t; });
+  const clearTimer = vi.fn((h: unknown) => { (h as { cleared: boolean }).cleared = true; });
+  const advance = (t: number): void => {
+    now = t;
+    for (const timer of [...timers].sort((a, b) => a.at - b.at)) {
+      if (!timer.cleared && timer.at <= now) { timer.cleared = true; timer.fn(); }
+    }
+  };
+  const pending = () => timers.filter((t) => !t.cleared).length;
+  return { setTimer, clearTimer, advance, pending, clock: () => now };
+}
+
 function fakeRaf() {
   let cb: ((t: number) => void) | null = null;
   let handle = 0;
@@ -105,52 +122,71 @@ describe('createLoop', () => {
     expect(draw).toHaveBeenCalledTimes(6);
   });
 
-  it('calls draw once a second under reducedMotion, with no interpolation', () => {
-    const { raf, cancel, fire } = fakeRaf();
-    let t = 0;
+  it('calls draw once a second under reducedMotion on the timer path, never asking for an animation frame (R-F6)', () => {
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, clock } = fakeTimers();
     const draw = vi.fn(() => true);
-    const loop = createLoop(draw, { raf, cancel, now: () => t, reducedMotion: true });
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, reducedMotion: true });
     loop.start();
 
-    fire(); // first tick ever: draws immediately
+    advance(0); // the first tick draws at once
     expect(draw).toHaveBeenCalledTimes(1);
-
-    t = 400;
-    fire(); // under a second since the last draw
-    expect(draw).toHaveBeenCalledTimes(1);
-
-    t = 999;
-    fire(); // still under a second
-    expect(draw).toHaveBeenCalledTimes(1);
-
-    t = 1000;
-    fire(); // a full second has now elapsed
+    advance(400);
+    advance(999);
+    expect(draw).toHaveBeenCalledTimes(1); // under a second since the last draw
+    advance(1000);
     expect(draw).toHaveBeenCalledTimes(2);
-
-    t = 1500;
-    fire(); // only 500ms since the last draw
+    advance(1500);
     expect(draw).toHaveBeenCalledTimes(2);
-
-    t = 2000;
-    fire(); // a full second since the last draw
+    advance(2000);
     expect(draw).toHaveBeenCalledTimes(3);
+    for (let t = 3000; t <= 10_000; t += 1000) advance(t);
+    expect(draw).toHaveBeenCalledTimes(11); // once a second for ten simulated seconds
+    expect(raf).not.toHaveBeenCalled(); // and not one requestAnimationFrame in all of it
   });
 
-  it('calls draw once a second under lightweight too, the same honest reading', () => {
-    const { raf, cancel, fire } = fakeRaf();
-    let t = 0;
+  it('calls draw once a second under lightweight too, with zero requestAnimationFrame calls in ten simulated seconds', () => {
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, clock } = fakeTimers();
     const draw = vi.fn(() => true);
-    const loop = createLoop(draw, { raf, cancel, now: () => t, lightweight: true });
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, lightweight: true });
     loop.start();
+    for (let t = 0; t <= 10_000; t += 500) advance(t);
+    expect(draw).toHaveBeenCalledTimes(11);
+    expect(raf).not.toHaveBeenCalled();
+  });
 
-    fire();
+  it('parks the reduced-motion loop after eight unchanged ticks, exactly like the full loop, and nudge wakes it', () => {
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, pending, clock } = fakeTimers();
+    const draw = vi.fn(() => false);
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, reducedMotion: true });
+    loop.start();
+    for (let t = 0; t <= 7000; t += 1000) advance(t);
+    expect(draw).toHaveBeenCalledTimes(8);
+    expect(pending()).toBe(0); // parked: no timer armed, nothing will ever fire again on its own
+    advance(20_000);
+    expect(draw).toHaveBeenCalledTimes(8);
+
+    loop.nudge(); // a new snapshot
+    expect(pending()).toBe(1);
+    advance(20_000);
+    expect(draw).toHaveBeenCalledTimes(9);
+    expect(raf).not.toHaveBeenCalled();
+  });
+
+  it('stop() clears the reduced-motion timer so no tick is left pending', () => {
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, pending, clock } = fakeTimers();
+    const draw = vi.fn(() => true);
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, lightweight: true });
+    loop.start();
+    advance(0);
+    expect(pending()).toBe(1);
+    loop.stop();
+    expect(pending()).toBe(0);
+    advance(5000);
     expect(draw).toHaveBeenCalledTimes(1);
-    t = 500;
-    fire();
-    expect(draw).toHaveBeenCalledTimes(1);
-    t = 1000;
-    fire();
-    expect(draw).toHaveBeenCalledTimes(2);
   });
 
   it('frames() counts every actual draw call, for the e2e proof to assert against', () => {
@@ -234,17 +270,18 @@ describe('createLoop', () => {
   });
 
   it('does not freeze when draw throws under reducedMotion either', () => {
-    const { raf, cancel, fire, hasScheduled } = fakeRaf();
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, pending, clock } = fakeTimers();
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const draw = vi.fn(() => {
       throw new Error('boom');
     });
-    const loop = createLoop(draw, { raf, cancel, now: () => 0, reducedMotion: true });
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, reducedMotion: true });
 
     loop.start();
-    expect(() => fire()).not.toThrow();
+    expect(() => advance(0)).not.toThrow();
     expect(draw).toHaveBeenCalledTimes(1);
-    expect(hasScheduled()).toBe(true); // still ticking once a second, not stuck
+    expect(pending()).toBe(1); // still ticking once a second, not stuck
     expect(errorSpy).toHaveBeenCalledTimes(1);
 
     errorSpy.mockRestore();
@@ -259,9 +296,18 @@ describe('nextPollDelay', () => {
     expect(nextPollDelay(sourceUpdatedAt, now)).toBe(27_000);
   });
 
-  it('never returns a negative delay when the aligned target has already passed', () => {
+  it("when the aligned target has already passed it waits for the next tick on the feed's own phase, never polling at once or in a tight loop", () => {
+    // Source timestamp at 0; aligned targets at 32 s, 62 s, 92 s, ... A feed
+    // that is late (or down) must not be polled "now" on every pass.
     const sourceUpdatedAt = new Date(0).toISOString();
-    expect(nextPollDelay(sourceUpdatedAt, 1_000_000)).toBe(0);
+    expect(nextPollDelay(sourceUpdatedAt, 33_000)).toBe(29_000); // one second past the 32 s target: the 62 s one
+    expect(nextPollDelay(sourceUpdatedAt, 1_000_000)).toBe(22_000); // the next target on that phase is 1_022_000
+    expect(nextPollDelay(sourceUpdatedAt, 1_022_000)).toBe(30_000); // exactly on a target: the one after it
+  });
+
+  it('never waits longer than one tick plus the cushion, whatever the timestamp claims', () => {
+    const future = new Date(10_000_000).toISOString();
+    expect(nextPollDelay(future, 0)).toBe(32_000);
   });
 
   it('falls back to the fixed cadence when sourceUpdatedAt is missing', () => {
@@ -270,5 +316,37 @@ describe('nextPollDelay', () => {
 
   it('falls back to the fixed cadence when sourceUpdatedAt cannot be parsed', () => {
     expect(nextPollDelay('not-a-date', 0)).toBe(POLL_FALLBACK_MS);
+  });
+});
+
+describe('continuePoll', () => {
+  it('re-arms the chain once the poll has settled, and does nothing else when it succeeded', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const arm = vi.fn();
+    continuePoll(Promise.resolve('fetched'), arm, 'test poll');
+    expect(arm).not.toHaveBeenCalled(); // never synchronously: the handler must have settled first
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(arm).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('re-arms the chain when the poll threw, logs the failure with its label, and leaves no rejection unhandled', async () => {
+    const order: string[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { order.push('log'); });
+    const arm = vi.fn(() => { order.push('arm'); });
+    const failure = new Error('renderer choked on one bad snapshot');
+    continuePoll(Promise.reject(failure), arm, 'test poll');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(arm).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0]![0]).toContain('test poll');
+    expect(errorSpy.mock.calls[0]![1]).toBe(failure);
+    // The next poll is armed before the failure is reported, so a reporter
+    // that itself throws can never be what ends the chain.
+    expect(order).toEqual(['arm', 'log']);
+    errorSpy.mockRestore();
   });
 });
