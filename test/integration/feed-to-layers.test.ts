@@ -87,6 +87,21 @@ describe('every layer renders the real feed output', () => {
     expect(clean(body)).not.toContain(DASH);
   });
 
+  it('lists Događanja for culture/community sources and Grad radi for the Assembly and communal works, from the real dogadanja fixtures', () => {
+    const kultura = panel(renderLayer('kultura', ctx()), 'kultura-dogadanja');
+    const eventRows = [...kultura.querySelectorAll('[data-testid=event-row]')];
+    expect(eventRows.length).toBeGreaterThan(0);
+    for (const row of eventRows) expect(clean(row)).not.toBe('');
+    expect(clean(kultura)).not.toContain(UNAVAILABLE);
+    expect(eventRows.map(clean).join(' ')).not.toContain('Skupština');
+
+    const uprava = panel(renderLayer('uprava-i-pravo', ctx()), 'uprava-i-pravo-grad-radi');
+    const cityRows = [...uprava.querySelectorAll('[data-testid=city-work-row]')];
+    expect(cityRows.length).toBeGreaterThan(0);
+    for (const row of cityRows) expect(clean(row)).not.toBe('');
+    expect(clean(uprava)).not.toContain(UNAVAILABLE);
+  });
+
   it('numbers every act of the Glasnik', () => {
     const body = panel(renderLayer('uprava-i-pravo', ctx()), 'uprava-i-pravo-acts');
     const rows = [...body.querySelectorAll('[data-testid=act-row]')];
