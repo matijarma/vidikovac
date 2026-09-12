@@ -1,5 +1,5 @@
 /* Layer-level chrome: the map holder and the note above the safety layer. */
-.layer-note { margin: 0; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+.layer-note { margin: 0; color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
 .map-holder { display: flex; flex-direction: column; gap: 0.5rem; }
 .map-canvas { block-size: clamp(14rem, 42vh, 26rem); border-radius: 10px; overflow: hidden; background: var(--tone-surface-2, color-mix(in oklab, Canvas 85%, CanvasText 15%)); }
 .map-canvas-mini { block-size: clamp(9rem, 24vh, 14rem); }

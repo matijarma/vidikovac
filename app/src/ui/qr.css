@@ -9,8 +9,11 @@
    extension options page did exactly that, and that combination decoded to NOTHING
    in the same measurement — 0 barcodes found, against 1 for both other polarities.
 
-   Pinning both here means the next consumer cannot half-override it. The modules
-   also stay `currentColor` in the SVG (qr.ts), so `color` is what sets them. */
+   Pinning both here means the next consumer cannot half-override it: the pair now
+   lives together in tokens.css, as `--tone-qr-plate` / `--tone-qr-ink`, so touching
+   one means editing them both there rather than overriding one alone in a
+   consumer. The modules also stay `currentColor` in the SVG (qr.ts), so `color`
+   is what sets them. */
 .qr {
   display: inline-flex;
   align-items: center;
@@ -20,8 +23,8 @@
   padding: var(--sp-3);
   border: 1px solid var(--tone-stroke);
   border-radius: var(--r-lg);
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--tone-qr-plate);
+  color: var(--tone-qr-ink);
 }
 
 .qr svg {

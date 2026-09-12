@@ -6,5 +6,5 @@
 .page li { margin-block: 0.75rem; }
 .izvor { padding-block: 1rem; border-block-end: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 15%, transparent)); }
 .izvor-text { margin: 0; }
-.izvor-meta { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+.izvor-meta { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
 .page-nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; }

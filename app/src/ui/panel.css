@@ -7,7 +7,7 @@
 .panel {
   display: flex; flex-direction: column; gap: 0.75rem;
   padding: 1rem; border-radius: 14px;
-  background: var(--tone-surface, color-mix(in oklab, Canvas 92%, CanvasText 8%));
+  background: var(--tone-surface-1, color-mix(in oklab, Canvas 92%, CanvasText 8%));
   border: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 18%, transparent));
 }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
@@ -22,10 +22,10 @@
 .big-number { font-size: clamp(2rem, 8vw, 3rem); margin: 0; font-variant-numeric: tabular-nums; }
 .panel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .panel-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.9rem; }
-.panel-empty, .panel-sub, .panel-status, .panel-attr { color: var(--tone-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); margin: 0; font-size: 0.85rem; }
+.panel-empty, .panel-sub, .panel-status, .panel-attr { color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); margin: 0; font-size: 0.85rem; }
 .panel-foot { display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 12%, transparent)); padding-top: 0.5rem; }
 .panel-attr { font-size: 0.75rem; line-height: 1.4; }
 .panel-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .panel-action { font-size: 0.85rem; }
-[data-status='stale'] { color: var(--tone-warn, #d08700); }
+[data-status='stale'] { color: var(--tone-state-warning, #d08700); }
 [data-status='down'] { color: var(--tone-danger, #c13d3d); }
