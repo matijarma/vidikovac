@@ -61,7 +61,7 @@
     "mapExpand": "Proširi kartu",
     "mapCollapse": "Skupi kartu",
     "schematic": "Tramvaji i autobusi sada",
-    "schematicLegend": "{drawn} od {tracked} vozila s položajem",
+    "schematicLegend": "{drawn} od {tracked} praćenih vozila u kadru",
     "delays": "Kašnjenja po linijama",
     "delayOnTime": "po redu",
     "delayLate": "+{seconds} s",

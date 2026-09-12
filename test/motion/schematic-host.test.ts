@@ -97,7 +97,7 @@ describe('createSchematicHost', () => {
     resolveNetwork(testNetwork());
     await flush();
     await frame();
-    expect(legend(root)).toBe('1 od 1 vozila s položajem');
+    expect(legend(root)).toBe('1 od 1 praćenih vozila u kadru');
   });
 
   it('a crop scope keeps to the screen centre and to trams (R-P1)', async () => {
@@ -110,7 +110,7 @@ describe('createSchematicHost', () => {
       fix({ id: 'tram-far', lon: 15.99, lat: 45.813, routeId: 'R-tram' }), // on the line, ~1 km east: outside the crop
     ] }, NOW);
     await frame();
-    expect(legend(root)).toBe('1 od 3 vozila s položajem');
+    expect(legend(root)).toBe('1 od 3 praćenih vozila u kadru');
   });
 
   it('in lightweight mode never asks for the network, mounts the list synchronously, and still carries the note', () => {
@@ -130,7 +130,7 @@ describe('createSchematicHost', () => {
     expect(root.querySelector('[data-testid=schematic]')).not.toBeNull();
     h.update({ fixes: [fix({ id: 'v', lon: 15.977, lat: 45.813 })] }, NOW);
     await frame();
-    expect(legend(root)).toBe('1 od 1 vozila s položajem');
+    expect(legend(root)).toBe('1 od 1 praćenih vozila u kadru');
   });
 
   it('pause() and resume() reach the view once it exists, and a pause before mount is remembered', async () => {

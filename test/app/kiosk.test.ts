@@ -662,7 +662,7 @@ describe('the live stage (T9 / R-P1)', () => {
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     await frame();
     // Two pins inside the crop, one of them a bus: a locked kiosk keeps to trams (R-P1).
-    expect(text(live.querySelector('[data-testid=schematic-legend]'))).toBe('1 od 2 vozila s položajem');
+    expect(text(live.querySelector('[data-testid=schematic-legend]'))).toBe('1 od 2 praćenih vozila u kadru');
     // The whole-fleet count still drives the panorama and the catalogue.
     expect(text(k.root.querySelector('[data-testid=kiosk-catalogue]'))).toContain('156');
   });

@@ -57,7 +57,7 @@
     "mapExpand": "Expand the map",
     "mapCollapse": "Shrink the map",
     "schematic": "Trams and buses now",
-    "schematicLegend": "{drawn} of {tracked} vehicles with a position",
+    "schematicLegend": "{drawn} of {tracked} tracked vehicles in frame",
     "delays": "Delays by route",
     "delayOnTime": "on time",
     "delayLate": "+{seconds} s",

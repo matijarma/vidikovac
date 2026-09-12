@@ -156,7 +156,7 @@ describe('mountSchematicView, canvas path', () => {
     expect(legend.textContent).toBe('učitavanje podataka');
   });
 
-  it('renders the legend as "{drawn} od {tracked} vozila s položajem" once data arrives', () => {
+  it('renders the legend as "{drawn} od {tracked} praćenih vozila u kadru" once data arrives', () => {
     const { handle, fire, root } = mount({ stubSize: { w: 400, h: 400 } });
     handle.update({
       fixes: [
@@ -168,7 +168,7 @@ describe('mountSchematicView, canvas path', () => {
     const legend = root.querySelector('[data-testid=schematic-legend]')!;
     // v2's own reported spot is never drawn either way (R-P2); here it also
     // falls outside the crop, so only v1 counts as "drawn".
-    expect(legend.textContent).toBe('1 od 2 vozila s položajem');
+    expect(legend.textContent).toBe('1 od 2 praćenih vozila u kadru');
   });
 
   it('strokes the route layer once at mount and repaints the vehicle layer every fired frame', () => {
@@ -245,7 +245,7 @@ describe('mountSchematicView, lightweight path (R-L2)', () => {
     handle.update({ fixes: [fix({ id: 'v1', lon: 15.977, lat: 45.813, routeId: 'R-tram' })] });
     fire(NOW);
     const legend = root.querySelector('[data-testid=schematic-legend]')!;
-    expect(legend.textContent).toBe('1 od 1 vozila s položajem');
+    expect(legend.textContent).toBe('1 od 1 praćenih vozila u kadru');
   });
 
   it('drops a route type the caller filtered out of the list, exactly as the canvas would drop it from the route layer', () => {
