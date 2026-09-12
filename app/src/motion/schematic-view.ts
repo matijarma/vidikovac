@@ -26,6 +26,7 @@ import {
   type VehicleMark,
 } from './schematic';
 import type { I18n } from '../i18n/i18n';
+import { delayWord } from '../layers/shared';
 import { DENSITY, prepareCanvas, tone } from '../ui/canvas';
 import { escapeHtml } from '../ui/dom/escape';
 
@@ -103,19 +104,6 @@ export interface SchematicViewHandle {
    *  this view is the loop's own, sole caller. */
   update(data: SchematicUpdate, now?: number): void;
   destroy(): void;
-}
-
-/** The `panels.delayLate`/`delayEarly`/`delayOnTime` band, in seconds: the
- *  same ±15 s on-time threshold u-pokretu.ts's routeDelays rendering and
- *  kiosk.ts's own delayWord already use for this identical field. Matched by
- *  value here (not a shared import) for the same reason kiosk.ts gives: the
- *  three copies must never disagree about whether the same live route is
- *  running on time, which a shared constant proves as well as a shared
- *  function would. */
-function delayWord(i18n: I18n, seconds: number): string {
-  if (seconds > 15) return i18n.t('panels.delayLate', { seconds });
-  if (seconds < -15) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
-  return i18n.t('panels.delayOnTime');
 }
 
 interface StopLine {

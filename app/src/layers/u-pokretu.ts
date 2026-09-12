@@ -5,7 +5,7 @@ import { routeName } from '../data/routes';
 import type { MapLine, MapPoint } from '../map/city-map';
 import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
 import { escapeHtml } from '../ui/dom/escape';
-import { closureRow } from './shared';
+import { closureRow, delayWord } from './shared';
 import type { LayerContext } from './types';
 
 export interface RouteDelay {
@@ -83,12 +83,7 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
 
   const delays = routeDelays(zet);
   const delayRows = delays.map((row) => {
-    const label =
-      row.meanDelay >= -15 && row.meanDelay <= 15
-        ? i18n.t('panels.delayOnTime')
-        : row.meanDelay > 0
-          ? i18n.t('panels.delayLate', { seconds: row.meanDelay })
-          : i18n.t('panels.delayEarly', { seconds: Math.abs(row.meanDelay) });
+    const label = delayWord(i18n, row.meanDelay);
     return `<span data-testid="delay-row"><strong>${escapeHtml(routeName(row.routeId))}</strong><span class="panel-sub"> ${escapeHtml(label)} · ${escapeHtml(i18n.t('panels.vehiclesCount', { count: row.count }))}</span></span>`;
   });
   panels.appendChild(

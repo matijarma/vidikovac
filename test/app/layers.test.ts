@@ -4,7 +4,7 @@ import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
-import { vehicleCount } from '../../app/src/layers/shared';
+import { delayWord, vehicleCount } from '../../app/src/layers/shared';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import type { LayerContext } from '../../app/src/layers/types';
@@ -139,6 +139,24 @@ describe('vehicleCount', () => {
   });
   it('is null when there is no snapshot yet', () => {
     expect(vehicleCount(undefined)).toBeNull();
+  });
+});
+
+describe('delayWord', () => {
+  // The single ±15 s on-time band u-pokretu.ts, kiosk.ts and
+  // schematic-view.ts all call this for, so the three surfaces can never
+  // disagree about whether the same live route is running on time.
+  const i18n = createDefaultI18n('hr');
+  it('reads on time inside the ±15 s band, both boundaries inclusive', () => {
+    expect(delayWord(i18n, 0)).toBe('po redu');
+    expect(delayWord(i18n, 15)).toBe('po redu');
+    expect(delayWord(i18n, -15)).toBe('po redu');
+  });
+  it('reads late past +15 s, with the seconds in the word', () => {
+    expect(delayWord(i18n, 16)).toBe('+16 s');
+  });
+  it('reads early past -15 s, with the seconds made positive in the word', () => {
+    expect(delayWord(i18n, -16)).toBe('−16 s');
   });
 });
 

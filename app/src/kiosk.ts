@@ -19,7 +19,7 @@ import { codeUrl, formatCode, speakableCode } from './code';
 import { zagrebTime, zagrebWeekdayDate } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
-import { vehicleCount } from './layers/shared';
+import { delayWord, vehicleCount } from './layers/shared';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { createRotation, slotProgress } from './rotation';
@@ -204,18 +204,6 @@ export interface EssentialsRow {
  *  screen only says what it actually knows). */
 function isLive(snapshot: ModuleSnapshot | undefined): snapshot is ModuleSnapshot {
   return snapshot !== undefined && snapshot.status !== 'down';
-}
-
-/** panels.delayLate/delayEarly/delayOnTime in words, on the same ±15s on-time
- *  band u-pokretu.ts's routeDelays rendering already uses for this identical
- *  medianDelaySeconds field (app/src/layers/u-pokretu.ts, T's file — not
- *  edited here; the band is matched by value, not by a shared import, since
- *  M does not own that file). The two views must never disagree about
- *  whether the same live route is running on time. */
-function delayWord(i18n: I18n, seconds: number): string {
-  if (seconds > 15) return i18n.t('panels.delayLate', { seconds });
-  if (seconds < -15) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
-  return i18n.t('panels.delayOnTime');
 }
 
 /** The five things a locked screen can answer without a phone (R-P7 / M3b),

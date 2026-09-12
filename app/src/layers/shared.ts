@@ -50,3 +50,18 @@ export function vehicleCount(snapshot: ModuleSnapshot | undefined): number | nul
   if (teaser) return dataNumber(teaser, 'vehicles');
   return snapshot.items.filter((item) => item.id.startsWith('vehicle:')).length;
 }
+
+/**
+ * `panels.delayLate`/`delayEarly`/`delayOnTime` in words, for a route's
+ * `medianDelaySeconds` (or an equivalent per-route delay figure): the single
+ * ±15 s on-time band every surface that shows a route's delay must agree on
+ * — u-pokretu.ts's delay panel, kiosk.ts's essentials row and the schematic's
+ * lightweight stop list all call this instead of each carrying their own
+ * copy of the threshold, so a future change to the band changes all three
+ * at once instead of risking three answers to "is this route on time?".
+ */
+export function delayWord(i18n: I18n, seconds: number): string {
+  if (seconds > 15) return i18n.t('panels.delayLate', { seconds });
+  if (seconds < -15) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
+  return i18n.t('panels.delayOnTime');
+}
