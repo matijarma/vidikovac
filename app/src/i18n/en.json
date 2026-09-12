@@ -54,6 +54,7 @@
     "closuresCount_other": "{count} closures",
     "map": "Map",
     "mapUnavailable": "The map is not available in this browser; the list is below.",
+    "schematicLegend": "{drawn} of {tracked} vehicles with a position",
     "delays": "Delays by route",
     "delayOnTime": "on time",
     "delayLate": "+{seconds} s",

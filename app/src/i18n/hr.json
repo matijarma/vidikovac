@@ -58,6 +58,7 @@
     "closuresCount_other": "{count} zatvaranja",
     "map": "Karta",
     "mapUnavailable": "Karta nije dostupna u ovom pregledniku; popis je ispod.",
+    "schematicLegend": "{drawn} od {tracked} vozila s položajem",
     "delays": "Kašnjenja po linijama",
     "delayOnTime": "po redu",
     "delayLate": "+{seconds} s",
