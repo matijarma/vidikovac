@@ -85,7 +85,7 @@ export const DOGADANJA_SOURCE_CAP = 40;
 // Kulturpunkt's own wp-json endpoint stands in for the module's single
 // required Attribution.url: no one URL represents all six sources (they sit
 // under two different licences -- CC BY-SA 3.0 HR for Kulturpunkt, Otvorena
-// dozvola for the other five), so, like `hrt-news`'s own two-feed module
+// dozvola or zagreb.hr reuse terms for four city sources; Etnografski muzej states no licence), so, like `hrt-news`'s own two-feed module
 // before it, this points at one real, already-fetched, already-robots-checked
 // endpoint rather than an invented "portal" URL. Per-item attribution is a
 // lookup keyed by each item's own `data.source` (E2's report names this

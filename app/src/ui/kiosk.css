@@ -78,6 +78,8 @@
   gap: calc(var(--kiosk-scale) * 64px);
   padding: calc(var(--kiosk-scale) * 30px) calc(var(--kiosk-scale) * 80px) 0;
 }
+/* An author display beats the UA [hidden] rule, so hide explicitly (same as .kiosk-alert). */
+.kiosk-stage[hidden] { display: none; }
 .kiosk-teaser { display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; }
 /* ── The live stage (T9 / R-P1): T's schematic in the teaser column, above
    the headline. Empty only before mountKiosk fills it, when it takes no
@@ -155,6 +157,7 @@
   overflow-y: auto;
   padding: calc(var(--kiosk-scale) * 32px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 40px);
 }
+.kiosk-essentials[hidden] { display: none; }
 .kiosk-essentials > header {
   display: flex;
   flex-wrap: wrap;
