@@ -1,0 +1,50 @@
+/* The full map (T10): its button under the map, and the dashboard's full-map
+   view mode. Full-screen is a CSS state on .dash (data-view="map"), never the
+   Fullscreen API: the header -- with the session meander and the countdown --
+   stays in the flow above the map, so the meander is pinned above it by
+   construction and nothing can hide the clock. No container queries, no
+   :has(): the lightweight path never renders a map, but this sheet still
+   loads there and must stay inert (R-L3, R-L5). */
+
+.map-full-toggle { align-self: flex-start; }
+
+/* The dashboard takes the whole viewport: header on top, the view below. */
+.dash[data-view='map'] {
+  position: fixed; inset: 0; z-index: 5;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.5rem;
+  padding: 0.75rem clamp(0.75rem, 3vw, 2rem) 0;
+  background: var(--tone-surface-canvas, Canvas);
+  overflow: hidden;
+}
+/* Everything that is not the header or the view steps aside. The live
+   regions and the closing line stay in the flow so an expiry mid-map is still
+   announced and shown; they are empty or hidden until then. */
+.dash[data-view='map'] > .dash-panorama,
+.dash[data-view='map'] > .dash-tabs,
+.dash[data-view='map'] > .dash-foot { display: none; }
+.dash[data-view='map'] > .dash-alert,
+.dash[data-view='map'] > .dash-frozen { position: absolute; inset-inline: clamp(0.75rem, 3vw, 2rem); inset-block-end: 1rem; z-index: 1; }
+
+/* Only the U pokretu layer, and in it only the map panel. */
+.dash[data-view='map'] .dash-view { display: block; min-block-size: 0; }
+.dash[data-view='map'] .dash-view > .layer:not([data-layer='u-pokretu']) { display: none; }
+.dash[data-view='map'] .layer[data-layer='u-pokretu'] { block-size: 100%; gap: 0; }
+/* The layer heading stays for the reader (it is the layer's own h2 and the
+   focus target on a tab change) but leaves the screen. */
+.dash[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-title {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.dash[data-view='map'] .layer-panels { block-size: 100%; }
+.dash[data-view='map'] .layer-panels > .panel:not(#u-pokretu-map) { display: none; }
+.dash[data-view='map'] #u-pokretu-map {
+  display: grid; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100%; padding-block: 0.25rem 0.5rem; border-block-end: 0;
+}
+.dash[data-view='map'] #u-pokretu-map .panel-head,
+.dash[data-view='map'] #u-pokretu-map .panel-body,
+.dash[data-view='map'] #u-pokretu-map .panel-foot { grid-column: 1; }
+.dash[data-view='map'] #u-pokretu-map .panel-index { display: none; }
+.dash[data-view='map'] #u-pokretu-map .panel-body { min-block-size: 0; }
+.dash[data-view='map'] #u-pokretu-map .map-holder { block-size: 100%; min-block-size: 0; }
+.dash[data-view='map'] #u-pokretu-map .map-canvas { flex: 1 1 auto; block-size: auto; min-block-size: 0; border-radius: 0; }

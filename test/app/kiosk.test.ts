@@ -38,7 +38,7 @@ function batch(start: number, count = 20): CodeSlot[] {
   }));
 }
 
-function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>; loadNetwork?: () => Promise<null> } = {}) {
+function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: boolean; lightweight?: boolean; fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>; loadNetwork?: () => Promise<null>; mapFactory?: unknown } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
@@ -72,6 +72,7 @@ function mount(opts: { hash?: string; stored?: string | null; reducedMotion?: bo
     // The network artefact is never fetched under test; null is loadNetwork()'s
     // own honest answer to a failed load (every vehicle free-planes).
     loadNetwork: opts.loadNetwork ?? (async () => null),
+    mapFactory: opts.mapFactory as never,
     fetchData,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -659,6 +660,30 @@ describe('the live stage (T9 / R-P1)', () => {
     expect(hosts).toHaveLength(2); // the paused stage and the session layer
     expect(k.root.querySelector('[data-testid=kiosk-layer] #u-pokretu-schematic [data-testid=schematic-note]')).not.toBeNull();
     expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+  // T10: the full map on the unlocked kiosk layer.
+  it('gives the unlocked layer’s map the same one network load, and never creates a map in lightweight mode (R-L2)', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const mapFactory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), loadNetwork, mapFactory });
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    k.view('u-pokretu');
+    await flush();
+    expect(mapFactory).toHaveBeenCalledTimes(1);
+    const options = (mapFactory.mock.calls[0] as unknown as [{ loadNetwork?: () => Promise<null> }])[0];
+    await options.loadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+
+    const light = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true, mapFactory });
+    light.handlers.onCodes(batch(NOW), NOW);
+    light.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    light.view('u-pokretu');
+    await flush();
+    expect(mapFactory).toHaveBeenCalledTimes(1); // no second map: the lightweight kiosk renders none
+    expect(light.root.querySelector('[data-testid=kiosk-layer] #u-pokretu-map')).toBeNull();
   });
   it('lightweight: the stage carries the list and the note, and still no canvas anywhere', async () => {
     const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), lightweight: true });

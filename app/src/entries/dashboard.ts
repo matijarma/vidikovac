@@ -24,6 +24,7 @@ import '../ui/dialog.css';
 import '../ui/qr.css';
 import '../ui/print.css';
 import '../motion/schematic.css';
+import '../ui/map.css';
 
 const { i18n, theme, toasts } = bootPage({ page: 'dashboard' });
 const root = document.querySelector<HTMLElement>('#dash')!;

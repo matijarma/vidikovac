@@ -32,6 +32,14 @@ export interface LayerContext {
    * schematic panel.
    */
   schematic?: SchematicHost;
+  /**
+   * The page's full-map view mode (T10): a CSS state on the dashboard, never
+   * the Fullscreen API, so the session meander stays above the map by
+   * construction. `full` is the current state; the layer renders one button
+   * labelled for the state `toggle()` leads to. Absent on the kiosk and in
+   * unit contexts, and the layer then renders no button.
+   */
+  mapView?: { readonly full: boolean; toggle(): void };
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;

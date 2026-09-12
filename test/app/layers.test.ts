@@ -150,6 +150,37 @@ describe('u-pokretu', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');
   });
+  // T10: the full map.
+  it('hands the map each vehicle report as evidence, dated, with its trip and route type (R-P2)', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never) }));
+    const point = factory.mock.calls[0]![0].points[0];
+    // No `at` on the pin: dated at the snapshot's own fetch time, never `now`.
+    expect(point).toMatchObject({ id: 'vehicle:1', lon: 15.97, lat: 45.81, routeId: '6', at: NOW - 60_000 });
+    expect(point.title).toContain('6');
+  });
+  it('renders no map panel at all in lightweight mode: no map, no fallback line, no button (R-L2)', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const section = renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never), lightweight: true, mapView: { full: false, toggle: vi.fn() } }));
+    expect(section.querySelector('#u-pokretu-map')).toBeNull();
+    expect(section.querySelector('[data-testid=map-fallback]')).toBeNull();
+    expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    expect(factory).not.toHaveBeenCalled();
+  });
+  it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const maps = createMapSlots(factory as never);
+    const toggle = vi.fn();
+    const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full: false, toggle } }));
+    const button = section.querySelector<HTMLButtonElement>('#u-pokretu-map [data-testid=map-full-toggle]')!;
+    expect(text(button)).toBe('Proširi kartu');
+    button.click();
+    expect(toggle).toHaveBeenCalledTimes(1);
+    const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
+    expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
+    // No view-mode owner (the kiosk, a unit context): no button.
+    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector('[data-testid=map-full-toggle]')).toBeNull();
+  });
 });
 
 describe('vehicleCount', () => {

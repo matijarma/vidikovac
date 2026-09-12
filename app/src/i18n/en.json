@@ -54,6 +54,8 @@
     "closuresCount_other": "{count} closures",
     "map": "Map",
     "mapUnavailable": "The map is not available in this browser; the list is below.",
+    "mapExpand": "Expand the map",
+    "mapCollapse": "Shrink the map",
     "schematic": "Trams and buses now",
     "schematicLegend": "{drawn} of {tracked} vehicles with a position",
     "delays": "Delays by route",

@@ -35,13 +35,17 @@ export function routeDelays(snapshot: ModuleSnapshot | undefined): RouteDelay[] 
     .sort((a, b) => Math.abs(b.meanDelay) - Math.abs(a.meanDelay) || a.routeId.localeCompare(b.routeId, 'hr'));
 }
 
-export function vehiclePoints(snapshot: ModuleSnapshot | undefined): MapPoint[] {
-  return (snapshot?.items ?? [])
-    .filter((i) => i.id.startsWith('vehicle:') && i.geo?.type === 'Point')
-    .map((i) => {
-      const [lon, lat] = i.geo!.coordinates as number[];
-      return { id: i.id, lon: lon!, lat: lat!, title: routeName(dataText(i, 'routeId') || i.title), routeId: dataText(i, 'routeId') };
-    });
+/**
+ * The zet-rt pins as the full map's points: each one a dated vehicle report
+ * (motion/fixes.ts's own dating: the pin's own `at`, else the snapshot's source
+ * time, else its fetch time), so the map's motion model treats it as
+ * evidence and never as a place to draw (R-P2, T10). The title is the line
+ * name the map's accessible label and any future card would say.
+ */
+export function vehiclePoints(snapshot: ModuleSnapshot | undefined, now: number): MapPoint[] {
+  const titles = new Map<string, string>();
+  for (const item of snapshot?.items ?? []) titles.set(item.id, item.title);
+  return vehicleFixes(snapshot, now).map((fix) => ({ ...fix, title: routeName(fix.routeId || titles.get(fix.id) || '') }));
 }
 
 export function closureLines(snapshot: ModuleSnapshot | undefined): MapLine[] {
@@ -55,7 +59,7 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   const { section, panels } = createLayerSection('u-pokretu', i18n.t('layers.u-pokretu'));
   const zet = snapshots['zet-rt'];
   const closures = snapshots.prometnice;
-  const points = vehiclePoints(zet);
+  const points = vehiclePoints(zet, now);
   const lines = closureLines(closures);
 
   // T9: the moving map first -- the layer's face. The page owns the host;
@@ -71,29 +75,49 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
     );
   }
 
-  const mapBody = document.createElement('div');
-  mapBody.className = 'map-holder';
-  const canvas = ctx.maps?.slot({
-    id: 'u-pokretu-map',
-    className: 'map-canvas',
-    testid: 'map-canvas',
-    ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.vehiclesCount', { count: points.length })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`,
-    points,
-    lines,
-    reducedMotion: ctx.reducedMotion,
-  });
-  if (canvas) {
-    mapBody.appendChild(canvas);
-  } else {
-    const fallback = document.createElement('p');
-    fallback.className = 'panel-empty';
-    fallback.dataset.testid = 'map-fallback';
-    fallback.textContent = i18n.t('panels.mapUnavailable');
-    mapBody.appendChild(fallback);
+  // T10: the full MapLibre map. Not rendered at all in lightweight mode
+  // (R-L2: no panel, no fallback line, no button -- the schematic's list
+  // above is the honest face); elsewhere one live map per page (R-54) fed
+  // the dated reports as evidence, plus the full-screen button when the
+  // page owns a view mode.
+  if (!ctx.lightweight) {
+    const mapBody = document.createElement('div');
+    mapBody.className = 'map-holder';
+    const canvas = ctx.maps?.slot({
+      id: 'u-pokretu-map',
+      className: 'map-canvas',
+      testid: 'map-canvas',
+      ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.vehiclesCount', { count: points.length })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`,
+      points,
+      lines,
+      reducedMotion: ctx.reducedMotion,
+    });
+    if (canvas) {
+      mapBody.appendChild(canvas);
+      const mapView = ctx.mapView;
+      if (mapView) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'btn-ghost map-full-toggle';
+        // A stable id: the dashboard re-renders on toggle and hands focus
+        // back to the element with this id.
+        toggle.id = 'u-pokretu-map-full';
+        toggle.dataset.testid = 'map-full-toggle';
+        toggle.textContent = i18n.t(mapView.full ? 'panels.mapCollapse' : 'panels.mapExpand');
+        toggle.addEventListener('click', () => mapView.toggle());
+        mapBody.appendChild(toggle);
+      }
+    } else {
+      const fallback = document.createElement('p');
+      fallback.className = 'panel-empty';
+      fallback.dataset.testid = 'map-fallback';
+      fallback.textContent = i18n.t('panels.mapUnavailable');
+      mapBody.appendChild(fallback);
+    }
+    panels.appendChild(
+      createPanel({ i18n, now, id: 'u-pokretu-map', title: i18n.t('panels.map'), snapshot: zet, body: mapBody }).element,
+    );
   }
-  panels.appendChild(
-    createPanel({ i18n, now, id: 'u-pokretu-map', title: i18n.t('panels.map'), snapshot: zet, body: mapBody }).element,
-  );
 
   const delays = routeDelays(zet);
   const delayRows = delays.map((row) => {

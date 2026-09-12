@@ -495,3 +495,71 @@ describe('the schematic on U pokretu (T9)', () => {
     expect(view.dataset.frames).toBe(frozenAt);
   });
 });
+
+// --- T10: the full map ------------------------------------------------------
+describe('the full map (T10)', () => {
+  const fakeMap = () => vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+  async function onUPokretu(opts: Parameters<typeof mount>[0]) {
+    const mounted = mount(opts);
+    mounted.session.join();
+    await flush();
+    mounted.handle.selectLayer('u-pokretu');
+    await flush();
+    return mounted;
+  }
+
+  it('full-screen is a view mode on the dashboard itself, never the Fullscreen API: the meander stays above the map, Escape leaves', async () => {
+    const { root } = await onUPokretu({ mapFactory: fakeMap() });
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    expect(dash.dataset.view).toBe('layers');
+    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    button.focus();
+    button.click();
+    expect(dash.dataset.view).toBe('map');
+    expect(document.fullscreenElement ?? null).toBeNull();
+    // The meander figure is still a child of the same dashboard, before the
+    // map in document order, and not hidden: pinned above it by construction.
+    const meander = root.querySelector<HTMLElement>('.dash-meander')!;
+    const canvas = root.querySelector<HTMLElement>('[data-testid=map-canvas]')!;
+    expect(meander.closest('.dash')).toBe(dash);
+    expect(meander.hidden).toBe(false);
+    expect(Boolean(meander.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const again = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
+    expect(text(again)).toBe('Skupi kartu');
+    expect(document.activeElement).toBe(again); // focus survives the re-render
+    dash.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(dash.dataset.view).toBe('layers');
+    expect(text(root.querySelector('[data-testid=map-full-toggle]'))).toBe('Proširi kartu');
+  });
+
+  it('leaves the full map when another layer is opened', async () => {
+    const { root, handle } = await onUPokretu({ mapFactory: fakeMap() });
+    root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.click();
+    const dash = root.querySelector<HTMLElement>('.dash')!;
+    expect(dash.dataset.view).toBe('map');
+    handle.selectLayer('vijesti');
+    expect(dash.dataset.view).toBe('layers');
+  });
+
+  it('lightweight: never creates a map, renders no map panel and no button (R-L2)', async () => {
+    const mapFactory = fakeMap();
+    const { root } = await onUPokretu({ mapFactory, lightweight: true });
+    expect(mapFactory).not.toHaveBeenCalled();
+    expect(root.querySelector('#u-pokretu-map')).toBeNull();
+    expect(root.querySelector('[data-testid=map-fallback]')).toBeNull();
+    expect(root.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    expect(root.querySelector('[data-testid=schematic-list]')).not.toBeNull(); // the honest face stands in
+  });
+
+  it('the map and the schematic share one network fetch', async () => {
+    const loadNetwork = vi.fn(async () => null);
+    const mapFactory = fakeMap();
+    await onUPokretu({ mapFactory, loadNetwork });
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    const options = (mapFactory.mock.calls[0] as unknown as [{ loadNetwork?: () => Promise<null> }])[0];
+    expect(options.loadNetwork).toBeTypeOf('function');
+    await options.loadNetwork!();
+    await options.loadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+  });
+});

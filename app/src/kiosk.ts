@@ -20,7 +20,7 @@ import { zagrebTime, zagrebWeekdayDate } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import { delayWord, vehicleCount } from './layers/shared';
-import type { MapFactory } from './map/city-map';
+import { withNetwork, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { routeDelayMap, vehicleFixes } from './motion/fixes';
 import { loadNetwork, type Network } from './motion/network';
@@ -452,8 +452,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // cleared before it is armed again, so it fires at most once per arming.
   let essentialsIdleHandle: unknown = null;
 
-  const maps = createMapSlots(deps.mapFactory);
-
   // T9: two schematics on one screen -- the locked stage (the screen's own
   // centre, trams only, R-P1) and the one the unlocked U pokretu layer gets
   // (the whole network) -- sharing a single network load: the ~500 KB
@@ -466,6 +464,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
     return networkPromise;
   };
+  // T10 / R-L2: the unlocked layers' full map shares that one network load,
+  // and is not rendered at all in lightweight mode (no factory, so no slot).
+  const maps = createMapSlots(lightweight ? undefined : withNetwork(deps.mapFactory, loadNetworkOnce));
   const schematicDeps = {
     i18n,
     lightweight,
