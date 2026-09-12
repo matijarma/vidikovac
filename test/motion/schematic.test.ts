@@ -293,7 +293,7 @@ describe('vehicleMarks', () => {
     expect(m.angle).toBe(0);
   });
 
-  it('carries confidence in alpha as 0.55 + 0.45 * confidence, so the least confident vehicle is still darker than the line under it (R-V2)', () => {
+  it('carries confidence in alpha as MIN_VEHICLE_ALPHA + (1 - MIN_VEHICLE_ALPHA) * confidence, so the least confident vehicle is still darker than the line under it (R-V2)', () => {
     expect(MIN_VEHICLE_ALPHA).toBe(0.7);
     expect(MIN_VEHICLE_ALPHA).toBeGreaterThanOrEqual(ROUTE_ALPHA);
     const l = layoutSchematic(crossNetwork(), crop, 400, 400);
@@ -303,8 +303,8 @@ describe('vehicleMarks', () => {
       drawn({ id: 'c', p: CENTRE, type: GTFS_TRAM, confidence: 0 }),
     ]);
     expect(sure.alpha).toBe(1);
-    expect(unsure.alpha).toBeCloseTo(0.775, 9);
-    expect(none.alpha).toBe(0.55);
+    expect(unsure.alpha).toBeCloseTo(MIN_VEHICLE_ALPHA + (1 - MIN_VEHICLE_ALPHA) * 0.5, 9);
+    expect(none.alpha).toBe(MIN_VEHICLE_ALPHA);
   });
 
   it('leaves out stale vehicles, vehicles outside the crop, and types the layout excludes', () => {
@@ -383,7 +383,7 @@ describe('paintVehicles', () => {
     expect(rotates[0].args[0]).toBeCloseTo(-Math.PI / 2, 9);
     // The halo is always opaque; only the mark carries confidence.
     const alphas = calls.filter((c) => c.op === 'set globalAlpha').map((c) => c.args[0] as number);
-    expect(alphas).toEqual([1, 0.775, 1, 1]);
+    expect(alphas).toEqual([1, MIN_VEHICLE_ALPHA + (1 - MIN_VEHICLE_ALPHA) * 0.5, 1, 1]);
     expect(calls.filter((c) => c.op === 'save')).toHaveLength(2);
     expect(calls.filter((c) => c.op === 'restore')).toHaveLength(2);
   });
