@@ -19,6 +19,7 @@ import { codeUrl, formatCode, speakableCode } from './code';
 import { zagrebTime, zagrebWeekdayDate } from './format';
 import type { I18n } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
+import { cityTeaserAttribution, cityTeaserBody, cityTeaserRows } from './layers/grad-teaser';
 import { vehicleCount } from './layers/shared';
 import type { MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
@@ -52,7 +53,7 @@ export const ESSENTIALS_IDLE_MS = 90_000;
 const KIOSK_DESIGN_WIDTH = 1920;
 
 export interface TeaserCard {
-  id: 'weather' | 'quake' | 'closures' | 'news' | 'invitation';
+  id: 'weather' | 'quake' | 'closures' | 'news' | 'city' | 'invitation';
   title: string;
   body: string;
   attribution?: Attribution;
@@ -82,6 +83,10 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
   const quake = quakes?.items[0];
   const closures = map.prometnice;
   const closureCount = (closures?.items ?? []).filter((item) => item.kind === 'closure').length;
+  // E8: the one dogadanja card. The kiosk is the open tier, so only the
+  // Otvorena dozvola city rows reach it (layers/grad-teaser.ts).
+  const city = map.dogadanja;
+  const cityRow = cityTeaserRows(city)[0];
   return [
     {
       id: 'weather',
@@ -114,6 +119,12 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now
       title: i18n.t('kiosk.teaserNews'),
       body: news ? news.title : i18n.t('status.loading'),
       attribution: teaserAttribution(map['hrt-news'], news),
+    },
+    {
+      id: 'city',
+      title: i18n.t('kiosk.teaserCity'),
+      body: city ? (cityRow ? cityTeaserBody(cityRow, i18n) : i18n.t('kiosk.teaserCityEmpty')) : i18n.t('status.loading'),
+      attribution: cityTeaserAttribution(city, cityRow),
     },
     { id: 'invitation', title: i18n.t('common.appName'), body: i18n.t('kiosk.invitation') },
   ];

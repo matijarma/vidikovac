@@ -29,7 +29,8 @@ const SOURCE_NAME: Record<CultureEventSource, string> = {
   etnografski: 'Etnografski muzej',
   kvartovske: 'Kvartovske novosti',
 };
-const SOURCE_ATTRIBUTION: Record<CultureEventSource, string> = {
+/** Exported for the kiosk card (grad-teaser.ts), which reuses the kvartovske string rather than keeping a second copy. */
+export const CULTURE_SOURCE_ATTRIBUTION: Record<CultureEventSource, string> = {
   kulturpunkt: 'Kulturpunkt (CC BY-SA 3.0 HR)',
   etnografski: 'Etnografski muzej',
   kvartovske: 'Kvartovske novosti, Grad Zagreb (Otvorena dozvola)',
@@ -123,7 +124,7 @@ function eventRow(item: FeedItem, i18n: I18n): string {
   const source = dataText(item, 'source') as CultureEventSource;
   const venue = dataText(item, 'venue');
   const time = zagrebWeekdayDate(item.at);
-  const metaParts = [time, venue, SOURCE_ATTRIBUTION[source]].filter(Boolean).map(escapeHtml);
+  const metaParts = [time, venue, CULTURE_SOURCE_ATTRIBUTION[source]].filter(Boolean).map(escapeHtml);
   const link = item.link
     ? ` <a href="${escapeAttribute(item.link)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a>`
     : '';

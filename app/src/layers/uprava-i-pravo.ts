@@ -26,7 +26,8 @@ const SOURCE_NAME: Record<CityWorkSource, string> = {
   skupstina: 'Skupština Grada Zagreba',
   komunalne: 'Plan komunalnih aktivnosti',
 };
-const SOURCE_ATTRIBUTION: Record<CityWorkSource, string> = {
+/** Exported for the kiosk card (grad-teaser.ts), which reuses both strings rather than keeping a second copy. */
+export const CITY_WORK_SOURCE_ATTRIBUTION: Record<CityWorkSource, string> = {
   skupstina: 'Skupština Grada Zagreba (Otvorena dozvola)',
   komunalne: 'Plan komunalnih aktivnosti, Grad Zagreb (Otvorena dozvola)',
 };
@@ -46,7 +47,7 @@ function skupstinaRow(item: FeedItem, i18n: I18n): string {
   const organiser = dataText(item, 'organiser');
   const venue = dataText(item, 'venue');
   const time = zagrebWeekdayDate(item.at);
-  const metaParts = [organiser, time, venue, SOURCE_ATTRIBUTION.skupstina].filter(Boolean).map(escapeHtml);
+  const metaParts = [organiser, time, venue, CITY_WORK_SOURCE_ATTRIBUTION.skupstina].filter(Boolean).map(escapeHtml);
   const link = item.link
     ? ` <a href="${escapeAttribute(item.link)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a>`
     : '';
@@ -67,7 +68,7 @@ function komunalneRow(item: FeedItem, i18n: I18n): string {
   // source never claimed.
   const changed = i18n.t('panels.cityWorkChanged', { time: zagrebWeekdayDate(item.at) });
   const amountText = amount !== null ? i18n.t('panels.cityWorkAmount', { amount: amount.toLocaleString('hr-HR') }) : '';
-  const metaParts = [changed, phase, amountText, SOURCE_ATTRIBUTION.komunalne].filter(Boolean).map(escapeHtml);
+  const metaParts = [changed, phase, amountText, CITY_WORK_SOURCE_ATTRIBUTION.komunalne].filter(Boolean).map(escapeHtml);
   const summary = item.summary
     ? `<span class="panel-sub">${escapeHtml(item.summary)}</span>`
     : '';

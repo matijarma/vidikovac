@@ -25,6 +25,13 @@ const MODULES: ModuleSnapshot[] = [
   // item carrying the live count, the same shape vehicleCount() and the
   // panorama/catalogue read.
   snap('zet-rt', [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '156 vozila u pokretu', data: { vehicles: 156 } }]),
+  // The teaser's reduced dogadanja shape (registry.teaserSubset): only the
+  // Otvorena dozvola city rows, in the module's own soonest-first order.
+  snap('dogadanja', [
+    { id: 'skupstina:13', module: 'dogadanja', kind: 'event', tier: 'session', title: '13. sjednica Gradske skupštine', at: '2026-09-17T07:00:00Z', link: 'https://skupstina.zagreb.hr/sjednica/13', data: { source: 'skupstina', precision: 'time' } },
+    { id: 'zet-promet:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Obilazak linija 6 i 11', at: '2026-09-11T09:10:00Z', data: { source: 'zet-promet', precision: 'time' } },
+    { id: 'komunalne:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Ilica 1', at: '2026-07-02T00:00:00Z', data: { source: 'komunalne', phase: 'u tijeku', amount: 1000, precision: 'day' } },
+  ]),
 ];
 
 // Every code in a real batch is distinct; the rotation merges batches by code
@@ -99,10 +106,10 @@ const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s
 
 describe('teaser content', () => {
   const i18n = createDefaultI18n('hr');
-  it('builds weather, the last quake, the closure count, one HRT headline and the invitation, in that order', () => {
+  it('builds weather, the last quake, the closure count, one HRT headline, one city row and the invitation, in that order', () => {
     const cards = teaserCards(MODULES, i18n, NOW);
     // R-59: every card is live open-tier data; no "Uskoro" sign on a public screen.
-    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'news', 'invitation']);
+    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'news', 'city', 'invitation']);
     expect(cards[0]!.title).toBe('Vrijeme sada');
     expect(cards[0]!.body).toContain('21 °C');
     expect(cards[1]!.title).toBe('Posljednji potres');
@@ -113,7 +120,14 @@ describe('teaser content', () => {
     expect(cards[2]!.attribution?.text).toBe('Izvor: prometnice');
     expect(cards[3]!.body).toBe('Naslov vijesti');
     expect(cards[3]!.attribution?.text).toBe('Izvor: hrt-news');
-    expect(cards[4]!.body).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
+    expect(cards[4]!.title).toBe('Grad javlja');
+    expect(cards[4]!.body).toBe('13. sjednica Gradske skupštine · čet 17. 9. 2026.');
+    expect(cards[4]!.attribution).toEqual({
+      text: 'Izvor: Skupština Grada Zagreba (Otvorena dozvola)',
+      url: 'https://skupstina.zagreb.hr/sjednica/13',
+      licence: 'Otvorena dozvola (NN 67/17)',
+    });
+    expect(cards[5]!.body).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
     expect(cards.some((c) => c.body === i18n.t('kiosk.teaserSoon'))).toBe(false);
   });
   it('says so honestly when the quake feed is empty or still loading', () => {
@@ -122,6 +136,27 @@ describe('teaser content', () => {
     const loading = teaserCards(MODULES.filter((m) => m.module !== 'emsc' && m.module !== 'prometnice'), i18n, NOW);
     expect(loading[1]!.body).toBe('učitavanje podataka');
     expect(loading[2]!.body).toBe('učitavanje podataka');
+  });
+  it('the city card carries only Otvorena dozvola rows, labels a komunalne last-change date as such and stamps a ZET notice with its publish time', () => {
+    const city = (items: ModuleSnapshot['items']) =>
+      teaserCards([...MODULES.filter((m) => m.module !== 'dogadanja'), snap('dogadanja', items)], i18n, NOW).find((c) => c.id === 'city')!;
+    const rows = MODULES.find((m) => m.module === 'dogadanja')!.items;
+    // A CC BY-SA row that somehow reached the payload is still never shown: the card filters by licence itself.
+    const kulturpunkt = { id: 'kulturpunkt:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert u Močvari', at: '2026-09-12T18:00:00Z', data: { source: 'kulturpunkt' } } as const;
+    expect(city([kulturpunkt, ...rows]).body).toBe('13. sjednica Gradske skupštine · čet 17. 9. 2026.');
+    expect(city([kulturpunkt]).body).toBe('Trenutačno nema gradskih obavijesti.');
+    expect(city([kulturpunkt]).attribution?.text).toBe('Izvor: dogadanja'); // the payload's own module statement, as the closures card does
+    expect(city([]).body).toBe('Trenutačno nema gradskih obavijesti.');
+    // ZET: publish time, to the minute, as its precision says.
+    const zet = city(rows.filter((r) => r.id.startsWith('zet-')));
+    expect(zet.body).toBe('Obilazak linija 6 i 11 · objavljeno 11. 9. 11:10');
+    expect(zet.attribution?.text).toBe('Izvor: ZET (Otvorena dozvola)');
+    // komunalne: the register's last-change stamp is labelled, never shown as a scheduled date (E7).
+    const works = city(rows.filter((r) => r.id.startsWith('komunalne')));
+    expect(works.body).toBe('Ilica 1 · zadnja izmjena čet 2. 7. 2026.');
+    expect(works.attribution?.text).toBe('Izvor: Plan komunalnih aktivnosti, Grad Zagreb (Otvorena dozvola)');
+    // Nothing loaded yet: the same honest word every other card uses.
+    expect(teaserCards(MODULES.filter((m) => m.module !== 'dogadanja'), i18n, NOW).find((c) => c.id === 'city')!.body).toBe('učitavanje podataka');
   });
   it('the safety strip states the warning, the closure count and the on-duty pharmacy', () => {
     const strip = safetyStripText(MODULES, i18n);

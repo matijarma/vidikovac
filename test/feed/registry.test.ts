@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import {
   ATTRIBUTION,
+  DOGADANJA_OPEN_ATTRIBUTION,
   MODULES,
   MODULE_IDS,
+  OPEN_LICENCE,
   OPEN_MODULES,
+  TEASER_EVENTS_LIMIT,
   TEASER_MODULES,
   TEASER_NEWS_LIMIT,
   WARM_MODULES,
@@ -99,8 +102,8 @@ function item(over: Partial<FeedItem> & Pick<FeedItem, 'id' | 'kind' | 'title'>)
 }
 
 describe('teaserSubset', () => {
-  it('names the three session modules the kiosk may show without a scan', () => {
-    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'hrt-news']);
+  it('names the four session modules the kiosk may show without a scan', () => {
+    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'hrt-news', 'dogadanja']);
     expect(TEASER_NEWS_LIMIT).toBe(3);
   });
 
@@ -140,6 +143,38 @@ describe('teaserSubset', () => {
     expect(cut.items.map((i) => i.id)).toEqual(['n0', 'n1', 'n2']);
     expect(cut.status).toBe('live');
     expect(cut.attribution).toEqual(news.attribution);
+  });
+
+  it('cuts dogadanja to its Otvorena dozvola rows and restates the attribution without Kulturpunkt (E8: the kiosk is the open tier)', () => {
+    const merged = snapshot('dogadanja', [
+      item({ id: 'kulturpunkt:1', kind: 'event', title: 'Izložba', module: 'dogadanja', data: { source: 'kulturpunkt' } }),
+      item({ id: 'skupstina:1', kind: 'event', title: '13. sjednica', module: 'dogadanja', data: { source: 'skupstina' } }),
+      item({ id: 'etnografski:1', kind: 'event', title: 'Radionica', module: 'dogadanja', data: { source: 'etnografski' } }),
+      item({ id: 'zet-promet:1', kind: 'event', title: 'Obilazak', module: 'dogadanja', data: { source: 'zet-promet' } }),
+      item({ id: 'kvartovske:1', kind: 'event', title: 'Kvart', module: 'dogadanja', data: { source: 'kvartovske' } }),
+      item({ id: 'komunalne:1', kind: 'event', title: 'Ulica', module: 'dogadanja', data: { source: 'komunalne' } }),
+    ]);
+    const reduced = teaserSubset(merged);
+    expect(reduced.items.map((i) => i.id)).toEqual(['skupstina:1', 'zet-promet:1', 'kvartovske:1', 'komunalne:1']);
+    expect(reduced.status).toBe('live');
+    expect(reduced.attribution).toEqual(DOGADANJA_OPEN_ATTRIBUTION);
+    expect(reduced.attribution.licence).toBe(OPEN_LICENCE);
+    expect(reduced.attribution.text).not.toContain('Kulturpunkt');
+    expect(reduced.attribution.text).not.toContain('CC BY-SA');
+    expect(reduced.attribution.text).not.toContain('Etnografski');
+    // The merged module attribution names all six sources and two licences; that is right for the session view and wrong for the open one.
+    expect(merged.attribution).toBe(MODULES.dogadanja.attribution);
+    expect('sourceCounts' in reduced).toBe(false);
+  });
+
+  it('filters dogadanja by licence before cutting it to ten rows, so the cap never eats an open row', () => {
+    expect(TEASER_EVENTS_LIMIT).toBe(10);
+    const rows = Array.from({ length: 30 }, (_, n) =>
+      item({ id: `r${n}`, kind: 'event', title: `Red ${n}`, module: 'dogadanja', data: { source: n % 2 ? 'kulturpunkt' : 'skupstina' } }),
+    );
+    const reduced = teaserSubset(snapshot('dogadanja', rows));
+    expect(reduced.items).toHaveLength(10);
+    expect(reduced.items.map((i) => i.id)).toEqual(Array.from({ length: 10 }, (_, n) => `r${2 * n}`));
   });
 
   it('leaves an open module untouched', () => {
