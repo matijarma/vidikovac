@@ -157,6 +157,11 @@ describe('u-pokretu', () => {
     expect(data.fixes.map((f: { id: string }) => f.id)).toEqual(['vehicle:1', 'vehicle:2', 'vehicle:3']);
     expect(data.fixes[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
     expect([...data.delays!]).toEqual([['6', 90], ['11', -30]]);
+    // F8 / F5's leftover: the dashboard's own lightweight list can only say
+    // "stale" or "down" during an outage (R-X1's honesty rule) if it is
+    // handed the zet-rt snapshot itself, exactly as kiosk.ts's locked stage
+    // already does on its own update() call.
+    expect(data.snapshot).toBe(SNAPSHOTS['zet-rt']);
     // A second render (the next poll) reuses the very same element.
     const again = renderLayer('u-pokretu', ctx({ schematic }));
     expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);

@@ -38,6 +38,16 @@ const MODULES: ModuleSnapshot[] = [
   ]),
 ];
 
+// R-P7 / R-F8: a vehicle pin and a route delay summary, the two zet-rt item
+// shapes essentialsRows()'s routes row reads (module scope: shared by the
+// essentialsRows describe block below and the full-board R-F11 fixture).
+function vehiclePin(id: string, routeId: string, routeType = 0) {
+  return { id: `vehicle:${id}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: routeId, geo: { type: 'Point' as const, coordinates: [15.977, 45.813] as [number, number] }, data: { routeId, routeType } };
+}
+function routeSummary(routeId: string, medianDelaySeconds: number) {
+  return { id: `route:${routeId}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: `Linija ${routeId}`, data: { routeId, routeShortName: routeId, medianDelaySeconds, vehicles: 1 } };
+}
+
 // Every code in a real batch is distinct; the rotation merges batches by code
 // (R-51), so a fixture that repeated one would silently lose slots.
 const CODE_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -538,6 +548,27 @@ describe('mountKiosk', () => {
       expect(rowEls).toHaveLength(1);
       expect(text(k.root.querySelector('[data-testid=kiosk-essentials-rows]'))).toBe('Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno.');
     });
+
+    // R-F11: with every one of the five sources answering at once (the
+    // combination P-1/F5 flagged as still scrolling), the panel's rows
+    // container carries the two-column grid class the CSS turns into
+    // R-F11's layout, and all five rows render, in their fixed order, top
+    // to bottom -- warning, closures, lines nearby, weather, pharmacy.
+    it('with all five sources populated, the rows container carries the grid class and every row renders in order (R-F11)', async () => {
+      const allFive = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [...m.items, vehiclePin('t6', '6'), routeSummary('6', 90)]) : m));
+      const k = mount({
+        stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }),
+        fetchTeaser: async () => ({ modules: allFive }),
+      });
+      await flush();
+      k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+      const rowsBox = k.root.querySelector<HTMLElement>('[data-testid=kiosk-essentials-rows]')!;
+      expect(rowsBox.classList.contains('ess-rows')).toBe(true);
+      const rows = [...k.root.querySelectorAll<HTMLElement>('[data-testid=kiosk-essentials-rows] [data-testid=ess-row]')];
+      expect(rows).toHaveLength(5);
+      const labels = rows.map((row) => text(row.querySelector('.ess-label')));
+      expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'MAKSIMIR SADA', 'Dežurna ljekarna']);
+    });
   });
 });
 
@@ -602,13 +633,6 @@ describe('essentialsRows (R-P7 / M3b)', () => {
   // teaser's zet-rt subset already carries inside the kiosk's own box
   // (R-P1) -- never the 'route:' summary rows alone, which the production
   // bug (12 September) showed cover every route in the whole city.
-  function vehiclePin(id: string, routeId: string, routeType = 0) {
-    return { id: `vehicle:${id}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: routeId, geo: { type: 'Point' as const, coordinates: [15.977, 45.813] as [number, number] }, data: { routeId, routeType } };
-  }
-  function routeSummary(routeId: string, medianDelaySeconds: number) {
-    return { id: `route:${routeId}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'open' as const, title: `Linija ${routeId}`, data: { routeId, routeShortName: routeId, medianDelaySeconds, vehicles: 1 } };
-  }
-
   it('shows the routes among the vehicle pins in the box in words, numeric order: the first is the headline value, the rest join the detail line, and no raw seconds appear anywhere', () => {
     const withPins = MODULES.map((m) =>
       m.module === 'zet-rt' ? snap('zet-rt', [...m.items, vehiclePin('t6', '6'), vehiclePin('t12', '12'), routeSummary('6', -10), routeSummary('12', 120)]) : m,
@@ -902,9 +926,11 @@ describe('a 2017 engine lays the kiosk out (R-F4)', () => {
     // has a sibling-margin rule so rows never touch on an engine without
     // flex gap (Chrome before 84, Safari before 14.1, 2020 -- there is no
     // reliable @supports probe for flex gap, so margins carry the spacing
-    // on every engine).
+    // on every engine). .ess-rows is not one of these any more (R-F11): it
+    // is a CSS Grid, not a flex list, and Grid's own `gap` shipped with Grid
+    // itself in 2017 -- years before flex gap did -- so it needs no margin
+    // fallback and is covered by its own test below instead.
     for (const [sheet, list, item] of [
-      [kioskCss, '.ess-rows', '.ess-row + .ess-row'],
       [kioskCss, '.kiosk-catalogue', '.cat-row + .cat-row'],
       [schematicCss, '.schematic-list', '.schematic-route + .schematic-route'],
     ] as const) {
@@ -913,5 +939,39 @@ describe('a 2017 engine lays the kiosk out (R-F4)', () => {
       for (const rule of rules) expect(rule, `${list} must not space with gap`).not.toMatch(/(^|[\s;{])(row-|column-)?gap:(?!\s*0\s*[;}])/);
       expect(sheet, `${item} carries the spacing`).toContain(`${item} {`);
     }
+  });
+
+  // R-F11: the essentials board fits every combination on one 1080p screen
+  // without scrolling. These read the stylesheet as text for the same
+  // reason as the rest of this describe block: the shape being guarded (a
+  // hard grid-row cap, overflow:hidden as the last defence, no residual
+  // internal scrollbar) is a property of the source, proven in a real
+  // browser by e2e/kiosk-layout.spec.ts; this is the fast, exact check that
+  // the CSS itself still says what it must.
+  it('lays the essentials rows out as a two-column grid, 48 px column gap, capped at 150 px a row (R-F11)', () => {
+    const rule = rulesFor(kioskCss, '.ess-rows')[0];
+    expect(rule, '.ess-rows has a rule').toBeDefined();
+    expect(rule).toContain('display: grid');
+    expect(rule).toMatch(/grid-template-columns:\s*1fr 1fr/);
+    // The old declaration before the bare alias (R-F4's own pattern, already
+    // used a few lines up by .kiosk-stage): grid gap is a 2017 feature
+    // either way, this just matches the sheet's established house style.
+    expect(rule.indexOf('grid-column-gap: calc(var(--kiosk-scale) * 48px)')).toBeGreaterThan(-1);
+    expect(rule.indexOf('grid-column-gap:')).toBeLessThan(rule.indexOf('column-gap: calc(var(--kiosk-scale) * 48px)'));
+    expect(rule.indexOf('grid-row-gap: calc(var(--kiosk-scale) * 8px)')).toBeGreaterThan(-1);
+    expect(rule.indexOf('grid-row-gap:')).toBeLessThan(rule.indexOf('row-gap: calc(var(--kiosk-scale) * 8px)'));
+    // A row's cap, not its stretch (minmax(0, N)): three rows of five never
+    // exceed 3 * 150 + 2 * 8 = 466 px, the arithmetic R-F11 asks for.
+    expect(rule).toMatch(/grid-auto-rows:\s*minmax\(0,\s*calc\(var\(--kiosk-scale\)\s*\*\s*150px\)\)/);
+  });
+
+  it('removes the essentials panel\'s internal scroll and keeps overflow:hidden as the last defence (R-F11 / R-P7: a kiosk has no scroll wheel)', () => {
+    const panelRule = rulesFor(kioskCss, '.kiosk-essentials')[0]!;
+    expect(panelRule).not.toContain('overflow-y: auto');
+    expect(panelRule).toContain('overflow: hidden');
+    // Each row is its own last-resort clip too, so one freak feed string can
+    // never grow past its own 150 px grid row into its neighbour's.
+    const rowRule = rulesFor(kioskCss, '.ess-row')[0]!;
+    expect(rowRule).toContain('overflow: hidden');
   });
 });

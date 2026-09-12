@@ -286,32 +286,51 @@
 .kiosk-code-hint { font-size: calc(var(--kiosk-scale) * 18px); text-align: center; }
 .kiosk-code-hint .hint-emphasis { color: var(--tone-text-primary); }
 
-/* ── Essentials view (R-P7 / M3b): a locked kiosk answers without a phone.
-   A sibling of .kiosk-stage, in the same flow position — once .kiosk-stage
-   is [hidden] this simply takes its place, so the header and the safety
-   strip above and below it never move and stay visible while someone reads.
-   Row geometry is the M3 catalogue at a larger step: it is meant to be read
-   from a few steps back, like a departure board. ─────────────────────── */
+/* ── Essentials view (R-P7 / M3b, fitted for every combination by R-F11): a
+   locked kiosk answers without a phone. A sibling of .kiosk-stage, in the
+   same flow position — once .kiosk-stage is [hidden] this simply takes its
+   place, so the header and the safety strip above and below it never move
+   and stay visible while someone reads.
+
+   R-F11: the header (below) is at most 140 px and the five possible rows
+   lay out as a two-column CSS Grid, so five populated rows are three grid
+   rows rather than five stacked ones. overflow: hidden replaces the old
+   overflow-y: auto -- R-P7 promised this board never scrolls, and a kiosk
+   has no scroll wheel to scroll it with -- and is the *last* defence, not
+   the layout: every row's own type sizes (below) are chosen so the real
+   content fits inside the grid's own 150 px-a-row cap; the per-row
+   overflow: hidden a few rules down only guards a feed string long enough
+   to defeat that budget from ever spilling into a neighbour, the way the
+   wall-of-text bug (12 September, P-1) once pushed Maksimir and the
+   pharmacy row off the bottom of the screen entirely. ────────────────── */
 .kiosk-essentials {
   flex: 1;
   min-block-size: 0;
-  overflow-y: auto;
-  padding: calc(var(--kiosk-scale) * 32px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 40px);
+  overflow: hidden;
+  padding: calc(var(--kiosk-scale) * 24px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 32px);
 }
 .kiosk-essentials[hidden] { display: none; }
 .kiosk-essentials > header {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  margin-block-end: calc(var(--kiosk-scale) * 28px);
-  padding-block-end: calc(var(--kiosk-scale) * 24px);
+  align-items: center;
+  margin-block-end: calc(var(--kiosk-scale) * 16px);
+  padding-block-end: calc(var(--kiosk-scale) * 14px);
   border-block-end: 2px solid var(--tone-text-primary);
 }
-.kiosk-essentials h2 { flex: 1; min-inline-size: calc(var(--kiosk-scale) * 320px); font-size: calc(var(--kiosk-scale) * 44px); }
-.kiosk-essentials header .legend { flex-basis: 100%; margin-block-start: calc(var(--kiosk-scale) * 10px); }
+/* The title alone on its own line (flex-basis 100% forces the wrap, the
+   same trick the old rule used the other way round); the hint and the
+   close button share the line under it, both carrying the same top margin
+   so that second line sits a fixed distance under the title regardless of
+   which of the two is taller (never a flex `gap`: this is the same
+   flex-wrapped list R-F4 already covers on this file, so the fallback is a
+   margin, not row-gap). */
+.kiosk-essentials h2 { flex: 0 0 100%; min-inline-size: 0; font-size: calc(var(--kiosk-scale) * 40px); }
+.kiosk-essentials header .legend { flex: 1; min-inline-size: calc(var(--kiosk-scale) * 240px); margin-block-start: calc(var(--kiosk-scale) * 8px); }
 .kiosk-essentials-close {
   flex: none;
   margin-left: calc(var(--kiosk-scale) * 32px);
+  margin-block-start: calc(var(--kiosk-scale) * 8px);
   border: 2px solid var(--tone-text-primary);
   min-block-size: calc(var(--kiosk-scale) * 44px);
   padding-inline: calc(var(--kiosk-scale) * 28px);
@@ -322,19 +341,54 @@
   color: var(--tone-text-primary);
   cursor: pointer;
 }
-.ess-rows { display: flex; flex-direction: column; }
-.ess-row + .ess-row { margin-top: calc(var(--kiosk-scale) * 28px); }
-.ess-row { padding-block-start: calc(var(--kiosk-scale) * 22px); border-block-start: 2px solid var(--tone-stroke); }
-.ess-row:first-child { padding-block-start: 0; border-block-start: none; }
-.ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 24px); letter-spacing: 0.06em; color: var(--tone-label); }
-.ess-value { margin: calc(var(--kiosk-scale) * 8px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 56px); line-height: 1.08; }
-/* R-P7 / F5: one line, ellipsised rather than wrapped -- the same budget
-   discipline as .cat-value and the teaser headline. The routes row's own
-   detail can carry up to seven joined entries ("6 kasni 2 min · 11 na
-   vrijeme · …"); the eight-route cap bounds the string, this bounds the
-   box, so the board fits at 1920x1080 whatever a live feed sends. */
-.ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ess-attr { margin: calc(var(--kiosk-scale) * 10px) 0 0; font-size: calc(var(--kiosk-scale) * 17px); color: var(--tone-text-subtle); }
+/* R-F11: five rows as a two-column grid. CSS Grid's own row-major
+   auto-placement already starts top-left and, with an odd row count, lays
+   the lone last row into column 1 alone rather than stretching it across
+   both -- nothing here has to force either behaviour, it is the default.
+   grid-column-gap/grid-row-gap before their bare aliases is R-F4's own
+   pattern, already used a few hundred lines up on .kiosk-stage: Grid's
+   `gap` shipped with Grid itself in 2017, years before flex gap did, so
+   (unlike the flex lists R-F4 names) this needs no margin fallback.
+   grid-auto-rows: minmax(0, 150px) is a cap, not a stretch -- a short row
+   (a lone pharmacy row with no detail) does not grow to fill it -- so three
+   grid rows are at most 3 * 150 + 2 * 8 = 466 px, inside the roughly
+   580 px the stage leaves under the header at 1080p. */
+.ess-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-column-gap: calc(var(--kiosk-scale) * 48px);
+  column-gap: calc(var(--kiosk-scale) * 48px);
+  grid-row-gap: calc(var(--kiosk-scale) * 8px);
+  row-gap: calc(var(--kiosk-scale) * 8px);
+  grid-auto-rows: minmax(0, calc(var(--kiosk-scale) * 150px));
+}
+.ess-row { min-inline-size: 0; min-block-size: 0; overflow: hidden; }
+.ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.2; letter-spacing: 0.06em; color: var(--tone-label); }
+.ess-value { margin: calc(var(--kiosk-scale) * 4px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 40px); line-height: 1.05; }
+/* R-F11: at most two lines, ellipsised on the second -- the routes row's
+   own detail can carry up to seven joined entries ("6 kasni 2 min · 11 na
+   vrijeme · …"), and a CAP or closure title can run long in its own right.
+   The fixed max-block-size is the pre-2019 fallback: an engine that does
+   not understand -webkit-line-clamp still clips at exactly two lines'
+   worth of height, just without the ellipsis glyph; the modern
+   improvement (an ellipsis on the truncated second line) is read after it,
+   R-F4's own old-then-new order. */
+.ess-detail {
+  margin: calc(var(--kiosk-scale) * 4px) 0 0;
+  font-family: var(--font-body);
+  font-size: calc(var(--kiosk-scale) * 22px);
+  line-height: 1.2;
+  color: var(--tone-text-muted);
+  max-block-size: calc(var(--kiosk-scale) * 22px * 1.2 * 2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+}
+/* One line, ellipsised rather than wrapped -- the same budget discipline as
+   .ess-detail's own single line, .cat-value and the teaser headline. */
+.ess-attr { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-size: calc(var(--kiosk-scale) * 16px); color: var(--tone-text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Safety strip: 120 tall (R-V1), its text at most two lines of 26 ──── */
 .kiosk-safety {
