@@ -27,6 +27,7 @@ import {
   type Crop,
   type SchematicLayout,
   type VehicleMark,
+  type VehicleTones,
 } from './schematic';
 import { describeVehicle, type VehicleCard } from './vehicle-card';
 import type { I18n } from '../i18n/i18n';
@@ -241,7 +242,11 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
 
   let layout: SchematicLayout = layoutSchematic(netOrEmpty, crop, NOMINAL_PX, NOMINAL_PX, 1, types);
   let vehiclesCtx: CanvasRenderingContext2D | null = null;
-  let ink = '#f2ead8';
+  // R-V2: three tones, read off computed style at every resize()/theme
+  // change (never literals in schematic.ts). The fallbacks are the dark
+  // face's own values, used only where getComputedStyle has no box to read.
+  let tones: VehicleTones = { ink: '#f2ead8', halo: '#16226b' };
+  let lineTone = '#9db4ff';
 
   /** Route-layer repaint: theme, resize or (never, in this view's own
    *  lifetime) crop change only -- schematic.ts's whole reason for two
@@ -255,8 +260,12 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     vehiclesCtx = sizedVehicles?.ctx ?? null;
     if (!sizedVehicles) return;
     layout = layoutSchematic(netOrEmpty, crop, sizedVehicles.w, sizedVehicles.h, DENSITY, types);
-    ink = tone(vehiclesCanvas, '--tone-text-primary', '#f2ead8');
-    if (sizedRoutes) paintRoutes(sizedRoutes.ctx, layout, ink);
+    tones = {
+      ink: tone(vehiclesCanvas, '--tone-text-primary', tones.ink),
+      halo: tone(vehiclesCanvas, '--tone-surface-canvas', tones.halo),
+    };
+    lineTone = tone(vehiclesCanvas, '--tone-label', lineTone);
+    if (sizedRoutes) paintRoutes(sizedRoutes.ctx, layout, lineTone);
   }
 
   function renderList(): void {
@@ -432,7 +441,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     lastMarks = marks;
     if (selectedId !== null && !marks.some((m) => m.id === selectedId)) closeCard(false); // left the crop, went stale: nothing left to describe
     paintCard(drawnList);
-    if (vehiclesCtx) paintVehicles(vehiclesCtx, layout, marks, ink, selectedId);
+    if (vehiclesCtx) paintVehicles(vehiclesCtx, layout, marks, tones, selectedId);
     const sig = marksSignature(marks, selectedId);
     const moved = sig !== lastMarksSignature;
     lastMarksSignature = sig;

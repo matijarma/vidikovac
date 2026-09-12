@@ -29,6 +29,7 @@
   justify-content: space-between;
   gap: calc(var(--kiosk-scale) * 24px);
   padding: calc(var(--kiosk-scale) * 40px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 24px);
+  line-height: 1.3; /* R-V1: the header is 120 with its rule, so its one line has a known height */
   border-block-end: 2px solid var(--tone-text-primary);
 }
 .kiosk-wordmark {
@@ -50,7 +51,7 @@
    mono, tracked, muted caption (design.md §2: "legenda … jedino mjesto za
    duhovitost"). ─────────────────────────────────────────────────────── */
 .kiosk-fig { margin: 0; }
-.legend { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.04em; color: var(--tone-text-muted); }
+.legend { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.3; letter-spacing: 0.04em; color: var(--tone-text-muted); }
 
 /* ── Panorama band: canvas full width at 264px (88px once a session or T's
    live map owns the stage); its lightweight twin is a plain 2px rule
@@ -69,63 +70,175 @@
 .kiosk-panorama .legend { margin-block-start: calc(var(--kiosk-scale) * 10px); padding-inline: calc(var(--kiosk-scale) * 80px); }
 
 /* ── Stage: the two-column gallery sheet ──────────────────────────────── */
+/* R-V1: at 1920 by 1080 the stage has budgets, not a flow. Above it the
+   header (120 with its rule) and the panorama strip (88 plus its legend);
+   below it the safety strip (120). The stage takes what is left -- about
+   715 at scale 1 -- and never grows past it: overflow:hidden is the last
+   defence, but every row below is sized so nothing ever reaches it. The
+   production screenshot of 12 September had the catalogue rows printed over
+   the Osnovno button because this was a flowing stack. */
 .kiosk-stage {
   position: relative;
   flex: 1;
   min-block-size: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 1fr calc(var(--kiosk-scale) * 560px);
   gap: calc(var(--kiosk-scale) * 64px);
-  padding: calc(var(--kiosk-scale) * 30px) calc(var(--kiosk-scale) * 80px) 0;
+  padding: calc(var(--kiosk-scale) * 12px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 12px);
 }
-.kiosk-teaser { display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; }
+/* The left column as explicit rows, top to bottom: the schematic takes
+   everything the fixed rows leave (about 380 at 1080p, the dominant element
+   of the stage as R-P1 intended); the headline row is 96; the meander is
+   its 72 canvas plus its legend; the catalogue is 96 with its top rule,
+   pinned last. */
+.kiosk-teaser {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) calc(var(--kiosk-scale) * 96px) auto calc(var(--kiosk-scale) * 96px);
+  row-gap: calc(var(--kiosk-scale) * 8px);
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
 /* ── The live stage (T9 / R-P1): T's schematic in the teaser column, above
    the headline. Empty only before mountKiosk fills it, when it takes no
-   space. The canvas pair is a wide band (the crop circle fits its height,
-   the wider canvas shows more of the city either side); the lightweight
-   list and every caption scale with the kiosk like the legends do. ───── */
+   space. The canvas pair fills its whole row (the crop circle fits the
+   row's height; the wider canvas is empty cloth either side of it); the
+   lightweight list and every caption scale with the kiosk like the legends
+   do. ────────────────────────────────────────────────────────────────── */
 .kiosk-live:empty { display: none; }
-.kiosk-live { margin-block-end: calc(var(--kiosk-scale) * 24px); }
-.kiosk-live .schematic-canvases { aspect-ratio: auto; min-block-size: 0; block-size: calc(var(--kiosk-scale) * 300px); }
-.kiosk-live .schematic-legend, .kiosk-live .schematic-note { font-size: calc(var(--kiosk-scale) * 19px); }
+.kiosk-live { min-block-size: 0; overflow: hidden; }
+/* The stack every browser gets: host, slot and view each shrink to the row,
+   the canvas pair takes what the legend and the honesty note leave. */
+.kiosk-live .schematic-host { block-size: 100%; gap: calc(var(--kiosk-scale) * 4px); }
+.kiosk-live .schematic-slot { flex: 1; min-block-size: 0; display: flex; flex-direction: column; }
+.kiosk-live .schematic { flex: 1; min-block-size: 0; gap: calc(var(--kiosk-scale) * 4px); }
+.kiosk-live .schematic-canvases { flex: 1; min-block-size: 0; block-size: auto; aspect-ratio: auto; }
+/* R-V1: the schematic legend is mono 19, two lines at most; the honesty
+   note (R-P2's sentence) is 17. Both are capped to a narrow column so that,
+   laid into the figure's corner below, they never reach the drawing. */
+.kiosk-live .schematic-legend {
+  font-size: calc(var(--kiosk-scale) * 19px);
+  line-height: 1.25;
+  max-block-size: calc(var(--kiosk-scale) * 19px * 1.25 * 2);
+  overflow: hidden;
+}
+.kiosk-live .schematic-note { font-size: calc(var(--kiosk-scale) * 17px); line-height: 1.3; }
+.kiosk-live .schematic-legend, .kiosk-live .schematic-note { max-inline-size: calc(var(--kiosk-scale) * 320px); }
+/* Where the browser can drop the slot's and the view's boxes, the host lays
+   the canvas pair over the whole row and sets the legend and the note into
+   the figure's own empty bottom-left corner: the crop circle is centred in
+   a column three times as wide as the row is tall, so that corner carries
+   no route and no vehicle (a 320 px caption column clears the circle up to
+   a 3:2 stage). That is what lets the canvas be the full ~380 px rather
+   than ~310 with two caption lines under it. A browser without
+   display:contents (before 2018) keeps the stack above: a shorter canvas
+   with the captions under it, nothing overlapping -- R-L3's shape of a
+   degrade. The canvas path is the only one with canvases; in lightweight
+   mode the list simply spans the row. */
+@supports (display: contents) {
+  .kiosk-live .schematic-slot, .kiosk-live .schematic { display: contents; }
+  .kiosk-live .schematic-host {
+    display: grid;
+    grid-template-columns: calc(var(--kiosk-scale) * 320px) 1fr;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    gap: 0;
+  }
+  .kiosk-live .schematic-canvases { grid-column: 1 / -1; grid-row: 1 / -1; block-size: 100%; }
+  .kiosk-live .schematic-list { grid-column: 1 / -1; grid-row: 1; }
+  .kiosk-live .schematic-legend { grid-column: 1; grid-row: 2; }
+  .kiosk-live .schematic-note { grid-column: 1; grid-row: 3; margin-block-start: calc(var(--kiosk-scale) * 4px); }
+  .kiosk-live .schematic-legend, .kiosk-live .schematic-note { position: relative; z-index: 1; align-self: end; }
+  /* The tap card moves to the top corner, out of the captions' way. */
+  .kiosk-live .schematic-card { inset-block-end: auto; inset-block-start: calc(var(--kiosk-scale) * 8px); }
+}
 .kiosk-live .schematic-card { font-size: calc(var(--kiosk-scale) * 24px); }
 .kiosk-live .schematic-stop-name, .kiosk-live .schematic-lines { font-size: calc(var(--kiosk-scale) * 24px); }
 
-.teaser-card { opacity: 0; transition: opacity 600ms ease; }
+/* ── Headline row (R-V1): 96 tall for every card -- a kicker line, one
+   52 px line of title, and one small line under it: the card's attribution,
+   or for the invitation its second sentence in --tone-label. Every line is
+   nowrap with an ellipsis, so the row measures the same whatever the feed
+   says (an HRT headline, a long DHMZ observation). The title keeps its
+   descenders by painting them into its own bottom padding, which a negative
+   margin takes back out of the flow. ─────────────────────────────────── */
+.teaser-card { display: flex; flex-direction: column; min-inline-size: 0; opacity: 0; transition: opacity 600ms ease; }
 .teaser-card.is-in { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .teaser-card { transition: none; opacity: 1; } }
-.teaser-kicker { margin: 0 0 calc(var(--kiosk-scale) * 8px); font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.06em; color: var(--tone-label); }
-.teaser-title { margin: 0; font-family: var(--font-display); font-weight: 700; line-height: 1.06; letter-spacing: -0.02em; font-size: calc(var(--kiosk-scale) * 68px); }
-.teaser-tagline { color: var(--tone-label); }
-.teaser-attr { margin-block-start: calc(var(--kiosk-scale) * 12px); font-size: calc(var(--kiosk-scale) * 19px); color: var(--tone-text-muted); }
+.teaser-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--kiosk-scale) * 19px);
+  line-height: 1.08;
+  letter-spacing: 0.06em;
+  color: var(--tone-label);
+  white-space: nowrap;
+}
+.teaser-title {
+  margin: 0 0 -0.14em;
+  padding-block-end: 0.14em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  font-size: calc(var(--kiosk-scale) * 52px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The invitation's second sentence: its own line under the first, in the
+   label tone, at the small-line size the other cards give their attribution
+   -- the headline and its deck. */
+.teaser-tagline {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 500;
+  letter-spacing: 0;
+  font-size: calc(var(--kiosk-scale) * 20px);
+  line-height: 1;
+  color: var(--tone-label);
+}
+.teaser-attr {
+  margin: 0 0 -0.2em;
+  padding-block-end: 0.2em;
+  font-size: calc(var(--kiosk-scale) * 17px);
+  line-height: 1.12;
+  color: var(--tone-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Meander (design.md §3.2): the 30s code countdown. Canvas by default;
    the lightweight twin is a track + a bar whose width is the same
-   quantised percent, no canvas, no transition (R-L2). ─────────────────── */
-.kiosk-meander { margin-block-start: calc(var(--kiosk-scale) * 30px); }
+   quantised percent, no canvas, no transition (R-L2). Its row is the 72
+   canvas plus the legend line (R-V1). ─────────────────────────────────── */
+.kiosk-meander { margin: 0; }
 .kiosk-meander .meander { display: block; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 72px); }
 .kiosk-meander .meander-track { position: relative; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 24px); background: var(--tone-stroke); }
 .kiosk-meander .meander-bar { position: absolute; inset-block: 0; inset-inline-start: 0; background: var(--tone-text-primary); }
-.kiosk-meander .legend { margin-block-start: calc(var(--kiosk-scale) * 12px); }
+.kiosk-meander .legend { margin-block-start: calc(var(--kiosk-scale) * 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ── Catalogue: 01/02/03, a CSS counter (never the string itself) ────── */
+/* ── Catalogue: 01/02/03, a CSS counter (never the string itself). The last
+   row of the column, 96 tall with its rule (R-V1): rule 2, label 19, value
+   48, and the padding that makes up the rest. ─────────────────────────── */
 .kiosk-catalogue {
   counter-reset: cat;
-  margin-block-start: auto;
+  margin: 0;
   display: flex;
   gap: calc(var(--kiosk-scale) * 60px);
   align-items: flex-end;
-  padding-block: calc(var(--kiosk-scale) * 24px) calc(var(--kiosk-scale) * 32px);
+  padding-block: calc(var(--kiosk-scale) * 4px) calc(var(--kiosk-scale) * 6px);
   border-block-start: 2px solid var(--tone-text-primary);
 }
-.cat-row { counter-increment: cat; }
-.cat-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.08em; color: var(--tone-label); }
+.cat-row { counter-increment: cat; min-inline-size: 0; }
+.cat-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.3; letter-spacing: 0.08em; color: var(--tone-label); white-space: nowrap; }
 .cat-label::before { content: counter(cat, decimal-leading-zero) ' · '; }
-.cat-value { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 48px); white-space: nowrap; }
+.cat-value { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 48px); line-height: 1.1; white-space: nowrap; }
 .cat-unit { font-weight: 500; font-size: calc(var(--kiosk-scale) * 30px); color: var(--tone-text-muted); }
 
-/* ── Code card ─────────────────────────────────────────────────────────── */
-.kiosk-code { display: flex; flex-direction: column; justify-content: flex-start; padding-block-start: calc(var(--kiosk-scale) * 6px); }
+/* ── Code card: vertically centred in the stage (R-V1) ─────────────────── */
+.kiosk-code { display: flex; flex-direction: column; justify-content: center; min-block-size: 0; }
 .code-card {
   display: flex;
   flex-direction: column;
@@ -186,14 +299,18 @@
 .ess-detail { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-body); font-size: calc(var(--kiosk-scale) * 24px); color: var(--tone-text-muted); }
 .ess-attr { margin: calc(var(--kiosk-scale) * 10px) 0 0; font-size: calc(var(--kiosk-scale) * 17px); color: var(--tone-text-subtle); }
 
-/* ── Safety strip ──────────────────────────────────────────────────────── */
+/* ── Safety strip: 120 tall (R-V1), its text at most two lines of 26 ──── */
 .kiosk-safety {
   flex: none;
+  box-sizing: border-box;
+  block-size: calc(var(--kiosk-scale) * 120px);
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: calc(var(--kiosk-scale) * 44px);
   padding: calc(var(--kiosk-scale) * 28px) calc(var(--kiosk-scale) * 80px);
   font-size: calc(var(--kiosk-scale) * 26px);
+  line-height: 1.2;
   background: var(--tone-surface-2);
   color: var(--tone-text-primary);
 }
