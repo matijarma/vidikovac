@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ScanOk } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -336,5 +338,127 @@ describe('camera region', () => {
     scanner().deps.onCancel?.();
     expect(region.hidden).toBe(true);
     expect(document.activeElement).toBe(button);
+  });
+});
+
+// Reproduces the review finding on scan.css:39-47 vs base.css:43-47: a bare
+// `.scan-input` (specificity 0,1,0) loses every contested longhand to the
+// generic `input[type='text'], select` reset in base.css (0,1,1) — border,
+// min-height, font-family and font-size all silently fall back to the base
+// rule's values regardless of file/import order, since there is no @layer,
+// !important or :where() anywhere in the codebase. This computes real CSS
+// specificity (a, b, c) from the selector text so the check keeps holding
+// for whatever selector shape the fix takes, not just today's exact string.
+describe('scan-input CSS specificity (regression: base.css must not win)', () => {
+  const RAW_BASE_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'base.css'), 'utf8');
+  const RAW_SCAN_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'scan.css'), 'utf8');
+  // Comment-stripped so a code comment's prose (this test's own included —
+  // it names the selectors it's checking for readability) can never be
+  // mistaken for the CSS it describes.
+  const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const BASE_CSS = stripComments(RAW_BASE_CSS);
+  const SCAN_CSS = stripComments(RAW_SCAN_CSS);
+
+  /** CSS specificity of one simple (combinator-free) selector, as (id, class-like, type-like). */
+  function specificity(selector: string): [number, number, number] {
+    let working = selector.trim();
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    working = working.replace(/::?(before|after|first-line|first-letter)\b/g, () => {
+      c += 1;
+      return ' ';
+    });
+    working = working.replace(/::[\w-]+/g, () => {
+      c += 1;
+      return ' ';
+    });
+    working = working.replace(/\[[^\]]*\]/g, () => {
+      b += 1;
+      return ' ';
+    });
+    working = working.replace(/#[\w-]+/g, () => {
+      a += 1;
+      return ' ';
+    });
+    working = working.replace(/\.[\w-]+/g, () => {
+      b += 1;
+      return ' ';
+    });
+    working = working.replace(/:[\w-]+(\([^)]*\))?/g, () => {
+      b += 1;
+      return ' ';
+    });
+    c += (working.match(/[a-zA-Z][\w-]*/g) ?? []).length;
+    return [a, b, c];
+  }
+
+  function cmp(x: [number, number, number], y: [number, number, number]): number {
+    for (let i = 0; i < 3; i += 1) {
+      if (x[i] !== y[i]) return x[i]! - y[i]!;
+    }
+    return 0;
+  }
+
+  /** The exact selector line that opens the `.scan-input` rule in scan.css. */
+  function scanInputSelector(): string {
+    const m = /^([^{}]*\.scan-input[^{}]*)\{/m.exec(SCAN_CSS);
+    if (!m) throw new Error('scan.css has no rule targeting .scan-input');
+    return m[1]!.trim();
+  }
+
+  /** The comma-branch of base.css's generic reset that itself matches `input`. */
+  function baseInputSelector(): string {
+    const m = /^input\[type='text'\][^{]*,\s*select\s*\{/m.exec(BASE_CSS);
+    if (!m) throw new Error("base.css has no `input[type='text'], select` reset — has the generic rule moved?");
+    return "input[type='text']";
+  }
+
+  /** The `{ ... }` body immediately following the given rule's selector line. */
+  function ruleBody(css: string, selectorLine: RegExp): string {
+    const m = selectorLine.exec(css);
+    if (!m) throw new Error(`no rule found for ${selectorLine}`);
+    const start = m.index;
+    return css.slice(start, css.indexOf('}', start) + 1);
+  }
+
+  it('neither the .scan-input rule nor the base input reset is wrapped in @layer, !important or :where() — specificity math alone decides the winner', () => {
+    // Scoped to the two contending rules, not the whole file: base.css does
+    // use !important elsewhere (e.g. .visually-hidden), which is unrelated
+    // to this cascade fight. If this ever fires on either rule, cascade
+    // layers/!important/:where() have entered and the plain specificity
+    // comparison below is no longer the whole story.
+    const scanRule = ruleBody(SCAN_CSS, /^([^{}]*\.scan-input[^{}]*)\{/m);
+    const baseRule = ruleBody(BASE_CSS, /^input\[type='text'\][^{]*,\s*select\s*\{/m);
+    for (const body of [scanRule, baseRule]) {
+      expect(body).not.toMatch(/!important/);
+    }
+    expect(BASE_CSS).not.toMatch(/@layer/);
+    expect(SCAN_CSS).not.toMatch(/@layer/);
+    expect(BASE_CSS).not.toMatch(/:where\(/);
+    expect(SCAN_CSS).not.toMatch(/:where\(/);
+  });
+
+  it("base.css's generic input reset really does carry (0,1,1)", () => {
+    expect(specificity(baseInputSelector())).toEqual([0, 1, 1]);
+  });
+
+  it('.scan-input rule out-specifies (or ties and follows) the base reset, so its declarations actually win', () => {
+    const scanSel = scanInputSelector();
+    const scanSpec = specificity(scanSel);
+    const baseSpec = specificity(baseInputSelector());
+    // scan.css is imported after base.css (app/src/entries/scan.ts), so an
+    // exact tie would still win on source order — but only a strictly higher
+    // specificity is robust to that import order ever changing.
+    expect(cmp(scanSpec, baseSpec), `.scan-input selector "${scanSel}" must out-specify "input[type='text']"`).toBeGreaterThan(0);
+  });
+
+  it('the four contested longhands are set directly on the .scan-input rule, not left to the generic reset', () => {
+    const start = SCAN_CSS.indexOf(scanInputSelector());
+    const body = SCAN_CSS.slice(start, SCAN_CSS.indexOf('}', start) + 1);
+    expect(body).toMatch(/border:\s*2px solid var\(--tone-stroke-strong\)/);
+    expect(body).toMatch(/min-height:\s*3\.25rem/);
+    expect(body).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(body).toMatch(/font-size:\s*1\.75rem/);
   });
 });

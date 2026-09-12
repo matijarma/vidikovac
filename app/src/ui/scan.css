@@ -36,7 +36,13 @@
 
 .scan-form { display: grid; gap: var(--sp-2); }
 .scan-label { font-weight: var(--weight-medium); }
-.scan-input {
+/* input[type='text'].scan-input, not bare .scan-input: base.css's generic
+   `input[type='text'], select` reset is (0,1,1) and would otherwise beat a
+   single-class selector's (0,1,0) on every contested longhand (border,
+   min-height, font-family, font-size) regardless of import order — there is
+   no @layer/!important/:where() in this codebase to arbitrate it instead.
+   `input[type='text'].scan-input` is (0,2,1), which wins unconditionally. */
+input[type='text'].scan-input {
   width: 100%;
   min-height: 3.25rem;
   border: 2px solid var(--tone-stroke-strong);
