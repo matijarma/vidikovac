@@ -453,6 +453,45 @@ describe('shape choice hysteresis and the direction penalty', () => {
     expect(drawn.onShape).toBeNull();
     expect(drawn.confidence).toBeLessThanOrEqual(0.5); // free-plane cap
   });
+
+  it('when the current shape itself drifts past the residual gate, a valid sibling under the gate is picked instead of free-plane', () => {
+    // Two parallel north-running shapes on route R1: A directly under the
+    // vehicle's first fix, B 15 m east of it. The second fix lands 155 m
+    // off A (just past the 150 m gate) and 140 m off B (well inside it) --
+    // but only 15 m closer than A, short of the 25 m hysteresis margin.
+    // Hysteresis is meant to defend a *valid* current shape from a
+    // narrowly-better rival, not to keep a vehicle glued to a shape whose
+    // own residual has already drifted past the gate: A's score no longer
+    // qualifies as a baseline to defend, so the vehicle must fall through
+    // to B (a genuinely valid candidate) rather than being bumped to
+    // lower-confidence free-plane with a valid track sitting right there.
+    const A: XY[] = [
+      { x: 0, y: 0 },
+      { x: 0, y: 2000 },
+    ];
+    const B: XY[] = [
+      { x: 15, y: 0 },
+      { x: 15, y: 2000 },
+    ];
+    const net = buildNetwork(
+      [
+        { id: 'A', route: 'R1', pts: A },
+        { id: 'B', route: 'R1', pts: B },
+      ],
+      [],
+      [{ id: 'R1', short: '1', type: 0, shapes: [0, 1] }],
+    );
+    const model = createModel(net);
+    let t = T0;
+    model.update([fixAt('v1', { x: 0, y: 100 }, t)], t); // exactly on A, 15 m off B: A wins outright
+    model.step(t);
+    t += 30_000;
+    // 155 m off A (past the gate), 140 m off B (inside it, but only 15 m
+    // closer than A -- short of the 25 m margin). Both shapes run north,
+    // same as this movement, so neither takes the direction penalty.
+    model.update([fixAt('v1', { x: 155, y: 130 }, t)], t);
+    expect(model.step(t)[0].onShape).toBe(1); // B, not free-plane
+  });
 });
 
 describe('network === null', () => {

@@ -258,9 +258,17 @@ interface Selection {
 }
 
 /** Picks the shape a vehicle should be on, applying the 25 m hysteresis
- *  margin only when there is a current shape to defend; a vehicle with no
- *  current shape (brand new, just past a tripId change, or recovering from
- *  free-plane) is a free pick among anything under the 150 m residual gate. */
+ *  margin only when there is a current shape to defend, and only when that
+ *  current shape's own residual is still inside the 150 m gate. A shape
+ *  whose own proj.d has already drifted past the gate is not a valid
+ *  baseline to defend -- its score no longer means "this is a good fit",
+ *  so measuring a switch-in candidate against it could let hysteresis
+ *  block a perfectly valid sibling shape (a route can have several) purely
+ *  because the vehicle's *current* assignment happened to be the one that
+ *  drifted. So a current shape past the gate is treated exactly like "no
+ *  current shape" and falls through to the free pick below, same as a
+ *  brand new vehicle, one just past a tripId change, or one recovering
+ *  from free-plane. */
 function selectShape(net: Network, candidates: readonly number[], q: XY, dirVec: XY | null, prevShapeIdx: number | null): Selection {
   if (candidates.length === 0) return { shapeIdx: null, shapeScore: Infinity, proj: null, changed: prevShapeIdx !== null };
 
@@ -270,21 +278,21 @@ function selectShape(net: Network, candidates: readonly number[], q: XY, dirVec:
 
   if (prevShapeIdx !== null) {
     const current = scored.find((c) => c.idx === prevShapeIdx);
-    if (current) {
+    if (current && current.proj.d <= DISCREPANCY_LIMIT_M) {
       if (best.idx !== prevShapeIdx && best.score + HYSTERESIS_MARGIN_M < current.score && best.proj.d <= DISCREPANCY_LIMIT_M) {
         return { shapeIdx: best.idx, shapeScore: best.score, proj: best.proj, changed: true };
       }
-      if (current.proj.d <= DISCREPANCY_LIMIT_M) {
-        return { shapeIdx: prevShapeIdx, shapeScore: current.score, proj: current.proj, changed: false };
-      }
-      return { shapeIdx: null, shapeScore: Infinity, proj: null, changed: true }; // drifted off geometry entirely
+      return { shapeIdx: prevShapeIdx, shapeScore: current.score, proj: current.proj, changed: false };
     }
   }
 
   if (best.proj.d <= DISCREPANCY_LIMIT_M) {
     return { shapeIdx: best.idx, shapeScore: best.score, proj: best.proj, changed: true };
   }
-  return { shapeIdx: null, shapeScore: Infinity, proj: null, changed: false }; // stays free-plane
+  // No candidate qualifies: free-plane. `changed` is true whenever there
+  // was a real previous assignment (including one that just drifted past
+  // the gate above) being dropped, false when it was already free-plane.
+  return { shapeIdx: null, shapeScore: Infinity, proj: null, changed: prevShapeIdx !== null };
 }
 
 export function createModel(net: Network | null): Model {
