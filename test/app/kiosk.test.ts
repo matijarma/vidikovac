@@ -795,7 +795,6 @@ describe('a 2017 engine lays the kiosk out (R-F4)', () => {
       ['.kiosk-live .schematic-list', '.kiosk-live .schematic-stop + .schematic-stop'],
     ]) {
       const rules = rulesFor(kioskCss, list);
-      console.log('DBG', JSON.stringify(list), rules.length, JSON.stringify(kioskCss.split('\n').filter((l) => l.includes('.ess-rows'))));
       expect(rules.length, `${list} has a rule`).toBeGreaterThan(0);
       for (const rule of rules) expect(rule, `${list} must not space with gap`).not.toMatch(/(^|[\s;{])(row-|column-)?gap:(?!\s*0\s*[;}])/);
       expect(kioskCss, `${item} carries the spacing`).toContain(`${item} {`);
