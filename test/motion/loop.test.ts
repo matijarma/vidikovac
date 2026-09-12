@@ -178,6 +178,77 @@ describe('createLoop', () => {
     fire(); // simulate a raf callback that was already in flight when stop() ran
     expect(draw).not.toHaveBeenCalled();
   });
+
+  it('start() resets frames() to 0, matching its own "since the last start()" contract', () => {
+    const { raf, cancel, fire } = fakeRaf();
+    const draw = vi.fn(() => true);
+    const loop = createLoop(draw, { raf, cancel, now: () => 0 });
+
+    loop.start();
+    fire();
+    fire();
+    expect(loop.frames()).toBe(2);
+
+    loop.stop();
+    loop.start();
+    expect(loop.frames()).toBe(0); // a restart is a fresh count, not a continuation
+
+    fire();
+    expect(loop.frames()).toBe(1);
+  });
+
+  it('does not freeze when draw throws: it logs and keeps scheduling instead of dying silently', () => {
+    const { raf, cancel, fire, hasScheduled } = fakeRaf();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const draw = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const loop = createLoop(draw, { raf, cancel, now: () => 0 });
+
+    loop.start();
+    expect(() => fire()).not.toThrow(); // the raf callback itself must never throw
+    expect(draw).toHaveBeenCalledTimes(1);
+    expect(hasScheduled()).toBe(true); // still scheduling -- not stuck in limbo
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(loop.frames()).toBe(0); // a thrown call is never counted as an actually-drawn frame
+
+    errorSpy.mockRestore();
+  });
+
+  it('eventually parks on repeated draw throws, same as repeated unchanged frames -- and nudge recovers it', () => {
+    const { raf, cancel, fire, hasScheduled } = fakeRaf();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const draw = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const loop = createLoop(draw, { raf, cancel, now: () => 0 });
+
+    loop.start();
+    for (let i = 0; i < 8; i++) fire();
+    expect(hasScheduled()).toBe(false); // parked: a thrown frame counts as unchanged
+
+    loop.nudge(); // recoverable exactly like an ordinary park -- this is the point of the fix
+    expect(hasScheduled()).toBe(true);
+
+    errorSpy.mockRestore();
+  });
+
+  it('does not freeze when draw throws under reducedMotion either', () => {
+    const { raf, cancel, fire, hasScheduled } = fakeRaf();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const draw = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const loop = createLoop(draw, { raf, cancel, now: () => 0, reducedMotion: true });
+
+    loop.start();
+    expect(() => fire()).not.toThrow();
+    expect(draw).toHaveBeenCalledTimes(1);
+    expect(hasScheduled()).toBe(true); // still ticking once a second, not stuck
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    errorSpy.mockRestore();
+  });
 });
 
 describe('nextPollDelay', () => {

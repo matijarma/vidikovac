@@ -94,8 +94,22 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     }
 
     const before = clockNow();
-    const changed = draw(before);
-    frameCount++;
+    let changed = false;
+    try {
+      changed = draw(before);
+      frameCount++;
+    } catch (err) {
+      // A throwing `draw` (a bug reacting to a malformed snapshot, say) must
+      // never unwind past this point: on a kiosk meant to run unattended for
+      // hours (R-P1), letting the exception escape would abort before
+      // scheduleFull() is reached, leaving the loop neither drawing nor
+      // properly parked (parked never became true either) -- a state
+      // nothing, not even nudge(), can recover from. Treating the throw as
+      // an unchanged frame keeps it inside the loop's own recovery paths:
+      // it either draws again next tick, or parks after the usual streak,
+      // from which nudge() already knows how to wake it.
+      console.error('[motion loop] draw() threw; treating this frame as unchanged', err);
+    }
     const elapsed = clockNow() - before;
 
     if (elapsed > FRAME_BUDGET_MS) {
@@ -134,8 +148,15 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     const now = clockNow();
     if (lastReducedDrawAt === null || now - lastReducedDrawAt >= REDUCED_MOTION_INTERVAL_MS) {
       lastReducedDrawAt = now;
-      draw(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
-      frameCount++;
+      try {
+        draw(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
+        frameCount++;
+      } catch (err) {
+        // Same reasoning as onFullFrame's catch: an uncaught throw here would
+        // abort before scheduleReduced() runs, freezing the once-a-second
+        // clock tick for good.
+        console.error('[motion loop] draw() threw; treating this frame as unchanged', err);
+      }
     }
     scheduleReduced();
   }
@@ -150,6 +171,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       slowStreak = 0;
       unchangedStreak = 0;
       lastReducedDrawAt = null;
+      frameCount = 0; // frames() is documented as "since the last start()" -- a restart is a fresh count
       if (reduced) scheduleReduced();
       else scheduleFull();
     },
