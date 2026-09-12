@@ -64,27 +64,40 @@ export const DEFAULT_CROP: Readonly<Crop> = Object.freeze({
 });
 
 /** Matija, 12 September: "both bus and tram should be a blue square but
- *  tram visibly thinner. direction is visible from movement." A bus is an
- *  8 px square and never rotates. */
-export const BUS_SIDE_PX = 8;
-/** A tram is a 12 by 3.5 px rectangle laid along its track: the same area
- *  class as the bus so neither reads as more important, but at under half
- *  the bus's width it is visibly thinner at a glance, not on inspection. */
-export const TRAM_LENGTH_PX = 12;
-export const TRAM_WIDTH_PX = 3.5;
+ *  tram visibly thinner. direction is visible from movement." A bus is a
+ *  10 px square and never rotates. These are on-screen minimums (R-V2):
+ *  marks are sized in CSS px times device density, never in metres and
+ *  never through --kiosk-scale, so a 4K wall and a phone draw the same mark.
+ *  The production screenshot that set them (12 September, 1080p) had an
+ *  8 px bus and a 12 by 3.5 px tram, and the tram vanished into the line. */
+export const BUS_SIDE_PX = 10;
+/** A tram is a 14 by 5 px rectangle laid along its track: at half the bus's
+ *  side it is visibly thinner at a glance, not on inspection, and at 5 px it
+ *  is still a shape rather than a hairline. */
+export const TRAM_LENGTH_PX = 14;
+export const TRAM_WIDTH_PX = 5;
 
-/** Route lines are the quiet track under the loud vehicles: the same alpha
- *  the panorama gives its ridge and its bead rail (design.md §3.1), so the
- *  two canvas motifs read as one hand. */
-export const ROUTE_ALPHA = 0.3;
+/** Route lines are the printed network under the vehicles, drawn in the
+ *  label tone (design.md's one permitted third shade) at this alpha: dark
+ *  enough to read as a diagram, light enough that a vehicle at the minimum
+ *  alpha below is still unmistakably the darker thing on it (R-V2). */
+export const ROUTE_ALPHA = 0.55;
 /** Two CSS px of route line: one reads as a hairline and disappears under a
- *  3.5 px tram at 1080p; three starts competing with the vehicles. */
+ *  5 px tram at 1080p; three starts competing with the vehicles. */
 const ROUTE_LINE_PX = 2;
 
 /** Alpha carries confidence, but a vehicle the model draws exists: at zero
  *  confidence (a fresh vehicle, a stop-gate hold) it is still a vehicle on
- *  the map, only its direction is unknown, so it never fades below this. */
-const MIN_VEHICLE_ALPHA = 0.35;
+ *  the map, only its direction is unknown, so it never fades below this --
+ *  which is the line's own alpha, so ink at this alpha over the halo is
+ *  never lighter than label blue at the same alpha over the cloth (R-V2:
+ *  alpha = 0.55 + 0.45 * confidence). */
+export const MIN_VEHICLE_ALPHA = 0.55;
+/** A one-CSS-pixel halo in the canvas tone under every mark, drawn first:
+ *  what separates a vehicle from the line it sits on and from a neighbour
+ *  at the same stop. One extra fillRect per mark per frame; the loop parks
+ *  when nothing moves, so it costs nothing on a still map. */
+export const HALO_PX = 1;
 
 /** The whole-network crop pads the bounding circle by this so the outermost
  *  terminus does not sit on the canvas edge. */
@@ -120,6 +133,15 @@ export interface SchematicLayout {
   net: Network;
   lines: RouteLine[];
   toPx(p: XY): XY;
+}
+
+/** The two tones the vehicle layer paints with: `ink` for the marks and the
+ *  selection ring (`--tone-text-primary`), `halo` for the cloth-coloured
+ *  halo under each mark (`--tone-surface-canvas`). Read off computed style
+ *  by the view (ui/canvas.ts's tone()), never literals here. */
+export interface VehicleTones {
+  ink: string;
+  halo: string;
 }
 
 export interface VehicleMark {
@@ -316,13 +338,14 @@ export function hitVehicle(marks: readonly VehicleMark[], x: number, y: number, 
   return best;
 }
 
-/** The route layer: clear, then stroke every clipped run in ink at the
- *  route alpha. Called on theme, resize or crop change only. */
-export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, ink: string): void {
+/** The route layer: clear, then stroke every clipped run in the line tone
+ *  (`--tone-label`, R-V2) at the route alpha. Called on theme, resize or
+ *  crop change only. */
+export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, lineTone: string): void {
   ctx.clearRect(0, 0, layout.w, layout.h);
   if (layout.lines.length === 0) return;
   ctx.save();
-  ctx.strokeStyle = ink;
+  ctx.strokeStyle = lineTone;
   ctx.globalAlpha = ROUTE_ALPHA;
   ctx.lineWidth = ROUTE_LINE_PX * layout.density;
   ctx.lineCap = 'round';
@@ -335,28 +358,34 @@ export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, ink:
   ctx.restore();
 }
 
-/** The vehicle layer: clear, then fill each mark centred on its own
- *  position, rotated only when the mark carries an angle, and ring the one
- *  mark whose id is `selectedId` (the tapped vehicle, T9). Called per frame. */
+/** The vehicle layer: clear, then for each mark fill its halo (opaque, in
+ *  the cloth tone) and the mark itself (ink at the mark's alpha), both
+ *  centred on its own position and rotated only when the mark carries an
+ *  angle; ring the one mark whose id is `selectedId` (the tapped vehicle,
+ *  T9). Called per frame. */
 export function paintVehicles(
   ctx: SchematicContext,
   layout: SchematicLayout,
   marks: readonly VehicleMark[],
-  ink: string,
+  tones: VehicleTones,
   selectedId: string | null = null,
 ): void {
   ctx.clearRect(0, 0, layout.w, layout.h);
+  const halo = HALO_PX * layout.density;
   for (const m of marks) {
     ctx.save();
     ctx.translate(m.x, m.y);
     if (m.angle !== 0) ctx.rotate(m.angle);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = tones.halo;
+    ctx.fillRect(-m.w / 2 - halo, -m.h / 2 - halo, m.w + 2 * halo, m.h + 2 * halo);
     ctx.globalAlpha = m.alpha;
-    ctx.fillStyle = ink;
+    ctx.fillStyle = tones.ink;
     ctx.fillRect(-m.w / 2, -m.h / 2, m.w, m.h);
     if (m.id === selectedId) {
       const side = Math.max(m.w, m.h) * RING_SCALE;
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = ink;
+      ctx.strokeStyle = tones.ink;
       ctx.lineWidth = RING_LINE_PX * layout.density;
       ctx.lineJoin = 'miter';
       ctx.beginPath();

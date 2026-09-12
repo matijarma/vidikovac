@@ -7,11 +7,13 @@ import {
   BUS_SIDE_PX,
   clipToCircle,
   DEFAULT_CROP,
+  HALO_PX,
   HIT_RADIUS_CSS_PX,
   hitVehicle,
   layoutSchematic,
   paintRoutes,
   paintVehicles,
+  MIN_VEHICLE_ALPHA,
   ROUTE_ALPHA,
   TRAM_LENGTH_PX,
   TRAM_WIDTH_PX,
@@ -232,11 +234,14 @@ describe('wholeNetworkCrop', () => {
 describe('vehicleMarks', () => {
   const crop: Crop = { centre: CENTRE, radius: 1000 };
 
-  it('draws a bus as an 8 px square with no rotation and a tram as a 12 by 3.5 px rectangle, visibly thinner', () => {
-    expect(BUS_SIDE_PX).toBe(8);
-    expect(TRAM_LENGTH_PX).toBe(12);
-    expect(TRAM_WIDTH_PX).toBe(3.5);
-    expect(TRAM_WIDTH_PX).toBeLessThan(BUS_SIDE_PX / 2);
+  // R-V2: minimum on-screen sizes, whatever --kiosk-scale and density do --
+  // a bus is a 10 px square, a tram 14 by 5 px: at most half the bus's side,
+  // visibly thinner, and still a shape rather than a hairline.
+  it('draws a bus as a 10 px square with no rotation and a tram as a 14 by 5 px rectangle, visibly thinner (R-V2)', () => {
+    expect(BUS_SIDE_PX).toBe(10);
+    expect(TRAM_LENGTH_PX).toBe(14);
+    expect(TRAM_WIDTH_PX).toBe(5);
+    expect(TRAM_WIDTH_PX).toBeLessThanOrEqual(BUS_SIDE_PX / 2);
     const l = layoutSchematic(crossNetwork(), crop, 400, 400);
     const marks = vehicleMarks(l, [
       drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS, heading: { x: 0, y: 1 } }),
@@ -248,19 +253,19 @@ describe('vehicleMarks', () => {
     expect(tram).toBeDefined();
     if (!bus || !tram) return;
     expect(bus.kind).toBe('bus');
-    expect(bus.w).toBe(8);
-    expect(bus.h).toBe(8);
+    expect(bus.w).toBe(10);
+    expect(bus.h).toBe(10);
     expect(bus.angle).toBe(0); // no rotation, whatever the heading says
     expect(tram.kind).toBe('tram');
-    expect(tram.w).toBe(12);
-    expect(tram.h).toBe(3.5);
+    expect(tram.w).toBe(14);
+    expect(tram.h).toBe(5);
   });
 
-  it('scales the marks with device density, so 8 CSS px stays 8 CSS px at 2x', () => {
+  it('scales the marks with device density, so 10 CSS px stays 10 CSS px at 2x', () => {
     const l = layoutSchematic(crossNetwork(), crop, 800, 800, 2);
     const [bus] = vehicleMarks(l, [drawn({ id: 'b', p: { x: 500, y: 0 }, type: GTFS_BUS })]);
-    expect(bus.w).toBe(16);
-    expect(bus.h).toBe(16);
+    expect(bus.w).toBe(20);
+    expect(bus.h).toBe(20);
   });
 
   it('rotates a tram to its heading, in canvas angle (y down)', () => {
@@ -288,7 +293,9 @@ describe('vehicleMarks', () => {
     expect(m.angle).toBe(0);
   });
 
-  it('carries confidence in alpha, never below a visible floor', () => {
+  it('carries confidence in alpha as 0.55 + 0.45 * confidence, so the least confident vehicle is still darker than the line under it (R-V2)', () => {
+    expect(MIN_VEHICLE_ALPHA).toBe(0.55);
+    expect(MIN_VEHICLE_ALPHA).toBeGreaterThanOrEqual(ROUTE_ALPHA);
     const l = layoutSchematic(crossNetwork(), crop, 400, 400);
     const [sure, unsure, none] = vehicleMarks(l, [
       drawn({ id: 'a', p: CENTRE, type: GTFS_TRAM, confidence: 1 }),
@@ -296,9 +303,8 @@ describe('vehicleMarks', () => {
       drawn({ id: 'c', p: CENTRE, type: GTFS_TRAM, confidence: 0 }),
     ]);
     expect(sure.alpha).toBe(1);
-    expect(unsure.alpha).toBeGreaterThan(none.alpha);
-    expect(unsure.alpha).toBeLessThan(sure.alpha);
-    expect(none.alpha).toBeGreaterThanOrEqual(0.35);
+    expect(unsure.alpha).toBeCloseTo(0.775, 9);
+    expect(none.alpha).toBe(0.55);
   });
 
   it('leaves out stale vehicles, vehicles outside the crop, and types the layout excludes', () => {
@@ -321,14 +327,16 @@ describe('vehicleMarks', () => {
 });
 
 describe('paintRoutes', () => {
-  it('clears the layer and strokes every clipped run in ink at the route alpha', () => {
-    const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
+  it('clears the layer and strokes every clipped run in the line tone (label blue) at alpha 0.55 and 2 CSS px (R-V2)', () => {
+    expect(ROUTE_ALPHA).toBe(0.55);
+    const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 800, 800, 2);
     const { ctx, calls } = recorder();
-    paintRoutes(ctx, l, '#f2ead8');
-    expect(calls[0]).toEqual({ op: 'clearRect', args: [0, 0, 400, 400] });
+    paintRoutes(ctx, l, '#9db4ff');
+    expect(calls[0]).toEqual({ op: 'clearRect', args: [0, 0, 800, 800] });
     expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(2);
-    expect(calls.find((c) => c.op === 'set strokeStyle')?.args).toEqual(['#f2ead8']);
+    expect(calls.find((c) => c.op === 'set strokeStyle')?.args).toEqual(['#9db4ff']);
     expect(calls.find((c) => c.op === 'set globalAlpha')?.args).toEqual([ROUTE_ALPHA]);
+    expect(calls.find((c) => c.op === 'set lineWidth')?.args).toEqual([4]); // 2 CSS px at density 2
     // Every run is stroked as one moveTo followed by lineTo calls.
     expect(calls.filter((c) => c.op === 'moveTo')).toHaveLength(2);
     expect(calls.filter((c) => c.op === 'lineTo').length).toBeGreaterThanOrEqual(2);
@@ -346,39 +354,56 @@ describe('paintRoutes', () => {
 });
 
 describe('paintVehicles', () => {
-  it('clears the layer, then fills each mark in ink at its own alpha, rotating only trams', () => {
+  const TONES = { ink: '#16226b', halo: '#f2ead8' };
+
+  it('clears the layer, then for each mark fills a one-pixel halo in the canvas tone and the mark in ink at its own alpha, rotating only trams (R-V2)', () => {
     const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
     const marks = vehicleMarks(l, [
       drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS, confidence: 0.5 }),
       drawn({ id: 'tram', p: CENTRE, type: GTFS_TRAM, heading: { x: 0, y: 1 }, confidence: 1 }),
     ]);
     const { ctx, calls } = recorder();
-    paintVehicles(ctx, l, marks, '#16226b');
+    paintVehicles(ctx, l, marks, TONES);
     expect(calls[0]).toEqual({ op: 'clearRect', args: [0, 0, 400, 400] });
-    const fillStyles = calls.filter((c) => c.op === 'set fillStyle');
-    expect(fillStyles.length).toBeGreaterThan(0);
-    expect(fillStyles.every((c) => c.args[0] === '#16226b')).toBe(true);
-    const fills = calls.filter((c) => c.op === 'fillRect');
-    expect(fills).toHaveLength(2);
+    // Halo, then mark, per vehicle: the halo is what separates a vehicle
+    // from the line under it and from a neighbour at the same stop.
+    expect(calls.filter((c) => c.op === 'set fillStyle').map((c) => c.args[0])).toEqual([TONES.halo, TONES.ink, TONES.halo, TONES.ink]);
+    const fills = calls.filter((c) => c.op === 'fillRect').map((c) => c.args);
+    expect(HALO_PX).toBe(1);
     // Each mark is drawn centred on its own origin after a translate, so the
-    // rect sits at (-w/2, -h/2).
-    expect(fills[0].args).toEqual([-4, -4, 8, 8]);
-    expect(fills[1].args).toEqual([-6, -1.75, 12, 3.5]);
+    // rect sits at (-w/2, -h/2); the halo is one CSS px larger on every side.
+    expect(fills).toEqual([
+      [-6, -6, 12, 12],
+      [-5, -5, 10, 10],
+      [-8, -3.5, 16, 7],
+      [-7, -2.5, 14, 5],
+    ]);
     const rotates = calls.filter((c) => c.op === 'rotate');
     expect(rotates).toHaveLength(1);
     expect(rotates[0].args[0]).toBeCloseTo(-Math.PI / 2, 9);
+    // The halo is always opaque; only the mark carries confidence.
     const alphas = calls.filter((c) => c.op === 'set globalAlpha').map((c) => c.args[0] as number);
-    expect(alphas).toHaveLength(2);
-    expect(alphas[0]).toBeLessThan(1);
-    expect(alphas[1]).toBe(1);
+    expect(alphas).toEqual([1, 0.775, 1, 1]);
     expect(calls.filter((c) => c.op === 'save')).toHaveLength(2);
     expect(calls.filter((c) => c.op === 'restore')).toHaveLength(2);
+  });
+
+  it('scales the halo with device density, so it stays one CSS pixel at 2x', () => {
+    const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 800, 800, 2);
+    const marks = vehicleMarks(l, [drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS })]);
+    const { ctx, calls } = recorder();
+    paintVehicles(ctx, l, marks, TONES);
+    const fills = calls.filter((c) => c.op === 'fillRect').map((c) => c.args);
+    expect(fills).toEqual([
+      [-12, -12, 24, 24],
+      [-10, -10, 20, 20],
+    ]);
   });
 
   it('only clears when there is nothing to draw', () => {
     const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
     const { ctx, calls } = recorder();
-    paintVehicles(ctx, l, [], '#000');
+    paintVehicles(ctx, l, [], TONES);
     expect(calls.map((c) => c.op)).toEqual(['clearRect']);
   });
 });
@@ -416,12 +441,14 @@ describe('paintVehicles with a selection', () => {
       drawn({ id: 'tram', p: CENTRE, type: GTFS_TRAM, heading: { x: 1, y: 0 } }),
     ]);
     const { ctx, calls } = recorder();
-    paintVehicles(ctx, l, marks, '#16226b', 'tram');
+    paintVehicles(ctx, l, marks, { ink: '#16226b', halo: '#f2ead8' }, 'tram');
     const rects = calls.filter((c) => c.op === 'rect');
     expect(rects).toHaveLength(1);
     const side = TRAM_LENGTH_PX * 2;
     expect(rects[0].args).toEqual([-side / 2, -side / 2, side, side]);
     expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(1);
+    // The ring is ink, not halo: it says "this one" in the mark's own voice.
+    expect(calls.find((c) => c.op === 'set strokeStyle')?.args).toEqual(['#16226b']);
     // The ring is drawn inside the tram's own save/translate/rotate frame, so
     // it sits on the mark: rect comes after that mark's fillRect and before
     // its restore.
@@ -434,7 +461,7 @@ describe('paintVehicles with a selection', () => {
     const l = layoutSchematic(crossNetwork(), { centre: CENTRE, radius: 1000 }, 400, 400);
     const marks = vehicleMarks(l, [drawn({ id: 'bus', p: { x: 500, y: 0 }, type: GTFS_BUS })]);
     const { ctx, calls } = recorder();
-    paintVehicles(ctx, l, marks, '#16226b', 'gone');
+    paintVehicles(ctx, l, marks, { ink: '#16226b', halo: '#f2ead8' }, 'gone');
     expect(calls.filter((c) => c.op === 'rect')).toHaveLength(0);
   });
 });
