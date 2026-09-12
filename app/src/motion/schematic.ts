@@ -17,7 +17,6 @@
 import { dist, toPlane, type XY } from './geo';
 import type { Drawn } from './model';
 import type { Network } from './network';
-import { project, tangent } from './polyline';
 import type { StrokeContext } from '../ui/meander';
 
 /** The narrow canvas surface the two painters need: area M's StrokeContext
@@ -282,12 +281,8 @@ function canvasAngle(dir: XY): number {
  *  a rectangle can use without knowing which way the tram faces (decision
  *  5: direction is undecidable at a standstill, but the rails are not); and
  *  for a free-plane vehicle with no heading, no rotation at all. */
-function tramDirection(layout: SchematicLayout, v: Drawn): XY | null {
-  if (v.heading) return v.heading;
-  if (v.onShape === null) return null;
-  const shape = layout.net.shapes[v.onShape];
-  if (!shape || shape.pts.length < 2) return null;
-  return tangent(shape.pts, shape.cum, project(shape.pts, shape.cum, v.p).s);
+function tramDirection(v: Drawn): XY | null {
+  return v.heading ?? v.track ?? null;
 }
 
 /**
@@ -305,7 +300,7 @@ export function vehicleMarks(layout: SchematicLayout, vehicles: readonly Drawn[]
     const { x, y } = layout.toPx(v.p);
     const alpha = MIN_VEHICLE_ALPHA + (1 - MIN_VEHICLE_ALPHA) * Math.min(1, Math.max(0, v.confidence));
     if (v.type === ROUTE_TYPE_TRAM) {
-      const dir = tramDirection(layout, v);
+      const dir = tramDirection(v);
       marks.push({
         id: v.id, kind: 'tram', x, y,
         w: TRAM_LENGTH_PX * density, h: TRAM_WIDTH_PX * density,

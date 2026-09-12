@@ -234,6 +234,11 @@ export interface CityMapOptions {
 
 export interface CityMapHandle {
   update(points: MapPoint[], lines: MapLine[]): void;
+  /** Stops stepping the model and requesting frames (a frozen dashboard,
+   *  R-F6). The map itself and the model's history stay; `resume()` picks
+   *  the motion up again. */
+  pause(): void;
+  resume(): void;
   destroy(): void;
 }
 
@@ -276,6 +281,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let destroyMap: (() => void) | null = null;
   let lastPushedSignature = '';
   let nextPushAt = -Infinity;
+  // The loop starts on MapLibre's 'load'; a pause() before that must still
+  // win, so 'load' consults this instead of starting unconditionally.
+  let paused = false;
 
   container.setAttribute('role', 'img');
   container.setAttribute('aria-label', options.ariaLabel);
@@ -375,7 +383,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         source('closures')?.setData(linesToGeoJson(lines));
       };
       pushVehicles = (fc) => source('vehicles')?.setData(fc);
-      loop.start();
+      if (!paused) loop.start();
     });
   })();
 
@@ -389,6 +397,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       model?.update(pointsToFixes(points), now());
       applyStatic?.();
       loop.nudge();
+    },
+    pause() {
+      paused = true;
+      loop.stop();
+    },
+    resume() {
+      paused = false;
+      if (pushVehicles) loop.start(); // before 'load' the load handler starts it
     },
     destroy() {
       disposed = true;

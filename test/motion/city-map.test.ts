@@ -60,21 +60,25 @@ const metres = (fc: unknown, id: string, to: MapPoint): number => {
 
 async function harness(opts: { points?: MapPoint[]; lines?: MapLine[]; reducedMotion?: boolean; loadNetwork?: () => Promise<null> } = {}) {
   let t = T0;
-  const queue: ((ts: number) => void)[] = [];
+  // Frame requests by handle, so cancelAnimationFrame really withdraws one.
+  const queue = new Map<number, (ts: number) => void>();
+  let nextHandle = 0;
   const container = document.createElement('div');
   document.body.appendChild(container);
   const loadNetwork = opts.loadNetwork ?? vi.fn(async () => null);
   const handle = createCityMap(
     { container, ariaLabel: 'Karta', points: opts.points ?? [A], lines: opts.lines ?? [CLOSURE], reducedMotion: opts.reducedMotion, loadNetwork },
-    { loadMaplibre: async () => lib as never, raf: (cb) => { queue.push(cb); return queue.length; }, cancel: () => {}, now: () => t },
+    { loadMaplibre: async () => lib as never, raf: (cb) => { queue.set(++nextHandle, cb); return nextHandle; }, cancel: (h) => { queue.delete(h); }, now: () => t },
   );
   await flush();
   const map = FakeMap.instances[FakeMap.instances.length - 1]!;
   map.load();
   /** Advances the clock and runs every frame callback that was waiting. */
-  const frame = (dt = FRAME_MS): void => { t += dt; for (const cb of queue.splice(0)) cb(t); };
+  const frame = (dt = FRAME_MS): void => { t += dt; const due = [...queue.values()]; queue.clear(); for (const cb of due) cb(t); };
   const vehicles = (): FakeSource => map.getSource('vehicles')!;
-  return { handle, map, container, frame, vehicles, loadNetwork };
+  /** Frame requests outstanding: 0 means nothing will paint until asked. */
+  const pending = (): number => queue.size;
+  return { handle, map, container, frame, vehicles, loadNetwork, pending };
 }
 
 afterEach(() => { FakeMap.instances.length = 0; document.body.replaceChildren(); });
@@ -161,12 +165,21 @@ describe('12 Hz source updates, not one per frame', () => {
     expect(Number(container.dataset.frames)).toBeGreaterThanOrEqual(59);
   });
 
-  it('under reduced motion steps once a second with no interpolation', async () => {
-    const { handle, frame, vehicles } = await harness({ reducedMotion: true });
-    handle.update([B], [CLOSURE]);
-    const before = vehicles().calls.length;
-    for (let i = 0; i < 60; i++) frame();
-    expect(vehicles().calls.length - before).toBeLessThanOrEqual(2);
+  it('under reduced motion steps once a second on a timer, with no interpolation and no frame requests at all (R-F6)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { handle, frame, vehicles, pending } = await harness({ reducedMotion: true });
+      expect(pending()).toBe(0); // never asked the compositor for a frame
+      handle.update([B], [CLOSURE]);
+      const before = vehicles().calls.length;
+      for (let i = 0; i < 60; i++) frame(); // a second of would-be frames: nothing is listening to them
+      expect(vehicles().calls.length - before).toBe(0);
+      vi.advanceTimersByTime(1000); // one clock tick
+      expect(vehicles().calls.length - before).toBeLessThanOrEqual(2);
+      expect(pending()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('parks when nothing moves and wakes on the next update', async () => {
@@ -183,6 +196,25 @@ describe('12 Hz source updates, not one per frame', () => {
 });
 
 describe('lifecycle', () => {
+  it('pause() withdraws the pending frame and requests none until resume() (R-F6: a frozen dashboard animates nothing)', async () => {
+    const { handle, frame, container, pending } = await harness();
+    handle.update([B], [CLOSURE]);
+    frame();
+    expect(pending()).toBe(1);
+    handle.pause();
+    expect(pending()).toBe(0);
+    const pausedAt = container.dataset.frames;
+    frame();
+    frame();
+    expect(container.dataset.frames).toBe(pausedAt);
+    expect(pending()).toBe(0);
+    handle.resume();
+    expect(pending()).toBe(1); // asking for frames again
+    frame();
+    frame();
+    expect(container.dataset.frames).toBe('1'); // a fresh start(): the counter restarted and frames are drawn again
+  });
+
   it('applies a report that arrived before the library loaded, once, and stops everything on destroy', async () => {
     let t = T0;
     const queue: ((ts: number) => void)[] = [];

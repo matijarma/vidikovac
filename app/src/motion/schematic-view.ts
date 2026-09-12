@@ -289,6 +289,16 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
 
   let lastLegendText: string | null = null;
 
+  /** R-F2: the legend's denominator is the vehicles this view is *for* --
+   *  fresh (the model evicts the rest) and of a type it draws -- so
+   *  "{drawn} od {tracked} praćenih vozila u kadru" is exactly true on a
+   *  trams-only kiosk: tracked trams, of which this many are in frame. */
+  function trackedCount(drawnList: readonly Drawn[]): number {
+    let n = 0;
+    for (const v of drawnList) if (!v.stale && (!types || types.has(v.type))) n++;
+    return n;
+  }
+
   /** Writes the legend only when it actually changed (a DOM write every
    *  frame, most of them identical, is the kind of "redundant traffic" this
    *  whole project already treats as a defect elsewhere). Returns whether it
@@ -435,7 +445,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     if (!element.isConnected) return false;
     const drawnList = model.step(t);
     const marks = vehicleMarks(layout, drawnList);
-    const legendChanged = paintLegend(marks.length, model.size());
+    const legendChanged = paintLegend(marks.length, trackedCount(drawnList));
     element.dataset.frames = String(loop.frames());
     if (lightweight) return legendChanged;
     lastMarks = marks;
@@ -452,6 +462,10 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     raf: deps.raf,
     cancel: deps.cancel,
     now: deps.now,
+    // The reduced-motion and lightweight paths tick on a timer, never a
+    // frame request (R-F6): the same injected pair the card's idle close uses.
+    setTimer,
+    clearTimer,
     reducedMotion: deps.reducedMotion,
     lightweight,
   });

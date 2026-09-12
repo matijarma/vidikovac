@@ -277,14 +277,23 @@ describe('vehicleMarks', () => {
     expect(north.angle).toBeCloseTo(-Math.PI / 2, 9);
   });
 
-  it('lays a tram whose direction is undecided along the track tangent instead of guessing', () => {
-    // A north-south tram line; the vehicle stands on it with heading null.
+  it('lays a tram whose direction is undecided along the track the model hands it, instead of guessing', () => {
+    // A north-south tram line; the vehicle stands on it with heading null
+    // but the model's own tangent at the drawn position (Drawn.track).
+    const ns = shapeOf('NS', 'R-tram', [{ x: 0, y: -1000 }, { x: 0, y: 1000 }]);
+    const net = buildNetwork([ns], [{ id: 'R-tram', short: '1', type: GTFS_TRAM }]);
+    const l = layoutSchematic(net, crop, 400, 400);
+    const [m] = vehicleMarks(l, [drawn({ id: 't', p: { x: 0, y: 100 }, type: GTFS_TRAM, heading: null, onShape: 0, track: { x: 0, y: 1 } })]);
+    // Along the track: vertical on the canvas, either sign.
+    expect(Math.abs(Math.sin(m.angle))).toBeCloseTo(1, 9);
+  });
+
+  it('never re-projects a tram onto its shape per frame: with no heading and no track from the model the mark is unrotated', () => {
     const ns = shapeOf('NS', 'R-tram', [{ x: 0, y: -1000 }, { x: 0, y: 1000 }]);
     const net = buildNetwork([ns], [{ id: 'R-tram', short: '1', type: GTFS_TRAM }]);
     const l = layoutSchematic(net, crop, 400, 400);
     const [m] = vehicleMarks(l, [drawn({ id: 't', p: { x: 0, y: 100 }, type: GTFS_TRAM, heading: null, onShape: 0 })]);
-    // Along the track: vertical on the canvas, either sign.
-    expect(Math.abs(Math.sin(m.angle))).toBeCloseTo(1, 9);
+    expect(m.angle).toBe(0);
   });
 
   it('gives a free-plane tram with no heading an unrotated mark', () => {

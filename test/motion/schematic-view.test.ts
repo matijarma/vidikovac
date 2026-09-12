@@ -134,7 +134,13 @@ function mount(opts: {
     vehicleCalls = stubCanvas(vehiclesCanvas, opts.stubSize.w, opts.stubSize.h);
     repaint?.();
   }
-  return { root, handle, fire, hasScheduled, routesCanvas, vehiclesCanvas, routeCalls, vehicleCalls, i18n, timers };
+  /** Fires every armed one-shot timer (the reduced-motion loop's clock tick,
+   *  the card's idle close) at clock `t`. */
+  const tick = (t: number = clock): void => {
+    clock = t;
+    for (const timer of [...timers]) if (!timer.cleared) { timer.cleared = true; timer.fn(); }
+  };
+  return { root, handle, fire, tick, hasScheduled, routesCanvas, vehiclesCanvas, routeCalls, vehicleCalls, i18n, timers };
 }
 
 /** A click at CSS-pixel (x, y) inside the stubbed canvas box. */
@@ -168,6 +174,20 @@ describe('mountSchematicView, canvas path', () => {
     const legend = root.querySelector('[data-testid=schematic-legend]')!;
     // v2's own reported spot is never drawn either way (R-P2); here it also
     // falls outside the crop, so only v1 counts as "drawn".
+    expect(legend.textContent).toBe('1 od 2 praćenih vozila u kadru');
+  });
+
+  it('counts only the drawn types in the legend denominator: a bus inside the box does not count on a trams-only crop (R-F2)', () => {
+    const { handle, fire, root } = mount({ stubSize: { w: 400, h: 400 }, types: new Set([ROUTE_TYPE_TRAM]) });
+    handle.update({
+      fixes: [
+        fix({ id: 't1', lon: 15.977, lat: 45.813, routeId: 'R-tram' }), // a tram in the box
+        fix({ id: 'b1', lon: 15.977, lat: 45.8131, routeId: 'R-bus' }), // a bus in the box: not this view's to count
+        fix({ id: 't2', lon: 16.5, lat: 46.5, routeId: 'R-tram' }), // a tracked tram far outside the box
+      ],
+    });
+    fire(NOW);
+    const legend = root.querySelector('[data-testid=schematic-legend]')!;
     expect(legend.textContent).toBe('1 od 2 praćenih vozila u kadru');
   });
 
@@ -240,10 +260,11 @@ describe('mountSchematicView, lightweight path (R-L2)', () => {
     expect(line.textContent).toContain('+40 s');
   });
 
-  it('shows the same legend text as the canvas path -- same data, same legend, no apology', () => {
-    const { handle, fire, root } = mount({ lightweight: true });
+  it('shows the same legend text as the canvas path -- same data, same legend, no apology -- on the once-a-second timer tick, never a frame request (R-F6)', () => {
+    const { handle, tick, root, hasScheduled } = mount({ lightweight: true });
     handle.update({ fixes: [fix({ id: 'v1', lon: 15.977, lat: 45.813, routeId: 'R-tram' })] });
-    fire(NOW);
+    expect(hasScheduled()).toBe(false); // no requestAnimationFrame on this path, ever
+    tick(NOW);
     const legend = root.querySelector('[data-testid=schematic-legend]')!;
     expect(legend.textContent).toBe('1 od 1 praćenih vozila u kadru');
   });

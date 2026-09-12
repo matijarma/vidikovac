@@ -661,8 +661,10 @@ describe('the live stage (T9 / R-P1)', () => {
     expect(text(live.querySelector('[data-testid=schematic-note]'))).toBe(NOTE);
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     await frame();
-    // Two pins inside the crop, one of them a bus: a locked kiosk keeps to trams (R-P1).
-    expect(text(live.querySelector('[data-testid=schematic-legend]'))).toBe('1 od 2 praćenih vozila u kadru');
+    // Two pins inside the crop, one of them a bus: a locked kiosk keeps to
+    // trams (R-P1), and the bus does not count as "tracked" either -- the
+    // legend says tracked trams, of which this many are in frame (R-F2).
+    expect(text(live.querySelector('[data-testid=schematic-legend]'))).toBe('1 od 1 praćenih vozila u kadru');
     // The whole-fleet count still drives the panorama and the catalogue.
     expect(text(k.root.querySelector('[data-testid=kiosk-catalogue]'))).toContain('156');
   });
@@ -683,6 +685,44 @@ describe('the live stage (T9 / R-P1)', () => {
     await frame();
     expect(Number(view.dataset.frames)).toBeGreaterThan(Number(paused));
   });
+  it('parks the stage loop while the essentials view covers it, and resumes it on close (R-F6)', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), fetchTeaser: async () => ({ modules: boxedTeaser() }) });
+    await flush();
+    const view = k.root.querySelector<HTMLElement>('[data-testid=kiosk-live] [data-testid=schematic]')!;
+    await frame();
+    k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')!.click();
+    const paused = view.dataset.frames;
+    await frame();
+    await frame();
+    expect(view.dataset.frames).toBe(paused); // hidden behind the essentials: not one frame drawn
+    k.root.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-close]')!.click();
+    await frame();
+    const resumed = view.dataset.frames;
+    await frame();
+    await frame();
+    expect(Number(view.dataset.frames)).toBeGreaterThan(Number(resumed)); // drawing again
+  });
+
+  it('polls the teaser again 2 s after the feed\'s next 30 s tick when zet-rt carries a source timestamp, else after 20 s', async () => {
+    const plain = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
+    await flush();
+    // The 20 s rotation and the 20 s fallback teaser poll: two registrations at that delay.
+    expect(plain.timers.filter((t) => !t.cleared && t.ms === TEASER_ROTATE_MS)).toHaveLength(2);
+
+    const stamped = boxedTeaser().map((m) => (m.module === 'zet-rt' ? { ...m, sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : m));
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), fetchTeaser: async () => ({ modules: stamped }) });
+    await flush();
+    expect(k.timers.filter((t) => !t.cleared && t.ms === TEASER_ROTATE_MS)).toHaveLength(1); // the rotation alone
+    const poll = k.timers.find((t) => !t.cleared && t.ms === 27_000);
+    expect(poll).toBeDefined();
+    // Firing it polls once and re-arms the chain (the fetch answers the same
+    // timestamp, so the next aim is the same 27 s out on this frozen clock).
+    poll!.fn();
+    await flush();
+    expect(poll!.cleared).toBe(true);
+    expect(k.timers.filter((t) => !t.cleared && t.ms === 27_000)).toHaveLength(1);
+  });
+
   it('gives the unlocked U pokretu layer its own whole-network schematic, on the same one network load', async () => {
     const loadNetwork = vi.fn(async () => null);
     const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }), loadNetwork });

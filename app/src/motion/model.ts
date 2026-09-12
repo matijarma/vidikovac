@@ -9,9 +9,11 @@
 // So: a reported position (a Fix) is evidence, folded into a vehicle's own
 // history by `update`; it is never itself drawn. `step` is the only thing
 // that produces a position, and it always arrives at a new fix by
-// convergence, never by jumping onto it -- except for the one explicit,
-// bounded, recorded exception (a discrepancy beyond the snap distance,
-// where continuing to "converge" would just be a smooth lie).
+// convergence, never by jumping onto it. Being *behind* along the line it
+// is already on is the model lagging, never the model being wrong, so an
+// along-track gap of any size is closed by catching up (R-F1); the model is
+// only ever wrong about *which* line, or where across it, and that is
+// decided -- and recorded -- in selectShape, never by teleporting the mark.
 
 import { dist, toPlane, type XY } from './geo';
 import { at, project, tangent } from './polyline';
@@ -43,6 +45,19 @@ export interface Drawn {
   confidence: number; // 0 to 1, drives alpha
   onShape: number | null; // null means free-plane mode
   stale: boolean;
+  /** The track's own direction at the drawn position, on-shape only --
+   *  the same tangent `heading` is derived from, before the confidence
+   *  threshold decides whether the facing is known. A renderer that lays
+   *  a tram along its rails reads this instead of re-projecting `p` onto
+   *  the shape every frame. */
+  track?: XY;
+  /** True on a frame the stop gate is holding this vehicle at a stop. */
+  held?: boolean;
+  /** Epoch ms of the last time the model found itself wrong about its
+   *  line (a cross-track residual past DISCREPANCY_LIMIT_M, or a shape
+   *  change) and re-seeded; undefined if it never has. Never set by an
+   *  along-track gap, however large -- see convergeScalar. */
+  lastSnapAt?: number;
 }
 
 export interface Model {
@@ -71,9 +86,10 @@ const SILENCE_HOLD_S = 90;
  *  motion eases down rather than visibly ticking down in stages. */
 const SILENCE_HALFLIFE_S = 45;
 /** Past five minutes of silence the report is not "a bit old", it is gone:
- *  the vehicle is marked stale and stops outright rather than crawling
- *  forever on a guess. */
-const STALE_S = 300;
+ *  the vehicle is evicted from the model (R-F2) -- `size()` shrinks and
+ *  nothing is drawn -- rather than flagged and carried, so a legend's
+ *  denominator stays honest and per-frame cost stops growing with uptime. */
+export const STALE_S = 300;
 
 /** Below this the model does nothing: floating-point and GPS jitter must
  *  never read as motion. */
@@ -90,12 +106,35 @@ const TAU_BACKWARD_S = 4;
  *  rate, or a genuinely stopped-but-slightly-mismatched vehicle would never
  *  visibly settle onto its own stop. */
 const MIN_CATCHUP_MS = 4;
-/** Beyond this the model does not know it is "a bit off" -- it knows it is
- *  wrong. The same 150 m draws two lines at once: past it on the shape, the
- *  drawn arc length snaps rather than glides (sliding smoothly across 150 m
- *  would be a visible, false certainty); past it on every candidate shape,
- *  the vehicle leaves the geometry entirely for free-plane mode. */
+/** An along-track gap wider than this is a poll interval's worth of lag
+ *  (a fix delivered 25 to 45 s late, a gate that held through a dwell), not
+ *  a vehicle a few metres off its mark; from here the catch-up cap rises so
+ *  the gap closes in about one poll interval (R-F1a). */
+const CATCHUP_GAP_M = 50;
+/** The raised cap: twice the vehicle's own speed, and never under 8 m/s so
+ *  a slow or freshly-stopped estimate still closes a real gap -- a 300 m
+ *  lag at tram speed is gone in 15 to 20 s, one poll interval, which a
+ *  person on the pavement reads as a tram catching up, not teleporting. */
+const CATCHUP_BEHIND_MIN_MS = 8;
+/** Beyond this the model does not know it is "a bit off" about *where
+ *  across* the line it is -- it knows it is on the wrong line: past it on
+ *  the current shape the assignment is dropped, past it on every candidate
+ *  shape the vehicle leaves the geometry for free-plane mode. Along the
+ *  line it means nothing: being behind is lag, handled by catch-up. */
 const DISCREPANCY_LIMIT_M = 150;
+/** How long the stop gate holds a vehicle whose dead reckoning has reached
+ *  the next stop nobody has confirmed it past: one dwell -- doors open,
+ *  people off and on -- after which a real tram has usually left. */
+const GATE_DWELL_S = 25;
+/** After the dwell the gate lets go at half the estimated speed: the model
+ *  still has no fix past the stop, so it neither pins the tram to a
+ *  platform it has probably left (manufacturing the lag catch-up then has
+ *  to close) nor carries it on at full speed on no evidence (R-F1b). */
+const GATE_RELEASE_SPEED_FACTOR = 0.5;
+/** The evidence discount on that released motion: it is a guess about a
+ *  departure nobody saw, so the mark fades by this much until a fix past
+ *  the stop confirms it. */
+const GATE_RELEASE_CONFIDENCE_PENALTY = 0.2;
 
 /** A candidate shape whose implied direction of travel disagrees with the
  *  vehicle's own last movement is probably the wrong one even when its raw
@@ -153,7 +192,8 @@ interface VehicleState {
 
   s: number; // current drawn arc length (on-shape only)
   targetS: number; // the target arc length from the last fix (on-shape only)
-  nextStopS: number; // dead reckoning's ceiling on this shape (on-shape only)
+  nextStopS: number; // the stop gate: dead reckoning holds here for a dwell (on-shape only)
+  followingStopS: number; // the stop after that: the released reckoning's own ceiling (on-shape only)
 
   // Free-plane interpolation anchors: p glides from `freeFromP` (at
   // `freeFromAt`) to `freeToP` (at `freeToAt`), then holds.
@@ -172,12 +212,11 @@ interface VehicleState {
   lastFixP: XY;
   lastStepAt: number;
 
-  /** Epoch ms of the last time convergence snapped rather than glided
-   *  (beyond DISCREPANCY_LIMIT_M); undefined if it never has. Not part of
-   *  Drawn or Model -- both are frozen interface contracts other areas may
-   *  already be coding against -- but the brief's "records that it did" is
-   *  kept honest here rather than silently discarded, for a future
-   *  observability task (or a reviewer) to read. */
+  /** Epoch ms of the last fix on which the model found itself wrong about
+   *  its line -- a shape change, or a residual past DISCREPANCY_LIMIT_M
+   *  that dropped it to free-plane -- and re-seeded from where it was
+   *  drawn; undefined if it never has. Surfaced on Drawn so a test (or a
+   *  reviewer) can assert that being behind never counts as being wrong. */
   lastSnapAt: number | undefined;
 }
 
@@ -207,25 +246,55 @@ function silenceDecay(silenceSeconds: number): number {
   return Math.pow(0.5, (silenceSeconds - SILENCE_HOLD_S) / SILENCE_HALFLIFE_S);
 }
 
+/** The integral of that envelope: how many seconds' worth of travel at the
+ *  baseline speed a vehicle has dead-reckoned after `silenceSeconds` of
+ *  silence. Reckoning with the *integral* (not the decayed speed times the
+ *  whole elapsed time) is what makes the reckoned position monotonic: a
+ *  speed that halves every 45 s eases the mark to a halt, it never pulls
+ *  it back along the line it has already covered. */
+function reckonedSeconds(silenceSeconds: number): number {
+  if (silenceSeconds <= SILENCE_HOLD_S) return silenceSeconds;
+  return SILENCE_HOLD_S + (SILENCE_HALFLIFE_S / Math.LN2) * (1 - silenceDecay(silenceSeconds));
+}
+
+/** The inverse: the silence after which `reckoned` seconds' worth of travel
+ *  has been dead-reckoned, or Infinity when the decay halts the vehicle
+ *  first (the envelope integrates to SILENCE_HOLD_S + SILENCE_HALFLIFE_S /
+ *  ln 2, about 155 s of travel, and never more). */
+function silenceToReckon(reckoned: number): number {
+  if (reckoned <= SILENCE_HOLD_S) return reckoned;
+  const remaining = 1 - ((reckoned - SILENCE_HOLD_S) * Math.LN2) / SILENCE_HALFLIFE_S;
+  if (remaining <= 0) return Infinity;
+  return SILENCE_HOLD_S - SILENCE_HALFLIFE_S * Math.log2(remaining);
+}
+
+/** The most the drawn arc length may move in one second toward a target
+ *  `gap` metres away: the ordinary settle rate under CATCHUP_GAP_M, the
+ *  raised catch-up rate beyond it (R-F1a). Exported for the test that
+ *  bounds every frame of the steady-state scenario by it. */
+export function catchUpCap(gap: number, speed: number): number {
+  return gap > CATCHUP_GAP_M ? Math.max(CATCHUP_BEHIND_MIN_MS, 2 * speed) : Math.max(MIN_CATCHUP_MS, speed);
+}
+
 /**
  * Exponential convergence of the drawn arc length toward the target, tau
- * depending on direction, dead-zoned, catch-up-capped, and snapping (with
- * `snapped: true`) beyond DISCREPANCY_LIMIT_M. Free-plane mode does not use
- * this -- with no shape to stay glued to, it has no "arc length" to converge
- * and instead interpolates the 2D position directly against wall-clock time
- * (see the free-plane branch in `step` below).
+ * depending on direction, dead-zoned and catch-up-capped -- and never a
+ * jump, whatever the gap: along the shape the model can only be behind or
+ * ahead, never wrong (R-F1). Free-plane mode does not use this -- with no
+ * shape to stay glued to, it has no "arc length" to converge and instead
+ * interpolates the 2D position directly against wall-clock time (see the
+ * free-plane branch in `step` below).
  */
-function convergeScalar(cur: number, target: number, dtSeconds: number, speed: number): { value: number; snapped: boolean } {
+function convergeScalar(cur: number, target: number, dtSeconds: number, speed: number): number {
   const diff = target - cur;
   const absDiff = Math.abs(diff);
-  if (absDiff > DISCREPANCY_LIMIT_M) return { value: target, snapped: true };
-  if (absDiff < DEAD_ZONE_M || dtSeconds <= 0) return { value: cur, snapped: false };
+  if (absDiff < DEAD_ZONE_M || dtSeconds <= 0) return cur;
   const tau = diff > 0 ? TAU_FORWARD_S : TAU_BACKWARD_S;
   const alpha = 1 - Math.exp(-dtSeconds / tau);
   let step = diff * alpha;
-  const maxStep = Math.max(MIN_CATCHUP_MS, speed) * dtSeconds;
+  const maxStep = catchUpCap(absDiff, speed) * dtSeconds;
   if (Math.abs(step) > maxStep) step = Math.sign(step) * maxStep;
-  return { value: cur + step, snapped: false };
+  return cur + step;
 }
 
 interface ShapeCandidate {
@@ -327,6 +396,7 @@ export function createModel(net: Network | null): Model {
     let s = 0;
     let shapeScore = Infinity;
     let nextStopS = Infinity;
+    let followingStopS = Infinity;
     if (net && candidates.length > 0) {
       const sel = selectShape(net, candidates, p, null, null);
       if (sel.shapeIdx !== null && sel.proj) {
@@ -334,6 +404,7 @@ export function createModel(net: Network | null): Model {
         shapeScore = sel.shapeScore;
         s = sel.proj.s;
         nextStopS = nextStopCeiling(shapeIdx, s);
+        followingStopS = nextStopCeiling(shapeIdx, nextStopS);
       }
     }
     return {
@@ -348,6 +419,7 @@ export function createModel(net: Network | null): Model {
       s,
       targetS: s,
       nextStopS,
+      followingStopS,
       freeFromP: p,
       freeFromAt: now,
       freeToP: p,
@@ -415,6 +487,12 @@ export function createModel(net: Network | null): Model {
     if (v.intervals.length > 3) v.intervals.shift();
     v.speed = computeSpeed(v.intervals);
 
+    // The one place the model can be *wrong* rather than behind: it changed
+    // its mind about which line (or left the geometry because no line fits
+    // within DISCREPANCY_LIMIT_M across). Recorded, never drawn as a jump:
+    // the re-seeds below keep the mark continuous with where it was.
+    if (sel.changed) v.lastSnapAt = now;
+
     if (sel.shapeIdx !== null && sel.proj) {
       if (sel.changed) {
         // A fresh assignment (new vehicle path aside): re-seed the drawn
@@ -427,6 +505,7 @@ export function createModel(net: Network | null): Model {
       v.shapeScore = sel.shapeScore;
       v.targetS = sel.proj.s;
       v.nextStopS = nextStopCeiling(sel.shapeIdx, sel.proj.s);
+      v.followingStopS = nextStopCeiling(sel.shapeIdx, v.nextStopS);
     } else {
       v.shapeIdx = null;
       v.shapeScore = Infinity;
@@ -442,6 +521,15 @@ export function createModel(net: Network | null): Model {
     v.lastFixP = newP;
   }
 
+  /** R-F2: a vehicle silent for STALE_S is gone, not flagged. Run on every
+   *  update() (the poll that did not mention it) and every step() (so a
+   *  paused or failing poll cannot keep ghosts alive on screen either). */
+  function evict(now: number): void {
+    for (const [id, v] of vehicles) {
+      if (now - v.lastFixAt >= STALE_S * 1000) vehicles.delete(id);
+    }
+  }
+
   return {
     update(fixes, now) {
       for (const fix of fixes) {
@@ -452,43 +540,61 @@ export function createModel(net: Network | null): Model {
           applyFix(v, fix, now);
         }
       }
+      evict(now);
     },
 
     step(now) {
+      evict(now);
       const out: Drawn[] = [];
       for (const v of vehicles.values()) {
         const dtFrame = Math.max(0, (now - v.lastStepAt) / 1000);
         v.lastStepAt = now;
 
         const silence = Math.max(0, (now - v.lastFixAt) / 1000);
-        const stale = silence >= STALE_S;
-        const decay = stale ? 0 : silenceDecay(silence);
-        const effSpeed = stale ? 0 : v.speed * decay;
+        const decay = silenceDecay(silence);
+        const effSpeed = v.speed * decay;
 
-        let confidence = stale ? 0 : v.confidence * decay;
+        let confidence = v.confidence * decay;
         let heldByGate = false;
         let rawHeading: XY | null;
+        let track: XY | undefined;
 
-        if (stale) {
-          // Frozen: reuse whatever step() last computed, exactly (decision:
-          // "marked stale and stops", not a slow asymptotic crawl).
-          rawHeading = null;
-        } else if (v.shapeIdx !== null && net) {
+        if (v.shapeIdx !== null && net) {
           const shape = net.shapes[v.shapeIdx];
           const shapeLen = shape.cum[shape.cum.length - 1];
-          const elapsedSinceFix = Math.max(0, (now - v.lastFixAt) / 1000);
-          const rawDeadReckon = v.targetS + effSpeed * elapsedSinceFix;
-          const ceiling = Math.min(v.nextStopS, shapeLen);
+          // Dead reckoning: the baseline speed over the decay envelope's
+          // integral (reckonedSeconds), so the reckoned position only ever
+          // advances and eases to a halt as the silence grows.
+          const reckoned = reckonedSeconds(silence);
+          const rawDeadReckon = v.targetS + v.speed * reckoned;
+          const gate = Math.min(v.nextStopS, shapeLen);
           let effTarget = rawDeadReckon;
-          if (rawDeadReckon > ceiling) {
-            effTarget = ceiling;
-            heldByGate = true;
+          if (rawDeadReckon > gate && v.speed > 0) {
+            // Reckoning reached the next stop this many seconds ago. For one
+            // dwell the gate holds the vehicle there; after that it lets go
+            // at half speed -- along the same envelope, from the moment the
+            // dwell ended -- still never past the stop after it (R-F1b).
+            const reachedAt = silenceToReckon((gate - v.targetS) / v.speed);
+            const heldFor = silence - reachedAt;
+            if (heldFor <= GATE_DWELL_S) {
+              effTarget = gate;
+              heldByGate = true;
+            } else {
+              const following = Math.min(v.followingStopS, shapeLen);
+              const released = gate + GATE_RELEASE_SPEED_FACTOR * v.speed * (reckoned - reckonedSeconds(reachedAt + GATE_DWELL_S));
+              if (released >= following) {
+                effTarget = following;
+                heldByGate = true;
+              } else {
+                effTarget = released;
+                confidence -= GATE_RELEASE_CONFIDENCE_PENALTY;
+              }
+            }
           }
-          const { value, snapped } = convergeScalar(v.s, effTarget, dtFrame, effSpeed);
-          if (snapped) v.lastSnapAt = now; // "records that it did" (brief)
-          v.s = value;
+          v.s = convergeScalar(v.s, effTarget, dtFrame, effSpeed);
           v.p = at(shape.pts, shape.cum, v.s);
-          rawHeading = tangent(shape.pts, shape.cum, v.s);
+          track = tangent(shape.pts, shape.cum, v.s);
+          rawHeading = track;
         } else {
           const span = v.freeToAt - v.freeFromAt;
           const frac = span <= 0 ? 1 : Math.min(1, Math.max(0, (now - v.freeFromAt) / span));
@@ -504,7 +610,7 @@ export function createModel(net: Network | null): Model {
         confidence = Math.max(0, Math.min(1, confidence));
         const heading = confidence < HEADING_CONFIDENCE_THRESHOLD ? null : rawHeading;
 
-        out.push({
+        const drawn: Drawn = {
           id: v.id,
           routeId: v.routeId,
           short: v.short,
@@ -514,8 +620,14 @@ export function createModel(net: Network | null): Model {
           speed: effSpeed,
           confidence,
           onShape: v.shapeIdx,
-          stale,
-        });
+          // Never true any more: a vehicle that old was evicted above (R-F2).
+          // Kept because Drawn is a contract renderers already filter on.
+          stale: false,
+        };
+        if (track) drawn.track = track;
+        if (heldByGate) drawn.held = true;
+        if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
+        out.push(drawn);
       }
       return out;
     },

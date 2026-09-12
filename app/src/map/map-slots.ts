@@ -29,6 +29,8 @@ export interface MapSlots {
   slot(options: MapSlotOptions): HTMLElement | null;
   /** Destroys every slot no `slot()` call has asked for since the last sweep. */
   sweep(): void;
+  /** Pauses every live map's motion (a frozen dashboard, R-F6). */
+  pause(): void;
   destroy(): void;
 }
 
@@ -75,6 +77,9 @@ export function createMapSlots(factory: MapFactory | undefined): MapSlots {
         if (slot.used) slot.used = false;
         else drop(id, slot);
       }
+    },
+    pause() {
+      for (const slot of slots.values()) slot.handle.pause();
     },
     destroy() {
       for (const [id, slot] of [...slots]) drop(id, slot);
