@@ -17,7 +17,6 @@ import { fetchTeaser } from '../api';
 import { zagrebTime } from '../format';
 import { vehicleCount } from '../layers/shared';
 import { tone } from '../ui/canvas';
-import '../ui/fonts.css';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { paintPanorama } from '../ui/panorama';
 
@@ -104,6 +103,14 @@ const lightweight = detectLagano({
   canWebgl,
 });
 markLagano(document.documentElement, lightweight);
+// R-F3: the three Modrotisak faces are the modern path's typography and
+// never reach the lightweight graph -- Croatian text pulls latin and latin-ext
+// of every face, more than the whole 200 kB promise (§1.10) on their own. A
+// dynamic import makes Vite emit fonts.css as its own chunk, loaded here only
+// when the entry has decided against the light path; the lightweight screen
+// keeps the system stack tokens.css already names, the same honest degrade as
+// the canvas-free panorama (R-L2).
+if (!lightweight) void import('../ui/fonts.css');
 
 if (!lightweight) {
   const panorama = document.querySelector<HTMLCanvasElement>('[data-testid=panorama]');

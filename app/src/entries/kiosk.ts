@@ -11,7 +11,6 @@ import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import '../ui/tokens.css';
 import '../ui/base.css';
-import '../ui/fonts.css';
 import '../ui/panel.css';
 import '../ui/layers.css';
 import '../ui/qr.css';
@@ -47,6 +46,14 @@ const lightweight = detectLagano({
   canWebgl,
 });
 markLagano(document.documentElement, lightweight);
+// R-F3: the three Modrotisak faces are the modern path's typography and
+// never reach the lightweight graph -- Croatian text pulls latin and latin-ext
+// of every face, more than the whole 200 kB promise (§1.10) on their own. A
+// dynamic import makes Vite emit fonts.css as its own chunk, loaded here only
+// when the entry has decided against the light path; the lightweight screen
+// keeps the system stack tokens.css already names, the same honest degrade as
+// the canvas-free panorama (R-L2).
+if (!lightweight) void import('../ui/fonts.css');
 
 mountKiosk(root, {
   i18n,
