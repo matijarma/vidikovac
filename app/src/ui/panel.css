@@ -1,30 +1,42 @@
-/* Panel chrome. Freshness is a word plus a shape; colour never carries meaning alone. */
+/* Panel chrome. Freshness is a word plus a shape; colour never carries meaning alone.
+   Panels are catalogue rows, not cards (v2.0 §"Paneli nisu kartice"): a mono index
+   drawn from a CSS counter, a quiet label, a loud figure, one hairline rule under
+   each row. No background, no radius, no border-all-round. */
 .layer { display: flex; flex-direction: column; gap: 1rem; }
 .layer-title { font-family: var(--font-display, 'Space Grotesk', system-ui, sans-serif); font-size: 1.6rem; margin: 0; }
 .layer-title:focus-visible { outline: 3px solid var(--tone-accent, #7cd4ff); outline-offset: 4px; }
-.layer-panels { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+.layer-panels { display: block; counter-reset: panel; }
 
 .panel {
-  display: flex; flex-direction: column; gap: 0.75rem;
-  padding: 1rem; border-radius: 14px;
-  background: var(--tone-surface-1, color-mix(in oklab, Canvas 92%, CanvasText 8%));
-  border: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 18%, transparent));
+  counter-increment: panel;
+  display: grid;
+  grid-template-columns: var(--panel-index-w, 2.25rem) 1fr;
+  column-gap: 0.75rem; row-gap: 0.35rem;
+  padding-block: 0.9rem;
+  background: transparent; border: 0; border-radius: 0;
+  border-block-end: 1px solid var(--tone-stroke, color-mix(in oklab, CanvasText 18%, transparent));
 }
-.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
-.panel-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
-.panel-fresh { margin: 0; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; }
+.panel-head { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 0.75rem; }
+.panel-index {
+  flex: 0 0 var(--panel-index-w, 2.25rem);
+  font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.06em;
+  color: var(--tone-label, var(--tone-text-muted));
+}
+.panel-index::before { content: counter(panel, decimal-leading-zero); }
+.panel-title { margin: 0; font-family: var(--font-body); font-size: 0.8125rem; font-weight: 500; color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
+.panel-fresh { margin: 0 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .fresh-shape { width: 0.7rem; height: 0.7rem; background: currentColor; }
 [data-freshness='zivo'] .fresh-shape { border-radius: 50%; color: var(--tone-accent, #7cd4ff); }
 [data-freshness='danas'] .fresh-shape { border-radius: 2px; }
 [data-freshness='referenca'] .fresh-shape { rotate: 45deg; border-radius: 2px; }
 
-.panel-body { display: flex; flex-direction: column; gap: 0.5rem; }
-.big-number { font-size: clamp(2rem, 8vw, 3rem); margin: 0; font-variant-numeric: tabular-nums; }
+.panel-body { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.big-number { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; margin: 0; font-variant-numeric: tabular-nums; }
 .panel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .panel-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.9rem; }
-.panel-empty, .panel-sub, .panel-status, .panel-attr { color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); margin: 0; font-size: 0.85rem; }
-.panel-foot { display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 12%, transparent)); padding-top: 0.5rem; }
-.panel-attr { font-size: 0.75rem; line-height: 1.4; }
+.panel-empty, .panel-sub, .panel-status { color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); margin: 0; font-size: 0.85rem; }
+.panel-foot { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; padding-top: 0.5rem; }
+.panel-attr { color: var(--tone-text-subtle, color-mix(in oklab, CanvasText 45%, Canvas 55%)); margin: 0; font-size: 0.6875rem; line-height: 1.4; }
 .panel-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .panel-action { font-size: 0.85rem; }
 [data-status='stale'] { color: var(--tone-state-warning, #d08700); }
