@@ -7,9 +7,9 @@
 // plain false and the caller answers the same 404: an unauthenticated caller
 // cannot even learn the route exists.
 // Ported from D:\scratch\psdlat\worker\src\stats.ts (AGPL-3.0-or-later).
-import { networkCheck } from '../config';
+import { isTestEnvironment } from '../config';
 import type { Env } from '../env';
-import { constantTimeEqual, utf8 } from './tokens';
+import { constantTimeEqual, hexEncode, hmacSha256, requireSecret, utf8 } from './tokens';
 
 export interface JwksDocument {
   keys?: Array<JsonWebKey & { kid?: string }>;
@@ -140,11 +140,10 @@ function tokenFromRequest(request: Request): string | null {
 }
 
 /**
- * R-02: the e2e bypass. Inert in production, where NETWORK_CHECK is enforce,
- * whatever the variable holds.
+ * Explicit test environment only. No pairing setting can enable this bypass.
  */
 function bypassAccepted(env: Env, request: Request): boolean {
-  if (networkCheck(env) !== 'off') return false;
+  if (!isTestEnvironment(env)) return false;
   const expected = env.E2E_ADMIN_BYPASS;
   if (typeof expected !== 'string' || expected.length < BYPASS_MIN_LENGTH) return false;
   const offered = request.headers.get(BYPASS_HEADER);
@@ -154,7 +153,7 @@ function bypassAccepted(env: Env, request: Request): boolean {
 
 /**
  * True only for a request Cloudflare Access signed for this application, or
- * one carrying the test bypass while NETWORK_CHECK is off. Never throws.
+ * one carrying the test bypass while APP_ENV=test. Never throws.
  */
 export async function verifyAccess(env: Env, request: Request, deps: AccessDeps = {}): Promise<boolean> {
   if (bypassAccepted(env, request)) return true;
@@ -166,7 +165,7 @@ export async function verifyAccess(env: Env, request: Request, deps: AccessDeps 
     const teamDomain = teamVar.replace(/^https:\/\//, '').replace(/\/+$/, '');
 
     const token = tokenFromRequest(request);
-    if (token === null) return false;
+    if (token === null || token.length > 16_384) return false;
     const parts = token.split('.');
     if (parts.length !== 3) return false;
     const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];
@@ -181,7 +180,7 @@ export async function verifyAccess(env: Env, request: Request, deps: AccessDeps 
     const audOk = Array.isArray(payload.aud) ? payload.aud.includes(expectedAud) : payload.aud === expectedAud;
     if (!audOk) return false;
     const nowSeconds = Date.now() / 1000;
-    if (typeof payload.exp !== 'number' || nowSeconds > payload.exp + CLOCK_SKEW_SECONDS) return false;
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || nowSeconds > payload.exp + CLOCK_SKEW_SECONDS) return false;
     if (payload.nbf !== undefined) {
       if (typeof payload.nbf !== 'number' || nowSeconds < payload.nbf - CLOCK_SKEW_SECONDS) return false;
     }
@@ -197,4 +196,24 @@ export async function verifyAccess(env: Env, request: Request, deps: AccessDeps 
   } catch {
     return false;
   }
+}
+
+/** Hour-scoped pseudonymous quota key. No email/sub/token is persisted or logged. */
+export async function accessPrincipal(
+  env: Env,
+  request: Request,
+  deps: AccessDeps = {},
+  now = Date.now(),
+): Promise<string | null> {
+  if (!(await verifyAccess(env, request, deps))) return null;
+  let identity = 'test-evaluator';
+  if (!bypassAccepted(env, request)) {
+    const token = tokenFromRequest(request);
+    if (!token) return null;
+    const claims = base64UrlToJson(token.split('.')[1]!) as Record<string, unknown>;
+    const subject = claims.sub || claims.email || claims.common_name;
+    if (typeof subject !== 'string' || subject.length === 0 || subject.length > 1024) return null;
+    identity = subject;
+  }
+  return hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), `screen-quota|${Math.floor(now / 3_600_000)}|${identity}`));
 }

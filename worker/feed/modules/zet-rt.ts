@@ -56,8 +56,9 @@ const HALF_LON_DEG = TEASER_BOX_HALF_M / (METRES_PER_DEG_LAT * Math.cos((TEASER_
 /** Whether a coordinate lies in the default screen's teaser box. A square in
  *  degrees, not the client's circle: the circle is the client's to clip
  *  against real geometry; this only bounds what leaves the Worker. */
-export function inTeaserBox(lon: number, lat: number): boolean {
-  return Math.abs(lon - TEASER_BOX_CENTRE.lon) <= HALF_LON_DEG && Math.abs(lat - TEASER_BOX_CENTRE.lat) <= HALF_LAT_DEG;
+export function inTeaserBox(lon: number, lat: number, centre: { lon: number; lat: number } = TEASER_BOX_CENTRE): boolean {
+  const halfLon = TEASER_BOX_HALF_M / (METRES_PER_DEG_LAT * Math.cos((centre.lat * Math.PI) / 180));
+  return Math.abs(lon - centre.lon) <= halfLon && Math.abs(lat - centre.lat) <= HALF_LAT_DEG;
 }
 
 export function delayWords(seconds: number): string {

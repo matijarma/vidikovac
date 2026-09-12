@@ -4,6 +4,7 @@ import { json } from '../http';
 import { getModules } from '../feed/cache';
 import { MODULES, MODULE_IDS, OPEN_MODULES, TEASER_MODULES, isModuleId, teaserSubset } from '../feed/registry';
 import { verifyDataToken } from '../pairing/tokens';
+import { screenStop } from '../pairing/stops';
 
 // Three endpoints, one rule: the open tier is readable by anyone and cacheable
 // at the edge; everything else needs a data token minted by the room, is counted
@@ -46,13 +47,16 @@ export async function handleFeed(
   const now = deps.now ?? (() => new Date());
 
   if (path === '/api/teaser') {
+    const requestedStop = url.searchParams.get('stop');
+    const stop = requestedStop ? screenStop(requestedStop) : null;
+    if (requestedStop && !stop) return json({ error: 'unknown-stop' }, 400);
     const ids = [...OPEN_MODULES, ...TEASER_MODULES];
     const snapshots = await load(env, ctx, ids);
     // teaserSubset already knows, per module, whether and how to reduce a
     // snapshot (a no-op for most); applying it to every module here, not just
     // the session ones in TEASER_MODULES, is what also caps an open module
     // such as emsc down to its teaser size.
-    const modules = snapshots.map((snapshot) => teaserSubset(snapshot));
+    const modules = snapshots.map((snapshot) => teaserSubset(snapshot, stop ?? undefined));
     return json({ generatedAt: now().toISOString(), modules } satisfies FeedResponse, 200, {
       'cache-control': TEASER_CACHE_CONTROL,
     });

@@ -48,12 +48,16 @@ describe('BeaconDO kiosk socket', () => {
     kiosk.ws.close(1000, 'done');
   });
 
-  it('requires an X-Net-Key from the Worker and refuses a non-upgrade request', async () => {
+  it('does not require a network key but still refuses a non-upgrade request', async () => {
     const { beaconId } = await provision();
     const direct = await runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) =>
-      instance.fetch(new Request('https://do/ws', { headers: { Upgrade: 'websocket' } })),
+      instance.fetch(new Request('https://do/ws')),
     );
     expect(direct.status).toBe(400);
+    const upgrade = await beaconStub(testEnv, beaconId).fetch('https://do/ws', { headers: { Upgrade: 'websocket' } });
+    expect(upgrade.status).toBe(101);
+    upgrade.webSocket!.accept();
+    upgrade.webSocket!.close(1000, 'done');
   });
 
   it('closes after three wrong answers', async () => {
@@ -188,15 +192,11 @@ describe('BeaconDO redeem', () => {
   // R-30: redeem's optional third `mode` argument lets a test pin the
   // network-check mode without mutating instance.env (the test bindings fix
   // NETWORK_CHECK to 'off', so production behaviour must be exercised this way).
-  it('rejects same-network under enforce and lets it through under warn', async () => {
+  it('allows the same network even when an old deployment still says enforce', async () => {
     const { beaconId, batch } = await onlineKiosk();
     const stub = beaconStub(testEnv, beaconId);
-    const kioskNet = await runInDurableObject(stub, (instance: BeaconDO) => instance.kioskNetKeys()[0]!);
-    expect(kioskNet).toBe(KIOSK_NET_KEY);
-    // The 'enforce' rejection happens before the code is marked used, so the
-    // same code (always open right now) is redeemable again under 'warn'.
-    expect(await stub.redeem(batch[0]!.code, kioskNet, 'enforce')).toEqual({ ok: false, error: 'same-network' });
-    expect((await stub.redeem(batch[0]!.code, kioskNet, 'warn')).ok).toBe(true);
+    expect((await stub.redeem(batch[0]!.code, KIOSK_NET_KEY, 'enforce')).ok).toBe(true);
+    expect(await stub.redeem(batch[0]!.code, KIOSK_NET_KEY, 'warn')).toEqual({ ok: false, error: 'code-used' });
   });
 
   it('slows down after 20 failed redeems in 60 s', async () => {

@@ -1,6 +1,5 @@
 // Byte helpers, WebCrypto HMAC, stateless data tokens and random ids. Runs in
 // workerd, browsers and Node without Buffer.
-import { networkCheck } from '../config';
 import type { Env } from '../env';
 import { CODE_ALPHABET } from '../protocol';
 
@@ -79,21 +78,13 @@ export async function hmacSha256(secretKey: string | Uint8Array, message: string
 
 export type SecretName = 'SESSION_SECRET' | 'NET_KEY_SECRET';
 
-const DEV_SECRETS: Record<SecretName, string> = {
-  SESSION_SECRET: 'vidikovac-dev-session-secret-not-for-production',
-  NET_KEY_SECRET: 'vidikovac-dev-net-key-secret-not-for-production',
-};
-
 /**
- * The runtime secret, or a fixed development value ONLY when NETWORK_CHECK is
- * 'off' (local dev). In every other mode a missing secret is a loud
- * configuration error: silently signing with a known value would make every
- * data token forgeable.
+ * Every environment must configure signing keys explicitly. Changing pairing
+ * policy can never enable a known development key.
  */
 export function requireSecret(env: Env, name: SecretName): string {
   const value = env[name];
   if (typeof value === 'string' && value.length >= 16) return value;
-  if (networkCheck(env) === 'off') return DEV_SECRETS[name];
   throw new Error(`${name} is not configured (set it with: wrangler secret put ${name}); refusing to run with a default`);
 }
 

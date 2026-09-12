@@ -192,7 +192,7 @@ export const DOGADANJA_OPEN_ATTRIBUTION: Attribution = {
   licence: OPEN_LICENCE,
 };
 
-export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
+export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; lat: number }): ModuleSnapshot {
   switch (snapshot.module) {
     case 'dhmz-now':
       return snapshot;
@@ -205,7 +205,7 @@ export function teaserSubset(snapshot: ModuleSnapshot): ModuleSnapshot {
       const boxed = pins.filter((item) => {
         if (item.geo?.type !== 'Point') return false;
         const [lon, lat] = item.geo.coordinates as [number, number];
-        return inTeaserBox(lon, lat);
+        return inTeaserBox(lon, lat, centre);
       });
       const delays = snapshot.items.filter((item) => item.id.startsWith('route:'));
       const count: FeedItem = {

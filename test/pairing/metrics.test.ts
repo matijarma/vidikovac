@@ -6,7 +6,7 @@ import { METRIC_EVENTS, isMetricEvent, recordMetric, zagrebDayHour } from '../..
 describe('metric vocabulary', () => {
   it('lists every server and client event exactly once', () => {
     expect([...METRIC_EVENTS].sort()).toEqual(
-      ['session_start', 'session_end', 'scan_fail', 'kiosk_online', 'source_fetch', 'hitno_view', 'over_cap', 'panel_open', 'export'].sort(),
+      ['session_start', 'session_end', 'scan_fail', 'kiosk_online', 'source_fetch', 'hitno_view', 'over_cap', 'panel_open', 'export', 'evaluation'].sort(),
     );
     expect(isMetricEvent('panel_open')).toBe(true);
     expect(isMetricEvent('page_view')).toBe(false);

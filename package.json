@@ -20,9 +20,12 @@
     "check:izvori": "node scripts/check-plan-links.mjs"
   },
   "dependencies": {
+    "@protomaps/basemaps": "5.7.2",
     "fast-xml-parser": "^5.2.5",
     "gtfs-realtime-bindings": "^1.1.1",
-    "maplibre-gl": "^5.24.0",
+    "jsqr": "1.4.0",
+    "maplibre-gl": "6.4.1",
+    "pmtiles": "4.5.0",
     "uqr": "^0.1.3"
   },
   "devDependencies": {

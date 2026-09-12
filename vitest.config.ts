@@ -27,6 +27,7 @@ export default defineConfig({
             miniflare: {
               bindings: {
                 SESSION_SECRET: 'test-session-secret',
+                APP_ENV: 'test',
                 NET_KEY_SECRET: 'test-net-key-secret',
                 NETWORK_CHECK: 'off',
                 E2E_ADMIN_BYPASS: 'test-admin-bypass-value-0123456789',

@@ -1,9 +1,6 @@
 // worker/routes/pairing.ts
-// The three public pairing endpoints. This module is the only place in the
-// system that reads a visitor's address: it turns it into a netKey
-// (worker/pairing/netkey.ts) and hands that to the Durable Objects, which
-// never see request.cf, CF-Connecting-IP or a user agent. Nothing here is
-// stored; the code, the address and the key live for one request.
+// Real pairing. Network equality is not an access condition. The only remaining
+// address use is the existing ephemeral request-rate limiter.
 import { beaconStub, BEACON_ID_SHAPE } from '../do/beacon-do';
 import { indexStub } from '../do/index-do';
 import { roomStub, ROOM_ID_SHAPE } from '../do/room-do';
@@ -13,7 +10,6 @@ import type { RouteHandler } from '../index';
 import { logError } from '../log';
 import { recordMetric } from '../metrics';
 import { normalizeCode } from '../pairing/codes';
-import { NET_KEY_HEADER, netKey } from '../pairing/netkey';
 import { SCAN_MESSAGES_HR, type ScanError, type ScanFail, type ScanOk, type ScanRequest } from '../protocol';
 
 /** `{"code":"ABCD-EFGH"}` is 22 bytes; 64 is generous and bounds the read. */
@@ -135,7 +131,6 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
     return scanFail('bad-request');
   }
 
-  const scannerNetKey = await netKey(env, request);
   const owner = await indexStub(env).resolve(code);
   if (owner === null) {
     recordMetric(env, 'scan_fail', 'code-unknown');
@@ -143,7 +138,7 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
   }
   const result =
     owner.kind === 'kiosk'
-      ? await beaconStub(env, owner.ownerId).redeem(code, scannerNetKey)
+      ? await beaconStub(env, owner.ownerId).redeem(code)
       : await roomStub(env, owner.ownerId).redeemPeer(code);
   if (!result.ok) {
     recordMetric(env, 'scan_fail', result.error, owner.kind);
@@ -166,11 +161,11 @@ function upgradeGuard(request: Request, url: URL): Response | null {
   return null;
 }
 
-/** Hands the handshake to the Durable Object with the one header it cannot compute itself. */
-async function upgradeTo(stub: Upgradable, request: Request, env: Env): Promise<Response> {
+/** The DO authenticates its own principal; network metadata is never forwarded. */
+async function upgradeTo(stub: Upgradable, request: Request): Promise<Response> {
   const headers = new Headers(request.headers);
-  // Whatever the client sent under this name is discarded: only the Worker mints net keys.
-  headers.set(NET_KEY_HEADER, await netKey(env, request));
+  headers.delete('X-Net-Key');
+  headers.delete('CF-Connecting-IP');
   headers.set('Upgrade', 'websocket');
   return stub.fetch(new Request(request.url, { method: 'GET', headers }));
 }
@@ -188,7 +183,7 @@ export const handlePairing: RouteHandler = async (request, env, ctx, url) => {
       if (!BEACON_ID_SHAPE.test(beaconId)) return json({ error: 'not-found' }, 404);
       const refusal = upgradeGuard(request, url);
       if (refusal !== null) return refusal;
-      return await upgradeTo(beaconStub(env, beaconId), request, env);
+      return await upgradeTo(beaconStub(env, beaconId), request);
     }
 
     const room = ROOM_PATH.exec(url.pathname);
@@ -197,7 +192,7 @@ export const handlePairing: RouteHandler = async (request, env, ctx, url) => {
       if (!ROOM_ID_SHAPE.test(roomId)) return json({ error: 'not-found' }, 404);
       const refusal = upgradeGuard(request, url);
       if (refusal !== null) return refusal;
-      return await upgradeTo(roomStub(env, roomId), request, env);
+      return await upgradeTo(roomStub(env, roomId), request);
     }
 
     return null;

@@ -17,7 +17,7 @@ import type { MetricsDailyRow } from '../metrics-do';
 export const RAW_COLUMNS = ['day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;
 export const CITY_COLUMNS = ['month', 'day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;
 
-export const CITY_EXCLUDED_EVENTS: ReadonlySet<string> = new Set(['over_cap', 'source_fetch']);
+export const CITY_EXCLUDED_EVENTS: ReadonlySet<string> = new Set(['over_cap', 'source_fetch', 'evaluation']);
 export const CITY_MIN_CELL = 10;
 export const CITY_ROUND_TO = 5;
 export const OSTALO = 'ostalo';

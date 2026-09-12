@@ -71,7 +71,7 @@ describe('IndexDO beacon registry', () => {
     await stub.registerBeacon({ beaconId: 'B34C0N02', venueType: 'knjiznica', area: 'sesvete', operatorLabel: 'KGZ Sesvete', stopId: '2040', createdAt: 2_000 });
     const list = await stub.listBeacons();
     expect(list.map((b) => b.beaconId)).toEqual(['B34C0N02', 'B34C0N01']);
-    expect(list[1]).toEqual({ beaconId: 'B34C0N01', venueType: 'kafic', area: 'donji-grad', operatorLabel: 'Kavana Velebit', stopId: null, createdAt: 1_000, revokedAt: null });
+    expect(list[1]).toEqual({ beaconId: 'B34C0N01', venueType: 'kafic', area: 'donji-grad', operatorLabel: 'Kavana Velebit', stopId: null, createdAt: 1_000, revokedAt: null, kind: 'venue', expiresAt: null });
     await stub.markBeaconRevoked('B34C0N01', 3_000);
     expect((await stub.listBeacons()).find((b) => b.beaconId === 'B34C0N01')!.revokedAt).toBe(3_000);
   });

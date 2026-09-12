@@ -30,10 +30,11 @@ function mount(decoder: QrDecoder, getUserMedia?: () => Promise<MediaStream>) {
 }
 
 describe('isQrScanSupported', () => {
-  it('needs both BarcodeDetector and getUserMedia', () => {
+  it('needs camera access, with a bundled decoder when BarcodeDetector is absent', () => {
     expect(isQrScanSupported({})).toBe(false);
     expect(isQrScanSupported({ BarcodeDetector: function () {} as never })).toBe(false);
     expect(isQrScanSupported({ BarcodeDetector: function () {} as never, navigator: { mediaDevices: { getUserMedia: () => {} } } })).toBe(true);
+    expect(isQrScanSupported({ navigator: { mediaDevices: { getUserMedia: () => {} } } })).toBe(true);
   });
 });
 

@@ -34,7 +34,7 @@ export default defineConfig({
   webServer: MANAGED_SERVERS
     ? [
         {
-          command: 'npm run build && npm run dev -- --port 8787 --inspector-port 9229',
+          command: 'npm run build && npm run dev -- --port 8787 --inspector-port 9229 --var APP_ENV:test',
           url: `${APP_URL}/api/health`,
           timeout: 240_000,
           reuseExistingServer: !process.env.CI,
@@ -43,7 +43,7 @@ export default defineConfig({
         },
         {
           command:
-            'node scripts/require-app-build.mjs && npx wrangler dev --port 8788 --inspector-port 9230 --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
+            'node scripts/require-app-build.mjs && npx wrangler dev --port 8788 --inspector-port 9230 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
           url: `${SHORT_URL}/api/health`,
           timeout: 120_000,
           reuseExistingServer: !process.env.CI,

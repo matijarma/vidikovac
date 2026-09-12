@@ -12,20 +12,23 @@ export interface Env {
   RL_SCAN: RateLimiter;
   RL_DATA: RateLimiter;
   RL_OPEN: RateLimiter;
+  MAPS?: R2Bucket;
+  /** Unset means production. Test bypasses require exactly "test". */
+  APP_ENV?: string;
   // Runtime values, all optional: code falls back to the defaults in config.ts.
   SESSION_SECRET?: string;
   NET_KEY_SECRET?: string;
   SESSION_MINUTES?: string;
   PEER_MINUTES?: string;
   CODE_ROTATE_SECONDS?: string;
-  NETWORK_CHECK?: string; // enforce | warn | off
+  NETWORK_CHECK?: string; // retired, ignored; retained only for old deployment configuration
   SCAN_TURNSTILE?: string; // on | off
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
   /**
    * Test-only admin bypass: verifyAccess accepts a request carrying header
    * `x-e2e-admin-bypass` equal to this value, and ONLY when networkCheck(env)
-   * is 'off' (never in production, where NETWORK_CHECK is enforce).
+   * is explicitly APP_ENV=test. The retired NETWORK_CHECK flag cannot enable it.
    */
   E2E_ADMIN_BYPASS?: string;
 }

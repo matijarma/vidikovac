@@ -12,9 +12,14 @@ export function codeRotateSeconds(env: Env): number {
   return positive(env.CODE_ROTATE_SECONDS, 30);
 }
 export type NetworkCheck = 'enforce' | 'warn' | 'off';
-export function networkCheck(env: Env): NetworkCheck {
-  const v = (env.NETWORK_CHECK ?? 'enforce').toLowerCase();
-  return v === 'warn' || v === 'off' ? v : 'enforce';
+/** Compatibility health field. Network-based access restriction was removed. */
+export function networkCheck(_env: Env): NetworkCheck {
+  return 'off';
+}
+
+/** Security defaults to production, independently of any retired network flag. */
+export function isTestEnvironment(env: Env): boolean {
+  return env.APP_ENV === 'test';
 }
 
 function positive(raw: string | undefined, fallback: number): number {

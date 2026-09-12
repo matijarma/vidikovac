@@ -1,14 +1,13 @@
 SESSION_SECRET=dev-session-secret-change-me
-NET_KEY_SECRET=dev-net-key-secret-change-me
+APP_ENV=test
 SESSION_MINUTES=10
 PEER_MINUTES=5
 CODE_ROTATE_SECONDS=30
-NETWORK_CHECK=off
 SCAN_TURNSTILE=off
 
 # Cloudflare Access, set in the dashboard in production (worker/pairing/access.ts)
 CF_ACCESS_TEAM_DOMAIN=aningfilm.cloudflareaccess.com
 CF_ACCESS_AUD=
-# Test-only admin bypass, live only while NETWORK_CHECK=off; at least 32 characters.
+# Test-only admin bypass, live only while APP_ENV=test; at least 32 characters.
 # Generate with: node -e "console.log(require('node:crypto').randomBytes(36).toString('base64url'))"
 E2E_ADMIN_BYPASS=dev-admin-bypass-change-me-0123456789

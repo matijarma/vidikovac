@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "vidikovac", // production Worker serving https://zagreb.aningfilm.hr
+  "workers_dev": false,
+  "preview_urls": false,
   // Runtime values (SESSION_MINUTES, NETWORK_CHECK, ...) live in the Cloudflare
   // dashboard, not in git. Without keep_vars a Git-connected build would wipe them.
   "keep_vars": true,
@@ -15,7 +17,7 @@
     // the static-asset store (free and off the request meter). /hitno is
     // server-rendered (open safety tier), /open/* is derived data, /stats is the
     // Access-gated operator page.
-    "run_worker_first": ["/api/*", "/ws/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*"],
+    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
@@ -31,6 +33,7 @@
   "kv_namespaces": [
     { "binding": "FEED", "id": "8cb66336f0424a8ea1246bfc6a4ae29b" } // last-good copy of every feed module
   ],
+  "r2_buckets": [{ "binding": "MAPS", "bucket_name": "vidikovac-maps" }],
   "ratelimits": [
     { "name": "RL_SCAN", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }, // POST /api/scan per IP
     { "name": "RL_DATA", "namespace_id": "2002", "simple": { "limit": 240, "period": 60 } }, // /api/data per data token

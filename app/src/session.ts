@@ -7,6 +7,7 @@ import {
   type CodeSlot,
   type LayerId,
   type Role,
+  type ScreenMetadata,
   type RoomClientMessage,
   type RoomServerMessage,
 } from '../../worker/protocol';
@@ -62,6 +63,7 @@ export interface SessionSnapshot {
   dataToken: string | null;
   participants: number;
   secondsLeft: number;
+  screen?: ScreenMetadata;
 }
 
 export interface SessionClient {
@@ -123,6 +125,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   let expiresAt: number | null = null;
   let dataToken: string | null = null;
   let participants = 0;
+  let screen: ScreenMetadata | undefined;
   let offset = 0;
   let expiredFired = false;
 
@@ -138,7 +141,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
 
   const serverNow = (): number => now() + offset;
   const secondsLeft = (): number => (expiresAt === null ? 0 : Math.max(0, Math.floor((expiresAt - serverNow()) / 1000)));
-  const snapshot = (): SessionSnapshot => ({ phase, role, expiresAt, dataToken, participants, secondsLeft: secondsLeft() });
+  const snapshot = (): SessionSnapshot => ({ phase, role, expiresAt, dataToken, participants, secondsLeft: secondsLeft(), ...(screen ? { screen } : {}) });
 
   function send(message: RoomClientMessage): void {
     if (socket && socket.readyState === 1) socket.send(JSON.stringify(message));
@@ -160,6 +163,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         expiresAt = message.expiresAt;
         dataToken = message.dataToken;
         participants = message.participants;
+        screen = message.screen;
         offset = message.serverNow - now();
         phase = 'live';
         attempt = 0;

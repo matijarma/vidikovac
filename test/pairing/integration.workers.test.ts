@@ -96,8 +96,8 @@ describe('provision, unlock, join, view', () => {
     expect(screen.joined).toMatchObject({ role: 'kiosk', participants: 2 });
 
     // 6. The phone drives: its view reaches the screen, and only the screen.
-    phone.conn.ws.send(JSON.stringify({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } }));
-    expect(await screen.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } });
+    phone.conn.ws.send(JSON.stringify({ t: 'view', layer: 'u-pokretu', params: { kind: 'stop', id: '2040' } }));
+    expect(await screen.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { kind: 'stop', id: '2040' } });
 
     // 7. The code is spent, and the session was counted without an identifier.
     const replay = await SELF.fetch('https://vidikovac.test/api/scan', {

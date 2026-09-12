@@ -46,7 +46,7 @@ describe('POST /api/admin/beacons', () => {
     expect(created.beaconId).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
     expect(created.beaconId).toHaveLength(BEACON_ID_LENGTH);
     expect(created.secret).toMatch(/^[0-9A-HJKMNP-TV-Z]{32}$/);
-    expect(created.provisionUrl).toBe(`https://zagreb.aningfilm.hr/kiosk#${created.beaconId}.${created.secret}`);
+    expect(created.provisionUrl).toBe(`https://zagreb.aningfilm.hr/kiosk/#${created.beaconId}.${created.secret}`);
 
     expect(await beaconStub(testEnv, created.beaconId).status()).toMatchObject({ exists: true, revoked: false });
     const listed = (await indexStub(testEnv).listBeacons()).find((row) => row.beaconId === created.beaconId);

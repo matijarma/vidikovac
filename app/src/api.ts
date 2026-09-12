@@ -46,8 +46,9 @@ export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: t
   return (await response.json()) as ModuleSnapshot;
 }
 
-export async function fetchTeaser(fetchImpl: typeof fetch = fetch): Promise<TeaserResponse> {
-  const response = await fetchImpl('/api/teaser', { cache: 'no-store' });
+export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: string): Promise<TeaserResponse> {
+  const path = stopId ? `/api/teaser?stop=${encodeURIComponent(stopId)}` : '/api/teaser';
+  const response = await fetchImpl(path, { cache: 'no-store' });
   if (!response.ok) throw new DataError(response.status);
   return (await response.json()) as TeaserResponse;
 }

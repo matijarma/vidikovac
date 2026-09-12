@@ -20,6 +20,20 @@ export type BeaconKind = 'kiosk' | 'phone';
 export type VenueType = 'kafic' | 'knjiznica' | 'cetvrt' | 'udruga' | 'zet' | 'ostalo';
 export type Role = 'kiosk' | 'scanner' | 'phone';
 
+export interface ScreenStop {
+  id: string;
+  name: string;
+  lon: number;
+  lat: number;
+  routes: string[];
+}
+
+export interface ScreenMetadata {
+  kind: 'temporary' | 'venue';
+  expiresAt: number | null;
+  stop: ScreenStop | null;
+}
+
 /** Minted code slot, sent to the beacon client in batches. */
 export interface CodeSlot {
   code: string;
@@ -57,6 +71,7 @@ export interface ScanOk {
   participants: number;
   /** Operator label of the screen, e.g. "Kavana Velebit"; null for a phone. */
   screenLabel: string | null;
+  screen?: ScreenMetadata;
 }
 
 export interface ScanFail {
@@ -80,6 +95,7 @@ export interface CreateBeaconResponse {
   /** Shown once; the kiosk stores it in localStorage. */
   secret: string;
   provisionUrl: string;
+  screen?: ScreenMetadata;
 }
 
 // ---- WebSocket: /ws/beacon/:beaconId (kiosk <-> BeaconDO) ------------------
@@ -92,7 +108,7 @@ export type BeaconClientMessage =
 
 export type BeaconServerMessage =
   | { t: 'challenge'; nonce: string }
-  | { t: 'codes'; batch: CodeSlot[]; serverNow: number }
+  | { t: 'codes'; batch: CodeSlot[]; serverNow: number; screen?: ScreenMetadata }
   | { t: 'unlocked'; roomId: string; ticket: string; expiresAt: number }
   | { t: 'revoked' }
   | { t: 'pong' }
@@ -121,6 +137,7 @@ export type RoomServerMessage =
       resumeToken: string;
       dataToken: string;
       participants: number;
+      screen?: ScreenMetadata;
     }
   | { t: 'view'; layer: LayerId; params?: Record<string, string> }
   | { t: 'codes'; batch: CodeSlot[]; serverNow: number }
@@ -200,6 +217,7 @@ export const SERVER_EVENTS = [
   'source_fetch',
   'hitno_view',
   'over_cap',
+  'evaluation',
 ] as const;
 export type ServerEvent = (typeof SERVER_EVENTS)[number];
 

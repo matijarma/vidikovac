@@ -4,7 +4,7 @@
 // directly as the kiosk challenge's HMAC key (rulings.md R-32 — no hashing of
 // the secret before use, so both sides key the HMAC identically). Every
 // unauthorised request — and every unexpected error — is the same 404.
-import { beaconStub, BEACON_ID_SHAPE, type BeaconCreateInput } from '../do/beacon-do';
+import { beaconStub, BEACON_ID_SHAPE } from '../do/beacon-do';
 import { indexStub } from '../do/index-do';
 import type { Env } from '../env';
 import { json } from '../http';
@@ -12,19 +12,14 @@ import type { RouteHandler } from '../index';
 import { logError, logInfo } from '../log';
 import { verifyAccess } from '../pairing/access';
 import { AREAS, isVenueType, type AreaSlug } from '../pairing/areas';
-import { randomId } from '../pairing/tokens';
-import type { CreateBeaconRequest, CreateBeaconResponse } from '../protocol';
+import type { CreateBeaconRequest } from '../protocol';
 import { readCappedBody } from './pairing';
+import { provisionScreen } from '../pairing/provision';
 
 /** The kiosk URL is minted for production; e2e rebases the fragment onto its own origin. */
 export const PROVISION_ORIGIN = 'https://zagreb.aningfilm.hr';
 export const ADMIN_BODY_MAX_BYTES = 512;
 export const OPERATOR_LABEL_MAX = 80;
-/** randomId packs five bits per character: 5 bytes -> 8 characters = BEACON_ID_LENGTH. */
-const BEACON_ID_BYTES = 5;
-/** 20 bytes -> 32 characters of Crockford base32. */
-const SECRET_BYTES = 20;
-const CREATE_ATTEMPTS = 5;
 /** The shape BeaconDO.create enforces; checked here so a typo is a 400, not a thrown RPC. */
 const STOP_ID_SHAPE = /^[0-9A-Za-z_-]{1,32}$/;
 
@@ -68,23 +63,9 @@ async function createBeacon(request: Request, env: Env): Promise<Response> {
   const stopId = body.stopId === undefined || body.stopId === '' ? null : String(body.stopId);
   if (stopId !== null && !STOP_ID_SHAPE.test(stopId)) return badRequest('stopId');
 
-  const secret = randomId(SECRET_BYTES);
-  for (let attempt = 0; attempt < CREATE_ATTEMPTS; attempt += 1) {
-    const beaconId = randomId(BEACON_ID_BYTES);
-    const input: BeaconCreateInput = { beaconId, venueType, area, operatorLabel, stopId, secret };
-    const { created } = await beaconStub(env, beaconId).create(input);
-    if (!created) continue; // id already taken: draw another one
-    await indexStub(env).registerBeacon({ beaconId, venueType, area, operatorLabel, stopId, createdAt: Date.now() });
-    logInfo('beacon-created', { beaconId, venueType, area });
-    const response: CreateBeaconResponse = {
-      beaconId,
-      secret,
-      provisionUrl: `${PROVISION_ORIGIN}/kiosk#${beaconId}.${secret}`,
-    };
-    return json(response, 201);
-  }
-  logError('beacon-id-collision', new Error('five ids taken in a row'));
-  return json({ error: 'internal' }, 500);
+  const response = await provisionScreen(env, { venueType, area, operatorLabel, stopId, kind: 'venue' }, PROVISION_ORIGIN);
+  logInfo('beacon-created', { beaconId: response.beaconId, venueType, area });
+  return json(response, 201, { 'cache-control': 'no-store' });
 }
 
 async function revokeBeacon(env: Env, beaconId: string): Promise<Response> {

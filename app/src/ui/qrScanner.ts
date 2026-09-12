@@ -17,17 +17,8 @@
 // One code path serves the PWA and the APK.
 //
 // --- Decoder support --------------------------------------------------------
-// `BarcodeDetector` is the platform decoder. It ships on Chrome for Android
-// (and therefore in the Android System WebView), which is exactly where this
-// feature was asked for. It is NOT available on desktop Chrome, Firefox, or iOS
-// Safari — so on those, `isQrScanSupported()` is false and the Scan affordance
-// is not rendered at all. That is deliberate: the manual token field is always
-// present and always works, and a button that opens a camera which can never
-// decode is worse than no button.
-//
-// The decoder is injected (`createDecoder`), so a bundled WASM/JS fallback can be
-// dropped in later for iOS without touching this module's lifecycle or the UI
-// that hosts it.
+// Prefer the platform decoder. On Safari/Firefox and other engines without it,
+// load jsQR only after the user opens the camera. Typed entry remains available.
 import { escapeAttribute, escapeHtml, createElementFromHTML } from './dom/escape';
 import { iconMarkup } from './icons';
 
@@ -118,9 +109,48 @@ export function isQrScanSupported(
     navigator?: { mediaDevices?: { getUserMedia?: unknown } };
   } = globalThis as never,
 ): boolean {
-  const hasDecoder = typeof scope.BarcodeDetector === 'function';
   const hasCamera = typeof scope.navigator?.mediaDevices?.getUserMedia === 'function';
-  return hasDecoder && hasCamera;
+  return hasCamera;
+}
+
+/** No decoder library or camera canvas is loaded before a scan is requested. */
+export function createJsQrDecoder(doc: Document = document): QrDecoder {
+  let canvas: HTMLCanvasElement | null = null;
+  let library: Promise<typeof import('jsqr')> | null = null;
+  return {
+    async detect(source) {
+      const frame = source as { videoWidth?: number; videoHeight?: number; naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
+      const width = frame.videoWidth || frame.naturalWidth || frame.width || 0;
+      const height = frame.videoHeight || frame.naturalHeight || frame.height || 0;
+      if (!width || !height) return [];
+      canvas ??= doc.createElement('canvas');
+      const scale = Math.min(1, 960 / Math.max(width, height));
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) return [];
+      context.drawImage(source, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      library ??= import('jsqr');
+      const jsQR = (await library).default;
+      const result = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' });
+      return result?.data ? [result.data] : [];
+    },
+  };
+}
+
+export function createDefaultQrDecoder(): QrDecoder {
+  const native = createBarcodeDetectorDecoder();
+  let fallback: QrDecoder | null = null;
+  return {
+    async detect(source) {
+      if (native) {
+        try { return await native.detect(source); } catch { /* unavailable native format */ }
+      }
+      fallback ??= createJsQrDecoder();
+      return fallback.detect(source);
+    },
+  };
 }
 
 /** Wraps the platform `BarcodeDetector`, restricted to QR. Returns null when the
@@ -154,7 +184,7 @@ export function createQrScanner(deps: QrScannerDeps): QrScannerHandle {
   const getUserMedia =
     deps.getUserMedia ??
     ((constraints) => navigator.mediaDevices.getUserMedia(constraints) as Promise<MediaStream>);
-  const createDecoder = deps.createDecoder ?? (() => createBarcodeDetectorDecoder());
+  const createDecoder = deps.createDecoder ?? createDefaultQrDecoder;
   const intervalMs = deps.intervalMs ?? 200;
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));

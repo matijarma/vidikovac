@@ -1,5 +1,5 @@
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
-import type { LayerId } from '../../../worker/protocol';
+import type { LayerId, ScreenStop } from '../../../worker/protocol';
 import type { PublicSelection } from '../../../worker/public-selection';
 import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
@@ -7,13 +7,7 @@ import type { ResolvedTheme, ThemePreference } from '../ui/theme';
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
 
-export interface ScreenStop {
-  id: string;
-  name: string;
-  lon: number;
-  lat: number;
-  routes: string[];
-}
+export type { ScreenStop } from '../../../worker/protocol';
 
 export interface ViewState {
   layer: LayerId;

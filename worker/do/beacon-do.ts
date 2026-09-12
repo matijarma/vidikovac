@@ -1,16 +1,15 @@
 // BeaconDO: one per public screen. Authenticates the kiosk socket with a
 // nonce challenge, mints code batches aligned to wall-clock slots, registers
 // them with IndexDO, and turns a redeemed code into a RoomDO session. Socket
-// attachments hold only {phase, netKey} once authenticated; the challenge
+// attachments hold only {phase} once authenticated; the challenge
 // phase adds the nonce and the attempt counter for its few seconds of life.
 import { DurableObject } from 'cloudflare:workers';
-import { codeRotateSeconds, networkCheck, sessionMinutes, type NetworkCheck } from '../config';
+import { codeRotateSeconds, sessionMinutes, type NetworkCheck } from '../config';
 import type { Env } from '../env';
-import { logError, logInfo } from '../log';
+import { logError } from '../log';
 import { recordMetric, zagrebDayHour } from '../metrics';
 import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
-import { NET_KEY_HEADER, isNetKey } from '../pairing/netkey';
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId } from '../pairing/tokens';
 import {
   CODES_PER_BATCH,
@@ -23,6 +22,8 @@ import {
   type ScanError,
   type ScanOk,
   type VenueType,
+  type ScreenMetadata,
+  type ScreenStop,
 } from '../protocol';
 import { indexStub } from './index-do';
 import { roomStub, type RoomOpenInput } from './room-do';
@@ -66,12 +67,15 @@ export interface BeaconCreateInput {
    * own derivation so both sides key the HMAC identically).
    */
   secret: string;
+  kind?: 'temporary' | 'venue';
+  screenExpiresAt?: number;
+  stop?: ScreenStop;
 }
 
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
-type ChallengeAttachment = { phase: 'challenge'; netKey: string; nonce: string; issuedAt: number; attempts: number };
-type AuthedAttachment = { phase: 'authed'; netKey: string };
+type ChallengeAttachment = { phase: 'challenge'; nonce: string; issuedAt: number; attempts: number };
+type AuthedAttachment = { phase: 'authed' };
 type SocketAttachment = ChallengeAttachment | AuthedAttachment;
 
 type MetaRow = { key: string; value: string };
@@ -144,7 +148,22 @@ export class BeaconDO extends DurableObject<Env> {
   }
 
   private isRevoked(): boolean {
-    return this.meta('revoked') === '1';
+    const expiry = Number(this.meta('screenExpiresAt') ?? '0');
+    return this.meta('revoked') === '1' || (expiry > 0 && this.now() >= expiry);
+  }
+
+  screenMetadata(): ScreenMetadata {
+    const expiry = Number(this.meta('screenExpiresAt') ?? '0');
+    const raw = this.meta('stop');
+    return {
+      kind: this.meta('kind') === 'temporary' ? 'temporary' : 'venue',
+      expiresAt: expiry || null,
+      stop: raw ? JSON.parse(raw) as ScreenStop : null,
+    };
+  }
+
+  private authenticatedSockets(): WebSocket[] {
+    return this.ctx.getWebSockets().filter((ws) => (ws.deserializeAttachment() as SocketAttachment | null)?.phase === 'authed');
   }
 
   // --- RPC: provisioning ---------------------------------------------------
@@ -161,6 +180,8 @@ export class BeaconDO extends DurableObject<Env> {
       (input.stopId !== null && !STOP_ID_SHAPE.test(input.stopId)) ||
       typeof input.secret !== 'string' ||
       !SECRET_SHAPE.test(input.secret)
+      || (input.kind !== undefined && input.kind !== 'temporary' && input.kind !== 'venue')
+      || (input.kind === 'temporary' && (!Number.isFinite(input.screenExpiresAt) || input.screenExpiresAt! <= this.now()))
     ) {
       throw new Error('beacon-create-invalid');
     }
@@ -174,7 +195,11 @@ export class BeaconDO extends DurableObject<Env> {
       this.setMeta('secret', input.secret);
       this.setMeta('revoked', '0');
       this.setMeta('createdAt', String(this.now()));
+      this.setMeta('kind', input.kind ?? 'venue');
+      if (input.screenExpiresAt) this.setMeta('screenExpiresAt', String(input.screenExpiresAt));
+      if (input.stop) this.setMeta('stop', JSON.stringify(input.stop));
     });
+    if (input.screenExpiresAt) await this.ctx.storage.setAlarm(input.screenExpiresAt);
     return { created: true };
   }
 
@@ -201,19 +226,9 @@ export class BeaconDO extends DurableObject<Env> {
     return {
       exists: this.exists(),
       revoked: this.isRevoked(),
-      kioskOnline: this.kioskNetKeys().length > 0,
+      kioskOnline: this.authenticatedSockets().length > 0,
       codes: this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM codes`).one().n,
     };
-  }
-
-  /** Net keys of the authenticated kiosk sockets (normally one). Exposed for tests and the same-network rule. */
-  kioskNetKeys(): string[] {
-    const keys: string[] = [];
-    for (const ws of this.ctx.getWebSockets()) {
-      const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-      if (attachment?.phase === 'authed') keys.push(attachment.netKey);
-    }
-    return keys;
   }
 
   // --- WebSocket: kiosk ------------------------------------------------------
@@ -222,16 +237,15 @@ export class BeaconDO extends DurableObject<Env> {
     if (request.method !== 'GET' || request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket', { status: 400 });
     }
-    const netKey = request.headers.get(NET_KEY_HEADER);
-    if (!isNetKey(netKey)) return new Response('missing net key', { status: 400 });
     if (!this.exists()) return new Response('unknown beacon', { status: 404 });
+    if (this.isRevoked()) return new Response('screen expired or revoked', { status: 410 });
 
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
     this.ctx.acceptWebSocket(server, ['kiosk']);
     const nonce = base64UrlEncode(randomBytes(NONCE_BYTES));
-    const attachment: ChallengeAttachment = { phase: 'challenge', netKey, nonce, issuedAt: this.now(), attempts: 0 };
+    const attachment: ChallengeAttachment = { phase: 'challenge', nonce, issuedAt: this.now(), attempts: 0 };
     server.serializeAttachment(attachment);
     server.send(frame({ t: 'challenge', nonce }));
     return new Response(null, { status: 101, webSocket: client });
@@ -312,7 +326,7 @@ export class BeaconDO extends DurableObject<Env> {
       this.rejectChallenge(ws, attachment, 'auth-failed');
       return;
     }
-    const authed: AuthedAttachment = { phase: 'authed', netKey: attachment.netKey };
+    const authed: AuthedAttachment = { phase: 'authed' };
     ws.serializeAttachment(authed);
     await this.markOnline();
     await this.sendBatch(ws);
@@ -335,7 +349,11 @@ export class BeaconDO extends DurableObject<Env> {
     const today = zagrebDayHour(new Date(this.now())).day;
     if (this.meta('lastOnlineDay') === today) return;
     this.setMeta('lastOnlineDay', today);
-    void recordMetric(this.env, 'kiosk_online', this.meta('area') ?? '');
+    if (this.screenMetadata().kind === 'temporary') {
+      void recordMetric(this.env, 'evaluation', 'kiosk_online', this.meta('area') ?? '');
+    } else {
+      void recordMetric(this.env, 'kiosk_online', this.meta('area') ?? '');
+    }
   }
 
   // --- codes -----------------------------------------------------------------
@@ -387,18 +405,13 @@ export class BeaconDO extends DurableObject<Env> {
       await indexStub(this.env).register(minted.map((s) => ({ code: s.code, kind: 'kiosk' as const, ownerId: beaconId, expiresAt: s.slotEnd + CODE_GRACE_MS })));
     }
 
-    ws.send(frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now() }));
+    ws.send(frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now(), screen: this.screenMetadata() }));
   }
 
   // --- RPC: redeem -----------------------------------------------------------
 
-  /**
-   * `mode` overrides `networkCheck(this.env)` for the same-network rule.
-   * Production callers (the /api/scan route) never pass it: they get the
-   * real runtime setting. Tests pin it here instead of mutating instance.env
-   * (R-30), since the workers-test bindings fix NETWORK_CHECK to 'off'.
-   */
-  async redeem(code: string, scannerNetKey: string, mode?: NetworkCheck): Promise<RedeemResult> {
+  /** Legacy extra arguments are ignored; no network identity is read or stored. */
+  async redeem(code: string, _legacyNetworkKey?: string, _legacyMode?: NetworkCheck): Promise<RedeemResult> {
     const now = this.now();
     if (!this.exists()) return { ok: false, error: 'code-unknown' };
     if (this.isRevoked()) return { ok: false, error: 'revoked' };
@@ -410,15 +423,8 @@ export class BeaconDO extends DurableObject<Env> {
     if (row.used === 1) return this.fail(now, 'code-used');
     if (codeWindow({ slotStart: row.slot_start, slotEnd: row.slot_end }, now) !== 'open') return this.fail(now, 'code-expired');
 
-    const kioskSockets = this.ctx.getWebSockets().filter((ws) => (ws.deserializeAttachment() as SocketAttachment | null)?.phase === 'authed');
+    const kioskSockets = this.authenticatedSockets();
     if (kioskSockets.length === 0) return this.fail(now, 'screen-offline');
-
-    const sameNetwork = isNetKey(scannerNetKey) && this.kioskNetKeys().includes(scannerNetKey);
-    if (sameNetwork) {
-      const checkMode = mode ?? networkCheck(this.env);
-      if (checkMode === 'enforce') return this.fail(now, 'same-network');
-      if (checkMode === 'warn') logInfo('same-network-warn', { beaconId: this.meta('beaconId') ?? undefined });
-    }
 
     // Flip the code atomically; a concurrent redeem of the same code sees used = 1.
     const flipped = this.ctx.storage.sql.exec(`UPDATE codes SET used = 1 WHERE code = ? AND used = 0`, code).rowsWritten;
@@ -438,6 +444,7 @@ export class BeaconDO extends DurableObject<Env> {
       venueType,
       area: areaSlug,
       screenLabel,
+      screen: this.screenMetadata(),
       tickets: [
         { ticket: scannerTicket, role: 'scanner' },
         { ticket: kioskTicket, role: 'kiosk' },
@@ -465,8 +472,22 @@ export class BeaconDO extends DurableObject<Env> {
         expiresAt,
         participants: opened.participants,
         screenLabel,
+        screen: this.screenMetadata(),
       },
     };
+  }
+
+  /** Only this screen and its codes expire; already opened rooms keep their grant. */
+  async alarm(): Promise<void> {
+    const expiry = Number(this.meta('screenExpiresAt') ?? '0');
+    if (!expiry) return;
+    if (this.now() < expiry) { await this.ctx.storage.setAlarm(expiry); return; }
+    await this.revoke();
+    if (this.now() < expiry + 15 * 60_000) {
+      await this.ctx.storage.setAlarm(expiry + 15 * 60_000);
+    } else {
+      await this.ctx.storage.deleteAll();
+    }
   }
 
   private fail(now: number, error: ScanError): RedeemResult {
@@ -492,6 +513,7 @@ export class BeaconDO extends DurableObject<Env> {
       return;
     }
     sql.exec(`INSERT INTO sessions (started_at) VALUES (?)`, now);
-    void recordMetric(this.env, 'session_start', 'kiosk', areaSlug);
+    void recordMetric(this.env, this.screenMetadata().kind === 'temporary' ? 'evaluation' : 'session_start',
+      this.screenMetadata().kind === 'temporary' ? 'session_start' : 'kiosk', areaSlug);
   }
 }

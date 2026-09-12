@@ -96,11 +96,11 @@ describe('verifyAccess with a real Access signature', () => {
 });
 
 describe('the test-only bypass (R-02)', () => {
-  it('is accepted only with NETWORK_CHECK off, a long enough value and an exact match', async () => {
-    const off = { NETWORK_CHECK: 'off', E2E_ADMIN_BYPASS: BYPASS };
+  it('is accepted only with APP_ENV=test, a long enough value and an exact match', async () => {
+    const off = { APP_ENV: 'test', E2E_ADMIN_BYPASS: BYPASS };
     expect(await verifyAccess(accessEnv(off), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(true);
-    expect(await verifyAccess(accessEnv({ ...off, NETWORK_CHECK: 'enforce' }), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(false);
-    expect(await verifyAccess(accessEnv({ ...off, NETWORK_CHECK: 'warn' }), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(false);
+    expect(await verifyAccess(accessEnv({ ...off, APP_ENV: 'production', NETWORK_CHECK: 'off' }), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(false);
+    expect(await verifyAccess(accessEnv({ ...off, APP_ENV: undefined, NETWORK_CHECK: 'off' }), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(false);
     expect(await verifyAccess(accessEnv(off), requestWith({ 'x-e2e-admin-bypass': `${BYPASS}x` }))).toBe(false);
     expect(await verifyAccess(accessEnv({ NETWORK_CHECK: 'off', E2E_ADMIN_BYPASS: 'prekratko' }), requestWith({ 'x-e2e-admin-bypass': 'prekratko' }))).toBe(false);
     expect(await verifyAccess(accessEnv({ NETWORK_CHECK: 'off' }), requestWith({ 'x-e2e-admin-bypass': BYPASS }))).toBe(false);

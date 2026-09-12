@@ -176,8 +176,8 @@ describe('RoomDO view forwarding', () => {
     const kiosk = await join(roomId, input.tickets[1]!.ticket);
     await scanner.conn.inbox.nextOfType('count');
 
-    scanner.conn.ws.send(JSON.stringify({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } }));
-    expect(await kiosk.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { stop: '2040' } });
+    scanner.conn.ws.send(JSON.stringify({ t: 'view', layer: 'u-pokretu', params: { kind: 'stop', id: '2040' } }));
+    expect(await kiosk.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { kind: 'stop', id: '2040' } });
     await scanner.conn.inbox.expectSilence();
 
     kiosk.conn.ws.send(JSON.stringify({ t: 'view', layer: 'vijesti' }));

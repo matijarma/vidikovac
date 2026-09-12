@@ -67,12 +67,9 @@ describe('requireSecret', () => {
     expect(() => requireSecret({} as Env, 'SESSION_SECRET')).toThrow(/SESSION_SECRET/);
     expect(() => requireSecret({ NETWORK_CHECK: 'warn' } as Env, 'NET_KEY_SECRET')).toThrow(/NET_KEY_SECRET/);
   });
-  it('falls back to a fixed dev value only when NETWORK_CHECK is off', () => {
-    const a = requireSecret({ NETWORK_CHECK: 'off' } as Env, 'SESSION_SECRET');
-    const b = requireSecret({ NETWORK_CHECK: 'off' } as Env, 'SESSION_SECRET');
-    expect(a).toBe(b);
-    expect(a.length).toBeGreaterThan(16);
-    expect(requireSecret({ NETWORK_CHECK: 'off' } as Env, 'NET_KEY_SECRET')).not.toBe(a);
+  it('never enables a known secret through network policy or test environment', () => {
+    expect(() => requireSecret({ NETWORK_CHECK: 'off' } as Env, 'SESSION_SECRET')).toThrow(/SESSION_SECRET/);
+    expect(() => requireSecret({ APP_ENV: 'test' } as Env, 'SESSION_SECRET')).toThrow(/SESSION_SECRET/);
   });
 });
 

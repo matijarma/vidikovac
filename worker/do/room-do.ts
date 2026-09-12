@@ -20,6 +20,7 @@ import { logError } from '../log';
 import { recordMetric } from '../metrics';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
 import { randomId, signDataToken } from '../pairing/tokens';
+import { parseSelection, selectionParams } from '../public-selection';
 import {
   CLIENT_EVENTS,
   CLOSE_REPLACED,
@@ -40,6 +41,8 @@ import {
   type ScanError,
   type ScanOk,
   type VenueType,
+  type ScreenMetadata,
+  type ServerEvent,
 } from '../protocol';
 import { indexStub } from './index-do';
 
@@ -75,6 +78,7 @@ export interface RoomOpenInput {
   /** Area slug for the counters; null for a phone-granted room. */
   area: string | null;
   screenLabel: string | null;
+  screen?: ScreenMetadata;
   tickets: RoomTicket[];
 }
 
@@ -164,12 +168,9 @@ function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
       if (typeof parsed.params !== 'object' || parsed.params === null || Array.isArray(parsed.params)) return null;
       const entries = Object.entries(parsed.params as Record<string, unknown>);
       if (entries.length > PARAMS_MAX_KEYS) return null;
-      const params: Record<string, string> = {};
-      for (const [key, value] of entries) {
-        if (typeof value !== 'string' || key.length > PARAMS_MAX_CHARS || value.length > PARAMS_MAX_CHARS) return null;
-        params[key] = value;
-      }
-      return { t: 'view', layer: parsed.layer, params };
+      const selection = parseSelection(parsed.params);
+      if (entries.length && !selection) return null;
+      return { t: 'view', layer: parsed.layer, ...(selection ? { params: selectionParams(selection) } : {}) };
     }
     case 'share':
       return { t: 'share' };
@@ -247,6 +248,19 @@ export class RoomDO extends DurableObject<Env> {
     );
   }
 
+  private screenMetadata(): ScreenMetadata | undefined {
+    const raw = this.meta('screen');
+    return raw ? JSON.parse(raw) as ScreenMetadata : undefined;
+  }
+
+  private metric(event: ServerEvent | ClientEvent, dim1 = '', dim2 = ''): void {
+    if (this.screenMetadata()?.kind === 'temporary') {
+      recordMetric(this.env, 'evaluation', event, dim1);
+    } else {
+      recordMetric(this.env, event, dim1, dim2);
+    }
+  }
+
   phase(): Phase {
     return (this.meta('phase') as Phase | null) ?? 'none';
   }
@@ -296,6 +310,7 @@ export class RoomDO extends DurableObject<Env> {
       this.setMeta('venueType', input.venueType ?? '');
       this.setMeta('area', input.area ?? '');
       this.setMeta('screenLabel', input.screenLabel ?? '');
+      if (input.screen) this.setMeta('screen', JSON.stringify(input.screen));
       this.setMeta('phase', 'live');
       for (const entry of input.tickets) {
         this.ctx.storage.sql.exec(
@@ -340,9 +355,10 @@ export class RoomDO extends DurableObject<Env> {
       venueType: null,
       area: null,
       screenLabel: null,
+      ...(this.screenMetadata() ? { screen: this.screenMetadata()! } : {}),
       tickets: [{ ticket, role: 'scanner' }],
     });
-    void recordMetric(this.env, 'session_start', 'phone', '');
+    this.metric('session_start', 'phone', '');
     return {
       ok: true,
       scan: {
@@ -354,6 +370,7 @@ export class RoomDO extends DurableObject<Env> {
         expiresAt,
         participants: opened.participants,
         screenLabel: null,
+        ...(this.screenMetadata() ? { screen: this.screenMetadata()! } : {}),
       },
     };
   }
@@ -536,6 +553,7 @@ export class RoomDO extends DurableObject<Env> {
         resumeToken: participant.resume_token,
         dataToken,
         participants,
+        ...(this.screenMetadata() ? { screen: this.screenMetadata()! } : {}),
       }),
     );
     const count = frame({ t: 'count', participants });
@@ -625,7 +643,7 @@ export class RoomDO extends DurableObject<Env> {
     const dims = this.eventDims(name, dim);
     if (dims === null) return;
     sql.exec(`UPDATE participants SET events = events + 1 WHERE resume_token = ?`, attachment.resumeToken);
-    void recordMetric(this.env, name, dims[0], dims[1]);
+    this.metric(name, dims[0], dims[1]);
   }
 
   private eventDims(name: ClientEvent, dim: string | undefined): [string, string] | null {
@@ -696,7 +714,7 @@ export class RoomDO extends DurableObject<Env> {
         logError('room-expire-close-failed', error);
       }
     }
-    void recordMetric(this.env, 'session_end', reason, bucket);
+    this.metric('session_end', reason, bucket);
     await this.wipe();
   }
 

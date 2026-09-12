@@ -1,7 +1,7 @@
 // Kiosk side of the BeaconDO socket: authenticate with HMAC(secret, nonce),
 // receive code batches, ask for the next batch, notice the unlock and the
 // revoke, reconnect with backoff. Knows nothing about the DOM.
-import type { BeaconClientMessage, BeaconServerMessage, CodeSlot } from '../../worker/protocol';
+import type { BeaconClientMessage, BeaconServerMessage, CodeSlot, ScreenMetadata } from '../../worker/protocol';
 import { hmacSha256Base64Url } from './crypto';
 import { beaconSocketUrl, type WebSocketLike } from './session';
 
@@ -14,6 +14,7 @@ export const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const;
 export interface BeaconCredentials {
   beaconId: string;
   secret: string;
+  screen?: ScreenMetadata;
 }
 
 export type BeaconStatus = 'idle' | 'connecting' | 'live' | 'offline' | 'revoked';
@@ -35,7 +36,7 @@ export function readBeacon(storage: StorageLike | null | undefined): BeaconCrede
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<BeaconCredentials>;
     return typeof parsed.beaconId === 'string' && typeof parsed.secret === 'string'
-      ? { beaconId: parsed.beaconId, secret: parsed.secret }
+      ? { beaconId: parsed.beaconId, secret: parsed.secret, ...(parsed.screen ? { screen: parsed.screen } : {}) }
       : null;
   } catch {
     return null;
@@ -61,6 +62,7 @@ export interface BeaconClientDeps {
   onUnlocked: (unlock: { roomId: string; ticket: string; expiresAt: number }) => void;
   onRevoked: () => void;
   onStatus: (status: BeaconStatus) => void;
+  onContext?: (screen: ScreenMetadata) => void;
 }
 
 export interface BeaconClient {
@@ -110,6 +112,7 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
       case 'codes':
         attempt = 0; // a batch means the screen is healthy; next drop retries fast
         setStatus('live');
+        if (message.screen) deps.onContext?.(message.screen);
         deps.onCodes(message.batch, message.serverNow);
         return;
       case 'unlocked':
