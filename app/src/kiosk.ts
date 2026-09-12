@@ -206,11 +206,15 @@ function isLive(snapshot: ModuleSnapshot | undefined): snapshot is ModuleSnapsho
   return snapshot !== undefined && snapshot.status !== 'down';
 }
 
-/** panels.delayLate/delayEarly/delayOnTime in words, exactly as the u-pokretu
- *  panel already phrases a route's median delay (app/src/layers/u-pokretu.ts). */
+/** panels.delayLate/delayEarly/delayOnTime in words, on the same ±15s on-time
+ *  band u-pokretu.ts's routeDelays rendering already uses for this identical
+ *  medianDelaySeconds field (app/src/layers/u-pokretu.ts, T's file — not
+ *  edited here; the band is matched by value, not by a shared import, since
+ *  M does not own that file). The two views must never disagree about
+ *  whether the same live route is running on time. */
 function delayWord(i18n: I18n, seconds: number): string {
-  if (seconds > 30) return i18n.t('panels.delayLate', { seconds });
-  if (seconds < -30) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
+  if (seconds > 15) return i18n.t('panels.delayLate', { seconds });
+  if (seconds < -15) return i18n.t('panels.delayEarly', { seconds: Math.abs(seconds) });
   return i18n.t('panels.delayOnTime');
 }
 

@@ -6,7 +6,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { catalogueRows, ESSENTIALS_IDLE_MS, essentialsRows, mountKiosk, safetyStripText, TEASER_ROTATE_MS, teaserCards } from '../../app/src/kiosk';
 import { zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
-import { LJEKARNE } from '../../worker/hitno/ljekarne';
+import { LJEKARNE, LJEKARNE_SOURCE } from '../../worker/hitno/ljekarne';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const attr = (text: string) => ({ text, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
@@ -552,6 +552,32 @@ describe('essentialsRows (R-P7 / M3b)', () => {
     expect(departures.label).toBe('Sljedeći polasci');
     expect(departures.value).toBe('12: +150 s');
     expect(departures.detail).toBe('6: po redu');
+  });
+
+  it('classifies a route delay on the same ±15s on-time band u-pokretu.ts already uses for the identical medianDelaySeconds field (app/src/layers/u-pokretu.ts routeDelays rendering), so the two views of the same live number never disagree', () => {
+    const withRoutes = MODULES.map((m) =>
+      m.module === 'zet-rt'
+        ? snap('zet-rt', [
+            ...m.items,
+            { id: 'route:12', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: 'Linija 12', data: { routeId: '12', routeShortName: '12', medianDelaySeconds: 20, vehicles: 3 } },
+          ])
+        : m,
+    );
+    const departures = essentialsRows(withRoutes, i18n, NOW).find((r) => r.id === 'departures')!;
+    // +20s sits outside u-pokretu.ts's ±15s band, so this must read "late",
+    // not "po redu" the way a ±30s band (this file's former threshold) would.
+    expect(departures.value).toBe('12: +20 s');
+  });
+
+  it('falls back to the curated on-duty pharmacy, attributed to LJEKARNE_SOURCE, when a live ckan-geo snapshot has no ljekarne-tagged item — the real-world case, since ckan-geo never tags one (see the comment on the LJEKARNE import in kiosk.ts)', () => {
+    const withoutTag = MODULES.map((m) =>
+      m.module === 'ckan-geo'
+        ? snap('ckan-geo', [{ id: 'd1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Zborno mjesto Ribnjak', data: { category: 'okupljalista' } }])
+        : m,
+    );
+    const pharmacy = essentialsRows(withoutTag, i18n, NOW).find((r) => r.id === 'pharmacy')!;
+    expect(pharmacy.value).toBe(LJEKARNE[0]!.label);
+    expect(pharmacy.attribution).toBe(LJEKARNE_SOURCE.text);
   });
 
   it('skips a row outright when its module is down or has nothing to say, rather than an empty placeholder', () => {
