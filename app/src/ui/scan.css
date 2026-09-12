@@ -38,14 +38,28 @@
 .scan-label { font-weight: var(--weight-medium); }
 /* input[type='text'].scan-input, not bare .scan-input: base.css's generic
    `input[type='text'], select` reset is (0,1,1) and would otherwise beat a
-   single-class selector's (0,1,0) on every contested longhand (border,
+   single-class selector's (0,1,0) on every contested longhand (border-width,
    min-height, font-family, font-size) regardless of import order — there is
    no @layer/!important/:where() in this codebase to arbitrate it instead.
-   `input[type='text'].scan-input` is (0,2,1), which wins unconditionally. */
+   `input[type='text'].scan-input` is (0,2,1), which wins unconditionally.
+
+   border-width/border-style only — NOT the `border` shorthand, and NOT
+   border-color: base.css's own `input[type='text']:focus-visible` rule is
+   ALSO (0,2,1) (an attribute selector plus a pseudo-class weighs the same as
+   an attribute selector plus a class), an exact tie that this stylesheet,
+   loading after base.css on every built page, would win. A border-color
+   declared here would therefore silently beat the focus-visible rule's
+   `border-color: var(--tone-focus-ring)` on every keyboard focus, leaving the
+   border-glow the only visible focus cue. Leaving border-color unset means
+   this rule never contests that property at all, so base.css's own two rules
+   (the unfocused default vs. :focus-visible) resolve it between themselves —
+   the default's border-color is already --tone-stroke-strong, so the
+   unfocused appearance is unchanged. */
 input[type='text'].scan-input {
   width: 100%;
   min-height: 3.25rem;
-  border: 2px solid var(--tone-stroke-strong);
+  border-width: 2px;
+  border-style: solid;
   background: var(--tone-surface-1);
   font-family: var(--font-mono);
   font-size: 1.75rem;
