@@ -509,7 +509,8 @@ export class BeaconDO extends DurableObject<Env> {
     const hour = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM sessions WHERE started_at > ?`, now - HOUR_MS).one().n;
     const day = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM sessions`).one().n;
     if (hour >= CAP_PER_HOUR || day >= CAP_PER_DAY) {
-      void recordMetric(this.env, 'over_cap', 'kiosk', areaSlug);
+      void recordMetric(this.env, this.screenMetadata().kind === 'temporary' ? 'evaluation' : 'over_cap',
+        this.screenMetadata().kind === 'temporary' ? 'over_cap' : 'kiosk', areaSlug);
       return;
     }
     sql.exec(`INSERT INTO sessions (started_at) VALUES (?)`, now);

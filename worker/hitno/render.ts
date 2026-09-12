@@ -75,16 +75,16 @@ function timeTag(iso: string | undefined): string {
 
 function freshness(panel: HitnoPanel, now: Date): string {
   const s = panel.snapshot;
-  if (s === null || s.status === 'down') {
+  if (s === null || panel.state === 'unavailable') {
     return `<p class="status down"><span class="dot" aria-hidden="true">○</span> Izvor trenutačno nedostupan.</p>`;
   }
-  if (s.status === 'stale') {
+  if (panel.state === 'stale') {
     return (
       `<p class="status stale"><span class="dot" aria-hidden="true">◐</span> Zastarjelo: ` +
-      `posljednji uspješan dohvat ${timeTag(s.fetchedAt)}.</p>`
+      `posljednji uspješan dohvat ${timeTag(panel.availability?.fetchedAt ?? s.fetchedAt)}.</p>`
     );
   }
-  const fetched = parseIso(s.fetchedAt);
+  const fetched = parseIso(panel.availability?.fetchedAt ?? s.fetchedAt);
   const live = fetched !== null && now.getTime() - fetched.getTime() < LIVE_WINDOW_MS;
   return (
     `<p class="status live"><span class="dot" aria-hidden="true">●</span> ${live ? 'Živo' : 'Danas'}: ` +
@@ -140,7 +140,9 @@ function section(id: string, heading: string, body: string, badge = ''): string 
 function warningsSection(panel: HitnoPanel, now: Date): string {
   let list: string;
   if (panel.items.length === 0) {
-    list = `<p class="empty">Trenutačno nema upozorenja DHMZ-a za Zagrebačku regiju.</p>`;
+    list = `<p class="empty">${panel.state === 'empty'
+      ? 'Trenutačno nema upozorenja DHMZ-a za Zagrebačku regiju.'
+      : 'Stanje upozorenja nije potvrđeno. Provjeri službeni izvor DHMZ-a.'}</p>`;
   } else {
     list =
       `<ul class="items">` +
@@ -169,7 +171,9 @@ function warningsSection(panel: HitnoPanel, now: Date): string {
 function quakesSection(panel: HitnoPanel, now: Date): string {
   let list: string;
   if (panel.items.length === 0) {
-    list = `<p class="empty">U posljednja 72 sata EMSC nije zabilježio potres u okolici Zagreba.</p>`;
+    list = `<p class="empty">${panel.state === 'empty'
+      ? 'U posljednja 72 sata EMSC nije zabilježio potres u okolici Zagreba.'
+      : 'Podaci o potresima trenutačno nisu potvrđeni. Provjeri EMSC.'}</p>`;
   } else {
     list =
       `<ul class="items">` +
@@ -196,7 +200,9 @@ function quakesSection(panel: HitnoPanel, now: Date): string {
 function closuresSection(panel: HitnoPanel, now: Date): string {
   let list: string;
   if (panel.items.length === 0) {
-    list = `<p class="empty">Nema aktivnih zatvaranja.</p>`;
+    list = `<p class="empty">${panel.state === 'empty'
+      ? 'Nema aktivnih zatvaranja.'
+      : 'Stanje prometnica nije potvrđeno. Provjeri službeni izvor.'}</p>`;
   } else {
     list =
       `<ul class="items">` +

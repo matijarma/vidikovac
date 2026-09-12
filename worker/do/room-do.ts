@@ -267,7 +267,7 @@ export class RoomDO extends DurableObject<Env> {
 
   private isLive(): boolean {
     const phase = this.phase();
-    return phase === 'live' || phase === 'warned60' || phase === 'warned20';
+    return (phase === 'live' || phase === 'warned60' || phase === 'warned20') && this.expiresAt() > this.now();
   }
 
   private expiresAt(): number {
