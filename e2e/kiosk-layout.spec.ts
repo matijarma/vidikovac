@@ -461,3 +461,108 @@ test.describe('the essentials board never scrolls under the production load (F5 
     });
   }
 });
+
+// --- F8 / R-F11: the board must fit every combination, not just the pair --
+// R-F11 (was P-1): F5 fixed the pair the production screenshot showed and
+// flagged that all five rows at once -- a live CAP warning, closures, the
+// routes row, weather and the pharmacy -- still scrolled inside the panel,
+// which R-P7 promises it never will (a kiosk has no scroll wheel). This
+// stubs every one of the five sources with real, unhelpful-length content
+// (38 closures, a dozen routes, a long CAP title) and proves the board fits
+// on one 1080p screen with no internal scroll, no two rows overlapping, and
+// no detail line running past its two-line cap.
+
+/** A CAP title long enough to press the two-line clamp, not merely sit on
+ *  one short line -- the same discipline as the closures/routes fixture
+ *  above, real trouble rather than an easy case. */
+const LONG_CAP_TITLE = 'Upozorenje na obilnu kišu, grmljavinu i olujni vjetar diljem Zagrebačke regije do večernjih sati';
+
+function essentialsFullStressModules(): unknown[] {
+  const routeIds = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const closureIds = Array.from({ length: 38 }, (_, i) => i + 1);
+  return [
+    {
+      module: 'dhmz-cap', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR,
+      items: [{ id: 'w1', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: LONG_CAP_TITLE, severity: 'moderate' }],
+    },
+    {
+      module: 'prometnice', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR,
+      items: closureIds.map((n) => ({ id: `c${n}`, module: 'prometnice', kind: 'closure', tier: 'open', title: `Ulica broj ${n}` })),
+    },
+    {
+      module: 'zet-rt', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), sourceUpdatedAt: new Date().toISOString(),
+      attribution: {
+        text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669',
+        url: 'https://www.zet.hr/gtfs-rt-protobuf', licence: 'Otvorena dozvola',
+      },
+      items: [...routeIds.map((id) => essentialsVehiclePin(`v${id}`, id)), ...routeIds.map((id) => essentialsRouteSummary(id, 90))],
+    },
+    {
+      module: 'dhmz-now', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR,
+      items: [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', data: { temp: 24, weather: 'sunčano uz povremenu naoblaku' } }],
+    },
+    {
+      module: 'ckan-geo', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(), attribution: ATTR,
+      items: [{ id: 'p1', module: 'ckan-geo', kind: 'poi', tier: 'open', title: 'Ljekarna Centar, Ilica 1', data: { category: 'ljekarne', duty: 'da' } }],
+    },
+  ];
+}
+
+/** Distinct line-box tops inside `selector`'s own text -- the same technique
+ *  assertStageFits uses for the teaser headline, generalised to any element. */
+async function lineCount(page: Page, handle: ReturnType<Page['locator']>): Promise<number> {
+  return handle.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+    return new Set(rects.map((r) => Math.round(r.top))).size;
+  });
+}
+
+test.describe('the essentials board fits all five rows at once (R-F11)', () => {
+  for (const face of FACES) {
+    test(`${face} face: "Osnovno" fits every one of the five rows above the strip, no internal scroll, no overlap, no detail past two lines -- screenshot saved`, async ({ page, request }) => {
+      await stubTeaserModules(page, essentialsFullStressModules());
+      const { kioskUrl } = await provisionKiosk(request, APP_URL);
+      await openLockedKiosk(page, face, kioskUrl);
+
+      await page.getByTestId('kiosk-essentials-open').click();
+      const panel = page.getByTestId('kiosk-essentials');
+      await expect(panel).toBeVisible();
+
+      const rows = page.locator('[data-testid=kiosk-essentials-rows] [data-testid=ess-row]');
+      const count = await rows.count();
+      expect(count, `${face}: every one of the five sources rendered its row`).toBe(5);
+
+      const strip = await box(page, '[data-testid=safety-strip]');
+      const boxes: Box[] = [];
+      for (let i = 0; i < count; i++) {
+        const r = await rows.nth(i).boundingBox();
+        expect(r, `${face}: essentials row ${i} has a box`).not.toBeNull();
+        expect(r!.y + r!.height, `${face}: essentials row ${i} ends above the safety strip`).toBeLessThanOrEqual(strip.y);
+        boxes.push(r!);
+      }
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          expect(overlaps(boxes[i], boxes[j]), `${face}: essentials row ${i} must not overlap row ${j}`).toBe(false);
+        }
+      }
+
+      const fit = await panel.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
+      expect(fit.scrollHeight - fit.clientHeight, `${face}: the essentials panel needs no internal scroll with all five rows populated`).toBeLessThanOrEqual(1);
+
+      const details = page.locator('[data-testid=kiosk-essentials-rows] .ess-detail');
+      const detailCount = await details.count();
+      expect(detailCount, `${face}: cap, closures, routes and weather each carry a detail line`).toBe(4);
+      for (let i = 0; i < detailCount; i++) {
+        const lines = await lineCount(page, details.nth(i));
+        expect(lines, `${face}: essentials detail ${i} is at most two lines tall`).toBeLessThanOrEqual(2);
+      }
+
+      const rowsText = await page.locator('[data-testid=kiosk-essentials-rows]').innerText();
+      expect(rowsText, 'never a raw-seconds figure anywhere on the board').not.toMatch(/\d s\b/);
+
+      await page.screenshot({ path: `${SHOTS_DIR}/kiosk-1080p-essentials-full-${face}.png`, fullPage: false });
+    });
+  }
+});

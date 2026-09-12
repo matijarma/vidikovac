@@ -69,7 +69,11 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   // the map says so in one sentence.
   const schematic = ctx.schematic;
   if (schematic) {
-    schematic.update({ fixes: vehicleFixes(zet, now), delays: routeDelayMap(zet) }, now);
+    // R-F8 / F8: the zet-rt snapshot itself, not just its fixes and delays,
+    // so the lightweight list's `renderList()` can print the honest
+    // stale/down sentence during an outage the same way the locked kiosk
+    // stage's own update() call already does (kiosk.ts's loadTeaser()).
+    schematic.update({ fixes: vehicleFixes(zet, now), delays: routeDelayMap(zet), snapshot: zet }, now);
     panels.appendChild(
       createPanel({ i18n, now, id: 'u-pokretu-schematic', title: i18n.t('panels.schematic'), snapshot: zet, body: schematic.mount() }).element,
     );
