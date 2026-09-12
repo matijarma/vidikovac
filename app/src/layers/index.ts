@@ -29,8 +29,11 @@ export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   'u-pokretu': ['zet-rt', 'prometnice'],
   'zrak-i-nebo': ['emsc', 'dhmz-cap', 'dhmz-forecast'],
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
-  'uprava-i-pravo': ['glasnik'],
-  kultura: [],
+  // dogadanja is one module, session tier, shared by both layers below: each
+  // reads the same merged snapshot and filters to its own subset of the six
+  // sources (kultura.ts, uprava-i-pravo.ts), so it is listed for both.
+  'uprava-i-pravo': ['glasnik', 'dogadanja'],
+  kultura: ['dogadanja'],
   vijesti: ['hrt-news'],
 };
 

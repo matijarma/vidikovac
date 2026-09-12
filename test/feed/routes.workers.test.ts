@@ -71,6 +71,7 @@ describe('GET /api/teaser', () => {
       'dhmz-now',
       'zet-rt',
       'hrt-news',
+      'dogadanja',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
     expect(zet?.items.map((item) => item.id)).toEqual(['vozila', 'route:12']);
