@@ -234,6 +234,13 @@ export interface CityMapOptions {
    *  never a jump onto a report. A page passes the same memoised loader its
    *  schematic uses so the artefact is fetched once (R-L4). */
   loadNetwork?: () => Promise<Network | null>;
+  /** The page's clock-tick timer pair for the reduced-motion loop, which
+   *  never asks the compositor for a frame (R-F6) and ticks on the pair
+   *  the page injects -- the same one its schematic uses -- so a test of
+   *  the page owns every timer on it (R-F12). Bound by `withTimers`, like
+   *  the loader above by `withNetwork`; absent, the loop uses the globals. */
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
 }
 
 export interface CityMapHandle {
@@ -259,20 +266,26 @@ export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => 
   return factory && ((options) => factory({ ...options, loadNetwork }));
 }
 
+/** Binds the page's timer pair into a factory, beside `withNetwork`, so the
+ *  production factory (createCityMap itself, in the entries) ticks its
+ *  reduced-motion loop on the pair the page injects rather than on the
+ *  globals (R-F12). `undefined` in stays `undefined` out. */
+export function withTimers(factory: MapFactory | undefined, setTimer: (fn: () => void, ms: number) => unknown, clearTimer: (handle: unknown) => void): MapFactory | undefined {
+  return factory && ((options) => factory({ ...options, setTimer, clearTimer }));
+}
+
 /** The slice of MapLibre this wrapper drives; maplibre-entry.ts exports it. */
 type MaplibreModule = typeof import('./maplibre-entry');
 
-/** Injectable internals: the library import (never loaded under test), and
- *  the loop's own clock, frame primitive and clock-tick timer pair
- *  (motion/loop.ts's LoopDeps -- the reduced-motion loop runs on the timer
- *  pair, never on frames, R-F6). */
+/** Injectable internals: the library import (never loaded under test) and
+ *  the loop's own clock and frame primitive (motion/loop.ts's LoopDeps).
+ *  The clock-tick timer pair is not here: it is the page's, and rides on
+ *  the options through `withTimers`, like the network loader. */
 export interface CityMapDeps {
   loadMaplibre?: () => Promise<MaplibreModule>;
   raf?: (cb: (t: number) => void) => number;
   cancel?: (h: number) => void;
   now?: () => number;
-  setTimer?: (fn: () => void, ms: number) => unknown;
-  clearTimer?: (handle: unknown) => void;
 }
 
 let mapUid = 0;
@@ -328,8 +341,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     raf: deps.raf,
     cancel: deps.cancel,
     now,
-    setTimer: deps.setTimer,
-    clearTimer: deps.clearTimer,
+    setTimer: options.setTimer,
+    clearTimer: options.clearTimer,
     reducedMotion: options.reducedMotion,
   });
 
