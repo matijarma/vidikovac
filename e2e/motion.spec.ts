@@ -112,14 +112,35 @@ function emptySnapshot(moduleId: string) {
 /** Fulfils `/api/teaser` (the locked kiosk's own open-tier poll) with a
  *  single `zet-rt` module every time it is asked, however many times that
  *  is -- the count is how a test proves "the snapshot behind these two
- *  frames never changed": across a sampled window it must read 1. */
-async function stubTeaser(page: Page, snapshot: unknown): Promise<{ count(): number }> {
+ *  frames never changed": across a sampled window it must read 1.
+ *
+ *  `snapshot` may be a factory instead of a plain value: a caller that also
+ *  passes `gate` wants the module built at *fulfil* time, not at call time
+ *  (see `deferred` below, whose whole point is delaying that moment).
+ *  `gate`, when given, is awaited before the *first* response is fulfilled;
+ *  every later poll answers immediately, matching the real endpoint. */
+async function stubTeaser(
+  page: Page,
+  snapshot: unknown | (() => unknown),
+  gate?: Promise<void>,
+): Promise<{ count(): number }> {
   let count = 0;
   await page.route('**/api/teaser', async (route: Route) => {
     count++;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules: [snapshot] }) });
+    if (count === 1 && gate) await gate;
+    const body = typeof snapshot === 'function' ? (snapshot as () => unknown)() : snapshot;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules: [body] }) });
   });
   return { count: () => count };
+}
+
+/** A promise the caller can resolve from the outside, plus the function to
+ *  resolve it with -- the standard "deferred" shape, used here to hold
+ *  `stubTeaser`'s first fulfilment open until the test says otherwise. */
+function deferred(): { promise: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
 }
 
 /** Fulfils every `/api/data/<module>` a session's dashboard asks for:
@@ -162,10 +183,26 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     page,
     request,
   }) => {
-    const teaser = await stubTeaser(page, zetSnapshot('e2e-kiosk-1', 0));
+    // The fixture's ease window (FIX_INTERVAL_MS) starts the instant
+    // model.update() sees these two fixes -- i.e. the instant this route's
+    // first response is actually fulfilled, not when the test happened to
+    // set it up. loadTeaser() fires at mount (kiosk.ts), long before
+    // `pair-code` becomes visible (a BeaconDO WebSocket handshake with a
+    // 30 s allowance), so holding that first response gated on `release`
+    // and only calling it once pairing is done -- with the fixture itself
+    // built at that same moment (`snapshot` is a factory, so its `now` is
+    // read at fulfil time) -- ties the ease window's start to the moment
+    // this test starts measuring, however long pairing actually took.
+    // Without this, a slow handshake (a cold Durable Object, a loaded CI
+    // box) lets the vehicle finish easing and the loop park (loop.ts's
+    // PARK_AFTER_UNCHANGED) before either assertion below ever samples a
+    // frame.
+    const gate = deferred();
+    const teaser = await stubTeaser(page, () => zetSnapshot('e2e-kiosk-1', 0), gate.promise);
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    gate.release();
 
     const schematicSel = '[data-testid=kiosk-live] [data-testid=schematic]';
     const vehiclesCanvasSel = '[data-testid=kiosk-live] [data-testid=schematic-vehicles]';
