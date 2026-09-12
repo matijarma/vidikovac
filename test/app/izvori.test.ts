@@ -49,10 +49,17 @@ const EXPECTED: Record<string, { url: string; text: string; licence: string }> =
     text: 'Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}',
     licence: 'Otvorena dozvola (NN 67/17)',
   },
+  dogadanja: {
+    url: 'https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc',
+    text:
+      'Šest izvora zagrebačkih događanja: Kulturpunkt (CC BY-SA 3.0 HR), Skupština Grada Zagreba, kvartovske novosti, ' +
+      'plan komunalnih aktivnosti i ZET (Otvorena dozvola), Etnografski muzej; licenca i poveznica navedeni uz svaku stavku prema polju "source"',
+    licence: 'Više licenci, vidi izvor uz svaku stavku',
+  },
 };
 
 describe('app/src/data/izvori.json', () => {
-  it('lists exactly the nine modules, once each', () => {
+  it('lists exactly the ten modules, once each', () => {
     const ids = izvori.sources.map((s) => s.module);
     expect([...ids].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
@@ -88,7 +95,7 @@ describe.skipIf(registryMissing)('parity with worker/feed/registry.ts', () => {
 describe('renderIzvoriHtml', () => {
   it('renders one article per source with the text, link and licence', () => {
     const html = renderIzvoriHtml();
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(10);
     expect(html).toContain('Public dataset by ZET provided under Open license');
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');

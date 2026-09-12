@@ -9,6 +9,7 @@ import { fetchGlasnik } from './modules/glasnik';
 import { fetchHrtNews } from './modules/hrt-news';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt } from './modules/zet-rt';
+import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
 
 // The registry is the single source of truth for tier, refresh windows and
 // attribution. Module files know only how to parse their own source.
@@ -66,6 +67,10 @@ export const ATTRIBUTION: Record<ModuleId, Attribution> = {
     url: 'https://data.zagreb.hr/',
     licence: OPEN_LICENCE,
   },
+  // Blends two licences (CC BY-SA 3.0 HR for Kulturpunkt, Otvorena dozvola for
+  // the other five) -- see dogadanja/index.ts's own header for why this one
+  // row can't state a single licence the way every other module's row does.
+  dogadanja: DOGADANJA_ATTRIBUTION,
 };
 
 interface ModuleDefinition {
@@ -110,6 +115,19 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: fetchHrtNews }),
   glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: fetchGlasnik }),
   'ckan-geo': defineModule({ id: 'ckan-geo', tier: 'open', ttl: 86400, maxStale: 2592000, load: fetchCkanGeo }),
+  // Not built through defineModule: its own fetcher already returns the
+  // complete snapshot (module/tier/fetchedAt/attribution/items stamped
+  // itself), plus `sourceCounts`, which defineModule's generic wrapper would
+  // silently drop (it constructs a fresh object literal from a plain
+  // FeedPayload and never spreads one through). See dogadanja/index.ts.
+  dogadanja: {
+    id: 'dogadanja',
+    tier: 'session',
+    ttl: 900,
+    maxStale: 86400,
+    attribution: DOGADANJA_ATTRIBUTION,
+    fetcher: fetchDogadanja,
+  },
 };
 
 export const MODULE_IDS = Object.keys(MODULES) as ModuleId[];
