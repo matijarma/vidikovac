@@ -178,6 +178,23 @@ describe('mountKiosk', () => {
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('žuto upozorenje');
     expect(text(root.querySelector('[data-testid=safety-strip]'))).toContain('Ljekarna Centar, Ilica 1');
   });
+  it('never splits a live news headline into a two-tone headline: only the invitation card gets that treatment', async () => {
+    // A realistic HRT headline with Croatian date notation ("11. rujna"),
+    // which contains a bare ". " that is not a sentence boundary.
+    const headline = 'Gradska skupština 11. rujna donijela odluku o prometnicama.';
+    const newsModules = MODULES.map((m) =>
+      m.module === 'hrt-news' ? { ...m, items: [{ ...m.items[0]!, title: headline }] } : m,
+    );
+    const { root, timers } = mount({ fetchTeaser: async () => ({ modules: newsModules }) });
+    await flush();
+    // Rotate weather -> quake -> closures -> news (three rotations).
+    timers.forEach((tick) => tick());
+    timers.forEach((tick) => tick());
+    timers.forEach((tick) => tick());
+    const card = root.querySelector('[data-testid=teaser-card]')!;
+    expect(text(card)).toContain(headline);
+    expect(card.querySelector('.teaser-tagline')).toBeNull();
+  });
   it('the meander is a canvas that sweeps by default, on a fresh slot', () => {
     const plain = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna' }) });
     plain.handlers.onCodes(batch(NOW), NOW);
@@ -349,5 +366,13 @@ describe('catalogueRows', () => {
     expect(rows[1]!.unit).toBe('vozila');
     expect(rows[2]!.value).toBe('1');
     expect(rows[2]!.unit).toBe('zatvorena'); // count 1 -> Croatian "one" category
+  });
+  it('shows an honest loading state for closures when the prometnice module has not loaded, never a claimed zero', () => {
+    const rows = catalogueRows(MODULES.filter((m) => m.module !== 'prometnice'), i18n);
+    const row = rows.find((r) => r.id === 'closures')!;
+    // Mirrors the weather row two lines up and the vehicles row: an absent
+    // snapshot is "loading", not a rendered "0".
+    expect(row.value).toBe(i18n.t('status.loading'));
+    expect(row.unit).toBe('');
   });
 });

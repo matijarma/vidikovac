@@ -152,8 +152,11 @@ export function catalogueRows(modules: readonly ModuleSnapshot[], i18n: I18n): C
     {
       id: 'closures',
       label: i18n.t('kiosk.catalogueClosures'),
-      value: String(closures),
-      unit: i18n.t('kiosk.unitClosed', { count: closures }),
+      // Mirrors the weather/vehicles rows above (and teaserCards' own
+      // closures card): no prometnice snapshot yet is an honest "loading",
+      // never a claimed zero.
+      value: map.prometnice ? String(closures) : i18n.t('status.loading'),
+      unit: map.prometnice ? i18n.t('kiosk.unitClosed', { count: closures }) : '',
     },
   ];
 }
@@ -340,9 +343,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
 
   /** M3b's note: the invitation's two sentences split onto two lines, the
-   *  first in ink and the second in `--tone-label` (Vidikovac.dc.html:69) —
-   *  written generically off the first full stop, never hard-coded to one
-   *  card id, so it applies to whichever card the rotation is showing. */
+   *  first in ink and the second in `--tone-label` (Vidikovac.dc.html:69).
+   *  Scoped to the invitation card alone (see `paintTeaser`) — every other
+   *  card's body is live, uncontrolled feed text (an HRT headline, a DHMZ
+   *  observation) where a bare first '. ' is not a sentence boundary: Croatian
+   *  date notation ("11. rujna") and abbreviations ("dr. ", "npr. ") both
+   *  contain one, and would be spuriously split into a two-tone headline. */
   function splitHeadline(text: string): { lead: string; tail: string } {
     const cut = text.indexOf('. ');
     return cut === -1 ? { lead: text, tail: '' } : { lead: text.slice(0, cut + 1), tail: text.slice(cut + 2) };
@@ -352,7 +358,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const card = cards[cardIndex % Math.max(1, cards.length)];
     if (!card) return;
     teaserCard.classList.remove('is-in');
-    const { lead, tail } = splitHeadline(card.body);
+    const { lead, tail } = card.id === 'invitation' ? splitHeadline(card.body) : { lead: card.body, tail: '' };
     teaserCard.innerHTML = `<p class="teaser-kicker">${escapeHtml(card.title)}</p>
       <h1 class="teaser-title">${escapeHtml(lead)}${tail ? `<br><span class="teaser-tagline">${escapeHtml(tail)}</span>` : ''}</h1>
       ${card.attribution ? `<p class="teaser-attr">${escapeHtml(card.attribution.text)}</p>` : ''}`;
