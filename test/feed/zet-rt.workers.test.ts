@@ -35,7 +35,12 @@ describe('fetchZetRt inside the Workers runtime', () => {
     expect(payload.sourceUpdatedAt).toBe('2026-09-11T10:59:45.000Z');
     const vehicle = payload.items.find((item) => item.id.startsWith('vehicle:'));
     expect(vehicle?.geo).toEqual({ type: 'Point', coordinates: [15.9839, 45.8136] });
-    expect(vehicle?.data).toMatchObject({ routeId: '12', tripId: 't1', vehicleId: '102216', bearing: 90 });
+    expect(vehicle?.data).toMatchObject({ routeId: '12', tripId: 't1', vehicleId: '102216' });
+    // R-P3: the fixture above carries a bearing on the wire (unlike the real
+    // ZET feed, which sends none at all) to prove this is a deliberate drop,
+    // not an accident of what happens to arrive.
+    expect(vehicle?.data).not.toHaveProperty('bearing');
+    expect(vehicle?.data).not.toHaveProperty('speed');
     const delay = payload.items.find((item) => item.id.startsWith('route:'));
     expect(delay?.data).toEqual({ routeId: '12', routeShortName: '12', medianDelaySeconds: -81, vehicles: 1 });
   });

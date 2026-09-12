@@ -77,13 +77,21 @@ export function parseZetRt(bytes: Uint8Array, routes: ZetRoutes): FeedPayload {
           title: routeLabel(routeId, routes),
           ...(at ? { at: new Date(at * 1000).toISOString() } : {}),
           geo: { type: 'Point', coordinates: [roundCoord(lon), roundCoord(lat)] },
+          // R-P3: ZET's GTFS-RT feed carries no bearing and no speed on
+          // VehiclePosition. protobufjs still decodes both fields — the
+          // proto default of 0 for an absent scalar — which read as "facing
+          // due north, standing still" for every vehicle on the map. Do not
+          // restore `bearing: toNumber(vehicle.position.bearing)` or
+          // `speed: toNumber(vehicle.position.speed)` from the protobuf
+          // definition by reflex: the fields exist in the schema because
+          // GTFS-RT allows them, not because this feed ever populates them.
+          // The motion model (T5) derives its own speed from fix history
+          // instead; a reported position is evidence, never output.
           data: compactData({
             routeId: routeId || undefined,
             tripId: vehicle.trip?.tripId ?? undefined,
             vehicleId,
             routeShortName: routeId ? routeShortName(routeId, routes) : undefined,
-            bearing: toNumber(vehicle.position.bearing),
-            speed: toNumber(vehicle.position.speed),
           }),
         });
       }

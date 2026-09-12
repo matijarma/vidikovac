@@ -107,7 +107,9 @@ export interface ModuleSpec {
  */
 export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // Both the per-vehicle pin and the one summary row per route (id 'route:<routeId>').
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'bearing', 'speed', 'medianDelaySeconds', 'vehicles'],
+  // No 'bearing' and no 'speed' (R-P3): ZET's feed never sends either, and the
+  // motion model derives its own speed from fix history instead of trusting one.
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'medianDelaySeconds', 'vehicles'],
   closure: ['type', 'subtype', 'direction', 'street'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],
