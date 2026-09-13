@@ -62,3 +62,10 @@ describe('dashboard.css sidebar under text zoom', () => {
     expect(0.3 * 90).toBeGreaterThan(19);
   });
 });
+
+describe('Grad: the phase bars are a desk figure', () => {
+  it('hides .cv-phases below 60rem, where the chips already carry the counts', () => {
+    expect(LAYERS).toContain('@media (max-width: 59.99rem) { .cv-phases { display: none; } }');
+  });
+});
+

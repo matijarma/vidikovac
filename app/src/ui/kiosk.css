@@ -209,13 +209,14 @@
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface-2); text-align: center; font-size: var(--k-sup-2); color: var(--k-ink-2); }
 .k-invite-text { grid-area: text; min-width: 0; }
-.k-invite-code { display: grid; grid-area: code; grid-template-columns: auto minmax(0, 1fr); grid-column-gap: var(--k-gap); column-gap: var(--k-gap); align-items: end; margin-top: var(--k-gap); }
+.k-invite-code { display: grid; grid-area: code; grid-template-columns: auto minmax(0, 1fr); grid-column-gap: var(--k-gap); column-gap: var(--k-gap); align-items: end; margin-top: var(--k-gap); container-type: inline-size; }
 .kiosk[data-size='compact'] .k-invite-code { grid-template-columns: minmax(0, 1fr); align-self: end; margin-top: calc(var(--k-gap) * 0.6); }
 .k-invite-code .k-progress { grid-column: 1 / -1; }
 .kiosk[data-size='wide'] .k-invite-code .k-hint { margin: 0; text-align: right; }
 .k-lead { font-size: var(--k-main); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
 .k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); line-height: 1.3; color: var(--k-ink-2); }
-.k-code { display: flex; align-items: baseline; margin-top: var(--k-gap); font-size: var(--k-code-size); font-weight: 800; letter-spacing: 0.06em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--k-action); }
+/* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier. */
+.k-code { display: flex; align-items: baseline; margin-top: var(--k-gap); font-size: min(var(--k-code-size), 11.5cqi); font-weight: 800; letter-spacing: 0.06em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--k-action); }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .k-code-dash { margin: 0 0.15em; color: var(--k-ink-3); }
 .k-hint { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); color: var(--k-ink-2); }

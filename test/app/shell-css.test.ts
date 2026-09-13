@@ -275,3 +275,10 @@ describe('scroll padding keeps focused rows clear of the fixed chrome', () => {
     expect(desk).toContain('html:has(.ki) { scroll-padding-block: 0; }');
   });
 });
+
+describe('the shell grid has one shrinkable track', () => {
+  it('sizes the phone column as minmax(0, 1fr), so a zoomed header or workspace can never widen the page', () => {
+    expect(rule('.ki', CSS)).toContain('grid-template-columns: minmax(0, 1fr);');
+  });
+});
+

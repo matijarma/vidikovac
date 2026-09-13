@@ -18,6 +18,8 @@ import type { LayerContext } from './types';
 
 /** One default page of Gazette acts; the search field narrows the list first, so a search always covers every act. */
 const ACTS_PAGE = 10;
+/** One default page of communal works; the phase chips and the search narrow the list first, so a filter always covers every match. */
+const WORKS_PAGE = 8;
 
 const CITY_WORK_SOURCE_TUPLE = ['skupstina', 'komunalne'] as const;
 type CityWorkSource = (typeof CITY_WORK_SOURCE_TUPLE)[number];
@@ -108,11 +110,15 @@ function worksSection(i18n: I18n, ctx: LayerContext): string {
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
   const coverage = coverageText(i18n, dogadanja);
   const toolbar = `<div class="ws-toolbar">${searchField({ id: 'works-search', key: 'wq', label: i18n.t('civic.searchWorks'), placeholder: i18n.t('civic.searchWorksPlaceholder'), value: query })}${chips}</div>`;
+  const shownWorks = Math.min(filtered.length, Number(ctx.view?.filters.works) || WORKS_PAGE);
+  const moreWorks = shownWorks < filtered.length
+    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(WORKS_PAGE, filtered.length - shownWorks) }), { extra: { 'filter-key': 'works', 'filter-value': shownWorks + WORKS_PAGE } })
+    : '';
   return section({
     id: 'cv-works', tone: 'civic', className: 'cv-wide', testid: 'cv-works',
     body: sectionHead(i18n, { kicker: SOURCE_NAME.komunalne, title: i18n.t('civic.works'), snapshot: dogadanja, error: ctx.errors?.dogadanja, id: 'cv-works-title' }) +
       `<p class="sec-note">${escapeHtml(i18n.t('civic.worksIntro'))}</p>${figure}${toolbar}` +
-      (state || `<ul class="rows" role="list" data-testid="works">${filtered.map((w) => workRow(i18n, w, ctx)).join('')}</ul>`) +
+      (state || `<ul class="rows" role="list" data-testid="works">${filtered.slice(0, shownWorks).map((w) => workRow(i18n, w, ctx)).join('')}</ul>${moreWorks}`) +
       `<p class="sec-note">${escapeHtml(i18n.t('civic.amountNote'))}${coverage ? ` · ${escapeHtml(coverage)}` : ''}</p>`,
   });
 }

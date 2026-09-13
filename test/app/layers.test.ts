@@ -620,3 +620,29 @@ describe('exports wiring', () => {
     expect(detail.querySelector('[data-action=ics-item]')).toBeNull(); // the fixture carries no dateBasis, so no calendar file
   });
 });
+
+describe('Grad pages the communal works register (wave 1 merge gate: Grad under 3000 px at 390)', () => {
+  const MANY_WORKS: ModuleSnapshot = base(
+    'dogadanja',
+    Array.from({ length: 20 }, (_, i) => ({
+      id: `komunalne:${i + 1}`, module: 'dogadanja', kind: 'event', tier: 'session', title: `Radovi ${i + 1}`, summary: `zahvat ${i + 1}`,
+      at: '2026-06-01T00:00:00Z', data: { source: 'komunalne', phase: i % 2 ? 'Radovi u tijeku' : 'Ugovaranje', status: 'U tijeku', amount: 1000 + i, precision: 'day' },
+    })) as ModuleSnapshot['items'],
+  );
+  it('renders eight works, offers eight more, and a filter value renders exactly that many', () => {
+    const section = renderLayer('uprava-i-pravo', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: MANY_WORKS } }));
+    expect(section.querySelectorAll('[data-testid=works] [data-testid=city-work-row]')).toHaveLength(8);
+    const more = section.querySelector<HTMLElement>('#cv-works [data-action=filter][data-filter-key=works]')!;
+    expect(more.textContent?.trim()).toBe('Prikaži još 8');
+    expect(more.dataset.filterValue).toBe('16');
+    const expanded = renderLayer('uprava-i-pravo', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: MANY_WORKS }, view: { layer: 'uprava-i-pravo', selection: null, filters: { works: '16' } } }));
+    expect(expanded.querySelectorAll('[data-testid=works] [data-testid=city-work-row]')).toHaveLength(16);
+    expect(expanded.querySelector('#cv-works [data-action=filter][data-filter-key=works]')?.textContent?.trim()).toBe('Prikaži još 4');
+  });
+  it('a phase chip narrows the list first, so a filtered register shows every match up to the page', () => {
+    const section = renderLayer('uprava-i-pravo', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: MANY_WORKS }, view: { layer: 'uprava-i-pravo', selection: null, filters: { phase: 'Ugovaranje' } } }));
+    expect(section.querySelectorAll('[data-testid=works] [data-testid=city-work-row]')).toHaveLength(8);
+    expect(section.querySelector('#cv-works [data-action=filter][data-filter-key=works]')?.textContent?.trim()).toBe('Prikaži još 2');
+  });
+});
+

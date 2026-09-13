@@ -69,7 +69,7 @@ a { color: var(--tone-text-brand); text-underline-offset: 0.15em; text-decoratio
 }
 
 /* Text roles */
-.kicker { margin: 0; font-size: var(--text-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.kicker { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
 .meta { margin: 0; font-size: var(--text-meta); line-height: var(--leading-snug); color: var(--tone-text-muted); }
 .muted { color: var(--tone-text-muted); }
 
@@ -108,7 +108,7 @@ input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; a
 .chip-static { cursor: default; border-color: var(--tone-stroke); color: var(--tone-text-muted); }
 
 /* Status words: severity and freshness as a word plus a shape, never colour alone. */
-.badge { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 1.5rem; padding: 0 var(--sp-2); border-radius: var(--r-xs); font-size: var(--text-meta); font-weight: var(--weight-bold); letter-spacing: 0.02em; line-height: 1; background: var(--tone-surface-2); color: var(--tone-text-primary); }
+.badge { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 1.5rem; padding: 0 var(--sp-2); border-radius: var(--r-xs); font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; line-height: 1; background: var(--tone-surface-2); color: var(--tone-text-primary); }
 .badge::before { content: ''; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: currentColor; }
 .badge[data-tone='info'] { color: var(--tone-text-muted); }
 .badge[data-tone='minor'] { background: var(--tone-tint-success); color: var(--tone-state-success); }

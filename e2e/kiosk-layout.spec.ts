@@ -59,6 +59,8 @@ async function openInvitation(page: Page, face: Face, size: { width: number; hei
   await page.setViewportSize(size);
   await page.goto(kioskUrl);
   await expect(page.locator('[data-testid=pair-code][data-state=live]')).toBeVisible({ timeout: 30_000 });
+  // Geometry is measured in the final face: Manrope loaded, not the wider fallback.
+  await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1500);
 }
 

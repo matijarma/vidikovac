@@ -84,7 +84,7 @@
 .t-map-canvas .maplibregl-ctrl-attrib { font-size: var(--text-meta); background: var(--tone-surface-1); color: var(--tone-text-muted); }
 .t-map-canvas .maplibregl-ctrl-attrib a { color: var(--tone-text-muted); }
 /* The compact credit: one 44 px button that opens the line. */
-.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { min-block-size: var(--target); padding-inline-end: var(--target); border-radius: var(--r-pill); box-shadow: var(--tone-shadow-soft); }
+.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { min-block-size: var(--target); padding-inline-end: var(--target); border-radius: var(--r-pill); box-shadow: var(--tone-shadow-soft); background: var(--tone-surface-1); color: var(--tone-text-muted); }
 .t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding-inline-end: 0; min-inline-size: var(--target); }
 .t-map-canvas .maplibregl-ctrl-attrib-button { inline-size: var(--target); block-size: var(--target); background-repeat: no-repeat; background-position: center; }
 .t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { line-height: var(--target); padding-inline-start: var(--sp-3); }

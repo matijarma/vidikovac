@@ -84,7 +84,8 @@ async function tabWalkClearOfChrome(page: Page, limit = TAB_LIMIT): Promise<Focu
       const px = (n: number): string => `${Math.round(n)} px`;
       let problem = '';
       // The chrome's own controls sit inside the chrome, and a <dialog> paints in the top layer above it.
-      const inChrome = el.closest(header) !== null || el.closest(tabbar) !== null || el.closest('dialog') !== null;
+      // The skip link paints over the header on focus by design (z-index above --z-sticky), like a dialog in the top layer.
+      const inChrome = el.closest(header) !== null || el.closest(tabbar) !== null || el.closest('dialog') !== null || el.classList.contains('skip-link');
       if (!inChrome && r.width > 0 && r.height > 0) {
         if (r.top < zoneTop - 1) problem = `top ${px(r.top)} is above the header's bottom edge ${px(zoneTop)}`;
         else if (r.bottom > zoneBottom + 1) problem = `bottom ${px(r.bottom)} is below the tab bar's top edge ${px(zoneBottom)} (viewport ${innerHeight} px)`;

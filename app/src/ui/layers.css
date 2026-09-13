@@ -26,7 +26,8 @@
 .ki[data-modality='pointer'] .layer-title:focus-visible, .ki[data-modality='pointer'] .detail-title:focus-visible, .ki[data-modality='pointer'] .ki-main:focus-visible { outline: none; }
 /* The weather lead is a flat line, not another card. */
 .sec.wx-lead { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
-.ws-toolbar { display: grid; gap: var(--sp-3); }
+.ws-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.ws-toolbar > * { min-inline-size: 0; }
 .ws-toolbar .field-search input { inline-size: 100%; }
 /* Chips stay one row on a phone: the row scrolls under a fading edge instead
    of wrapping to a second line, and returns to a wrapping group once there is
@@ -135,9 +136,9 @@
 .g-dot { fill: var(--tone-text-primary); stroke: var(--tone-surface-1); stroke-width: 2; }
 .g-dot-urgency { fill: var(--tone-urgency); fill-opacity: 0.8; }
 .g-centre { fill: var(--tone-action-brand); }
-.g-label { fill: var(--tone-text-muted); font-size: 12px; }
+.g-label { fill: var(--tone-text-muted); font-size: 13px; }
 .g-label-strong { fill: var(--tone-text-primary); font-weight: 700; }
-.g-caption { fill: var(--tone-text-subtle); font-size: 10px; }
+.g-caption { fill: var(--tone-text-muted); font-size: 13px; }
 .g-value { fill: var(--tone-text-primary); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .g-path { fill: none; stroke: var(--tone-weather); stroke-width: 2; stroke-dasharray: 4 5; opacity: 0.8; }
 .g-horizon { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
@@ -177,7 +178,7 @@
 .g-bar-fill[data-tone='action'] { background: var(--tone-action-brand); }
 .g-bar-fill[data-tone='transit'] { background: var(--tone-transit); }
 .g-bar-value { font-size: var(--type-secondary); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; line-height: var(--lh-body); color: var(--tone-text-primary); }
-.g-bar-caption { grid-column: 1 / -1; font-size: var(--type-meta); color: var(--tone-text-subtle); }
+.g-bar-caption { grid-column: 1 / -1; font-size: var(--type-secondary); color: var(--tone-text-muted); }
 /* Route rows (overview transport action). */
 .route-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .route-list > li { border-block-start: 1px solid var(--tone-stroke); }
@@ -301,6 +302,7 @@
 
 /* Civic: phases counted, amounts listed, acts searchable. */
 .cv-phases { display: grid; gap: var(--sp-2); }
+@media (max-width: 59.99rem) { .cv-phases { display: none; } }
 .cv-amount { font-variant-numeric: tabular-nums; font-weight: var(--weight-bold); }
 .cv-issue { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3); }
 .cv-issue-no { font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -331,7 +333,7 @@
   .sf-number:hover { background: var(--tone-surface-3); }
 }
 .sf-number-value { font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
-.sf-number-label { font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
+.sf-number-label { font-size: var(--type-control); color: var(--tone-text-muted); line-height: var(--lh-body); }
 .sf-number-primary { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
 .sf-number-primary .sf-number-label { color: inherit; opacity: 0.85; }
 @media (hover: hover) {

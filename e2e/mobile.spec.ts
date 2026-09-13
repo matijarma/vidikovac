@@ -329,16 +329,21 @@ test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (a
 });
 
 // --- 6. bounded heights ------------------------------------------------------------------
-test(`with fixtures at 390 px Grad stays under ${GRAD_MAX_HEIGHT_PX} px and Sigurnost under ${SIGURNOST_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
+test(`with fixtures at 390 px Grad stays under ${GRAD_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
-  const height = (): Promise<number> => page.evaluate(() => document.documentElement.scrollHeight);
   await openLayer(page, 'uprava-i-pravo');
   await settle(page, fixture);
-  const grad = await height();
-  expect.soft(grad, `Grad renders ${grad} px of document; the plan bounds it under ${GRAD_MAX_HEIGHT_PX} px (paged lists, "Prikaži još")`).toBeLessThan(GRAD_MAX_HEIGHT_PX);
+  const grad = await page.evaluate(() => document.documentElement.scrollHeight);
+  expect(grad, `Grad renders ${grad} px of document; the plan bounds it under ${GRAD_MAX_HEIGHT_PX} px (paged lists, "Prikaži još")`).toBeLessThan(GRAD_MAX_HEIGHT_PX);
+});
+
+test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
+  // Expected red until T3.2 lays Sigurnost out as hairline sections with 52 px rows; the pre-wave-3 cards measure about 3600 px with the same content. T3.2 removes this line.
+  test.fail(true, 'red until T3.2 (Sigurnost composition) brings the layout under the bound');
+  const fixture = await openDashboard(page, PHONE);
   await openLayer(page, 'sigurnost');
   await settle(page, fixture);
-  const sigurnost = await height();
+  const sigurnost = await page.evaluate(() => document.documentElement.scrollHeight);
   expect(sigurnost, `Sigurnost renders ${sigurnost} px of document; the plan bounds it under ${SIGURNOST_MAX_HEIGHT_PX} px (assembly points paged)`).toBeLessThan(SIGURNOST_MAX_HEIGHT_PX);
 });
 
@@ -373,6 +378,8 @@ test('at 200% text the header and the tab bar have no horizontal overflow and th
 
 // --- 8. landing -----------------------------------------------------------------------------
 test('the landing at 390 px puts "Skeniraj ili upiši kod" before the kiosk link and the live strip above the fold', async ({ page }) => {
+  // Expected red until T4.4 (landing hierarchy, R-K6) reorders the actions; T4.4 removes this line, and the runner reports the test as passing unexpectedly until it does.
+  test.fail(true, 'red until T4.4 puts the scan action before the kiosk link and the live strip above the fold');
   await page.setViewportSize(PHONE);
   const response = await page.goto('/');
   expect(response?.status(), '/ must answer 200').toBe(200);

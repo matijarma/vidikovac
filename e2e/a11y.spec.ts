@@ -270,8 +270,14 @@ test.describe('the moving map has a text path (R-F5)', () => {
       // Below the desktop breakpoint the attribution is compact (R-O2): one
       // 44 px button opens the credit line, so the licence link is reached
       // the way a person reaches it, by pressing that button first.
-      const attributionButton = phone.locator('.maplibregl-ctrl-attrib-button');
-      if ((phone.viewportSize()?.width ?? 0) < DESKTOP_MIN_PX && (await attributionButton.isVisible())) await attributionButton.click();
+      // MapLibre opens the compact credit expanded and folds it on the first drag, so the
+      // button is pressed only when the credit line is folded (a press on an open credit closes it).
+      const attribution = phone.locator('.maplibregl-ctrl-attrib');
+      const attributionButton = attribution.locator('.maplibregl-ctrl-attrib-button');
+      if ((phone.viewportSize()?.width ?? 0) < DESKTOP_MIN_PX && (await attributionButton.isVisible())) {
+        const showing = await attribution.evaluate((el) => el.classList.contains('maplibregl-compact-show'));
+        if (!showing) await attributionButton.click();
+      }
       await expect(phone.getByRole('link', { name: /OpenStreetMap/ })).toBeVisible();
 
       await assertTextPath(phone, '/d/ (session)');

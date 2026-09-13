@@ -110,3 +110,23 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(fromFirstContainer).not.toMatch(/font-size/);
   });
 });
+
+describe('the 13 px floor holds for the shared labels too (wave 1 merge gate: e2e/mobile.spec.ts test 5)', () => {
+  const BASE = ui('base.css');
+  it('kickers and badges in base.css sit at the secondary role, not the 12 px meta size', () => {
+    expect(BASE).toMatch(/\.kicker \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(BASE).toMatch(/\.badge \{[^}]*font-size: var\(--type-secondary\);/);
+  });
+  it('emergency tile labels read at the control role, bar captions at the secondary role, SVG figure labels at 13 px', () => {
+    expect(LAYERS).toMatch(/\.sf-number-label \{[^}]*font-size: var\(--type-control\);/);
+    expect(LAYERS).toMatch(/\.g-bar-caption \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(LAYERS).toMatch(/\.g-label \{[^}]*font-size: 13px;/);
+    expect(LAYERS).toMatch(/\.g-caption \{[^}]*font-size: 13px;/);
+    expect(LAYERS).not.toMatch(/\.g-label \{[^}]*font-size: 12px;/);
+  });
+  it('the workspace toolbar keeps a scrolling chip row inside its own column instead of widening the page', () => {
+    expect(LAYERS).toContain('.ws-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }');
+    expect(LAYERS).toContain('.ws-toolbar > * { min-inline-size: 0; }');
+  });
+});
+

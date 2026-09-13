@@ -10,6 +10,7 @@
      zoomed (rem grows, vw does not) does it yield room to the workspace. */
   --ki-side: clamp(14rem, 30vw, 17rem);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
   grid-template-areas: 'top' 'banners' 'main';
   min-height: 100vh;
