@@ -28,9 +28,7 @@ export interface RouteSummaryRow {
   type: number;
   /** Vehicles of this route among the input set. */
   count: number;
-  /** delayWord()'s own output. A route with no figure in `delays` at all
-   *  reads "na vrijeme" rather than "unknown" -- the same fallback the
-   *  schematic's old stop list already used for a route's own median. */
+  /** delayWord()'s output. No median means unknown, never "on time". */
   word: string;
 }
 
@@ -57,7 +55,7 @@ export function summariseRoutes(
       label,
       type,
       count,
-      word: delayWord(i18n, delays.get(routeId) ?? 0),
+      word: delayWord(i18n, delays.get(routeId)),
     }))
     .sort((a, b) => a.type - b.type || a.label.localeCompare(b.label, 'hr', { numeric: true }));
 }

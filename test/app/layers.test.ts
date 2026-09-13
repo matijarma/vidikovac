@@ -126,6 +126,14 @@ describe('u-pokretu', () => {
     ]);
     expect(routeDelays(undefined)).toEqual([]);
   });
+  it('does not fabricate zero or rank an uninterpretable median as a current delay', () => {
+    const snapshot = SNAPSHOTS['zet-rt']!;
+    expect(routeDelays({ ...snapshot, items: [
+      ...snapshot.items,
+      { id: 'route:13', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '13', data: { routeId: '13', medianDelaySeconds: 18_600 } },
+      { id: 'route:17', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '17', data: { routeId: '17' } },
+    ] }).map((row) => row.routeId)).toEqual(['6', '11']);
+  });
   it('builds the map from vehicle points and closure lines and prints the delay table', () => {
     const update = vi.fn();
     const factory = vi.fn(() => ({ update, destroy: vi.fn() }));
@@ -151,20 +159,15 @@ describe('u-pokretu', () => {
     expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
-  // T9: the moving map. The page owns one SchematicHost for its whole life
-  // (motion/schematic-host.ts); the layer mounts its stable element into a
-  // panel on every render and hands it this poll's evidence -- fixes from
-  // the vehicle: pins and the route: median delays -- never a position of
-  // its own making.
-  it('mounts the page’s schematic host into the first panel and feeds it this snapshot’s fixes and delays', () => {
+  // Lightweight retains the accessible schematic-host list. The full
+  // experience has one vector-map workspace, never two competing maps.
+  it('mounts the lightweight host with this snapshot’s fixes, delays and source state', () => {
     const element = document.createElement('div');
     element.dataset.testid = 'schematic-host';
     const schematic = { element, mount: vi.fn(() => element), update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() };
-    const section = renderLayer('u-pokretu', ctx({ schematic }));
-    const panel = section.querySelector('#u-pokretu-schematic')!;
-    expect(text(panel.querySelector('.panel-title'))).toBe('Tramvaji i autobusi sada');
-    expect(panel.querySelector('[data-testid=schematic-host]')).toBe(element);
-    expect(section.querySelectorAll('[data-testid=panel]')[0]).toBe(panel);
+    const section = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
+    expect(section.querySelector('[data-testid=schematic-host]')).toBe(element);
+    expect(section.querySelector('[data-testid=transport-workspace]')).toBeNull();
     expect(schematic.update).toHaveBeenCalledTimes(1);
     const [data, at] = schematic.update.mock.calls[0]!;
     expect(at).toBe(NOW);
@@ -177,9 +180,13 @@ describe('u-pokretu', () => {
     // already does on its own update() call.
     expect(data.snapshot).toBe(SNAPSHOTS['zet-rt']);
     // A second render (the next poll) reuses the very same element.
-    const again = renderLayer('u-pokretu', ctx({ schematic }));
+    const again = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
     expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);
     expect(schematic.update).toHaveBeenCalledTimes(2);
+    expect(text(again.querySelector('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
+    const full = renderLayer('u-pokretu', ctx({ schematic }));
+    expect(full.querySelector('[data-testid=schematic-host]')).toBeNull();
+    expect(full.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
   });
   it('renders no schematic panel when the page has no host (unit contexts, the kiosk essentials)', () => {
     const section = renderLayer('u-pokretu', ctx());
@@ -187,7 +194,9 @@ describe('u-pokretu', () => {
   });
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
-    expect(text(section.querySelector('[data-testid=map-fallback]'))).toBe('Karta nije dostupna u ovom pregledniku; popis je ispod.');
+    expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
+    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stanice rade i bez nje.');
+    expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
   });
   // T10: the full map.
   it('hands the map each vehicle report as evidence, dated, with its trip and route type (R-P2)', () => {
@@ -217,8 +226,8 @@ describe('u-pokretu', () => {
     expect(toggle).toHaveBeenCalledTimes(1);
     const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
     expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
-    // No view-mode owner (the kiosk, a unit context): no button.
-    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    // No view-mode owner: the stable control is hidden and not actionable.
+    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.hidden).toBe(true);
   });
 });
 
@@ -294,6 +303,15 @@ describe('delayWord', () => {
     expect(delayWord(en, 90)).toBe('2 min late');
     expect(delayWord(en, -90)).toBe('2 min early');
   });
+  it.each([undefined, null, NaN, Infinity, -Infinity, 5401, -5401, 18_600])('keeps an absent or uninterpretable median (%s) unknown', (value) => {
+    expect(delayWord(i18n, value)).toBe(i18n.t('transit.noDelayData'));
+    const en = createDefaultI18n('en');
+    expect(delayWord(en, value)).toBe(en.t('transit.noDelayData'));
+  });
+  it('does not clamp a valid boundary value or change the source reading', () => {
+    expect(delayWord(i18n, 5400)).toBe('kasni 90 min');
+    expect(delayWord(i18n, -5400)).toBe('rani 90 min');
+  });
 });
 
 // --- route-summary.ts: the one helper both R-F8's lightweight list and the
@@ -318,9 +336,9 @@ describe('summariseRoutes', () => {
     expect(rows[2]).toMatchObject({ routeId: '109', type: 3, count: 1, word: 'rani 1 min' });
   });
 
-  it('reads a route with no delay figure at all as on time, the same fallback the old stop list used', () => {
+  it('does not claim punctuality when the route has no median', () => {
     const rows = summariseRoutes([veh('6', '6', 0)], new Map(), i18n);
-    expect(rows[0].word).toBe('na vrijeme');
+    expect(rows[0].word).toBe(i18n.t('transit.noDelayData'));
   });
 
   it('is empty when there are no vehicles', () => {
@@ -453,6 +471,13 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     expect(body).toContain('Trenutačno nema najava');
     expect(body).toContain('Odgovorili: Kvartovske novosti');
     expect(body).toContain('Bez odgovora: Kulturpunkt, Etnografski muzej');
+  });
+  it.each(['Avenija Dubrovnik 17', 'Ulica grada Vukovara 68', 'Zadarska 80'])('does not mistake a Zagreb street (%s) or an organiser for the event city', (venue) => {
+    const original = SNAPSHOTS.dogadanja!;
+    const local = { ...original.items[0]!, at: '2026-09-12T18:00:00Z', data: { ...original.items[0]!.data, venue, organiser: 'Udruga Split' } };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: { ...original, items: [local] } } }));
+    expect(section.querySelector('#ev-outside')).toBeNull();
+    expect(text(section.querySelector('[data-testid=agenda]'))).toContain(local.title);
   });
   it('kultura keeps a venue outside Zagreb apart and never lists it as a Zagreb event', () => {
     const split = { ...SNAPSHOTS.dogadanja!, items: [

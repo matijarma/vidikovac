@@ -65,7 +65,17 @@ export function vehicleCount(snapshot: ModuleSnapshot | undefined): number | nul
  * one once a route is off the band at all, so "kasni 0 min" (16 s late)
  * never prints a claim of punctuality the band itself already denied.
  */
-export function delayWord(i18n: I18n, seconds: number): string {
+/** Presentation bound, not a correction to the upstream data. Very large
+ * medians cannot be interpreted as a useful current route delay. Keep the
+ * raw source value intact and report the reading as unconfirmed instead. */
+export const MAX_ROUTE_DELAY_SECONDS = 90 * 60;
+
+export function plausibleRouteDelay(seconds: number | null | undefined): seconds is number {
+  return typeof seconds === 'number' && Number.isFinite(seconds) && Math.abs(seconds) <= MAX_ROUTE_DELAY_SECONDS;
+}
+
+export function delayWord(i18n: I18n, seconds: number | null | undefined): string {
+  if (!plausibleRouteDelay(seconds)) return i18n.t('transit.noDelayData');
   const minutes = Math.max(1, Math.round(Math.abs(seconds) / 60));
   if (seconds > 15) return i18n.t('panels.delayLate', { minutes });
   if (seconds < -15) return i18n.t('panels.delayEarly', { minutes });

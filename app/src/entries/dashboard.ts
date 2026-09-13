@@ -87,7 +87,7 @@ if (!params) {
   kept.delete('ticket');
   kept.delete('label');
   kept.set('room', params.roomId);
-  history.replaceState(null, '', `/d/#${kept.toString()}`);
+  history.replaceState(null, '', `${location.pathname}${location.search}#${kept.toString()}`);
   // Export metrics carry `<layer>/<kind>`, the room's own dimension.
   let dash: DashboardHandle | null = null;
   const exportDim = (kind: string): string => `${dash?.activeLayer() ?? 'grad-sada'}/${kind}`;

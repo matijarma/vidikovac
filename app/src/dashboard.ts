@@ -244,6 +244,13 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function render(): void {
+    // A renderer may move a controller's live node while producing its tree.
+    // Capture focus before calling it, not after that move has blurred it.
+    const focused = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+    const focusedId = focused?.id;
+    const caret = focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement
+      ? { start: focused.selectionStart, end: focused.selectionEnd, direction: focused.selectionDirection }
+      : null;
     const ctx = layerContext();
     const layer = view.snapshot().layer;
     const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
@@ -252,11 +259,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       wrapper.appendChild(next);
       reconcile(main, wrapper);
     } else {
-      const focusId = doc.activeElement instanceof HTMLElement ? doc.activeElement.id : '';
       main.replaceChildren(next);
-      if (focusId) doc.getElementById(focusId)?.focus();
+    }
+    const target = focused?.isConnected ? focused : focusedId ? doc.getElementById(focusedId) : null;
+    if (target && doc.activeElement !== target) {
+      target.focus({ preventScroll: true });
+      if (caret && caret.start !== null && caret.end !== null &&
+          (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+        target.setSelectionRange(caret.start, caret.end, caret.direction ?? undefined);
+      }
     }
     maps.sweep();
+    if (frozen) maps.pause();
   }
 
   function setMapView(full: boolean): void {
@@ -552,17 +566,35 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });
-  const stopStore = store.subscribe(() => { render(); paintShell(); });
+  // A batch can finish several modules in the same turn. Render the latest
+  // combined state once, without delaying independent slow-source responses.
+  let feedRenderQueued = false;
+  const stopStore = store.subscribe(() => {
+    if (feedRenderQueued || frozen || disposed) return;
+    feedRenderQueued = true;
+    queueMicrotask(() => {
+      feedRenderQueued = false;
+      if (frozen || disposed) return;
+      render();
+      paintShell();
+    });
+  });
   const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
   const onMedia = (): void => { paintShell(); render(); };
   media?.addEventListener?.('change', onMedia);
-  const onPopState = (): void => {
-    if (!deps.location) return;
+  function restoreView(hash: string): void {
+    if (frozen || disposed) return;
+    const previous = view.snapshot().layer;
     directory = false;
-    view.restore(deps.location.hash);
+    view.restore(hash);
+    const restored = view.snapshot();
+    if (restored.layer !== 'u-pokretu' && mapFull) setMapView(false);
     updateTitle();
     paintShell();
-  };
+    session.sendView(restored.layer, selectionParams(restored.selection));
+    if (restored.layer !== previous) continuePoll(refresh(), rearmPoll, 'dashboard history refresh');
+  }
+  const onPopState = (): void => { if (deps.location) restoreView(deps.location.hash); };
   const win = globalThis as unknown as { addEventListener?: Window['addEventListener']; removeEventListener?: Window['removeEventListener'] };
   if (deps.history && deps.location) win.addEventListener?.('popstate', onPopState);
   updateTitle();
@@ -577,7 +609,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element,
     selectLayer: (layer) => navigate(layer, null, false),
     activeLayer: () => view.snapshot().layer,
-    restore: (hash) => { directory = false; view.restore(hash); updateTitle(); paintShell(); },
+    restore: restoreView,
     destroy() {
       disposed = true;
       if (timer !== null) { clearTimer(timer); timer = null; }

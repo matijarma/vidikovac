@@ -271,6 +271,25 @@ describe('polling on the feed store', () => {
 });
 
 describe('reconciliation across polls', () => {
+  it('preserves a transport search and its caret before a renderer can reparent the controller', async () => {
+    const { root, session, tick, handle } = mount();
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    const input = root.querySelector<HTMLInputElement>('[data-testid=transport-search]')!;
+    input.focus();
+    input.value = 'Trg';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.setSelectionRange(1, 2);
+    tick();
+    await flush();
+    expect(root.querySelector('[data-testid=transport-search]')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('Trg');
+    expect(input.selectionStart).toBe(1);
+    expect(input.selectionEnd).toBe(2);
+    handle.destroy();
+  });
   it('keeps the workspace node, the focused search field and its typed text through a poll, filtering as you type', async () => {
     const { root, session, tick } = mount();
     session.join();
@@ -413,6 +432,23 @@ describe('failure and recovery', () => {
 });
 
 describe('the full map view (transport)', () => {
+  it('history fetches the restored domain immediately and mirrors only its public selection', async () => {
+    const { session, handle, fetchData } = mount();
+    session.join();
+    await flush();
+    fetchData.mockClear();
+    handle.restore('#room=r1&layer=sigurnost&q=private-text');
+    await flush();
+    expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
+    expect(session.sent.at(-1)).toEqual({ layer: 'sigurnost' });
+    fetchData.mockClear();
+    session.expire();
+    handle.restore('#room=r1&layer=vijesti');
+    await flush();
+    expect(handle.activeLayer()).toBe('sigurnost');
+    expect(fetchData).not.toHaveBeenCalled();
+    handle.destroy();
+  });
   it('records the input modality so a pointer tap paints no heading ring while keyboard focus keeps it', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;

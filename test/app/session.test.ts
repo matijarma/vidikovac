@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CLOSE_SESSION_EXPIRED } from '../../worker/protocol';
-import { createSessionClient, DATA_TOKEN_KEY, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
+import { createSessionClient, DATA_TOKEN_KEY, HANDSHAKE_TIMEOUT_MS, INITIAL_CONNECT_WINDOW_MS, RESUME_KEY, roomSocketUrl } from '../../app/src/session';
 import { FakeSocket } from './helpers';
 
 function storage(initial: Record<string, string> = {}) {
@@ -9,7 +9,8 @@ function storage(initial: Record<string, string> = {}) {
 }
 function boot(opts: { ticket?: string | null; store?: ReturnType<typeof storage>; now?: () => number } = {}) {
   const sockets: FakeSocket[] = [];
-  const retries: { fn: () => void; ms: number }[] = [];
+  const retries: { fn: () => void; ms: number; id: number }[] = [];
+  let timerId = 0;
   const st = opts.store ?? storage();
   let clock = 1_000_000;
   const client = createSessionClient({
@@ -18,8 +19,8 @@ function boot(opts: { ticket?: string | null; store?: ReturnType<typeof storage>
     storage: st,
     now: opts.now ?? (() => clock),
     wsBase: 'wss://x.test',
-    setTimeout: (fn, ms) => { retries.push({ fn, ms }); return retries.length; },
-    clearTimeout: () => { retries.length = 0; },
+    setTimeout: (fn, ms) => { const id = ++timerId; retries.push({ fn, ms, id }); return id; },
+    clearTimeout: (id) => { const index = retries.findIndex((timer) => timer.id === id); if (index >= 0) retries.splice(index, 1); },
   });
   client.connect();
   return {
@@ -73,6 +74,34 @@ describe('createSessionClient', () => {
     expect(err).toHaveBeenCalledWith('no-ticket');
     expect(client.snapshot().phase).toBe('closed');
   });
+  it.each(['ticket-invalid', 'resume-invalid', 'room-closed'])('recovers from %s by clearing unusable credentials and asking for a fresh scan', (reason) => {
+    const b = boot({ store: storage({
+      [RESUME_KEY]: JSON.stringify({ roomId: 'room1', resumeToken: 'old' }),
+      [DATA_TOKEN_KEY]: 'old-data',
+    }) });
+    const errors = vi.fn();
+    b.client.onError(errors);
+    b.sock.emit('open');
+    b.sock.server({ t: 'error', error: reason });
+    expect(b.client.snapshot().phase).toBe('closed');
+    expect(b.client.snapshot().dataToken).toBeNull();
+    expect(errors).toHaveBeenCalledWith('no-ticket');
+    expect(b.st.raw[RESUME_KEY]).toBeUndefined();
+    expect(b.st.raw[DATA_TOKEN_KEY]).toBeUndefined();
+    expect(b.retries).toHaveLength(0);
+  });
+  it('treats room-closed after a known deadline as expiry, not a reconnect loop', () => {
+    const b = boot();
+    const expired = vi.fn();
+    b.client.onExpired(expired);
+    b.sock.emit('open');
+    b.sock.server(JOINED);
+    b.advance(700_000);
+    b.sock.server({ t: 'error', error: 'room-closed' });
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(b.client.snapshot().phase).toBe('expired');
+    expect(b.retries).toHaveLength(0);
+  });
   it('forwards view, codes, count, expiring and error messages', () => {
     const { client, sock } = boot();
     const view = vi.fn(); const codes = vi.fn(); const count = vi.fn(); const expiring = vi.fn(); const error = vi.fn();
@@ -101,6 +130,7 @@ describe('createSessionClient', () => {
     expect(client.snapshot().phase).toBe('expired');
     expect(st.raw[RESUME_KEY]).toBeUndefined();
     expect(st.raw[DATA_TOKEN_KEY]).toBeUndefined();
+    expect(client.snapshot().dataToken).toBeNull();
   });
   it('treats a 4000 close without a prior message as expiry too', () => {
     const { client, sock } = boot();
@@ -161,13 +191,64 @@ describe('createSessionClient', () => {
 
   it('an ordinary close before a session exists is reported as closed, not expired', () => {
     const { client, sock } = boot();
-    const expired = vi.fn(); const closed = vi.fn();
+    const expired = vi.fn(); const closed = vi.fn(); const error = vi.fn();
+    client.onError(error);
     client.onExpired(expired); client.onClose(closed);
     sock.emit('open');
     sock.emit('close', { code: 1006, reason: '' });
     expect(expired).not.toHaveBeenCalled();
     expect(closed).toHaveBeenCalledWith(1006);
     expect(client.snapshot().phase).toBe('closed');
+    expect(error).toHaveBeenCalledWith('no-ticket');
+  });
+  it('retries a failed handshake while the single-use ticket is still unspent', () => {
+    const b = boot();
+    b.sock.emit('close', { code: 1006, reason: '' });
+    expect(b.client.snapshot().phase).toBe('connecting');
+    expect(b.retries[0]!.ms).toBe(500);
+    b.runRetry();
+    b.sock.emit('open');
+    expect(b.sock.json(0)).toEqual({ t: 'join', ticket: 'tick1' });
+    b.sock.server(JOINED);
+    expect(b.client.snapshot().phase).toBe('live');
+    expect(b.retries).toHaveLength(0);
+  });
+  it('retries a resume handshake even before the new page knows the room deadline', () => {
+    const b = boot({ ticket: null, store: storage({ [RESUME_KEY]: JSON.stringify({ roomId: 'room1', resumeToken: 'res1' }) }) });
+    b.sock.emit('open');
+    b.sock.emit('close', { code: 1006, reason: '' });
+    expect(b.client.snapshot().phase).toBe('connecting');
+    b.runRetry();
+    b.sock.emit('open');
+    expect(b.sock.json(0)).toEqual({ t: 'resume', resumeToken: 'res1' });
+  });
+  it('bounds a hanging handshake and ignores late events from the abandoned socket', () => {
+    const b = boot();
+    const old = b.sock;
+    expect(b.retries[0]!.ms).toBe(HANDSHAKE_TIMEOUT_MS);
+    b.advance(HANDSHAKE_TIMEOUT_MS);
+    b.runRetry();
+    expect(b.retries[0]!.ms).toBe(500);
+    b.runRetry();
+    expect(b.sockets).toHaveLength(2);
+    old.emit('open');
+    old.server(JOINED);
+    old.emit('close', { code: 1006, reason: '' });
+    expect(b.client.snapshot().phase).toBe('connecting');
+    expect(old.sent).toHaveLength(0);
+    b.sock.emit('open');
+    b.sock.server(JOINED);
+    expect(b.client.snapshot().phase).toBe('live');
+  });
+  it('ends initial retry attempts with scan recovery, not an endless connecting state', () => {
+    const b = boot();
+    const errors = vi.fn();
+    b.client.onError(errors);
+    b.advance(INITIAL_CONNECT_WINDOW_MS);
+    b.runRetry();
+    expect(b.client.snapshot().phase).toBe('closed');
+    expect(errors).toHaveBeenCalledWith('no-ticket');
+    expect(b.retries).toHaveLength(0);
   });
   it('serialises outbound messages exactly as the contract types them', () => {
     const { client, sock } = boot();

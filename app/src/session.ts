@@ -53,6 +53,8 @@ export interface SessionClientDeps {
  * promises was never shown and the view counters silently stopped (R-53).
  */
 export const RECONNECT_DELAYS_MS: readonly number[] = [500, 1_000, 2_000, 5_000, 10_000];
+export const HANDSHAKE_TIMEOUT_MS = 10_000;
+export const INITIAL_CONNECT_WINDOW_MS = 30_000;
 
 export type SessionPhase = 'idle' | 'connecting' | 'live' | 'expired' | 'closed';
 
@@ -120,6 +122,8 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   let leaving = false;
   let attempt = 0;
   let retryHandle: unknown = null;
+  let handshakeHandle: unknown = null;
+  let firstConnectAt: number | null = null;
   let phase: SessionPhase = 'idle';
   let role: Role | null = null;
   let expiresAt: number | null = null;
@@ -151,14 +155,41 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     if (expiredFired) return;
     expiredFired = true;
     phase = 'expired';
+    dataToken = null;
+    clearHandshake();
     try { storage?.removeItem(RESUME_KEY); } catch { /* ignore */ }
     try { storage?.removeItem(DATA_TOKEN_KEY); } catch { /* ignore */ }
     expired.forEach((l) => l());
   }
 
+  function clearHandshake(): void {
+    if (handshakeHandle !== null) { cancelLater(handshakeHandle); handshakeHandle = null; }
+  }
+
+  /** Invalid grants cannot recover by retrying the same ticket or resume token. */
+  function rejectGrant(reason: string): void {
+    leaving = true;
+    clearHandshake();
+    if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
+    dataToken = null;
+    try { storage?.removeItem(RESUME_KEY); } catch { /* storage optional */ }
+    try { storage?.removeItem(DATA_TOKEN_KEY); } catch { /* storage optional */ }
+    if (expiresAt !== null && expiresAt <= serverNow()) {
+      fireExpired();
+    } else {
+      phase = 'closed';
+      // The existing UI recovery contract is "scan again"; also retain the
+      // server reason for diagnostics without exposing it in the interface.
+      error.forEach((listener) => listener(reason));
+      error.forEach((listener) => listener('no-ticket'));
+    }
+    socket?.close(1000, 'grant-invalid');
+  }
+
   function handle(message: RoomServerMessage): void {
     switch (message.t) {
       case 'joined':
+        clearHandshake();
         role = message.role;
         expiresAt = message.expiresAt;
         dataToken = message.dataToken;
@@ -176,14 +207,23 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
       case 'count': participants = message.participants; count.forEach((l) => l(participants)); return;
       case 'expiring': expiring.forEach((l) => l(message.secondsLeft)); return;
       case 'expired': fireExpired(); return;
-      case 'error': error.forEach((l) => l(message.error)); return;
+      case 'error':
+        if (message.error === 'ticket-invalid' || message.error === 'resume-invalid' || message.error === 'room-closed') {
+          rejectGrant(message.error);
+        } else error.forEach((l) => l(message.error));
+        return;
       default: return;
     }
   }
 
-  /** The room is still running and we are not the ones who hung up. */
+  /** Retry only with a usable credential, within the room or initial deadline.
+   * A sent ticket with no joined response cannot safely be spent a second time. */
   function shouldReconnect(): boolean {
-    return !leaving && phase !== 'expired' && expiresAt !== null && expiresAt > serverNow();
+    if (leaving || phase === 'expired') return false;
+    if (!(deps.ticket && !ticketSpent) && !readResume(storage, deps.roomId)) return false;
+    return expiresAt !== null
+      ? expiresAt > serverNow()
+      : firstConnectAt !== null && now() - firstConnectAt < INITIAL_CONNECT_WINDOW_MS;
   }
 
   function scheduleReconnect(): void {
@@ -193,17 +233,49 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     retryHandle = later(() => {
       retryHandle = null;
       if (!shouldReconnect()) {
-        if (!leaving && expiresAt !== null) fireExpired();
+        if (!leaving) {
+          if (expiresAt !== null && expiresAt <= serverNow()) fireExpired();
+          else { phase = 'closed'; error.forEach((listener) => listener('no-ticket')); }
+        }
         return;
       }
       openSocket();
     }, delay);
   }
 
+  function disconnected(code: number): void {
+    socket = null;
+    clearHandshake();
+    if (code === CLOSE_SESSION_EXPIRED) { fireExpired(); return; }
+    const reconnecting = shouldReconnect();
+    if (reconnecting) {
+      phase = 'connecting';
+      scheduleReconnect();
+    } else if (phase !== 'expired') phase = 'closed';
+    closed.forEach((listener) => listener(code));
+    if (!reconnecting && !leaving && phase !== 'expired') {
+      if (expiresAt !== null && expiresAt <= serverNow()) fireExpired();
+      else error.forEach((listener) => listener('no-ticket'));
+    }
+  }
+
   function openSocket(): void {
     phase = 'connecting';
-    socket = createSocket(roomSocketUrl(deps.roomId, wsBase));
-    socket.addEventListener('open', () => {
+    firstConnectAt ??= now();
+    let active: WebSocketLike;
+    try { active = createSocket(roomSocketUrl(deps.roomId, wsBase)); }
+    catch { disconnected(1006); return; }
+    socket = active;
+    handshakeHandle = later(() => {
+      handshakeHandle = null;
+      if (socket !== active || phase !== 'connecting') return;
+      // Detach this attempt first so a late close/message cannot disturb the
+      // next attempt. Some failed handshakes never produce a close event.
+      disconnected(1006);
+      try { active.close(1000, 'handshake-timeout'); } catch { /* already unavailable */ }
+    }, HANDSHAKE_TIMEOUT_MS);
+    active.addEventListener('open', () => {
+      if (socket !== active || leaving || phase === 'expired') return;
       const resumeToken = readResume(storage, deps.roomId);
       // The ticket is single-use, so only the first attempt may spend it; every
       // later one resumes, which is what RoomDO's one-live-socket rule expects.
@@ -213,36 +285,31 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
       } else if (resumeToken) {
         send({ t: 'resume', resumeToken });
       } else {
+        leaving = true;
         phase = 'closed';
+        clearHandshake();
         error.forEach((l) => l('no-ticket'));
-        socket?.close(1000, 'no-ticket');
+        active.close(1000, 'no-ticket');
       }
     });
-    socket.addEventListener('message', (event) => {
+    active.addEventListener('message', (event) => {
+      if (socket !== active || leaving || phase === 'expired') return;
       if (typeof event.data !== 'string') return;
       let parsed: unknown;
       try { parsed = JSON.parse(event.data); } catch { return; }
       if (parsed && typeof parsed === 'object' && typeof (parsed as { t?: unknown }).t === 'string') handle(parsed as RoomServerMessage);
     });
-    socket.addEventListener('close', (event) => {
-      socket = null;
-      if (event.code === CLOSE_SESSION_EXPIRED) { fireExpired(); return; }
-      const reconnecting = shouldReconnect();
-      if (reconnecting) {
-        phase = 'connecting';
-        scheduleReconnect();
-      } else if (phase !== 'expired') phase = 'closed';
-      closed.forEach((l) => l(event.code));
-      // A socket that dropped after the room's own clock ran out never gets an
-      // 'expired' frame, so the client says so itself.
-      if (!reconnecting && !leaving && phase !== 'expired' && expiresAt !== null && expiresAt <= serverNow()) fireExpired();
+    active.addEventListener('close', (event) => {
+      if (socket === active) disconnected(event.code);
     });
-    socket.addEventListener('error', () => { error.forEach((l) => l('socket')); });
+    active.addEventListener('error', () => {
+      if (socket === active) error.forEach((l) => l('socket'));
+    });
   }
 
   return {
     connect() {
-      if (socket) return;
+      if (socket || retryHandle !== null || leaving || phase === 'expired') return;
       openSocket();
     },
     snapshot,
@@ -261,6 +328,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     event(name, dim) { send(dim === undefined ? { t: 'event', name } : { t: 'event', name, dim }); },
     close() {
       leaving = true;
+      clearHandshake();
       if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
       socket?.close(1000, 'leave');
     },

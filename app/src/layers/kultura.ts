@@ -133,8 +133,11 @@ export function ongoingEvents(items: readonly FeedItem[], now: number): FeedItem
 const OUTSIDE_ZAGREB = /\b(split|hvar|rijek|osijek|zadar|dubrovnik|pul|varazdin|sibenik|karlov[ac]|sis[ak]|koprivnic|cakov|vukovar|vinkovc|bjelovar|pozeg|rovinj|porec|makarsk|trogir|korcul|opatij|umag|krk)[a-z]{0,2}\b/;
 
 export function venueOutsideZagreb(item: FeedItem): boolean {
-  const place = normalise(`${dataText(item, 'venue')} ${dataText(item, 'organiser')}`);
-  return OUTSIDE_ZAGREB.test(place) && !place.includes('zagreb');
+  // An organiser's home city is not the event's location. Neither are street
+  // names such as Avenija Dubrovnik or Ulica grada Vukovara city segments.
+  const place = normalise(dataText(item, 'venue'));
+  const withoutStreetNames = place.replace(/\b(?:avenija|av\.|ulica|ul\.|trg|cesta|obala)\s+(?:grada\s+)?[a-z]+/g, '');
+  return OUTSIDE_ZAGREB.test(withoutStreetNames) && !place.includes('zagreb');
 }
 
 function leadCell(i18n: I18n, item: FeedItem): string {

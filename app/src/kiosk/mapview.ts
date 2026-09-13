@@ -55,7 +55,7 @@ export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMap
   let pushed = '';
   let current: KioskMapHandle | null = null;
   const wrapped: MapFactory | undefined = factory && ((options) => {
-    const merged: CityMapOptions & KioskMapView = { ...options, ...view };
+    const merged: CityMapOptions = { ...options, ...view };
     current = factory(merged) as KioskMapHandle;
     pushed = JSON.stringify(view);
     return current;

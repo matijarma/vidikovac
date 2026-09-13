@@ -17,6 +17,7 @@ import { closureItems, zetNotices } from '../transport/detail';
 import { tr } from '../transport/strings';
 import { closuresMarkup } from '../transport/view';
 import { workspaceFor } from '../transport/workspace';
+import { plausibleRouteDelay } from './shared';
 import type { LayerContext } from './types';
 
 export interface RouteDelay {
@@ -39,9 +40,9 @@ export function routeDelays(snapshot: ModuleSnapshot | undefined): RouteDelay[] 
     .map((item) => ({
       routeId: dataText(item, 'routeId'),
       count: dataNumber(item, 'vehicles') ?? 0,
-      meanDelay: dataNumber(item, 'medianDelaySeconds') ?? 0,
+      meanDelay: dataNumber(item, 'medianDelaySeconds'),
     }))
-    .filter((row) => row.routeId !== '')
+    .filter((row): row is RouteDelay => row.routeId !== '' && plausibleRouteDelay(row.meanDelay))
     .sort((a, b) => Math.abs(b.meanDelay) - Math.abs(a.meanDelay) || a.routeId.localeCompare(b.routeId, 'hr'));
 }
 
