@@ -5,6 +5,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { DESKTOP_MIN_PX } from './lib';
 
 // The two sizes design.md and Vidikovac.dc.html were drawn at: kiosk 1080p
 // and the /d phone artboard (390×844). Every surface is swept at whichever
@@ -266,6 +267,11 @@ test.describe('the moving map has a text path (R-F5)', () => {
       await expect(phone.getByTestId('map-canvas')).toHaveAttribute('role', 'region');
       await expect(phone.getByTestId('map-canvas')).toHaveAttribute('aria-label', /Karta/);
       await expect(phone.locator('.maplibregl-ctrl-zoom-in')).toBeVisible();
+      // Below the desktop breakpoint the attribution is compact (R-O2): one
+      // 44 px button opens the credit line, so the licence link is reached
+      // the way a person reaches it, by pressing that button first.
+      const attributionButton = phone.locator('.maplibregl-ctrl-attrib-button');
+      if ((phone.viewportSize()?.width ?? 0) < DESKTOP_MIN_PX && (await attributionButton.isVisible())) await attributionButton.click();
       await expect(phone.getByRole('link', { name: /OpenStreetMap/ })).toBeVisible();
 
       await assertTextPath(phone, '/d/ (session)');

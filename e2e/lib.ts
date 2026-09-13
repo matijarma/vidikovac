@@ -2,6 +2,9 @@
 // cover them in node; e2e/helpers.ts wraps them with page-level actions.
 import { CODE_ALPHABET, CODE_DISPLAY_SPLIT, CODE_LENGTH } from '../worker/protocol';
 
+/** The layout breakpoints, so no spec carries a width literal of its own (test/app/breakpoints.test.ts ties them to the CSS). */
+export { DESKTOP_MIN_PX, KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../app/src/core/breakpoints';
+
 const group = `[${CODE_ALPHABET}]{${CODE_DISPLAY_SPLIT}}`;
 /** ABCD-EFGH in the Crockford alphabet (0-9, A-Z without I, L, O, U). */
 export const CODE_RE = new RegExp(`^${group}-${group}$`);

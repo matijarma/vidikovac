@@ -69,6 +69,29 @@ Nisu provedeni fizičko skeniranje s udaljenosti, test stvarnog iPhonea/Androida
 mjerenje potrošnje električne energije ili istraživanje s korisnicima pomoćnih
 tehnologija. To ostaje odvojena provjera pilota.
 
+## Metoda
+
+Od preinake za telefon (13. rujna 2026.) Playwright ima dva projekta: `chromium`
+za stolno računalo i `mobile`, emulirani Pixel 7 s dodirom, koji izvodi
+`e2e/mobile.spec.ts` i `e2e/a11y-session.spec.ts`. Geometrijske provjere iz
+`e2e/geometry.ts` traže ljepljivo zaglavlje iznad sadržaja, obavijesti u toku
+stranice umjesto preko sadržaja, traku kartica uz donji rub i stranicu bez
+vodoravnog prelijevanja, na 390 × 844, 320 × 568 i 844 × 390. Detenti plahte na
+Prometu, klizanje nasuprot pomicanju karte, granične visine Grada i Sigurnosti
+te stanje pri 200 % teksta imaju vlastite testove. Donja granica veličine teksta
+na telefonu je 13 px, osim redaka s atribucijom; svaka poveznica u izvorima ima
+cilj od 44 px. Pragovi i pravila zapisani su na jednom mjestu, u
+`e2e/geometry.ts`, koje čitaju i `e2e/mobile.spec.ts` i
+`scripts/audit-production.mjs`, pa se svaka promjena praga odražava u oba
+nalaza. Sesija na `/d/` prolazi axe s oznakama WCAG 2.2 AA na 390 i 1920 px, u
+obje teme, uz obilazak tipkom Tab koji provjerava da fokus nikad ne završi pod
+zaglavljem ili trakom. `npm run review:visual` snima proširenu matricu
+(320, pejzaž, tamna tema uz 200 % teksta, tablet, javne stranice na 390 px i
+lagani Promet), a `scripts/audit-production.mjs` obilazi stvarnu instalaciju s
+pristupnim tokenom iz okoline i vraća izlazni kod 1 kad zakaže bilo koje pravilo
+geometrije, veličine teksta, cilja ili prelijevanja. Ovaj odlomak opisuje metodu;
+rezultati se bilježe tek nakon pokretanja na spojenoj grani.
+
 ## Isporuka i prijava
 
 Repozitorij ostaje privatan, evaluacijsko okruženje zaštićeno Accessom.

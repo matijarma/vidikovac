@@ -31,7 +31,24 @@ export default defineConfig({
     locale: 'hr-HR',
     timezoneId: 'Europe/Zagreb',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Two projects. `chromium` is the desk: every behavioural spec, at whatever
+  // viewport each test sets. `mobile` is a Pixel 7 (isMobile, hasTouch, a real
+  // device scale factor) and runs only the phone gates and the fixture-backed
+  // session sweep, so the wall clock grows by minutes, not by a second run of
+  // the whole suite. Both share the servers, the single worker and the env
+  // switches above.
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: ['**/mobile.spec.ts', '**/a11y-session.spec.ts'],
+    },
+    {
+      name: 'mobile',
+      use: { ...devices['Pixel 7'] },
+      testMatch: ['**/mobile.spec.ts', '**/a11y-session.spec.ts'],
+    },
+  ],
   webServer: MANAGED_SERVERS
     ? [
         {
