@@ -13,6 +13,7 @@
 // A screenshot per size and face lands in test-results/kiosk-<w>-<face>.png.
 import { expect, test, type Page } from '@playwright/test';
 import { APP_URL, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { KIOSK_WIDE_MIN_PX } from './lib';
 
 const SIZES = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }] as const;
 const FACES = ['light', 'dark'] as const;
@@ -66,7 +67,7 @@ for (const size of SIZES) {
     test(`the invitation at ${size.width} by ${size.height}, ${face}: whole code, QR of ${MIN_QR_PX} px or more, nothing overflows or overlaps, basics fit`, async ({ page, request }) => {
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       await openInvitation(page, face, size, kioskUrl);
-      expect(await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid=kiosk]')?.dataset.size)).toBe(size.width >= 1700 ? 'wide' : 'compact');
+      expect(await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid=kiosk]')?.dataset.size)).toBe(size.width >= KIOSK_WIDE_MIN_PX ? 'wide' : 'compact');
       const qr = (await page.getByTestId('kiosk-qr').boundingBox())!;
       expect(qr.width, 'the QR is readable from steps away').toBeGreaterThanOrEqual(MIN_QR_PX);
       expect(qr.height).toBeGreaterThanOrEqual(MIN_QR_PX);

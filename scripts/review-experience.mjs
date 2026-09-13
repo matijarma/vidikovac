@@ -29,7 +29,70 @@ const matrix = [
   { name: 'phone-en-reduced', width: 390, height: 844, theme: 'dark', locale: 'en', reduced: true },
   { name: 'desktop-text200', width: 1440, height: 1000, theme: 'light', locale: 'hr', textZoom: true },
   { name: 'phone-text200', width: 390, height: 844, theme: 'light', locale: 'hr', textZoom: true },
+  // The mobile overhaul's extra scenes: the smallest phone the plan supports,
+  // landscape, dark at 200% text (the zoom-compact state), a dark tablet.
+  { name: 'phone-320', width: 320, height: 568, theme: 'light', locale: 'hr' },
+  { name: 'phone-landscape', width: 844, height: 390, theme: 'light', locale: 'hr' },
+  { name: 'phone-dark-text200', width: 390, height: 844, theme: 'dark', locale: 'hr', textZoom: true },
+  { name: 'tablet-dark', width: 768, height: 1024, theme: 'dark', locale: 'hr' },
 ];
+// WCAG 2.x A and AA plus 2.2 AA (target size, focus not obscured), the same set the Playwright sweeps use.
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
+// Public pages a person meets without a session, captured at the phone size.
+const PHONE = { width: 390, height: 844 };
+const PAGES = [
+  { path: '/', slug: 'home' },
+  { path: '/s/', slug: 's' },
+  { path: '/hitno', slug: 'hitno' },
+  { path: '/open/', slug: 'open' },
+];
+
+/** One layer of one scene: axe, the geometry facts, a screenshot, a record; a blocking violation or overflow is a finding. */
+async function captureLayer(page, sceneName, layer) {
+  const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+  const blocking = audit.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+  for (const violation of blocking) findings.push({
+    scene: sceneName, layer, problem: violation.id,
+    targets: violation.nodes.map((node) => node.target),
+  });
+  const geometry = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - innerWidth,
+    regions: document.querySelectorAll('[data-testid=dash-view] > .layer').length,
+    lang: document.documentElement.lang,
+  }));
+  if (geometry.overflow > 1 || geometry.regions !== 1) findings.push({ scene: sceneName, layer, problem: 'geometry', ...geometry });
+  const file = `${sceneName}-${layer}.png`;
+  await page.screenshot({ path: resolve(output, file), fullPage: false });
+  records.push({ scene: sceneName, layer, file, ...geometry, seriousOrCritical: blocking.length });
+  console.log(`${sceneName} / ${layer}: overflow=${geometry.overflow}, axe=${blocking.length}`);
+}
+
+/** A public page at the phone size, no session: axe, overflow, a screenshot, a record. */
+async function capturePage(browser, { path, slug }) {
+  const context = await browser.newContext({ viewport: PHONE, colorScheme: 'light', locale: 'hr-HR' });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    const response = await page.goto(`${base}${path}`);
+    const status = response ? response.status() : 0;
+    if (status !== 200) findings.push({ scene: 'phone-page', page: path, problem: 'status', status });
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(800);
+    const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+    const blocking = audit.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+    for (const violation of blocking) findings.push({ scene: 'phone-page', page: path, problem: violation.id, targets: violation.nodes.map((node) => node.target) });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    if (overflow > 1) findings.push({ scene: 'phone-page', page: path, problem: 'geometry', overflow });
+    const file = `phone-page-${slug}.png`;
+    await page.screenshot({ path: resolve(output, file), fullPage: false });
+    records.push({ scene: 'phone-page', page: path, file, status, overflow, seriousOrCritical: blocking.length });
+    console.log(`phone-page ${path}: status=${status}, overflow=${overflow}, axe=${blocking.length}`);
+    if (errors.length) findings.push({ scene: 'phone-page', page: path, problem: 'page-errors', errors });
+  } finally {
+    await context.close();
+  }
+}
 
 async function openLayer(page, layer) {
   let nav = page.locator(`[data-action=nav][data-layer="${layer}"]:visible`).first();
@@ -72,22 +135,7 @@ try {
         await page.waitForFunction(() => ['ready', 'tiles-failed', 'unavailable'].includes(
           document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-map-status')), null, { timeout: 30_000 });
       }
-      const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
-      const blocking = audit.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
-      for (const violation of blocking) findings.push({
-        scene: scene.name, layer, problem: violation.id,
-        targets: violation.nodes.map((node) => node.target),
-      });
-      const geometry = await page.evaluate(() => ({
-        overflow: document.documentElement.scrollWidth - innerWidth,
-        regions: document.querySelectorAll('[data-testid=dash-view] > .layer').length,
-        lang: document.documentElement.lang,
-      }));
-      if (geometry.overflow > 1 || geometry.regions !== 1) findings.push({ scene: scene.name, layer, problem: 'geometry', ...geometry });
-      const file = `${scene.name}-${layer}.png`;
-      await page.screenshot({ path: resolve(output, file), fullPage: false });
-      records.push({ scene: scene.name, layer, file, ...geometry, seriousOrCritical: blocking.length });
-      console.log(`${scene.name} / ${layer}: overflow=${geometry.overflow}, axe=${blocking.length}`);
+      await captureLayer(page, scene.name, layer);
 
       if (layer === 'u-pokretu' && scene.name === 'phone') {
         const search = page.getByTestId('transport-search');
@@ -108,6 +156,26 @@ try {
     if (foreignRequests.size) findings.push({ scene: scene.name, problem: 'foreign-requests', origins: [...foreignRequests] });
     if (errors.length) findings.push({ scene: scene.name, problem: 'page-errors', errors });
     if (!session.requests.length) findings.push({ scene: scene.name, problem: 'no-data-requests' });
+    await context.close();
+  }
+
+  for (const entry of PAGES) await capturePage(browser, entry);
+
+  // The lightweight face of Promet at the phone size: no stage, no canvas, a scrolling list.
+  {
+    const context = await browser.newContext({ viewport: PHONE, colorScheme: 'light', locale: 'hr-HR' });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => { localStorage.setItem('vidikovac-locale', 'hr'); });
+    const session = await installExperienceFixture(page, await experienceSnapshots());
+    await page.goto(`${base}${FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=1')}`);
+    await page.locator('#ov-weather').waitFor();
+    await openLayer(page, 'u-pokretu');
+    if (await page.locator('canvas').count()) findings.push({ scene: 'phone-lagano', layer: 'u-pokretu', problem: 'canvas-on-lightweight-path' });
+    await captureLayer(page, 'phone-lagano', 'u-pokretu');
+    if (errors.length) findings.push({ scene: 'phone-lagano', problem: 'page-errors', errors });
+    if (!session.requests.length) findings.push({ scene: 'phone-lagano', problem: 'no-data-requests' });
     await context.close();
   }
 } finally {

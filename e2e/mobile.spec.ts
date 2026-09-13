@@ -1,0 +1,468 @@
+// The phone gates: what the plan promises a person holding the phone, made
+// testable on the fixture spine (a routed WebSocket and routed /api/data, so
+// no real screen and no upstream). Runs in the `mobile` project only (Pixel 7:
+// isMobile, hasTouch, a real device scale factor); the viewport is set per test
+// because the same shell must hold at 390, 320 and in landscape.
+//
+// Every assertion here fails on its own check with a sentence naming the
+// plan's target (`.ki-head`, `[data-testid=notice]`, `data-sheet`, 13 px,
+// 44 px), never on a selector timeout: a missing target is read from the page
+// and reported as the finding it is. Against main c3de057 most of these are
+// red for the reasons the plan documents (banners overlay content, the map
+// swipe traps the page, the header scrolls away, 12 px labels); each turns
+// green when its area lands.
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { expect, test, type CDPSession, type Page } from '@playwright/test';
+import type { LayerId } from '../worker/protocol';
+import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type FixtureSession } from './experience-fixtures';
+import { geometryIssues, type GeometryOptions } from './geometry';
+
+// --- the numbers the plan fixes ------------------------------------------------
+const PHONE = { width: 390, height: 844 };
+const SMALL = { width: 320, height: 568 };
+const LANDSCAPE = { width: 844, height: 390 };
+const DESK = { width: 1440, height: 900 };
+type Viewport = typeof PHONE;
+
+/** The shell's geometry targets: 48 px sticky header (56 with a safe-area inset at most), fixed tab bar, banners in flow. */
+const SHELL: GeometryOptions = { header: '.ki-head', tabbar: '.ki-tabbar', main: '[data-testid=dash-view]', banners: '[data-testid=banners]', maxHeaderPx: 56 };
+const LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+const DETENTS = ['peek', 'half', 'open'] as const;
+type Detent = (typeof DETENTS)[number];
+/** Sheet detents: peek 5rem; half 50% of the stage; open leaves 2.5rem of the stage. */
+const PEEK_PX = 80;
+const PEEK_TOLERANCE_PX = 2;
+const HALF_TOLERANCE = 0.02;
+const OPEN_GAP_PX = 40;
+const OPEN_GAP_TOLERANCE_PX = 4;
+/** Type floor on a phone and the minimum target, WCAG 2.2 AA as the constraints state them. */
+const TYPE_FLOOR_PX = 13;
+const TARGET_PX = 44;
+/** Attribution lines are the one exception to the type floor. */
+const TYPE_FLOOR_EXEMPT = '.provenance, .panel-attr, .source-line, .maplibregl-ctrl-attrib';
+/** Bounded page heights with fixtures (plan, "Test updates", new test 7). */
+const GRAD_MAX_HEIGHT_PX = 3_000;
+const SIGURNOST_MAX_HEIGHT_PX = 2_500;
+/** A long scroll, past any first viewport. */
+const SCROLL_PX = 1_500;
+/** One finger, 200 px, twelve moves 16 ms apart: the shape a real swipe has. */
+const SWIPE_PX = 200;
+const SWIPE_STEPS = 12;
+const SWIPE_STEP_MS = 16;
+/** The sheet transition is 220 ms; the map's camera ease is shorter. */
+const SETTLE_MS = 600;
+/** Session clock marks the notices hang on: 600 s session, 60 s and 20 s warnings. */
+const SESSION_MS = 600_000;
+const WARN_60_MS = 60_000;
+const WARN_20_MS = 20_000;
+
+const HR = JSON.parse(readFileSync(fileURLToPath(new URL('../app/src/i18n/hr.json', import.meta.url)), 'utf8')) as { session: { connecting: string } };
+
+// --- helpers -------------------------------------------------------------------
+interface Box { x: number; y: number; width: number; height: number; top: number; bottom: number; left: number; right: number; cx: number; cy: number }
+
+/** The first match's box in CSS px, or null when there is none to measure. */
+async function boxOf(page: Page, selector: string): Promise<Box | null> {
+  return page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) return null;
+    return { x: r.x, y: r.y, width: r.width, height: r.height, top: r.top, bottom: r.bottom, left: r.left, right: r.right, cx: r.x + r.width / 2, cy: r.y + r.height / 2 };
+  }, selector);
+}
+
+const fmt = (n: number): string => `${Math.round(n * 10) / 10} px`;
+const boxText = (b: Box): string => `top ${fmt(b.top)}, bottom ${fmt(b.bottom)}, left ${fmt(b.left)}, right ${fmt(b.right)}`;
+const insideViewport = (b: Box, vp: Viewport): boolean => b.top >= -1 && b.left >= -1 && b.bottom <= vp.height + 1 && b.right <= vp.width + 1;
+
+/** The fixture-backed session at the given viewport, with Sada painted. */
+async function openDashboard(page: Page, viewport: Viewport, url = FIXTURE_DASHBOARD): Promise<FixtureSession> {
+  await page.setViewportSize(viewport);
+  const fixture = await installExperienceFixture(page, await experienceSnapshots());
+  await page.goto(url);
+  await expect(page.locator('#ov-weather'), 'Sada must paint from the fixture').toBeVisible();
+  await expect(page.getByTestId('session-label')).toBeVisible();
+  return fixture;
+}
+
+async function openLayer(page: Page, layer: LayerId): Promise<void> {
+  let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  if (!(await navigation.count())) {
+    await page.getByTestId('tab-more').click();
+    navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  }
+  await navigation.click();
+  await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
+}
+
+/** The layer's own data has arrived and been painted: the fixture's request count stops moving, then a frame passes. */
+async function settle(page: Page, fixture: FixtureSession): Promise<void> {
+  let seen = -1;
+  await expect.poll(async () => {
+    const count = fixture.requests.length;
+    await page.waitForTimeout(400);
+    const stable = fixture.requests.length === count && count === seen;
+    seen = fixture.requests.length;
+    return stable;
+  }, { message: 'the fixture requests must settle', timeout: 15_000 }).toBe(true);
+  await page.waitForTimeout(150);
+}
+
+async function scrollDocument(page: Page, y: number): Promise<void> {
+  await page.evaluate((top) => window.scrollTo(0, top), y);
+  await page.waitForTimeout(150);
+}
+
+const scrollY = (page: Page): Promise<number> => page.evaluate(() => window.scrollY);
+
+/** A one-finger drag through the real touch pipeline (CDP), as a person swipes. */
+async function touchDrag(cdp: CDPSession, page: Page, x: number, y0: number, y1: number): Promise<void> {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0 }] });
+  for (let i = 1; i <= SWIPE_STEPS; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * i) / SWIPE_STEPS }] });
+    await page.waitForTimeout(SWIPE_STEP_MS);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(SETTLE_MS);
+}
+
+/** The map has settled into a state the stage can be measured in. */
+async function waitForMap(page: Page, states: RegExp): Promise<void> {
+  await expect(page.getByTestId('map-canvas'), 'the Promet map must reach a settled status').toHaveAttribute('data-map-status', states, { timeout: 30_000 });
+  await page.waitForTimeout(300);
+}
+
+const workspace = (page: Page) => page.locator('[data-testid=transport-workspace]');
+const detentOf = async (page: Page): Promise<string | null> => workspace(page).getAttribute('data-sheet');
+
+/** Presses the chevron until the sheet reports `target`; an unreachable detent is the finding. */
+async function cycleTo(page: Page, target: Detent): Promise<void> {
+  const seen: (string | null)[] = [await detentOf(page)];
+  for (let i = 0; i < DETENTS.length && seen[seen.length - 1] !== target; i++) {
+    await page.locator('[data-action=toggle-sheet]').click();
+    await page.waitForTimeout(SETTLE_MS);
+    seen.push(await detentOf(page));
+  }
+  expect(seen[seen.length - 1], `the chevron must be able to reach data-sheet="${target}"; cycling produced ${seen.join(' → ')}`).toBe(target);
+}
+
+/** How much of the sheet is on the stage: its box clipped to the stage's box. */
+async function visibleSheetHeight(page: Page): Promise<{ sheet: number; stage: number }> {
+  return page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid=transport-sheet]')?.getBoundingClientRect();
+    const stage = document.querySelector('.transport-body')?.getBoundingClientRect();
+    if (!sheet || !stage) return { sheet: -1, stage: -1 };
+    const visible = Math.max(0, Math.min(sheet.bottom, stage.bottom) - Math.max(sheet.top, stage.top));
+    return { sheet: visible, stage: stage.height };
+  });
+}
+
+/** A hash of the map's free pixels: the canvas box above the sheet (the whole canvas when the sheet is elsewhere), so a
+ *  moving sheet body cannot masquerade as a camera move. WebGL need not preserve its buffer; a page screenshot reads the composed frame. */
+async function mapHash(page: Page): Promise<string> {
+  const clip = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-testid=map-canvas]')?.getBoundingClientRect();
+    if (!canvas) return null;
+    const sheet = document.querySelector('[data-testid=transport-sheet]')?.getBoundingClientRect();
+    const top = Math.max(0, canvas.top);
+    const overlaps = sheet && sheet.top < canvas.bottom && sheet.bottom > canvas.top && sheet.left < canvas.right && sheet.right > canvas.left;
+    const bottom = Math.min(innerHeight, overlaps ? Math.min(canvas.bottom, sheet.top) : canvas.bottom);
+    return { x: Math.max(0, canvas.left), y: top, width: Math.min(innerWidth, canvas.right) - Math.max(0, canvas.left), height: bottom - top };
+  });
+  expect(clip, 'the map canvas must be on the page to compare its pixels').not.toBeNull();
+  expect(clip!.height, `the free map strip above the sheet must be tall enough to compare (got ${fmt(clip!.height)})`).toBeGreaterThanOrEqual(16);
+  const shot = await page.screenshot({ clip: clip!, animations: 'disabled', caret: 'hide' });
+  return createHash('sha256').update(shot).digest('hex');
+}
+
+/** Two frames half a second apart agree: tiles are in, nothing eases, the next difference is the swipe's. */
+async function waitForStillMap(page: Page): Promise<string> {
+  let last = '';
+  await expect.poll(async () => {
+    const a = await mapHash(page);
+    await page.waitForTimeout(500);
+    const b = await mapHash(page);
+    last = b;
+    return a === b;
+  }, { message: 'the map must settle before a swipe is measured (its pixels kept changing for 20 s)', timeout: 20_000 }).toBe(true);
+  return last;
+}
+
+// --- 1. geometry at three sizes ----------------------------------------------------
+for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
+  test(`the shell fits a ${viewport.width}×${viewport.height} phone: nothing overlays Sada, the tab bar is flush with the bottom, and the session pill and safety control survive a long scroll on Vijesti and Sigurnost`, async ({ page }) => {
+    const fixture = await openDashboard(page, viewport);
+    await settle(page, fixture);
+    expect(await geometryIssues(page, SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
+
+    for (const layer of ['vijesti', 'sigurnost'] as const) {
+      await openLayer(page, layer);
+      await settle(page, fixture);
+      await scrollDocument(page, SCROLL_PX);
+      const scrolled = await scrollY(page);
+      for (const testid of ['session-label', 'safety-shortcut'] as const) {
+        const box = await boxOf(page, `[data-testid=${testid}]`);
+        expect(box, `after scrolling to ${scrolled} px on ${layer} at ${viewport.width}×${viewport.height}, [data-testid=${testid}] must still be rendered`).not.toBeNull();
+        expect(insideViewport(box!, viewport), `after scrolling to ${scrolled} px on ${layer} at ${viewport.width}×${viewport.height}, [data-testid=${testid}] must stay in the viewport; its box is ${boxText(box!)}`).toBe(true);
+      }
+    }
+  });
+}
+
+// --- 2. sticky chrome -----------------------------------------------------------------
+test('the header stays pinned: after scrolling 1,500 px on Sada, .ki-head still starts at the top edge', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  await scrollDocument(page, SCROLL_PX);
+  const scrolled = await scrollY(page);
+  const head = await boxOf(page, SHELL.header);
+  expect(head, `the sticky header ${SHELL.header} must exist so the session pill and the safety control never scroll away; none is rendered`).not.toBeNull();
+  expect(Math.abs(head!.top), `after scrolling to ${scrolled} px the header ${SHELL.header} must start at 0 ± 1 px; it starts at ${fmt(head!.top)}`).toBeLessThanOrEqual(1);
+});
+
+// --- 3. detents ------------------------------------------------------------------------
+test('the Promet sheet has three detents: the chevron cycles peek, half, open; peek is 80 px, half is half the stage, open leaves 40 px of map; a handle drag and a body drag snap to the next detent', async ({ page }) => {
+  await openDashboard(page, PHONE);
+  await openLayer(page, 'u-pokretu');
+  await waitForMap(page, /^(ready|tiles-failed|unavailable)$/);
+
+  const start = await detentOf(page);
+  expect(DETENTS as readonly string[], `data-sheet must be one of peek, half, open; it reads "${start}"`).toContain(start ?? '');
+  const startIndex = DETENTS.indexOf(start as Detent);
+  const expected = [1, 2, 3].map((i) => DETENTS[(startIndex + i) % DETENTS.length]);
+  const seen: (string | null)[] = [];
+  for (let i = 0; i < 3; i++) {
+    await page.locator('[data-action=toggle-sheet]').click();
+    await page.waitForTimeout(SETTLE_MS);
+    seen.push(await detentOf(page));
+  }
+  expect(seen, `from "${start}" the chevron must cycle peek → half → open and return; it produced ${seen.join(' → ')}`).toEqual(expected);
+
+  await cycleTo(page, 'peek');
+  const peek = await visibleSheetHeight(page);
+  expect(peek.stage, 'the stage .transport-body must have a box').toBeGreaterThan(0);
+  expect(Math.abs(peek.sheet - PEEK_PX), `at peek the sheet shows ${PEEK_PX} ± ${PEEK_TOLERANCE_PX} px of itself; it shows ${fmt(peek.sheet)} of a ${fmt(peek.stage)} stage`).toBeLessThanOrEqual(PEEK_TOLERANCE_PX);
+
+  await cycleTo(page, 'half');
+  const half = await visibleSheetHeight(page);
+  expect(Math.abs(half.sheet - half.stage / 2), `at half the sheet covers half the stage within ${HALF_TOLERANCE * 100}%; it shows ${fmt(half.sheet)} of ${fmt(half.stage)}`).toBeLessThanOrEqual(HALF_TOLERANCE * half.stage);
+
+  await cycleTo(page, 'open');
+  const open = await visibleSheetHeight(page);
+  expect(Math.abs(open.stage - open.sheet - OPEN_GAP_PX), `at open the sheet leaves ${OPEN_GAP_PX} ± ${OPEN_GAP_TOLERANCE_PX} px of the stage visible; it leaves ${fmt(open.stage - open.sheet)}`).toBeLessThanOrEqual(OPEN_GAP_TOLERANCE_PX);
+
+  const cdp = await page.context().newCDPSession(page);
+  await cycleTo(page, 'half');
+  const head = await boxOf(page, '.t-sheet-head');
+  expect(head, 'the sheet head .t-sheet-head must be rendered to drag').not.toBeNull();
+  await touchDrag(cdp, page, head!.cx, head!.cy, head!.cy - SWIPE_PX);
+  expect(await detentOf(page), `a ${SWIPE_PX} px upward drag on the sheet head from half must end at open`).toBe('open');
+
+  await cycleTo(page, 'open');
+  const body = page.locator('[data-testid=transport-detail]');
+  await body.evaluate((el) => { el.scrollTop = 0; });
+  const bodyBox = await boxOf(page, '[data-testid=transport-detail]');
+  expect(bodyBox, 'the sheet body [data-testid=transport-detail] must be rendered to drag').not.toBeNull();
+  await touchDrag(cdp, page, bodyBox!.cx, bodyBox!.cy, bodyBox!.cy + SWIPE_PX);
+  expect(await detentOf(page), `a ${SWIPE_PX} px downward drag on the sheet body at scrollTop 0 from open must end at half`).toBe('half');
+});
+
+// --- 4. scroll versus pan --------------------------------------------------------------
+test('one finger does one thing: a swipe over the Promet map pans the camera and leaves the page put, a swipe over the open sheet body scrolls the body and not the camera, a swipe over Sada scrolls the page', async ({ page }) => {
+  await openDashboard(page, PHONE);
+  await openLayer(page, 'u-pokretu');
+  await waitForMap(page, /^ready$/);
+  const cdp = await page.context().newCDPSession(page);
+
+  await cycleTo(page, 'peek');
+  const canvas = await boxOf(page, '[data-testid=map-canvas]');
+  expect(canvas, 'the map canvas must be on the page').not.toBeNull();
+  const before = await waitForStillMap(page);
+  const y0 = await scrollY(page);
+  await touchDrag(cdp, page, canvas!.cx, canvas!.cy, canvas!.cy - SWIPE_PX);
+  const y1 = await scrollY(page);
+  expect(y1, `a swipe over the map must not scroll the page: scrollY went ${y0} → ${y1} (Promet is a fixed stage)`).toBe(0);
+  expect(await mapHash(page), `a ${SWIPE_PX} px swipe over the map must move the camera: the map pixels are identical before and after`).not.toBe(before);
+
+  await cycleTo(page, 'open');
+  const body = page.locator('[data-testid=transport-detail]');
+  await body.evaluate((el) => { el.scrollTop = 0; });
+  const scrollable = await body.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY }));
+  // Soft: when the body is not a scroller yet, the Sada fact below still reports.
+  expect.soft(scrollable.scrollHeight > scrollable.clientHeight + 1 && /auto|scroll/.test(scrollable.overflowY), `at open the sheet body must be its own scroll container with more content than box: scrollHeight ${scrollable.scrollHeight}, clientHeight ${scrollable.clientHeight}, overflow-y ${scrollable.overflowY}`).toBe(true);
+  const bodyBox = await boxOf(page, '[data-testid=transport-detail]');
+  expect(bodyBox, 'the sheet body [data-testid=transport-detail] must be rendered').not.toBeNull();
+  const camera = await waitForStillMap(page);
+  await touchDrag(cdp, page, bodyBox!.cx, Math.min(bodyBox!.cy, PHONE.height - 100), Math.min(bodyBox!.cy, PHONE.height - 100) - SWIPE_PX);
+  const bodyScroll = await body.evaluate((el) => el.scrollTop);
+  expect.soft(bodyScroll, `a swipe over the open sheet body must scroll the body; its scrollTop is ${bodyScroll}`).toBeGreaterThan(0);
+  expect.soft(await scrollY(page), 'a swipe over the sheet body must not scroll the page').toBe(0);
+  expect.soft(await mapHash(page), 'a swipe over the sheet body must leave the camera unchanged; the map pixels above the sheet moved').toBe(camera);
+
+  await openLayer(page, 'grad-sada');
+  await scrollDocument(page, 0);
+  const main = await boxOf(page, SHELL.main);
+  expect(main, 'Sada must be rendered in main').not.toBeNull();
+  const y = Math.min(main!.cy, PHONE.height * 0.6);
+  await touchDrag(cdp, page, main!.cx, y, y - SWIPE_PX);
+  const sadaScroll = await scrollY(page);
+  expect(sadaScroll, `a swipe over Sada must scroll the document; scrollY stayed at ${sadaScroll}`).toBeGreaterThan(0);
+});
+
+// --- 5. type floor ----------------------------------------------------------------------
+test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (attribution lines excepted), and every link in a source line is a ${TARGET_PX} px target`, async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  const small = new Map<string, string>();
+  const shortLinks: string[] = [];
+  for (const layer of LAYERS) {
+    await openLayer(page, layer);
+    if (layer === 'u-pokretu') await waitForMap(page, /^(ready|tiles-failed|unavailable)$/);
+    await settle(page, fixture);
+    const found = await page.evaluate(({ floor, exempt, target }) => {
+      for (const details of document.querySelectorAll<HTMLDetailsElement>('details.provenance')) details.open = true;
+      const texts: { key: string; line: string }[] = [];
+      const links: string[] = [];
+      const name = (el: Element): string => {
+        const h = el as HTMLElement;
+        const cls = typeof h.className === 'string' && h.className.trim() ? `.${h.className.trim().split(/\s+/).slice(0, 2).join('.')}` : '';
+        return `${el.tagName.toLowerCase()}${h.id ? `#${h.id}` : ''}${cls}${h.dataset?.testid ? `[data-testid=${h.dataset.testid}]` : ''}`;
+      };
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = (node.textContent ?? '').trim();
+        const parent = node.parentElement;
+        if (!text || !parent || parent.closest('script, style, noscript, template') || parent.closest(exempt)) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const r = range.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        const cs = getComputedStyle(parent);
+        if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+        const size = parseFloat(cs.fontSize);
+        if (size < floor) texts.push({ key: `${name(parent)}|${text.slice(0, 40)}`, line: `${name(parent)} "${text.slice(0, 40)}" at ${Math.round(size * 100) / 100} px` });
+      }
+      for (const a of document.querySelectorAll<HTMLAnchorElement>('.provenance a, .source a')) {
+        const r = a.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        if (r.height < target - 0.5) links.push(`${name(a)} "${(a.textContent ?? '').trim().slice(0, 40)}" is ${Math.round(r.height * 10) / 10} px tall`);
+      }
+      return { texts, links };
+    }, { floor: TYPE_FLOOR_PX, exempt: TYPE_FLOOR_EXEMPT, target: TARGET_PX });
+    for (const t of found.texts) if (!small.has(t.key)) small.set(t.key, `${layer}: ${t.line}`);
+    shortLinks.push(...found.links.map((l) => `${layer}: ${l}`));
+  }
+  const smallList = [...small.values()];
+  expect.soft(smallList.length, `${smallList.length} visible text(s) below the ${TYPE_FLOOR_PX} px floor at 390 px:\n${smallList.slice(0, 40).join('\n')}${smallList.length > 40 ? `\n… and ${smallList.length - 40} more` : ''}`).toBe(0);
+  expect(shortLinks.length, `${shortLinks.length} link(s) inside .provenance or .source below the ${TARGET_PX} px target:\n${shortLinks.slice(0, 40).join('\n')}${shortLinks.length > 40 ? `\n… and ${shortLinks.length - 40} more` : ''}`).toBe(0);
+});
+
+// --- 6. bounded heights ------------------------------------------------------------------
+test(`with fixtures at 390 px Grad stays under ${GRAD_MAX_HEIGHT_PX} px and Sigurnost under ${SIGURNOST_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  const height = (): Promise<number> => page.evaluate(() => document.documentElement.scrollHeight);
+  await openLayer(page, 'uprava-i-pravo');
+  await settle(page, fixture);
+  const grad = await height();
+  expect.soft(grad, `Grad renders ${grad} px of document; the plan bounds it under ${GRAD_MAX_HEIGHT_PX} px (paged lists, "Prikaži još")`).toBeLessThan(GRAD_MAX_HEIGHT_PX);
+  await openLayer(page, 'sigurnost');
+  await settle(page, fixture);
+  const sigurnost = await height();
+  expect(sigurnost, `Sigurnost renders ${sigurnost} px of document; the plan bounds it under ${SIGURNOST_MAX_HEIGHT_PX} px (assembly points paged)`).toBeLessThan(SIGURNOST_MAX_HEIGHT_PX);
+});
+
+// --- 7. zoom-compact ----------------------------------------------------------------------
+test('at 200% text the header and the tab bar have no horizontal overflow and the current tab keeps a whole label', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await page.waitForTimeout(300);
+  const issues = await page.evaluate(({ header, tabbar }) => {
+    const out: string[] = [];
+    for (const [label, sel] of [['header', header], ['tab bar', tabbar]] as const) {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (!el || el.getBoundingClientRect().height <= 0) { out.push(`the ${label} ${sel} is missing or hidden`); continue; }
+      if (el.scrollWidth > el.clientWidth + 1) out.push(`the ${label} ${sel} overflows horizontally at 200%: scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}`);
+    }
+    const tab = document.querySelector<HTMLElement>('.ki-tab[aria-current="page"]');
+    const text = tab?.querySelector<HTMLElement>('.ki-nav-label');
+    if (!tab || !text) { out.push('the current tab .ki-tab[aria-current="page"] must carry a .ki-nav-label'); return out; }
+    const r = text.getBoundingClientRect();
+    const cs = getComputedStyle(text);
+    if (r.width < 1 || r.height < 1 || cs.visibility === 'hidden') out.push(`the current tab's label "${text.textContent?.trim()}" is not visible at 200%`);
+    else {
+      const t = tab.getBoundingClientRect();
+      if (text.scrollWidth > text.clientWidth + 1) out.push(`the current tab's label "${text.textContent?.trim()}" is clipped at 200% (scrollWidth ${text.scrollWidth} > clientWidth ${text.clientWidth}); labels never ellipsise`);
+      if (r.left < t.left - 1 || r.right > t.right + 1) out.push(`the current tab's label "${text.textContent?.trim()}" spills out of its tab cell at 200%`);
+    }
+    return out;
+  }, { header: SHELL.header, tabbar: SHELL.tabbar });
+  expect(issues, 'zoom-compact state at 200% text').toEqual([]);
+});
+
+// --- 8. landing -----------------------------------------------------------------------------
+test('the landing at 390 px puts "Skeniraj ili upiši kod" before the kiosk link and the live strip above the fold', async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  const response = await page.goto('/');
+  expect(response?.status(), '/ must answer 200').toBe(200);
+  const found = await page.evaluate(() => {
+    const scan = document.querySelector('[data-testid=cta-scan]') ?? document.querySelector('a.btn-primary[href^="/s/"]');
+    const kiosk = document.querySelector('[data-testid=cta-kiosk]');
+    const strip = document.querySelector('[data-testid=live-strip]');
+    return {
+      scan: scan ? `${scan.tagName.toLowerCase()}.${scan.className} "${scan.textContent?.trim()}"` : null,
+      kiosk: kiosk ? `"${kiosk.textContent?.trim()}"` : null,
+      scanBeforeKiosk: scan && kiosk ? Boolean(scan.compareDocumentPosition(kiosk) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
+      scanPrimary: scan ? scan.classList.contains('btn-primary') : null,
+      stripTop: strip ? strip.getBoundingClientRect().top : null,
+    };
+  });
+  expect(found.scan, 'the landing must render [data-testid=cta-scan] (or a primary action linking /s/)').not.toBeNull();
+  expect(found.kiosk, 'the landing must keep the kiosk link [data-testid=cta-kiosk]').not.toBeNull();
+  expect(found.scanBeforeKiosk, `"Skeniraj ili upiši kod" must come before the kiosk link ${found.kiosk} in DOM order (R-K6: scanning is the primary action on every width); the scan action is ${found.scan}`).toBe(true);
+  expect(found.scanPrimary, `the scan action must be the primary button; it is ${found.scan}`).toBe(true);
+  expect(found.stripTop, 'the live strip [data-testid=live-strip] must be rendered').not.toBeNull();
+  expect(found.stripTop!, `the live strip must start above the fold at 390×844; it starts at ${fmt(found.stripTop!)}`).toBeLessThan(PHONE.height);
+});
+
+// --- 9. notice row ------------------------------------------------------------------------------
+test('the expiry notices sit in the banners row without covering content: expiring60 at one minute, expiring20 at twenty seconds, then the frozen card and no notice', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  const notice = page.locator('[data-testid=notice]');
+  const kinds = async (): Promise<string[]> => notice.evaluateAll((els) => els.map((el) => el.getAttribute('data-kind') ?? '(none)'));
+
+  await page.clock.fastForward(SESSION_MS - WARN_60_MS);
+  await page.waitForTimeout(150);
+  const at60 = await kinds();
+  expect(at60, `at 60 s before expiry a [data-testid=notice][data-kind=expiring60] must be in the banners row (plan: Session lifecycle); found ${at60.length ? at60.join(', ') : 'no notice'}`).toEqual(['expiring60']);
+  await expect(notice.first(), 'the expiring60 notice must be visible').toBeVisible();
+  expect(await geometryIssues(page, { ...SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
+
+  await page.clock.fastForward(WARN_60_MS - WARN_20_MS);
+  await page.waitForTimeout(150);
+  const at20 = await kinds();
+  expect(at20, `at 20 s before expiry the notice must read data-kind=expiring20; found ${at20.length ? at20.join(', ') : 'no notice'}`).toEqual(['expiring20']);
+  expect(await geometryIssues(page, { ...SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
+
+  fixture.expire();
+  await expect(page.getByTestId('frozen-line'), 'after expiry the frozen card must be visible').toBeVisible();
+  const afterExpiry = await kinds();
+  expect(afterExpiry, `after expiry no notice may remain; found ${afterExpiry.join(', ')}`).toEqual([]);
+});
+
+// --- 10. desktop first paint ------------------------------------------------------------------------
+test('at 1440 the rail paints before the session joins: the sidebar is visible and the session card reads the connecting text', async ({ page }) => {
+  await page.setViewportSize(DESK);
+  // A room that never answers: the join is swallowed, so the page stays in its first paint.
+  await page.routeWebSocket('**/ws/room/**', () => {});
+  await page.goto(FIXTURE_DASHBOARD);
+  const label = page.getByTestId('session-label');
+  await expect(label, 'the session card must be part of the first paint').toBeVisible();
+  await expect(label, `before the join the session card reads "${HR.session.connecting}"`).toContainText(HR.session.connecting);
+  const side = page.locator('nav[data-region=side]');
+  await expect(side, 'the sidebar must be visible at 1440 before any data arrives').toBeVisible();
+  await expect(side.locator('[data-action=nav]'), 'the sidebar lists the seven domains').toHaveCount(LAYERS.length);
+});

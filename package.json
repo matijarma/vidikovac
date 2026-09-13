@@ -15,6 +15,7 @@
     "e2e": "playwright test",
     "e2e:a11y": "playwright test e2e/a11y.spec.ts",
     "a11y:lighthouse": "node scripts/lighthouse-a11y.mjs",
+    "review:visual": "node scripts/review-experience.mjs",
     "gtfs:routes": "node scripts/gtfs-routes.mjs",
     "build:network": "node scripts/gtfs-shapes.mjs",
     "check:izvori": "node scripts/check-plan-links.mjs"
