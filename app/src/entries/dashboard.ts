@@ -190,5 +190,15 @@ if (!params) {
       session.event('export', exportDim(kind));
     },
   });
+  // Sada links to Promet, and Promet's map is real MapLibre the moment it opens
+  // (map-slots.ts still creates it lazily): on a modern phone, the library and
+  // its worker are worth fetching into the cache while the device is idle, so
+  // the tab switch itself never pays for the download. Never on the lightweight
+  // path (R-L2), which must not reach for this chunk at all (test/app/budget.test.ts).
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+  const prefetch = () => { void import('../map/maplibre-entry'); };
+  if (!lightweight) {
+    if (idle) idle(prefetch, { timeout: 4000 }); else setTimeout(prefetch, 2500);
+  }
   session.connect();
 }
