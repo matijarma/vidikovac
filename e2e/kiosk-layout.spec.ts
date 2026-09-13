@@ -111,3 +111,23 @@ test('paired at 1920 by 1080: the phone unlocks the screen and the mirrored comp
     await kioskCtx.close();
   }
 });
+
+test('a stale ZET feed holds the map: the screen tells the map the feed state and nothing animates through an outage', async ({ page, request }) => {
+  // Every teaser answer arrives with zet-rt marked stale, as the Worker serves a last-good copy during an outage.
+  await page.route('**/api/teaser**', async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { modules: { module: string; status: string }[] };
+    body.modules = body.modules.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' } : m));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  const { kioskUrl } = await provisionKiosk(request, APP_URL);
+  await openInvitation(page, 'light', SIZES[0], kioskUrl);
+  const map = page.getByTestId('kiosk-map');
+  await expect(map).toHaveAttribute('data-feed', 'stale', { timeout: 15_000 });
+  // The board says so too, and the lines keep their last words rather than a fresh claim.
+  await expect(page.getByTestId('kiosk-lines')).toContainText('zastarjelo');
+  // The basics panel pauses and resumes the map; the hold survives the resume.
+  await page.getByTestId('kiosk-essentials-open').click();
+  await page.keyboard.press('Escape');
+  await expect(map).toHaveAttribute('data-feed', 'stale');
+});
