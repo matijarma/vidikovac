@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { AREAS } from '../../worker/pairing/areas';
 import { ScreenError } from '../../app/src/core/screens';
+import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { createMapSlots } from '../../app/src/map/map-slots';
@@ -15,7 +16,8 @@ import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../ap
 import { decideLayout, MIN_ZOOM } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
-import { eventGroups, fitRows, pairedMarkup } from '../../app/src/kiosk/paired';
+import { weatherMarkup } from '../../app/src/kiosk/invitation';
+import { creditText, eventGroups, fitRows, pairedMarkup, row } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
@@ -438,5 +440,39 @@ describe('the one map, through the additive adapter', () => {
     expect(STOP.lat - lat).toBeCloseTo((150 * metresPerPixel(15, STOP.lat)) / 111_320, 6);
     expect(boardCentre(STOP, 15, 0)).toEqual([STOP.lon, STOP.lat]);
     expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
+  });
+});
+
+describe('credits and rows on a screen read from steps away', () => {
+  const all = () => Object.fromEntries(MODULES.map((m) => [m.module, m]));
+  const ctx = (layer: 'kultura' | 'uprava-i-pravo' | 'vijesti', extra: Partial<Parameters<typeof pairedMarkup>[0]> = {}) => pairedMarkup({ layer, strings: hr, i18n, locale: 'hr', snapshots: all(), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const, ...extra });
+  it('a credit names the publisher and the licence and points at /izvori; an act\u2019s UUID and the six-source paragraph never print; ZET\u2019s mandated sentence stays verbatim', () => {
+    const glasnik = snap('glasnik', [item('glasnik', 'a1', 'act', 'Zaključak o prihvaćanju pokroviteljstva', { at: '2026-09-07T00:00:00Z', data: { broj: '29', godina: '2026', id: 'e5f003b0-c950-44de-be5f-ac76aa2ee8c6' } })]);
+    glasnik.attribution = { text: 'Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}', url: '', licence: 'Otvorena dozvola (NN 67/17)' };
+    const grad = ctx('uprava-i-pravo', { snapshots: { ...all(), glasnik } });
+    expect(grad.main).toContain('Izvor: Službeni glasnik Grada Zagreba · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
+    expect(grad.main).not.toContain('e5f003b0');
+    expect(grad.main.match(/k-main-source/g)).toHaveLength(1);
+    expect(grad.main).toContain('Izvori: Skupština Grada Zagreba (Otvorena dozvola) · Grad Zagreb, plan komunalnih aktivnosti (Otvorena dozvola) · potpuna atribucija: /izvori');
+    expect(grad.side).not.toContain('k-source');
+    const kultura = ctx('kultura');
+    expect(kultura.main).toContain('Izvori: Kulturpunkt (CC BY-SA 3.0 HR) · Grad Zagreb, kvartovske novosti (Otvorena dozvola) · potpuna atribucija: /izvori');
+    expect(kultura.main).not.toContain('Šest izvora');
+    expect(kultura.side).not.toContain('k-source'); // the notices block is covered by the layer's one credit
+    expect(creditText(MODULES.find((m) => m.module === 'zet-rt')!, [], hr)).toBe('Izvor: test · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
+    expect(creditText(MODULES.find((m) => m.module === 'prometnice')!, [], hr)).toBe('Izvor: Grad Zagreb (data.zagreb.hr) · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
+    expect(creditText(downPlaceholder('emsc', '2026-09-11T12:33:00Z'), [], kioskStrings('en'))).toBe('Source: EMSC, seismicportal.eu · full attribution: /izvori');
+  });
+  it('a row keeps its whole title with the aside inside it; the selected item grows to main size; an observation without a reading says so in a word', () => {
+    expect(row('Naslov', 'detalj', '20:00', ' data-x="1"')).toBe('<span class="k-row-main" data-x="1"><span class="k-row-aside">20:00</span>Naslov</span><span class="k-row-sub">detalj</span>');
+    expect(row('Naslov')).toBe('<span class="k-row-main">Naslov</span>');
+    const selected = ctx('vijesti', { selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' } }).side;
+    expect(selected).toContain('k-block--grow');
+    expect(selected).toContain('class="k-select-main k-select-main--item"');
+    expect(selected).toContain('Izvor: HRT · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
+    const noTemp = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { humidity: 60 } })]) : m));
+    const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), NOW, hr);
+    expect(markup).toContain('bez očitanja temperature');
+    expect(markup).not.toMatch(/kiosk-temp">[–-]</);
   });
 });

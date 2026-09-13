@@ -246,20 +246,23 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const w = parts.warning;
     strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
       <span class="k-strip-label">${escapeHtml(s.safety.label)}</span>
+      <div class="k-strip-items" data-testid="strip-items">
       <span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeHtml(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>
       <span class="k-strip-item" data-testid="strip-closures" data-state="${parts.closures.state}">${escapeHtml(parts.closures.text)}${parts.closures.nearestText ? ` <span class="k-strip-sub">${escapeHtml(parts.closures.nearestText)}</span>` : ''}</span>
       <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(s.safety.pharmacy)}: <strong>${escapeHtml(parts.pharmacy.label)}</strong></span>
+      </div>
       <a class="k-strip-hitno" href="/hitno">${escapeHtml(s.safety.hitno)}</a>`;
     fitStrip();
   }
-  /** Long words (a stale, unconfirmed state) must still fit one line: first the
-   *  nearest-street aside goes, then the type steps down; nothing is clipped. */
+  /** The three sentences share one wrapping box with room for two lines, so
+   *  long words (a stale, unconfirmed state) move a sentence down whole. Only
+   *  when two lines are not enough does the nearest-street aside go. The type
+   *  never steps down and nothing is clipped mid-word. */
   function fitStrip(): void {
-    strip.classList.remove('k-strip--nosub', 'k-strip--tight');
-    const overflows = (): boolean => strip.clientWidth > 0 && strip.scrollWidth > strip.clientWidth + 1;
-    if (!overflows()) return;
-    strip.classList.add('k-strip--nosub');
-    if (overflows()) strip.classList.add('k-strip--tight');
+    strip.classList.remove('k-strip--nosub');
+    const items = strip.querySelector<HTMLElement>('.k-strip-items');
+    if (!items || items.clientHeight === 0) return;
+    if (items.scrollHeight > items.clientHeight + 1) strip.classList.add('k-strip--nosub');
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --

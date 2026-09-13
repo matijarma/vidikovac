@@ -52,6 +52,8 @@ export interface KioskStrings {
     unavailable: string;
     loading: string;
     station: string;
+    /** A live observation with no temperature: said in a word, never a dash. */
+    noReading: string;
   };
   lines: {
     title: string;
@@ -159,6 +161,11 @@ export interface KioskStrings {
     lineWord: string;
     stopWord: string;
     licence: string;
+    /** "Izvor" / "Izvori": the label a compact credit line opens with. */
+    sourceLabel: string;
+    sourcesLabel: string;
+    /** Where the full attribution of every source lives. */
+    fullSources: string;
   };
   notice: {
     expiredTitle: string;

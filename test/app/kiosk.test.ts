@@ -248,6 +248,15 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
     expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .k-line')).toHaveLength(4);
   });
+  it('the strip keeps its three sentences in one wrapping box and never steps the type down', async () => {
+    const k = mount({ stored: STORED, viewport: { width: 1366, height: 768 } });
+    await flush();
+    const strip = q(k.root, '[data-testid=safety-strip]')!;
+    expect(q(strip, '[data-testid=strip-items] [data-testid=strip-warning]')).not.toBeNull();
+    expect(q(strip, '[data-testid=strip-items] [data-testid=strip-pharmacy]')).not.toBeNull();
+    expect(strip.className).not.toContain('k-strip--tight');
+    expect(text(q(strip, '[data-testid=strip-closures]'))).toBe('1 zatvaranje najbliže Ilica');
+  });
   it('lightweight: the map host is hidden, nothing is a canvas, and the lines board fills the column', async () => {
     const k = mount({ stored: STORED, lightweight: true });
     await flush();

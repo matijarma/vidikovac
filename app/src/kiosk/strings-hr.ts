@@ -49,6 +49,7 @@ export const hr: KioskStrings = {
     unavailable: 'Podaci DHMZ-a trenutačno nisu dostupni.',
     loading: 'Učitavanje podataka DHMZ-a…',
     station: 'postaja {name}',
+    noReading: 'bez očitanja temperature',
   },
   lines: {
     title: 'Linije s ove stanice',
@@ -189,6 +190,9 @@ export const hr: KioskStrings = {
     lineWord: 'linija',
     stopWord: 'stanica',
     licence: 'Licenca',
+    sourceLabel: 'Izvor',
+    sourcesLabel: 'Izvori',
+    fullSources: 'potpuna atribucija: /izvori',
   },
   notice: {
     expiredTitle: 'Ovaj privremeni zaslon je istekao.',

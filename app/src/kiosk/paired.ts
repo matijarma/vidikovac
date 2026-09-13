@@ -9,12 +9,13 @@ import { LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
 import { fillAttribution } from '../attribution';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
+import { DOGADANJA_SOURCES, IZVORI } from '../izvori-render';
 import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kicker, linesMarkup, weatherMarkup } from './invitation';
-import { activeWarnings, cityDateLine, cityKicker, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
+import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
 import { routeLongName, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
@@ -80,19 +81,59 @@ export function statusLine(snapshot: ModuleSnapshot | undefined, s: KioskStrings
   return snapshot.status === 'stale' ? `${s.paired.stale} · ${from}` : from;
 }
 
-/** The source line of a block: filled attribution and the licence, once,
- *  small -- the licence only when the attribution does not already name it. */
-export function sourceLine(snapshot: ModuleSnapshot | undefined, item: FeedItem | undefined, s: KioskStrings, extraClass = ''): string {
-  if (!snapshot) return '';
-  const text = fillAttribution(snapshot.attribution, snapshot, item ?? snapshot.items[0]);
+/** Who publishes a module, as a credit line names it: the public body for the
+ *  City's datasets (the Otvorena dozvola asks for it), the institute or the
+ *  broadcaster otherwise. A module not listed reads its /izvori name. */
+const PUBLISHER: Partial<Record<ModuleId, string>> = {
+  prometnice: 'Grad Zagreb (data.zagreb.hr)',
+  'ckan-geo': 'Grad Zagreb (data.zagreb.hr)',
+  'dhmz-now': 'DHMZ',
+  'dhmz-forecast': 'DHMZ',
+  'dhmz-cap': 'DHMZ',
+  emsc: 'EMSC, seismicportal.eu',
+  'hrt-news': 'HRT',
+  glasnik: 'Službeni glasnik Grada Zagreba',
+};
+/** The dogadanja sources whose /izvori name does not already say who publishes them. */
+const EVENT_PUBLISHER: Record<string, string> = {
+  kvartovske: 'Grad Zagreb, kvartovske novosti',
+  komunalne: 'Grad Zagreb, plan komunalnih aktivnosti',
+  'zet-promet': 'ZET',
+  'zet-novosti': 'ZET',
+};
+
+/** One block's credit, compact enough for a screen read from steps away: who
+ *  published the rows on show, under which licence, and where the full
+ *  attribution lives (/izvori). ZET's sentence is the one its licence mandates
+ *  and stays verbatim. The dogadanja module credits each source actually on
+ *  the screen by name and its own catalogued licence, never the six-source
+ *  paragraph. A per-item template (an act's UUID) never prints. */
+export function creditText(snapshot: ModuleSnapshot, items: readonly FeedItem[], s: KioskStrings): string {
   const licence = snapshot.attribution.licence;
-  const named = licence !== '' && text.toLowerCase().includes(licence.toLowerCase().split(' (')[0]!);
-  return `<p class="k-meta k-source${extraClass ? ` ${extraClass}` : ''}">${escapeHtml(text)}${named ? '' : ` · ${escapeHtml(s.paired.licence)}: ${escapeHtml(licence)}`}</p>`;
+  const licenceWords = licence === '' ? '' : `${s.paired.licence}: ${licence}`;
+  if (snapshot.module === 'zet-rt') {
+    const text = fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]);
+    const named = licence !== '' && text.toLowerCase().includes(licence.toLowerCase().split(' (')[0]!);
+    return [text, named ? '' : licenceWords, s.paired.fullSources].filter(Boolean).join(' · ');
+  }
+  if (snapshot.module === 'dogadanja') {
+    const shown = new Set(items.map((item) => dataText(item, 'source')));
+    const credits = [...new Set(DOGADANJA_SOURCES.filter((src) => shown.has(src.source)).map((src) => `${EVENT_PUBLISHER[src.source] ?? src.naziv} (${src.licence})`))];
+    if (credits.length > 0) return `${credits.length > 1 ? s.paired.sourcesLabel : s.paired.sourceLabel}: ${credits.join(' · ')} · ${s.paired.fullSources}`;
+  }
+  const publisher = PUBLISHER[snapshot.module] ?? IZVORI.find((src) => src.module === snapshot.module)?.naziv ?? fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]);
+  return [`${s.paired.sourceLabel}: ${publisher}`, licenceWords, s.paired.fullSources].filter(Boolean).join(' · ');
 }
 
-/** One source line for the blocks a single module feeds, spanning the main grid. */
-function mainSource(snapshot: ModuleSnapshot | undefined, s: KioskStrings): string {
-  return sourceLine(snapshot, undefined, s, 'k-main-source');
+/** The credit line under a block; `items` are the rows on show, for a per-source credit. */
+export function sourceLine(snapshot: ModuleSnapshot | undefined, items: readonly FeedItem[], s: KioskStrings, extraClass = ''): string {
+  if (!snapshot) return '';
+  return `<p class="k-meta k-source${extraClass ? ` ${extraClass}` : ''}">${escapeHtml(creditText(snapshot, items, s))}</p>`;
+}
+
+/** One credit for the blocks a single module feeds, spanning the main grid. */
+function mainSource(snapshot: ModuleSnapshot | undefined, items: readonly FeedItem[], s: KioskStrings): string {
+  return sourceLine(snapshot, items, s, 'k-main-source');
 }
 
 export interface BlockOptions {
@@ -100,6 +141,8 @@ export interface BlockOptions {
   tone?: string;
   snapshot?: ModuleSnapshot;
   item?: FeedItem;
+  /** The rows on show, when the credit should name their sources (dogadanja). */
+  items?: readonly FeedItem[];
   grow?: boolean;
   /** Goes before the status in the kicker's right-hand text. */
   meta?: string;
@@ -114,7 +157,7 @@ export function block(title: string, body: string, o: BlockOptions): string {
   return `<article class="k-block${o.tone ? ` k-block--${escapeAttribute(o.tone)}` : ''}${o.grow ? ' k-block--grow' : ''}${list}"${o.testid ? ` data-testid="${escapeAttribute(o.testid)}"` : ''}${o.snapshot ? ` data-status="${o.snapshot.status}"` : ''}>
     ${kicker(title, status)}
     <div class="k-block-body">${body}</div>
-    ${o.noSource ? '' : sourceLine(o.snapshot, o.item, o.s)}
+    ${o.noSource ? '' : sourceLine(o.snapshot, o.items ?? (o.item ? [o.item] : []), o.s)}
   </article>`;
 }
 
@@ -130,8 +173,11 @@ export function listBody(snapshot: ModuleSnapshot | undefined, rows: readonly st
   return `<ul class="k-rows"${total > rows.length ? ` data-total="${total}"` : ''}>${rows.map((row) => `<li class="k-row">${row}</li>`).join('')}</ul>`;
 }
 
+/** The aside (a time, a distance, a count) goes inside the title's box, first
+ *  in the markup, so it floats at the right of the first line and the title
+ *  flows whole around it; no title is ever clamped. */
 export function row(main: string, sub = '', aside = '', attrs = ''): string {
-  return `<span class="k-row-main"${attrs}>${main}</span>${sub ? `<span class="k-row-sub">${sub}</span>` : ''}${aside ? `<span class="k-row-aside">${aside}</span>` : ''}`;
+  return `<span class="k-row-main"${attrs}>${aside ? `<span class="k-row-aside">${aside}</span>` : ''}${main}</span>${sub ? `<span class="k-row-sub">${sub}</span>` : ''}`;
 }
 
 /** After a paint, trailing rows that do not fit their block are hidden and
@@ -308,7 +354,8 @@ function findItem(ctx: PairedContext, module: ModuleId, key: string): { item: Fe
 function selectionCard(ctx: PairedContext): string {
   const { strings: s, selection, i18n } = ctx;
   if (!selection) return '';
-  const o = { s, testid: 'k-selection', tone: 'select' };
+  // The selection is the column's subject: it takes the room the column has.
+  const o = { s, testid: 'k-selection', tone: 'select', grow: true };
   if (selection.kind === 'route') {
     const zet = ctx.snapshots['zet-rt'];
     const summary = zet?.items.find((item) => item.id === `route:${selection.id}`);
@@ -329,7 +376,7 @@ function selectionCard(ctx: PairedContext): string {
   if (!found) return '';
   const { item, snapshot } = found;
   const when = item.at && item.dateBasis !== 'unknown' ? dayTime(item.at) : '';
-  const body = `<p class="k-select-main">${escapeHtml(item.title)}</p>${item.summary ? `<p class="k-select-sub">${escapeHtml(item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
+  const body = `<p class="k-select-main k-select-main--item">${escapeHtml(item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${escapeHtml(item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
   return block(s.session.selected, body, { ...o, snapshot, item });
 }
 
@@ -354,7 +401,7 @@ function forecastBlock(ctx: PairedContext): string {
     const range = tmin !== null && tmax !== null ? fill(s.weather.range, { min: fmtNumber(locale, tmin, 0), max: fmtNumber(locale, tmax, 0) }) : s.paired.rangeUnknown;
     // DHMZ's forecast 'vrijeme' is sometimes a symbol code, never a word to print.
     const raw = dataText(today, 'weather');
-    const word = /^\d+$/.test(raw) ? '' : raw;
+    const word = /^\d+$/.test(raw) ? '' : cleanCondition(raw);
     body = `<p class="k-figure">${escapeHtml(range)}</p>${word ? `<p class="k-figure-sub">${escapeHtml(word)}</p>` : ''}${today.summary ? `<p class="k-text">${escapeHtml(today.summary)}</p>` : ''}`;
   }
   return block(s.paired.forecast, body, { s, snapshot: snap, item: today, testid: 'k-forecast' });
@@ -507,7 +554,10 @@ function worksBlock(ctx: PairedContext, limit: number): string {
 function renderGrad(ctx: PairedContext): PairedMarkup {
   const wide = ctx.size === 'wide';
   // Acts and sessions side by side; the works register takes the side column, so no column is starved.
-  const main = `${actsBlock(ctx, wide ? 6 : 4)}${sessionsBlock(ctx, wide ? 5 : 3)}${mainSource(ctx.snapshots.dogadanja, ctx.strings)}`;
+  const dog = ctx.snapshots.dogadanja;
+  // The one credit names the sources these blocks draw from: the Assembly's calendar and the works register.
+  const cityItems = (isLive(dog) ? dog.items : []).filter((item) => citySource(item) === 'skupstina' || citySource(item) === 'komunalne');
+  const main = `${actsBlock(ctx, wide ? 6 : 4)}${sessionsBlock(ctx, wide ? 5 : 3)}${mainSource(dog, cityItems, ctx.strings)}`;
   return { lines: '', main, side: `${selectionCard(ctx)}${worksBlock(ctx, wide ? 5 : 3)}` };
 }
 
@@ -519,7 +569,7 @@ function zetNoticesBlock(ctx: PairedContext, limit: number): string {
   const items = (isLive(dog) ? dog.items : []).filter((item) => ZET_NOTICE_SOURCES.has(dataText(item, 'source')));
   if (items.length === 0) return '';
   const rows = items.slice(0, limit).map((item) => row(escapeHtml(item.title), escapeHtml(cityDateLine(item, ctx.strings, ctx.locale))));
-  return block(ctx.strings.paired.zetNotices, listBody(dog, rows, ctx.strings.paired.noData, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, testid: 'k-zet-notices' });
+  return block(ctx.strings.paired.zetNotices, listBody(dog, rows, ctx.strings.paired.noData, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, items, testid: 'k-zet-notices' });
 }
 
 // --- Događanja (kultura) --------------------------------------------------------
@@ -614,8 +664,10 @@ function renderKultura(ctx: PairedContext): PairedMarkup {
   const dog = ctx.snapshots.dogadanja;
   const groups = eventGroups(isLive(dog) ? dog.items : [], ctx.now);
   const half = ctx.size === 'wide' ? 4 : 3;
-  const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, s)}`;
-  const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, ctx.size === 'wide' ? 4 : 3), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true });
+  // One credit for the whole layer, naming the sources of the rows it can show -- the notices included, so no second copy sits under them.
+  const shown = [...groups.today, ...groups.ongoing, ...groups.tomorrow, ...groups.later, ...groups.notices];
+  const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, shown, s)}`;
+  const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, ctx.size === 'wide' ? 4 : 3), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true, noSource: true });
   return { lines: '', main, side: `${selectionCard(ctx)}${notices}` };
 }
 
@@ -627,7 +679,7 @@ function renderVijesti(ctx: PairedContext): PairedMarkup {
   const items = isLive(hrt) ? hrt.items : [];
   const [lead, ...rest] = items;
   const leadBody = lead
-    ? `<p class="k-headline">${escapeHtml(lead.title)}</p>${lead.summary ? `<p class="k-text">${escapeHtml(lead.summary)}</p>` : ''}<p class="k-figure-sub">${escapeHtml([dataText(lead, 'source') || 'HRT', lead.at ? fill(s.story.published, { time: dayTime(lead.at) }) : ''].filter(Boolean).join(' · '))}</p>`
+    ? `<p class="k-headline">${escapeHtml(lead.title)}</p>${lead.summary ? `<p class="k-text k-text--long">${escapeHtml(lead.summary)}</p>` : ''}<p class="k-figure-sub">${escapeHtml([dataText(lead, 'source') || 'HRT', lead.at ? fill(s.story.published, { time: dayTime(lead.at) }) : ''].filter(Boolean).join(' · '))}</p>`
     : hrt?.status === 'down' ? `<p class="k-board-note" data-state="down">${escapeHtml(s.paired.sourceDown)}</p>` : `<p class="k-board-note">${escapeHtml(hrt ? s.paired.newsNone : s.paired.noData)}</p>`;
   const leadBlock = block(s.story.news, leadBody, { s, snapshot: hrt, item: lead, testid: 'k-lead', tone: 'lead', grow: true });
   const rows = rest.slice(0, ctx.size === 'wide' ? 6 : 4).map((item) => row(escapeHtml(item.title), escapeHtml(dataText(item, 'source') || 'HRT'), item.at ? escapeHtml(clock(item.at)) : ''));

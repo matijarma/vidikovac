@@ -48,7 +48,7 @@ export function weatherMarkup(weather: WeatherNow, now: number, strings: KioskSt
   }
   const stale = weather.state === 'stale' ? `<span class="k-chip k-chip--stale">${escapeHtml(strings.paired.stale)}</span>` : '';
   return `${kicker(strings.weather.title, weather.station)}
-    <div class="k-weather-main"><span class="k-temp" data-testid="kiosk-temp">${escapeHtml(weather.temperature ?? '–')}</span><span class="k-condition">${escapeHtml(weather.condition)}</span>${stale}</div>
+    <div class="k-weather-main">${weather.temperature !== null ? `<span class="k-temp" data-testid="kiosk-temp">${escapeHtml(weather.temperature)}</span>` : `<span class="k-temp k-temp--none" data-testid="kiosk-temp" data-state="none">${escapeHtml(strings.weather.noReading)}</span>`}<span class="k-condition">${escapeHtml(weather.condition)}</span>${stale}</div>
     <p class="k-weather-details">${escapeHtml(weather.details.join(' · '))}</p>
     <p class="k-weather-sun">${escapeHtml(sun)}</p>
     <p class="k-meta">${escapeHtml([weather.observedAt, 'DHMZ'].filter(Boolean).join(' · '))}</p>`;

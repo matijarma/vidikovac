@@ -49,6 +49,7 @@ export const en: KioskStrings = {
     unavailable: 'DHMZ data is unavailable right now.',
     loading: 'Loading DHMZ data…',
     station: 'station {name}',
+    noReading: 'no temperature reading',
   },
   lines: {
     title: 'Lines from this stop',
@@ -189,6 +190,9 @@ export const en: KioskStrings = {
     lineWord: 'line',
     stopWord: 'stop',
     licence: 'Licence',
+    sourceLabel: 'Source',
+    sourcesLabel: 'Sources',
+    fullSources: 'full attribution: /izvori',
   },
   notice: {
     expiredTitle: 'This temporary screen has expired.',
