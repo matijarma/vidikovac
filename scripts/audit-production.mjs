@@ -18,29 +18,22 @@
 // used when the repo's Playwright has it installed; otherwise the iPhone descriptor runs in Chromium and
 // result.json says so (`engine`).
 //
-// Every capture records metrics (result.json, `metrics`) and evaluates four rules with the thresholds below:
-// geometry (a sticky header above the content, banners in flow, the tab bar flush with the bottom), type floor
+// Every capture records metrics (result.json, `metrics`) and evaluates the mobile gates' rules: geometry (a sticky
+// header above the content, banners in flow, the tab bar flush with the bottom, the header's height), type floor
 // (TYPE_FLOOR_PX on phone-class widths, attribution lines excepted), targets (TARGET_MIN_PX) and overflow (no
-// wider than the viewport). Exit code 0 when every rule holds on every capture, 1 when any rule fails
-// (`violations` lists each), 2 when the journey itself could not run (no credentials, screen creation refused,
-// no browser). Nothing in the repo or the deployment changes; the temporary screen expires on its own.
+// wider than the viewport). The thresholds and the rules have one source, e2e/geometry.ts, shared with the
+// Playwright gate e2e/mobile.spec.ts; this script loads that TypeScript module through a throwaway Vite loader
+// (the way scripts/review-experience.mjs loads the fixtures), so the audit's verdict on production and the gate's
+// verdict on the same DOM cannot drift apart. Exit code 0 when every rule holds on every capture, 1 when any rule
+// fails (`violations` lists each, tagged by rule), 2 when the journey itself could not run (no credentials, no rule
+// loader, screen creation refused, no browser). Nothing in the repo or the deployment changes; the temporary screen
+// expires on its own.
 import { chromium, devices, webkit } from '@playwright/test';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createServer } from 'vite';
 
-// --- thresholds -------------------------------------------------------------------------
-/** No visible text below this on a phone, except attribution lines (WCAG 2.2 AA as the constraints state it). */
-const TYPE_FLOOR_PX = 13;
-/** Every interactive element is at least this in both dimensions. */
-const TARGET_MIN_PX = 44;
-/** The sticky header: 48 px plus a safe-area inset at most. */
-const HEADER_MAX_PX = 56;
-/** Sub-pixel rounding allowance for edges and widths. */
-const EDGE_TOLERANCE_PX = 1;
-/** Phone-class captures are narrower than the shell's desktop breakpoint (app/src/core/breakpoints.ts, DESKTOP_MIN_PX). */
-const DESKTOP_MIN_PX = 960;
-/** The one exception to the type floor. */
-const TYPE_FLOOR_EXEMPT = '.provenance, .panel-attr, .source-line, .maplibregl-ctrl-attrib';
+// --- run constants (the rule thresholds live in e2e/geometry.ts and are imported below) -------------
 /** The Worker's self-service quota; this script spends one of them. */
 const SCREEN_QUOTA_PER_HOUR = 5;
 const DEFAULT_APP_URL = 'https://zagreb.aningfilm.hr';
@@ -48,9 +41,8 @@ const DEFAULT_APP_URL = 'https://zagreb.aningfilm.hr';
 const EXPIRY_WARNING_LEAD_MS = 50_000;
 /** No single action or wait may hang the run: a control that never appears is an error, not a stall. */
 const ACTION_TIMEOUT_MS = 20_000;
-/** The shell's selectors the geometry rules read. */
-const SHELL = { root: '.ki', header: '.ki-head', tabbar: '.ki-tabbar', main: '[data-testid=dash-view]', banners: '[data-testid=banners]' };
-const THRESHOLDS = { typeFloor: TYPE_FLOOR_PX, target: TARGET_MIN_PX, headerMax: HEADER_MAX_PX, edge: EDGE_TOLERANCE_PX, desktopMin: DESKTOP_MIN_PX, exempt: TYPE_FLOOR_EXEMPT, shell: SHELL };
+/** The /d/ shell's root; its presence says the shell's geometry rules apply to a capture. */
+const SHELL_ROOT = '.ki';
 
 // --- environment -------------------------------------------------------------------------
 const clientId = process.env.CF_ACCESS_CLIENT_ID;
@@ -66,7 +58,27 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT = resolve(root, process.env.AUDIT_OUT ?? `review.local/audit-${stamp}`);
 mkdirSync(resolve(OUT, 'text'), { recursive: true });
 
-const result = { startedAt: new Date().toISOString(), origin: ORIGIN, thresholds: { TYPE_FLOOR_PX, TARGET_MIN_PX, HEADER_MAX_PX, EDGE_TOLERANCE_PX, DESKTOP_MIN_PX }, engine: null, health: null, steps: [], errors: [], metrics: {}, timings: {}, violations: [] };
+// --- the rules: one source with the Playwright gate ---------------------------------------------
+// e2e/geometry.ts holds the thresholds (TYPE_FLOOR_PX, TARGET_MIN_PX, HEADER_MAX_PX, EDGE_TOLERANCE_PX) and the rules;
+// it is TypeScript, so a throwaway Vite server in middleware mode loads it here, the way scripts/review-experience.mjs
+// loads the fixtures. No port, no file watcher, no HMR socket: it only transforms modules, and it closes with the run.
+let loader;
+try {
+  loader = await createServer({
+    configFile: false, root, appType: 'custom', logLevel: 'warn',
+    cacheDir: resolve(root, 'review.local/ssr-cache'),
+    server: { middlewareMode: true, hmr: false, watch: null },
+  });
+} catch (e) {
+  console.error(`audit-production: the rule loader could not start: ${e && e.message ? e.message : e}`);
+  process.exit(2);
+}
+const { TYPE_FLOOR_PX, TARGET_MIN_PX, HEADER_MAX_PX, EDGE_TOLERANCE_PX, PHONE_SHELL, PHONE_TYPE_FLOOR, SOURCE_LINK_TARGETS, CONTROL_TARGETS, ALL_GEOMETRY_RULES, ruleViolations } =
+  await loader.ssrLoadModule('/e2e/geometry.ts');
+/** Phone-class captures are narrower than the shell's desktop breakpoint. */
+const { DESKTOP_MIN_PX } = await loader.ssrLoadModule('/app/src/core/breakpoints.ts');
+
+const result = { startedAt: new Date().toISOString(), origin: ORIGIN, thresholds: { TYPE_FLOOR_PX, TARGET_MIN_PX, HEADER_MAX_PX, EDGE_TOLERANCE_PX, DESKTOP_MIN_PX, source: 'e2e/geometry.ts' }, engine: null, health: null, steps: [], errors: [], metrics: {}, timings: {}, violations: [] };
 const t0 = Date.now();
 let fatal = false;
 function log(msg) {
@@ -112,76 +124,26 @@ async function shot(page, name, full = false) {
   } catch (e) { fail(`shot ${name}`, e); }
 }
 
-// --- metrics and rules, evaluated inside the page ---------------------------------------------
-const METRICS_FN = (th) => {
+// --- metrics, evaluated inside the page; the rules run through ruleViolations from e2e/geometry.ts -----------
+const METRICS_FN = ({ shellRoot }) => {
   const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
   const name = (el) => {
     const cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
     const testid = el.dataset && el.dataset.testid ? `[data-testid=${el.dataset.testid}]` : '';
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls}${testid}`;
   };
-  const px = (n) => `${Math.round(n * 10) / 10} px`;
-  const violations = [];
-  const phoneClass = innerWidth < th.desktopMin;
-
-  // Targets: every interactive element at least th.target in both dimensions.
-  const targets = [...document.querySelectorAll('a[href],button,input,select,textarea,summary,[role=button],[role=tab],[tabindex]:not([tabindex="-1"])')].filter(vis);
-  const small = targets.map((el) => { const r = el.getBoundingClientRect(); return { where: name(el), text: (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40), w: Math.round(r.width), h: Math.round(r.height) }; }).filter((t) => t.w < th.target - th.edge || t.h < th.target - th.edge);
-  for (const t of small) violations.push({ rule: 'target', detail: `${t.where} "${t.text}" is ${t.w}×${t.h} px, under ${th.target} px` });
-
-  // Type floor: visible text nodes on phone-class widths, attribution lines excepted.
   const textEls = [...document.querySelectorAll('body *')].filter((el) => vis(el) && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
-  const sizes = textEls.map((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), text: el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40), where: name(el), exempt: Boolean(el.closest(th.exempt)) }));
-  const underFloor = sizes.filter((s) => !s.exempt && s.size < th.typeFloor);
-  if (phoneClass) for (const s of underFloor) violations.push({ rule: 'type-floor', detail: `${s.where} "${s.text}" at ${Math.round(s.size * 100) / 100} px, under ${th.typeFloor} px` });
-
-  // Overflow: the document no wider than the viewport.
-  const scrollWidth = document.documentElement.scrollWidth;
-  if (scrollWidth > innerWidth + th.edge) violations.push({ rule: 'overflow', detail: `document ${scrollWidth} px wide in a ${innerWidth} px viewport` });
-
-  // Geometry of the /d/ shell: sticky header above content, banners in flow, tab bar flush with the bottom.
-  const shell = document.querySelector(th.shell.root);
-  if (shell) {
-    const header = document.querySelector(th.shell.header);
-    const main = document.querySelector(th.shell.main);
-    const banners = document.querySelector(th.shell.banners);
-    const tabbar = document.querySelector(th.shell.tabbar);
-    const mainChildren = main ? [...main.children].filter(vis) : [];
-    const bannerNodes = [...(banners ? [...banners.children] : []), ...document.querySelectorAll('[data-testid=notice]')].filter((el, i, all) => all.indexOf(el) === i && vis(el));
-    if (phoneClass) {
-      if (!header || !vis(header)) violations.push({ rule: 'geometry', detail: `the sticky header ${th.shell.header} is missing or hidden` });
-      else {
-        const h = header.getBoundingClientRect();
-        const reference = bannerNodes[0] || mainChildren[0];
-        if (reference && h.bottom > reference.getBoundingClientRect().top + 0.5) violations.push({ rule: 'geometry', detail: `the header ends at ${px(h.bottom)} but ${name(reference)} starts at ${px(reference.getBoundingClientRect().top)}: it overlays content` });
-        if (h.height > th.headerMax + 0.5) violations.push({ rule: 'geometry', detail: `the header is ${px(h.height)} tall, above ${th.headerMax} px` });
-      }
-      if (!tabbar || !vis(tabbar)) violations.push({ rule: 'geometry', detail: `the tab bar ${th.shell.tabbar} is missing or hidden` });
-      else {
-        const t = tabbar.getBoundingClientRect();
-        if (Math.abs(t.bottom - innerHeight) > th.edge) violations.push({ rule: 'geometry', detail: `the tab bar ends at ${px(t.bottom)} while the viewport ends at ${innerHeight} px` });
-      }
-    }
-    for (const banner of bannerNodes) {
-      const b = banner.getBoundingClientRect();
-      for (const child of mainChildren) {
-        const c = child.getBoundingClientRect();
-        if (b.left < c.right - 1 && c.left < b.right - 1 && b.top < c.bottom - 1 && c.top < b.bottom - 1) violations.push({ rule: 'geometry', detail: `the banner ${name(banner)} overlaps ${name(child)}: banners must sit in flow` });
-      }
-    }
-  }
-
   const fixed = [...document.querySelectorAll('body *')].filter((el) => { const p = getComputedStyle(el).position; return p === 'fixed' || p === 'sticky'; }).map((el) => { const r = el.getBoundingClientRect(); return { sel: name(el), pos: getComputedStyle(el).position, top: Math.round(r.top), h: Math.round(r.height), w: Math.round(r.width) }; });
   const firstViewport = textEls.filter((el) => { const r = el.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; }).map((el) => el.textContent.trim().replace(/\s+/g, ' ')).filter(Boolean).join(' | ').slice(0, 2500);
   const fam = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).fontFamily.slice(0, 60) : null; };
+  const shell = document.querySelector(shellRoot);
   const canvas = document.querySelector('[data-testid=map-canvas]');
   const cr = canvas ? canvas.getBoundingClientRect() : null;
   const sess = document.querySelector('[data-testid=session-label]');
   const workspace = document.querySelector('[data-testid=transport-workspace]');
   return {
-    innerWidth, innerHeight, scrollWidth, scrollHeight: document.documentElement.scrollHeight, phoneClass,
-    targets: targets.length, smallTargets: small.length, smallTargetSamples: small.slice(0, 15),
-    textEls: sizes.length, underFloor: underFloor.length, underFloorSamples: underFloor.slice(0, 12), minFont: sizes.length ? Math.min(...sizes.map((s) => s.size)) : null,
+    innerWidth, innerHeight, scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight,
+    shell: Boolean(shell),
     fixed, firstViewport,
     loading: (document.body.innerText.match(/učitavanje|loading/gi) || []).length,
     actions: [...new Set([...document.querySelectorAll('[data-action]')].map((el) => el.getAttribute('data-action')))],
@@ -193,18 +155,27 @@ const METRICS_FN = (th) => {
     sheet: workspace ? workspace.getAttribute('data-sheet') : null,
     map: canvas ? { status: canvas.getAttribute('data-map-status'), top: Math.round(cr.top), height: Math.round(cr.height), width: Math.round(cr.width), viewportShare: +(cr.height / innerHeight).toFixed(2), touchAction: getComputedStyle(canvas).touchAction, cooperative: Boolean(document.querySelector('.maplibregl-cooperative-gesture-screen')), markers: document.querySelectorAll('.maplibregl-marker').length } : null,
     title: document.title, lang: document.documentElement.lang, theme: document.documentElement.getAttribute('data-theme-resolved'), url: location.href.replace(/#.*/, '#…'),
-    violations,
   };
 };
 
+/** One capture: the descriptive metrics, then the shared rules; every violation lands in result.violations tagged by rule. */
 async function metrics(page, name) {
   try {
-    const m = await page.evaluate(METRICS_FN, THRESHOLDS);
-    const { violations, ...rest } = m;
-    result.metrics[name] = rest;
-    for (const v of violations) result.violations.push({ capture: name, ...v });
+    const m = await page.evaluate(METRICS_FN, { shellRoot: SHELL_ROOT });
+    const phoneClass = m.innerWidth < DESKTOP_MIN_PX;
+    // The shell rules (sticky header, tab bar flush, header height) hold on the /d/ shell at phone-class widths; banners
+    // in flow and no overflow hold wherever the shell is; a page without the shell is measured for overflow alone.
+    const rules = !m.shell ? ['overflow'] : phoneClass ? ALL_GEOMETRY_RULES : ['overlay', 'overflow'];
+    const violations = await ruleViolations(page, {
+      geometry: { ...PHONE_SHELL, rules },
+      typeFloor: phoneClass ? PHONE_TYPE_FLOOR : undefined,
+      targets: [SOURCE_LINK_TARGETS, CONTROL_TARGETS],
+    });
+    const byRule = {};
+    for (const v of violations) { byRule[v.rule] = (byRule[v.rule] || 0) + 1; result.violations.push({ capture: name, ...v }); }
+    result.metrics[name] = { ...m, phoneClass, violations: byRule };
     writeFileSync(resolve(OUT, 'text', `${name}.txt`), await page.evaluate(() => document.body.innerText));
-    log(`metrics ${name}: overflow=${m.scrollWidth - m.innerWidth} small=${m.smallTargets}/${m.targets} <${TYPE_FLOOR_PX}px=${m.underFloor}/${m.textEls} loading=${m.loading} map=${m.map ? m.map.viewportShare : '-'} violations=${violations.length}`);
+    log(`metrics ${name}: overflow=${m.scrollWidth - m.innerWidth} loading=${m.loading} map=${m.map ? m.map.viewportShare : '-'} violations=${violations.length} ${JSON.stringify(byRule)}`);
   } catch (e) { fail(`metrics ${name}`, e); }
 }
 
@@ -647,6 +618,7 @@ try {
   for (const c of contexts) { try { await c.close(); } catch {} }
   try { await chrome.close(); } catch {}
   try { if (wk) await wk.close(); } catch {}
+  try { await loader.close(); } catch {}
   log(`done: ${result.summary.captures} metric sets, ${result.violations.length} rule violations ${JSON.stringify(byRule)}, ${result.errors.length} recorded errors/warnings; ${resolve(OUT, 'result.json')}`);
 }
 process.exitCode = fatal ? 2 : result.violations.length ? 1 : 0;

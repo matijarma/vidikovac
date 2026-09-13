@@ -80,9 +80,12 @@ vodoravnog prelijevanja, na 390 × 844, 320 × 568 i 844 × 390. Detenti plahte 
 Prometu, klizanje nasuprot pomicanju karte, granične visine Grada i Sigurnosti
 te stanje pri 200 % teksta imaju vlastite testove. Donja granica veličine teksta
 na telefonu je 13 px, osim redaka s atribucijom; svaka poveznica u izvorima ima
-cilj od 44 px. Sesija na `/d/` prolazi axe s oznakama WCAG 2.2 AA na 390 i 1920
-px, u obje teme, uz obilazak tipkom Tab koji provjerava da fokus nikad ne završi
-pod zaglavljem ili trakom. `npm run review:visual` snima proširenu matricu
+cilj od 44 px. Pragovi i pravila zapisani su na jednom mjestu, u
+`e2e/geometry.ts`, koje čitaju i `e2e/mobile.spec.ts` i
+`scripts/audit-production.mjs`, pa se svaka promjena praga odražava u oba
+nalaza. Sesija na `/d/` prolazi axe s oznakama WCAG 2.2 AA na 390 i 1920 px, u
+obje teme, uz obilazak tipkom Tab koji provjerava da fokus nikad ne završi pod
+zaglavljem ili trakom. `npm run review:visual` snima proširenu matricu
 (320, pejzaž, tamna tema uz 200 % teksta, tablet, javne stranice na 390 px i
 lagani Promet), a `scripts/audit-production.mjs` obilazi stvarnu instalaciju s
 pristupnim tokenom iz okoline i vraća izlazni kod 1 kad zakaže bilo koje pravilo

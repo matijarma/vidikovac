@@ -10,14 +10,16 @@
 // and reported as the finding it is. Against main c3de057 most of these are
 // red for the reasons the plan documents (banners overlay content, the map
 // swipe traps the page, the header scrolls away, 12 px labels); each turns
-// green when its area lands.
+// green when its area lands. The thresholds and the rules (geometry, type
+// floor, targets) come from ./geometry, the one source this gate shares with
+// scripts/audit-production.mjs.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { LayerId } from '../worker/protocol';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type FixtureSession } from './experience-fixtures';
-import { geometryIssues, type GeometryOptions } from './geometry';
+import { geometryIssues, PHONE_SHELL, PHONE_TYPE_FLOOR, ruleViolations, SOURCE_LINK_TARGETS, TARGET_MIN_PX, TYPE_FLOOR_PX } from './geometry';
 
 // --- the numbers the plan fixes ------------------------------------------------
 const PHONE = { width: 390, height: 844 };
@@ -26,8 +28,6 @@ const LANDSCAPE = { width: 844, height: 390 };
 const DESK = { width: 1440, height: 900 };
 type Viewport = typeof PHONE;
 
-/** The shell's geometry targets: 48 px sticky header (56 with a safe-area inset at most), fixed tab bar, banners in flow. */
-const SHELL: GeometryOptions = { header: '.ki-head', tabbar: '.ki-tabbar', main: '[data-testid=dash-view]', banners: '[data-testid=banners]', maxHeaderPx: 56 };
 const LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
 const DETENTS = ['peek', 'half', 'open'] as const;
 type Detent = (typeof DETENTS)[number];
@@ -37,11 +37,6 @@ const PEEK_TOLERANCE_PX = 2;
 const HALF_TOLERANCE = 0.02;
 const OPEN_GAP_PX = 40;
 const OPEN_GAP_TOLERANCE_PX = 4;
-/** Type floor on a phone and the minimum target, WCAG 2.2 AA as the constraints state them. */
-const TYPE_FLOOR_PX = 13;
-const TARGET_PX = 44;
-/** Attribution lines are the one exception to the type floor. */
-const TYPE_FLOOR_EXEMPT = '.provenance, .panel-attr, .source-line, .maplibregl-ctrl-attrib';
 /** Bounded page heights with fixtures (plan, "Test updates", new test 7). */
 const GRAD_MAX_HEIGHT_PX = 3_000;
 const SIGURNOST_MAX_HEIGHT_PX = 2_500;
@@ -196,7 +191,7 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
   test(`the shell fits a ${viewport.width}×${viewport.height} phone: nothing overlays Sada, the tab bar is flush with the bottom, and the session pill and safety control survive a long scroll on Vijesti and Sigurnost`, async ({ page }) => {
     const fixture = await openDashboard(page, viewport);
     await settle(page, fixture);
-    expect(await geometryIssues(page, SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
+    expect(await geometryIssues(page, PHONE_SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
 
     for (const layer of ['vijesti', 'sigurnost'] as const) {
       await openLayer(page, layer);
@@ -218,9 +213,9 @@ test('the header stays pinned: after scrolling 1,500 px on Sada, .ki-head still 
   await settle(page, fixture);
   await scrollDocument(page, SCROLL_PX);
   const scrolled = await scrollY(page);
-  const head = await boxOf(page, SHELL.header);
-  expect(head, `the sticky header ${SHELL.header} must exist so the session pill and the safety control never scroll away; none is rendered`).not.toBeNull();
-  expect(Math.abs(head!.top), `after scrolling to ${scrolled} px the header ${SHELL.header} must start at 0 ± 1 px; it starts at ${fmt(head!.top)}`).toBeLessThanOrEqual(1);
+  const head = await boxOf(page, PHONE_SHELL.header);
+  expect(head, `the sticky header ${PHONE_SHELL.header} must exist so the session pill and the safety control never scroll away; none is rendered`).not.toBeNull();
+  expect(Math.abs(head!.top), `after scrolling to ${scrolled} px the header ${PHONE_SHELL.header} must start at 0 ± 1 px; it starts at ${fmt(head!.top)}`).toBeLessThanOrEqual(1);
 });
 
 // --- 3. detents ------------------------------------------------------------------------
@@ -304,7 +299,7 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
 
   await openLayer(page, 'grad-sada');
   await scrollDocument(page, 0);
-  const main = await boxOf(page, SHELL.main);
+  const main = await boxOf(page, PHONE_SHELL.main);
   expect(main, 'Sada must be rendered in main').not.toBeNull();
   const y = Math.min(main!.cy, PHONE.height * 0.6);
   await touchDrag(cdp, page, main!.cx, y, y - SWIPE_PX);
@@ -313,7 +308,7 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
 });
 
 // --- 5. type floor ----------------------------------------------------------------------
-test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (attribution lines excepted), and every link in a source line is a ${TARGET_PX} px target`, async ({ page }) => {
+test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (attribution lines excepted), and every link in a source line is a ${TARGET_MIN_PX} px target`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   const small = new Map<string, string>();
   const shortLinks: string[] = [];
@@ -321,42 +316,16 @@ test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (a
     await openLayer(page, layer);
     if (layer === 'u-pokretu') await waitForMap(page, /^(ready|tiles-failed|unavailable)$/);
     await settle(page, fixture);
-    const found = await page.evaluate(({ floor, exempt, target }) => {
-      for (const details of document.querySelectorAll<HTMLDetailsElement>('details.provenance')) details.open = true;
-      const texts: { key: string; line: string }[] = [];
-      const links: string[] = [];
-      const name = (el: Element): string => {
-        const h = el as HTMLElement;
-        const cls = typeof h.className === 'string' && h.className.trim() ? `.${h.className.trim().split(/\s+/).slice(0, 2).join('.')}` : '';
-        return `${el.tagName.toLowerCase()}${h.id ? `#${h.id}` : ''}${cls}${h.dataset?.testid ? `[data-testid=${h.dataset.testid}]` : ''}`;
-      };
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const text = (node.textContent ?? '').trim();
-        const parent = node.parentElement;
-        if (!text || !parent || parent.closest('script, style, noscript, template') || parent.closest(exempt)) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        const r = range.getBoundingClientRect();
-        if (r.width < 1 || r.height < 1) continue;
-        const cs = getComputedStyle(parent);
-        if (cs.visibility === 'hidden' || cs.display === 'none') continue;
-        const size = parseFloat(cs.fontSize);
-        if (size < floor) texts.push({ key: `${name(parent)}|${text.slice(0, 40)}`, line: `${name(parent)} "${text.slice(0, 40)}" at ${Math.round(size * 100) / 100} px` });
-      }
-      for (const a of document.querySelectorAll<HTMLAnchorElement>('.provenance a, .source a')) {
-        const r = a.getBoundingClientRect();
-        if (r.width < 1 || r.height < 1) continue;
-        if (r.height < target - 0.5) links.push(`${name(a)} "${(a.textContent ?? '').trim().slice(0, 40)}" is ${Math.round(r.height * 10) / 10} px tall`);
-      }
-      return { texts, links };
-    }, { floor: TYPE_FLOOR_PX, exempt: TYPE_FLOOR_EXEMPT, target: TARGET_PX });
-    for (const t of found.texts) if (!small.has(t.key)) small.set(t.key, `${layer}: ${t.line}`);
-    shortLinks.push(...found.links.map((l) => `${layer}: ${l}`));
+    // The rule engine opens every closed source disclosure first: a closed details renders no links to measure.
+    const found = await ruleViolations(page, { typeFloor: PHONE_TYPE_FLOOR, targets: [SOURCE_LINK_TARGETS], openDetails: true });
+    for (const { rule, detail } of found) {
+      if (rule === 'type-floor') { if (!small.has(detail)) small.set(detail, `${layer}: ${detail}`); }
+      else shortLinks.push(`${layer}: ${detail}`);
+    }
   }
   const smallList = [...small.values()];
   expect.soft(smallList.length, `${smallList.length} visible text(s) below the ${TYPE_FLOOR_PX} px floor at 390 px:\n${smallList.slice(0, 40).join('\n')}${smallList.length > 40 ? `\n… and ${smallList.length - 40} more` : ''}`).toBe(0);
-  expect(shortLinks.length, `${shortLinks.length} link(s) inside .provenance or .source below the ${TARGET_PX} px target:\n${shortLinks.slice(0, 40).join('\n')}${shortLinks.length > 40 ? `\n… and ${shortLinks.length - 40} more` : ''}`).toBe(0);
+  expect(shortLinks.length, `${shortLinks.length} link(s) inside .provenance or .source below the ${TARGET_MIN_PX} px target:\n${shortLinks.slice(0, 40).join('\n')}${shortLinks.length > 40 ? `\n… and ${shortLinks.length - 40} more` : ''}`).toBe(0);
 });
 
 // --- 6. bounded heights ------------------------------------------------------------------
@@ -398,7 +367,7 @@ test('at 200% text the header and the tab bar have no horizontal overflow and th
       if (r.left < t.left - 1 || r.right > t.right + 1) out.push(`the current tab's label "${text.textContent?.trim()}" spills out of its tab cell at 200%`);
     }
     return out;
-  }, { header: SHELL.header, tabbar: SHELL.tabbar });
+  }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar });
   expect(issues, 'zoom-compact state at 200% text').toEqual([]);
 });
 
@@ -439,13 +408,13 @@ test('the expiry notices sit in the banners row without covering content: expiri
   const at60 = await kinds();
   expect(at60, `at 60 s before expiry a [data-testid=notice][data-kind=expiring60] must be in the banners row (plan: Session lifecycle); found ${at60.length ? at60.join(', ') : 'no notice'}`).toEqual(['expiring60']);
   await expect(notice.first(), 'the expiring60 notice must be visible').toBeVisible();
-  expect(await geometryIssues(page, { ...SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
+  expect(await geometryIssues(page, { ...PHONE_SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
 
   await page.clock.fastForward(WARN_60_MS - WARN_20_MS);
   await page.waitForTimeout(150);
   const at20 = await kinds();
   expect(at20, `at 20 s before expiry the notice must read data-kind=expiring20; found ${at20.length ? at20.join(', ') : 'no notice'}`).toEqual(['expiring20']);
-  expect(await geometryIssues(page, { ...SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
+  expect(await geometryIssues(page, { ...PHONE_SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
 
   fixture.expire();
   await expect(page.getByTestId('frozen-line'), 'after expiry the frozen card must be visible').toBeVisible();
