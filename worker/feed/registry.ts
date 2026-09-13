@@ -197,6 +197,8 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
     case 'dhmz-now':
       return snapshot;
     case 'zet-rt': {
+      // No usable feed is not an observed fleet count of zero.
+      if (snapshot.status === 'down') return { ...snapshot, items: [] };
       const pins = snapshot.items.filter((item) => item.id.startsWith('vehicle:'));
       const vehicles = pins.length;
       // R-P1: the pins inside the default screen's box travel with the
@@ -246,6 +248,7 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
         const states = Object.values(sources);
         result.status = states.every((source) => source.status === 'live') ? 'live'
           : states.every((source) => source.status === 'down') ? 'down' : 'stale';
+        if (result.status === 'live') delete result.staleSince;
       }
       return limitedSnapshot(result, items, openLicenceEvents(snapshot.items).length);
     }

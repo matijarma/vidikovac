@@ -9,8 +9,14 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Inv
 const target = 'http://127.0.0.1:8787';
 const server = await createServer({
   configFile: resolve(process.cwd(), 'vite.config.ts'),
+  // Worktrees share node_modules through junctions, but Vite's optimised module
+  // cache is root/config-specific and must not be shared between dev servers.
+  cacheDir: resolve(process.cwd(), 'test-results/vite-cache'),
   server: {
     host: '127.0.0.1', port, strictPort: true,
+    // Main-agent shared contracts may be inspected alongside a contributor's
+    // worktree. This local-only server is never the deployed asset handler.
+    fs: { allow: [process.cwd(), resolve(import.meta.dirname, '..')] },
     proxy: {
       '/api': { target, changeOrigin: false },
       '/ws': { target, ws: true, changeOrigin: false },

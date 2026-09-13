@@ -1,0 +1,93 @@
+import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
+import type { LayerId } from '../worker/protocol';
+import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
+
+const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+
+async function openLayer(page: Page, layer: LayerId): Promise<void> {
+  let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  if (!(await navigation.count())) {
+    await page.getByTestId('tab-more').click();
+    navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  }
+  await navigation.click();
+  await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
+  test.describe(`Kaj ima? ${viewport.width}px`, () => {
+    test.use({ viewport, locale: 'hr-HR' });
+
+    test('all seven workspaces are discoverable, not seven simultaneous columns', async ({ page }) => {
+      const snapshots = await experienceSnapshots();
+      await installExperienceFixture(page, snapshots);
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('session-label')).toBeVisible();
+      await expect(page.getByTestId('ov-weather')).toBeVisible();
+      for (const layer of LAYERS) {
+        await openLayer(page, layer);
+        await expect(page.locator('[data-testid="dash-view"] > .layer')).toHaveCount(1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width + 1);
+        await expect(page.getByTestId('dash-view')).not.toContainText('[object Object]');
+      }
+      await expect(page.locator('canvas[data-testid="panorama"], [data-testid="meander-legend"]')).toHaveCount(0);
+    });
+
+    test('source outages never claim no warnings and retain usable navigation', async ({ page }) => {
+      await installExperienceFixture(page, await experienceSnapshots('down'));
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('session-label')).toBeVisible();
+      await openLayer(page, 'sigurnost');
+      const surface = page.getByTestId('dash-view');
+      await expect(surface).not.toContainText('Nema hitnih upozorenja');
+      await expect(surface).not.toContainText('Nema upozorenja za Zagrebačku regiju.');
+      await expect(surface.locator('a[href="tel:112"]')).toBeVisible();
+      await openLayer(page, 'kultura');
+      await expect(page.getByTestId('dash-view')).toContainText(/nedostup|nepozn|ne odgovar|potvrđen/);
+    });
+
+    test('expiry freezes data but leaves safety and the renewal path available', async ({ page }) => {
+      const fixture = await installExperienceFixture(page, await experienceSnapshots());
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('ov-weather')).toBeVisible();
+      fixture.expire();
+      await expect(page.getByTestId('frozen-line')).toBeVisible();
+      const requestsAfterExpiry = fixture.requests.length;
+      await page.clock.runFor(31_000);
+      expect(fixture.requests.length).toBe(requestsAfterExpiry);
+      await expect(page.getByTestId('frozen-line').locator('a')).toBeVisible();
+    });
+
+    test('a stale expired warning never becomes a freshly confirmed all-clear', async ({ page }) => {
+      const snapshots = await experienceSnapshots('empty');
+      snapshots['dhmz-cap'].status = 'stale';
+      snapshots['dhmz-cap'].items = [{
+        id: 'expired-warning', module: 'dhmz-cap', kind: 'warning', tier: 'open',
+        title: 'Ranije upozorenje', severity: 'moderate',
+        at: new Date(FIXTURE_NOW.getTime() - 3_600_000).toISOString(),
+        until: new Date(FIXTURE_NOW.getTime() - 60_000).toISOString(),
+      }];
+      await installExperienceFixture(page, snapshots);
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('session-label')).toBeVisible();
+      await openLayer(page, 'sigurnost');
+      await expect(page.locator('[data-testid="dash-view"] [data-status="stale"]').first()).toBeVisible();
+      await expect(page.getByTestId('dash-view')).not.toContainText('Nema hitnih upozorenja');
+      await expect(page.getByTestId('dash-view')).not.toContainText('Nema upozorenja za Zagrebačku regiju.');
+    });
+  });
+}
+
+test('phone overview gives the city the first viewport and passes accessibility checks', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installExperienceFixture(page, await experienceSnapshots());
+  await page.goto(FIXTURE_DASHBOARD);
+  await expect(page.getByTestId('ov-weather')).toBeVisible();
+  const boxes = await page.locator('[data-testid="dash-view"] .sec').evaluateAll((nodes) =>
+    nodes.map((node) => ({ id: node.id, top: node.getBoundingClientRect().top, bottom: node.getBoundingClientRect().bottom })));
+  expect(boxes.filter((box) => box.top < 700 && box.bottom > 0).length).toBeGreaterThanOrEqual(2);
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([]);
+});

@@ -72,7 +72,9 @@ export const handleMaps: RouteHandler = async (request, env, ctx, url) => {
     const tile = await archive.getZxy(z, x, y);
     const response = new Response(tile ? tile.data : null, {
       status: tile ? 200 : 204,
-      headers: { 'content-type': 'application/vnd.mapbox-vector-tile', 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff' },
+      // x-protobuf is the PMTiles adapter's media type and is eligible for
+      // Cloudflare's automatic Brotli/Gzip compression of vector tile bodies.
+      headers: { 'content-type': 'application/x-protobuf', 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff' },
     });
     ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
     return request.method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;

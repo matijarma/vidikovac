@@ -111,6 +111,10 @@ function item(over: Partial<FeedItem> & Pick<FeedItem, 'id' | 'kind' | 'title'>)
 }
 
 describe('teaserSubset', () => {
+  it('does not manufacture a zero fleet summary from an unavailable source', () => {
+    const missing = { ...snapshot('zet-rt', []), status: 'down' as const };
+    expect(teaserSubset(missing).items).toEqual([]);
+  });
   it('names the four session modules the kiosk may show without a scan', () => {
     expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'hrt-news', 'dogadanja']);
     expect(TEASER_NEWS_LIMIT).toBe(3);

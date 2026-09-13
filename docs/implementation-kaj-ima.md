@@ -85,10 +85,11 @@ Frontend implementation is NOT finished or integrated. Fable's preserved changes
   invitation and paired-view helpers. Paired view/CSS have continuation markers;
   the main kiosk controller and entry integration remain incomplete.
 
-The renewed Fable calls were rejected with `Fable 5.1 requires usage credits`
-before execution, including a minimal call using the normal CLI configuration.
-This is an external blocker, not permission to change model, scope or quality.
-Do not treat unfinished Fable work as reviewed or deploy it. Resume the three
-assigned worktrees at maximum effort once the CLI can execute Fable again.
+An earlier interruption was caused by Fable usage credits. The owner restored
+access and a real Fable call returned READY. All three full implementation
+workstreams have resumed at maximum effort from their saved code, without
+reducing scope or quality. Do not treat unfinished work as reviewed or deploy it.
+Current implementation logs are the ignored `fable-*-continue.jsonl` files under
+`.superpowers/kaj/`; preserve them for continuity.
 The original Fable security review is complete; a final review after corrections
 and the rendered frontend cross-review are still required.
