@@ -11,9 +11,15 @@
 // for the slot by id and gets the same element back, moved into the new
 // section, with the new points and lines pushed through update(). Whatever no
 // render asked for between two sweeps is destroyed.
-import type { CityMapHandle, MapFactory, MapLine, MapPoint } from './city-map';
+import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapPoint } from './city-map';
 
-export interface MapSlotOptions {
+/** Everything a CityMapOptions carries beyond the slot's own fields passes
+ *  straight through to the factory the first time the slot is made (theme,
+ *  locale, camera, the screen's stop, the selection and the callbacks), so
+ *  a layer that owns a slot drives the map it gets back through `handle(id)`. */
+export type MapSlotPassthrough = Omit<CityMapOptions, 'container' | 'ariaLabel' | 'points' | 'lines' | 'reducedMotion'>;
+
+export interface MapSlotOptions extends MapSlotPassthrough {
   /** Stable per panel: the same id must mean the same map for the page's life. */
   id: string;
   ariaLabel: string;
@@ -27,6 +33,9 @@ export interface MapSlotOptions {
 export interface MapSlots {
   /** The container for this map, or null when the page has no map factory. */
   slot(options: MapSlotOptions): HTMLElement | null;
+  /** The live map behind a slot, for the layer that owns it to select,
+   *  follow and fit; null before the slot exists or without a factory. */
+  handle(id: string): CityMapHandle | null;
   /** Destroys every slot no `slot()` call has asked for since the last sweep. */
   sweep(): void;
   /** Pauses every live map's motion (a frozen dashboard, R-F6). */
@@ -57,20 +66,25 @@ export function createMapSlots(factory: MapFactory | undefined): MapSlots {
         existing.used = true;
         existing.container.setAttribute('aria-label', options.ariaLabel);
         existing.handle.update(options.points, options.lines);
+        // The per-render inputs a persistent map still takes: the resolved
+        // theme, the locale and the screen's stop. Each optional on the
+        // handle (a stub factory in a test need not implement them) and
+        // idempotent on the real one.
+        if (options.theme !== undefined) existing.handle.setTheme?.(options.theme);
+        if (options.locale !== undefined) existing.handle.setLocale?.(options.locale);
+        if (options.stop !== undefined) existing.handle.setStop?.(options.stop);
         return existing.container;
       }
       const container = document.createElement('div');
       container.className = options.className;
       if (options.testid) container.dataset.testid = options.testid;
-      const handle = factory({
-        container,
-        ariaLabel: options.ariaLabel,
-        points: options.points,
-        lines: options.lines,
-        reducedMotion: options.reducedMotion,
-      });
+      const { id: _id, className: _className, testid: _testid, ...rest } = options;
+      const handle = factory({ ...rest, container });
       slots.set(options.id, { container, handle, used: true });
       return container;
+    },
+    handle(id) {
+      return slots.get(id)?.handle ?? null;
     },
     sweep() {
       for (const [id, slot] of [...slots]) {

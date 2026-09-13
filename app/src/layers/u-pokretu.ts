@@ -1,12 +1,22 @@
-// U pokretu: where the trams and buses are, which streets are shut, and how late
-// each route is running right now.
+// U pokretu: the transport workspace -- one map with the motion model's
+// vehicles as numbered pills, the route network and named stops, the
+// closures, and beside it one sheet of search, running routes and detail
+// (transport/workspace.ts). The renderer runs on every poll and returns a
+// fresh section; the workspace element inside it is the page's one
+// persistent controller, moved in each time, so a poll never throws away
+// the camera, the selection, the search text or the focus. The lightweight
+// path (R-L2) renders no map, no search and no geometry: the page's
+// schematic host lists the routes moving now, its own honest face, and the
+// closures and notices follow as text.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
 import type { MapLine, MapPoint } from '../map/city-map';
 import { routeDelayMap, vehicleFixes } from '../motion/fixes';
-import { createLayerSection, createPanel, dataNumber, dataText, listMarkup } from '../panels/panel';
-import { escapeHtml } from '../ui/dom/escape';
-import { closureRow, delayWord } from './shared';
+import { createLayerSection, dataNumber, dataText, statusText } from '../panels/panel';
+import { closureItems, zetNotices } from '../transport/detail';
+import { tr } from '../transport/strings';
+import { closuresMarkup } from '../transport/view';
+import { workspaceFor } from '../transport/workspace';
 import type { LayerContext } from './types';
 
 export interface RouteDelay {
@@ -36,11 +46,11 @@ export function routeDelays(snapshot: ModuleSnapshot | undefined): RouteDelay[] 
 }
 
 /**
- * The zet-rt pins as the full map's points: each one a dated vehicle report
- * (motion/fixes.ts's own dating: the pin's own `at`, else the snapshot's source
- * time, else its fetch time), so the map's motion model treats it as
- * evidence and never as a place to draw (R-P2, T10). The title is the line
- * name the map's accessible label and any future card would say.
+ * The zet-rt pins as the map's points: each one a dated vehicle report
+ * (motion/fixes.ts's own dating: the pin's own `at`, else the snapshot's
+ * source time, else its fetch time), so the map's motion model treats it as
+ * evidence and never as a place to draw (R-P2). The title is the line name
+ * the map's accessible label would say.
  */
 export function vehiclePoints(snapshot: ModuleSnapshot | undefined, now: number): MapPoint[] {
   const titles = new Map<string, string>();
@@ -59,96 +69,37 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   const { section, panels } = createLayerSection('u-pokretu', i18n.t('layers.u-pokretu'));
   const zet = snapshots['zet-rt'];
   const closures = snapshots.prometnice;
-  const points = vehiclePoints(zet, now);
-  const lines = closureLines(closures);
+  if (ctx.lightweight) {
+    panels.appendChild(renderLightweight(ctx, zet, closures));
+    return section;
+  }
+  const workspace = workspaceFor(ctx);
+  workspace.render({ ctx, points: vehiclePoints(zet, now), lines: closureLines(closures) });
+  panels.appendChild(workspace.element);
+  return section;
+}
 
-  // T9: the moving map first -- the layer's face. The page owns the host;
-  // this render only moves its stable element into a fresh panel and hands
-  // it this poll's evidence (the pins as fixes, the route rows as delays).
-  // Every drawn position is the model's own (R-P2); the host's note under
-  // the map says so in one sentence.
+/** R-L2: no map, no search, no geometry fetch; the schematic host's list and the closures as text. */
+function renderLightweight(ctx: LayerContext, zet: ModuleSnapshot | undefined, closures: ModuleSnapshot | undefined): HTMLElement {
+  const { i18n, now } = ctx;
+  const wrap = document.createElement('div');
+  wrap.className = 'transport t-light';
+  wrap.dataset.testid = 'transport-light';
+  const hint = document.createElement('p');
+  hint.className = 't-hint';
+  hint.textContent = tr(i18n, 'lightHint');
+  wrap.appendChild(hint);
   const schematic = ctx.schematic;
   if (schematic) {
-    // R-F8 / F8: the zet-rt snapshot itself, not just its fixes and delays,
-    // so the lightweight list's `renderList()` can print the honest
-    // stale/down sentence during an outage the same way the locked kiosk
-    // stage's own update() call already does (kiosk.ts's loadTeaser()).
+    // R-F8: the snapshot itself rides along, so the list prints the honest
+    // stale/down sentence during an outage instead of an empty list.
     schematic.update({ fixes: vehicleFixes(zet, now), delays: routeDelayMap(zet), snapshot: zet }, now);
-    panels.appendChild(
-      createPanel({ i18n, now, id: 'u-pokretu-schematic', title: i18n.t('panels.schematic'), snapshot: zet, body: schematic.mount() }).element,
-    );
+    wrap.appendChild(schematic.mount());
   }
-
-  // T10: the full MapLibre map. Not rendered at all in lightweight mode
-  // (R-L2: no panel, no fallback line, no button -- the schematic's list
-  // above is the honest face); elsewhere one live map per page (R-54) fed
-  // the dated reports as evidence, plus the full-screen button when the
-  // page owns a view mode.
-  if (!ctx.lightweight) {
-    const mapBody = document.createElement('div');
-    mapBody.className = 'map-holder';
-    const canvas = ctx.maps?.slot({
-      id: 'u-pokretu-map',
-      className: 'map-canvas',
-      testid: 'map-canvas',
-      ariaLabel: `${i18n.t('panels.map')}: ${i18n.t('panels.vehiclesCount', { count: points.length })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`,
-      points,
-      lines,
-      reducedMotion: ctx.reducedMotion,
-    });
-    if (canvas) {
-      mapBody.appendChild(canvas);
-      const mapView = ctx.mapView;
-      if (mapView) {
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'btn-ghost map-full-toggle';
-        // A stable id: the dashboard re-renders on toggle and hands focus
-        // back to the element with this id.
-        toggle.id = 'u-pokretu-map-full';
-        toggle.dataset.testid = 'map-full-toggle';
-        toggle.textContent = i18n.t(mapView.full ? 'panels.mapCollapse' : 'panels.mapExpand');
-        toggle.addEventListener('click', () => mapView.toggle());
-        mapBody.appendChild(toggle);
-      }
-    } else {
-      const fallback = document.createElement('p');
-      fallback.className = 'panel-empty';
-      fallback.dataset.testid = 'map-fallback';
-      fallback.textContent = i18n.t('panels.mapUnavailable');
-      mapBody.appendChild(fallback);
-    }
-    panels.appendChild(
-      createPanel({ i18n, now, id: 'u-pokretu-map', title: i18n.t('panels.map'), snapshot: zet, body: mapBody }).element,
-    );
-  }
-
-  const delays = routeDelays(zet);
-  const delayRows = delays.map((row) => {
-    const label = delayWord(i18n, row.meanDelay);
-    return `<span data-testid="delay-row"><strong>${escapeHtml(routeName(row.routeId))}</strong><span class="panel-sub"> ${escapeHtml(label)} · ${escapeHtml(i18n.t('panels.vehiclesCount', { count: row.count }))}</span></span>`;
-  });
-  panels.appendChild(
-    createPanel({
-      i18n, now, id: 'u-pokretu-delays', title: i18n.t('panels.delays'), snapshot: zet,
-      body: listMarkup(delayRows, i18n.t('status.empty')),
-      onCopy: ctx.onCopy,
-      copyText: delays.length > 0 ? delays.map((d) => `${routeName(d.routeId)}: ${d.meanDelay} s`).join('\n') : undefined,
-    }).element,
-  );
-
-  panels.appendChild(
-    createPanel({
-      i18n, now, id: 'u-pokretu-closures', title: i18n.t('panels.closures'), snapshot: closures,
-      body: listMarkup((closures?.items ?? []).map((c) => closureRow(c, i18n)), i18n.t('status.empty')),
-      extraActions: ctx.onExport
-        ? [
-            { id: 'geojson', label: i18n.t('export.geojson'), run: () => ctx.onExport?.('geojson', 'prometnice') },
-            { id: 'ics', label: i18n.t('export.ics'), run: () => ctx.onExport?.('ics', 'prometnice') },
-          ]
-        : undefined,
-    }).element,
-  );
-
-  return section;
+  const list = document.createElement('div');
+  list.dataset.testid = 'transport-light-closures';
+  const sourceStatus = closures && closures.status !== 'live' ? statusText(closures, i18n, now) : null;
+  list.innerHTML = closuresMarkup(i18n, closureItems(closures), zetNotices(ctx.snapshots.dogadanja), sourceStatus, null, false);
+  wrap.appendChild(list);
+  return wrap;
 }

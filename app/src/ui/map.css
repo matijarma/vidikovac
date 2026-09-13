@@ -1,14 +1,158 @@
-/* The full map (T10): its button under the map, and the dashboard's full-map
-   view mode. Full-screen is a CSS state on .dash (data-view="map"), never the
-   Fullscreen API: the header -- with the session meander and the countdown --
-   stays in the flow above the map, so the meander is pinned above it by
-   construction and nothing can hide the clock. No container queries, no
-   :has(): the lightweight path never renders a map, but this sheet still
-   loads there and must stay inert (R-L3, R-L5). */
+/* The transport workspace (layers/u-pokretu.ts, transport/workspace.ts):
+   one map, one sheet, one toolbar, on the phone and the desk, in both faces.
+   Tokens only (tokens.css); no container queries, no :has(), so the sheet
+   still loads inert on the lightweight path (R-L3, R-L5) and lays out on a
+   2017 engine. The full-map view mode is a CSS state on .dash
+   (data-view="map"), never the Fullscreen API, so the session header stays
+   in the flow above the map. */
 
-.map-full-toggle { align-self: flex-start; }
+.transport {
+  --t-tram: #08777b;
+  --t-tram-ink: #ffffff;
+  --t-bus: #3b4fb8;
+  --t-bus-ink: #ffffff;
+  --t-other: #526461;
+  --t-other-ink: #ffffff;
+  --t-closure: #c2274a;
+  --t-gap: 0.75rem;
+  display: flex; flex-direction: column; gap: var(--t-gap);
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme-resolved='dark'] .transport {
+  --t-tram: #63d7c3;
+  --t-tram-ink: #17201f;
+  --t-bus: #9fb4ff;
+  --t-bus-ink: #17201f;
+  --t-other: #8fa09a;
+  --t-other-ink: #17201f;
+  --t-closure: #ff8fa3;
+}
 
-/* The dashboard takes the whole viewport: header on top, the view below. */
+/* --- Toolbar: search, modes, closures ---------------------------------- */
+.transport-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.t-search { position: relative; flex: 1 1 16rem; min-width: 0; display: flex; }
+.t-search-input {
+  flex: 1 1 auto; min-width: 0; min-height: 2.75rem; padding: 0 2.75rem 0 var(--sp-3);
+  font: inherit; font-size: 1rem; color: var(--tone-text-primary);
+  background: var(--tone-surface-1); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-md);
+}
+.t-search-input::-webkit-search-cancel-button { display: none; }
+.t-search-input:focus-visible { outline: none; border-color: var(--tone-focus-ring); box-shadow: var(--tone-focus-glow); }
+.t-search-clear {
+  position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: 2.75rem;
+  border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: 1.25rem; cursor: pointer; border-radius: var(--r-md);
+}
+.t-search-clear:hover { color: var(--tone-text-primary); }
+.t-modes { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.t-toggle {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; padding: 0 0.9rem;
+  border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: transparent;
+  color: var(--tone-text-primary); font: inherit; font-size: 0.875rem; font-weight: var(--weight-medium); cursor: pointer;
+}
+.t-toggle::before { content: ''; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; background: var(--t-swatch, currentColor); opacity: 0.35; }
+.t-toggle[aria-pressed='true'] { background: var(--tone-surface-2); border-color: var(--tone-stroke-strong); }
+.t-toggle[aria-pressed='true']::before { opacity: 1; }
+.t-toggle[data-mode='0'] { --t-swatch: var(--t-tram); }
+.t-toggle[data-mode='3'] { --t-swatch: var(--t-bus); }
+.t-toggle[data-action='toggle-closures'] { --t-swatch: var(--t-closure); }
+
+/* --- Body: map beside the sheet on a desk, map over the sheet on a phone -- */
+.transport-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--t-gap); min-width: 0; }
+.transport-map { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.t-map-canvas {
+  position: relative; block-size: clamp(16rem, 48vh, 30rem); border-radius: var(--r-lg); overflow: hidden;
+  background: var(--tone-surface-2); border: 1px solid var(--tone-stroke);
+}
+.t-map-canvas .maplibregl-canvas:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: -3px; }
+.t-map-canvas .maplibregl-ctrl-attrib { font-size: 0.6875rem; background: var(--tone-surface-1); color: var(--tone-text-muted); }
+.t-map-canvas .maplibregl-ctrl-attrib a { color: var(--tone-text-muted); }
+.t-map-canvas .maplibregl-ctrl-group { background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); border-radius: var(--r-sm); }
+.t-map-canvas .maplibregl-ctrl-group button { inline-size: 2.75rem; block-size: 2.75rem; }
+.t-map-canvas .maplibregl-ctrl-group button + button { border-top-color: var(--tone-stroke); }
+.t-map-canvas .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: var(--t-ctrl-filter, none); }
+:root[data-theme-resolved='dark'] .t-map-canvas { --t-ctrl-filter: invert(1) hue-rotate(180deg); }
+.t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: 0.6875rem; }
+
+/* --- Map status and tools ---------------------------------------------- */
+.t-map-status {
+  position: absolute; inset-inline: 0.75rem; inset-block-start: 0.75rem; z-index: 2; margin: 0;
+  padding: 0.5rem 0.75rem; border-radius: var(--r-md);
+  background: var(--tone-surface-1); color: var(--tone-text-primary); font-size: 0.875rem; box-shadow: var(--tone-shadow-soft);
+}
+.t-map-status[hidden] { display: none; }
+.transport[data-status='unavailable'] .t-map-canvas { display: none; }
+.transport[data-status='unavailable'] .t-map-status { position: static; box-shadow: none; border: 1px solid var(--tone-stroke); }
+.t-map-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.t-action { min-height: 2.75rem; font-size: 0.875rem; }
+.t-map-tools .t-action { min-height: 2.5rem; padding-inline: 0.75rem; }
+
+/* --- Sheet ------------------------------------------------------------- */
+.transport-sheet {
+  display: flex; flex-direction: column; min-width: 0;
+  background: var(--tone-surface-1); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg);
+}
+.t-sheet-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; min-height: 3.5rem; }
+.t-peek { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1rem; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+/* The peek line stands in for the body while the sheet is collapsed; the open body has its own title, so the head keeps only the way back down. */
+.transport[data-sheet='open'] .t-peek { display: none; }
+.transport[data-sheet='open'] .t-sheet-head { justify-content: flex-end; padding-block: 0.5rem; min-height: 0; }
+.t-sheet-toggle { flex: none; }
+.t-sheet-body { padding: 0 1rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.transport[data-sheet='peek'] .t-sheet-body { display: none; }
+.t-title { margin: 0; font-family: var(--font-body); font-size: 1.25rem; font-weight: var(--weight-semi); letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.t-subtitle { margin: 0; font-family: var(--font-body); font-size: 0.75rem; font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tone-text-muted); }
+.t-lead { margin: 0; font-size: 1.0625rem; font-weight: var(--weight-medium); }
+.t-hint, .t-empty, .t-status, .t-note, .t-meta { margin: 0; color: var(--tone-text-muted); font-size: 0.875rem; }
+.t-status { color: var(--tone-state-warning); }
+.t-block { display: flex; flex-direction: column; gap: 0.5rem; }
+.t-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.t-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9375rem; }
+
+/* --- Rows and badges --------------------------------------------------- */
+.t-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.t-list > li + li { border-block-start: 1px solid var(--tone-stroke); }
+.t-row {
+  display: flex; align-items: center; gap: 0.75rem; inline-size: 100%; min-height: 3rem; padding: 0.5rem 0.25rem;
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm);
+}
+button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
+.t-option[aria-selected='true'] { background: var(--tone-surface-2); outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
+.t-row-main { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.t-row-title { font-size: 1rem; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.t-row-sub { font-size: 0.8125rem; color: var(--tone-text-muted); }
+.t-group-label { padding: 0.75rem 0.25rem 0.25rem; font-size: 0.75rem; font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tone-text-muted); }
+.t-list > li.t-group-label + li { border-block-start: 0; }
+.t-badges { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; flex: none; max-inline-size: 9rem; }
+.t-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-inline-size: 2rem; block-size: 1.625rem; padding: 0 0.45rem;
+  border-radius: var(--r-pill); font-size: 0.875rem; font-weight: var(--weight-bold); letter-spacing: 0.01em; flex: none;
+  background: var(--t-other); color: var(--t-other-ink);
+}
+.t-badge[data-kind='tram'] { background: var(--t-tram); color: var(--t-tram-ink); }
+.t-badge[data-kind='bus'] { background: var(--t-bus); color: var(--t-bus-ink); }
+.t-title .t-badge { min-inline-size: 2.75rem; block-size: 2.125rem; font-size: 1.125rem; }
+.t-badge-more { font-size: 0.75rem; color: var(--tone-text-muted); align-self: center; }
+.t-mark { flex: none; inline-size: 0.75rem; block-size: 0.75rem; border-radius: 2px; }
+.t-mark-closure { background: var(--t-closure); }
+.t-notice { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.25rem; min-height: 3rem; }
+.t-notice .t-row-main { flex: 1 1 auto; }
+.t-link { flex: none; font-size: 0.875rem; }
+.t-stops { counter-reset: stop; }
+.t-stops .t-row::before { counter-increment: stop; content: counter(stop); flex: none; inline-size: 1.75rem; font-size: 0.8125rem; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.t-stops .t-row[aria-current='true'] { background: var(--tone-surface-2); }
+
+/* --- A desk: the map beside the sheet, the sheet always open ------------ */
+@media (min-width: 60rem) {
+  .transport-body { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); align-items: start; }
+  .t-map-canvas { block-size: clamp(26rem, 64vh, 44rem); }
+  .transport-sheet { max-block-size: clamp(26rem, 64vh, 44rem); overflow: auto; position: sticky; inset-block-start: 0.5rem; }
+  .t-sheet-head { display: none; }
+  .transport[data-sheet='peek'] .t-sheet-body { display: flex; }
+  .t-sheet-body { padding-block-start: 1rem; }
+}
+
+/* --- The full-map view mode (.dash[data-view='map']) -------------------- */
 .dash[data-view='map'] {
   position: fixed; inset: 0; z-index: 5;
   display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.5rem;
@@ -16,35 +160,37 @@
   background: var(--tone-surface-canvas, Canvas);
   overflow: hidden;
 }
-/* Everything that is not the header or the view steps aside. The live
-   regions and the closing line stay in the flow so an expiry mid-map is still
-   announced and shown; they are empty or hidden until then. */
 .dash[data-view='map'] > .dash-panorama,
 .dash[data-view='map'] > .dash-tabs,
 .dash[data-view='map'] > .dash-foot { display: none; }
 .dash[data-view='map'] > .dash-alert,
 .dash[data-view='map'] > .dash-frozen { position: absolute; inset-inline: clamp(0.75rem, 3vw, 2rem); inset-block-end: 1rem; z-index: 1; }
-
-/* Only the U pokretu layer, and in it only the map panel. */
-.dash[data-view='map'] .dash-view { display: block; min-block-size: 0; }
+.dash[data-view='map'] .dash-view { display: block; min-block-size: 0; block-size: 100%; }
 .dash[data-view='map'] .dash-view > .layer:not([data-layer='u-pokretu']) { display: none; }
 .dash[data-view='map'] .layer[data-layer='u-pokretu'] { block-size: 100%; gap: 0; }
-/* The layer heading stays for the reader (it is the layer's own h2 and the
-   focus target on a tab change) but leaves the screen. */
 .dash[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-title {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.dash[data-view='map'] .layer-panels { block-size: 100%; }
-.dash[data-view='map'] .layer-panels > .panel:not(#u-pokretu-map) { display: none; }
-.dash[data-view='map'] #u-pokretu-map {
-  display: grid; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto;
-  block-size: 100%; padding-block: 0.25rem 0.5rem; border-block-end: 0;
+.dash[data-view='map'] .layer-panels, .dash[data-view='map'] .transport { block-size: 100%; min-block-size: 0; }
+.dash[data-view='map'] .transport-body { flex: 1 1 auto; min-block-size: 0; grid-template-rows: minmax(0, 1fr); }
+.dash[data-view='map'] .transport-map { min-block-size: 0; }
+.dash[data-view='map'] .t-map-canvas { flex: 1 1 auto; block-size: auto; min-block-size: 0; }
+.dash[data-view='map'] .transport-sheet { max-block-size: 100%; }
+.dash[data-view='map'] .t-note { display: none; }
+
+/* --- A public screen: bigger type, no controls to touch ----------------- */
+.transport[data-kiosk='true'] { --t-gap: 1rem; }
+.transport[data-kiosk='true'] .t-map-canvas { block-size: clamp(22rem, 56vh, 40rem); border-radius: var(--r-xl); }
+.transport[data-kiosk='true'] .t-row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
+.transport[data-kiosk='true'] .t-row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-facts { font-size: 1.125rem; }
+.transport[data-kiosk='true'] .t-title { font-size: 1.75rem; }
+.transport[data-kiosk='true'] .t-badge { min-inline-size: 2.75rem; block-size: 2.125rem; font-size: 1.125rem; }
+.transport[data-kiosk='true'] .t-row { cursor: default; }
+
+/* --- The lightweight face: a list, no map ---------------------------------- */
+.t-light { display: flex; flex-direction: column; gap: 0.75rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .t-sheet-body, .t-map-status { transition: opacity var(--dur-fast) var(--ease); }
 }
-.dash[data-view='map'] #u-pokretu-map .panel-head,
-.dash[data-view='map'] #u-pokretu-map .panel-body,
-.dash[data-view='map'] #u-pokretu-map .panel-foot { grid-column: 1; }
-.dash[data-view='map'] #u-pokretu-map .panel-index { display: none; }
-.dash[data-view='map'] #u-pokretu-map .panel-body { min-block-size: 0; }
-.dash[data-view='map'] #u-pokretu-map .map-holder { block-size: 100%; min-block-size: 0; }
-.dash[data-view='map'] #u-pokretu-map .map-canvas { flex: 1 1 auto; block-size: auto; min-block-size: 0; border-radius: 0; }
