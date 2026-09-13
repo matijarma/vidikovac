@@ -6,6 +6,8 @@
 //
 // Optional environment:
 //   AUDIT_APP_URL   the deployment to audit; default https://zagreb.aningfilm.hr
+//   AUDIT_KIOSK_URL a screen that already exists, by its provisioning URL, so the
+//                   run creates none (the same value e2e takes as E2E_KIOSK_URL)
 //   AUDIT_OUT       where screenshots, text dumps, audit.log and result.json land;
 //                   default review.local/audit-<timestamp>/ (gitignored through *.local)
 //
@@ -53,6 +55,8 @@ if (!clientId || !clientSecret) {
 }
 const HEADERS = { 'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret };
 const ORIGIN = new URL(process.env.AUDIT_APP_URL ?? DEFAULT_APP_URL).origin;
+/** A screen that already exists: its provisioning URL, so the journey needs no screen creation. */
+const KIOSK_URL = process.env.AUDIT_KIOSK_URL ? new URL(process.env.AUDIT_KIOSK_URL, ORIGIN).toString() : null;
 const root = resolve(import.meta.dirname, '..');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT = resolve(root, process.env.AUDIT_OUT ?? `review.local/audit-${stamp}`);
@@ -389,8 +393,16 @@ try {
     } catch (e) { fail(`fonts ${label}`, e); }
   }
 
-  // KIOSK: one temporary self-service screen (one of SCREEN_QUOTA_PER_HOUR).
+  // KIOSK: a screen to audit. AUDIT_KIOSK_URL names one that already exists (its
+  // provisioning URL, the same value e2e takes as E2E_KIOSK_URL); without it the
+  // run creates one temporary self-service screen (one of SCREEN_QUOTA_PER_HOUR),
+  // which needs an Access identity the runner's credentials may not carry.
   kiosk = await newCtx(chrome, 'kiosk', { viewport: { width: 1366, height: 768 }, colorScheme: 'light' });
+  if (KIOSK_URL) {
+    log(`screen from AUDIT_KIOSK_URL (no screen created)`);
+    result.steps.push({ screen: 'provided' });
+    await kiosk.goto(KIOSK_URL);
+  } else {
   await kiosk.goto(`${ORIGIN}/kiosk/`);
   await kiosk.getByTestId('kiosk-setup').waitFor({ timeout: 30_000 });
   await kiosk.waitForTimeout(800);
@@ -408,7 +420,15 @@ try {
   const creation = await created;
   log(`screen creation ${creation.status()} (quota ${SCREEN_QUOTA_PER_HOUR} per hour)`);
   result.steps.push({ screen: creation.status() });
-  if (creation.status() !== 201) throw new Error(`screen creation ${creation.status()} ${(await creation.text()).slice(0, 300)}`);
+  if (creation.status() !== 201) {
+    const detail = (await creation.text()).slice(0, 300);
+    throw new Error(
+      creation.status() === 403
+        ? `screen creation 403 ${detail}. The credentials in this environment reach the site but carry no Access identity, so the self-service endpoint refuses them. Create a screen in a browser and re-run with AUDIT_KIOSK_URL set to its provisioning URL.`
+        : `screen creation ${creation.status()} ${detail}`,
+    );
+  }
+  }
   await kiosk.getByTestId('pair-code').waitFor({ timeout: 30_000 });
   await kiosk.waitForFunction(() => document.querySelector('[data-testid=kiosk-map]') && document.querySelector('[data-testid=kiosk-map]').getAttribute('data-map-status') === 'ready', null, { timeout: 30_000 }).catch(() => log('kiosk map not ready in 30 s'));
   await kiosk.waitForTimeout(3000);
