@@ -46,14 +46,17 @@ Application documents and README reflect Kaj ima?, actual capabilities and revis
 - [x] Security, screen creation, source truth.
 - [x] Fable visual foundation, map, domains and kiosk integrated.
 - [x] Cross-review and browser refinement.
-- [ ] Tests, application materials and protected deployment.
+- [x] Tests, application-copy updates and protected deployment.
 
 ## Implementation evidence
 
 Baseline commits: b035057 (approved brief and contracts), 8ae414f (real screens,
 same-Wi-Fi, R2 and QR fallback), 3983482 (source correctness). The R2 regional
 archive and self-hosted glyphs/sprites have been checked through the local Worker.
-No implementation commits have been pushed to the evaluation deployment yet.
+The integrated implementation was pushed as `33cd11a` and deployed by the
+GitHub-connected Cloudflare Build on 13 September 2026. A real protected
+screen-creation/pairing/all-domain browser smoke passed on the deployed app;
+the repo remains private and anonymous requests remain Access-gated.
 
 Fable's first independent security review found seven concrete issues: evaluation
 failure provenance, post-cleanup DO schema, rolling-hour quotas, release of failed
@@ -65,7 +68,7 @@ The Windows Bash transport truncates very long command strings. Fable edits use
 the native apply_patch stdin bridge in scripts/apply-patch.mjs, with command-sized
 chunks. This is a tooling constraint, not a reduction in code or design scope.
 
-## Resume checkpoint
+## Integrated delivery
 
 Codex-side changes are implemented: real temporary screens and same-Wi-Fi pairing,
 explicit secret requirements, Access validation, source date/availability fixes,
@@ -100,3 +103,8 @@ Do not interpret passing unit tests as final visual acceptance or as physical
 iPhone/Android/QR-distance testing. Fable remains the main frontend implementer
 and independent reviewer, using maximum effort. Account selection follows
 the owner's current instructions and is not part of the application configuration.
+
+Delivery is verified in `docs/kaj-verification.md`, including the Cloudflare
+version and the real protected smoke. Company/personal application fields,
+the video link, physical device checks and the actual funding submission are
+not represented as completed by this implementation.

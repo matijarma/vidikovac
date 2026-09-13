@@ -73,9 +73,24 @@ Repozitorij ostaje privatan, evaluacijsko okruženje zaštićeno Accessom.
 Isporuka ide kroz `git push` i postojeći Cloudflare Build, uz naknadnu
 autentificiranu provjeru stranica, karte i stvaranja zaslona.
 
-Automatizirane provjere i gradnja potvrđene su prije isporuke. Zapis o
-postavljenom buildu i zaštićenom scenariju uparivanja dodaje se nakon
-Cloudflareove gradnje; sama lokalna provjera nije dokaz isporuke.
+Implementacija `33cd11a` isporučena je kroz GitHub i uspješan Cloudflare Build
+13. rujna 2026. u 12:57 po zagrebačkom vremenu. Postavljena Worker verzija:
+`eb5728ae-4413-445b-8e42-73360a23c7fe`.
+
+Od 12:59:47 do 12:59:59 provedena je provjera na stvarnoj evaluacijskoj adresi:
+
+- anonimni zahtjev dobiva 302 prema Access prijavi;
+- novi Worker javlja `networkCheck: off`;
+- samoposluga stvara stvarni privremeni zaslon odgovorom 201;
+- kod povezuje drugi preglednik i zaslon prelazi u povezano stanje;
+- svih sedam područja otvara se bez horizontalnog prelijevanja i pogrešaka;
+- vektorska karta, stajališta i vlastite kartografske pločice učitavaju se;
+- Access pristup bez podatkovnog tokena sesije i dalje dobiva 401 na
+  `/api/data/zet-rt`.
+
+Repozitorij je nakon isporuke i dalje privatan. Snimke i strojni zapis te
+provjere čuvaju se lokalno u `review.local/deployed/`. Kasnija izmjena ovog
+dokumenta ne mijenja provjerenu implementaciju.
 
 Osobni i financijski podaci prijavitelja, video-poveznica i predaja kroz
 e-Pisarnicu nisu mijenjani niti izvršeni ovom implementacijom.
