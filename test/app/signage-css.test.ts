@@ -94,6 +94,20 @@ describe('the row is three columns: lead, main, trail', () => {
   it('gives a row with one child the whole width, so the lists keep their geometry until wave 3 migrates them', () => {
     expect(decls('.row > :only-child', CSS)['grid-column']).toBe('1 / -1');
   });
+  // Source order is not placement: a row whose lead is empty (signRow's `lead:
+  // ''`) has two children, so auto-placement would drop the main part into the
+  // lead track and the trail into the flexible one. Measured at 390 with an
+  // empty lead and a long title: the title track grew to 336 px and the delay
+  // word was squeezed to 0. The main part is therefore placed by name.
+  it('places the main part in the middle track by name, so an empty lead cannot push it into the lead track', () => {
+    expect(decls('.row-main', CSS)['grid-column']).toBe('2');
+  });
+  // ... and when it really is first, it takes the empty lead track with it, so
+  // the title starts at the row's edge (x=0, not x=12) and the trail still ends
+  // at it. Disjoint from the :only-child rule above, which spans all three.
+  it('lets a leadless main part take the empty lead track, so nothing is indented by a gap that leads nowhere', () => {
+    expect(decls('.row > .row-main:first-child:not(:only-child)', CSS)['grid-column']).toBe('1 / 3');
+  });
 });
 
 describe('the skeleton shimmers only where motion reports a fact', () => {

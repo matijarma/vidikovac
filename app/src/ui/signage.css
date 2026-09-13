@@ -27,6 +27,13 @@
    that still render one button inside the row (blocks.ts itemRow) keep the
    geometry they had, and a row built without a lead or a trail reads the same. */
 .row > :only-child { grid-column: 1 / -1; }
+/* The middle cell is placed by name, not by source order: a row with an
+   empty lead has two children, and auto-placement would put the title in the
+   lead track (sized to its own text) and the trail in the flexible one. When
+   the main part really is first it takes the empty lead track with it, so the
+   title starts at the row's edge and the trail still ends at it. */
+.row-main { grid-column: 2; }
+.row > .row-main:first-child:not(:only-child) { grid-column: 1 / 3; }
 .row-dense { min-block-size: 2.75rem; }
 .row-title { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
 .row-sub { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }

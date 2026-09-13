@@ -44,6 +44,17 @@ describe('signRow', () => {
     );
   });
 
+  // The combination signage.css has to place by hand: no lead, but a trail.
+  // The row then has two children and the grid cannot read intent from order.
+  it('writes the main part and the trail as the only two cells when there is no lead', () => {
+    expect(signRow({ key: 'route-268', lead: '', title: 'Velika Gorica', trail: '<span class="row-delay">kasni 3 min</span>' })).toBe(
+      '<li class="row" data-key="route-268">'
+      + '<span class="row-main"><span class="row-title">Velika Gorica</span></span>'
+      + '<span class="row-delay">kasni 3 min</span>'
+      + '</li>',
+    );
+  });
+
   it('escapes the title, the second line and the key, and keeps the lead and the trail as markup', () => {
     const row = signRow({
       key: 'q"1',
