@@ -58,7 +58,7 @@
     "kultura": "Događanja",
     "vijesti": "Vijesti"
   },
-  "nav": { "label": "Domene", "more": "Još", "moreTitle": "Ostale domene", "safety": "Sigurnost", "safetyHint": "Sigurnosne informacije, uvijek pri ruci" },
+  "nav": { "label": "Domene", "more": "Još", "moreTitle": "Još", "safety": "Sigurnost", "safetyHint": "Sigurnosne informacije, uvijek pri ruci" },
   "shell": {
     "session": "Sesija",
     "sessionTitle": "Ova sesija",
@@ -344,7 +344,8 @@
     "intro": "Ostale domene, sesija i stranice.",
     "domains": "Domene",
     "open": "Otvori {layer}",
-    "session": "Sesija i postavke",
+    "session": "Otključano",
+    "sessionSub": "Postavke, jezik i tema",
     "pages": "Stranice",
     "weatherSummary": "{temp} °C, {condition}",
     "safetySummaryCalm": "Nema hitnih upozorenja",

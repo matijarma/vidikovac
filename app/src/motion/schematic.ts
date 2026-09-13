@@ -4,9 +4,9 @@
 // repainted every frame on a second canvas laid over the first, so routes
 // sit under vehicles by construction and a frame never re-strokes 500
 // polylines. Everything here is pure geometry plus two draw functions over
-// a narrow structural context (the pattern area M set in ui/meander.ts and
-// ui/panorama.ts), so plain node exercises it without a <canvas>; mounting
-// the canvases, owning the model and the loop is the view's job (T8).
+// a narrow structural context, so plain node exercises it without a
+// <canvas>; mounting the canvases, owning the model and the loop is the
+// view's job (T8).
 //
 // What is drawn is the real shape geometry in the local metre plane, never
 // the artefact's octilinear diagram: the model computes every position on
@@ -17,9 +17,26 @@
 import { dist, toPlane, type XY } from './geo';
 import type { Drawn } from './model';
 import type { Network } from './network';
-import type { StrokeContext } from '../ui/meander';
 
-/** The narrow canvas surface the two painters need: area M's StrokeContext
+/** The narrow stroke/path/clip surface a canvas 2D context exposes,
+ *  structurally a subset of CanvasRenderingContext2D so a recording test
+ *  double can implement it without a real <canvas>. */
+export interface StrokeContext {
+  save(): void;
+  restore(): void;
+  beginPath(): void;
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  rect(x: number, y: number, w: number, h: number): void;
+  clip(): void;
+  stroke(): void;
+  strokeStyle: string | CanvasGradient | CanvasPattern;
+  lineWidth: number;
+  lineJoin: CanvasLineJoin;
+  miterLimit: number;
+}
+
+/** The narrow canvas surface the two painters need: StrokeContext
  *  (save/restore, path, stroke, clip) plus what a filled, rotated mark and
  *  a cleared layer add. Structurally a subset of CanvasRenderingContext2D. */
 export interface SchematicContext extends StrokeContext {

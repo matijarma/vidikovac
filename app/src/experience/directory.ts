@@ -55,19 +55,26 @@ const LINES: Record<string, (i18n: I18n, ctx: LayerContext) => string> = {
 
 export function renderDirectory(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
+  const chevron = iconMarkup('chevron-right', undefined, 'icon row-chevron');
   const items = MORE_LAYERS.map((layer: LayerId) => {
     const line = LINES[layer]?.(i18n, ctx) ?? i18n.t('directory.noSummary');
-    const current = ctx.view?.layer === layer;
-    return `<li data-key="${layer}"><a class="dir-item" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}" data-testid="dir-${layer}">${iconMarkup(LAYER_ICONS[layer])}<span class="dir-text"><span class="dir-title">${escapeHtml(i18n.t(`layers.${layer}`))}</span><span class="dir-line">${escapeHtml(line)}</span></span>${iconMarkup('chevron-right', undefined, 'icon row-chevron')}</a></li>`;
+    return `<li class="row row-dir" data-key="${layer}"><a class="dir-item" href="#layer=${layer}" data-action="nav" data-layer="${layer}" data-testid="dir-${layer}">${iconMarkup(LAYER_ICONS[layer], undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t(`layers.${layer}`))}</span><span class="row-sub">${escapeHtml(line)}</span></span>${chevron}</a></li>`;
   }).join('');
+  // Fix round 1 (T2.4): LayerContext (core/contracts.ts, out of this task's ownership) carries
+  // no expiry/frozen field, so this row cannot show the real "unlocked until" moment or swap to
+  // session.expiredTitle when frozen. Rather than substitute a wrong clock value (ctx.now is the
+  // plain wall clock, not the session's expiry), the copy carries no time at all until a chartered
+  // follow-up threads real session state into LayerContext. The header pill and the session sheet
+  // this row opens remain the accurate, real-time source.
+  const sessionTitle = i18n.t('directory.session');
+  const sessionRow = `<li class="row row-dir" data-key="session"><button type="button" class="dir-item" data-action="session" data-testid="dir-session">${iconMarkup('sliders-horizontal', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(sessionTitle)}</span><span class="row-sub">${escapeHtml(i18n.t('directory.sessionSub'))}</span></span>${chevron}</button></li>`;
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
     ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],
   ];
   return createElementFromHTML(`<section class="layer ws ws-directory" id="layer-directory" data-layer="directory" data-reconcile aria-labelledby="layer-title-directory">
-<header class="ws-head"><h2 class="layer-title" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2><p class="meta">${escapeHtml(i18n.t('directory.intro'))}</p></header>
-<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}</ul>
-<section class="sec" aria-labelledby="dir-session-title"><h3 class="sec-title" id="dir-session-title">${escapeHtml(i18n.t('directory.session'))}</h3><button type="button" class="btn-ghost" data-action="session">${iconMarkup('ticket')}<span>${escapeHtml(i18n.t('shell.settings'))}</span></button></section>
+<header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
+<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}${sessionRow}</ul>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }
