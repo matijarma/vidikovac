@@ -34,6 +34,7 @@ import { DEFAULT_STOP_ID } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
+export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
 
 /** The story, the clock line and the paired refresh all move on this tick. */
 export const ROTATE_MS = 20_000;

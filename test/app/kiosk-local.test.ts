@@ -18,6 +18,7 @@ import { createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, requestKioskM
 import { eventGroups, fitRows, pairedMarkup } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
+import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, KIOSK_CATALOGUES, kioskStrings, plural } from '../../app/src/kiosk/strings';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -214,6 +215,20 @@ describe('local content from the stop-scoped teaser', () => {
     expect(byId.get('city:zet-promet:1')?.meta).toBe('objavljeno 11. 9. 11:10');
     expect(byId.get('city:komunalne:1')?.meta).toBe('zadnja izmjena čet 2. 7.');
     expect(cityDateLine(item('dogadanja', 'x', 'event', 'x', { at: '2026-09-11T00:00:00Z', dateBasis: 'unknown' }), hr, 'hr')).toBe('');
+  });
+  it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
+    const unfiltered = MODULES.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [item('dogadanja', 'kp:9', 'event', 'Koncert u Močvari (Kulturpunkt)', { at: '2026-09-11T20:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt' } }), ...m.items]) : m));
+    const list = stories(unfiltered, hr, 'hr', NOW);
+    expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(false); // the licence boundary holds on the screen itself
+    expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
+    const cards = teaserCards(MODULES, i18n, NOW);
+    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'news', 'city', 'invitation']);
+    expect(cards[0]!.body).toBe('21,4 °C · vedro');
+    expect(cards[1]!.body).toBe('M 1,6 · CROATIA');
+    expect(cards[2]!.body).toBe('2 zatvaranja');
+    expect(cards[4]!.body).toContain('13. sjednica Gradske skupštine');
+    expect(cards.every((c) => !(c.attribution?.text ?? '').includes('{'))).toBe(true);
+    expect(safetyStripText(MODULES, i18n)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
   });
   it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
     const rows = essentialsRows(MODULES, i18n, hr, 'hr', STOP);

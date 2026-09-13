@@ -7,10 +7,12 @@
 // and there is nothing" (a true empty), because a public screen that prints
 // zero for an outage is lying (PRODUCT.md, principle 4).
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
+import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import { LJEKARNE } from '../../../worker/hitno/ljekarne';
 import { fillAttribution } from '../attribution';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
+import { cityTeaserAttribution } from '../layers/grad-teaser';
 import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../layers/route-summary';
 import { dist, toPlane } from '../motion/geo';
 import { dataNumber, dataText } from '../panels/panel';
@@ -366,7 +368,8 @@ export const STORY_CAP = 8;
 export function stories(modules: readonly ModuleSnapshot[], strings: KioskStrings, locale: string, now: number): Story[] {
   const map = byModule(modules);
   const dogadanja = map.dogadanja;
-  const city: Story[] = (isLive(dogadanja) ? dogadanja.items : []).slice(0, 4).map((item) => {
+  // Only Otvorena dozvola rows reach a public screen, whatever the payload carried (the licence boundary).
+  const city: Story[] = (isLive(dogadanja) ? dogadanja.items.filter(isOpenLicenceEvent) : []).slice(0, 4).map((item) => {
     const source = dataText(item, 'source');
     return {
       id: `city:${item.id}`,
@@ -374,7 +377,7 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
       title: item.title,
       meta: cityDateLine(item, strings, locale),
       source: CITY_SOURCE[source] ?? 'Grad Zagreb',
-      attribution: fillAttribution(dogadanja!.attribution, dogadanja!, item),
+      attribution: cityTeaserAttribution(dogadanja, item)?.text ?? fillAttribution(dogadanja!.attribution, dogadanja!, item),
       tone: 'city' as const,
     };
   });
