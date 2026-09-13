@@ -124,6 +124,41 @@ export function findSelected(snapshot: ModuleSnapshot | undefined, selection: Pu
   return snapshot.items.find((item) => publicItemKey(item.module, item.id) === selection.id);
 }
 
+/**
+ * The line badge (signage.css `.line`): the number on the front of the
+ * vehicle, in its mode's shape and colour. `s` in dense rows and the peek,
+ * `m` on boards, `l` on a detail head, `k` on a public screen. `extra` are
+ * further attributes on the badge, written as they are named.
+ */
+export function lineBadge(label: string, kind: 'tram' | 'bus' | 'other', size: 's' | 'm' | 'l' | 'k' = 'm', extra: Record<string, string> = {}): string {
+  const rest = attrs(extra);
+  return `<span class="line" data-kind="${kind}" data-size="${size}"${rest ? ` ${rest}` : ''}>${escapeHtml(label)}</span>`;
+}
+
+export interface SignRowParts {
+  /** Trusted markup in the first column: a badge, a time, an icon, nothing. */
+  lead: string;
+  title: string;
+  sub?: string;
+  /** Trusted markup in the last column: a delay word, a mark, a chevron. */
+  trail?: string;
+  /** The reconciler's identity for the row. */
+  key: string;
+  /** Further attributes on the `li`, written as they are named. */
+  attrs?: Record<string, string>;
+}
+
+/**
+ * A row of the departure board: a lead, a destination, a word for the state.
+ * The text arguments are escaped here; `lead` and `trail` are markup other
+ * builders produced.
+ */
+export function signRow(parts: SignRowParts): string {
+  const rest = attrs(parts.attrs ?? {});
+  const sub = parts.sub ? `<span class="row-sub">${escapeHtml(parts.sub)}</span>` : '';
+  return `<li class="row" data-key="${escapeAttribute(parts.key)}"${rest ? ` ${rest}` : ''}>${parts.lead}<span class="row-main"><span class="row-title">${escapeHtml(parts.title)}</span>${sub}</span>${parts.trail ?? ''}</li>`;
+}
+
 export interface ItemRowOptions {
   selected?: boolean;
   testid?: string;

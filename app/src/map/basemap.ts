@@ -273,20 +273,27 @@ export interface OverlayPalette {
   screenStop: string;
 }
 
+/* The mode colours repeat the interface roles value for value: a bus and its
+ * route line are the transit role (--tone-transit, #0b4f6c light, #8fd0ec
+ * dark), a closure the urgency role (#b3271e, #ff9d9d), a tram the brand
+ * (#08777b, #63d7c3), another mode the muted text colour. One blue and one
+ * rose across the map, the badges (ui/signage.css) and the mode chips
+ * (ui/map.css). MapLibre paints from literals, so these are the token hexes
+ * written out; tokens.css stays their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   tram: '#08777b',
   tramText: '#ffffff',
-  bus: '#3b4fb8',
+  bus: '#0b4f6c',
   busText: '#ffffff',
   other: '#526461',
   otherText: '#ffffff',
   routeTram: '#08777b',
-  routeBus: '#3b4fb8',
+  routeBus: '#0b4f6c',
   stopFill: '#f6f8f7',
   stopStroke: '#526461',
   label: '#182423',
   halo: '#f6f8f7',
-  closure: '#c2274a',
+  closure: '#b3271e',
   closureCasing: '#f6f8f7',
   place: '#b8731a',
   selection: '#182423',
@@ -297,17 +304,17 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
 export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   tram: '#63d7c3',
   tramText: '#17201f',
-  bus: '#9fb4ff',
+  bus: '#8fd0ec',
   busText: '#17201f',
   other: '#8fa09a',
   otherText: '#17201f',
   routeTram: '#63d7c3',
-  routeBus: '#9fb4ff',
+  routeBus: '#8fd0ec',
   stopFill: '#17201f',
   stopStroke: '#b8c7c1',
   label: '#eff6f3',
   halo: '#17201f',
-  closure: '#ff8fa3',
+  closure: '#ff9d9d',
   closureCasing: '#17201f',
   place: '#f0c060',
   selection: '#eff6f3',

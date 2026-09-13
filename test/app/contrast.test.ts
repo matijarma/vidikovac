@@ -52,6 +52,13 @@ describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.
   it('on-accent text is readable on the accent fill', () => {
     expect(contrastRatio(palette(theme, 'on-accent'), palette(theme, 'accent'))).toBeGreaterThanOrEqual(AA_TEXT);
   });
+  // The bus: `--tone-action-brand-fg` on `--tone-transit`, the pair the line
+  // badge (ui/signage.css), the map pill (map/basemap.ts) and the mode chip
+  // all carry. #f6f8f7 on #0b4f6c light, #10201d on #8fd0ec dark.
+  it('on-accent text is readable on the transit fill, which carries the bus badge and the bus pill', () => {
+    const ratio = contrastRatio(palette(theme, 'on-accent'), palette(theme, 'transit'));
+    expect(Number(ratio.toFixed(2)), `${theme} on-accent on transit = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
+  });
   it('keeps subtle and muted distinct so the hierarchy survives', () => {
     expect(palette(theme, 'text-subtle')).not.toBe(palette(theme, 'text-muted'));
   });
@@ -115,7 +122,7 @@ describe('WCAG contrast arithmetic', () => {
 // models exactly that rendering (8-bit sRGB) and holds it to AA.
 describe.each(['dark', 'light'] as const)('%s palette as rendered in OKLCH', (theme) => {
   it('every OKLCH twin paints the same colour as its measured hex fallback', () => {
-    for (const name of [...SURFACES, ...TEXTS, 'accent-deep']) {
+    for (const name of [...SURFACES, ...TEXTS, 'accent-deep', 'transit']) {
       expect(deltaE(rendered(theme, name), hexToLinear(palette(theme, name))), `${theme} ${name}`).toBeLessThan(0.003);
     }
   });

@@ -11,14 +11,14 @@
    Tokens only (tokens.css); no container queries and no :has(), so the sheet
    still loads inert on the lightweight path (R-L3, R-L5). */
 
+/* The three mode colours are the roles, not literals: the chip swatches are a
+   legend for the map, so they read the same tokens the badges (signage.css)
+   and the map pills (map/basemap.ts) paint with -- one peacock, one deep blue,
+   one rose, per theme, everywhere. The badge inks moved out with the badge. */
 .transport {
-  --t-tram: #08777b;
-  --t-tram-ink: #ffffff;
-  --t-bus: #3b4fb8;
-  --t-bus-ink: #ffffff;
-  --t-other: #526461;
-  --t-other-ink: #ffffff;
-  --t-closure: #c2274a;
+  --t-tram: var(--tone-action-brand);
+  --t-bus: var(--tone-transit);
+  --t-closure: var(--tone-urgency);
   --t-gap: 0.75rem;
   display: flex; flex-direction: column; gap: var(--t-gap);
   min-width: 0;
@@ -27,16 +27,6 @@
 /* The workspace hides its controls with the hidden attribute (a kiosk has no search, no chips and no full-map
    button); the display rules of .btn-ghost and the flex rows must never override that. */
 .transport [hidden] { display: none !important; }
-:root[data-theme-resolved='dark'] .transport {
-  --t-tram: #63d7c3;
-  --t-tram-ink: #17201f;
-  --t-bus: #9fb4ff;
-  --t-bus-ink: #17201f;
-  --t-other: #8fa09a;
-  --t-other-ink: #17201f;
-  --t-closure: #ff8fa3;
-}
-
 /* --- Search: in the sheet, under its head ------------------------------- */
 .transport-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-3); }
 .t-search { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
@@ -182,18 +172,9 @@
 .t-group-label { padding: var(--sp-3) var(--sp-1) var(--sp-1); font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
 .t-list > li.t-group-label + li { border-block-start: 0; }
 .t-badges { display: inline-flex; flex-wrap: wrap; gap: var(--sp-1); flex: none; max-inline-size: 9rem; }
-/* The line badge: shape carries the mode (tram a rounded rectangle, bus a capsule), colour repeats it.
-   `.line` and data-kind/data-size are the shared component's contract; wave 2 moves these rules onto it. */
-.t-badge {
-  display: inline-flex; align-items: center; justify-content: center; padding: 0 0.45rem; flex: none;
-  block-size: 2rem; min-inline-size: 2.75rem; border-radius: 0.25rem; font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: 0.01em;
-  background: var(--t-other); color: var(--t-other-ink);
-}
-.t-badge[data-size='s'] { block-size: 1.5rem; min-inline-size: 2rem; font-size: var(--text-sm); }
-.t-badge[data-size='m'] { block-size: 2rem; min-inline-size: 2.75rem; font-size: var(--text-lg); }
-.t-badge[data-size='l'] { block-size: 2.5rem; min-inline-size: 3.5rem; font-size: var(--text-xl); }
-.t-badge[data-kind='tram'] { background: var(--t-tram); color: var(--t-tram-ink); border-radius: 0.25rem; }
-.t-badge[data-kind='bus'] { background: var(--t-bus); color: var(--t-bus-ink); border-radius: var(--r-pill); }
+/* The badge itself is `.line` in signage.css: shape carries the mode, colour
+   repeats it, and the same component sits on the map pill, in Sada and on the
+   public screen. What stays here is the room around it. */
 .t-badge-more { font-size: 0.8125rem; color: var(--tone-text-muted); align-self: center; }
 .t-mark { flex: none; inline-size: 0.75rem; block-size: 0.75rem; border-radius: 2px; }
 .t-mark-closure { background: var(--t-closure); }
@@ -298,7 +279,6 @@
 .transport[data-kiosk='true'] .t-row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
 .transport[data-kiosk='true'] .t-row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-facts { font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-title { font-size: 1.75rem; }
-.transport[data-kiosk='true'] .t-badge { min-inline-size: 2.75rem; block-size: 2.125rem; font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-row { cursor: default; }
 
 /* --- The lightweight face: a list, no map ---------------------------------- */

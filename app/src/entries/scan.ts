@@ -6,6 +6,7 @@ import { createScanPage, type ScanPageHandle } from '../scan';
 import { isQrScanSupported } from '../ui/qrScanner';
 import '../ui/tokens.css';
 import '../ui/base.css';
+import '../ui/signage.css';
 import '../ui/fonts.css';
 import '../ui/toast.css';
 import '../ui/qrScanner.css';
