@@ -275,6 +275,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       : null;
     const ctx = layerContext();
     const layer = view.snapshot().layer;
+    // Promet is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is the
+    // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
+    element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
     const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
     if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
