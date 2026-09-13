@@ -196,17 +196,15 @@
 .route-delay[data-state='early'] { color: var(--tone-weather); }
 .route-delay[data-state='ontime'] { color: var(--tone-live); }
 /* Overview: one composed page. A block is an area on the canvas with 24 px of
-   air around it, never a repeated card; the three column stacks the desk
-   composition needs are `display: contents` here, so a phone reads the blocks
-   in the order below and the desk is a grid change and nothing else. */
+   air around it, never a repeated card. The blocks are written in reading
+   order (weather, safety, board, agenda, news, gazette) and no rule here moves
+   one past another: the visual order is the DOM order, so a finger and a Tab
+   key travel the page the same way (WCAG 2.2 SC 2.4.3). The three column
+   stacks the desk composition needs are contiguous slices of that order and
+   are `display: contents` here, so the phone reads straight down the page and
+   the desk is a grid change and nothing else. */
 .ov { display: grid; gap: var(--sp-6); align-items: start; }
 .ov-col { display: contents; }
-.ov-weather { order: 1; }
-.ov-safety { order: 2; }
-.ov-transit { order: 3; }
-.ov-agenda { order: 4; }
-.ov-news { order: 5; }
-.ov-civic { order: 6; }
 /* "Trg bana J. Jelačića · ned 13. 9. 2026.": where this is, before any figure. */
 .ov-place { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-block: var(--sp-3) var(--sp-4); }
 .ov-block { display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; }

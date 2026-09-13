@@ -295,3 +295,17 @@ describe('the tab bar is exactly the space the shell reserves for it', () => {
   });
 });
 
+
+describe('Sada reads in one order on every width', () => {
+  it('never reorders an overview block in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
+    // `order` (and a row-reversed flow) would move a block past its neighbours
+    // for the eye while leaving it where it was for a Tab key and a screen
+    // reader. The blocks are written in reading order instead; the desk groups
+    // them into column stacks, which moves no block past another.
+    const blocks = /\.ov-(?:weather|safety|transit|agenda|news|civic)\b[^{}]*\{[^}]*\}/g;
+    for (const [declaration] of LAYERS_CSS.matchAll(blocks)) {
+      expect(declaration, declaration).not.toMatch(/\border\s*:/);
+    }
+    expect(LAYERS_CSS).not.toMatch(/\.ov\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+  });
+});

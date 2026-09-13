@@ -131,8 +131,18 @@ describe('grad-sada (Sada, the overview)', () => {
     }
     // "Trg bana J. Jelačića · ned 13. 9. 2026." says this is Zagreb, here, before any figure does.
     expect(text(section.querySelector('.ov-place'))).toContain(STOP.name);
-    // Blocks live in the three column stacks the desk composition needs; the phone orders them in CSS.
+    // The page is written in the order it is read: the DOM order is the phone
+    // order, so a finger, a Tab key and a screen reader travel the same page in
+    // the same sequence (WCAG 2.2 SC 2.4.3). Nothing is reordered in CSS.
+    expect([...section.querySelectorAll('.ov-block')].map((block) => block.id)).toEqual(['ov-weather', 'ov-safety', 'ov-transit', 'ov-agenda', 'ov-news', 'ov-civic']);
+    // The desk column stacks are contiguous slices of that one order, so the
+    // desk composition is a grid change and never a second reading order.
     expect([...section.querySelectorAll('.ov-col')].map((col) => col.getAttribute('data-key'))).toEqual(['col-a', 'col-b', 'col-c']);
+    expect([...section.querySelectorAll('.ov-col')].map((col) => [...col.children].map((block) => block.id))).toEqual([
+      ['ov-weather', 'ov-safety', 'ov-transit'],
+      ['ov-agenda'],
+      ['ov-news', 'ov-civic'],
+    ]);
     expect([...section.querySelectorAll('.ov-block')].every((block) => block.parentElement?.classList.contains('ov-col'))).toBe(true);
     // Provenance is one expandable line, not a wall of dataset names.
     expect(section.querySelector('details.provenance')).not.toBeNull();
@@ -181,6 +191,29 @@ describe('grad-sada (Sada, the overview)', () => {
     expect(band.getAttribute('data-level')).toBe('unknown');
     expect(text(band)).toContain('Stanje nije potvrđeno');
     expect(text(band)).not.toContain('Nema hitnih upozorenja');
+  });
+
+  it('names a level only when that level is the reason: a quake with minor warnings reads the urgent word', () => {
+    // safetyState raises urgent from a moderate/severe/extreme warning OR a quake
+    // of M3 and up. When the quake is the reason, a minor or info warning is not
+    // the verdict: "zeleno" is never a level word on any surface (R-K1).
+    const minorWarnings = base('dhmz-cap', [
+      { id: 'w2', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Vjetar u gorju', severity: 'minor', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
+      { id: 'w3', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Promjena vremena', severity: 'info', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
+    ]);
+    const felt = base('emsc', [{ id: 'q2', module: 'emsc', kind: 'quake', tier: 'open', title: 'ZAGREB', at: '2026-09-11T09:00:00Z', geo: { type: 'Point', coordinates: [15.98, 45.81] }, data: { mag: 3.5, depth: 8 } }]);
+    const section = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': minorWarnings, emsc: felt } }));
+    const band = section.querySelector('#ov-safety .band')!;
+    expect(band.getAttribute('data-level')).toBe('urgent');
+    expect(text(band)).toBe('Hitno sada');
+    expect(text(band)).not.toContain('zeleno');
+    expect(text(band)).not.toContain('obavijest');
+    expect(text(band)).not.toContain('Vjetar u gorju');
+
+    // A warning that is itself a reason for the urgency still names itself.
+    const yellow = base('dhmz-cap', [...minorWarnings.items, ...SNAPSHOTS['dhmz-cap']!.items]);
+    const named = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': yellow, emsc: felt } }));
+    expect(text(named.querySelector('#ov-safety .band'))).toBe('žuto upozorenje: Grmljavinsko nevrijeme');
   });
 
   it('boards the six lines of this screen’s stop, each with its badge and its delay word', () => {

@@ -5,9 +5,12 @@
 // link into its domain and none of them is a card; a source that has not
 // answered yet paints the shape it is about to fill instead of a word.
 //
-// The blocks are written into three column stacks (`.ov-col`), so the desk
-// composition is a CSS change and never a second render; on a phone the
-// columns are `display: contents` and the order is the reading order above.
+// The blocks are written in the order they are read, so the eye, the Tab key
+// and a screen reader travel the page in one sequence (WCAG 2.2 SC 2.4.3).
+// They are grouped into three column stacks (`.ov-col`), each a contiguous
+// slice of that one order, so the desk composition is a CSS change and never a
+// second render and never a second order; on a phone the columns are
+// `display: contents` and the page reads straight down.
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import { ZET_ROUTES } from '../data/routes';
@@ -150,16 +153,27 @@ function weatherBlock(i18n: I18n, ctx: LayerContext): string {
   return block({ id: 'ov-weather', tone: 'weather', labelledBy: 'ov-weather-title', body });
 }
 
-const SEVERITY_RANK: Record<string, number> = { extreme: 4, severe: 3, moderate: 2, minor: 1, info: 0 };
+/**
+ * The severities that make the city urgent, ranked. It is the same predicate
+ * `safetyState` raises `urgent` from, so a warning may name the verdict only
+ * when it is itself a reason for it; `minor` and `info` are real DHMZ
+ * severities and neither is.
+ */
+const URGENT_RANK: Record<string, number> = { extreme: 3, severe: 2, moderate: 1 };
 const SAFETY_ICON: Record<SafetyLevel, IconName> = { calm: 'check-circle', urgent: 'triangle-alert', unknown: 'alert-circle' };
 
-/** The safety verdict in the words the domain uses: the top warning when there is one, otherwise calm or unconfirmed. */
+/** The safety verdict in the words the domain uses: the top warning when one is the reason, otherwise calm, unconfirmed, or the urgent word. */
 function safetyVerdict(i18n: I18n, state: SafetyState): string {
   if (state.level === 'calm') return i18n.t('safety.calm');
   if (state.level === 'unknown') return i18n.t('directory.safetySummaryUnknown');
-  const top = [...state.activeWarnings].sort((a, b) => (SEVERITY_RANK[b.severity ?? 'info'] ?? 0) - (SEVERITY_RANK[a.severity ?? 'info'] ?? 0))[0];
+  // Urgency can come from the quake instead. Then the band says so in the
+  // domain's own word rather than borrowing the colour of a warning that is
+  // not the reason ("zeleno" is never a level word anywhere, R-K1).
+  const top = [...state.activeWarnings]
+    .filter((w) => URGENT_RANK[w.severity ?? ''] !== undefined)
+    .sort((a, b) => (URGENT_RANK[b.severity!] ?? 0) - (URGENT_RANK[a.severity!] ?? 0))[0];
   if (!top) return i18n.t('safety.urgent');
-  return `${i18n.t(`panels.severity.${top.severity ?? 'info'}`)}: ${top.title}`;
+  return `${i18n.t(`panels.severity.${top.severity}`)}: ${top.title}`;
 }
 
 /** One band, the only tint on the page: the state now, when it was confirmed, and the way into Sigurnost. */
@@ -317,9 +331,9 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
 <h2 class="layer-title visually-hidden" id="layer-title-grad-sada" tabindex="-1">${escapeHtml(i18n.t('layers.grad-sada'))}</h2>
 <p class="ov-place" data-key="place">${escapeHtml(place)}</p>
 <div class="ov">
-  <div class="ov-col" data-key="col-a">${weatherBlock(i18n, ctx)}${agendaBlock(i18n, ctx)}</div>
-  <div class="ov-col" data-key="col-b">${transitBlock(i18n, ctx)}${civicBlock(i18n, ctx)}</div>
-  <div class="ov-col" data-key="col-c">${safetyBlock(i18n, ctx)}${newsBlock(i18n, ctx)}</div>
+  <div class="ov-col" data-key="col-a">${weatherBlock(i18n, ctx)}${safetyBlock(i18n, ctx)}${transitBlock(i18n, ctx)}</div>
+  <div class="ov-col" data-key="col-b">${agendaBlock(i18n, ctx)}</div>
+  <div class="ov-col" data-key="col-c">${newsBlock(i18n, ctx)}${civicBlock(i18n, ctx)}</div>
 </div>
 ${provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])}
 </section>`);
