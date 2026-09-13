@@ -90,7 +90,6 @@
 .transport[data-status='unavailable'] .t-map-tools { display: none; }
 .t-map-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .t-action { min-height: 2.75rem; font-size: 0.875rem; }
-.t-map-tools .t-action { min-height: 2.5rem; padding-inline: 0.75rem; }
 
 /* --- Sheet ------------------------------------------------------------- */
 .transport-sheet {

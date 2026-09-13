@@ -15,7 +15,9 @@ body {
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: var(--weight-bold); line-height: var(--leading-tight); margin: 0; letter-spacing: -0.015em; }
 p, ul, ol, figure { margin: 0; }
 a { color: var(--tone-text-brand); text-underline-offset: 0.15em; text-decoration-thickness: 1px; }
-a:hover { color: var(--tone-action-brand-hover); }
+@media (hover: hover) {
+  a:hover { color: var(--tone-action-brand-hover); }
+}
 :focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
 ::selection { background: var(--tone-tint-action); }
 .visually-hidden {
@@ -31,19 +33,29 @@ a:hover { color: var(--tone-action-brand-hover); }
   display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
   min-height: var(--target); padding: 0 var(--sp-4);
   border-radius: var(--r-md); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: 1.2;
-  cursor: pointer; text-decoration: none; white-space: nowrap;
+  cursor: pointer; text-decoration: none; white-space: nowrap; touch-action: manipulation;
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .btn { border: 1px solid transparent; background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
-.btn:hover { background: var(--tone-action-brand-hover); color: var(--tone-action-brand-fg); }
+@media (hover: hover) {
+  .btn:hover { background: var(--tone-action-brand-hover); color: var(--tone-action-brand-fg); }
+}
 .btn-primary { min-height: var(--target-primary); padding-inline: var(--sp-5); font-size: var(--text-body); }
 .btn-ghost { border: 1px solid var(--tone-stroke-strong); background: transparent; color: var(--tone-action-ghost-fg); }
-.btn-ghost:hover { background: var(--tone-surface-2); color: var(--tone-action-ghost-fg); }
+@media (hover: hover) {
+  .btn-ghost:hover { background: var(--tone-surface-2); color: var(--tone-action-ghost-fg); }
+}
 .btn-quiet { border: 1px solid transparent; background: transparent; color: var(--tone-text-muted); }
-.btn-quiet:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); }
+@media (hover: hover) {
+  .btn-quiet:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); }
+}
 .btn:disabled, .btn-ghost:disabled, .btn-quiet:disabled, [aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .btn[aria-pressed='true'], .btn-ghost[aria-pressed='true'], .btn-quiet[aria-pressed='true'] { background: var(--tone-tint-action); color: var(--tone-text-primary); border-color: var(--tone-action-brand); }
 .icon-btn { padding: 0; inline-size: var(--target); }
+/* Press feedback: a touch has no hover, so :active stands in for it. */
+@media (hover: none) {
+  .btn:active, .btn-ghost:active, .btn-quiet:active, .chip:active { background-color: var(--tone-surface-2); transition: none; }
+}
 .icon {
   width: 1.25rem; height: 1.25rem; flex: none;
   fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
@@ -86,10 +98,12 @@ input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; a
   position: relative; display: inline-flex; align-items: center; gap: var(--sp-1);
   min-height: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-pill);
   border: 1px solid var(--tone-stroke-strong); background: transparent; color: var(--tone-text-primary);
-  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: 1.2; cursor: pointer;
+  font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: 1.2; cursor: pointer; touch-action: manipulation;
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
-.chip:hover { background: var(--tone-surface-2); }
+@media (hover: hover) {
+  .chip:hover { background: var(--tone-surface-2); }
+}
 .chip[aria-pressed='true'], .chip[aria-selected='true'] { background: var(--tone-text-primary); border-color: var(--tone-text-primary); color: var(--tone-surface-canvas); }
 .chip-static { cursor: default; border-color: var(--tone-stroke); color: var(--tone-text-muted); }
 

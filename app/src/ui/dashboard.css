@@ -26,6 +26,7 @@
   padding-inline: max(var(--sp-4), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
   background: var(--tone-surface-1);
   border-block-end: 1px solid var(--tone-stroke);
+  container-type: inline-size; container-name: header;
 }
 .ki-head > * { grid-area: auto; min-inline-size: 0; display: flex; align-items: center; }
 /* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
@@ -35,7 +36,7 @@
 /* Banners sit in flow between the header and the workspace; nothing overlays content. */
 .ki-banners { grid-area: banners; display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) 0; }
 .ki-banners:empty { display: none; }
-.ki-main { grid-area: main; min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) max(var(--sp-4), env(safe-area-inset-right, 0px)) calc(var(--ki-tabs) + var(--sp-6)) max(var(--sp-4), env(safe-area-inset-left, 0px)); }
+.ki-main { grid-area: main; min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) max(var(--sp-4), env(safe-area-inset-right, 0px)) calc(var(--ki-tabs) + var(--sp-6)) max(var(--sp-4), env(safe-area-inset-left, 0px)); touch-action: pan-y; }
 .ki-main:focus-visible { outline: none; }
 /* The Promet stage (the transport layer writes data-stage): the shell is the viewport, main is the stage. */
 .ki[data-stage='map'] { block-size: 100vh; block-size: 100dvh; overflow: hidden; }
@@ -52,7 +53,7 @@
    for readers and the desktop card. Amber for the last minute, rose for the
    last twenty seconds: the ring strokes with --tone-action-brand, so one
    override recolours the ring and the tint together. */
-.ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); padding: 0 var(--sp-3) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; cursor: pointer; }
+.ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); padding: 0 var(--sp-3) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; cursor: pointer; touch-action: manipulation; }
 .ki-session .g-ring { inline-size: 1.5rem; block-size: 1.5rem; flex: none; }
 .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .ki-session-sentence { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -66,23 +67,36 @@
 
 /* One-tap safety on the phone: shield and the word, rose on the urgency tint.
    Under 360 px the word hides and the aria-label carries it. */
-.ki-safety { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); font-size: var(--text-sm); font-weight: var(--weight-bold); text-decoration: none; }
+.ki-safety { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); font-size: var(--text-sm); font-weight: var(--weight-bold); text-decoration: none; touch-action: manipulation; }
 .ki-safety .ki-nav-label { display: inline; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
 @media (max-width: 22.4375rem) {
   .ki-safety { min-inline-size: var(--target); padding: 0; }
   .ki-safety .ki-nav-label { display: none; }
 }
+/* Zoom-compact header: 390 px at 200% text is 12.2rem, so a container query (not
+   a viewport one) catches zoom the same way it catches a narrow phone. */
+@container header (max-width: 18rem) {
+  .ki-session .g-ring { display: none; }
+  .ki-safety { min-inline-size: var(--target); padding: 0; }
+  .ki-safety .ki-nav-label { display: none; }
+  .ki-wordmark-text { font-size: var(--text-body); }
+}
 
 /* Phone tab bar: four labelled targets, 44 px and up, safe-area aware. */
-.ki-tabbar { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); border-block-start: 1px solid var(--tone-stroke); padding-block-end: env(safe-area-inset-bottom, 0px); }
+.ki-tabbar { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); border-block-start: 1px solid var(--tone-stroke); padding-block-end: env(safe-area-inset-bottom, 0px); container-type: inline-size; container-name: tabs; }
 .ki-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
-.ki-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; inline-size: 100%; min-height: 3.75rem; padding: var(--sp-1) 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-meta); font-weight: var(--weight-medium); text-decoration: none; cursor: pointer; }
-.ki-tab .icon { width: 1.4rem; height: 1.4rem; }
-.ki-tab[aria-current='page'] { color: var(--tone-action-brand); }
-.ki-tab[aria-current='page'] .icon { stroke-width: 2.4; }
+.ki-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; inline-size: 100%; min-block-size: 3.5rem; padding: var(--sp-1) 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); text-decoration: none; cursor: pointer; touch-action: manipulation; }
+.ki-tab .icon { width: 1.5rem; height: 1.5rem; }
+.ki-tab[aria-current='page'] { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
+.ki-tab[aria-current='page']::before { content: ''; position: absolute; inset-block-start: 0; inset-inline: 0; block-size: 2px; background: var(--tone-action-brand); }
 .ki-tab[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
-.ki-nav-label { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ki-nav-label { max-inline-size: 100%; white-space: nowrap; }
+/* Zoom-compact tab bar: icons grow, only the current label stays (never ellipsised). */
+@container tabs (max-width: 18rem) {
+  .ki-tab .icon { width: 1.75rem; height: 1.75rem; }
+  .ki-tab:not([aria-current='page']) .ki-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 /* Banners: the session's own states, never confused with data states. */
 .banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
 .banner-text { margin: 0; flex: 1 1 16rem; font-weight: var(--weight-medium); line-height: var(--leading-snug); }
@@ -118,8 +132,10 @@
   .ki-safety-slot, .ki-tabbar { display: none; }
   .ki-side { display: block; grid-area: side; padding: var(--sp-2) var(--sp-3); }
   .ki-side-list { display: grid; gap: 0.125rem; margin: 0; padding: 0; list-style: none; }
-  .ki-side-link { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-text-muted); font-size: var(--text-md); font-weight: var(--weight-medium); text-decoration: none; }
-  .ki-side-link:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); }
+  .ki-side-link { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-text-muted); font-size: var(--text-md); font-weight: var(--weight-medium); text-decoration: none; touch-action: manipulation; }
+  @media (hover: hover) {
+    .ki-side-link:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); }
+  }
   .ki-side-link[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-side-link[aria-current='page'] .icon { color: var(--tone-action-brand); }
   .ki-side-link[data-layer='sigurnost'] { margin-block-start: var(--sp-3); border-block-start: 1px solid var(--tone-stroke); border-radius: 0 0 var(--r-md) var(--r-md); padding-block-start: var(--sp-1); }
@@ -138,6 +154,12 @@
 @media (min-width: 90rem) {
   .ki { --ki-side: clamp(14rem, 30vw, 19rem); }
   .ki-main { padding-inline: var(--sp-12); }
+}
+
+/* Press feedback: a touch has no hover, so :active stands in for it, instant
+   on press with no transition, releasing over the usual duration on lift. */
+@media (hover: none) {
+  .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-side-link:active { background-color: var(--tone-surface-2); transition: none; }
 }
 
 /* Full-map view mode (transport): the workspace takes the height, chrome stays. */

@@ -6,12 +6,45 @@ import { describe, expect, it } from 'vitest';
 // 48 px header, banners in flow and one workspace; the desktop dissolves the
 // header into the rail grid. Literals pinned here are the ones the geometry
 // gates and the sibling tasks (T1.2 tab bar, T1.3 Promet stage) build on.
-const CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'dashboard.css'), 'utf8');
+const ui = (name: string): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', name), 'utf8');
+const CSS = ui('dashboard.css');
+const BASE_CSS = ui('base.css');
+const LAYERS_CSS = ui('layers.css');
+const TOAST_CSS = ui('toast.css');
+const MAP_CSS = ui('map.css');
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** The declarations of the first flat rule for `selector` inside `scope` (rules in this file never nest). */
 const rule = (selector: string, scope: string = CSS): string =>
   new RegExp(`(?:^|\\n)\\s*${escape(selector)} \\{([^}]*)\\}`).exec(scope)?.[1] ?? '';
 const DESKTOP = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+
+/**
+ * Every `:hover` in a stylesheet must sit inside a block whose enclosing
+ * @-rule chain includes `hover: hover` (T1.2's rule: no hover styles apply on
+ * a touch device). A brace-depth walk, not a per-line regex, because some
+ * hover rules are nested inside an existing viewport @media rather than
+ * re-wrapped on their own — the enclosing chain still carries the condition.
+ * Returns the ungated selector preludes found, empty when everything is gated.
+ */
+function ungatedHovers(css: string): string[] {
+  const stack: string[] = [];
+  const found: string[] = [];
+  let buf = '';
+  for (const ch of css) {
+    if (ch === '{') {
+      const prelude = buf.trim();
+      if (prelude.includes(':hover') && !stack.some((p) => p.includes('hover: hover'))) found.push(prelude);
+      stack.push(prelude);
+      buf = '';
+    } else if (ch === '}') {
+      stack.pop();
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  return found;
+}
 
 describe('dashboard.css phone shell', () => {
   it('lays the shell out as header, banners and main in flow, on a small-viewport height with the 2017 fallback line above it', () => {
@@ -106,5 +139,130 @@ describe('dashboard.css desktop (60rem and up)', () => {
   it('keeps both sidebar clamps byte-identical (pinned by workspace-css.test.ts as well)', () => {
     expect(CSS).toContain('--ki-side: clamp(14rem, 30vw, 17rem);');
     expect(CSS).toContain('.ki { --ki-side: clamp(14rem, 30vw, 19rem); }');
+  });
+});
+
+// T1.2: the tab bar, zoom-compact containers, hover gating, press states and
+// touch behaviour. map.css is T1.3's except the one deleted 40 px override.
+describe('tab bar: 56 px targets, the current tab a bold peacock bar, labels that never ellipsise', () => {
+  it('the tab is 56 px tall with 14 px labels and a manipulation touch-action (no double-tap zoom delay)', () => {
+    const tab = rule('.ki-tab');
+    expect(tab).toContain('font-size: var(--text-sm)');
+    expect(tab).toContain('min-block-size: 3.5rem');
+    expect(tab).toContain('touch-action: manipulation');
+  });
+  it('the current tab is bold peacock with a 2 px bar across the top of its own cell', () => {
+    const current = rule(".ki-tab[aria-current='page']");
+    expect(current).toContain('color: var(--tone-action-brand)');
+    expect(current).toContain('font-weight: var(--weight-bold)');
+    const bar = rule(".ki-tab[aria-current='page']::before");
+    expect(bar).toContain("content: ''");
+    expect(bar).toContain('block-size: 2px');
+    expect(bar).toContain('background: var(--tone-action-brand)');
+  });
+  it('never truncates a label with an ellipsis', () => {
+    expect(rule('.ki-nav-label')).not.toContain('text-overflow');
+    expect(rule('.ki-nav-label')).not.toContain('overflow: hidden');
+  });
+  it('keeps --ki-tabs at 3.5rem plus the safe-area inset; the tab bar and the toast stack both key off it', () => {
+    expect(CSS).toContain('--ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));');
+  });
+});
+
+describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container queries catch zoom like a narrow phone', () => {
+  it('the header and tab bar are named inline-size containers', () => {
+    expect(rule('.ki-head')).toContain('container-type: inline-size; container-name: header;');
+    expect(rule('.ki-tabbar')).toContain('container-type: inline-size; container-name: tabs;');
+  });
+  it('under 18rem the header drops the ring and the safety label, and the tab bar hides every label but the current one', () => {
+    expect(CSS).toContain('@container header (max-width: 18rem)');
+    expect(CSS).toContain('@container tabs (max-width: 18rem)');
+    const header = /@container header \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(rule('.ki-session .g-ring', header)).toContain('display: none');
+    expect(rule('.ki-safety .ki-nav-label', header)).toContain('display: none');
+    const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(rule('.ki-tab .icon', tabs)).toContain('1.75rem');
+    expect(rule(".ki-tab:not([aria-current='page']) .ki-nav-label", tabs)).toContain('clip: rect(0 0 0 0)');
+  });
+});
+
+describe('every :hover lives under @media (hover: hover); :active gives instant surface-2 feedback under (hover: none)', () => {
+  it('gates every :hover in the shell, base and workspace stylesheets', () => {
+    for (const [label, css] of [
+      ['dashboard.css', CSS],
+      ['base.css', BASE_CSS],
+      ['layers.css', LAYERS_CSS],
+      ['toast.css', TOAST_CSS],
+    ] as const) {
+      expect(ungatedHovers(css), `ungated :hover selectors in ${label}`).toEqual([]);
+    }
+  });
+  it('.row-button:hover keeps only its background; the geometry change (the old hover-grows-the-row trick) is gone', () => {
+    const hover = rule('.row-button:hover', LAYERS_CSS);
+    expect(hover).toContain('background: var(--tone-surface-2)');
+    expect(hover).not.toContain('margin-inline');
+    expect(hover).not.toContain('padding-inline');
+    expect(hover).not.toContain('inline-size');
+    // The current row shares the same fixed geometry now — only the tint differs.
+    expect(rule(".row-button[aria-current='true']", LAYERS_CSS)).not.toContain('margin-inline');
+  });
+  it('presses give instant feedback on the controls this task owns, across the three files that define them', () => {
+    const dash = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(dash).toContain('.ki-tab:active');
+    expect(dash).toContain('.ki-session:active');
+    expect(dash).toContain('.ki-safety:active');
+    expect(dash).toContain('.ki-side-link:active');
+    const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
+    expect(base).toContain('.btn:active');
+    expect(base).toContain('.chip:active');
+    const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
+    expect(layers).toContain('.row-button:active');
+    expect(layers).toContain('.route-link:active');
+    expect(layers).toContain('.dir-item:active');
+    expect(layers).toContain('.sf-number:active');
+    expect(layers).toContain('.link-arrow:active');
+    expect(layers).toContain('.link-ext:active');
+  });
+});
+
+describe('touch: the main scrolls vertically only; controls get the browser out of the way of a tap', () => {
+  it('.ki-main is pan-y (a one-finger drag scrolls, it never pinch-zooms or text-selects)', () => {
+    expect(rule('.ki-main')).toContain('touch-action: pan-y');
+  });
+  it('every S-owned control is touch-action: manipulation (no 300 ms tap delay)', () => {
+    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab']) expect(rule(selector)).toContain('touch-action: manipulation');
+    expect(rule('.ki-side-link', DESKTOP)).toContain('touch-action: manipulation');
+    for (const selector of ['.btn, .btn-ghost, .btn-quiet', '.chip']) expect(rule(selector, BASE_CSS)).toContain('touch-action: manipulation');
+    for (const selector of ['.row-button', '.route-link', '.dir-item', '.link-arrow, .link-ext', '.source-link']) {
+      expect(rule(selector, LAYERS_CSS)).toContain('touch-action: manipulation');
+    }
+  });
+});
+
+describe('targets: 44 px minimum, every link a real target, no 40 px map-toolbar override left in map.css', () => {
+  it('the provenance block’s bare /izvori/ link gets a 44 px target; the old auto override on .source-link inside it is gone', () => {
+    expect(LAYERS_CSS).not.toContain('.provenance .source-link { min-height: auto');
+    expect(rule('.provenance a', LAYERS_CSS)).toContain('min-block-size: var(--target)');
+  });
+  it('map.css no longer shrinks the map toolbar buttons to a 40 px override; the base 44 px .t-action applies', () => {
+    expect(MAP_CSS).not.toContain('min-height: 2.5rem');
+    expect(rule('.t-action', MAP_CSS)).toContain('min-height: 2.75rem');
+  });
+});
+
+describe('toasts sit above the tab bar on a phone, at body size, with a 44 px dismiss', () => {
+  it('the stack clears the tab bar and both safe-area insets below the desktop breakpoint', () => {
+    const phone = /@media \(max-width: 59\.99rem\) \{([\s\S]*?)\n\}/.exec(TOAST_CSS)?.[1] ?? '';
+    const stack = rule('.toast-stack', phone);
+    expect(stack).toContain('inset-block-end: calc(3.5rem + env(safe-area-inset-bottom, 0px)');
+    expect(stack).toContain('inset-inline: var(--sp-4)');
+  });
+  it('the message reads at body size (16 px), never the 12 px metadata size', () => {
+    expect(rule('.toast-message', TOAST_CSS)).toContain('font-size: var(--text-body)');
+  });
+  it('the dismiss button is a full 44 px target', () => {
+    const dismiss = rule('.toast-dismiss', TOAST_CSS);
+    expect(dismiss).toContain('inline-size: var(--target)');
+    expect(dismiss).toContain('block-size: var(--target)');
   });
 });
