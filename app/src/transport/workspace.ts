@@ -279,7 +279,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     ctx().navigate?.('u-pokretu', pub);
   }
 
-  /** The one place the selection changes: state, the map, the paired screen, then the sheet. A selection lifts the sheet to half, never leaves it at peek. */
+  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
     if (next?.kind === 'stop' && !next.ids) next = { ...next, ids: groupFor(next.id)?.ids };
     selection = next;
@@ -288,9 +288,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       following = null;
       handle?.follow?.(null);
     }
+    // The sheet settles at half before the map moves, so the fit is padded for the detent the person will see;
+    // padded for an open sheet, MapLibre has no room left and refuses the fit.
+    if (next) sheet?.set('half');
     handle?.select?.(next, { fit: opts.fit });
     if (opts.relay !== false) relay(next);
-    if (next) sheet?.set('half');
     if (query) {
       query = '';
       searchInput.value = '';
@@ -327,13 +329,18 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     return { bottom: 0, right: 0 };
   }
 
+  /** Tells the map what covers it now. */
+  function syncFitPadding(): void {
+    handle?.setFitPadding?.(fitPadding());
+  }
+
   function onDetent(): void {
     const height = stage.clientHeight;
     if (height !== lastStageHeight) {
       lastStageHeight = height;
       handle?.resize?.();
     }
-    handle?.setFitPadding?.(fitPadding());
+    syncFitPadding();
     if (input) renderSheetToggle();
   }
 
@@ -347,7 +354,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       sheet?.destroy();
       sheet = null;
       element.dataset.sheet = next === 'desk' ? 'open' : 'half';
-      handle?.setFitPadding?.(fitPadding());
+      syncFitPadding();
     }
   }
   const onMedia = (): void => {
@@ -357,6 +364,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   };
   deskMedia?.addEventListener?.('change', onMedia);
   landscapeMedia?.addEventListener?.('change', onMedia);
+
+  // The column modes measure the sheet's box, which the first render cannot (the workspace renders before the
+  // layer appends it, layers/u-pokretu.ts) and which follows the stage's width and the column's slide ("Proširi
+  // kartu"): the stage's own observer reports it at the first layout and on every resize, the column's transition
+  // at its end, and every render again. On the phone the detent controller owns it.
+  const onStageBox = (): void => {
+    if (!sheet) syncFitPadding();
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(onStageBox).observe(stage);
+  else window.addEventListener('resize', onStageBox);
+  sheetEl.addEventListener('transitionend', (event) => {
+    if (event.target === sheetEl) onStageBox();
+  });
 
   /** A peeking sheet rises to half; a higher one stays where it is. */
   function raise(): void {
@@ -614,6 +634,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         setFollowing(null);
         break;
       case 'fit-selection':
+        // Half first, as in setSelection: the fit is padded for the sheet the person will see.
+        sheet?.set('half');
         handle?.fit?.('selection');
         break;
       case 'fit-city':
@@ -821,10 +843,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         relayedKey = key;
       }
     }
+    // A selection the page brought lifts the sheet to half like any other, before the map fits to it.
+    if (changed && selection) sheet?.set('half');
     syncMap(c, next.points, next.lines);
     // An outage is no evidence of motion: the map holds every vehicle where it is until the feed is live again.
     handle?.setFeedState?.(c.snapshots['zet-rt']?.status ?? 'down');
     if (changed) handle?.select?.(selection, { fit: selection !== null });
+    onStageBox();
     renderSheet();
   }
 

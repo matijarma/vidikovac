@@ -558,6 +558,8 @@ const HIT_TOLERANCE_PX = 8;
 const CAMERA_MS = 600;
 /** Padding around a fitted route or closure, CSS px. */
 const FIT_PADDING_PX = 40;
+/** The least of the viewport a fit may be squeezed into on either axis, whatever covers the rest. */
+const FIT_ROOM_PX = 2 * FIT_PADDING_PX;
 /** Route follow refits the selected route's vehicles at most this often, so the camera settles between moves. */
 const ROUTE_FOLLOW_MS = 5000;
 
@@ -570,6 +572,27 @@ export function viewSelection(route: string | null | undefined, stopId: string |
 
 let mapUid = 0;
 
+/** MapLibre refuses a fit whose padding leaves it no room (cameraForBounds warns and moves nothing), so along each
+ *  axis the two sides together leave at least FIT_ROOM_PX of the box: the excess comes off the larger side first and
+ *  the breathing space last. A box with no size yet (not laid out) has nothing to fit inside and is left alone. */
+function fitInside(p: Required<FitPadding>, a: 'top' | 'left', b: 'bottom' | 'right', size: number): void {
+  if (!(size > 0)) return;
+  const room = Math.max(0, size - FIT_ROOM_PX);
+  let excess = p[a] + p[b] - room;
+  if (excess <= 0) return;
+  for (const key of p[a] >= p[b] ? [a, b] : [b, a]) {
+    const take = Math.min(excess, Math.max(0, p[key] - FIT_PADDING_PX));
+    p[key] -= take;
+    excess -= take;
+  }
+  if (excess > 0) {
+    // Even the breathing space is too much for this box: share what room there is in proportion.
+    const total = p[a] + p[b];
+    p[a] = total > 0 ? Math.floor((p[a] * room) / total) : 0;
+    p[b] = total > 0 ? Math.floor((p[b] * room) / total) : 0;
+  }
+}
+
 export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): CityMapHandle {
   const { container } = options;
   const now = deps.now ?? (() => Date.now());
@@ -579,10 +602,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   const reduced = options.reducedMotion === true;
   let fitPadding: FitPadding = { ...options.fitPadding };
 
-  /** FIT_PADDING_PX of breathing space on every side, plus the covered part, plus a call's own extra. */
+  /** FIT_PADDING_PX of breathing space on every side, plus the covered part, plus a call's own extra, kept inside the container's box. */
   function paddingFor(extra: FitPadding = {}): Required<FitPadding> {
     const side = (key: keyof FitPadding): number => FIT_PADDING_PX + (fitPadding[key] ?? 0) + (extra[key] ?? 0);
-    return { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+    const p = { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+    fitInside(p, 'top', 'bottom', container.clientHeight);
+    fitInside(p, 'left', 'right', container.clientWidth);
+    return p;
   }
   /** A point eased to (not fitted) lands in the middle of the uncovered area: half the padding difference, as MapLibre's `offset`. */
   function offsetFor(extra: FitPadding = {}): [number, number] {

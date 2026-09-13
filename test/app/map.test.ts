@@ -149,8 +149,13 @@ const CLOSURE: MapLine = { id: 'c1', title: 'Grada Vukovara', coordinates: [[15.
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.813, routes: ['6', '11'] };
 const flush = async (): Promise<void> => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
 
-async function stageMap(extra: Partial<CityMapOptions> = {}) {
+async function stageMap(extra: Partial<CityMapOptions> = {}, box?: { width: number; height: number }) {
   const container = document.createElement('div');
+  if (box) {
+    // happy-dom lays nothing out: the box MapLibre would measure (clientWidth/clientHeight) is given by the test.
+    Object.defineProperty(container, 'clientWidth', { get: () => box.width });
+    Object.defineProperty(container, 'clientHeight', { get: () => box.height });
+  }
   document.body.appendChild(container);
   const handle = createCityMap(
     { container, ariaLabel: 'Karta', points: [], lines: [CLOSURE], reducedMotion: true, loadNetwork: async () => null, ...extra },
@@ -204,5 +209,18 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
     expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'easeTo', options: { center: [STOP.lon, STOP.lat], offset: [-10, -60] } });
     handle.fit!('city');
     expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'easeTo', options: { center: ZAGREB_CENTER, offset: [-10, -60] } });
+  });
+
+  it('a padding that would leave MapLibre no room (an open sheet under the breathing space) is clamped to the container’s box on each axis, so a fit is never refused', async () => {
+    const { handle, map } = await stageMap({ fitPadding: { bottom: 700 } }, { width: 390, height: 740 });
+    handle.select!({ kind: 'closure', id: 'c1' }, { fit: true });
+    // 740 px tall: at least 80 px stay free; the excess comes off the covered side and the 40 px breathing space stays.
+    expect(map.cameraCalls.at(-1)?.options.padding).toEqual({ top: 40, right: 40, bottom: 620, left: 40 });
+    handle.setFitPadding!({ right: 380 }); // a landscape column wider than the box leaves
+    handle.fit!('selection');
+    expect(map.cameraCalls.at(-1)?.options.padding).toEqual({ top: 40, right: 270, bottom: 40, left: 40 });
+    handle.setFitPadding!({ bottom: 370 }); // half: within the room, untouched
+    handle.fit!('selection');
+    expect(map.cameraCalls.at(-1)?.options.padding).toEqual({ top: 40, right: 40, bottom: 410, left: 40 });
   });
 });

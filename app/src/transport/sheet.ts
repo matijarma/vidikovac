@@ -6,7 +6,9 @@
 // starts on the head at any time, and on the body only from the top of its
 // scroll and only downward, so the list keeps its own native scrolling. The
 // release snaps to the nearest detent, or one detent further in the flick's
-// direction. No dependency, pointer events only, and every browser-only
+// direction. A drag's moves and release are read from the window, so a
+// pointer that leaves the sheet, or a node the next poll replaces, never
+// strands one. No dependency, pointer events only, and every browser-only
 // primitive (ResizeObserver, setPointerCapture) is guarded so the same code
 // runs under happy-dom.
 export type Detent = 'peek' | 'half' | 'open';
@@ -59,7 +61,6 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
 
 interface Drag {
   pointerId: number;
-  target: Element;
   fromBody: boolean;
   startY: number;
   startH: number;
@@ -147,21 +148,48 @@ export function createSheet(deps: SheetDeps): SheetController {
   markTop();
 
   // --- Pointer drags -------------------------------------------------------------
-  function capture(target: Element, pointerId: number): void {
-    if (typeof target.setPointerCapture !== 'function') return;
+  // The pointerdown is heard on the sheet; the moves and the release are heard on
+  // the window while a drag is pending. A mouse has no implicit capture and the
+  // head sits at the sheet's top edge, so its first move often lands over the map
+  // already; a finger's implicit capture sits on the node it touched, which the
+  // next poll may replace. Either way the events must reach the controller, or
+  // the drag would never end. Once a drag has committed the sheet itself, the one
+  // node a render never replaces, captures the pointer. Capture waits for the
+  // commit: a pointer captured at pointerdown retargets the click that follows a
+  // tap to the capturing node (Chrome, Firefox), and every row and the chevron
+  // would stop answering taps.
+  function capture(pointerId: number): void {
+    if (typeof sheet.setPointerCapture !== 'function') return;
     try {
-      target.setPointerCapture(pointerId);
+      sheet.setPointerCapture(pointerId);
     } catch {
       /* the pointer is already gone (happy-dom, a cancelled touch) */
     }
   }
-  function release(target: Element, pointerId: number): void {
-    if (typeof target.releasePointerCapture !== 'function') return;
+  function release(pointerId: number): void {
+    if (typeof sheet.releasePointerCapture !== 'function') return;
     try {
-      target.releasePointerCapture(pointerId);
+      sheet.releasePointerCapture(pointerId);
     } catch {
       /* never captured */
     }
+  }
+  function listen(on: boolean): void {
+    if (on) {
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    } else {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+  }
+  /** Forgets the pending drag and stops listening to the window for it. */
+  function endDrag(): void {
+    if (!drag) return;
+    drag = null;
+    listen(false);
   }
   function heightAt(d: Drag, clientY: number): number {
     return clamp(d.startH - (clientY - d.startY), heightFor('peek'), heightFor('open'));
@@ -174,7 +202,8 @@ export function createSheet(deps: SheetDeps): SheetController {
     const fromBody = body.contains(target);
     if (!fromBody && !head.contains(target)) return;
     if (fromBody && body.scrollTop > 0) return;
-    drag = { pointerId: event.pointerId, target, fromBody, startY: event.clientY, startH: heightFor(current), lastY: event.clientY, lastT: now(), velocity: 0, committed: false };
+    drag = { pointerId: event.pointerId, fromBody, startY: event.clientY, startH: heightFor(current), lastY: event.clientY, lastT: now(), velocity: 0, committed: false };
+    listen(true);
   }
   function onMove(event: PointerEvent): void {
     if (!drag || event.pointerId !== drag.pointerId) return;
@@ -183,11 +212,11 @@ export function createSheet(deps: SheetDeps): SheetController {
       if (Math.abs(dy) < DRAG_SLOP_PX) return;
       if (drag.fromBody && dy < 0) {
         // The first move goes up: the list scrolls itself.
-        drag = null;
+        endDrag();
         return;
       }
       drag.committed = true;
-      capture(drag.target, event.pointerId);
+      capture(event.pointerId);
       root.dataset.dragging = 'true';
     }
     const t = now();
@@ -199,13 +228,15 @@ export function createSheet(deps: SheetDeps): SheetController {
   function onUp(event: PointerEvent): void {
     if (!drag || event.pointerId !== drag.pointerId) return;
     const d = drag;
-    drag = null;
+    endDrag();
     if (!d.committed) return;
-    release(d.target, event.pointerId);
+    release(event.pointerId);
     delete root.dataset.dragging;
     dragEndedAt = now();
-    const velocity = event.type === 'pointerup' && now() - d.lastT <= STALE_MOVE_MS ? d.velocity : 0;
-    set(nearest(heightAt(d, event.clientY), velocity));
+    // A cancel (the browser took the gesture for a scroll) carries no position worth reading: the finger's last known one stands, with no flick.
+    const cancelled = event.type !== 'pointerup';
+    const velocity = !cancelled && now() - d.lastT <= STALE_MOVE_MS ? d.velocity : 0;
+    set(nearest(heightAt(d, cancelled ? d.lastY : event.clientY), velocity));
   }
   /** The click a drag leaves behind lands on whatever is under the lifted finger; it was a drag, not a choice. */
   function onClick(event: Event): void {
@@ -214,9 +245,6 @@ export function createSheet(deps: SheetDeps): SheetController {
     event.preventDefault();
   }
   sheet.addEventListener('pointerdown', onDown);
-  sheet.addEventListener('pointermove', onMove);
-  sheet.addEventListener('pointerup', onUp);
-  sheet.addEventListener('pointercancel', onUp);
   sheet.addEventListener('click', onClick, true);
 
   if (deps.reducedMotion) root.dataset.sheetMotion = 'none';
@@ -238,11 +266,8 @@ export function createSheet(deps: SheetDeps): SheetController {
       window.removeEventListener('resize', onResize);
       body.removeEventListener('scroll', markTop);
       sheet.removeEventListener('pointerdown', onDown);
-      sheet.removeEventListener('pointermove', onMove);
-      sheet.removeEventListener('pointerup', onUp);
-      sheet.removeEventListener('pointercancel', onUp);
       sheet.removeEventListener('click', onClick, true);
-      drag = null;
+      endDrag();
       root.style.removeProperty('--sheet-h');
       root.style.removeProperty('--sheet-open-h');
       delete root.dataset.dragging;

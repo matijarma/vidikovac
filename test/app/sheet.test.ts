@@ -28,18 +28,18 @@ function mount(o: MountOptions = {}) {
   return { root, stage, sheet, head, body, controller, resize: (h: number) => { height = h; } };
 }
 
-const pointer = (el: Element, type: string, clientY: number): void => {
-  el.dispatchEvent(new PointerEvent(type, { clientY, clientX: 120, pointerId: 7, bubbles: true, cancelable: true }));
+const pointer = (el: Element, type: string, clientY: number, pointerId = 7): void => {
+  el.dispatchEvent(new PointerEvent(type, { clientY, clientX: 120, pointerId, bubbles: true, cancelable: true }));
 };
-/** A drag as a finger makes it: down, a few moves with the clock advancing, up. */
-function drag(el: Element, from: number, to: number, clock: { t: number }, stepMs: number, steps = 4): void {
-  pointer(el, 'pointerdown', from);
+/** A drag as a finger makes it: down, a few moves with the clock advancing, up. Every touch is a new pointer id; a mouse is always 1. */
+function drag(el: Element, from: number, to: number, clock: { t: number }, stepMs: number, steps = 4, pointerId = 7): void {
+  pointer(el, 'pointerdown', from, pointerId);
   for (let i = 1; i <= steps; i += 1) {
     clock.t += stepMs;
-    pointer(el, 'pointermove', from + ((to - from) * i) / steps);
+    pointer(el, 'pointermove', from + ((to - from) * i) / steps, pointerId);
   }
   clock.t += stepMs;
-  pointer(el, 'pointerup', to);
+  pointer(el, 'pointerup', to, pointerId);
 }
 const sheetH = (root: HTMLElement): number => Number.parseFloat(root.style.getPropertyValue('--sheet-h'));
 
@@ -183,13 +183,80 @@ describe('pointer drags', () => {
     expect(clicks).toHaveBeenCalledTimes(2);
   });
 
-  it('destroy() removes every listener and its custom properties', () => {
+  it('a mouse drag is followed from the window: the head sits at the sheet’s top edge, so the first move already lands over the map and a mouse has no implicit capture', () => {
+    const clock = { t: 0 };
+    const { root, head, controller } = mount({ now: () => clock.t });
+    pointer(head, 'pointerdown', 500, 1);
+    clock.t += 50;
+    pointer(document.body, 'pointermove', 400, 1); // never reaches the sheet
+    expect(root.dataset.dragging).toBe('true');
+    expect(sheetH(root)).toBe(470);
+    clock.t += 50;
+    pointer(document.body, 'pointermove', 300, 1);
+    expect(sheetH(root)).toBe(570);
+    clock.t += 50;
+    pointer(document.body, 'pointerup', 300, 1);
+    expect(root.dataset.dragging).toBeUndefined();
+    expect(controller.detent()).toBe('open');
+  });
+
+  it('a press that ends away from the sheet leaves nothing behind: the next drag, from a new pointer, still moves the sheet; a cancelled drag snaps from where the finger last was', () => {
+    const clock = { t: 0 };
+    const { root, head, controller } = mount({ now: () => clock.t });
+    pointer(head, 'pointerdown', 500, 7);
+    clock.t += 30;
+    pointer(document.body, 'pointerup', 502, 7);
+    expect(root.dataset.dragging).toBeUndefined();
+    drag(head, 500, 300, clock, 50, 4, 8);
+    expect(controller.detent()).toBe('open');
+    // The browser takes the gesture (a scroll): pointercancel arrives with no useful coordinates, from wherever the finger is.
+    pointer(head, 'pointerdown', 100, 9);
+    clock.t += 50;
+    pointer(head, 'pointermove', 450, 9);
+    expect(root.dataset.dragging).toBe('true');
+    expect(sheetH(root)).toBe(350);
+    pointer(document.body, 'pointercancel', 0, 9);
+    expect(root.dataset.dragging).toBeUndefined();
+    expect(controller.detent()).toBe('half'); // 350 is nearer half than open; the cancel's own 0 would have said open
+  });
+
+  it('a drag from a row the next poll replaces keeps going: once it commits, capture moves to the sheet itself, and the release is heard wherever the finger is', () => {
+    const clock = { t: 0 };
+    const { root, sheet, body, controller } = mount({ now: () => clock.t });
+    const row = document.createElement('button');
+    body.appendChild(row);
+    const captured = vi.fn();
+    const released = vi.fn();
+    sheet.setPointerCapture = captured;
+    sheet.releasePointerCapture = released;
+    pointer(row, 'pointerdown', 300, 9);
+    expect(captured).not.toHaveBeenCalled(); // a tap keeps its click on the row: capture waits for the drag to commit
+    clock.t += 50;
+    pointer(row, 'pointermove', 320, 9);
+    expect(captured).toHaveBeenCalledWith(9);
+    expect(sheetH(root)).toBe(350);
+    body.replaceChildren(); // the poll re-sets the body's content: the row under the finger is gone
+    expect(row.isConnected).toBe(false);
+    clock.t += 50;
+    pointer(document.body, 'pointermove', 420, 9);
+    expect(sheetH(root)).toBe(250);
+    clock.t += 50;
+    pointer(document.body, 'pointerup', 500, 9);
+    expect(released).toHaveBeenCalledWith(9);
+    expect(root.dataset.dragging).toBeUndefined();
+    expect(controller.detent()).toBe('peek');
+  });
+
+  it('destroy() removes every listener and its custom properties, a drag in flight included', () => {
     vi.stubGlobal('ResizeObserver', undefined);
     const clock = { t: 0 };
     const changes = vi.fn();
     const { root, head, body, controller, resize } = mount({ now: () => clock.t, onChange: changes });
+    pointer(head, 'pointerdown', 500, 12);
     controller.destroy();
     changes.mockClear();
+    pointer(document.body, 'pointermove', 300, 12);
+    pointer(document.body, 'pointerup', 300, 12);
     drag(head, 500, 200, clock, 20);
     resize(600);
     window.dispatchEvent(new Event('resize'));

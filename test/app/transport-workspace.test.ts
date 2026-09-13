@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
@@ -106,6 +106,9 @@ const q = <T extends Element>(selector: string): T => document.body.querySelecto
 const all = <T extends Element>(selector: string): T[] => [...document.body.querySelectorAll<T>(selector)];
 const visible = (selector: string): HTMLElement[] => all<HTMLElement>(selector).filter((el) => !el.hidden);
 const pressed = (selector: string): string | null => q(selector).getAttribute('aria-pressed');
+const spy = (fn: unknown): Mock => fn as Mock;
+/** Where a mock's latest call sits in the run's global call sequence (vitest's invocationCallOrder); -1 when it was never called. */
+const lastCall = (fn: unknown): number => spy(fn).mock.invocationCallOrder.at(-1) ?? -1;
 
 /** The workspace reads two media queries itself (the 60rem desk, the landscape phone); the portrait phone is the default here. */
 function fakeMedia(o: { wide?: boolean; landscape?: boolean } = {}): void {
@@ -408,13 +411,72 @@ describe('detents on the phone stage', () => {
     expect(ws.dataset.sheet).toBe('open');
   });
 
-  it('the landscape phone reports half with no drag controller', () => {
+  it('a selection made while the sheet is open brings it to half before the map moves, so the fit is padded for the detent the person will see: a row, "Prikaži na karti", a selection the page navigated to', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const ws = q<HTMLElement>('[data-testid=transport-workspace]');
+    // happy-dom lays nothing out: the stage is given the 740 px of a 390×844 phone, so half is 370 and open 700.
+    Object.defineProperty(q<HTMLElement>('.transport-body'), 'clientHeight', { get: () => 740, configurable: true });
+    const covered = (): number => Number.parseFloat(ws.style.getPropertyValue('--sheet-h'));
+    const half = 370;
+    const chevron = (): HTMLButtonElement => q<HTMLButtonElement>('.t-sheet-toggle');
+    const handle = last();
+    const reset = (): void => { for (const fn of [handle.select, handle.fit, handle.setFitPadding]) spy(fn).mockClear(); };
+    chevron().click();
+    expect(ws.dataset.sheet).toBe('open');
+    expect(covered()).toBe(700);
+    reset();
+    q<HTMLButtonElement>('#t-row-route-6').click();
+    expect(ws.dataset.sheet).toBe('half');
+    expect(covered()).toBe(half);
+    expect(handle.setFitPadding).toHaveBeenLastCalledWith({ bottom: half, right: 0 });
+    expect(handle.select).toHaveBeenLastCalledWith({ kind: 'route', id: '6' }, { fit: true });
+    expect(lastCall(handle.setFitPadding)).toBeLessThan(lastCall(handle.select));
+    // "Prikaži na karti" pressed with the sheet open: the sheet comes down, then the map fits.
+    chevron().click();
+    expect(ws.dataset.sheet).toBe('open');
+    reset();
+    q<HTMLButtonElement>('[data-action=fit-selection]').click();
+    expect(ws.dataset.sheet).toBe('half');
+    expect(handle.fit).toHaveBeenLastCalledWith('selection');
+    expect(handle.setFitPadding).toHaveBeenLastCalledWith({ bottom: half, right: 0 });
+    expect(lastCall(handle.setFitPadding)).toBeLessThan(lastCall(handle.fit));
+    // A selection the page navigated to (history, a paired screen) applied on a poll while the sheet is open.
+    chevron().click();
+    expect(ws.dataset.sheet).toBe('open');
+    reset();
+    context.view = { layer: 'u-pokretu', selection: { kind: 'route', id: '11' }, filters: {} };
+    render(context);
+    expect(ws.dataset.sheet).toBe('half');
+    expect(handle.select).toHaveBeenLastCalledWith({ kind: 'route', id: '11' }, { fit: true });
+    expect(handle.setFitPadding).toHaveBeenLastCalledWith({ bottom: half, right: 0 });
+    expect(lastCall(handle.setFitPadding)).toBeLessThan(lastCall(handle.select));
+    expect(text(q('[data-testid=route-title]'))).toContain('11');
+  });
+
+  it('the landscape phone reports half with no drag controller; the column’s covered width reaches the map at the stage’s first layout and on every poll, not only after a rotation', () => {
     fakeMedia({ landscape: true });
-    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
-    render(ctx({ maps }).context);
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
     expect(ws.dataset.sheet).toBe('half');
     expect(ws.style.getPropertyValue('--sheet-h')).toBe('');
+    // The first render happens before the element is in the document (layers/u-pokretu.ts): nothing to measure yet.
+    expect(last().options.fitPadding).toEqual({ bottom: 0, right: 0 });
+    // 844×390: the stage spans the width and the 45 % column starts at 464.
+    const rect = (left: number, right: number): DOMRect => ({ left, right, top: 0, bottom: 286, x: left, y: 0, width: right - left, height: 286, toJSON: () => ({}) });
+    q<HTMLElement>('.transport-body').getBoundingClientRect = () => rect(0, 844);
+    q<HTMLElement>('.transport-sheet').getBoundingClientRect = () => rect(464, 844);
+    expect(observers).toHaveLength(1); // the workspace watches its stage; there is no detent controller in landscape
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    expect(last().setFitPadding).toHaveBeenLastCalledWith({ bottom: 0, right: 380 });
+    spy(last().setFitPadding).mockClear();
+    render(context); // the poll: the live element is in the document, so its box is real
+    expect(last().setFitPadding).toHaveBeenLastCalledWith({ bottom: 0, right: 380 });
   });
 });
 
