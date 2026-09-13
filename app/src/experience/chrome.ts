@@ -23,6 +23,10 @@ export const LAYER_ICONS: Record<LayerId, IconName> = {
   vijesti: 'newspaper',
 };
 
+/** The one in-flow notice: joined (4 s), the 60 s and 20 s marks, a share refusal (8 s). */
+export type NoticeKind = 'joined' | 'expiring60' | 'expiring20' | 'refusal';
+export interface ShellNotice { kind: NoticeKind; text: string; until: number | null }
+
 export interface ShellState {
   layer: LayerId;
   directory: boolean;
@@ -42,6 +46,10 @@ export interface ShellState {
   error: string | null;
   lastRefresh: number | null;
   mapFull: boolean;
+  /** Shown in the banners row; the hidden live regions do the announcing, so it carries no role. */
+  notice: ShellNotice | null;
+  /** Active modules whose last fetch failed or whose snapshot is down, said once in a quiet banner. */
+  sourcesDown: number;
 }
 
 export function remainingText(seconds: number): string {
@@ -72,7 +80,9 @@ export function topBarMarkup(i18n: I18n, s: ShellState): string {
 function navItem(i18n: I18n, s: ShellState, layer: LayerId, className: string): string {
   const current = s.layer === layer && !s.directory;
   const openSafety = s.frozen && layer === 'sigurnost';
-  return `<li><a class="${className}" href="${openSafety ? '/hitno' : `#layer=${layer}`}"${openSafety ? '' : ' data-action="nav"'} data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${s.frozen && !openSafety ? ' aria-disabled="true"' : ''}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
+  // Frozen: the links stay visible for orientation but leave the Tab order.
+  const disabled = s.frozen && !openSafety ? ' aria-disabled="true" tabindex="-1"' : '';
+  return `<li><a class="${className}" href="${openSafety ? '/hitno' : `#layer=${layer}`}"${openSafety ? '' : ' data-action="nav"'} data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${disabled}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
 }
 
 /** The phone tab bar: Sada, Promet, Događanja and Još, which names the open extra domain. */
@@ -80,7 +90,7 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
   const inMore = MORE_LAYERS.includes(s.layer);
   const moreCurrent = s.directory || inMore;
   const moreLabel = inMore && !s.directory ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
-  return `<ul class="ki-tabs" role="list">${PHONE_TABS.map((layer) => navItem(i18n, s, layer, 'ki-tab')).join('')}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${s.frozen ? ' aria-disabled="true"' : ''}>${iconMarkup(inMore && !s.directory ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
+  return `<ul class="ki-tabs" role="list">${PHONE_TABS.map((layer) => navItem(i18n, s, layer, 'ki-tab')).join('')}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${s.frozen ? ' aria-disabled="true" tabindex="-1"' : ''}>${iconMarkup(inMore && !s.directory ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
 }
 /**
  * The one session element, placed by the shell grid: a compact chip in the
@@ -100,7 +110,14 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
   const timeText = s.frozen ? i18n.t('session.frozenBadge') : s.countdownHidden ? i18n.t('shell.session') : s.phase === 'live' ? time : '';
   const state = s.frozen ? 'frozen' : s.reconnecting ? 'reconnecting' : s.phase;
   const expires = s.expiresAt !== null ? ` data-expires-at="${s.expiresAt}"` : '';
-  return `<button type="button" class="ki-session" data-action="session" data-testid="session-label" data-state="${state}"${expires} title="${escapeAttribute(i18n.t('session.sheetTitle'))}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
+  // Amber at the last minute, rose at the last twenty seconds: the CSS recolours the pill and its ring.
+  const urgency = s.frozen || s.phase !== 'live' ? 'none' : s.secondsLeft <= 20 ? 'alert' : s.secondsLeft <= 60 ? 'warn' : 'none';
+  const label = s.frozen
+    ? i18n.t('session.expiredTitle')
+    : s.expiresAt !== null && s.phase === 'live'
+      ? i18n.t('session.pillLabel', { time: zagrebTime(s.expiresAt) })
+      : i18n.t('session.connecting');
+  return `<button type="button" class="ki-session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(i18n.t('session.sheetTitle'))}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
 }
 
 /** The desktop sidebar: seven labelled domains and the footer note. */
@@ -109,9 +126,12 @@ export function sidebarMarkup(i18n: I18n, s: ShellState): string {
   return `<ul class="ki-side-list" role="list">${items}</ul><p class="ki-side-foot meta">${escapeHtml(i18n.t('shell.footerNote'))}</p>`;
 }
 
-/** The wordmark region, shown on both surfaces. */
+/** The wordmark region, shown on both surfaces. The one brand gesture: the question mark in peacock. */
 export function wordmarkMarkup(i18n: I18n): string {
-  return `<a class="ki-wordmark" href="/" aria-label="${escapeAttribute(i18n.t('shell.wordmarkLabel'))}"><span class="ki-wordmark-text">${escapeHtml(i18n.t('common.appName'))}</span></a>`;
+  const name = i18n.t('common.appName');
+  const mark = name.endsWith('?');
+  const stem = mark ? name.slice(0, -1) : name;
+  return `<a class="ki-wordmark" href="/" aria-label="${escapeAttribute(i18n.t('shell.wordmarkLabel'))}"><span class="ki-wordmark-text">${escapeHtml(stem)}${mark ? '<span class="ki-wordmark-mark">?</span>' : ''}</span></a>`;
 }
 
 /** One-tap safety, phone only (the sidebar lists Sigurnost as a domain). */
@@ -120,7 +140,11 @@ export function safetyMarkup(i18n: I18n, s: ShellState): string {
   return `<a class="ki-safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.safety'))}</span></a>`;
 }
 
-/** Session-state banners: expired (with the way to a new session), reconnecting, no ticket, paused. */
+/**
+ * Session-state banners, all in flow: expired (with the way to a new session),
+ * no ticket, access, reconnecting, then the one notice, the silent-sources
+ * count and paused. Nothing here overlays the workspace.
+ */
 export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): string {
   const out: string[] = [];
   if (s.frozen) {
@@ -131,6 +155,12 @@ export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): strin
     out.push(`<div class="banner banner-warn" role="alert" data-key="access" data-testid="access-banner"><p class="banner-text">${escapeHtml(i18n.t('session.accessDenied'))}</p><a class="btn" href="/">${escapeHtml(i18n.t('common.links.home'))}</a></div>`);
   } else if (s.reconnecting) {
     out.push(`<div class="banner banner-warn" role="status" data-key="reconnecting" data-testid="reconnecting">${iconMarkup('refresh-cw')}<p class="banner-text">${escapeHtml(i18n.t('session.disconnected'))}</p></div>`);
+  }
+  if (s.notice && !s.frozen) {
+    out.push(`<div class="banner banner-notice" data-key="notice" data-kind="${s.notice.kind}" data-testid="notice"><p class="banner-text">${escapeHtml(s.notice.text)}</p><button type="button" class="btn-quiet icon-btn banner-dismiss" data-action="dismiss-notice" aria-label="${escapeAttribute(i18n.t('common.dismiss'))}">${iconMarkup('x')}</button></div>`);
+  }
+  if (s.sourcesDown > 0 && !s.frozen) {
+    out.push(`<div class="banner banner-quiet" role="status" data-key="sources" data-testid="sources-down"><p class="banner-text">${escapeHtml(i18n.t('shell.sourcesDown', { count: s.sourcesDown }))}</p></div>`);
   }
   if (s.paused && !s.frozen) {
     const time = s.lastRefresh !== null ? zagrebTime(s.lastRefresh) : '';

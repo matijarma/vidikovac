@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
 import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
@@ -18,7 +19,7 @@ vi.mock('../../app/src/core/screens', () => ({ loadStops: vi.fn(async () => []) 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const EXPIRES = NOW + 10 * 60_000; // 14:42
 
-function fakeSession() {
+function fakeSession(now: () => number = () => NOW) {
   const listeners = {
     joined: [] as ((s: SessionSnapshot) => void)[], expiring: [] as ((n: number) => void)[], expired: [] as (() => void)[],
     count: [] as ((n: number) => void)[], codes: [] as ((batch: unknown[], serverNow: number) => void)[],
@@ -30,7 +31,7 @@ function fakeSession() {
   const events: { name: string; dim?: string }[] = [];
   const client: SessionClient = {
     connect: vi.fn(), snapshot: () => snapshot, serverNow: () => NOW,
-    secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? NOW) - NOW) / 1000))),
+    secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? now()) - now()) / 1000))),
     onJoined: (l) => { listeners.joined.push(l); return () => {}; },
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
     onExpired: (l) => { listeners.expired.push(l); return () => {}; },
@@ -75,17 +76,20 @@ interface MountOptions {
   mapFactory?: unknown;
   lightweight?: boolean;
   loadNetwork?: () => Promise<null>;
+  /** A movable clock shared by the dashboard and the fake session's remaining time. */
+  now?: () => number;
   deps?: Partial<DashboardDeps>;
 }
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const session = fakeSession();
+  const now = opts.now ?? (() => NOW);
+  const session = fakeSession(now);
   const ticks: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => (opts.snapshot ?? snapshotOf)(module));
   const handle = mountDashboard(root, {
-    i18n: createDefaultI18n('hr'), session: session.client, now: () => NOW, fetchData: fetchData as never,
+    i18n: createDefaultI18n('hr'), session: session.client, now, fetchData: fetchData as never,
     label: 'Kavana Velebit', mapFactory: opts.mapFactory as never, lightweight: opts.lightweight ?? false,
     loadNetwork: opts.loadNetwork ?? (async () => null), matchMedia: () => ({ matches: Boolean(opts.wide) }),
     setInterval: (fn: () => void, ms: number) => { const t = { fn, ms, cleared: false }; ticks.push(t); return t; },
@@ -540,5 +544,177 @@ describe('the full map view (transport)', () => {
     handle.selectLayer('vijesti');
     expect(root.querySelector('[data-testid=map-canvas]')).toBeNull();
     handle.destroy();
+  });
+});
+
+describe('the sticky header and notices in flow', () => {
+  const clock = () => { let at = NOW; return { now: () => at, set(ms: number) { at = ms; } }; };
+  const notice = (root: Root, kind?: string): HTMLElement | null =>
+    root.querySelector<HTMLElement>(kind ? `[data-testid=notice][data-kind=${kind}]` : '[data-testid=notice]');
+  const noticeText = (root: Root, kind: string): string => text(notice(root, kind)?.querySelector('.banner-text'));
+
+  it('groups the wordmark, the session pill and the safety control in one header, and keeps the assertive region visually hidden', () => {
+    const { root } = mount();
+    const head = root.querySelector<HTMLElement>('header.ki-head');
+    expect(head).not.toBeNull();
+    expect(head!.querySelector('.ki-wordmark')).not.toBeNull();
+    expect(head!.querySelector('[data-testid=session-label]')).not.toBeNull();
+    expect(head!.querySelector('[data-testid=safety-shortcut]')).not.toBeNull();
+    expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
+    expect(text(root.querySelector('.ki-wordmark .ki-wordmark-mark'))).toBe('?');
+    const alert = root.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
+    expect(alert.classList.contains('visually-hidden')).toBe(true);
+    expect(alert.classList.contains('ki-alert')).toBe(true);
+    expect(alert.getAttribute('aria-live')).toBe('assertive');
+    expect(head!.contains(alert)).toBe(false);
+  });
+  it('reports the poll on the shell: data-loading is true while a fetch is pending and false once it lands', async () => {
+    const pending = mount({ deps: { fetchData: () => new Promise<never>(() => {}) } });
+    pending.session.join();
+    await flush();
+    expect(pending.handle.element.dataset.loading).toBe('true');
+    pending.handle.destroy();
+    const landed = mount();
+    landed.session.join();
+    await flush();
+    expect(landed.handle.element.dataset.loading).toBe('false');
+  });
+  it('confirms the unlock as a success notice with the screen label for four seconds, without a live role', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    expect(noticeText(root, 'joined')).toBe('Otključano do 14:42 · Kavana Velebit');
+    expect(notice(root)!.hasAttribute('role')).toBe(false);
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
+    time.set(NOW + 3_999);
+    tick();
+    expect(notice(root, 'joined')).not.toBeNull();
+    time.set(NOW + 4_000);
+    tick();
+    expect(notice(root)).toBeNull();
+    const peer = mount({ deps: { label: null } });
+    peer.session.join('phone');
+    expect(noticeText(peer.root, 'joined')).toBe('Otključano do 14:42');
+  });
+  it('shows the 60 s and 20 s warnings in flow with the approved sentences, then clears the notice and the alert on the freeze', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    time.set(EXPIRES - 60_000);
+    tick();
+    expect(noticeText(root, 'expiring60')).toBe(hr.session.expiring60);
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe(hr.session.expiring60);
+    time.set(EXPIRES - 20_000);
+    tick();
+    expect(root.querySelectorAll('[data-testid=notice]')).toHaveLength(1);
+    expect(noticeText(root, 'expiring20')).toBe(hr.session.expiring20);
+    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe(hr.session.expiring20);
+    time.set(EXPIRES);
+    tick();
+    expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(notice(root)).toBeNull();
+    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('');
+  });
+  it('a share refusal stays in the assertive region and shows as an in-flow notice for eight seconds', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    session.error('share-not-allowed');
+    expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe(hr.session.shareUnavailable);
+    expect(noticeText(root, 'refusal')).toBe(hr.session.shareUnavailable);
+    time.set(NOW + 7_999);
+    tick();
+    expect(notice(root, 'refusal')).not.toBeNull();
+    time.set(NOW + 8_000);
+    tick();
+    expect(notice(root)).toBeNull();
+  });
+  it('the 44 px dismiss control removes the notice at once', () => {
+    const { root, session } = mount();
+    session.join();
+    expect(notice(root, 'joined')).not.toBeNull();
+    const dismiss = click(root, '[data-testid=notice] [data-action=dismiss-notice]');
+    expect(dismiss.getAttribute('aria-label')).toBe(hr.common.dismiss);
+    expect(dismiss.classList.contains('icon-btn')).toBe(true);
+    expect(notice(root)).toBeNull();
+  });
+  it('after the freeze the disabled tabs and Još leave the Tab order while the safety link stays reachable', () => {
+    const { root, session } = mount();
+    session.join();
+    session.expire();
+    const tabs = [...root.querySelectorAll<HTMLElement>('.ki-tab[aria-disabled="true"]')];
+    expect(tabs).toHaveLength(4);
+    for (const tab of tabs) expect(tab.getAttribute('tabindex')).toBe('-1');
+    const links = [...root.querySelectorAll<HTMLElement>('.ki-side-link[aria-disabled="true"]')];
+    expect(links).toHaveLength(6);
+    for (const link of links) expect(link.getAttribute('tabindex')).toBe('-1');
+    expect(root.querySelector('.ki-side-link[data-layer=sigurnost]')?.getAttribute('tabindex')).toBeNull();
+    expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('tabindex')).toBeNull();
+  });
+  it('the session pill names the expiry and the action for readers, and turns warn at 60 s and alert at 20 s', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    const pill = (): HTMLElement => root.querySelector<HTMLElement>('[data-testid=session-label]')!;
+    expect(pill().dataset.urgency).toBe('none');
+    expect(pill().getAttribute('aria-label')).toBe(hr.session.connecting);
+    session.join();
+    expect(pill().dataset.urgency).toBe('none');
+    expect(pill().getAttribute('aria-label')).toContain('Otključano do 14:42');
+    expect(text(pill())).toContain('Otključano · Kavana Velebit · do 14:42');
+    time.set(EXPIRES - 45_000);
+    tick();
+    expect(pill().dataset.urgency).toBe('warn');
+    time.set(EXPIRES - 15_000);
+    tick();
+    expect(pill().dataset.urgency).toBe('alert');
+    session.expire();
+    expect(pill().dataset.urgency).toBe('none');
+    expect(pill().getAttribute('aria-label')).toBe(hr.session.expiredTitle);
+  });
+  it('counts the silent sources once in a quiet status banner, with Croatian plurals', async () => {
+    const failing = (...down: ModuleId[]) => (module: ModuleId): ModuleSnapshot => {
+      if (down.includes(module)) throw new Error('down');
+      return snapshotOf(module);
+    };
+    const one = mount({ snapshot: failing('hrt-news') });
+    one.session.join();
+    await flush();
+    const banner = one.root.querySelector<HTMLElement>('[data-testid=sources-down]');
+    expect(text(banner)).toBe('1 izvor ne odgovara.');
+    expect(banner?.getAttribute('role')).toBe('status');
+    one.handle.destroy();
+    const two = mount({ snapshot: failing('hrt-news', 'emsc') });
+    two.session.join();
+    await flush();
+    expect(text(two.root.querySelector('[data-testid=sources-down]'))).toBe('2 izvora ne odgovaraju.');
+    two.handle.destroy();
+    const none = mount();
+    none.session.join();
+    await flush();
+    expect(none.root.querySelector('[data-testid=sources-down]')).toBeNull();
+  });
+  it('a layer change or a closed directory on the phone scrolls the document to the top; the desktop keeps its scroll', () => {
+    const win = globalThis as { scrollTo?: (options: ScrollToOptions) => void };
+    const original = win.scrollTo;
+    const scrollTo = vi.fn();
+    win.scrollTo = scrollTo;
+    try {
+      const phone = mount();
+      click(phone.root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+      expect(document.activeElement?.id).toBe('layer-title-kultura');
+      scrollTo.mockClear();
+      click(phone.root, '[data-testid=tab-more]');
+      click(phone.root, '[data-testid=dir-zrak-i-nebo]');
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+      phone.handle.destroy();
+      scrollTo.mockClear();
+      const desk = mount({ wide: true });
+      click(desk.root, '.ki-side-link[data-layer=kultura]');
+      expect(scrollTo).not.toHaveBeenCalled();
+      desk.handle.destroy();
+    } finally {
+      win.scrollTo = original;
+    }
   });
 });

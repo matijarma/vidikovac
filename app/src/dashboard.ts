@@ -10,7 +10,7 @@ import { zagrebTime } from './format';
 import { parseSelection, publicItemKey, selectionParams, type PublicSelection, type ScreenContext } from './core/contracts';
 import { createFeedStore } from './core/feed-store';
 import { createViewStore } from './core/view-store';
-import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, tabbarMarkup, wordmarkMarkup, type ShellState } from './experience/chrome';
+import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
 import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { storeLocale } from './i18n/create-default-i18n';
@@ -155,15 +155,20 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let disposed = false;
   let shareDenied = false;
   let joinedOnce = false;
+  /** The one in-flow notice; the hidden live regions announce, this one shows. */
+  let notice: ShellNotice | null = null;
 
   // --- stable shell --------------------------------------------------------
+  // The two live regions are visually hidden, never display: none, so readers hear them.
   const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting">
 <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
-<p class="ki-alert" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
-<div class="ki-top" data-region="top"></div>
-<div class="ki-session-slot" data-region="session"></div>
-<div class="ki-safety-slot" data-region="safety"></div>
+<p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
+<header class="ki-head" data-region-group="head">
+  <div class="ki-top" data-region="top"></div>
+  <div class="ki-session-slot" data-region="session"></div>
+  <div class="ki-safety-slot" data-region="safety"></div>
+</header>
 <nav class="ki-side" data-region="side" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
@@ -177,13 +182,20 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const main = element.querySelector<HTMLElement>('main')!;
   const regions = { top: region('top'), session: region('session'), safety: region('safety'), side: region('side'), banners: region('banners'), tabs: region('tabs') };
 
+  /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
+  function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
+    return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down').length;
+  }
+
   function shellState(): ShellState {
     const s = session.snapshot();
+    const feed = store.snapshot();
     return {
       layer: view.snapshot().layer, directory, phase: s.phase, frozen, reconnecting,
       secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownHidden, paused,
-      loading: store.snapshot().loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
+      loading: feed.loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
+      notice, sourcesDown: sourcesDown(feed),
     };
   }
 
@@ -192,10 +204,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   function paintShell(): void {
+    // The two expiry marks are decided before the paint so the same paint carries their notice.
+    const live = session.snapshot();
+    if (!frozen && live.expiresAt !== null && live.phase === 'live') {
+      const left = session.secondsLeft();
+      if (left <= 60) announce(60);
+      if (left <= 20) announce(20);
+    }
     const s = shellState();
     element.dataset.surface = surface();
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
     element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
+    element.dataset.loading = String(s.loading);
     paintRegion(regions.top, wordmarkMarkup(i18n));
     paintRegion(regions.session, sessionMarkup(i18n, s));
     paintRegion(regions.safety, safetyMarkup(i18n, s));
@@ -204,11 +224,13 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     paintRegion(regions.tabs, tabbarMarkup(i18n, s));
     regions.side.setAttribute('aria-label', i18n.t('nav.label'));
     regions.tabs.setAttribute('aria-label', i18n.t('nav.label'));
-    if (!frozen && s.expiresAt !== null && s.phase === 'live') {
-      if (s.secondsLeft <= 60) announce(60);
-      if (s.secondsLeft <= 20) announce(20);
-    }
     sheet.refresh();
+  }
+
+  /** Shows one notice in flow for `ms` (null: until replaced or the freeze) and paints. */
+  function setNotice(kind: NoticeKind, text: string, ms: number | null): void {
+    notice = { kind, text, until: ms === null ? null : now() + ms };
+    paintShell();
   }
 
   function updateTitle(): void {
@@ -284,6 +306,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     doc.getElementById(`layer-title-${id}`)?.focus();
   }
 
+  /** A new place on the phone starts at the top, under the sticky header; the desktop keeps its scroll. */
+  function scrollToTop(): void {
+    if (surface() === 'phone' && typeof globalThis.scrollTo === 'function') globalThis.scrollTo({ top: 0 });
+  }
+
   function activeModules(): readonly ModuleId[] {
     return directory ? DIRECTORY_MODULES : LAYER_MODULES[view.snapshot().layer];
   }
@@ -303,11 +330,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     session.sendView(layer, selectionParams(selection));
     if (layer !== previous || wasDirectory) {
       session.event('panel_open', layer);
+      scrollToTop();
       focusWorkspace(layer);
       continuePoll(refresh(), rearmPoll, 'dashboard layer refresh');
     } else if (selection) {
       doc.getElementById('ws-detail-title')?.focus();
-      if (surface() === 'phone' && typeof globalThis.scrollTo === 'function') globalThis.scrollTo({ top: 0 });
+      scrollToTop();
     } else {
       focusWorkspace(layer);
     }
@@ -412,17 +440,26 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     armPoll();
   }
 
-  /** 60 s politely, 20 s assertively: the room's own two marks, promised by the accessibility statement. */
+  /**
+   * 60 s politely, 20 s assertively: the room's own two marks, promised by the
+   * accessibility statement. Each also becomes the in-flow notice (the 60 s one
+   * until the 20 s mark, the 20 s one until the freeze). Runs inside paintShell,
+   * so it only sets state; the caller's paint shows it.
+   */
   function announce(secondsLeft: number): void {
     if (secondsLeft <= 20) {
       if (warned20) return;
       warned20 = true;
-      assertive.textContent = i18n.t('session.expiring20');
+      const text = i18n.t('session.expiring20');
+      assertive.textContent = text;
+      notice = { kind: 'expiring20', text, until: null };
       return;
     }
     if (warned60) return;
     warned60 = true;
-    polite.textContent = i18n.t('session.expiring60');
+    const text = i18n.t('session.expiring60');
+    polite.textContent = text;
+    notice = { kind: 'expiring60', text, until: null };
   }
 
   // --- share the city: one hop, the room mints, this only rotates ----------
@@ -480,6 +517,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     store.pause(true);
     if (timer !== null) { clearTimer(timer); timer = null; }
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+    // The closing card (role=alert) takes over from the notice and the assertive region.
+    notice = null;
+    assertive.textContent = '';
     paintShell();
   }
   // --- session -------------------------------------------------------------
@@ -487,13 +527,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     reconnecting = false;
     error = null;
     totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
-    polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
-    paintShell();
+    const time = zagrebTime(snapshot.expiresAt ?? now());
+    polite.textContent = i18n.t('session.unlockedAnnounce', { time });
+    setNotice('joined', deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time }), 4_000);
     render();
     if (!joinedOnce) { joinedOnce = true; titleEl.focus(); }
     continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
   });
-  session.onExpiring((secondsLeft) => announce(secondsLeft));
+  session.onExpiring((secondsLeft) => { announce(secondsLeft); paintShell(); });
   session.onCount(() => paintShell());
   session.onExpired(freeze);
   session.onClose(() => {
@@ -503,8 +544,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   session.onError((code) => {
     if (code === 'share-not-allowed' || code === 'share-unavailable') {
       if (code === 'share-not-allowed') shareDenied = true;
-      assertive.textContent = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
-      paintShell();
+      const text = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
+      assertive.textContent = text;
+      setNotice('refusal', text, 8_000);
       return;
     }
     if (code === 'no-ticket') {
@@ -552,6 +594,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       case 'session': sheet.open(); return;
       case 'share-city': session.share(); return;
       case 'resume': setPaused(false); return;
+      case 'dismiss-notice': notice = null; paintShell(); return;
       case 'map-full': setMapView(!mapFull); return;
       default: return;
     }
@@ -611,6 +654,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   armPoll();
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
+    if (notice && notice.until !== null && now() >= notice.until) notice = null;
     paintShell();
   }, TICK_MS);
 

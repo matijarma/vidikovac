@@ -1,55 +1,78 @@
 /* Kaj ima? - the /d/ shell. One DOM for both surfaces; the grid places the
-   same regions differently. Phone: 56 px top bar (wordmark, session chip,
-   safety), workspace, fixed tab bar. Desktop (>= 60rem): sidebar with seven
-   domains, the session card under it, one active workspace beside it. */
+   same regions differently. Phone: a sticky 48 px header (wordmark, session
+   pill, safety control), banners in flow, the workspace, a fixed tab bar.
+   Desktop (>= 60rem): sidebar with seven domains, the session card under it,
+   one active workspace beside it. */
 .ki {
-  --ki-top: 3.5rem;
-  --ki-tabs: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  --ki-top: calc(3rem + env(safe-area-inset-top, 0px));
+  --ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   /* The sidebar keeps its width at every viewport at 100%; only when text is
      zoomed (rem grows, vw does not) does it yield room to the workspace. */
   --ki-side: clamp(14rem, 30vw, 17rem);
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  grid-template-rows: var(--ki-top) 1fr;
-  grid-template-areas: 'top session safety' 'main main main';
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas: 'top' 'banners' 'main';
   min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100svh;
   background: var(--tone-surface-canvas);
 }
-.ki-top { grid-area: top; display: flex; align-items: center; padding-inline-start: var(--sp-4); min-inline-size: 0; }
-.ki-session-slot { grid-area: session; display: flex; align-items: center; justify-content: flex-end; min-inline-size: 0; }
-.ki-safety-slot { grid-area: safety; display: flex; align-items: center; padding-inline-end: var(--sp-2); }
+/* The header never scrolls away: three regions on one 44 px line, 3rem tall plus the notch. */
+.ki-head {
+  grid-area: top;
+  position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: var(--sp-2);
+  min-block-size: var(--ki-top);
+  padding-block-start: env(safe-area-inset-top, 0px);
+  padding-inline: max(var(--sp-4), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
+  background: var(--tone-surface-1);
+  border-block-end: 1px solid var(--tone-stroke);
+}
+.ki-head > * { grid-area: auto; min-inline-size: 0; display: flex; align-items: center; }
+/* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
+.ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
+.ki[data-loading='true'] .ki-head::after { opacity: 1; }
 .ki-side { display: none; }
-.ki-banners { grid-area: main; align-self: start; z-index: 1; display: grid; gap: var(--sp-2); padding: 0 var(--sp-4); }
+/* Banners sit in flow between the header and the workspace; nothing overlays content. */
+.ki-banners { grid-area: banners; display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) 0; }
 .ki-banners:empty { display: none; }
-.ki-main { grid-area: main; min-inline-size: 0; padding: var(--sp-3) var(--sp-4) calc(var(--ki-tabs) + var(--sp-6)); }
-.ki-banners:not(:empty) + .ki-main { padding-block-start: 0; }
-.ki-banners:not(:empty) { position: relative; margin-block-end: var(--sp-3); }
+.ki-main { grid-area: main; min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) max(var(--sp-4), env(safe-area-inset-right, 0px)) calc(var(--ki-tabs) + var(--sp-6)) max(var(--sp-4), env(safe-area-inset-left, 0px)); }
 .ki-main:focus-visible { outline: none; }
-.ki-alert:empty { display: none; }
-.ki-alert { grid-area: main; align-self: start; margin: var(--sp-2) var(--sp-4) 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--tone-tint-urgency); color: var(--tone-text-primary); font-size: var(--text-sm); z-index: 2; }
+/* The Promet stage (the transport layer writes data-stage): the shell is the viewport, main is the stage. */
+.ki[data-stage='map'] { block-size: 100vh; block-size: 100dvh; overflow: hidden; }
+.ki[data-stage='map'] .ki-main { padding: 0; overflow: hidden; }
+/* .ki-alert is the assertive live region: .visually-hidden hides it while readers
+   still hear it. It is never display: none, which would silence it. */
 
-/* Wordmark: compact, sentence case, no display question mark. */
+/* Wordmark: compact, sentence case; the one brand gesture is the question mark in peacock. */
 .ki-wordmark { display: inline-flex; align-items: center; min-height: var(--target); color: var(--tone-text-primary); text-decoration: none; }
-.ki-wordmark-text { font-weight: var(--weight-bold); font-size: var(--text-lg); letter-spacing: -0.02em; }
+.ki-wordmark-text { font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
+.ki-wordmark-mark { color: var(--tone-action-brand); }
 
-/* Session chip: ring, remaining time; the sentence is for readers and the desktop card. */
-.ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: var(--target); padding: 0 var(--sp-2) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--tone-text-primary); font: inherit; cursor: pointer; }
-.ki-session:hover { background: var(--tone-surface-2); }
-.ki-session .g-ring { inline-size: 1.75rem; block-size: 1.75rem; flex: none; }
+/* Session pill: ring and remaining time on a surface-2 pill; the sentence is
+   for readers and the desktop card. Amber for the last minute, rose for the
+   last twenty seconds: the ring strokes with --tone-action-brand, so one
+   override recolours the ring and the tint together. */
+.ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); padding: 0 var(--sp-3) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; cursor: pointer; }
+.ki-session .g-ring { inline-size: 1.5rem; block-size: 1.5rem; flex: none; }
 .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .ki-session-sentence { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; }
 .ki-session-more { display: none; }
+.ki-session[data-urgency='warn'] { background: var(--tone-tint-weather); --tone-action-brand: var(--tone-weather); }
+.ki-session[data-urgency='alert'] { background: var(--tone-tint-urgency); --tone-action-brand: var(--tone-urgency); }
 .ki-session[data-state='frozen'] .g-ring, .ki-session[data-state='reconnecting'] .g-ring { opacity: 0.5; }
 .ki-session[data-state='frozen'] .ki-session-time { color: var(--tone-text-muted); font-weight: var(--weight-medium); }
 .ki[data-countdown='hidden'] .ki-session-time { font-weight: var(--weight-medium); }
 
-/* One-tap safety on the phone. */
-.ki-safety { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-inline-size: var(--target); min-height: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-urgency); text-decoration: none; }
-.ki-safety .ki-nav-label { display: none; }
-.ki-safety:hover { background: var(--tone-tint-urgency); }
+/* One-tap safety on the phone: shield and the word, rose on the urgency tint.
+   Under 360 px the word hides and the aria-label carries it. */
+.ki-safety { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); font-size: var(--text-sm); font-weight: var(--weight-bold); text-decoration: none; }
+.ki-safety .ki-nav-label { display: inline; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
+@media (max-width: 22.4375rem) {
+  .ki-safety { min-inline-size: var(--target); padding: 0; }
+  .ki-safety .ki-nav-label { display: none; }
+}
 
 /* Phone tab bar: four labelled targets, 44 px and up, safe-area aware. */
 .ki-tabbar { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); border-block-start: 1px solid var(--tone-stroke); padding-block-end: env(safe-area-inset-bottom, 0px); }
@@ -68,16 +91,29 @@
 .banner-warn { background: var(--tone-tint-weather); }
 .banner-quiet { background: var(--tone-surface-2); }
 .banner .icon { color: var(--tone-text-muted); }
+/* The one notice: success for the unlock, amber for the last minute and a refusal,
+   rose for the last twenty seconds. The dismiss stays beside the text at every width. */
+.banner-notice { flex-wrap: nowrap; }
+.banner-notice .banner-text { flex: 1 1 auto; min-inline-size: 0; }
+.banner-notice[data-kind='joined'] { background: var(--tone-tint-success); }
+.banner-notice[data-kind='expiring60'], .banner-notice[data-kind='refusal'] { background: var(--tone-tint-weather); }
+.banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
+.banner-dismiss { margin-inline-start: auto; }
 
-/* Desktop: sidebar with seven labelled domains, the session card at its foot. */
+/* Desktop: sidebar with seven labelled domains, the session card at its foot.
+   The header dissolves into the grid: wordmark above the rail, banners beside it. */
 @media (min-width: 60rem) {
   .ki {
     grid-template-columns: var(--ki-side) minmax(0, 1fr);
     grid-template-rows: auto 1fr auto;
-    grid-template-areas: 'top main' 'side main' 'session main';
+    grid-template-areas: 'top banners' 'side main' 'session main';
     column-gap: 0;
   }
-  .ki-top { padding: var(--sp-4) var(--sp-5) var(--sp-2); align-items: flex-start; }
+  .ki-head { display: contents; }
+  .ki-head::after { content: none; }
+  .ki-top { grid-area: top; position: relative; padding: var(--sp-4) var(--sp-5) var(--sp-2); align-items: flex-start; }
+  .ki-top::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
+  .ki[data-loading='true'] .ki-top::after { opacity: 1; }
   .ki-wordmark-text { font-size: var(--text-xl); }
   .ki-safety-slot, .ki-tabbar { display: none; }
   .ki-side { display: block; grid-area: side; padding: var(--sp-2) var(--sp-3); }
@@ -96,9 +132,8 @@
   .ki-session-sentence { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
   .ki-session-time { font-size: var(--text-xl); }
   .ki-session-more { display: block; margin-inline-start: auto; color: var(--tone-text-subtle); }
-  .ki-main { grid-area: main; padding: var(--sp-5) var(--sp-8) var(--sp-10); }
+  .ki-main { padding: var(--sp-5) var(--sp-8) var(--sp-10); }
   .ki-banners { padding-inline: var(--sp-8); padding-block-start: var(--sp-4); }
-  .ki-alert { margin-inline: var(--sp-8); }
 }
 @media (min-width: 90rem) {
   .ki { --ki-side: clamp(14rem, 30vw, 19rem); }

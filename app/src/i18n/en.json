@@ -70,6 +70,8 @@
     "paused": "Refreshing is paused; the view holds the data as of {time}.",
     "pausedShort": "paused",
     "staleNotice": "Some sources are not responding; the last data is shown.",
+    "sourcesDown_one": "{count} source is not responding.",
+    "sourcesDown_other": "{count} sources are not responding.",
     "settings": "Settings",
     "language": "Language",
     "theme": "Theme",
@@ -341,6 +343,8 @@
   "session": {
     "unlocked": "Unlocked · {label} · until {time}",
     "unlockedAnnounce": "Unlocked until {time}",
+    "pillLabel": "Unlocked until {time}, open settings",
+    "joinedNotice": "Unlocked until {time} · {label}",
     "labelScreen": "screen",
     "labelPhone": "phone",
     "remaining": "Remaining",
