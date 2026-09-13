@@ -44,8 +44,8 @@ Application documents and README reflect Kaj ima?, actual capabilities and revis
 - [x] Baseline inspected and approved brief recorded.
 - [x] Shared contracts and isolated worktrees.
 - [x] Security, screen creation, source truth.
-- [ ] Fable visual foundation, map, domains and kiosk.
-- [ ] Cross-review and browser refinement.
+- [x] Fable visual foundation, map, domains and kiosk integrated.
+- [x] Cross-review and browser refinement.
 - [ ] Tests, application materials and protected deployment.
 
 ## Implementation evidence
@@ -74,22 +74,29 @@ coverage, no-JS safety design and application-copy updates. Latest full baseline
 before the final source-recovery tests: 119 files / 1483 passing tests. The added
 source recovery and screen cleanup/reservation tests pass in targeted runs.
 
-Frontend implementation is NOT finished or integrated. Fable's preserved changes:
+As of 13 September 2026, the UI, vector transport workspace and kiosk are
+integrated on main. Relevant milestones include `21b4bfa` (UI), `7fbfe6f`
+(transport), `d8a3141` (kiosk), `ad08784` (cross-review corrections),
+`89a6d3b` (expanded map, persistent workspace, opaque markers) and `cdb4309`
+(paired-domain content). Historical incomplete-worktree notes above no longer
+describe the app.
 
-- `kaj-ui`: tokens, baseline, fonts, icons and partially completed HR/EN catalogues
-  (`@@chunk3` marker). Dashboard, domain renderers, landing and scan still need work.
-- `kaj-map`: basemap styling, badge geometry, extended map contracts, route/stop
-  catalogues/search and tests. The replacement city-map implementation and
-  transport workspace remain incomplete.
-- `kaj-kiosk`: strings, screen setup, credentials, layout, map adapter, local data,
-  invitation and paired-view helpers. Paired view/CSS have continuation markers;
-  the main kiosk controller and entry integration remain incomplete.
+The integrated suite reached 135 files / 1,624 passing tests after the final
+review corrections. Real browser journeys cover self-service setup, same-Wi-Fi
+pairing, one-hop five-minute sharing, twelve-second test expiry, kiosk geometry,
+motion, reduced motion, map expansion and outage hold. No-WebGL transport and
+no-JavaScript safety also pass their browser checks.
 
-An earlier interruption was caused by Fable usage credits. The owner restored
-access and a real Fable call returned READY. All three full implementation
-workstreams have resumed at maximum effort from their saved code, without
-reducing scope or quality. Do not treat unfinished work as reviewed or deploy it.
-Current implementation logs are the ignored `fable-*-continue.jsonl` files under
-`.superpowers/kaj/`; preserve them for continuity.
-The original Fable security review is complete; a final review after corrections
-and the rendered frontend cross-review are still required.
+The first 49-surface review found three repeated root issues: filter-list
+semantics, light-theme safety-link contrast, and Safety/News overflow at 200%
+text size. Those are fixed; the expanded 56-surface matrix passes. Kiosk
+request-failure, temporal-state and whole-title refinements are integrated.
+Fable independently rechecked print contrast, source timestamp wording and
+consistent kiosk source states. All 52 browser tests pass. Evidence is in the
+ignored `review.local/` directory; `scripts/review-experience.mjs` reproduces
+the cross-viewport sweep. See `docs/kaj-verification.md` for the dated record.
+
+Do not interpret passing unit tests as final visual acceptance or as physical
+iPhone/Android/QR-distance testing. Fable remains the main frontend implementer
+and independent reviewer, using maximum effort. Account selection follows
+the owner's current instructions and is not part of the application configuration.

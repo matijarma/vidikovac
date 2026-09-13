@@ -137,6 +137,7 @@ export interface KioskStrings {
     sourceDown: string;
     unconfirmed: string;
     dataFrom: string;
+    fetchedAt: string;
     stale: string;
     phase: string;
     amount: string;

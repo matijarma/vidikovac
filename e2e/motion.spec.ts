@@ -21,6 +21,7 @@
 // applyFix(), model.ts's own two-step contract) from a single poll, so nothing
 // here waits on a second real 20 s cycle for that.
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 
 // Trg bana Jelačića -- motion/schematic.ts's own DEFAULT_CROP centre, so a
@@ -174,8 +175,10 @@ function frames(page: Page, selector: string): Promise<number> {
   return page.$eval(selector, (el) => Number((el as HTMLElement).dataset.frames ?? '0'));
 }
 
-function canvasSnapshot(page: Page, selector: string): Promise<string> {
-  return page.$eval(selector, (el) => (el as HTMLCanvasElement).toDataURL());
+async function canvasSnapshot(page: Page, selector: string): Promise<string> {
+  // WebGL need not preserve its drawing buffer. Chromium's screenshot reads
+  // the composed frame, unlike toDataURL() on a cleared WebGL buffer.
+  return createHash('sha256').update(await page.locator(selector).screenshot({ animations: 'disabled' })).digest('hex');
 }
 
 test.describe('the motion model, mounted end to end (T11)', () => {
@@ -202,10 +205,13 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    // Load the real tiles and worker before starting the five-second ease.
+    // Otherwise map startup can consume the entire interpolation window.
+    await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
     gate.release();
 
-    const schematicSel = '[data-testid=kiosk-live] [data-testid=schematic]';
-    const vehiclesCanvasSel = '[data-testid=kiosk-live] [data-testid=schematic-vehicles]';
+    const schematicSel = '[data-testid=kiosk-map]';
+    const vehiclesCanvasSel = '[data-testid=kiosk-map] canvas';
     await waitForFrames(page, schematicSel);
 
     // The frame counter: exported by loop.ts for exactly this proof, rather
@@ -239,7 +245,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
-    const schematicSel = '[data-testid=kiosk-live] [data-testid=schematic]';
+    const schematicSel = '[data-testid=kiosk-map]';
     await waitForFrames(page, schematicSel);
     const f1 = await frames(page, schematicSel);
     await page.waitForTimeout(3200);
@@ -251,12 +257,11 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     expect(f2 - f1, 'reduced motion must not advance anywhere near full frame rate').toBeLessThanOrEqual(5);
   });
 
-  test('a session on /d: the frame counter advances, the tap card names the line, and full-screen keeps the meander visible', async ({
+  test('a session on /d: the vector map advances, keyboard-accessible detail names the line, and full-map mode keeps session controls', async ({
     browser,
     request,
   }) => {
-    const h = await health(request, APP_URL);
-    test.skip(h.networkCheck === 'enforce', 'pairing needs NETWORK_CHECK=off or warn to unlock from one machine');
+    expect((await health(request, APP_URL)).networkCheck).toBe('off');
 
     const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } });
     const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
@@ -267,11 +272,11 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       const { scanUrl } = await readPairing(kiosk, APP_URL);
 
       const phone = await phoneCtx.newPage();
-      await stubSessionData(phone, zetSnapshot('e2e-dash-1'));
+      await stubSessionData(phone, zetSnapshot('e2e-dash-1', 0));
       await unlockOnPhone(phone, scanUrl, '10 minuta');
 
-      await phone.click('[data-layer="u-pokretu"]');
-      const schematicSel = '#u-pokretu-schematic [data-testid=schematic]';
+      await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click();
+      const schematicSel = '[data-testid=map-canvas]';
       await waitForFrames(phone, schematicSel);
       const f1 = await frames(phone, schematicSel);
       await phone.waitForTimeout(300);
@@ -282,17 +287,22 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       // own arrow-key contract, schematic-view.ts's onCanvasKey) rather than
       // clicking a computed pixel, so the assertion does not depend on the
       // whole-network crop's own scale.
-      await phone.locator('[data-testid=schematic-vehicles]').focus();
-      await phone.keyboard.press('ArrowRight');
-      await expect(phone.getByTestId('vehicle-card')).toBeVisible();
-      await expect(phone.getByTestId('vehicle-line')).toHaveText(ROUTE_ID);
+      const route = phone.locator('[data-testid=running-routes] button').first();
+      await phone.locator('[data-action=toggle-sheet]').click();
+      await route.focus();
+      await phone.keyboard.press('Enter');
+      const vehicle = phone.locator('[data-testid=route-vehicles] button').first();
+      await vehicle.focus();
+      await phone.keyboard.press('Enter');
+      await expect(phone.getByTestId('vehicle-title')).toContainText(ROUTE_ID);
 
-      // Full-screen: R-P1/T10's ring-preserving mode -- the tab row leaves,
-      // the session meander (the ring) does not.
+      // The new full-map mode keeps the working shell, not the retired
+      // panorama/meander graphic.
       await phone.click('#u-pokretu-map-full');
-      await expect(phone.locator('.dash[data-view="map"]')).toBeVisible();
-      await expect(phone.locator('.dash-tabs')).toBeHidden();
-      await expect(phone.getByTestId('session-ring')).toBeVisible();
+      await expect(phone.locator('.ki[data-view="map"]')).toBeVisible();
+      await expect(phone.getByTestId('session-label')).toBeVisible();
+      await expect(phone.locator('[data-testid=map-canvas] canvas')).toBeVisible();
+      await expect(phone.locator('[data-testid=panorama], [data-testid=meander-legend]')).toHaveCount(0);
     } finally {
       await kioskCtx.close();
       await phoneCtx.close();
@@ -306,7 +316,8 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     await page.goto(lightweightUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
-    await expect(page.locator('[data-testid=kiosk-live] [data-testid=schematic-list]')).toBeAttached();
+    await expect(page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]')).toBeVisible();
+    await expect(page.getByTestId('kiosk-lines')).toContainText(ROUTE_ID);
     expect(await page.locator('canvas').count(), 'no canvas of any kind on a lightweight page (R-L2)').toBe(0);
   });
 });

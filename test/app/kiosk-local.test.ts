@@ -17,7 +17,7 @@ import { decideLayout, MIN_ZOOM } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
-import { creditText, eventGroups, fitRows, pairedMarkup, row } from '../../app/src/kiosk/paired';
+import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
@@ -146,6 +146,15 @@ describe('districts, stops and the wizard\u2019s error sentences', () => {
 });
 
 describe('formatting for a screen read from steps away', () => {
+  it('does not present a retrieval or date-only publication as an observation clock', () => {
+    const observation = snap('dhmz-now', []);
+    expect(statusLine(observation, hr)).toBe('podaci od 14:31');
+    const retrieved = { ...snap('dogadanja', []), sourceUpdatedAt: undefined };
+    expect(statusLine(retrieved, hr)).toBe('dohvaćeno 14:31');
+    expect(statusLine(retrieved, kioskStrings('en'))).toBe('retrieved 14:31');
+    expect(statusLine(snap('glasnik', []), hr)).toBe('');
+    expect(statusLine(snap('glasnik', [], 'stale'), hr)).toBe('zastarjelo');
+  });
   it('uses Croatian decimals, spaced units and the Zagreb wall clock', () => {
     expect(fmtNumber('hr', 12.8)).toBe('12,8');
     expect(fmtNumber('en', 12.8)).toBe('12.8');

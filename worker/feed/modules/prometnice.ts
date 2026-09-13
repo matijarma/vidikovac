@@ -99,5 +99,8 @@ export function parsePrometnice(json: unknown): FeedPayload {
 
 export async function fetchPrometnice(ctx: FetchContext): Promise<FeedPayload> {
   const response = await ctx.fetch(PROMETNICE_URL);
-  return { ...parsePrometnice(await response.json()), sourceUpdatedAt: ctx.now().toISOString() };
+  // This JSON has item windows, not a dataset publication timestamp.
+  // The feed wrapper records retrieval in fetchedAt; do not duplicate it
+  // as a claim about when the publisher updated the data.
+  return parsePrometnice(await response.json());
 }

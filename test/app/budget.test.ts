@@ -13,7 +13,7 @@
 // all: a graph that references them would fetch them on some path, and the
 // budget would be an accident rather than a property.
 import { build } from 'vite';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -58,7 +58,15 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(() => {
-  if (outDir) rmSync(outDir, { recursive: true, force: true });
+  // The directory came from mkdtemp, but resolve and verify it before a
+  // recursive removal so an accidental variable change cannot leave tmp.
+  if (!outDir) return;
+  const target = resolve(outDir);
+  const temporaryRoot = resolve(tmpdir());
+  if (!target.startsWith(`${temporaryRoot}\\`) && !target.startsWith(`${temporaryRoot}/`)) {
+    throw new Error('Refusing to remove a budget directory outside the OS temporary directory.');
+  }
+  rmSync(target, { recursive: true, force: true });
 });
 
 function measure(path: string): Measured {
@@ -148,6 +156,24 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       for (const key of graph) {
         for (const asset of manifest[key]?.assets ?? []) expect(asset, `${key} bundles ${asset}`).not.toContain(NETWORK_ARTEFACT);
       }
+    });
+  }
+});
+
+describe('full map JavaScript budget, including the separate MapLibre v6 worker', () => {
+  for (const entry of ENTRIES) {
+    it(`/${entry.replace('index.html', '')} stays under 600 kB compressed when the map opens`, () => {
+      const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts')]);
+      const files = new Set([...keys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
+      // Vite emits ?worker&url as an asset, not as a manifest import.
+      // Omitting this file would undercount the real initial map payload.
+      const workers = readdirSync(join(outDir, 'assets')).filter((file) => /^maplibre-gl-worker-.*\.js$/.test(file));
+      expect(workers.length, 'the real map worker must be measured').toBeGreaterThan(0);
+      for (const worker of workers) files.add(`assets/${worker}`);
+      const rows = [...files].map(measure);
+      const total = rows.reduce((sum, row) => sum + row.gzip, 0);
+      console.log(`[budget] /${entry.replace('index.html', '')} full-map JS + worker: ${total} gzip bytes`);
+      expect(total, 'page, map library, shared chunks and worker together').toBeLessThan(600_000);
     });
   }
 });

@@ -7,9 +7,9 @@ import { defineConfig, devices } from '@playwright/test';
 //          (separate --persist-to so the two local DO stores never mix).
 // Point the suite at production with:
 //   E2E_NO_WEBSERVER=1 E2E_APP_URL=https://zagreb.aningfilm.hr E2E_KIOSK_URL=<provisioning URL of the E2E screen> npx playwright test
-// Against production the pairing spec asserts the same-network refusal (both
-// contexts share this machine's address) and the expiry spec is skipped unless
-// E2E_SHORT_URL names a server running with SESSION_MINUTES=0.2.
+// Same-network pairing must work on every environment. The expiry spec is
+// skipped for a hosted target unless E2E_SHORT_URL names a dedicated server
+// running with SESSION_MINUTES=0.2.
 const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
 const SHORT_URL = process.env.E2E_SHORT_URL ?? 'http://localhost:8788';
 const MANAGED_SERVERS = !process.env.E2E_NO_WEBSERVER;
@@ -27,6 +27,7 @@ export default defineConfig({
   use: {
     baseURL: APP_URL,
     trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
     locale: 'hr-HR',
     timezoneId: 'Europe/Zagreb',
   },

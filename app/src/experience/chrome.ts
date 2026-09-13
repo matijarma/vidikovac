@@ -65,13 +65,14 @@ export function topBarMarkup(i18n: I18n, s: ShellState): string {
   return `<a class="ki-wordmark" href="/" aria-label="${escapeAttribute(i18n.t('shell.wordmarkLabel'))}"><span class="ki-wordmark-text">${escapeHtml(i18n.t('common.appName'))}</span></a>
 <div class="ki-top-actions">
 <button type="button" class="ki-chip" data-action="session" data-testid="session-chip" data-state="${s.frozen ? 'frozen' : s.phase}" aria-label="${escapeAttribute(chipLabel)}">${sessionRing(s)}<span class="ki-chip-time tabular" data-testid="countdown">${escapeHtml(chipText)}</span></button>
-<a class="btn-quiet icon-btn ki-safety" href="#layer=sigurnost" data-action="nav" data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${s.layer === 'sigurnost' && !s.directory ? 'page' : 'false'}">${iconMarkup('shield')}</a>
+<a class="btn-quiet icon-btn ki-safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${s.layer === 'sigurnost' && !s.directory ? 'page' : 'false'}">${iconMarkup('shield')}</a>
 </div>`;
 }
 
 function navItem(i18n: I18n, s: ShellState, layer: LayerId, className: string): string {
   const current = s.layer === layer && !s.directory;
-  return `<li><a class="${className}" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${s.frozen ? ' aria-disabled="true"' : ''}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
+  const openSafety = s.frozen && layer === 'sigurnost';
+  return `<li><a class="${className}" href="${openSafety ? '/hitno' : `#layer=${layer}`}"${openSafety ? '' : ' data-action="nav"'} data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${s.frozen && !openSafety ? ' aria-disabled="true"' : ''}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
 }
 
 /** The phone tab bar: Sada, Promet, Događanja and Još, which names the open extra domain. */
@@ -116,7 +117,7 @@ export function wordmarkMarkup(i18n: I18n): string {
 /** One-tap safety, phone only (the sidebar lists Sigurnost as a domain). */
 export function safetyMarkup(i18n: I18n, s: ShellState): string {
   const current = s.layer === 'sigurnost' && !s.directory;
-  return `<a class="ki-safety" href="#layer=sigurnost" data-action="nav" data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.safety'))}</span></a>`;
+  return `<a class="ki-safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.safety'))}</span></a>`;
 }
 
 /** Session-state banners: expired (with the way to a new session), reconnecting, no ticket, paused. */

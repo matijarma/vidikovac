@@ -81,5 +81,6 @@ describe('fetchPrometnice', () => {
       'https://data.zagreb.hr/dataset/7ff5514d-0a1f-4f6c-86bd-8ed9a3c55eee/resource/e48b6992-add0-45a1-ae95-c5d97d8db259/download/data.json',
     );
     expect(payload.items).toHaveLength(32);
+    expect(payload.sourceUpdatedAt).toBeUndefined();
   });
 });

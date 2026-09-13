@@ -79,22 +79,26 @@ describe('static pages', () => {
   it('/privatnost lists the nine privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
     for (let i = 1; i <= 9; i += 1) expect(html).toContain(`id="tocka-${i}"`);
-    expect(html).toContain('Ne pohranjujemo IP adresu, korisnički agent, identifikator uređaja, kolačić ni koordinate.');
-    // R-58: the map tile request is the single third-party call, and the list
-    // view carries the same data without it.
-    expect(html).toContain('tile.openstreetmap.org');
-    expect(html).toContain('jedini poziv izvan ovog poslužitelja');
+    expect(html).toContain('U aplikaciji ne pohranjujemo IP adresu, korisnički agent ni trajni identifikator posjetitelja.');
+    expect(html).not.toContain('tile.openstreetmap.org');
+    expect(html).toContain('učitavaju se s iste domene');
+    expect(html).toContain('Zaslon i telefon smiju biti na istom Wi-Fiju.');
+    expect(html).toContain('Cloudflare Access');
+    expect(html).toContain('vlastiti autentikacijski kolačić');
+    expect(html).toContain('Repozitorij prototipa trenutačno je privatan');
     // Every browser-stored value, named (the data token is new in this wave).
     expect(html).toContain('token za nastavak sesije i token kojim ta sesija dohvaća podatke');
-    expect(html).toContain('U localStorage ostaju samo dvije postavke prikaza, tema i jezik');
-    expect(html).toContain('zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo”');
+    expect(html).toContain('U localStorage ostaju tema, jezik i odabir laganog prikaza');
+    expect(html).toContain('zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo“');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
   it('/pristupacnost carries the deviation clause verbatim from the spec', () => {
     const html = read('app/pristupacnost/index.html');
     expect(html).toContain(DEVIATION);
-    expect(html).toContain('(1) sigurnosni sloj /hitno dostupan je svima, bez skeniranja i bez ograničenja trajanja;');
-    expect(html).toContain('raspored panela čuva se lokalno u pregledniku i vraća pri sljedećem skeniranju.');
+    expect(html).toContain('sigurnosni sloj /hitno radi bez skeniranja i bez ograničenja trajanja');
+    expect(html).toContain('Posljednji otvoreni sloj čuva se lokalno u kartici i vraća pri sljedećem skeniranju.');
+    expect(html).not.toContain('kvaliteta zraka');
+    expect(html).not.toContain('izvorni kod objavljen');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
 });

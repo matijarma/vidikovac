@@ -123,7 +123,7 @@ async function stubSessionData(page: Page, zet: unknown): Promise<void> {
   });
 }
 
-/** The schematic has drawn at least once (loop.ts's frames(), written to data-frames). */
+/** The vector map has drawn at least once (the shared loop's frame counter). */
 async function waitForFrames(page: Page, selector: string): Promise<void> {
   await page.waitForFunction(
     (sel) => {
@@ -190,7 +190,7 @@ async function tabWalk(page: Page, limit = 150): Promise<FocusStop[]> {
         return node.getAttribute('title')?.trim() ?? '';
       };
       const where = `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.dataset.testid ? `[data-testid=${el.dataset.testid}]` : ''}${el.className ? `.${String(el.className).trim().split(/\s+/).join('.')}` : ''}`;
-      return { revisit, where, name: nameOf(el), inVehicleList: el.closest('[data-testid=vehicle-list]') !== null };
+      return { revisit, where, name: nameOf(el), inVehicleList: el.closest('[data-testid=route-vehicles], [data-testid=running-routes], [data-testid=transport-search]') !== null };
     });
     if (stop === null) {
       if (++leftDocument > 2) break;
@@ -202,7 +202,7 @@ async function tabWalk(page: Page, limit = 150): Promise<FocusStop[]> {
   return stops;
 }
 
-async function assertTextPath(page: Page, surface: string): Promise<void> {
+async function assertTextPath(page: Page, surface: string, interactiveTransport = true): Promise<void> {
   const nested = await new AxeBuilder({ page }).withRules(['nested-interactive']).analyze();
   expect(nested.violations.map(describeViolation), `${surface}: no interactive element may sit inside one whose children are presentational`).toEqual([]);
 
@@ -213,27 +213,32 @@ async function assertTextPath(page: Page, surface: string): Promise<void> {
     stops.filter((s) => s.name === '').map((s) => s.where),
     `${surface}: every element a Tab reaches must have an accessible name; the walk was:\n${listing}`,
   ).toEqual([]);
-  expect(stops.some((s) => s.inVehicleList), `${surface}: the vehicle list must be reachable by Tab; the walk was:\n${listing}`).toBe(true);
+  if (interactiveTransport) {
+    expect(stops.some((s) => s.inVehicleList), `${surface}: search or the route/vehicle list must be reachable by Tab; the walk was:\n${listing}`).toBe(true);
+  }
 }
 
 test.describe('the moving map has a text path (R-F5)', () => {
-  test('/kiosk/ with a tram in frame: no nested-interactive violation, a name on every Tab stop, and the vehicle list among them', async ({ page, request }) => {
+  test('/kiosk/ has a readable route board beside its named map, and every interactive control has a name', async ({ page, request }) => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
-    await waitForFrames(page, '[data-testid=kiosk-live] [data-testid=schematic]');
-    await expect(page.locator('[data-testid=kiosk-live] [data-testid=vehicle-list] button').first()).toBeAttached();
-    await assertTextPath(page, '/kiosk/');
+    await waitForFrames(page, '[data-testid=kiosk-map]');
+    await expect(page.getByTestId('kiosk-lines')).toContainText('6');
+    await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
+    await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
+    // A public screen's route board is glanceable, not a hidden interactive
+    // phone list. Its actual controls still need a complete keyboard path.
+    await assertTextPath(page, '/kiosk/', false);
   });
 
   test('/d/ in a session with U pokretu open: no nested-interactive violation, a name on every Tab stop (the map’s zoom buttons and the OpenStreetMap link included), and the vehicle list among them', async ({
     browser,
     request,
   }) => {
-    const h = await health(request, APP_URL);
-    test.skip(h.networkCheck === 'enforce', 'pairing needs NETWORK_CHECK=off or warn to unlock from one machine');
+    expect((await health(request, APP_URL)).networkCheck).toBe('off');
 
     const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: KIOSK });
     const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
@@ -246,16 +251,21 @@ test.describe('the moving map has a text path (R-F5)', () => {
       const phone = await phoneCtx.newPage();
       await stubSessionData(phone, zetSnapshot('e2e-a11y-dash', 0));
       await unlockOnPhone(phone, scanUrl, '10 minuta');
-      await phone.click('[data-layer="u-pokretu"]');
-      await waitForFrames(phone, '#u-pokretu-schematic [data-testid=schematic]');
-      await expect(phone.locator('[data-testid=vehicle-list] button').first()).toBeAttached();
+      await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click();
+      await waitForFrames(phone, '[data-testid=map-canvas]');
+      await phone.locator('[data-action=toggle-sheet]').click();
+      const route = phone.locator('[data-testid=running-routes] button').first();
+      await expect(route).toBeVisible();
+      await route.click();
+      await expect(phone.locator('[data-testid=route-vehicles] button').first()).toBeVisible();
 
       // The full map (T10) is a named region whose controls and licence
       // credit are exposed by name, not swallowed by an image role.
       // The panel itself is a region named "Karta" (aria-labelledby its title); the
       // map's own label carries the counts after a colon.
-      await expect(phone.getByRole('region', { name: /^Karta: /u })).toBeVisible();
-      await expect(phone.getByRole('button', { name: 'Zoom in' })).toBeVisible();
+      await expect(phone.getByTestId('map-canvas')).toHaveAttribute('role', 'region');
+      await expect(phone.getByTestId('map-canvas')).toHaveAttribute('aria-label', /Karta/);
+      await expect(phone.locator('.maplibregl-ctrl-zoom-in')).toBeVisible();
       await expect(phone.getByRole('link', { name: /OpenStreetMap/ })).toBeVisible();
 
       await assertTextPath(phone, '/d/ (session)');

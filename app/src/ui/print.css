@@ -5,11 +5,44 @@
   .ws-toolbar, .actions, .ws-back, .panel-actions, .skip-link, .lang-toggle, .toast-stack, .dialog, .ws-detail-hint { display: none !important; }
   .ki { display: block; min-height: 0; }
   .ki-main { padding: 0; }
+  :root {
+    color-scheme: light !important;
+    --tone-surface-canvas: Canvas;
+    --tone-surface-1: Canvas;
+    --tone-surface-2: Canvas;
+    --tone-surface-3: #dbe4e1;
+    --tone-stroke: CanvasText;
+    --tone-stroke-strong: CanvasText;
+    --tone-text-primary: CanvasText;
+    --tone-text-muted: CanvasText;
+    --tone-text-subtle: CanvasText;
+    --tone-text-brand: CanvasText;
+    --tone-text-brand-on-tint: CanvasText;
+    --tone-label: CanvasText;
+    --tone-action-brand: CanvasText;
+    --tone-weather: CanvasText;
+    --tone-events: CanvasText;
+    --tone-transit: CanvasText;
+    --tone-live: CanvasText;
+    --tone-urgency: CanvasText;
+  }
   html, body { background: #fff; color: #000; }
+  /* Paper must work with background graphics disabled. Never retain a dark
+     theme's pale label, white-on-filled emergency number, or coloured tint. */
+  .ki, .ki * {
+    color: CanvasText !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .ki svg text { fill: CanvasText !important; }
+  .sf-number-primary, .route-no, .t-badge, .badge { border: 1px solid CanvasText !important; }
   .sec, .panel, .detail { border: 1px solid #000; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
   /* An open detail prints alone: the list beside it is the screen's, not the page's. */
   .ws-split[data-detail-open='true'] .ws-primary { display: none !important; }
   .ws-split[data-detail-open='true'] .ws-detail { display: block !important; position: static; }
+  .ws-split[data-detail-open='true'] { display: block; }
+  .provenance summary { display: none; }
   .source, .source-line, .meta, .row-meta, .sec-note { color: #000; }
   a[href^='http']::after, .source-link::after { content: ' (' attr(href) ')'; font-size: 0.8em; }
   .map-canvas, .g-ring, .schematic { display: none; }

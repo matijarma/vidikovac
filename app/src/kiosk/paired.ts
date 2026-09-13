@@ -76,8 +76,11 @@ export interface PairedHandle {
 export function statusLine(snapshot: ModuleSnapshot | undefined, s: KioskStrings): string {
   if (!snapshot) return '';
   if (snapshot.status === 'down') return s.paired.sourceDown;
+  // Gazette rows carry their publication date. Midnight derived from a date
+  // is not a useful "live data" clock in a block header.
+  if (snapshot.module === 'glasnik') return snapshot.status === 'stale' ? s.paired.stale : '';
   const time = clock(snapshot.sourceUpdatedAt ?? snapshot.fetchedAt);
-  const from = fill(s.paired.dataFrom, { time });
+  const from = fill(snapshot.sourceUpdatedAt ? s.paired.dataFrom : s.paired.fetchedAt, { time });
   return snapshot.status === 'stale' ? `${s.paired.stale} · ${from}` : from;
 }
 

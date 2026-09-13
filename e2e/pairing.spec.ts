@@ -12,8 +12,7 @@ import {
   readPairing,
   unlockOnPhone,
 } from './helpers';
-
-const SAME_NETWORK_MESSAGE = 'Ovaj zaslon i tvoj telefon dijele istu mrežu.';
+import { CODE_RE } from './lib';
 
 async function twoContexts(browser: Browser): Promise<{ kioskCtx: BrowserContext; phoneCtx: BrowserContext }> {
   const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } });
@@ -22,8 +21,47 @@ async function twoContexts(browser: Browser): Promise<{ kioskCtx: BrowserContext
 }
 
 test.describe('pairing: a public screen and a phone', () => {
+  test('one-hop sharing gives a second phone its own five minutes without extending or taking over the original session', async ({ browser, request }) => {
+    const { kioskCtx, phoneCtx } = await twoContexts(browser);
+    const peerCtx = await browser.newContext({ ...devices['Pixel 7'], locale: 'hr-HR' });
+    try {
+      const { kioskUrl } = await provisionKiosk(request, APP_URL);
+      const kiosk = await kioskCtx.newPage();
+      await kiosk.goto(kioskUrl);
+      const { scanUrl } = await readPairing(kiosk, APP_URL);
+      const phone = await phoneCtx.newPage();
+      await unlockOnPhone(phone, scanUrl, '10 minuta');
+      const originalExpiry = await phone.getByTestId('session-label').getAttribute('data-expires-at');
+      await phone.getByTestId('session-label').click();
+      await phone.getByTestId('share-city').click();
+      const code = phone.getByTestId('share-code');
+      await expect(code).toHaveText(CODE_RE);
+      const peer = await peerCtx.newPage();
+      const raw = (await code.textContent())!.trim();
+      await unlockOnPhone(peer, `${APP_URL}/s/#${raw}`, '5 minuta');
+      const peerExpiry = Number(await peer.getByTestId('session-label').getAttribute('data-expires-at'));
+      expect(peerExpiry - Date.now()).toBeGreaterThan(270_000);
+      expect(peerExpiry - Date.now()).toBeLessThanOrEqual(300_000);
+      const room = (url: string) => new URLSearchParams(new URL(url).hash.slice(1)).get('room');
+      expect(room(peer.url())).not.toBe(room(phone.url()));
+      await expect(phone.getByTestId('session-label')).toHaveAttribute('data-expires-at', originalExpiry!);
+      await expect(kiosk.getByTestId('session-label')).toHaveAttribute('data-expires-at', originalExpiry!);
+      await peer.getByTestId('session-label').click();
+      await expect(peer.getByTestId('session-sheet')).toBeVisible();
+      await expect(peer.getByTestId('share-city')).toHaveCount(0);
+      const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code: raw } });
+      expect((await reuse.json()).error).toBe('code-used');
+      const token = await readDataToken(peer);
+      const allowed = await peer.request.get(`${APP_URL}/api/data/zet-rt`, { headers: { authorization: `Bearer ${token}` } });
+      expect(allowed.status()).toBe(200);
+    } finally {
+      await peerCtx.close();
+      await phoneCtx.close();
+      await kioskCtx.close();
+    }
+  });
   test('a scan unlocks both devices, the token gates /api/data, the code is single-use', async ({ browser, request }) => {
-    const h = await health(request, APP_URL);
+    expect((await health(request, APP_URL)).networkCheck).toBe('off');
     const { kioskCtx, phoneCtx } = await twoContexts(browser);
     try {
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
@@ -32,18 +70,7 @@ test.describe('pairing: a public screen and a phone', () => {
       const { code, scanUrl } = await readPairing(kiosk, APP_URL);
       const phone = await phoneCtx.newPage();
 
-      if (h.networkCheck === 'enforce') {
-        // Production: both contexts leave this machine with one address and one
-        // ASN, so the gate must refuse. That refusal is the assertion here; the
-        // unlock path is proven locally with NETWORK_CHECK=off and by hand at
-        // the café with the phone on mobile data.
-        await phone.goto(scanUrl);
-        await expect(phone.getByText(SAME_NETWORK_MESSAGE)).toBeVisible({ timeout: 30_000 });
-        await expect(kiosk.getByTestId('pair-code')).toBeVisible();
-        await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
-        return;
-      }
-
+      // Same-Wi-Fi pairing is a supported journey, on the deployed app too.
       await unlockOnPhone(phone, scanUrl, '10 minuta');
 
       // Both devices are in the same session: identical expiry down to the millisecond.
@@ -97,8 +124,7 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
 
   test('the phone freezes with the closing line and the screen shows the QR again', async ({ browser, request }) => {
     const base = SHORT_URL!;
-    const h = await health(request, base);
-    test.skip(h.networkCheck === 'enforce', 'expiry needs NETWORK_CHECK=off or warn (both contexts share one address)');
+    expect((await health(request, base)).networkCheck).toBe('off');
     const { kioskCtx, phoneCtx } = await twoContexts(browser);
     try {
       const { kioskUrl } = await provisionKiosk(request, base);

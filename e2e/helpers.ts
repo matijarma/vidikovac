@@ -80,6 +80,8 @@ export async function unlockOnPhone(phone: Page, scanUrl: string, expectedMinute
   await expect(card).toContainText(expectedMinutesText);
   await phone.getByRole('button', { name: 'Otključaj' }).click();
   await expect(phone.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
+  await expect(phone.getByTestId('session-label')).toHaveAttribute('data-state', 'live', { timeout: 30_000 });
+  await expect(phone.getByTestId('session-label')).toHaveAttribute('data-expires-at', /^\d{13}$/);
 }
 
 export function readDataToken(phone: Page): Promise<string | null> {

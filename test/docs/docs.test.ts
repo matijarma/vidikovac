@@ -48,10 +48,15 @@ describe('docs/izvori.md', () => {
 
 describe('docs/kiosk.md', () => {
   const kiosk = read('docs/kiosk.md');
-  it('lists the Chromium kiosk flags and the same-network rule', () => {
-    for (const flag of ['--kiosk', '--noerrdialogs', '--disable-infobars', '--incognito']) expect(kiosk).toContain(flag);
-    expect(kiosk).toContain('Ovaj zaslon i tvoj telefon dijele istu mrežu.');
-    expect(kiosk).toMatch(/^## Testni zaslon/m);
+  it('documents the actual self-service journey and supported network rule', () => {
+    expect(kiosk).toContain('POST /api/screens');
+    expect(kiosk).toContain('Isti Wi-Fi je dopušten.');
+    expect(kiosk).not.toContain('Ovaj zaslon i tvoj telefon dijele istu mrežu.');
+    expect(kiosk).toContain('APP_ENV=test');
+    expect(kiosk).toContain('E2E_ADMIN_BYPASS');
+    expect(kiosk).toContain('24 sata');
+    expect(kiosk).toContain('git push');
+    expect(kiosk).toContain('fizička matrica');
   });
 });
 

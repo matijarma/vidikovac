@@ -465,6 +465,26 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
+  it('the paired safety strip agrees with the live session copy when the preview request fails', async () => {
+    let fail = false;
+    const k = mount({ stored: STORED, fetchTeaser: async () => {
+      if (fail) throw new Error('preview unavailable');
+      return { modules: MODULES };
+    } });
+    await flush();
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    k.view('sigurnost');
+    await flush();
+    fail = true;
+    k.tick(POLL_FALLBACK_MS);
+    await flush();
+    expect(q(k.root, '[data-testid=k-warnings]')!.dataset.status).toBe('live');
+    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Osvježavanje pregleda zaslona nije uspjelo.');
+    expect(text(q(k.root, '[data-testid=strip-warning]'))).not.toContain('zastarjelo');
+    expect(text(q(k.root, '[data-testid=strip-warning]'))).toContain('Grmljavina');
+  });
   it('a thrown teaser fetch marks every last-good copy stale and holds the map; the next good answer brings it back', async () => {
     let fail = false;
     const calls: string[] = [];
@@ -587,12 +607,12 @@ describe('alerts, polling, the first tap and disposal', () => {
     await flush();
     const alert = q(k.root, '[data-testid=kiosk-alert]')!;
     expect(alert.hidden).toBe(false);
-    expect(text(alert)).toBe('Izvor podataka nedostupan');
+    expect(text(alert)).toBe('Osvježavanje pregleda zaslona nije uspjelo.');
     k.handlers.onStatus('offline');
     expect(text(alert)).toBe('Bez veze sa zaslonom — kod se ne može izdati');
     k.handlers.onStatus('live');
     expect(alert.hidden).toBe(false);
-    expect(text(alert)).toBe('Izvor podataka nedostupan');
+    expect(text(alert)).toBe('Osvježavanje pregleda zaslona nije uspjelo.');
     // The chain re-armed itself after the failed load, at the fallback delay.
     const poll = k.timers.slice(armedAtMount).filter((t) => t.ms === POLL_FALLBACK_MS && !t.cleared);
     expect(poll).toHaveLength(1);

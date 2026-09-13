@@ -5,8 +5,8 @@ observed in the actual browser, not taste inferred from source.
 
 Screenshots to Read:
 
-- `D:/scratch/vidikovac/test-results/kaj-ui-mobile-independent.png`
-- `D:/scratch/vidikovac/test-results/kaj-ui-desktop-independent.png`
+- `D:/scratch/vidikovac/review.local/kaj-ui-mobile-independent.png`
+- `D:/scratch/vidikovac/review.local/kaj-ui-desktop-independent.png`
 
 ## P1: current overview falls short of the approved visual brief
 
@@ -67,3 +67,37 @@ available, not a paragraph competing with the useful interface.
 - Test browser Back through item detail; no duplicate state entries per poll.
 - Sources/subsets remain correct; no fake arrival time, hourly weather, progress
   percentage, spend total or location.
+
+## Additional observed domain checks
+
+Browser captures in main `review.local/kaj-ui-{zrak-i-nebo,kultura,uprava-i-pravo,vijesti}-independent.png`:
+
+- Weather currently describes NW 1.2m/s as "bez vjetra" in its compass while the
+  overview correctly prints NW 1.2m/s. Parse the actual source compass vocabulary,
+  including N/NE/E/SE/S/SW/W/NW. A missing direction is not zero wind.
+- Weather's "last 7 days, 150km" earthquake block displays August events and a
+  162km event in the September 11 fixture. Filter the displayed set to its claimed
+  time and distance bounds, or label the broader source truth. Do not rescale
+  out-of-range dots into the radar's plotted circle.
+- Expired CAP warnings are shown as "najavljeno"; distinguish expired, future
+  and currently active, and align visible safety state with `/hitno`.
+- Event category labels render raw `izlozba`, `dogadjanje` etc because the nested
+  catalogue paths do not resolve. Show proper Croatian labels and English
+  equivalents, including diacritics.
+- Gazette item print currently still uses the legacy print stylesheet targeting
+  `.dash-*`/`.panel` only. Printing one chosen act's available metadata should
+  print that detail with attribution/link, not the entire seven-domain app.
+- `Gotovo` beside "Radovi u tijeku" is an upstream record-status/phase distinction.
+  If both fields are shown, label them explicitly; don't imply the project is
+  simultaneously finished and underway.
+
+## Transport focus integration
+
+The actual 332-vehicle stress browser confirmed search text survives but focus
+does not when the persistent workspace is reparented into a fresh layer.
+`dashboard.render` currently records focus only AFTER calling `renderLayer`;
+that call has already detached the focused workspace. Capture activeElement
+before invoking the renderer, then restore the same live element with
+`preventScroll:true` after reconciliation/reparenting if it remains connected.
+Preserve its input selection and scroll. The ideal path avoids detaching a
+persistent workspace for an ordinary data update at all.

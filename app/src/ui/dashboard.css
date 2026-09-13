@@ -119,7 +119,7 @@
 .sheet-actions { gap: var(--sp-2); }
 .sheet-btn { justify-content: flex-start; }
 .segmented { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-md); background: var(--tone-surface-2); }
-.segment { flex: 1 1 auto; min-height: 2.5rem; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; }
+.segment { flex: 1 1 auto; min-height: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; }
 .segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); box-shadow: var(--tone-shadow-soft); }
 .sheet-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .sheet-links a { display: inline-flex; align-items: center; min-height: var(--target); }

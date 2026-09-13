@@ -157,7 +157,7 @@
 .ov-block[data-tone='weather'] .ov-block-title { color: var(--tone-weather); }
 .ov-block[data-tone='transit'] .ov-block-title { color: var(--tone-transit); }
 .ov-block[data-tone='events'] .ov-block-title { color: var(--tone-events); }
-.ov-more { margin-inline-start: auto; font-size: var(--text-sm); }
+.ov-more { display: inline-flex; align-items: center; min-height: var(--target); margin-inline-start: auto; font-size: var(--text-sm); }
 /* Weather: the measured number with its facts on one line, the range beside them. */
 .ov-weather-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-4); align-items: center; }
 .ov-temp { font-size: 3rem; font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }

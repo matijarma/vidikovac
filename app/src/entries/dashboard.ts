@@ -30,6 +30,18 @@ const { i18n, theme, toasts } = bootPage({ page: 'dashboard' });
 const root = document.querySelector<HTMLElement>('#dash')!;
 const params = parseSessionHash(location.hash);
 
+// Collapsed on screen, complete on paper: native printing (including Ctrl+P)
+// must retain attribution and licence text, not only the disclosure heading.
+let printDetails: HTMLDetailsElement[] = [];
+window.addEventListener('beforeprint', () => {
+  printDetails = [...document.querySelectorAll<HTMLDetailsElement>('details.provenance:not([open])')];
+  for (const details of printDetails) details.open = true;
+});
+window.addEventListener('afterprint', () => {
+  for (const details of printDetails) details.open = false;
+  printDetails = [];
+});
+
 function safeLocalStorage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
 }

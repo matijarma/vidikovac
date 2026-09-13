@@ -178,6 +178,17 @@ describe('shell and navigation', () => {
   });
 });
 describe('session states', () => {
+  it('keeps the safety shortcut usable after expiry without reopening session data', () => {
+    const { root, session } = mount();
+    session.join();
+    session.expire();
+    for (const selector of ['[data-testid=safety-shortcut]', '.ki-side-link[data-layer=sigurnost]']) {
+      const link = root.querySelector<HTMLAnchorElement>(selector)!;
+      expect(link.getAttribute('href')).toBe('/hitno');
+      expect(link.hasAttribute('data-action')).toBe(false);
+      expect(link.getAttribute('aria-disabled')).not.toBe('true');
+    }
+  });
   it('announces the join politely, shows the remaining time and the shared expiry, and focuses the title once', () => {
     const { root, session } = mount();
     session.join();

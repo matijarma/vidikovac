@@ -239,9 +239,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; }
 
-  // --- Safety strip: always painted, never a session's ------------------------
+  // --- Safety strip: always present, sharing the visible source state --------
   function paintStrip(): void {
-    const parts = safetyStrip(teaser, stop, i18n, s, now());
+    // A session response may still confirm a source while the preview request
+    // fails (and vice versa). All visible safety copy must use the same choice.
+    const modules = phase === 'paired' ? Object.values(mergedSnapshots()).filter((m): m is ModuleSnapshot => Boolean(m)) : teaser;
+    const parts = safetyStrip(modules, stop, i18n, s, now());
     const noBasics = phase === 'paired' || phase === 'setup';
     const w = parts.warning;
     strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
