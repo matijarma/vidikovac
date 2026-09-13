@@ -57,20 +57,39 @@ markLagano(document.documentElement, lightweight);
 if (!lightweight) void import('../ui/fonts.css');
 
 if (!params) {
+  // Reached with no room in the fragment (a bookmark, a stray share): a
+  // composed empty state with the two real ways in and the open safety page.
+  const empty = document.createElement('div');
+  empty.className = 'ki-empty';
+  const wordmark = document.createElement('a');
+  wordmark.className = 'ki-wordmark';
+  wordmark.href = '/';
+  wordmark.setAttribute('aria-label', i18n.t('shell.wordmarkLabel'));
+  const wordmarkText = document.createElement('span');
+  wordmarkText.className = 'ki-wordmark-text';
+  wordmarkText.textContent = i18n.t('common.appName');
+  wordmark.appendChild(wordmarkText);
   const heading = document.createElement('h1');
-  heading.className = 'visually-hidden';
-  heading.textContent = i18n.t('common.appName');
-  const p = document.createElement('p');
-  p.className = 'ki-alert page';
-  p.setAttribute('role', 'alert');
-  p.textContent = i18n.t('session.noRoom');
-  const link = document.createElement('a');
-  link.className = 'btn';
-  link.href = '/s/';
-  link.textContent = i18n.t('common.links.scan');
-  root.appendChild(heading);
-  root.appendChild(p);
-  root.appendChild(link);
+  heading.className = 'ki-empty-title';
+  heading.textContent = i18n.t('session.noRoom');
+  heading.setAttribute('role', 'alert');
+  const hint = document.createElement('p');
+  hint.className = 'meta';
+  hint.textContent = i18n.t('shell.footerNote');
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  for (const [href, key, cls] of [['/s/', 'common.links.scan', 'btn btn-primary'], ['/kiosk/', 'common.links.kiosk', 'btn-ghost'], ['/hitno', 'common.links.hitno', 'btn-quiet']] as const) {
+    const link = document.createElement('a');
+    link.className = cls;
+    link.href = href;
+    link.textContent = i18n.t(key);
+    actions.appendChild(link);
+  }
+  empty.appendChild(wordmark);
+  empty.appendChild(heading);
+  empty.appendChild(hint);
+  empty.appendChild(actions);
+  root.appendChild(empty);
 } else {
   const session = createSessionClient({ roomId: params.roomId, ticket: params.ticket });
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;

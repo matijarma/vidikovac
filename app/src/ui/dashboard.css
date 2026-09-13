@@ -127,4 +127,9 @@
 .share-code { margin: 0; font-family: var(--font-mono); font-size: var(--text-2xl); letter-spacing: 0.12em; }
 
 /* Lightweight and reduced motion: flat surfaces, no transitions. */
+
+/* /d/ opened without a room: a small composed page, not a bare alert. */
+.ki-empty { display: grid; gap: var(--sp-4); max-width: 34rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-10); }
+.ki-empty-title { font-size: var(--text-xl); letter-spacing: -0.015em; line-height: var(--leading-snug); }
+.ki-empty .actions { gap: var(--sp-3); }
 :root[data-lagano='1'] .sec, :root[data-lagano='1'] .ki-session, :root[data-lagano='1'] .banner { box-shadow: none; }
