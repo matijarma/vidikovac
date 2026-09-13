@@ -8,6 +8,7 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { I18n } from '../i18n/i18n';
 import { summariseRoutes, type RouteSummaryRow } from '../layers/route-summary';
+import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import type { VehicleInfo } from '../map/city-map';
 import type { Network } from '../motion/network';
 import { compassKey } from '../motion/vehicle-card';
@@ -21,9 +22,8 @@ export function vehiclesOfModes(vehicles: readonly VehicleInfo[], modes: Readonl
 /** One row per route with a vehicle moving now, trams first, with the route's delay in words. */
 export function runningRoutes(vehicles: readonly VehicleInfo[], delays: ReadonlyMap<string, number>, i18n: I18n): RouteSummaryRow[] {
   const known = vehicles.filter((v): v is VehicleInfo & { routeId: string } => v.routeId !== undefined);
-  // summariseRoutes reads a route without a figure as on time (its lightweight
-  // list's old fallback). Here a missing median stays missing: the row carries
-  // no delay word at all -- missing data is not zero (design.md).
+  // The overview already explains missing readings. A route without its own
+  // median needs no repeated label; it must never be described as on time.
   return summariseRoutes(known.map((v) => ({ routeId: v.routeId, label: v.short || v.routeId, type: v.type })), delays, i18n).map((row) =>
     delays.has(row.routeId) ? row : { ...row, word: '' },
   );
@@ -46,13 +46,12 @@ export function countByRoute(vehicles: readonly VehicleInfo[]): Map<string, numb
   return counts;
 }
 
-/** A route median past this is a feed artefact (a trip update days old), not a delay a rider can act on; the
- *  same bound as layers/shared.ts's plausibleRouteDelay in the integrated app, to be unified there. */
-export const MAX_ROUTE_DELAY_S = 90 * 60;
+/** Compatibility name; all surfaces use the same presentation bound. */
+export const MAX_ROUTE_DELAY_S = MAX_ROUTE_DELAY_SECONDS;
 
 /** The medians a screen may rank and print; an implausible one is left out, never shown as minutes. */
 export function plausibleDelays(delays: ReadonlyMap<string, number>): Map<string, number> {
-  return new Map([...delays].filter(([, seconds]) => Number.isFinite(seconds) && Math.abs(seconds) <= MAX_ROUTE_DELAY_S));
+  return new Map([...delays].filter(([, seconds]) => plausibleRouteDelay(seconds)));
 }
 
 /** The last stop along shape `shapeIdx`, its terminus, or null when the artefact names none. */

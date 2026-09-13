@@ -12,6 +12,8 @@ import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { stubSessionStorage } from './helpers';
 
 stubSessionStorage();
+// The workspace's fallback catalogue is not an upstream call in a unit test.
+vi.mock('../../app/src/core/screens', () => ({ loadStops: vi.fn(async () => []) }));
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const EXPIRES = NOW + 10 * 60_000; // 14:42
@@ -371,6 +373,23 @@ describe('failure and recovery', () => {
     session.error('no-ticket');
     expect(text(root.querySelector('.ki-banners'))).toContain('Skeniraj kod ponovno');
     expect(root.querySelector('.ki-banners a[href="/s/"]')).not.toBeNull();
+  });
+  it('an invalid grant stops refreshing and map movement while preserving a scan-recovery action', async () => {
+    const pause = vi.fn();
+    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn(), pause, resume: vi.fn() }));
+    const { root, session, handle, fetchData, tick } = mount({ mapFactory: factory });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    fetchData.mockClear();
+    session.error('no-ticket');
+    tick();
+    await flush();
+    expect(pause).toHaveBeenCalled();
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(root.querySelector('.ki-banners a[href="/s/"]')).not.toBeNull();
+    handle.destroy();
   });
   it('the end of the session freezes the view: the closing line and the way to a new session, no fetches, navigation off, exports on', async () => {
     const onItemCopy = vi.fn();

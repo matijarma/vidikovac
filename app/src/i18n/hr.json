@@ -232,6 +232,7 @@
     "undated": "Obavijesti bez datuma",
     "undatedNote": "Izvor ne navodi datum događanja, pa ove obavijesti nisu današnje najave.",
     "venue": "Mjesto",
+    "venueUnknown": "Lokacija nije navedena",
     "organiser": "Organizator",
     "source": "Izvor",
     "licence": "Licenca",

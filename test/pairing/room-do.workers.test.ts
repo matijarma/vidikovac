@@ -26,7 +26,6 @@ const testEnv = env as unknown as Env;
 async function openRoom(overrides: Partial<RoomOpenInput> = {}): Promise<{ roomId: string; input: RoomOpenInput }> {
   const roomId = overrides.roomId ?? randomId(10);
   const input: RoomOpenInput = {
-    roomId,
     expiresAt: Date.now() + 10 * 60_000,
     beaconType: 'kiosk',
     venueType: 'kafic',

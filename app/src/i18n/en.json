@@ -226,6 +226,7 @@
     "undated": "Undated notices",
     "undatedNote": "The source gives no event date, so these notices are not today's listings.",
     "venue": "Venue",
+    "venueUnknown": "Location not provided",
     "organiser": "Organiser",
     "source": "Source",
     "licence": "Licence",

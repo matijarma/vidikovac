@@ -270,7 +270,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
     }
     maps.sweep();
-    if (frozen) maps.pause();
+    if (frozen || error === 'no-ticket') maps.pause();
   }
 
   function setMapView(full: boolean): void {
@@ -507,7 +507,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       paintShell();
       return;
     }
-    if (code === 'no-ticket') { error = 'no-ticket'; paintShell(); }
+    if (code === 'no-ticket') {
+      error = 'no-ticket';
+      reconnecting = false;
+      store.pause(true);
+      schematic.pause();
+      maps.pause();
+      closeShare();
+      if (timer !== null) { clearTimer(timer); timer = null; }
+      paintShell();
+    }
   });
   session.onCodes((batch, serverNow) => openShare(batch, serverNow));
 

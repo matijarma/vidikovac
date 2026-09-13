@@ -86,6 +86,7 @@ describe('createSessionClient', () => {
     expect(b.client.snapshot().phase).toBe('closed');
     expect(b.client.snapshot().dataToken).toBeNull();
     expect(errors).toHaveBeenCalledWith('no-ticket');
+    expect(errors).toHaveBeenCalledTimes(1);
     expect(b.st.raw[RESUME_KEY]).toBeUndefined();
     expect(b.st.raw[DATA_TOKEN_KEY]).toBeUndefined();
     expect(b.retries).toHaveLength(0);
@@ -221,6 +222,24 @@ describe('createSessionClient', () => {
     b.runRetry();
     b.sock.emit('open');
     expect(b.sock.json(0)).toEqual({ t: 'resume', resumeToken: 'res1' });
+  });
+  it('can resume a live session when browser storage is blocked', () => {
+    const st = storage();
+    st.getItem = () => { throw new Error('storage disabled'); };
+    st.setItem = () => { throw new Error('storage disabled'); };
+    const b = boot({ store: st });
+    b.sock.emit('open');
+    b.sock.server(JOINED);
+    b.sock.emit('close', { code: 1006, reason: '' });
+    expect(b.client.snapshot().phase).toBe('connecting');
+    b.runRetry();
+    b.sock.emit('open');
+    expect(b.sock.json(0)).toEqual({ t: 'resume', resumeToken: 'res1' });
+    b.sock.server(JOINED);
+    expect(b.client.snapshot().phase).toBe('live');
+    b.sock.server({ t: 'expired' });
+    b.sock.emit('close', { code: 1006, reason: '' });
+    expect(b.retries).toHaveLength(0);
   });
   it('bounds a hanging handshake and ignores late events from the abandoned socket', () => {
     const b = boot();

@@ -151,7 +151,7 @@ function eventRow(i18n: I18n, item: FeedItem, ctx: LayerContext, ongoing = false
   const untilKey = item.until ? zagrebDayKey(item.until) : '';
   const multiDay = untilKey !== '' && untilKey !== zagrebDayKey(item.at);
   const meta = [
-    venue ? escapeHtml(venue) : '',
+    escapeHtml(venue || i18n.t('events.venueUnknown')),
     `<span class="ev-source">${escapeHtml(i18n.t(`events.sources.${dataText(item, 'source')}`))}</span>`,
     ongoing ? escapeHtml(i18n.t('events.ongoingUntil', { date: zagrebWeekdayDate(item.until) })) : multiDay ? escapeHtml(i18n.t('events.untilDate', { date: zagrebWeekdayDate(item.until) })) : '',
   ].filter(Boolean).join(' · ');
@@ -189,7 +189,7 @@ function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
   const category = categoryLabel(i18n, eventCategory(item));
   const facts: [string, string][] = [
     [i18n.t('events.when'), isDated(item) ? eventWhen(i18n, item, ctx.now) : i18n.t('events.timeUnknown')],
-    [i18n.t('events.venue'), dataText(item, 'venue')],
+    [i18n.t('events.venue'), dataText(item, 'venue') || i18n.t('events.venueUnknown')],
     [i18n.t('events.organiser'), dataText(item, 'organiser')],
     [i18n.t('events.categoryLabel'), category],
     [i18n.t('events.source'), CULTURE_SOURCE_ATTRIBUTION[source] ?? source],

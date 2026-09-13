@@ -14,6 +14,7 @@ import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { cityTeaserAttribution } from '../layers/grad-teaser';
 import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../layers/route-summary';
+import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import { dist, toPlane } from '../motion/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
@@ -142,11 +143,8 @@ export function sunLine(sun: SunToday, strings: KioskStrings): string {
 
 /** A route median beyond this is a stale trip update, not a delay a rider can
  *  use (night-time feeds carry six-hour figures); it reads as unknown. */
-export const PLAUSIBLE_DELAY_S = 90 * 60;
-
-export function plausibleDelay(seconds: number | null | undefined): seconds is number {
-  return typeof seconds === 'number' && Number.isFinite(seconds) && Math.abs(seconds) <= PLAUSIBLE_DELAY_S;
-}
+export const PLAUSIBLE_DELAY_S = MAX_ROUTE_DELAY_SECONDS;
+export const plausibleDelay = plausibleRouteDelay;
 
 /** routeId -> median delay seconds from the 'route:' rows; absent means unknown. */
 export function routeDelays(zet: ModuleSnapshot | undefined): Map<string, number> {

@@ -128,6 +128,8 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   let role: Role | null = null;
   let expiresAt: number | null = null;
   let dataToken: string | null = null;
+  // Storage is a reload convenience, not a requirement for a live session.
+  let resumeToken = readResume(storage, deps.roomId);
   let participants = 0;
   let screen: ScreenMetadata | undefined;
   let offset = 0;
@@ -156,6 +158,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     expiredFired = true;
     phase = 'expired';
     dataToken = null;
+    resumeToken = null;
     clearHandshake();
     try { storage?.removeItem(RESUME_KEY); } catch { /* ignore */ }
     try { storage?.removeItem(DATA_TOKEN_KEY); } catch { /* ignore */ }
@@ -167,20 +170,19 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   }
 
   /** Invalid grants cannot recover by retrying the same ticket or resume token. */
-  function rejectGrant(reason: string): void {
+  function rejectGrant(): void {
     leaving = true;
     clearHandshake();
     if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
     dataToken = null;
+    resumeToken = null;
     try { storage?.removeItem(RESUME_KEY); } catch { /* storage optional */ }
     try { storage?.removeItem(DATA_TOKEN_KEY); } catch { /* storage optional */ }
     if (expiresAt !== null && expiresAt <= serverNow()) {
       fireExpired();
     } else {
       phase = 'closed';
-      // The existing UI recovery contract is "scan again"; also retain the
-      // server reason for diagnostics without exposing it in the interface.
-      error.forEach((listener) => listener(reason));
+      // One failure, one recovery event. Do not count the same rejection twice.
       error.forEach((listener) => listener('no-ticket'));
     }
     socket?.close(1000, 'grant-invalid');
@@ -193,6 +195,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         role = message.role;
         expiresAt = message.expiresAt;
         dataToken = message.dataToken;
+        resumeToken = message.resumeToken;
         participants = message.participants;
         screen = message.screen;
         offset = message.serverNow - now();
@@ -209,7 +212,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
       case 'expired': fireExpired(); return;
       case 'error':
         if (message.error === 'ticket-invalid' || message.error === 'resume-invalid' || message.error === 'room-closed') {
-          rejectGrant(message.error);
+          rejectGrant();
         } else error.forEach((l) => l(message.error));
         return;
       default: return;
@@ -220,7 +223,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
    * A sent ticket with no joined response cannot safely be spent a second time. */
   function shouldReconnect(): boolean {
     if (leaving || phase === 'expired') return false;
-    if (!(deps.ticket && !ticketSpent) && !readResume(storage, deps.roomId)) return false;
+    if (!(deps.ticket && !ticketSpent) && !resumeToken) return false;
     return expiresAt !== null
       ? expiresAt > serverNow()
       : firstConnectAt !== null && now() - firstConnectAt < INITIAL_CONNECT_WINDOW_MS;
@@ -276,7 +279,6 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     }, HANDSHAKE_TIMEOUT_MS);
     active.addEventListener('open', () => {
       if (socket !== active || leaving || phase === 'expired') return;
-      const resumeToken = readResume(storage, deps.roomId);
       // The ticket is single-use, so only the first attempt may spend it; every
       // later one resumes, which is what RoomDO's one-live-socket rule expects.
       if (deps.ticket && !ticketSpent) {
@@ -328,6 +330,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     event(name, dim) { send(dim === undefined ? { t: 'event', name } : { t: 'event', name, dim }); },
     close() {
       leaving = true;
+      resumeToken = null;
       clearHandshake();
       if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
       socket?.close(1000, 'leave');

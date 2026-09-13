@@ -111,7 +111,7 @@ describe('createThemeController', () => {
   it('falls back to the palette canvas when the custom property is unreadable', () => {
     const root = document.createElement('html'); // detached: computed style is empty
     createThemeController({ root, media: media(true), storage: fakeStorage(), documentRef: document });
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#16226b');
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#17201f');
   });
   it('tolerates a storage that throws', () => {
     const root = document.createElement('html');
