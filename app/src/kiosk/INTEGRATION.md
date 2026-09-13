@@ -19,25 +19,28 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 - `selectedRoute` and `follow` -- the route the phone selected; `follow` asks the
   camera to keep that route's vehicles in frame.
 
-Today's `createCityMap` ignores the extra fields (the map centres on the city
-at zoom 12); reading them is all that is needed. Two optional additions would
-improve the paired screen:
+The integrated `createCityMap` (the same-origin vector map) reads these, plus
+the other options the kiosk passes on creation: `stop` (the screen's stop,
+marked and named), `interactive: false` (no pointer or keyboard handling, no
+controls on a public screen), `symbolScale` 1.5 and `locale`. On the handle
+the kiosk drives:
 
-- `CityMapHandle.setView?(view: KioskMapView)` -- the adapter calls it whenever
-  the view changes (a new selection), only when the method exists.
-- A `resize()` on reparent -- the kiosk keeps the map column the same size in
-  every composition and parks the container in a hidden holder while a layer
-  without a map is shown, then re-appends it; MapLibre needs a resize if the
-  container's box changed in between.
-- Camera padding for the lines board -- the board lies over the lower part of
-  the map column (under half of its height, `[data-testid=kiosk-lines]`). A
-  `padding: { bottom }` equal to that board's height, or a `center` that
-  places the stop in the upper part of the visible area, keeps the screen's
-  stop and its vehicles in view. The kiosk can pass the board height once the
-  option exists; until then it centres on the stop and accepts the overlap.
-- The kiosk never calls the factory twice for one screen. `setView` (or the
-  creation options) is the only channel for camera state; the kiosk never
-  reaches into MapLibre itself.
+- `setView(view)` whenever the view changes (a new selection, a new centre);
+- `resize()` right after the container is re-appended -- the kiosk parks the
+  one container in a hidden holder while a layer without a map is shown;
+- `setFeedState(state)` from the ZET snapshot's own status on every paint, and
+  again right after every `resume()` (a reparent, the basics panel closing), so
+  a stale or down feed holds every vehicle where it is and nothing animates
+  through an outage. A map created during an outage is told before its first
+  frame.
+
+The lines board lies over the lower part of the map column (under half of its
+height). The map API has no camera padding, so the kiosk moves the camera
+centre south by half the board's height (`boardCentre`), which puts the stop in
+the middle of the uncovered part. A `padding` option on `setView` would let the
+kiosk keep the true centre instead; nothing else is pending on the map side.
+The kiosk never calls the factory twice for one screen and never reaches into
+MapLibre itself.
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn

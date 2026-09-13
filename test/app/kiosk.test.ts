@@ -456,6 +456,45 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
+  function fakeMap() {
+    const calls: string[] = [];
+    const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
+    return { factory: vi.fn(() => handle), handle, calls };
+  }
+  it('the map hears the ZET feed state on every paint: a stale teaser holds it, a reparent resizes and re-asserts the hold right after resume, basics pause and resume the same way', async () => {
+    const stale = MODULES.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' as const } : m));
+    const map = fakeMap();
+    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
+    // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
+    expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
+    await flush();
+    expect(map.calls.at(-1)).toBe('feed:stale');
+    expect(q(k.root, '[data-testid=kiosk-map]')).not.toBeNull();
+    (q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement).click();
+    expect(map.calls.at(-1)).toBe('pause');
+    q(k.root, '[data-testid=kiosk-essentials]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(map.calls.slice(-2)).toEqual(['resume', 'feed:stale']);
+    const before = map.calls.length;
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    // Parked while the composition changed, then re-parented into the paired map column.
+    const resize = map.calls.lastIndexOf('resize');
+    expect(resize).toBeGreaterThan(before);
+    expect(map.calls.slice(before, resize)).toEqual(['pause', 'feed:stale']); // parked, then told from the teaser on the paired paint
+    expect(map.calls.slice(resize, resize + 3)).toEqual(['resize', 'resume', 'feed:stale']);
+    expect(map.calls.at(-1)).toBe('feed:live'); // the session's own zet-rt answered live
+    k.view('vijesti');
+    await flush();
+    expect(map.calls.at(-1)).toBe('pause'); // a domain without a map parks it, never destroys it
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    k.view('u-pokretu');
+    await flush();
+    const again = map.calls.lastIndexOf('resume');
+    expect(map.calls[again - 1]).toBe('resize');
+    expect(map.calls[again + 1]).toBe('feed:live');
+    expect(map.handle.destroy).not.toHaveBeenCalled();
+  });
   it('a beacon outage and a teaser outage are independent alerts; the poll chain stays armed and clears its own alert on recovery', async () => {
     let fail = true;
     const k = mount({ stored: STORED, fetchTeaser: async () => { if (fail) throw new Error('down'); return { modules: MODULES }; } });

@@ -38,6 +38,8 @@ export const en: KioskStrings = {
     humidity: 'humidity {value} %',
     wind: 'wind {dir} {speed} m/s',
     windCalm: 'calm',
+    windNoDir: 'wind {speed} m/s',
+    compass: { N: 'north', NE: 'northeast', E: 'east', SE: 'southeast', S: 'south', SW: 'southwest', W: 'west', NW: 'northwest' },
     pressure: '{value} hPa',
     observed: 'observed {time}',
     sunrise: 'sunrise {time}',

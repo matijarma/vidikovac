@@ -38,6 +38,8 @@ export const hr: KioskStrings = {
     humidity: 'vlaga {value} %',
     wind: 'vjetar {dir} {speed} m/s',
     windCalm: 'bez vjetra',
+    windNoDir: 'vjetar {speed} m/s',
+    compass: { N: 'sjever', NE: 'sjeveroistok', E: 'istok', SE: 'jugoistok', S: 'jug', SW: 'jugozapad', W: 'zapad', NW: 'sjeverozapad' },
     pressure: '{value} hPa',
     observed: 'opaženo {time}',
     sunrise: 'izlazak {time}',

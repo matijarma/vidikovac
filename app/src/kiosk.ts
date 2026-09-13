@@ -280,7 +280,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (basics.hidden) return;
     basics.hidden = true;
     stage.hidden = false;
-    if (mapContainer && mapContainer.parentElement !== park) mapAdapter.handle()?.resume();
+    if (mapContainer && mapContainer.parentElement !== park) resumeMap();
     if (restoreFocus) element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')?.focus();
   }
 
@@ -297,12 +297,24 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     park.appendChild(mapContainer);
     mapAdapter.handle()?.pause();
   }
+  /** Motion may run again only if the feed allows it: the hold is re-asserted after every resume. */
+  function resumeMap(): void {
+    const handle = mapAdapter.handle();
+    if (!handle) return;
+    handle.resume();
+    mapAdapter.setFeedState(mapAdapter.feedState());
+  }
+  /** The lines board over the map's foot, in CSS px; 0 without layout or in lightweight mode. */
+  function boardHeight(): number {
+    const box = element.querySelector<HTMLElement>('.k-lines--overlay');
+    return box ? box.getBoundingClientRect().height : 0;
+  }
   function paintMap(): void {
     const host = currentMapHost();
     if (!host) { parkMap(); return; }
     const snapshots = phase === 'paired' ? { ...byModule(teaser), ...sessionSnapshots } : byModule(teaser);
     const container = requestKioskMap(maps, {
-      stop, snapshots, now: now(), reducedMotion,
+      stop, snapshots, now: now(), reducedMotion, locale, boardPx: boardHeight(),
       selection: phase === 'paired' ? selection : null,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
@@ -310,7 +322,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     mapContainer = container;
     if (container.parentElement !== host) {
       host.appendChild(container);
-      mapAdapter.handle()?.resume();
+      // The box changed while the container sat outside the layout.
+      mapAdapter.handle()?.resize?.();
+      resumeMap();
     }
     element.dataset.live = '1';
   }

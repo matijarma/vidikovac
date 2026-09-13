@@ -69,7 +69,11 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
   const details: string[] = [];
   if (humidity !== null) details.push(fill(strings.weather.humidity, { value: fmtNumber(locale, humidity, 0) }));
   if (windSpeed !== null) {
-    details.push(windSpeed < 0.3 || !windDir ? strings.weather.windCalm : fill(strings.weather.wind, { dir: windDir, speed: fmtNumber(locale, windSpeed, 1) }));
+    // Calm is exactly zero. A speed with no usable direction is still a speed;
+    // a direction reads in the catalogue's compass words, as the app's does.
+    const dir = compassLabel(windDir, strings);
+    const speed = fmtNumber(locale, windSpeed, 1);
+    details.push(windSpeed === 0 ? strings.weather.windCalm : dir ? fill(strings.weather.wind, { dir, speed }) : fill(strings.weather.windNoDir, { speed }));
   }
   if (pressure !== null) details.push(fill(strings.weather.pressure, { value: fmtNumber(locale, pressure, 0) }));
   const observedMs = observation.at ? Date.parse(observation.at) : NaN;
@@ -84,6 +88,23 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
     observedMs: Number.isFinite(observedMs) ? observedMs : null,
     attribution: fillAttribution(snapshot.attribution, snapshot, observation),
   };
+}
+
+/** DHMZ's compass point (its XML carries English points; 'C' or a dash for
+ *  none) as one of the eight compass words the app also uses, so the screen
+ *  and the phone agree: a 16-point reading rounds to the nearest eighth. */
+const COMPASS_DEG: Record<string, number> = {
+  N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5,
+  S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
+};
+const COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+
+export function compassLabel(dir: string, strings: KioskStrings): string {
+  const key = dir.trim().toUpperCase();
+  if (!key || key === 'C' || /^[-–—]+$/.test(key)) return '';
+  const deg = COMPASS_DEG[key];
+  if (deg === undefined) return '';
+  return strings.weather.compass[COMPASS8[Math.round(deg / 45) % 8]!] ?? '';
 }
 
 export interface SunToday {

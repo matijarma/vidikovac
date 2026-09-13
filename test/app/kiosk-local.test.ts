@@ -13,8 +13,8 @@ import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/di
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { decideLayout, MIN_ZOOM } from '../../app/src/kiosk/layout';
-import { cityDateLine, closuresNear, linesAtStop, nearestPharmacy, safetyStrip, stories, sunToday, weatherNow } from '../../app/src/kiosk/local';
-import { createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { cityDateLine, closuresNear, compassLabel, linesAtStop, nearestPharmacy, safetyStrip, stories, sunToday, weatherNow } from '../../app/src/kiosk/local';
+import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { eventGroups, fitRows, pairedMarkup } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
@@ -163,7 +163,7 @@ describe('local content from the stop-scoped teaser', () => {
     expect(w.temperature).toBe('21,4 °C');
     expect(w.condition).toBe('vedro');
     expect(w.station).toBe('Zagreb-Maksimir');
-    expect(w.details).toEqual(['vlaga 55 %', 'vjetar NW 2,3 m/s', '1016 hPa']);
+    expect(w.details).toEqual(['vlaga 55 %', 'vjetar sjeverozapad 2,3 m/s', '1016 hPa']);
     expect(w.observedAt).toBe('opaženo 14:00');
     expect(weatherNow(MODULES.filter((m) => m.module !== 'dhmz-now'), hr, 'hr').state).toBe('loading');
     const dash = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { temp: 11.2, weather: '-' } })]) : m));
@@ -171,6 +171,15 @@ describe('local content from the stop-scoped teaser', () => {
     expect(weatherNow(MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, status: 'down' as const } : m)), hr, 'hr').state).toBe('down');
   });
   it('lists the routes at the stop, capped, with each line\u2019s delay in words and its vehicles near the stop', () => {
+    const wind = (data: Record<string, string | number>) => weatherNow(MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data })]) : m)), hr, 'hr').details;
+    // Wind: calm only at exactly zero; a speed without a direction is still a speed; a direction is the app's compass word.
+    expect(wind({ temp: 11, windSpeed: 0, windDir: 'C' })).toEqual(['bez vjetra']);
+    expect(wind({ temp: 11, windSpeed: 0.3, windDir: 'NW' })).toEqual(['vjetar sjeverozapad 0,3 m/s']);
+    expect(wind({ temp: 11, windSpeed: 2.3 })).toEqual(['vjetar 2,3 m/s']);
+    expect(wind({ temp: 11, windSpeed: 1.2, windDir: '-' })).toEqual(['vjetar 1,2 m/s']);
+    expect(wind({ temp: 11, windSpeed: 4, windDir: 'NNE' })).toEqual(['vjetar sjeveroistok 4 m/s']);
+    expect(compassLabel('ese', kioskStrings('en'))).toBe('southeast');
+    expect(compassLabel('XYZ', hr)).toBe('');
     const board = linesAtStop(MODULES, STOP, i18n, 6);
     expect(board.state).toBe('live');
     expect(board.rows.map((r) => r.routeId)).toEqual(['6', '11', '12', '13', '14', '17']);
@@ -326,5 +335,29 @@ describe('the one map, through the additive adapter', () => {
     expect(KIOSK_MAP_SLOT_ID).toBe('kiosk-map');
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
+  });
+  it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and centres above the lines board', () => {
+    const setFeedState = vi.fn();
+    const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
+    const adapter = createKioskMapAdapter(factory);
+    adapter.setFeedState('stale');
+    expect(adapter.feedState()).toBe('stale');
+    const maps = createMapSlots(adapter.factory);
+    const zet = MODULES.find((m) => m.module === 'zet-rt')!;
+    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': { ...zet, status: 'stale' } }, now: NOW, selection: null, ariaLabel: 'karta', boardPx: 300 }, adapter);
+    expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
+    requestKioskMap(maps, { stop: STOP, snapshots: {}, now: NOW, selection: null, ariaLabel: 'karta' }, adapter);
+    expect(setFeedState).toHaveBeenLastCalledWith('down'); // no snapshot is no evidence of motion
+    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': zet }, now: NOW, selection: null, ariaLabel: 'karta' }, adapter);
+    expect(setFeedState).toHaveBeenLastCalledWith('live');
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options.interactive).toBe(false);
+    expect(options.symbolScale).toBe(KIOSK_SYMBOL_SCALE);
+    expect(options.stop).toEqual(STOP);
+    const [lon, lat] = options.center as [number, number];
+    expect(lon).toBe(STOP.lon);
+    expect(STOP.lat - lat).toBeCloseTo((150 * metresPerPixel(15, STOP.lat)) / 111_320, 6);
+    expect(boardCentre(STOP, 15, 0)).toEqual([STOP.lon, STOP.lat]);
+    expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
   });
 });

@@ -39,6 +39,10 @@ export interface KioskStrings {
     humidity: string;
     wind: string;
     windCalm: string;
+    /** A measured speed whose direction the station did not state. */
+    windNoDir: string;
+    /** The eight compass points, the same words the app's weather uses. */
+    compass: Record<'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW', string>;
     pressure: string;
     observed: string;
     sunrise: string;
