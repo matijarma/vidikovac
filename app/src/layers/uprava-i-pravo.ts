@@ -130,7 +130,7 @@ function gazetteSection(i18n: I18n, ctx: LayerContext): string {
   const shown = Math.min(matches.length, Number(ctx.view?.filters.acts) || ACTS_PAGE);
   const visible = matches.slice(0, shown);
   const more = shown < matches.length
-    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(ACTS_PAGE, matches.length - shown) }), { extra: { 'filter-key': 'acts', 'filter-value': shown + ACTS_PAGE } })
+    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(ACTS_PAGE, matches.length - shown) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'acts', 'filter-value': shown + ACTS_PAGE } })
     : '';
   const coverage = matches.length ? `<p class="sec-note">${escapeHtml(i18n.t('status.coverage', { shown, total: matches.length }))}</p>` : '';
   const first = acts[0];

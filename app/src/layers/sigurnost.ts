@@ -74,7 +74,7 @@ function closuresSection(i18n: I18n, ctx: LayerContext, state: SafetyState): str
   const shownCount = Math.min(items.length, Number(ctx.view?.filters.closures) || CLOSURES_PAGE);
   const shown = items.slice(0, shownCount);
   const more = shownCount < items.length
-    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(CLOSURES_STEP, items.length - shownCount) }), { extra: { 'filter-key': 'closures', 'filter-value': shownCount + CLOSURES_STEP } })
+    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(CLOSURES_STEP, items.length - shownCount) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'closures', 'filter-value': shownCount + CLOSURES_STEP } })
     : '';
   const list = listState(i18n, roads, 'prometnice', items.length, i18n.t('safety.closuresNone'), ctx.errors?.prometnice)
     || `<ul class="rows-plain" role="list" data-testid="safety-closures">${shown.map((c) => closureRow(i18n, c)).join('')}</ul>${more}`;

@@ -557,6 +557,10 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     expect(text(more)).toBe('Prikaži još 10');
     expect(more.getAttribute('data-filter-value')).toBe('20');
     expect(text(section.querySelector('#cv-gazette'))).toContain('prikazano 10 od 25');
+    // A bare-button grid child stretches to the section's full width unless it
+    // opts out (layers.css `.sf-more { justify-self: start }`); the button must
+    // render as a compact pill, not a full-width bar.
+    expect(more.classList.contains('sf-more')).toBe(true);
 
     const expanded = renderLayer('uprava-i-pravo', ctx({ snapshots: withActs, view: { layer: 'uprava-i-pravo', selection: null, filters: { acts: '20' } } }));
     expect(expanded.querySelectorAll('[data-testid=act-row]')).toHaveLength(20);
@@ -569,6 +573,7 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     const more = section.querySelector('[data-action=filter][data-filter-key=assembly]')!;
     expect(text(more)).toBe('Prikaži još 24');
     expect(more.getAttribute('data-filter-value')).toBe('36');
+    expect(more.classList.contains('sf-more')).toBe(true);
     // The count sentence always names the true total, unaffected by paging (R-K4).
     expect(text(section.querySelector('#sf-assembly'))).toContain('Na popisu je 40 mjesta');
 
@@ -583,6 +588,8 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     const more = section.querySelector('[data-action=filter][data-filter-key=closures]')!;
     expect(text(more)).toBe('Prikaži još 10');
     expect(more.getAttribute('data-filter-value')).toBe('15');
+    // Same grid-stretch escape as the gazette and assembly "more" buttons.
+    expect(more.classList.contains('sf-more')).toBe(true);
 
     const expanded = renderLayer('sigurnost', ctx({ snapshots: withClosures, view: { layer: 'sigurnost', selection: null, filters: { closures: '15' } } }));
     expect(expanded.querySelectorAll('[data-testid=closure-row]')).toHaveLength(15);
