@@ -24,6 +24,13 @@
 .sec.wx-lead { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
 .ws-toolbar { display: grid; gap: var(--sp-3); }
 .ws-toolbar .field-search input { inline-size: 100%; }
+/* Chips stay one row on a phone: the row scrolls under a fading edge instead
+   of wrapping to a second line, and returns to a wrapping group once there is
+   room (60rem, the point the rest of the workspace grid also widens). */
+.ws-toolbar .chips { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding-block: 2px; mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent); }
+.ws-toolbar .chips::-webkit-scrollbar { display: none; }
+.ws-toolbar .chips > li { flex: none; scroll-snap-align: start; }
+@media (min-width: 60rem) { .ws-toolbar .chips { flex-wrap: wrap; overflow: visible; mask-image: none; } }
 /* Control labels wrap rather than widen their column: a long label is never
    the reason a section's implicit grid track grows past its own box. */
 .ws .btn, .ws .btn-ghost, .ws .btn-quiet { white-space: normal; text-align: start; padding-block: var(--sp-2); }

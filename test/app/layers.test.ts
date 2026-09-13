@@ -63,6 +63,31 @@ function ctx(over: Partial<LayerContext> = {}): LayerContext {
 }
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
+// Fixtures with more rows than a single default page, for T1.4's paging tests.
+// Real shapes (module, kind, data) match the single-item SNAPSHOTS above.
+const MANY_ACTS: ModuleSnapshot = base(
+  'glasnik',
+  Array.from({ length: 25 }, (_, i) => ({
+    id: `a${i + 1}`, module: 'glasnik', kind: 'act', tier: 'open', title: `Odluka broj ${i + 1}`,
+    link: `https://www1.zagreb.hr/akt/${i + 1}`, data: { broj: String(i + 1), godina: '2026' },
+  })) as ModuleSnapshot['items'],
+);
+const MANY_POINTS: ModuleSnapshot = base(
+  'ckan-geo',
+  Array.from({ length: 40 }, (_, i) => ({
+    id: `p${i + 1}`, module: 'ckan-geo', kind: 'poi', tier: 'open', title: `Zborno mjesto ${i + 1}`,
+    data: { layer: 'zborna-mjesta', category: 'Zborno mjesto civilne zaštite' },
+  })) as ModuleSnapshot['items'],
+);
+const MANY_CLOSURES: ModuleSnapshot = base(
+  'prometnice',
+  Array.from({ length: 20 }, (_, i) => ({
+    id: `c${i + 1}`, module: 'prometnice', kind: 'closure', tier: 'open', title: `Ulica ${i + 1}`,
+    at: '2026-09-01T00:00:00Z', until: '2026-09-30T00:00:00Z',
+    data: { type: 'ROAD_CLOSED', subtype: 'ROAD_CLOSED_CONSTRUCTION', direction: 'ONE_DIRECTION' },
+  })) as ModuleSnapshot['items'],
+);
+
 describe('layer registry', () => {
   it('has a renderer and a module list for every LayerId', () => {
     for (const layer of LAYERS) {
@@ -520,6 +545,62 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     expect(detail.querySelector('a[href="https://vijesti.hrt.hr/clanak"]')).not.toBeNull();
     expect(text(detail)).toContain('Sažetak');
     expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain('Izvor: hrt-news');
+  });
+});
+
+describe('bounded lists, one-row chips and venue only when known (T1.4)', () => {
+  it('Grad pages the gazette by ten acts, offers the rest ten at a time, and a filter value renders exactly that many', () => {
+    const withActs = { ...SNAPSHOTS, glasnik: MANY_ACTS };
+    const section = renderLayer('uprava-i-pravo', ctx({ snapshots: withActs }));
+    expect(section.querySelectorAll('[data-testid=act-row]')).toHaveLength(10);
+    const more = section.querySelector('[data-action=filter][data-filter-key=acts]')!;
+    expect(text(more)).toBe('Prikaži još 10');
+    expect(more.getAttribute('data-filter-value')).toBe('20');
+    expect(text(section.querySelector('#cv-gazette'))).toContain('prikazano 10 od 25');
+
+    const expanded = renderLayer('uprava-i-pravo', ctx({ snapshots: withActs, view: { layer: 'uprava-i-pravo', selection: null, filters: { acts: '20' } } }));
+    expect(expanded.querySelectorAll('[data-testid=act-row]')).toHaveLength(20);
+  });
+
+  it('Sigurnost pages assembly points by twelve, offers 24 more, and a search still surfaces every match regardless of the page', () => {
+    const withPoints = { ...SNAPSHOTS, 'ckan-geo': MANY_POINTS };
+    const section = renderLayer('sigurnost', ctx({ snapshots: withPoints }));
+    expect(section.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(12);
+    const more = section.querySelector('[data-action=filter][data-filter-key=assembly]')!;
+    expect(text(more)).toBe('Prikaži još 24');
+    expect(more.getAttribute('data-filter-value')).toBe('36');
+    // The count sentence always names the true total, unaffected by paging (R-K4).
+    expect(text(section.querySelector('#sf-assembly'))).toContain('Na popisu je 40 mjesta');
+
+    const searched = renderLayer('sigurnost', ctx({ snapshots: withPoints, view: { layer: 'sigurnost', selection: null, filters: { zborna: 'mjesto' } } }));
+    expect(searched.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(40);
+  });
+
+  it('Sigurnost pages road closures by five and offers ten more at a time', () => {
+    const withClosures = { ...SNAPSHOTS, prometnice: MANY_CLOSURES };
+    const section = renderLayer('sigurnost', ctx({ snapshots: withClosures }));
+    expect(section.querySelectorAll('[data-testid=closure-row]')).toHaveLength(5);
+    const more = section.querySelector('[data-action=filter][data-filter-key=closures]')!;
+    expect(text(more)).toBe('Prikaži još 10');
+    expect(more.getAttribute('data-filter-value')).toBe('15');
+
+    const expanded = renderLayer('sigurnost', ctx({ snapshots: withClosures, view: { layer: 'sigurnost', selection: null, filters: { closures: '15' } } }));
+    expect(expanded.querySelectorAll('[data-testid=closure-row]')).toHaveLength(15);
+  });
+
+  it('shows a venue only when the source has one: no row in kultura or on Grad now claims an unknown location', () => {
+    const kultura = renderLayer('kultura', ctx());
+    expect(text(kultura)).not.toContain('Lokacija nije navedena');
+    const rows = [...kultura.querySelectorAll('[data-testid=event-row]')].map(text);
+    expect(rows.find((r) => r.includes('Koncert u parku'))).toContain('Kulturpunkt');
+    // The Etnografski fixture carries a real venue, and it still shows, venue then source.
+    expect(rows.find((r) => r.includes('Izložba tradicijskog nakita'))).toContain('Studentski centar · Etnografski muzej');
+
+    const detailOpen = renderLayer('kultura', ctx({ view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('dogadanja', 'kulturpunkt:1'), module: 'dogadanja' }, filters: {} } }));
+    expect(text(detailOpen.querySelector('[data-testid=event-detail]'))).not.toContain('Mjesto');
+
+    const gradSada = renderLayer('grad-sada', ctx());
+    expect(text(gradSada)).not.toContain('Lokacija nije navedena');
   });
 });
 

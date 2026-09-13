@@ -169,7 +169,7 @@ function agendaBlock(i18n: I18n, ctx: LayerContext): string {
     const day = dayHeading(i18n, item.at, ctx.now);
     const head = day !== lastDay ? `<li class="agenda-day" data-key="day-${escapeAttribute(day)}" role="presentation">${escapeHtml(day)}</li>` : '';
     lastDay = day;
-    const meta = [dataText(item, 'venue') || i18n.t('events.venueUnknown'), i18n.t(`events.sources.${dataText(item, 'source')}`)].filter(Boolean).join(' · ');
+    const meta = [dataText(item, 'venue'), i18n.t(`events.sources.${dataText(item, 'source')}`)].filter(Boolean).join(' · ');
     return head + crossRow('kultura', itemSelection(item), `<span class="row-lead">${eventLead(i18n, item)}</span><span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span><span class="row-meta">${escapeHtml(meta)}</span></span>`, item.id, 'ov-event');
   }).join('');
   const state = listState(i18n, dogadanja, 'dogadanja', upcoming.length, i18n.t('overview.noEvents'), ctx.errors?.dogadanja);

@@ -14,16 +14,28 @@ const snapshot: ModuleSnapshot = {
     at: '2026-09-14T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', precision: 'time' } }],
 };
 
-describe('events without a venue are explicitly unlocated', () => {
-  it.each(['hr', 'en'])('names the missing location in %s overview, agenda and detail', (locale) => {
+// T1.4: a venue prints only when the source has one; an event without one
+// shows its source alone, on every surface, never a placeholder sentence
+// ("Lokacija nije navedena" / "Location not provided" never prints, and no
+// "Mjesto"/"Venue" fact appears in the detail when there is nothing to show).
+describe('events without a venue show the source alone, never an unknown-location placeholder', () => {
+  it.each(['hr', 'en'])('names no missing location in %s overview, agenda or detail; the source stands alone', (locale) => {
     const i18n = createDefaultI18n(locale);
     const ctx = { i18n, now, snapshots: { dogadanja: snapshot } };
     const missing = i18n.t('events.venueUnknown');
-    expect(renderGradSada(ctx).querySelector('#ov-agenda')!.textContent).toContain(missing);
-    expect(renderKultura(ctx).querySelector('[data-testid=agenda]')!.textContent).toContain(missing);
+    const venueLabel = i18n.t('events.venue');
+    const source = i18n.t('events.sources.kulturpunkt');
+    const overview = renderGradSada(ctx).querySelector('#ov-agenda')!.textContent!;
+    expect(overview).not.toContain(missing);
+    expect(overview).toContain(source);
+    const agenda = renderKultura(ctx).querySelector('[data-testid=agenda]')!.textContent!;
+    expect(agenda).not.toContain(missing);
+    expect(agenda).toContain(source);
     const detail = renderKultura({ ...ctx, view: { layer: 'kultura', filters: {}, selection: {
       kind: 'item', module: 'dogadanja', id: publicItemKey('dogadanja', 'test-event'),
     } } });
-    expect(detail.querySelector('[data-testid=event-detail]')!.textContent).toContain(missing);
+    const detailText = detail.querySelector('[data-testid=event-detail]')!.textContent!;
+    expect(detailText).not.toContain(missing);
+    expect(detailText).not.toContain(venueLabel);
   });
 });
