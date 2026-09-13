@@ -3,7 +3,6 @@
 // session and the open pages. Not a layer: a view of the shell.
 import type { ModuleId } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
-import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
 import type { LayerContext } from '../layers/types';
@@ -61,10 +60,13 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
     const line = LINES[layer]?.(i18n, ctx) ?? i18n.t('directory.noSummary');
     return `<li class="row row-dir" data-key="${layer}"><a class="dir-item" href="#layer=${layer}" data-action="nav" data-layer="${layer}" data-testid="dir-${layer}">${iconMarkup(LAYER_ICONS[layer], undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t(`layers.${layer}`))}</span><span class="row-sub">${escapeHtml(line)}</span></span>${chevron}</a></li>`;
   }).join('');
-  // T2.4 ruling: LayerContext (core/contracts.ts, out of this task's ownership) carries no
-  // session-expiry field, so the row's clock uses ctx.now rather than the real "unlocked
-  // until" moment; the header pill and the session sheet it opens remain the accurate source.
-  const sessionTitle = i18n.t('directory.session', { time: zagrebTime(ctx.now) });
+  // Fix round 1 (T2.4): LayerContext (core/contracts.ts, out of this task's ownership) carries
+  // no expiry/frozen field, so this row cannot show the real "unlocked until" moment or swap to
+  // session.expiredTitle when frozen. Rather than substitute a wrong clock value (ctx.now is the
+  // plain wall clock, not the session's expiry), the copy carries no time at all until a chartered
+  // follow-up threads real session state into LayerContext. The header pill and the session sheet
+  // this row opens remain the accurate, real-time source.
+  const sessionTitle = i18n.t('directory.session');
   const sessionRow = `<li class="row row-dir" data-key="session"><button type="button" class="dir-item" data-action="session" data-testid="dir-session">${iconMarkup('sliders-horizontal', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(sessionTitle)}</span><span class="row-sub">${escapeHtml(i18n.t('directory.sessionSub'))}</span></span>${chevron}</button></li>`;
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],

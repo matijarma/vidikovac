@@ -331,7 +331,7 @@
     "intro": "The other domains, the session and the pages.",
     "domains": "Domains",
     "open": "Open {layer}",
-    "session": "Unlocked until {time}",
+    "session": "Unlocked",
     "sessionSub": "Settings, language and theme",
     "pages": "Pages",
     "weatherSummary": "{temp} °C, {condition}",

@@ -344,7 +344,7 @@
     "intro": "Ostale domene, sesija i stranice.",
     "domains": "Domene",
     "open": "Otvori {layer}",
-    "session": "Otključano do {time}",
+    "session": "Otključano",
     "sessionSub": "Postavke, jezik i tema",
     "pages": "Stranice",
     "weatherSummary": "{temp} °C, {condition}",

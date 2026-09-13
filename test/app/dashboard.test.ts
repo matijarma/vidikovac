@@ -159,7 +159,8 @@ describe('shell and navigation', () => {
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
     expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'vijesti']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
-    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toContain('Otključano do');
+    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano');
+    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).not.toMatch(/\d{1,2}:\d{2}/);
     click(root, '[data-testid=dir-session]');
     expect(document.querySelector('[data-testid=session-sheet]')).not.toBeNull();
     click(root, '[data-testid=dir-zrak-i-nebo]');
