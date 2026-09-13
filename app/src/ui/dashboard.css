@@ -38,6 +38,8 @@
 .ki-banners:empty { display: none; }
 .ki-main { grid-area: main; min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) max(var(--sp-4), env(safe-area-inset-right, 0px)) calc(var(--ki-tabs) + var(--sp-6)) max(var(--sp-4), env(safe-area-inset-left, 0px)); touch-action: pan-y; }
 .ki-main:focus-visible { outline: none; }
+/* Focus and anchor scrolls keep clear of the sticky header and the fixed tab bar, so a focused row is never hidden under either (the Tab walk in e2e/a11y-session.spec.ts). */
+html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }
 /* The Promet stage (the transport layer writes data-stage): the shell is the viewport, main is the stage. */
 .ki[data-stage='map'] { block-size: 100vh; block-size: 100dvh; overflow: hidden; }
 .ki[data-stage='map'] .ki-main { padding: 0; overflow: hidden; }
@@ -117,6 +119,7 @@
 /* Desktop: sidebar with seven labelled domains, the session card at its foot.
    The header dissolves into the grid: wordmark above the rail, banners beside it. */
 @media (min-width: 60rem) {
+  html:has(.ki) { scroll-padding-block: 0; }
   .ki {
     grid-template-columns: var(--ki-side) minmax(0, 1fr);
     grid-template-rows: auto 1fr auto;

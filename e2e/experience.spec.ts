@@ -3,10 +3,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
 import type { LayerId } from '../worker/protocol';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
+import { DESKTOP_MIN_PX } from './lib';
 
 const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
-/** The 60rem desk breakpoint in CSS px. Area G lands it as `app/src/core/breakpoints.ts` (imported through `e2e/lib.ts`); until that merges, the literal lives here. */
-const DESKTOP_MIN_PX = 960;
 
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
   let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();

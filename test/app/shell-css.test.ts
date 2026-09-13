@@ -193,6 +193,7 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
       ['base.css', BASE_CSS],
       ['layers.css', LAYERS_CSS],
       ['toast.css', TOAST_CSS],
+      ['map.css', MAP_CSS],
     ] as const) {
       expect(ungatedHovers(css), `ungated :hover selectors in ${label}`).toEqual([]);
     }
@@ -264,5 +265,13 @@ describe('toasts sit above the tab bar on a phone, at body size, with a 44 px di
     const dismiss = rule('.toast-dismiss', TOAST_CSS);
     expect(dismiss).toContain('inline-size: var(--target)');
     expect(dismiss).toContain('block-size: var(--target)');
+  });
+});
+
+describe('scroll padding keeps focused rows clear of the fixed chrome', () => {
+  it('pads the document scrollport by the header and the tab bar on the phone, and by nothing at the desk', () => {
+    expect(CSS).toContain('html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }');
+    const desk = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 0; }');
   });
 });
