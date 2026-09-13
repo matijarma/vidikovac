@@ -83,6 +83,8 @@
 .t-map-status[hidden] { display: none; }
 .transport[data-status='unavailable'] .t-map-canvas { display: none; }
 .transport[data-status='unavailable'] .t-map-status { position: static; box-shadow: none; border: 1px solid var(--tone-stroke); }
+/* No map, no camera: nothing for the whole-city and full-map buttons to act on. */
+.transport[data-status='unavailable'] .t-map-tools { display: none; }
 .t-map-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .t-action { min-height: 2.75rem; font-size: 0.875rem; }
 .t-map-tools .t-action { min-height: 2.5rem; padding-inline: 0.75rem; }
