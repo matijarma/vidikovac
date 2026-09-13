@@ -10,6 +10,7 @@ import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapHandle, CityMapOptions, MapSelection, MapStatus, VehicleInfo } from '../../app/src/map/city-map';
 import { createMapSlots, type MapSlots } from '../../app/src/map/map-slots';
 import { decodeNetwork, type Network } from '../../app/src/motion/network';
+import { reconcile } from '../../app/src/ui/dom/reconcile';
 import { text } from './helpers';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z');
@@ -275,5 +276,44 @@ describe('the map, the paired screen and the feed', () => {
     more.click();
     expect([...q<HTMLElement>('#u-pokretu-delays').querySelectorAll<HTMLElement>('[data-testid=delay-row]')].filter((li) => !li.hidden)).toHaveLength(11);
     expect(text(q('[data-action=toggle-delays]'))).toBe('Skupi');
+  });
+});
+
+describe('one workspace node for the page\u2019s life', () => {
+  it('reconciled in place (dashboard.ts through ui/dom/reconcile.ts) a poll never detaches the workspace, so a focused search keeps its focus and text; a host that replaces children gets the same node through the persist slot', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    const main = document.createElement('main');
+    document.body.replaceChildren(main);
+    const mount = (): void => {
+      const wrapper = document.createElement('div');
+      wrapper.appendChild(renderLayer('u-pokretu', context));
+      reconcile(main, wrapper);
+      maps.sweep();
+    };
+    mount();
+    const root = q<HTMLElement>('[data-testid=transport-workspace]');
+    expect(root.id).toMatch(/-root$/);
+    expect(main.querySelector('section[data-layer=u-pokretu]')!.hasAttribute('data-reconcile')).toBe(true);
+    expect(document.querySelector('kaj-persist')).toBeNull(); // the slot swapped the live element in on first mount
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.focus();
+    input.value = 'kva';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const removed: Node[] = [];
+    const observer = new MutationObserver((records) => { for (const r of records) removed.push(...r.removedNodes); });
+    observer.observe(main, { childList: true, subtree: true });
+    mount(); // the poll
+    observer.disconnect();
+    expect(removed).not.toContain(root);
+    expect(q('[data-testid=transport-workspace]')).toBe(root);
+    expect(document.querySelectorAll('[data-testid=transport-workspace]')).toHaveLength(1);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('kva');
+    expect(document.querySelectorAll('[role=option]').length).toBeGreaterThan(0);
+    // A stage that replaces its children: the inserted slot resolves to the very same node.
+    main.replaceChildren(renderLayer('u-pokretu', context));
+    expect(q('[data-testid=transport-workspace]')).toBe(root);
+    expect(document.querySelector('kaj-persist')).toBeNull();
   });
 });

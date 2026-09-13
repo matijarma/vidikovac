@@ -157,6 +157,22 @@ export function vehicleOpacity(selectedRoute: string | null): Expr {
   return selectedRoute === null ? ['get', 'alpha'] : ['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], selectedRoute], 1, VEHICLE_OPACITY_DIMMED]];
 }
 
+export interface PillInks {
+  fill: Expr;
+  text: Expr;
+  halo: Expr | string;
+}
+
+/** A pill is always opaque: a number over a street is read, never inferred (map review round 1). Confidence lives in
+ *  the dots, the nose and the sheet. While one route is selected, every other route's pill inverts -- the surface as
+ *  fill, its own colour as the number and outline -- so it steps back without a line ever showing through its digits. */
+export function pillInks(p: OverlayPalette, selectedRoute: string | null): PillInks {
+  const fill = kindColor(p, 'fill');
+  if (selectedRoute === null) return { fill, text: kindColor(p, 'text'), halo: p.halo };
+  const mine: Expr = ['==', ['get', 'routeId'], selectedRoute];
+  return { fill: ['case', mine, fill, p.stopFill], text: ['case', mine, kindColor(p, 'text'), fill], halo: ['case', mine, p.halo, fill] };
+}
+
 /** The filters the selection layers carry for `selection`: NEVER on every layer while nothing is selected. */
 export function selectionFilters(selection: MapSelection | null): Record<string, Expr> {
   const routeId = selection?.kind === 'route' ? selection.id : null;
@@ -183,7 +199,7 @@ export interface OverlayOptions {
   selection?: MapSelection | null;
 }
 
-function pillLayer(p: OverlayPalette, id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, opacity: Expr): StyleLayerLike {
+function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -205,12 +221,12 @@ function pillLayer(p: OverlayPalette, id: string, filter: Expr, overlap: boolean
       'symbol-sort-key': SORT_KEY,
     },
     paint: {
-      'icon-color': kindColor(p, 'fill'),
-      'icon-halo-color': p.halo,
+      'icon-color': inks.fill,
+      'icon-halo-color': inks.halo,
       'icon-halo-width': 1,
-      'icon-opacity': opacity,
-      'text-color': kindColor(p, 'text'),
-      'text-opacity': opacity,
+      'icon-opacity': 1,
+      'text-color': inks.text,
+      'text-opacity': 1,
     },
   };
 }
@@ -257,7 +273,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const sel = options.selection ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
-  const alpha = vehicleOpacity(sel?.kind === 'route' ? sel.id : null);
+  const selectedRoute = sel?.kind === 'route' ? sel.id : null;
+  const alpha = vehicleOpacity(selectedRoute);
+  const inks = pillInks(p, selectedRoute);
   const filters = selectionFilters(sel);
   const kinds = vehicleKinds(modes);
   const round = { 'line-cap': 'round', 'line-join': 'round' };
@@ -313,7 +331,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       { filter: kindFilter(modes) },
     ),
     noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), PILL_OVERLAP_ZOOM, s, alpha),
-    pillLayer(p, LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, alpha),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, inks),
     {
       id: LAYERS.stopLabels,
       type: 'symbol',
@@ -340,7 +358,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
     noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s, alpha),
-    pillLayer(p, LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, alpha),
+    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, pillInks(p, null)),
     {
       id: LAYERS.selectionRing,
       type: 'symbol',

@@ -154,32 +154,43 @@ button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
   .t-sheet-body { padding-block-start: 1rem; }
 }
 
-/* --- The full-map view mode (.dash[data-view='map']) -------------------- */
-.dash[data-view='map'] {
-  position: fixed; inset: 0; z-index: 5;
-  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.5rem;
-  padding: 0.75rem clamp(0.75rem, 3vw, 2rem) 0;
-  background: var(--tone-surface-canvas, Canvas);
-  overflow: hidden;
+/* --- The full-map view mode: .ki[data-view='map'] ------------------------
+   dashboard.ts sets data-view on the shell root. The shell stays: the top bar
+   with the session chip and the safety shortcut, the phone tab bar, the desk's
+   sidebar with the session card. The workspace changes shape: main becomes a
+   definite-height area the map fills, the sheet keeps its peek on a phone and
+   its column on a desk, the tools float over the map, and the session banners
+   (dashboard.css hides them in this mode) stay in view over it. */
+.ki[data-view='map'] .ki-main {
+  display: flex; flex-direction: column; min-block-size: 0; padding: 0; overflow: hidden;
+  block-size: calc(100vh - var(--ki-top, 3.5rem) - var(--ki-tabs, 3.75rem));
+  block-size: calc(100dvh - var(--ki-top, 3.5rem) - var(--ki-tabs, 3.75rem));
 }
-.dash[data-view='map'] > .dash-panorama,
-.dash[data-view='map'] > .dash-tabs,
-.dash[data-view='map'] > .dash-foot { display: none; }
-.dash[data-view='map'] > .dash-alert,
-.dash[data-view='map'] > .dash-frozen { position: absolute; inset-inline: clamp(0.75rem, 3vw, 2rem); inset-block-end: 1rem; z-index: 1; }
-.dash[data-view='map'] .dash-view { display: block; min-block-size: 0; block-size: 100%; }
-.dash[data-view='map'] .dash-view > .layer:not([data-layer='u-pokretu']) { display: none; }
-.dash[data-view='map'] .layer[data-layer='u-pokretu'] { block-size: 100%; gap: 0; }
-.dash[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-title {
+/* dashboard.css hides the banners in this mode; the expiry line must stay in view, and above MapLibre's controls (z-index 2). */
+.ki[data-view='map'] .ki-banners { display: grid; z-index: 3; }
+.ki[data-view='map'] .ki-main > .layer[data-layer='u-pokretu'] { flex: 1 1 auto; display: flex; flex-direction: column; min-block-size: 0; gap: 0; }
+.ki[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-title {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.dash[data-view='map'] .layer-panels, .dash[data-view='map'] .transport { block-size: 100%; min-block-size: 0; }
-.dash[data-view='map'] .transport-body { flex: 1 1 auto; min-block-size: 0; grid-template-rows: minmax(0, 1fr); }
-.dash[data-view='map'] .transport-map { min-block-size: 0; }
-.dash[data-view='map'] .t-map-canvas { flex: 1 1 auto; block-size: auto; min-block-size: 0; }
-.dash[data-view='map'] .transport-sheet { max-block-size: 100%; }
-.dash[data-view='map'] .t-note { display: none; }
+.ki[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-panels { flex: 1 1 auto; display: flex; flex-direction: column; min-block-size: 0; }
+.ki[data-view='map'] .transport { flex: 1 1 auto; min-block-size: 0; --t-gap: 0.5rem; padding: 0.5rem var(--sp-4, 1rem); }
+.ki[data-view='map'] .transport-body { flex: 1 1 auto; min-block-size: 0; grid-template-rows: minmax(0, 1fr) auto; }
+.ki[data-view='map'] .transport-map { min-block-size: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.ki[data-view='map'] .t-map-canvas { block-size: 100%; min-block-size: 14rem; }
+.ki[data-view='map'] .t-map-tools { position: absolute; inset-block-end: 2.5rem; inset-inline-start: 0.75rem; z-index: 2; }
+.ki[data-view='map'] .t-map-tools .t-action { background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
+.ki[data-view='map'] .transport-sheet { max-block-size: 42vh; overflow: auto; }
+.ki[data-view='map'] .t-note { display: none; }
+@media (min-width: 60rem) {
+  .ki[data-view='map'] .ki-main { block-size: 100vh; block-size: 100dvh; padding-inline-end: var(--sp-5, 1.25rem); }
+  .ki[data-view='map'] .transport { padding: var(--sp-4, 1rem) 0; }
+  /* The ordinary desk layout starts its two columns at the top; the full map needs both stretched to the
+     definite row, or the canvas's 100% resolves to nothing and only its floor remains. */
+  .ki[data-view='map'] .transport-body { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .ki[data-view='map'] .transport-map { block-size: 100%; }
+  .ki[data-view='map'] .transport-sheet { block-size: 100%; max-block-size: 100%; position: static; }
+}
 
 /* --- A public screen: bigger type, no controls to touch ----------------- */
 .transport[data-kiosk='true'] { --t-gap: 1rem; }

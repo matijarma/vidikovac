@@ -68,6 +68,10 @@ export function closureLines(snapshot: ModuleSnapshot | undefined): MapLine[] {
 export function renderUPokretu(ctx: LayerContext): HTMLElement {
   const { i18n, snapshots, now } = ctx;
   const { section, panels } = createLayerSection('u-pokretu', i18n.t('layers.u-pokretu'));
+  // The page's reconciler (ui/dom/reconcile.ts) may morph this section in
+  // place instead of replacing it: the workspace below is never detached by
+  // an ordinary poll, so its input, focus, scroll, camera and follow survive.
+  section.setAttribute('data-reconcile', '');
   const zet = snapshots['zet-rt'];
   const closures = snapshots.prometnice;
   if (ctx.lightweight) {
@@ -76,8 +80,46 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   }
   const workspace = workspaceFor(ctx);
   workspace.render({ ctx, points: vehiclePoints(zet, now), lines: closureLines(closures) });
-  panels.appendChild(workspace.element);
+  panels.appendChild(persistSlot(workspace.element));
   return section;
+}
+
+const PERSIST_TAG = 'kaj-persist';
+
+/**
+ * The placeholder that stands for the live workspace in a freshly rendered
+ * section. A host that reconciles (dashboard.ts through ui/dom/reconcile.ts)
+ * reads `data-persist-for` and keeps the live element where it is, so the
+ * element is never detached and the placeholder is never inserted. Any other
+ * host (a replaceChildren stage, a unit test) inserts the placeholder, which
+ * then swaps the live element into its own place the moment it is connected.
+ * Either way the workspace element is one node for the page's life.
+ */
+interface PersistSlotElement extends HTMLElement {
+  live: HTMLElement | null;
+}
+
+/** Defined on first use, never at import: a node test that imports this layer has no HTMLElement to extend. */
+function definePersistSlot(): boolean {
+  if (typeof customElements === 'undefined' || typeof HTMLElement === 'undefined') return false;
+  if (!customElements.get(PERSIST_TAG)) {
+    customElements.define(PERSIST_TAG, class extends HTMLElement implements PersistSlotElement {
+      live: HTMLElement | null = null;
+      connectedCallback(): void {
+        if (this.live && this.isConnected) this.replaceWith(this.live);
+      }
+    });
+  }
+  return true;
+}
+
+/** The live element itself while it is not in the document (first mount, a return to the layer, a detached render); the slot only while a poll must leave it where it is. */
+function persistSlot(live: HTMLElement): HTMLElement {
+  if (!live.isConnected || !definePersistSlot()) return live;
+  const slot = document.createElement(PERSIST_TAG) as PersistSlotElement;
+  slot.live = live;
+  slot.setAttribute('data-persist-for', live.id);
+  return slot;
 }
 
 /** R-L2: no map, no search, no geometry fetch; the schematic host's list and the closures as text. */

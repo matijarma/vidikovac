@@ -495,6 +495,7 @@ interface MapApi {
   addControl(control: unknown, position?: string): unknown;
   getCanvas(): HTMLCanvasElement;
   addImage(id: string, image: { width: number; height: number; data: Uint8ClampedArray }, options?: Record<string, unknown>): void;
+  hasImage?(id: string): boolean;
   addSource(id: string, spec: Record<string, unknown>): void;
   getSource(id: string): { setData(data: unknown): void } | undefined;
   addLayer(layer: Record<string, unknown>, beforeId?: string): void;
@@ -521,6 +522,8 @@ interface MapEventLike {
   sourceId?: string;
   tile?: unknown;
   error?: { url?: string; message?: string } | null;
+  /** styleimagemissing: the image name the style asked for. */
+  id?: string;
 }
 
 /** The resolved theme theme.ts writes on <html>; light when unset, the app's first-paint fallback. */
@@ -766,6 +769,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
     if (interactive) created.addControl(new l.NavigationControl({ showCompass: false }), 'top-right');
     created.on('error', onMapError);
+    created.on('styleimagemissing', (event) => onImageMissing(created, event));
     created.on('sourcedata', onSourceData);
     created.on('webglcontextlost', () => setStatus('unavailable'));
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
@@ -838,6 +842,16 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (lib === null || event.sourceId !== lib.BASEMAP_SOURCE || event.tile === undefined) return;
     basemapFailing = false;
     if (status === 'tiles-failed') setStatus('ready');
+  }
+
+  /** An image the style names but the sprite lacks (basemap.ts bounds the known
+   *  gap; this catches the rest): one transparent pixel under that name, so
+   *  MapLibre neither logs the miss on every frame nor drops the label beside
+   *  it. Nothing is drawn and nothing is invented. */
+  function onImageMissing(m: MapApi, event: MapEventLike): void {
+    const id = event.id;
+    if (!id || m.hasImage?.(id)) return;
+    m.addImage(id, { width: 1, height: 1, data: new Uint8ClampedArray(4) });
   }
 
   function cameraOf(m: MapApi): MapCamera {

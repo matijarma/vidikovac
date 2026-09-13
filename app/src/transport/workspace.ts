@@ -22,7 +22,7 @@ import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { statusText } from '../panels/panel';
 import { escapeAttribute as attr } from '../ui/dom/escape';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
-import { closureItems, countByRoute, runningRoutes, vehicleDirection, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
+import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
 import { searchTransport, type StopGroup } from './search';
 import { tr, trPlural } from './strings';
 import { closureDetailMarkup, closuresMarkup, delaysMarkup, overviewMarkup, resultsMarkup, routeDetailMarkup, statusLine, stopDetailMarkup, vehicleDetailMarkup, vehicleTitle, type DelayRow } from './view';
@@ -112,6 +112,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   };
   const element = document.createElement('div');
   element.className = 'transport';
+  // A stable id: the layer's persist slot names it for the page's reconciler (ui/dom/reconcile.ts, data-persist-for).
+  element.id = `${id}-root`;
   element.dataset.testid = 'transport-workspace';
   element.dataset.persist = 'u-pokretu';
   element.dataset.status = 'loading';
@@ -200,7 +202,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const kiosk = (): boolean => ctx().kiosk === true;
   /** null while every mode is on: the map then also draws vehicles of a type nobody knows. */
   const modesArg = (): ReadonlySet<number> | null => (ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes));
-  const delays = (): Map<string, number> => routeDelayMap(ctx().snapshots['zet-rt']);
+  const delays = (): Map<string, number> => plausibleDelays(routeDelayMap(ctx().snapshots['zet-rt']));
 
   /** Every vehicle the model has placed, or, before that and without a map, the reports listed by route alone.
    *  The mode toggle filters what the overview counts and the map draws; a route or stop someone asks about

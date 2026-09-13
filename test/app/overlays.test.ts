@@ -11,6 +11,7 @@ import {
   firstSymbolLayer,
   overlayImages,
   overlayLayers,
+  pillInks,
   selectionFilters,
   stopFilter,
   vehicleFilter,
@@ -97,5 +98,23 @@ describe('filters and the selection', () => {
     expect(theme.every((op) => op.kind === 'paint')).toBe(true);
     expect(styleDiff(light, overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'stop', id: '1_21' } })).map((op) => op.kind)).toEqual(['filter']);
     expect(styleDiff(light, overlayLayers(OVERLAY_LIGHT, { closuresVisible: false })).map((op) => `${op.id}:${op.kind}`).sort()).toEqual([`${LAYERS.closuresCasing}:layout`, `${LAYERS.closures}:layout`]);
+  });
+
+  it('a pill and its number are always opaque; while a route is selected the other routes invert (surface fill, own colour as number and outline) instead of fading, and the dots and noses carry the confidence', () => {
+    for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
+      const plain = overlayLayers(p);
+      for (const id of [LAYERS.vehicles, LAYERS.vehicleSelected]) {
+        const layer = plain.find((l) => l.id === id)!;
+        expect(layer.paint!['icon-opacity']).toBe(1);
+        expect(layer.paint!['text-opacity']).toBe(1);
+      }
+      expect(plain.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['get', 'alpha']);
+      const lit = overlayLayers(p, { selection: { kind: 'route', id: '6' } });
+      const pills = lit.find((l) => l.id === LAYERS.vehicles)!;
+      expect(pills.paint!['icon-opacity']).toBe(1);
+      expect(JSON.stringify(pills.paint!['icon-color'])).toContain(JSON.stringify(p.stopFill));
+      expect(pillInks(p, '6').halo).toEqual(['case', ['==', ['get', 'routeId'], '6'], p.halo, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]);
+      expect(lit.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, 0.35]]);
+    }
   });
 });

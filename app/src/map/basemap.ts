@@ -27,6 +27,25 @@ export const BASEMAP_SOURCE = 'basemap';
  *  appears anywhere in the style. */
 export const MAP_FONTS = Object.freeze({ regular: 'Noto Sans Regular', medium: 'Noto Sans Medium', italic: 'Noto Sans Italic' });
 
+/** The point icons the self-hosted sprite carries (protomaps/basemaps-assets
+ *  sprites/v4; scripts/map-assets.mjs copies it). @protomaps/basemaps 5.7.2's
+ *  pois layer asks for every POI kind by name and its filter admits a kind the
+ *  v4 sprite has no image for (townhall), which MapLibre reports as a missing
+ *  image on every frame. The style built here asks only for what the sprite
+ *  has; a kind without an image keeps its name label and gets no icon. */
+export const SPRITE_V4_ICONS: readonly string[] = Object.freeze([
+  'aerodrome', 'animal', 'arrow', 'artwork', 'attraction', 'bar', 'beach', 'beauty', 'bench', 'books', 'building', 'bus_stop', 'cafe',
+  'capital', 'clothes', 'convenience', 'drinking_water', 'electronics', 'fast_food', 'ferry_terminal', 'forest', 'garden', 'library',
+  'marina', 'museum', 'park', 'peak', 'post_office', 'restaurant', 'school', 'stadium', 'supermarket', 'theatre', 'toilets', 'townspot',
+  'train_station', 'university', 'zoo',
+]);
+
+/** The pois layer with its icon bound to the sprite: station keeps upstream's train_station alias, anything else names itself only when the sprite has it. */
+function boundPoiIcons(layer: StyleLayerLike): StyleLayerLike {
+  const icon = ['case', ['==', ['get', 'kind'], 'station'], 'train_station', ['in', ['get', 'kind'], ['literal', SPRITE_V4_ICONS]], ['get', 'kind'], ''];
+  return { ...layer, layout: { ...(layer.layout ?? {}), 'icon-image': icon } };
+}
+
 /** The tileset stops at 14; streets stay legible overzoomed to 18. */
 export const MAP_MAX_ZOOM = 18;
 /** Below this the bounded regional archive is a few tiles of nothing. */
@@ -340,7 +359,8 @@ export interface BasemapStyleOptions {
 /** The basemap layers alone for `theme`: what a live map diffs on a theme
  *  or locale change. */
 export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}): StyleLayerLike[] {
-  return protomapsLayers(BASEMAP_SOURCE, flavorFor(theme), { lang: labelLanguage(options.locale) }) as unknown as StyleLayerLike[];
+  const layers = protomapsLayers(BASEMAP_SOURCE, flavorFor(theme), { lang: labelLanguage(options.locale) }) as unknown as StyleLayerLike[];
+  return layers.map((layer) => (layer.id === 'pois' ? boundPoiIcons(layer) : layer));
 }
 
 /**

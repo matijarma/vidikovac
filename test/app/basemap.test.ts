@@ -6,6 +6,7 @@ import {
   MAP_FONTS,
   OVERLAY_DARK,
   OVERLAY_LIGHT,
+  SPRITE_V4_ICONS,
   basemapLayers,
   basemapStyle,
   flavorFor,
@@ -103,8 +104,27 @@ describe('the same-origin Protomaps v4 basemap', () => {
       expect(contrast(p.tram, p.tramText)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(p.bus, p.busText)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(p.other, p.otherText)).toBeGreaterThanOrEqual(4.5);
+      // The inverted pill of a route that is not the selected one: its own colour as the number on the surface.
+      expect(contrast(p.tram, p.stopFill)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(p.bus, p.stopFill)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(p.other, p.stopFill)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(p.label, p.halo)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(p.closure, p.closureCasing)).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('asks the sprite only for icons it carries: the pois layer names a kind as its icon only when SPRITE_V4_ICONS has it, and the one kind upstream admits without an image (townhall) keeps its label alone', () => {
+    const pois = basemapLayers('light').find((l) => l.id === 'pois')!;
+    const icon = pois.layout!['icon-image'] as unknown[];
+    expect(icon[0]).toBe('case');
+    expect(JSON.stringify(icon)).toContain(JSON.stringify(['in', ['get', 'kind'], ['literal', SPRITE_V4_ICONS]]));
+    expect(icon[icon.length - 1]).toBe('');
+    // ['all', ['in', ['get','kind'], ['literal', [...kinds]]], ...]: the admitted kinds sit inside the literal.
+    const inClause = (pois.filter as unknown[])[1] as unknown[];
+    const admitted = (inClause[2] as unknown[])[1] as string[];
+    expect(admitted.length).toBeGreaterThan(30);
+    const withoutImage = admitted.filter((kind) => kind !== 'station' && !SPRITE_V4_ICONS.includes(kind));
+    expect(withoutImage).toEqual(['townhall']);
+    expect(SPRITE_V4_ICONS).toContain('train_station');
   });
 });

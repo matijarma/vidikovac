@@ -46,6 +46,15 @@ export function countByRoute(vehicles: readonly VehicleInfo[]): Map<string, numb
   return counts;
 }
 
+/** A route median past this is a feed artefact (a trip update days old), not a delay a rider can act on; the
+ *  same bound as layers/shared.ts's plausibleRouteDelay in the integrated app, to be unified there. */
+export const MAX_ROUTE_DELAY_S = 90 * 60;
+
+/** The medians a screen may rank and print; an implausible one is left out, never shown as minutes. */
+export function plausibleDelays(delays: ReadonlyMap<string, number>): Map<string, number> {
+  return new Map([...delays].filter(([, seconds]) => Number.isFinite(seconds) && Math.abs(seconds) <= MAX_ROUTE_DELAY_S));
+}
+
 /** The last stop along shape `shapeIdx`, its terminus, or null when the artefact names none. */
 export function terminusName(net: Network, shapeIdx: number): string | null {
   let best: { name: string; s: number } | null = null;

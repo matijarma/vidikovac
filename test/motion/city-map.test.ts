@@ -57,6 +57,7 @@ class FakeMap {
   addControl(control: unknown): void { this.controls.push(control); }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
+  hasImage(id: string): boolean { return this.images.has(id); }
   addSource(id: string, spec: { type: string; data: unknown }): void {
     const calls: unknown[] = [];
     this.sources.set(id, { type: spec.type, data: spec.data, calls, setData: (d) => { calls.push(d); } });
@@ -310,6 +311,18 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
     const { map } = await harness({ extra: { interactive: false } });
     expect(map.options.interactive).toBe(false);
     expect(map.controls).toHaveLength(2); // attribution and scale
+  });
+
+  it('an image the style names but the sprite lacks is answered with one transparent pixel, once, so nothing is logged every frame and nothing is drawn', async () => {
+    const { map } = await harness();
+    map.fire('styleimagemissing', { id: 'townhall' });
+    const image = map.images.get('townhall')!;
+    expect(image.image).toMatchObject({ width: 1, height: 1 });
+    expect([...image.image.data]).toEqual([0, 0, 0, 0]);
+    map.fire('styleimagemissing', { id: 'townhall' });
+    expect(map.images.get('townhall')).toBe(image);
+    map.fire('styleimagemissing', {});
+    expect(map.images.size).toBe(7); // the six overlay images and the one stand-in
   });
 });
 
