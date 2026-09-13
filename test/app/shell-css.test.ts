@@ -282,3 +282,12 @@ describe('the shell grid has one shrinkable track', () => {
   });
 });
 
+describe('the tab bar is exactly the space the shell reserves for it', () => {
+  it('draws its hairline inside the box, so the bar measures --ki-tabs and never hangs over the stage', () => {
+    const bar = rule('.ki-tabbar');
+    expect(bar).toContain('box-shadow: inset 0 1px 0 var(--tone-stroke)');
+    expect(bar).not.toContain('border-block-start');
+    expect(rule('.ki-nav-label')).toContain('line-height: var(--lh-title)');
+  });
+});
+

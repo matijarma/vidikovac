@@ -71,8 +71,12 @@ if (!lightweight) void import('../ui/fonts.css');
 if (!params) {
   // Reached with no room in the fragment (a bookmark, a stray share): a
   // composed empty state with the two real ways in and the open safety page.
-  const empty = document.createElement('div');
+  // The page's one main landmark, and the target the skip link in d/index.html
+  // names, so the no-room state is as reachable as a running session.
+  const empty = document.createElement('main');
   empty.className = 'ki-empty';
+  empty.id = 'ki-main';
+  empty.tabIndex = -1;
   const wordmark = document.createElement('a');
   wordmark.className = 'ki-wordmark';
   wordmark.href = '/';
