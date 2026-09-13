@@ -23,6 +23,10 @@
 
 .row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3); min-block-size: 3.25rem; padding: var(--sp-1) 0; border-block-start: 1px solid var(--tone-stroke); }
 .row:first-child { border-block-start: 0; }
+/* A row with nothing beside its main part takes the whole width: the lists
+   that still render one button inside the row (blocks.ts itemRow) keep the
+   geometry they had, and a row built without a lead or a trail reads the same. */
+.row > :only-child { grid-column: 1 / -1; }
 .row-dense { min-block-size: 2.75rem; }
 .row-title { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
 .row-sub { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }

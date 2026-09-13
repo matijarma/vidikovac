@@ -79,6 +79,23 @@ describe('the line badge: shape carries the mode, colour repeats it', () => {
   });
 });
 
+describe('the row is three columns: lead, main, trail', () => {
+  it('lays the three tracks out with the lead and the trail at their natural size', () => {
+    const row = decls('.row', CSS);
+    expect(row.display).toBe('grid');
+    expect(row['grid-template-columns']).toBe('auto minmax(0, 1fr) auto');
+  });
+  // Every list that has not moved to signRow yet is still one `.row-button`
+  // inside `li.row` (blocks.ts itemRow, grad-sada). In a three-column grid that
+  // child would sit in the first track and end at its own content width, which
+  // measured 1006 vs 514 px on Događanja at 1440: the chevron floated in the
+  // middle of the row. A single child takes the whole row -- true for the new
+  // markup too, when a row has neither a lead nor a trail.
+  it('gives a row with one child the whole width, so the lists keep their geometry until wave 3 migrates them', () => {
+    expect(decls('.row > :only-child', CSS)['grid-column']).toBe('1 / -1');
+  });
+});
+
 describe('the skeleton shimmers only where motion reports a fact', () => {
   it('has a designed twin under reduced motion and on the lightweight path', () => {
     const reduced = atRule('@media (prefers-reduced-motion: reduce)', CSS);
