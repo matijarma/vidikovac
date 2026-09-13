@@ -287,7 +287,9 @@ function renderPromet(ctx: PairedContext): PairedMarkup {
   const selected = selectionCard(ctx);
   const all = delayRows(ctx, Infinity).length;
   const delays = block(ctx.strings.paired.delays, listBody(zet, delayRows(ctx, selected ? 4 : ctx.size === 'wide' ? 7 : 5), ctx.strings.paired.noData, ctx.strings, all), { s: ctx.strings, snapshot: zet, testid: 'k-delays', grow: true });
-  return { lines: linesBox(ctx), main: '', side: `${selected}${delays}${selected ? '' : closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2)}` };
+  // ZET's notices, when there are any, outrank road closures beside the delays; closures stay on Sada and Sigurnost.
+  const notices = selected ? '' : zetNoticesBlock(ctx, 2);
+  return { lines: linesBox(ctx), main: '', side: `${selected}${delays}${notices || (selected ? '' : closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2))}` };
 }
 
 // --- The public selection the phone relayed --------------------------------
@@ -497,32 +499,58 @@ function worksBlock(ctx: PairedContext, limit: number): string {
 
 function renderGrad(ctx: PairedContext): PairedMarkup {
   const wide = ctx.size === 'wide';
-  const main = `${actsBlock(ctx, wide ? 6 : 4)}<div class="k-stack">${sessionsBlock(ctx, wide ? 3 : 2)}${worksBlock(ctx, wide ? 4 : 3)}</div>${mainSource(ctx.snapshots.dogadanja, ctx.strings)}`;
-  return { lines: '', main, side: selectionCard(ctx) };
+  // Acts and sessions side by side; the works register takes the side column, so no column is starved.
+  const main = `${actsBlock(ctx, wide ? 6 : 4)}${sessionsBlock(ctx, wide ? 5 : 3)}${mainSource(ctx.snapshots.dogadanja, ctx.strings)}`;
+  return { lines: '', main, side: `${selectionCard(ctx)}${worksBlock(ctx, wide ? 5 : 3)}` };
+}
+
+const ZET_NOTICE_SOURCES: ReadonlySet<string> = new Set(['zet-promet', 'zet-rss', 'zet-novosti']);
+
+/** ZET's own notices (a detour, works on a line) belong beside the delays, not among culture. */
+function zetNoticesBlock(ctx: PairedContext, limit: number): string {
+  const dog = ctx.snapshots.dogadanja;
+  const items = (isLive(dog) ? dog.items : []).filter((item) => ZET_NOTICE_SOURCES.has(dataText(item, 'source')));
+  if (items.length === 0) return '';
+  const rows = items.slice(0, limit).map((item) => row(escapeHtml(item.title), escapeHtml(cityDateLine(item, ctx.strings, ctx.locale))));
+  return block(ctx.strings.paired.zetNotices, listBody(dog, rows, ctx.strings.paired.noData, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, testid: 'k-zet-notices' });
 }
 
 // --- Događanja (kultura) --------------------------------------------------------
 
 const NOTICE_SOURCES: ReadonlySet<string> = new Set(['kvartovske', 'zet-promet', 'zet-rss', 'zet-novosti']);
 
-export interface EventGroups { today: FeedItem[]; tomorrow: FeedItem[]; later: FeedItem[]; notices: FeedItem[] }
+/** Rows the culture layer leaves to their own domains: the Assembly and the
+ *  works register to Grad, ZET's notices to Promet. */
+const CULTURE_ELSEWHERE: ReadonlySet<string> = new Set(['skupstina', 'komunalne', 'zet-promet', 'zet-rss', 'zet-novosti']);
+/** A Zagreb screen lists Zagreb events; a venue naming another town is not one. */
+const NON_ZAGREB_VENUE = /\b(Split|Hvar|Rijeka|Osijek|Zadar|Dubrovnik|Pula|Varaždin|Šibenik|Karlovac|Sisak|Vukovar|Bjelovar|Koprivnica|Čakovec|Poreč|Rovinj|Makarska|Trogir|Vinkovci|Požega|Opatija|Krk)\b/;
+
+export interface EventGroups {
+  today: FeedItem[];
+  tomorrow: FeedItem[];
+  later: FeedItem[];
+  /** Began before today and still runs (an exhibition): shown with its end date, never as today's start. */
+  ongoing: FeedItem[];
+  notices: FeedItem[];
+}
 
 /** Dated events by Zagreb day; rows whose date is a publish or change stamp,
- *  or that state none, are notices. Works (komunalne) belong to the Grad layer. */
+ *  or that state none, are notices (the neighbourhood news). */
 export function eventGroups(items: readonly FeedItem[], now: number): EventGroups {
-  const out: EventGroups = { today: [], tomorrow: [], later: [], notices: [] };
+  const out: EventGroups = { today: [], tomorrow: [], later: [], ongoing: [], notices: [] };
   const today = dayKey(now);
   const tomorrow = zagrebDayAfter(now, 1);
   for (const item of items) {
     const source = dataText(item, 'source');
-    if (source === 'komunalne') continue;
+    if (CULTURE_ELSEWHERE.has(source) || NON_ZAGREB_VENUE.test(dataText(item, 'venue'))) continue;
     const basis = item.dateBasis;
     const dated = item.at !== undefined && basis !== 'unknown' && basis !== 'published' && basis !== 'updated' && !(basis === undefined && NOTICE_SOURCES.has(source));
     const start = dated ? Date.parse(item.at!) : NaN;
     if (!Number.isFinite(start)) { out.notices.push(item); continue; }
     const end = item.until ? Date.parse(item.until) : start;
     const key = dayKey(start);
-    if (key === today || (start <= now && end >= now)) out.today.push(item);
+    if (key !== today && start < now && end >= now) out.ongoing.push(item);
+    else if (key === today) out.today.push(item);
     else if (start < now) continue;
     else if (key === tomorrow) out.tomorrow.push(item);
     else out.later.push(item);
@@ -531,6 +559,7 @@ export function eventGroups(items: readonly FeedItem[], now: number): EventGroup
   out.today.sort(byStart);
   out.tomorrow.sort(byStart);
   out.later.sort(byStart);
+  out.ongoing.sort((a, b) => Date.parse(a.until ?? a.at!) - Date.parse(b.until ?? b.at!));
   return out;
 }
 
@@ -559,13 +588,26 @@ function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: numbe
   ));
 }
 
+function ongoingRow(item: FeedItem, ctx: PairedContext): string {
+  const { strings: s, locale } = ctx;
+  const category = s.events[dataText(item, 'category')] ?? '';
+  const sub = [s.paired.ongoingWord, category, dataText(item, 'venue') || dataText(item, 'organiser')].filter(Boolean).join(' · ');
+  const until = item.until ? fill(s.paired.ongoingUntil, { date: weekdayDayMonth(locale, item.until) }) : '';
+  return row(escapeHtml(item.title), escapeHtml(sub), escapeHtml(until));
+}
+
+function ongoingBlock(ctx: PairedContext, items: readonly FeedItem[], limit: number): string {
+  const dog = ctx.snapshots.dogadanja;
+  const rows = items.slice(0, limit).map((item) => ongoingRow(item, ctx));
+  return block(ctx.strings.paired.ongoing, listBody(dog, rows, ctx.strings.paired.eventsNone, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, testid: 'k-ongoing', grow: true, noSource: true });
+}
+
 function renderKultura(ctx: PairedContext): PairedMarkup {
   const { strings: s } = ctx;
   const dog = ctx.snapshots.dogadanja;
   const groups = eventGroups(isLive(dog) ? dog.items : [], ctx.now);
-  const cap = ctx.size === 'wide' ? 7 : 5;
   const half = ctx.size === 'wide' ? 4 : 3;
-  const main = `${eventsBlock(ctx, s.paired.today, groups.today, cap, 'k-today', false)}<div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, s)}`;
+  const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, s)}`;
   const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, ctx.size === 'wide' ? 4 : 3), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true });
   return { lines: '', main, side: `${selectionCard(ctx)}${notices}` };
 }

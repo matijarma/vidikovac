@@ -122,6 +122,10 @@ export interface KioskStrings {
     works: string;
     agenda: string;
     notices: string;
+    ongoing: string;
+    ongoingWord: string;
+    ongoingUntil: string;
+    zetNotices: string;
     headlines: string;
     overviewTransport: string;
     allDay: string;

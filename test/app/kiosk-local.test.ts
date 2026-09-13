@@ -297,11 +297,34 @@ describe('local content from the stop-scoped teaser', () => {
     expect(markup.main).toContain('Močvara');
     expect(markup.main).not.toMatch(/sjednica-odbora|kulturpunkt|class="k-row-sub"><\/span>/);
     expect(markup.side).toContain('k-notices');
-    const groups = eventGroups(MODULES.find((m) => m.module === 'dogadanja')!.items, NOW);
+    const items = MODULES.find((m) => m.module === 'dogadanja')!.items;
+    const groups = eventGroups(items, NOW);
     expect(groups.today.map((e) => e.id)).toEqual(['kp:1']);
     expect(groups.tomorrow.map((e) => e.id)).toEqual(['kp:2']);
-    expect(groups.later.map((e) => e.id)).toEqual(['skupstina:13']);
-    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1', 'zet-promet:1']);
+    expect(groups.later).toEqual([]); // the Assembly session belongs to Grad
+    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1']); // ZET notices belong to Promet
+    const extra = [
+      item('dogadanja', 'ex:1', 'event', 'Izložba koja traje', { at: '2026-09-01T09:00:00Z', until: '2026-09-30T18:00:00Z', dateBasis: 'event', data: { source: 'etnografski', category: 'izlozba', venue: 'Etnografski muzej, Zagreb' } }),
+      item('dogadanja', 'ex:2', 'event', 'Izložba u Splitu', { at: '2026-09-11T09:00:00Z', dateBasis: 'event', data: { source: 'etnografski', venue: 'Etnografski muzej, Split' } }),
+    ];
+    const more = eventGroups([...items, ...extra], NOW);
+    expect(more.ongoing.map((e) => e.id)).toEqual(['ex:1']); // began before today, still running: ongoing, not "today 09:00"
+    expect(more.today.map((e) => e.id)).toEqual(['kp:1']); // Split is not Zagreb
+    const withOngoing = { layer: 'kultura' as const, strings: hr, i18n, locale: 'hr', snapshots: { ...Object.fromEntries(MODULES.map((m) => [m.module, m])), dogadanja: snap('dogadanja', [...items, ...extra]) }, now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const };
+    const culture = pairedMarkup(withOngoing);
+    expect(culture.main).toContain('data-testid="k-ongoing"');
+    expect(culture.main).toContain('u tijeku · izložba · Etnografski muzej, Zagreb');
+    expect(culture.main).toContain('do sri 30. 9.');
+    expect(culture.main).not.toContain('13. sjednica');
+    expect(culture.main).not.toContain('Splitu');
+    // ZET's notices sit beside the delays on Promet, in place of road closures when present.
+    const promet = pairedMarkup({ ...withOngoing, layer: 'u-pokretu' as const });
+    expect(promet.side).toContain('data-testid="k-zet-notices"');
+    expect(promet.side).toContain('Obilazak linija 6 i 11');
+    expect(promet.side).not.toContain('data-testid="k-closures"');
+    const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
+    expect(grad.main).toContain('13. sjednica');
+    expect(grad.side).toContain('data-testid="k-works"');
   });
 });
 
