@@ -465,6 +465,14 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
+  it('a cold screen waits for readings rather than claiming zero vehicles or no new notices', async () => {
+    const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
+    await flush();
+    expect(q(k.root, '[data-testid=kiosk-lines] .k-board-note')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).not.toContain('nijedno vozilo');
+    expect(q(k.root, '[data-testid=kiosk-story] [data-state=loading]')).not.toBeNull();
+    k.handle.destroy();
+  });
   it('the paired safety strip agrees with the live session copy when the preview request fails', async () => {
     let fail = false;
     const k = mount({ stored: STORED, fetchTeaser: async () => {

@@ -84,7 +84,7 @@ integrated on main. Relevant milestones include `21b4bfa` (UI), `7fbfe6f`
 (paired-domain content). Historical incomplete-worktree notes above no longer
 describe the app.
 
-The integrated suite reached 135 files / 1,624 passing tests after the final
+The integrated suite reached 135 files / 1,625 passing tests after the final
 review corrections. Real browser journeys cover self-service setup, same-Wi-Fi
 pairing, one-hop five-minute sharing, twelve-second test expiry, kiosk geometry,
 motion, reduced motion, map expansion and outage hold. No-WebGL transport and

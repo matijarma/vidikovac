@@ -69,7 +69,7 @@ function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale:
 export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings: KioskStrings, locale: string): string {
   const title = stop ? strings.lines.title : strings.lines.nearbyTitle;
   const head = kicker(title, nearbyCountLine(board, strings, locale));
-  if (board.state === 'loading' && board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(strings.lines.loading)}</p>`;
+  if (board.state === 'loading') return `${head}<p class="k-board-note">${escapeHtml(strings.lines.loading)}</p>`;
   if (board.state === 'down') return `${head}<p class="k-board-note" data-state="down">${escapeHtml(strings.lines.unavailable)}</p>`;
   if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(stop ? strings.lines.noneNearby : strings.lines.noStop)}</p>`;
   const more = board.more > 0 ? `<p class="k-line-more">${escapeHtml(plural(locale, strings.lines.more, board.more))}</p>` : '';
@@ -136,7 +136,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       const list = stories(model.modules, s, locale, model.now);
       const story = list.length > 0 ? list[model.storyIndex % list.length]! : null;
       const sources = (['dogadanja', 'hrt-news', 'emsc'] as const).map((id) => byModule(model.modules)[id]);
-      const html = storyMarkup(story, s, sources.every((snapshot) => snapshot?.status === 'down'));
+      const html = sources.every((snapshot) => snapshot === undefined)
+        ? `${kicker(s.story.city)}<p class="k-story-title k-story-title--empty" data-state="loading">${escapeHtml(i18n.t('status.loading'))}</p>`
+        : storyMarkup(story, s, sources.every((snapshot) => snapshot?.status === 'down'));
       if (html !== lastStory) {
         storyBox.innerHTML = html;
         storyBox.dataset.tone = story?.tone ?? 'empty';

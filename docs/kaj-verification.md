@@ -8,7 +8,7 @@ ne obećava provjere na fizičkim uređajima koje nisu provedene.
 | Provjera | Integrirani rezultat |
 |---|---|
 | TypeScript aplikacije i Workera, produkcijska gradnja | prolazi |
-| Cijeli Vitest skup | 135 datoteka, 1.624 testa prolaze |
+| Cijeli Vitest skup | 135 datoteka, 1.625 testova prolazi |
 | Playwright | 52 testa prolaze |
 | Vizualna matrica aplikacije | 56 prikaza, bez horizontalnog prelijevanja i ozbiljnih/kritičnih axe nalaza |
 | Lagani početni paket, gzip | zaslon približno 104 kB, telefon 114 kB; granica 200 kB |
@@ -47,6 +47,8 @@ ili vremenskog limita.
 - Ispis odabranog akta zadržava atribuciju i poveznice, čak i ako su izvori
   bili sklopljeni. Tamna tema i isključene pozadinske grafike ne skrivaju 112.
 - Sigurnosni prečac nakon isteka otvara `/hitno`, bez ponovnog otvaranja sesije.
+- Dok prvi dohvat još traje, zaslon pokazuje učitavanje, ne nula vozila ili
+  tvrdnju da nema novih obavijesti.
 
 ## Vizualna matrica i ograničenja dokaza
 
