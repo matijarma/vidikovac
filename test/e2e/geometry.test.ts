@@ -96,6 +96,33 @@ describe('the page-side function in a DOM', () => {
     expect(out[0].detail).toContain('.ki-head');
     expect(out[1].detail).toContain('.ki-tabbar');
   });
+
+  it('measures a visually hidden radio at its label, the box a finger actually hits', () => {
+    document.body.innerHTML = `
+      <label for="stop-a" id="label-a">Trg bana Jelačića</label><input id="stop-a" type="radio" name="stop">
+      <label for="stop-b" id="label-b">Britanski trg</label><input id="stop-b" type="radio" name="stop">`;
+    const boxes: Record<string, DOMRect> = {
+      'stop-a': { width: 1, height: 1, top: 0, bottom: 1, left: 0, right: 1 } as DOMRect,
+      'stop-b': { width: 1, height: 1, top: 0, bottom: 1, left: 0, right: 1 } as DOMRect,
+      'label-a': { width: 320, height: 48, top: 0, bottom: 48, left: 0, right: 320 } as DOMRect,
+      'label-b': { width: 320, height: 20, top: 48, bottom: 68, left: 0, right: 320 } as DOMRect,
+    };
+    for (const [id, rect] of Object.entries(boxes)) {
+      const el = document.getElementById(id)!;
+      el.getBoundingClientRect = () => rect;
+      Object.defineProperty(el, 'offsetParent', { configurable: true, get: () => document.body });
+    }
+    const out = RULES_IN_PAGE({
+      targets: [CONTROL_TARGETS],
+      edge: EDGE_TOLERANCE_PX,
+      rounding: 0.5,
+    });
+    // The 48 px label passes for its input; the 20 px one is reported, and named as the label.
+    expect(out).toHaveLength(1);
+    expect(out[0].rule).toBe('target');
+    expect(out[0].detail).toContain('Britanski trg');
+    expect(out[0].detail).toContain('20 px');
+  });
 });
 
 describe('one source for the rules', () => {

@@ -233,15 +233,30 @@ export const RULES_IN_PAGE = (spec: PageRuleSpec): RuleViolation[] => {
     }
   }
 
+  // A control drawn 1 px square is the visually hidden half of a label pair
+  // (a radio or checkbox styled through its label): the label is what a finger
+  // hits, so the label's box is the target and the input is measured there.
+  const labelFor = (el: Element): Element | null => {
+    const id = el.getAttribute('id');
+    const explicit = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+    return explicit ?? el.closest('label');
+  };
   for (const target of spec.targets) {
     for (const el of document.querySelectorAll(target.selector)) {
       if (!shown(el)) continue;
-      const r = el.getBoundingClientRect();
+      let measured = el;
+      const box = el.getBoundingClientRect();
+      if (box.width <= 1.5 && box.height <= 1.5) {
+        const label = labelFor(el);
+        if (!label || !shown(label)) continue;
+        measured = label;
+      }
+      const r = measured.getBoundingClientRect();
       const shortHeight = r.height < target.minPx - spec.rounding;
       const shortWidth = target.axes === 'both' && r.width < target.minPx - spec.rounding;
       if (!shortHeight && !shortWidth) continue;
       const size = target.axes === 'both' ? `${px(r.width)} by ${px(r.height)}` : `${px(r.height)} tall`;
-      push('target', `${name(el)} "${words(el)}" is ${size}, under the ${target.minPx} px target`);
+      push('target', `${name(measured)} "${words(measured)}" is ${size}, under the ${target.minPx} px target`);
     }
   }
 
