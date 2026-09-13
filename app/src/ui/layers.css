@@ -16,6 +16,10 @@
 .ws-head { display: grid; gap: var(--sp-1); }
 .ws-head .layer-title { font-size: var(--text-2xl); letter-spacing: -0.02em; }
 .ws-head .meta { max-inline-size: 60ch; }
+/* The 13 px floor: a phone's second lines and timestamps read at the
+   secondary role, never the old 12 px meta size. `.meta` itself is base.css's
+   (attribution, licence lines), so its bump is scoped to a workspace room. */
+.ws .meta, .ov .meta { font-size: var(--type-secondary); }
 .layer-title { inline-size: fit-content; }
 .layer-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
 /* Programmatic focus after a pointer tap: no ring on a non-interactive heading; keyboard keeps it. */
@@ -53,7 +57,7 @@
 .sec[data-tone='urgency'] .kicker { color: var(--tone-urgency); }
 .sec[data-tone='transit'] .kicker { color: var(--tone-transit); }
 .sec[data-tone='civic'] .kicker, .sec[data-tone='action'] .kicker { color: var(--tone-civic); }
-.sec-note { margin: 0; font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
+.sec-note { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }
 
 /* Rows that open details. */
 .rows .row { border-block-start: 1px solid var(--tone-stroke); }
@@ -63,11 +67,11 @@
 .row-button[aria-current='true'] { background: var(--tone-tint-action); margin-inline: calc(-1 * var(--sp-2)); padding-inline: var(--sp-2); inline-size: calc(100% + 2 * var(--sp-2)); }
 .row-main { display: grid; gap: 0.15rem; flex: 1 1 auto; min-inline-size: 0; }
 .row-title { font-weight: var(--weight-medium); line-height: var(--leading-snug); }
-.row-meta { font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
+.row-meta { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }
 /* The lead may give way (an undated notice's "vrijeme nepoznato" is two words) rather than push the chevron out of the row. */
 .row-lead { flex: 0 1 auto; display: grid; justify-items: center; min-inline-size: 3.25rem; text-align: center; }
 .row-lead-big { font-size: var(--text-lg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.row-lead-small { font-size: var(--text-meta); color: var(--tone-text-muted); }
+.row-lead-small { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }
 .row-chevron { flex: none; color: var(--tone-text-subtle); }
 .row-static { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-3) 0; }
 .rows-plain > li { padding: var(--sp-3) 0; border-block-start: 1px solid var(--tone-stroke); }
@@ -78,12 +82,12 @@
 .ws-split[data-detail-open='true'] .ws-primary { display: none; }
 .ws-split[data-detail-open='true'] .ws-detail { display: grid; gap: var(--sp-3); align-content: start; }
 .ws-back { justify-self: start; padding-inline-start: var(--sp-2); }
-.ws-detail-hint { margin: 0; color: var(--tone-text-subtle); font-size: var(--text-sm); }
+.ws-detail-hint { margin: 0; color: var(--tone-text-subtle); font-size: var(--type-secondary); line-height: var(--lh-body); }
 .detail { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
 .detail-title { font-size: var(--text-xl); letter-spacing: -0.015em; }
 .detail-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
 .detail-facts { display: grid; gap: var(--sp-2); margin: 0; }
-.detail-facts div { display: grid; grid-template-columns: minmax(6rem, 30%) 1fr; gap: var(--sp-2); font-size: var(--text-sm); }
+.detail-facts div { display: grid; grid-template-columns: minmax(6rem, 30%) 1fr; gap: var(--sp-2); font-size: var(--type-secondary); line-height: var(--lh-body); }
 .detail-facts dt { color: var(--tone-text-muted); }
 .detail-facts dd { margin: 0; color: var(--tone-text-primary); }
 .detail-summary { margin: 0; line-height: var(--leading-relaxed); }
@@ -138,9 +142,36 @@
 .g-sun-halo { fill: var(--tone-weather); opacity: 0.18; }
 .g-arrow { stroke: var(--tone-text-primary); stroke-width: 2.5; stroke-linecap: round; }
 .g-arrow-head { fill: var(--tone-text-primary); }
-.g-radar { max-inline-size: 18rem; margin-inline: auto; }
-.g-compass { max-inline-size: 9rem; }
-.g-arc { max-inline-size: 9rem; }
+.g-radar { inline-size: min(100%, 16rem); aspect-ratio: 4 / 3; }
+.g-compass { inline-size: min(100%, 9rem); }
+.g-arc { inline-size: min(100%, 9rem); }
+.g-sun { inline-size: min(100%, 20rem); }
+/* Every figure's box is rem-sized, so its SVG grows with the reader's own
+   text zoom the way a fixed-px box never could (finding 6). The wrap is a
+   plain block; a figure with readable numbers adds a `.g-labels` row below
+   the SVG, in the same type role as the rest of the reading UI. */
+.g-wrap { display: grid; gap: var(--sp-1); justify-items: center; }
+.g-labels { display: flex; justify-content: space-between; font-size: var(--type-secondary); font-variant-numeric: tabular-nums; color: var(--tone-text-muted); position: relative; }
+.g-label-now { position: absolute; transform: translateX(-50%); color: var(--tone-text-primary); font-weight: var(--weight-bold); }
+/* Only the range figure positions a label by percent (the "now" marker), so
+   only it needs its label row pinned to the same width as the track under
+   it; sun and radar's legends are unpositioned and simply centre with the
+   dial. */
+.g-wrap-range .g-labels { inline-size: 100%; }
+/* Bars are HTML rows (no SVG): a fixed label column, a track/fill pair sized
+   in percent of the shared scale, the value tabular at the row's end. */
+.g-bars { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.g-bars > li { display: grid; grid-template-columns: var(--bar-label-w, 6rem) 1fr auto; align-items: center; gap: var(--sp-2); }
+.g-bar-label { font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); color: var(--tone-text-primary); text-align: end; overflow-wrap: anywhere; }
+.g-bar-track { position: relative; block-size: 0.625rem; border-radius: var(--r-pill); background: var(--tone-surface-3); overflow: hidden; }
+.g-bar-fill { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: inherit; background: var(--tone-text-muted); }
+.g-bar-fill[data-tone='urgency'] { background: var(--tone-urgency); }
+.g-bar-fill[data-tone='weather'] { background: var(--tone-weather); }
+.g-bar-fill[data-tone='events'] { background: var(--tone-events); }
+.g-bar-fill[data-tone='action'] { background: var(--tone-action-brand); }
+.g-bar-fill[data-tone='transit'] { background: var(--tone-transit); }
+.g-bar-value { font-size: var(--type-secondary); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; line-height: var(--lh-body); color: var(--tone-text-primary); }
+.g-bar-caption { grid-column: 1 / -1; font-size: var(--type-meta); color: var(--tone-text-subtle); }
 /* Route rows (overview transport action). */
 .route-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .route-list > li { border-block-start: 1px solid var(--tone-stroke); }
@@ -150,7 +181,7 @@
 .route-row-button { display: contents; }
 .route-link { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3); inline-size: 100%; min-height: var(--target); padding: var(--sp-1) var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .route-link:hover { background: var(--tone-surface-2); }
-.route-name { min-inline-size: 0; font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--tone-text-muted); overflow-wrap: anywhere; }
+.route-name { min-inline-size: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); overflow-wrap: anywhere; }
 .route-delay { font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
 .route-delay[data-state='early'] { color: var(--tone-weather); }
@@ -175,6 +206,10 @@
 .ov-weather-facts .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
 .ov-range { grid-column: 1 / -1; display: grid; }
 .ov-range .g-range { max-inline-size: 26rem; }
+/* The wrap (svg + .g-labels) shares one cap so the "now" label's percent
+   position always matches the marker under it; the .g-range cap above is
+   then redundant but harmless (its ancestor is already this width). */
+.ov-range .g-wrap-range { max-inline-size: 26rem; }
 /* Safety: a grouped, tinted block whose icon and title carry the level. */
 .ov-block.ov-safety { padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
 .ov-block.ov-safety[data-level='calm'] { background: var(--tone-tint-success); border-color: transparent; }
@@ -188,7 +223,7 @@
 .ov-strip li[data-level='unknown'] .icon { color: var(--tone-weather); }
 .ov-strip-text { flex: 1 1 auto; min-inline-size: 0; font-size: var(--text-sm); line-height: var(--leading-snug); }
 .ov-safety-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
-.ov .agenda-day { margin: 0; padding-block: var(--sp-2) 0; font-size: var(--text-meta); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
+.ov .agenda-day { margin: 0; padding-block: var(--sp-2) 0; font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
 .ov .rows .row-button { padding-block: var(--sp-2); }
 /* Provenance: one line to open; the required credits sit inside. */
 .provenance { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); font-size: var(--text-meta); color: var(--tone-text-muted); }
@@ -216,6 +251,7 @@
   .ov-block { border-block-start: 0; padding-block: 0; }
   .ov-weather-row { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-6); }
   .ov-range .g-range { max-inline-size: 32rem; }
+  .ov-range .g-wrap-range { max-inline-size: 32rem; }
 }
 
 /* Weather workspace. */
@@ -240,15 +276,15 @@
 .dir-item[data-layer='sigurnost'] .icon { color: var(--tone-urgency); }
 .dir-text { display: grid; gap: 0.1rem; flex: 1 1 auto; min-inline-size: 0; }
 .dir-title { font-weight: var(--weight-medium); }
-.dir-line { font-size: var(--text-sm); color: var(--tone-text-muted); }
+.dir-line { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .dir-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
 /* Events: a dated agenda with category controls; undated notices apart. */
 .agenda { display: grid; gap: var(--sp-2); }
-.agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); font-size: var(--text-meta); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
+.agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
 .agenda .row-lead { min-inline-size: 3.5rem; }
 .ev-time { font-size: var(--text-sm); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
-.ev-allday { font-size: var(--text-meta); color: var(--tone-events); font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.03em; }
+.ev-allday { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-events); font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.03em; }
 .ev-source { display: inline-flex; align-items: center; gap: 0.3rem; }
 .ev-source::before { content: ''; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 2px; background: var(--tone-events); }
 .ev-undated .row-lead { color: var(--tone-text-subtle); }
@@ -267,7 +303,7 @@
 @media (min-width: 60rem) { .nw-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }
 .nw-lead .row-title { font-size: var(--text-xl); letter-spacing: -0.01em; line-height: var(--leading-snug); }
 .nw-lead .row-meta { font-size: var(--text-sm); }
-.nw-summary { margin: 0.25rem 0 0; font-size: var(--text-sm); color: var(--tone-text-muted); line-height: var(--leading-normal); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-summary { margin: 0.25rem 0 0; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .nw-source-head { display: flex; align-items: center; gap: var(--sp-2); }
 .nw-source-head .icon { color: var(--tone-text-muted); }
 

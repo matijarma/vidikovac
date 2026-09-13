@@ -4,15 +4,55 @@
 // builders; every figure is marked `data-replace` with a signature so the
 // reconciler swaps it only when its data changed. Colours come from CSS
 // (currentColor and role tokens), so light, dark and solar update live.
+//
+// A figure's SVG draws geometry only (tracks, fills, markers, dials); any
+// number a person actually reads (a range's min/max/now, a bar's value, a
+// sun time, a distance ring) is HTML text beside it, sized in the type
+// tokens (rem), so it grows with the reader's own text zoom the way the
+// SVG's internal px-based `<text>` never could (finding 6). `wrap()` is the
+// one place that carries `data-replace`/`data-sig`, so every figure builder
+// still swaps wholesale on a signature change, whatever moved inside it.
 import { escapeAttribute, escapeHtml } from './dom/escape';
 
 const fmt = (n: number): string => (Math.round(n * 100) / 100).toString();
 
+/**
+ * `ring()`'s own builder: its sole caller (experience/chrome.ts, area S)
+ * sizes the returned element as a direct flex child of the session chip via
+ * dashboard.css's `.g-ring { flex: none }`; wrapping it would move that flex
+ * item one level down and change what the rule targets. `ring()` has no
+ * readable number to move to HTML, so it keeps data-replace on the `<svg>`
+ * itself, unlike every other figure below.
+ */
 function svg(className: string, viewBox: string, body: string, sig: string, label?: string): string {
   const a11y = label
     ? `role="img" aria-label="${escapeAttribute(label)}"`
     : 'aria-hidden="true"';
   return `<svg class="g ${escapeAttribute(className)}" viewBox="${viewBox}" ${a11y} focusable="false" data-replace data-sig="${escapeAttribute(sig)}">${body}</svg>`;
+}
+
+/** An SVG figure's geometry only, no `data-replace`: `wrap()` carries that on the outer element. */
+function figureSvg(className: string, viewBox: string, body: string, label?: string): string {
+  const a11y = label
+    ? `role="img" aria-label="${escapeAttribute(label)}"`
+    : 'aria-hidden="true"';
+  return `<svg class="g ${escapeAttribute(className)}" viewBox="${viewBox}" ${a11y} focusable="false">${body}</svg>`;
+}
+
+/** The element the reconciler swaps wholesale on a signature change. */
+function wrap(kind: string, sig: string, inner: string): string {
+  return `<div class="g-wrap g-wrap-${escapeAttribute(kind)}" data-replace data-sig="${escapeAttribute(sig)}">${inner}</div>`;
+}
+
+/**
+ * The HTML numbers beside a figure's SVG. Marked `aria-hidden`: the SVG
+ * keeps the one accessible name (its `aria-label`) that already reads the
+ * whole figure as a sentence, so a screen reader is not told the same
+ * numbers twice; a sighted reader at 200% text sees them grow because they
+ * are real text in a type role, not SVG geometry.
+ */
+function htmlLabels(spans: string): string {
+  return `<div class="g-labels" aria-hidden="true">${spans}</div>`;
 }
 
 function text(x: number, y: number, value: string, className: string, anchor: 'start' | 'middle' | 'end' = 'middle'): string {
@@ -43,7 +83,7 @@ export interface RangeBarOptions {
   label?: string;
 }
 
-/** Today's forecast range as a segment on a wider scale, with the measured value as a marker. */
+/** Today's forecast range as a segment on a wider scale, with the measured value as a marker; min, max and now are HTML beside the track. */
 export function rangeBar(o: RangeBarOptions): string {
   const W = 320;
   const pad = 4;
@@ -54,14 +94,18 @@ export function rangeBar(o: RangeBarOptions): string {
   const y = 34;
   let body = `<rect class="g-track" x="16" y="${y - 4}" width="${W - 32}" height="8" rx="4"/>`;
   body += `<rect class="g-fill g-fill-weather" x="${fmt(x(o.min))}" y="${y - 4}" width="${fmt(Math.max(4, x(o.max) - x(o.min)))}" height="8" rx="4"/>`;
-  body += text(x(o.min), y + 20, o.minLabel, 'g-label', 'middle');
-  body += text(x(o.max), y + 20, o.maxLabel, 'g-label', 'middle');
+  let nowLabel = '';
   if (o.now !== undefined && o.now !== null) {
     const nx = x(o.now);
     body += `<line class="g-marker" x1="${fmt(nx)}" y1="${y - 12}" x2="${fmt(nx)}" y2="${y + 8}"/><circle class="g-dot" cx="${fmt(nx)}" cy="${y}" r="5"/>`;
-    if (o.nowLabel) body += text(Math.min(W - 24, Math.max(24, nx)), y - 18, o.nowLabel, 'g-label g-label-strong', 'middle');
+    if (o.nowLabel) {
+      const pct = Math.min(100, Math.max(0, (nx / W) * 100));
+      nowLabel = `<span class="g-label-now" style="left:${fmt(pct)}%">${escapeHtml(o.nowLabel)}</span>`;
+    }
   }
-  return svg('g-range', `0 0 ${W} 60`, body, `${o.min}|${o.max}|${o.now ?? ''}|${o.nowLabel ?? ''}`, o.label);
+  const figure = figureSvg('g-range', `0 0 ${W} 60`, body, o.label);
+  const labels = htmlLabels(`<span class="g-label-min">${escapeHtml(o.minLabel)}</span>${nowLabel}<span class="g-label-max">${escapeHtml(o.maxLabel)}</span>`);
+  return wrap('range', `${o.min}|${o.max}|${o.now ?? ''}|${o.nowLabel ?? ''}`, figure + labels);
 }
 
 export interface ArcGaugeOptions {
@@ -83,7 +127,8 @@ export function arcGauge(o: ArcGaugeOptions): string {
   if (f > 0) body += `<path class="g-fill-stroke g-fill-${o.tone ?? 'weather'}" d="${arcPath(cx, cy, r, 270, 270 + 180 * f)}"/>`;
   body += text(cx, cy - 6, o.value, 'g-value', 'middle');
   body += text(cx, cy + 12, o.caption, 'g-label', 'middle');
-  return svg('g-arc', '0 0 120 72', body, `${f.toFixed(3)}|${o.value}|${o.caption}`, o.label);
+  const figure = figureSvg('g-arc', '0 0 120 72', body, o.label);
+  return wrap('arc', `${f.toFixed(3)}|${o.value}|${o.caption}`, figure);
 }
 
 /** A thin ring showing a remaining fraction (the session chip). */
@@ -105,7 +150,7 @@ export interface SunPathOptions {
   label?: string;
 }
 
-/** The sun's computed path for the day, with its position now; below the horizon at night. */
+/** The sun's computed path for the day, with its position now; below the horizon at night. Sunrise, noon and sunset times are HTML beside the arc. */
 export function sunPath(o: SunPathOptions): string {
   const W = 320;
   const hy = 84;
@@ -128,11 +173,10 @@ export function sunPath(o: SunPathOptions): string {
   let body = `<path class="g-path" d="M ${cx - rx} ${hy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${hy}"/>`;
   body += `<line class="g-horizon" x1="8" y1="${hy}" x2="${W - 8}" y2="${hy}"/>`;
   body += `<line class="g-tick" x1="${cx}" y1="${hy - ry - 4}" x2="${cx}" y2="${hy - ry + 4}"/>`;
-  body += text(cx, hy - ry - 8, o.noonLabel, 'g-label', 'middle');
   body += `<circle class="g-sun-halo" cx="${fmt(sx)}" cy="${fmt(sy)}" r="12"/><circle class="g-sun${up ? '' : ' g-sun-down'}" cx="${fmt(sx)}" cy="${fmt(sy)}" r="7"/>`;
-  body += text(cx - rx, hy + 20, o.sunriseLabel, 'g-label', 'start');
-  body += text(cx + rx, hy + 20, o.sunsetLabel, 'g-label', 'end');
-  return svg('g-sun', `0 0 ${W} 112`, body, `${Math.round(o.sunrise / 60000)}|${Math.round(o.sunset / 60000)}|${Math.round(o.now / 60000)}`, o.label);
+  const figure = figureSvg('g-sun', `0 0 ${W} 112`, body, o.label);
+  const labels = htmlLabels(`<span>${escapeHtml(o.sunriseLabel)}</span><span>${escapeHtml(o.noonLabel)}</span><span>${escapeHtml(o.sunsetLabel)}</span>`);
+  return wrap('sun', `${Math.round(o.sunrise / 60000)}|${Math.round(o.sunset / 60000)}|${Math.round(o.now / 60000)}`, figure + labels);
 }
 
 export interface CompassOptions {
@@ -170,7 +214,8 @@ export function compass(o: CompassOptions): string {
   }
   body += text(c, c + 3, o.value, 'g-value', 'middle');
   body += text(c, c + 17, o.caption, 'g-label', 'middle');
-  return svg('g-compass', '0 0 120 120', body, `${o.bearing ?? 'calm'}|${o.value}|${o.caption}|${o.letters.join('')}`, o.label);
+  const figure = figureSvg('g-compass', '0 0 120 120', body, o.label);
+  return wrap('compass', `${o.bearing ?? 'calm'}|${o.value}|${o.caption}|${o.letters.join('')}`, figure);
 }
 export interface BarRow {
   id: string;
@@ -182,27 +227,18 @@ export interface BarRow {
   tone?: 'urgency' | 'weather' | 'events' | 'action' | 'transit' | 'neutral';
 }
 
-/** Horizontal bars on one fixed scale, so rows stay comparable across polls. */
+/** Horizontal bars on one fixed scale, so rows stay comparable across polls. Labels and values are HTML rows; there is no SVG. */
 export function bars(rows: readonly BarRow[], max: number, label?: string, labelWidth = 96): string {
-  const W = 320;
-  const rowH = 30;
-  const labelW = labelWidth;
-  const barW = W - labelW - 56;
-  const H = Math.max(rowH, rows.length * rowH);
-  let body = '';
-  rows.forEach((row, index) => {
-    const y = index * rowH + rowH / 2;
-    const w = Math.max(3, (Math.min(row.value, max) / Math.max(1, max)) * barW);
-    body += `<g class="g-row" data-key="${escapeAttribute(row.id)}">`;
-    body += text(labelW - 8, y + 4, row.label, 'g-label g-label-strong', 'end');
-    body += `<rect class="g-track" x="${labelW}" y="${fmt(y - 5)}" width="${barW}" height="10" rx="5"/>`;
-    body += `<rect class="g-fill g-fill-${row.tone ?? 'neutral'}" x="${labelW}" y="${fmt(y - 5)}" width="${fmt(w)}" height="10" rx="5"/>`;
-    body += text(labelW + barW + 8, y + 4, row.valueText, 'g-label g-label-strong', 'start');
-    if (row.caption) body += text(labelW, y + 16, row.caption, 'g-caption', 'start');
-    body += '</g>';
-  });
+  const items = rows
+    .map((row) => {
+      const pct = Math.max(1, Math.min(100, (Math.min(row.value, max) / Math.max(1, max)) * 100));
+      const caption = row.caption ? `<span class="g-bar-caption">${escapeHtml(row.caption)}</span>` : '';
+      return `<li><span class="g-bar-label">${escapeHtml(row.label)}</span><span class="g-bar-track"><span class="g-bar-fill" data-tone="${escapeAttribute(row.tone ?? 'neutral')}" style="inline-size:${fmt(pct)}%"></span></span><span class="g-bar-value">${escapeHtml(row.valueText)}</span>${caption}</li>`;
+    })
+    .join('');
   const sig = rows.map((r) => `${r.id}:${r.value}:${r.valueText}`).join('|');
-  return svg('g-bars', `0 0 ${W} ${H + (rows.some((r) => r.caption) ? 12 : 0)}`, body, `${max}|${sig}`, label);
+  const attrLabel = label ? ` aria-label="${escapeAttribute(label)}"` : '';
+  return `<ol class="g-bars" role="list" data-replace data-sig="${escapeAttribute(`${max}|${sig}`)}"${attrLabel} style="--bar-label-w:${fmt(labelWidth / 16)}rem">${items}</ol>`;
 }
 
 export interface RadarPoint {
@@ -223,15 +259,14 @@ export interface RadarOptions {
   label?: string;
 }
 
-/** Places recorded quakes by their own distance and bearing from Zagreb, no basemap needed. */
+/** Places recorded quakes by their own distance and bearing from Zagreb, no basemap needed. Ring distances and the centre name are HTML beside the dial. */
 export function radar(o: RadarOptions): string {
   const c = 120;
   const R = 100;
   let body = '';
-  o.rings.forEach((ringLabel, index) => {
+  o.rings.forEach((_ringLabel, index) => {
     const r = (R * (index + 1)) / o.rings.length;
     body += `<circle class="g-track-stroke g-ring-line" cx="${c}" cy="${c}" r="${fmt(r)}"/>`;
-    body += text(c + 4, c - r - 3, ringLabel, 'g-caption', 'start');
   });
   body += `<line class="g-tick" x1="${c}" y1="${c - R}" x2="${c}" y2="${c + R}"/><line class="g-tick" x1="${c - R}" y1="${c}" x2="${c + R}" y2="${c}"/>`;
   for (const p of o.points) {
@@ -241,7 +276,8 @@ export function radar(o: RadarOptions): string {
     body += `<circle class="g-dot g-dot-urgency" data-key="${escapeAttribute(p.id)}" cx="${fmt(pos.x)}" cy="${fmt(pos.y)}" r="${fmt(size)}"><title>${escapeHtml(p.title)}</title></circle>`;
   }
   body += `<circle class="g-centre" cx="${c}" cy="${c}" r="4"/>`;
-  body += text(c, c + 16, o.centreLabel, 'g-label g-label-strong', 'middle');
+  const figure = figureSvg('g-radar', '0 0 240 240', body, o.label);
+  const labels = htmlLabels(`${o.rings.map((r) => `<span>${escapeHtml(r)}</span>`).join('')}<span>${escapeHtml(o.centreLabel)}</span>`);
   const sig = o.points.map((p) => `${p.id}:${p.distanceKm.toFixed(0)}:${p.bearingDeg.toFixed(0)}`).join('|');
-  return svg('g-radar', '0 0 240 240', body, `${o.maxKm}|${sig}`, o.label);
+  return wrap('radar', `${o.maxKm}|${sig}`, figure + labels);
 }
