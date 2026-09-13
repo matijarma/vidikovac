@@ -63,6 +63,17 @@ function ctx(over: Partial<LayerContext> = {}): LayerContext {
 }
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
+// The screen this phone is paired to, the same stop the e2e fixture serves, so
+// the overview's stop branch (the place line, six lines on the board) is the
+// one a person in the café actually sees.
+const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17'] };
+const atStop = (over: Partial<LayerContext> = {}): LayerContext => ctx({
+  screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: STOP },
+  ...over,
+});
+/** The real ZET feed dates itself from the GTFS-RT header, so its foot reads "podaci od", not "dohvaćeno". */
+const DATED_ZET: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, sourceUpdatedAt: new Date(NOW - 120_000).toISOString() };
+
 // Fixtures with more rows than a single default page, for T1.4's paging tests.
 // Real shapes (module, kind, data) match the single-item SNAPSHOTS above.
 const MANY_ACTS: ModuleSnapshot = base(
@@ -112,34 +123,115 @@ describe('layer registry', () => {
 });
 
 describe('grad-sada (Sada, the overview)', () => {
-  it('composes weather, safety, transit, agenda, news and the gazette from real values, with no clock and no fleet hero', () => {
-    const section = renderLayer('grad-sada', ctx());
+  it('opens with the place line, then weather, safety, the board, agenda, news and the gazette, with no clock', () => {
+    const section = renderLayer('grad-sada', atStop());
     expect(section.querySelector('[data-testid=clock]')).toBeNull();
-    expect(text(section.querySelector('[data-testid=temp]'))).toBe('21 °C');
-    const weather = text(section.querySelector('#ov-weather'));
-    expect(weather).toContain('vlaga 54 %');
-    expect(weather).toContain('danas od 12 do 24 °C');
-    expect(weather).not.toContain('Sunčano'); // the forecast prose belongs to the weather domain
-    const safety = section.querySelector('#ov-safety')!;
-    expect(safety.getAttribute('data-level')).toBe('urgent');
-    expect(text(safety)).toContain('žuto upozorenje');
-    expect(text(safety)).toContain('1 zatvorena prometnica sada');
-    expect(text(section.querySelector('[data-testid=vehicle-count]'))).toContain('3 vozila');
-    expect(section.querySelectorAll('#ov-transit .route-link').length).toBeGreaterThan(0);
-    expect(text(section.querySelector('#ov-transit'))).toContain('kasni 2 min');
-    expect(text(section.querySelector('#ov-agenda'))).toContain('Koncert u parku');
-    expect(text(section.querySelector('#ov-news'))).toContain('Naslov vijesti');
-    expect(text(section.querySelector('#ov-civic'))).toContain('21/2026');
+    for (const id of ['ov-weather', 'ov-safety', 'ov-transit', 'ov-agenda', 'ov-news', 'ov-civic']) {
+      expect(section.querySelector(`#${id}.ov-block`), id).not.toBeNull();
+    }
+    // "Trg bana J. Jelačića · ned 13. 9. 2026." says this is Zagreb, here, before any figure does.
+    expect(text(section.querySelector('.ov-place'))).toContain(STOP.name);
+    // Blocks live in the three column stacks the desk composition needs; the phone orders them in CSS.
+    expect([...section.querySelectorAll('.ov-col')].map((col) => col.getAttribute('data-key'))).toEqual(['col-a', 'col-b', 'col-c']);
+    expect([...section.querySelectorAll('.ov-block')].every((block) => block.parentElement?.classList.contains('ov-col'))).toBe(true);
     // Provenance is one expandable line, not a wall of dataset names.
     expect(section.querySelector('details.provenance')).not.toBeNull();
   });
+
+  it('reads the measured temperature, the range and the facts as one link into Vrijeme', () => {
+    const section = renderLayer('grad-sada', atStop());
+    expect(text(section.querySelector('[data-testid=temp]'))).toBe('21 °C');
+    expect(text(section.querySelector('[data-testid=temp]'))).toMatch(/°C$/);
+    const weather = text(section.querySelector('#ov-weather'));
+    expect(weather).toContain('vlaga 54 %');
+    expect(weather).toContain('danas od 12 do 24 °C');
+    expect(weather).toContain('Maksimir');
+    expect(weather).not.toContain('Sunčano'); // the forecast prose belongs to the weather domain
+    const link = section.querySelector('#ov-weather .ov-link')!;
+    expect(link.getAttribute('data-layer')).toBe('zrak-i-nebo');
+    expect(link.getAttribute('href')).toBe('#layer=zrak-i-nebo');
+    // "vedro" earns the sun; the condition word stands beside it either way.
+    expect(section.querySelector('#ov-weather .ov-cond .icon')).not.toBeNull();
+    expect(text(section.querySelector('#ov-weather .ov-cond'))).toBe('vedro');
+  });
+
+  it('states safety as one band whose level, word and time come from safetyState', () => {
+    const section = renderLayer('grad-sada', atStop());
+    const band = section.querySelector('#ov-safety .band')!;
+    expect(band.getAttribute('data-level')).toBe('urgent');
+    expect(section.querySelector('#ov-safety')?.getAttribute('data-level')).toBe('urgent');
+    expect(band.getAttribute('data-layer')).toBe('sigurnost');
+    expect(text(band)).toContain('žuto upozorenje');
+    expect(text(band)).toContain('Grmljavinsko nevrijeme');
+    // The untimed page is Sigurnost's to offer; the band only points at the domain.
+    expect(section.querySelector('#ov-safety [data-testid=hitno-link]')).toBeNull();
+
+    const calm = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': base('dhmz-cap', []) } }));
+    const calmBand = calm.querySelector('#ov-safety .band')!;
+    expect(calmBand.getAttribute('data-level')).toBe('calm');
+    expect(text(calmBand)).toContain('Nema hitnih upozorenja');
+    expect(text(calmBand)).toMatch(/potvrđeno \d{2}:\d{2}/);
+  });
+
   it('reads unknown, never all-clear, while a safety source is missing or down', () => {
-    const section = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(text(section.querySelector('#ov-weather'))).toContain('učitavanje podataka');
-    expect(section.querySelector('#ov-safety')?.getAttribute('data-level')).toBe('unknown');
+    const loading = renderLayer('grad-sada', ctx({ snapshots: {} }));
+    expect(loading.querySelector('#ov-safety .band')?.getAttribute('data-level')).toBe('unknown');
     const down = renderLayer('grad-sada', ctx({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': { ...SNAPSHOTS['dhmz-cap']!, status: 'down', items: [] } } }));
-    expect(text(down.querySelector('#ov-safety'))).toContain('Stanje upozorenja nije potvrđeno');
-    expect(text(down.querySelector('#ov-safety'))).not.toContain('Nema aktivnih upozorenja');
+    const band = down.querySelector('#ov-safety .band')!;
+    expect(band.getAttribute('data-level')).toBe('unknown');
+    expect(text(band)).toContain('Stanje nije potvrđeno');
+    expect(text(band)).not.toContain('Nema hitnih upozorenja');
+  });
+
+  it('boards the six lines of this screen’s stop, each with its badge and its delay word', () => {
+    const section = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'zet-rt': DATED_ZET } }));
+    expect(text(section.querySelector('#ov-transit .ov-title'))).toBe('Sa stanice Trg bana J. Jelačića');
+    const rows = [...section.querySelectorAll('#ov-transit .route-link')];
+    expect(rows.length).toBe(STOP.routes.length);
+    expect(rows.length).toBe(6);
+    for (const row of rows) {
+      const badge = row.querySelector('.line')!;
+      expect(badge.getAttribute('data-size')).toBe('m');
+      expect(badge.getAttribute('data-kind')).toBe('tram');
+      expect(row.getAttribute('data-layer')).toBe('u-pokretu');
+      expect(row.querySelector('.route-delay')).not.toBeNull();
+    }
+    expect(text(rows[0]!)).toContain('Črnomerec-Sopot');
+    expect(text(rows[0]!.querySelector('.route-delay'))).toBe('kasni 2 min');
+    // The foot counts the fleet and dates it, then says once what a delay is.
+    const count = text(section.querySelector('[data-testid=vehicle-count]'));
+    expect(count).toMatch(/^3 vozila/);
+    expect(count).toContain('podaci od');
+    expect(text(section.querySelector('#ov-transit'))).toContain('Kašnjenje je po liniji, nije dolazak.');
+  });
+
+  it('lists the next starts under day heads, the news leads and the gazette lockup', () => {
+    const section = renderLayer('grad-sada', atStop());
+    expect(text(section.querySelector('#ov-agenda .ov-title'))).toBe('Sljedeća događanja');
+    expect(section.querySelectorAll('#ov-agenda .agenda-day').length).toBeGreaterThan(0);
+    const events = section.querySelectorAll('#ov-agenda [data-testid=ov-event]');
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.length).toBeLessThanOrEqual(3);
+    expect(text(section.querySelector('#ov-agenda'))).toContain('Koncert u parku');
+    expect(text(section.querySelector('#ov-news'))).toContain('Naslov vijesti');
+    expect(text(section.querySelector('#ov-news'))).toContain('HRT vijesti');
+    expect(text(section.querySelector('#ov-civic .ov-issue-no'))).toBe('21/2026');
+    expect(text(section.querySelector('#ov-civic'))).toContain('Službeni glasnik');
+  });
+
+  it('paints every loading block as a skeleton of its own geometry and only announces the word', () => {
+    const section = renderLayer('grad-sada', ctx({ snapshots: {} }));
+    expect(section.querySelectorAll('.sk').length).toBeGreaterThan(0);
+    for (const id of ['ov-weather', 'ov-transit', 'ov-agenda', 'ov-news', 'ov-civic']) {
+      expect(section.querySelector(`#${id}`)?.getAttribute('aria-busy'), id).toBe('true');
+    }
+    expect(text(section)).toContain('učitavanje podataka');
+    for (const hidden of [...section.querySelectorAll('.visually-hidden')]) hidden.remove();
+    expect(text(section)).not.toContain('učitavanje podataka');
+    // A block whose source failed says so and offers the retry, never a skeleton that never ends.
+    const down = renderLayer('grad-sada', ctx({ snapshots: {}, errors: { 'dhmz-now': 'fetch failed' } }));
+    expect(down.querySelector('#ov-weather')?.getAttribute('aria-busy')).toBeNull();
+    expect(down.querySelector('#ov-weather [data-action=retry]')).not.toBeNull();
   });
 });
 

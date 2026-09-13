@@ -191,49 +191,83 @@
   .route-link:hover { background: var(--tone-surface-2); }
 }
 .route-name { min-inline-size: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); overflow-wrap: anywhere; }
-.route-delay { font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
+.route-delay { font-size: var(--type-control); font-weight: var(--weight-bold); white-space: nowrap; }
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
 .route-delay[data-state='early'] { color: var(--tone-weather); }
 .route-delay[data-state='ontime'] { color: var(--tone-live); }
-/* Overview: blocks with their own shapes on one canvas, never a repeated card. */
-.ov { display: grid; gap: var(--sp-5); align-items: start; }
-.ov-block { display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; padding-block: var(--sp-4); border-block-start: 1px solid var(--tone-stroke); }
-.ov-block.ov-weather { border-block-start: 0; padding-block-start: 0; }
-.ov-block-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
-.ov-block-title { font-size: var(--text-md); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
-.ov-block[data-tone='weather'] .ov-block-title { color: var(--tone-weather); }
-.ov-block[data-tone='transit'] .ov-block-title { color: var(--tone-transit); }
-.ov-block[data-tone='events'] .ov-block-title { color: var(--tone-events); }
+/* Overview: one composed page. A block is an area on the canvas with 24 px of
+   air around it, never a repeated card; the three column stacks the desk
+   composition needs are `display: contents` here, so a phone reads the blocks
+   in the order below and the desk is a grid change and nothing else. */
+.ov { display: grid; gap: var(--sp-6); align-items: start; }
+.ov-col { display: contents; }
+.ov-weather { order: 1; }
+.ov-safety { order: 2; }
+.ov-transit { order: 3; }
+.ov-agenda { order: 4; }
+.ov-news { order: 5; }
+.ov-civic { order: 6; }
+/* "Trg bana J. Jelačića · ned 13. 9. 2026.": where this is, before any figure. */
+.ov-place { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-block: var(--sp-3) var(--sp-4); }
+.ov-block { display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; }
+.ov-head { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-block-size: 2.75rem; }
+.ov-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
 .ov-more { display: inline-flex; align-items: center; min-height: var(--target); margin-inline-start: auto; font-size: var(--text-sm); }
-/* Weather: the measured number with its facts on one line, the range beside them. */
+/* The way into the domain keeps its own width; a long place name wraps instead of breaking the link in half. */
+.ov-head .ov-more { flex: none; }
+.ov-foot { margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+/* A whole block can be the control (the weather lockup); the link carries the block's own layout. */
+.ov-link { display: grid; gap: var(--sp-3); padding: var(--sp-2); margin: calc(-1 * var(--sp-2)); border-radius: var(--r-md); color: inherit; text-decoration: none; }
+/* Rows that open another domain: the button is the whole row, the list keeps the hairlines. */
+.ov-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.ov-list > li { border-block-start: 1px solid var(--tone-stroke); }
+.ov-list > li:first-child, .ov-list > li.agenda-day, .ov-list > li.agenda-day + li { border-block-start: 0; }
+.ov-row { inline-size: 100%; padding-inline: var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
+/* Weather: the measured number and the sky beside it, the facts and today's range below. */
 .ov-weather-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-4); align-items: center; }
-.ov-temp { font-size: 3rem; font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }
+.ov-temp { font-size: var(--type-numeral); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
 .ov-weather-text { display: grid; gap: 0.15rem; min-inline-size: 0; }
-.ov-cond { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-snug); }
-.ov-weather-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); color: var(--tone-text-muted); }
+.ov-cond { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
+.ov-cond .icon { width: 1.75rem; height: 1.75rem; color: var(--tone-weather); }
+.ov-obs, .ov-weather-facts { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.ov-weather-side { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); }
+.ov-weather-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0; padding: 0; list-style: none; }
 .ov-weather-facts li { display: inline-flex; align-items: center; gap: 0.3rem; }
 .ov-weather-facts .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
-.ov-range { grid-column: 1 / -1; display: grid; }
+.ov-range { display: grid; gap: var(--sp-1); }
 .ov-range .g-range { max-inline-size: 26rem; }
 /* The wrap (svg + .g-labels) shares one cap so the "now" label's percent
    position always matches the marker under it; the .g-range cap above is
    then redundant but harmless (its ancestor is already this width). */
 .ov-range .g-wrap-range { max-inline-size: 26rem; }
-/* Safety: a grouped, tinted block whose icon and title carry the level. */
-.ov-block.ov-safety { padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
-.ov-block.ov-safety[data-level='calm'] { background: var(--tone-tint-success); border-color: transparent; }
-.ov-block.ov-safety[data-level='unknown'] { background: var(--tone-tint-weather); border-color: transparent; }
-.ov-block.ov-safety[data-level='urgent'] { background: var(--tone-tint-urgency); border-color: var(--tone-urgency); }
-.ov-strip { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
-.ov-strip li { display: flex; align-items: center; gap: var(--sp-3); min-height: 2.5rem; }
-.ov-strip .icon { flex: none; }
-.ov-strip li[data-level='urgent'] .icon { color: var(--tone-urgency); }
-.ov-strip li[data-level='calm'] .icon { color: var(--tone-live); }
-.ov-strip li[data-level='unknown'] .icon { color: var(--tone-weather); }
-.ov-strip-text { flex: 1 1 auto; min-inline-size: 0; font-size: var(--text-sm); line-height: var(--leading-snug); }
-.ov-safety-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
-.ov .agenda-day { margin: 0; padding-block: var(--sp-2) 0; font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
-.ov .rows .row-button { padding-block: var(--sp-2); }
+/* A skeleton bar stands in for a line of text and is sized in that line's own
+   type role, so the block it fills has the geometry it will have with data and
+   nothing moves when the data lands. The figure keeps the range bar's own
+   aspect ratio for the same reason. */
+.ov-sk-title { block-size: calc(var(--type-body) * var(--lh-body)); }
+.ov-sk-sub { block-size: calc(var(--type-secondary) * var(--lh-body)); }
+.ov-sk-meta2 { block-size: calc(var(--type-secondary) * var(--leading-snug) * 2); }
+.ov-sk-obs { block-size: calc(var(--type-secondary) * var(--lh-body) * 2); }
+.ov-sk-cond { block-size: 1.75rem; }
+.ov-sk-numeral { inline-size: 5ch; block-size: calc(var(--type-numeral) * var(--lh-tight)); }
+.ov-sk-lead { inline-size: 2.5rem; block-size: calc(var(--type-control) * var(--lh-body)); }
+.ov-sk-badge { inline-size: 2.75rem; block-size: 2rem; border-radius: 0.25rem; }
+.ov-sk-figure { inline-size: 100%; max-inline-size: 26rem; aspect-ratio: 320 / 60; }
+.ov-weather-side .sk { flex: 1 0 100%; }
+/* The board: 52 px rows, the destination on one line, the state word at the end. */
+.ov-transit .route-link { min-block-size: 3.25rem; }
+.ov-transit .row-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Agenda: violet day heads in sentence case over a fixed 3.5 rem time column,
+   so three starts read as a column of times and not as ragged text. */
+.ov .agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: none; letter-spacing: normal; }
+.ov-agenda .row-lead { inline-size: 3.5rem; }
+.ov-agenda .ev-allday { text-transform: none; letter-spacing: normal; }
+/* Civic: the issue number as a lockup over the line that dates it. */
+.ov-issue { display: grid; gap: 0.15rem; }
+.ov-issue-no { font-size: var(--type-numeral); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+@media (hover: hover) {
+  .ov-link:hover, .ov-row:hover { background-color: var(--tone-surface-2); }
+}
 /* Provenance: one line to open; the required credits sit inside. */
 .provenance { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); font-size: var(--text-meta); color: var(--tone-text-muted); }
 .provenance summary { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--target); cursor: pointer; font-weight: var(--weight-medium); color: var(--tone-text-primary); list-style: none; }
@@ -244,8 +278,6 @@
 .provenance li { line-height: var(--leading-snug); }
 /* The one bare <a> in this block (the /izvori/ line) has no other class; it needs the target explicitly. */
 .provenance a { display: inline-flex; align-items: center; min-block-size: var(--target); }
-/* Civic: the issue number as a lockup. */
-.ov-civic .cv-issue { margin-block-start: var(--sp-1); }
 @media (min-width: 60rem) {
   .ov {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -258,7 +290,6 @@
   .ov-agenda { grid-area: agenda; }
   .ov-news { grid-area: news; }
   .ov-civic { grid-area: civic; }
-  .ov-block { border-block-start: 0; padding-block: 0; }
   .ov-weather-row { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-6); }
   .ov-range .g-range { max-inline-size: 32rem; }
   .ov-range .g-wrap-range { max-inline-size: 32rem; }
@@ -360,7 +391,7 @@
 
 /* Press feedback: a touch has no hover, so :active stands in for it. */
 @media (hover: none) {
-  .row-button:active, .route-link:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+  .row-button:active, .route-link:active, .ov-link:active, .ov-row:active, .ov-safety .band:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
 }
 
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
@@ -370,10 +401,9 @@
    container in rem, so the threshold moves with the text. Engines without
    container queries keep the viewport forms above. */
 @container ws (max-width: 36rem) {
-  .ov { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; gap: var(--sp-5); }
+  .ov { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; gap: var(--sp-6); }
+  .ov-col { display: contents; }
   .ov-weather, .ov-transit, .ov-safety, .ov-agenda, .ov-news, .ov-civic { grid-area: auto; }
-  .ov-block { border-block-start: 1px solid var(--tone-stroke); padding-block: var(--sp-4); }
-  .ov-block.ov-weather { border-block-start: 0; padding-block-start: 0; }
   .ov-weather-row { column-gap: var(--sp-4); }
   .ov-range .g-range { max-inline-size: 26rem; }
   .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
@@ -389,6 +419,10 @@
   .ov-weather-row { grid-template-columns: minmax(0, 1fr); }
   .ov-temp { grid-column: 1; }
   .ov-weather-text { grid-column: 1; }
+  /* The band's confirmation time is signage and never breaks; in this much
+     room it drops under the verdict instead of widening the page. */
+  .ov-safety .band { flex-wrap: wrap; padding-block: var(--sp-2); }
+  .ov-safety .band-meta { margin-inline-start: 0; }
   /* A row's lead (time, all-day, amount) takes its own line above the title. */
   .row-button { flex-wrap: wrap; }
   .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }

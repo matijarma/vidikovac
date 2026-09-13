@@ -37,6 +37,9 @@ const PEEK_TOLERANCE_PX = 2;
 const HALF_TOLERANCE = 0.02;
 const OPEN_GAP_PX = 40;
 const OPEN_GAP_TOLERANCE_PX = 4;
+/** Sada's promise at 390×844: weather, safety and the board are all reachable without a scroll. */
+const SADA_FOLD_PX = 700;
+const SADA_BLOCKS_IN_FOLD = 3;
 /** Bounded page heights with fixtures (plan, "Test updates", new test 7). */
 const GRAD_MAX_HEIGHT_PX = 3_000;
 const SIGURNOST_MAX_HEIGHT_PX = 2_500;
@@ -192,6 +195,16 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
     const fixture = await openDashboard(page, viewport);
     await settle(page, fixture);
     expect(await geometryIssues(page, PHONE_SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
+
+    if (viewport === PHONE) {
+      // The composition, not the scroll: three blocks of the city are on the first screen.
+      const blocks = await page.evaluate((fold) => [...document.querySelectorAll('.ov-block')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { id: el.id, top: Math.round(r.top), bottom: Math.round(r.bottom), inFold: r.top < fold && r.bottom > 0 };
+      }), SADA_FOLD_PX);
+      const inFold = blocks.filter((b) => b.inFold);
+      expect(inFold.length, `at least ${SADA_BLOCKS_IN_FOLD} .ov-block rects must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the blocks measure ${blocks.map((b) => `${b.id} ${b.top}→${b.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_BLOCKS_IN_FOLD);
+    }
 
     for (const layer of ['vijesti', 'sigurnost'] as const) {
       await openLayer(page, layer);

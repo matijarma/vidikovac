@@ -219,6 +219,10 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(layers).toContain('.row-button:active');
     expect(layers).toContain('.route-link:active');
+    // Sada's own controls: the whole weather lockup, the cross-domain rows, the safety band.
+    expect(layers).toContain('.ov-link:active');
+    expect(layers).toContain('.ov-row:active');
+    expect(layers).toContain('.ov-safety .band:active');
     expect(layers).toContain('.dir-item:active');
     expect(layers).toContain('.sf-number:active');
     expect(layers).toContain('.link-arrow:active');
