@@ -3,57 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vidikovac · Zagreb, povezan.</title>
-<meta name="description" content="Pogled na Zagreb u stvarnom vremenu, izgrađen na otvorenim podacima. Otključava se skeniranjem rotirajućeg QR koda s javnog zaslona.">
-<meta name="color-scheme" content="dark light">
-<style>
-  /* Modrotisak (design.md §0/§1): indigo cloth, cream print — two faces of
-     one bolt. Night is the indigo ground with cream ink; day turns the same
-     cloth over. --accent doubles as --tone-label (the one permitted third
-     shade: catalogue numbers, quiet caps, links). */
-  :root { color-scheme: dark; --bg: #16226b; --fg: #f2ead8; --muted: #c3cdf5; --accent: #9db4ff; }
-  @media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f2ead8; --fg: #16226b; --muted: #4553a8; --accent: #3a49b0; } }
-  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.5 'Manrope', 'Segoe UI', 'Avenir Next', sans-serif; }
-  main { max-width: 42rem; margin: 0 auto; padding: 4rem 1.25rem 6rem; }
-  h1 { font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif; font-size: clamp(2.2rem, 6vw, 3.6rem); line-height: 1.05; margin: 0 0 1rem; letter-spacing: -0.02em; }
-  .panorama-fig { margin: 0 0 2rem; }
-  .panorama-fig .panorama { display: block; width: 100%; height: clamp(120px, 22vw, 180px); }
-  .panorama-fig .legend {
-    margin: 0.6rem 0 0; font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 0.75rem; letter-spacing: 0.04em; color: var(--muted);
-  }
-  nav ul { list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
-  footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid color-mix(in oklab, var(--fg) 15%, transparent); }
-  h1 small { display: block; font-size: 0.45em; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-bottom: 0.6rem; }
-  p.lead { font-size: 1.25rem; }
-  .muted { color: var(--muted); }
-  a { color: var(--accent); }
-  code { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 0.95em; }
-</style>
+<title>Kaj ima? · Zagreb u stvarnom vremenu</title>
+<meta name="description" content="Kaj ima? je pogled na Zagreb u stvarnom vremenu, izgrađen na otvorenim podacima: promet, vrijeme, događanja, grad, sigurnost i vijesti. Otključava se skeniranjem koda s javnog zaslona.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f8f7">
+<link rel="stylesheet" href="/src/ui/tokens.css">
+<link rel="stylesheet" href="/src/ui/base.css">
+<link rel="stylesheet" href="/src/ui/landing.css">
+<script type="module" src="/src/entries/theme-init.ts"></script>
 </head>
 <body>
-<main>
-  <h1><small>Dobro došli u budućnost.</small>Zagreb, povezan.</h1>
-  <figure class="panorama-fig">
-    <canvas class="panorama" data-testid="panorama" role="img" aria-label="SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA"></canvas>
-    <figcaption class="legend" data-testid="panorama-legend">SL. 1 — ZAGREBAČKA PANORAMA · UČITAVANJE PODATAKA</figcaption>
-  </figure>
-  <p class="lead">Pogled na Zagreb u stvarnom vremenu, izgrađen isključivo na otvorenim podacima. Otključava se na deset minuta skeniranjem rotirajućeg QR koda s javnog zaslona ili s telefona druge osobe. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje je svrha, ne cijena, i deset minuta poslije sesija sama završi i vrati čovjeka u grad.</p>
-  <p>Zaslon stoji u kafiću, knjižnici ili čekaonici i cijelo vrijeme pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova na <a href="/s/">stranici za upis koda</a>.</p>
-  <p class="muted">Sigurnosni sloj — upozorenja DHMZ-a, potresi, zatvorene prometnice, dežurne ljekarne i zborna mjesta civilne zaštite — otvoren je svima, bez skeniranja i bez ograničenja trajanja.</p>
-  <nav aria-label="Stranice">
-    <ul>
-      <li><a href="/hitno">Sigurnost — otvoreno svima, bez skeniranja</a></li>
-      <li><a href="/s/">Upiši kod sa zaslona</a></li>
-      <li><a href="/izvori/">Izvori podataka i licence</a></li>
-      <li><a href="/open/">Otvoreni podaci za preuzimanje</a></li>
-      <li><a href="/privatnost/">Privatnost</a></li>
-      <li><a href="/pristupacnost/">Pristupačnost</a></li>
-    </ul>
+<a class="skip-link" href="#ld-main">Prijeđi na sadržaj</a>
+<header class="ld-head">
+  <a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica"><span class="ki-wordmark-text">Kaj ima?</span></a>
+  <nav class="ld-nav" aria-label="Brzi pristup">
+    <a href="/hitno">Sigurnost</a>
+    <a href="/s/">Upiši kod</a>
+    <a class="btn" href="/kiosk/">Otvori zaslon</a>
   </nav>
-  <footer class="muted">
-    <p>Izvorni kod: AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
-    <p role="status">Stanje: <code id="health">…</code></p>
+</header>
+<main id="ld-main" class="ld">
+  <section class="ld-hero" aria-labelledby="ld-title">
+    <p class="kicker">Zagreb u stvarnom vremenu</p>
+    <h1 id="ld-title">Deset minuta grada na tvom uređaju.</h1>
+    <p class="ld-lead">Promet, vrijeme, događanja, gradske odluke, sigurnost i vijesti iz otvorenih podataka Grada Zagreba i javnih službi, s izvorom uz svaki prikaz. Bez računa, bez instalacije i bez praćenja. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.</p>
+    <div class="ld-actions" data-testid="landing-actions">
+      <a class="btn btn-primary" href="/kiosk/" data-testid="cta-kiosk">Otvori gradski zaslon</a>
+      <a class="btn-ghost" href="/s/" data-testid="cta-scan">Skeniraj ili upiši kod</a>
+      <a class="btn-quiet" href="/hitno" data-testid="cta-safety">Sigurnost, bez skeniranja</a>
+    </div>
+    <p class="meta">Gradski zaslon je pravi zaslon za kafić, knjižnicu ili stanicu: postavi se u dva koraka, pokazuje kod koji se mijenja svakih trideset sekundi i otključava telefone u blizini.</p>
+  </section>
+  <section class="ld-live" aria-labelledby="ld-live-title">
+    <h2 id="ld-live-title" class="kicker">Sada u Zagrebu</h2>
+    <ul class="ld-strip" data-testid="live-strip">
+      <li><span class="ld-k">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather">učitavanje…</span></li>
+      <li><span class="ld-k">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety">učitavanje…</span></li>
+      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit">učitavanje…</span></li>
+    </ul>
+    <p class="meta">Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.</p>
+  </section>
+  <section class="ld-how" aria-labelledby="ld-how-title">
+    <h2 id="ld-how-title">Kako radi</h2>
+    <ol class="ld-steps">
+      <li><span>Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.</span></li>
+      <li><span>Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta.</span></li>
+      <li><span>Sesija sama završi, a prikaz ostaje na posljednjim podacima. <a href="/hitno">Sigurnost</a> je otvorena svima, bez skeniranja i bez ograničenja trajanja.</span></li>
+    </ol>
+  </section>
+  <nav class="ld-pages" aria-label="Stranice">
+    <a href="/hitno">Sigurnost, otvoreno svima</a>
+    <a href="/s/">Upiši kod sa zaslona</a>
+    <a href="/izvori/">Izvori podataka i licence</a>
+    <a href="/open/">Otvoreni podaci za preuzimanje</a>
+    <a href="/privatnost/">Privatnost</a>
+    <a href="/pristupacnost/">Pristupačnost</a>
+  </nav>
+  <footer class="ld-foot">
+    <p>Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
+    <p role="status">Stanje poslužitelja: <code id="health">…</code></p>
   </footer>
 </main>
 <script type="module" src="/src/entries/landing.ts"></script>

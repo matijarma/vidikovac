@@ -20,7 +20,8 @@
   margin: 0 auto;
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
 }
-.scan { display: grid; gap: var(--sp-4); }
+.scan { display: grid; gap: var(--sp-4); min-inline-size: 0; }
+.scan > *, .scan-form > * { min-inline-size: 0; }
 .scan-title { font-size: 2rem; }
 .scan-intro { color: var(--tone-text-muted); }
 
@@ -57,6 +58,7 @@
    unfocused appearance is unchanged. */
 input[type='text'].scan-input {
   width: 100%;
+  min-inline-size: 0;
   min-height: 3.25rem;
   border-width: 2px;
   border-style: solid;
@@ -72,12 +74,13 @@ input[type='text'].scan-input {
    no camera (platform can't decode) the row collapses to the one control. */
 .scan-actions {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: stretch;
   gap: var(--sp-3);
   margin-top: var(--sp-2);
 }
-.scan-actions--single { grid-template-columns: 1fr; }
+.scan-actions--single { grid-template-columns: minmax(0, 1fr); }
+.scan-actions .btn-ghost span { white-space: normal; }
 .scan-actions .btn, .scan-actions .btn-ghost { min-height: 3.25rem; }
 .scan-or {
   display: flex;
@@ -115,13 +118,15 @@ input[type='text'].scan-input {
 .scan-foot {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-3);
+  gap: var(--sp-2) var(--sp-4);
   max-width: 32rem;
   margin: 0 auto;
   padding: 0 var(--sp-4) var(--sp-8);
   color: var(--tone-text-muted);
   font-size: var(--text-sm);
 }
+.scan-foot a { display: inline-flex; align-items: center; min-height: var(--target); }
+.scan-foot .btn-ghost { color: var(--tone-urgency); border-color: currentColor; }
 
 @media (min-width: 40rem) {
   .scan-page { padding-top: var(--sp-10); }

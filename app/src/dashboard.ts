@@ -1,63 +1,56 @@
-// The /d/ surface. Owns the layer switcher (a real tablist with roving
-// tabindex), the session ring and countdown, the two WCAG toggles, the polling
-// loop and the expiry freeze. Every browser global is injected so the whole
-// behaviour is unit-tested under happy-dom.
-import type { Attribution, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+// The /d/ surface: one stable shell (wordmark, session, safety shortcut,
+// sidebar or tab bar, banners) around one active workspace. Real session,
+// real feeds through the core stores, keyed reconciliation of the workspace
+// so a poll never disturbs focus, typed text, scroll or a live map. Every
+// browser global is injected, so the behaviour is unit-tested under happy-dom.
+import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
 import { codeUrl, formatCode, speakableCode } from './code';
-import { countdown, zagrebTime } from './format';
-import type { I18n } from './i18n/i18n';
-import { ALL_LAYER_MODULES, LAYER_MODULES, renderLayer } from './layers';
-import { vehicleCount } from './layers/shared';
-import type { ExportKind } from './layers/types';
+import { zagrebTime } from './format';
+import { parseSelection, publicItemKey, selectionParams, type PublicSelection, type ScreenContext } from './core/contracts';
+import { createFeedStore } from './core/feed-store';
+import { createViewStore } from './core/view-store';
+import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, tabbarMarkup, wordmarkMarkup, type ShellState } from './experience/chrome';
+import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
+import { createSessionSheet, type SheetAction } from './experience/session-sheet';
+import { storeLocale } from './i18n/create-default-i18n';
+import type { I18n, LocaleCode } from './i18n/i18n';
+import { LAYER_MODULES, renderLayer } from './layers';
+import type { ExportKind, LayerContext } from './layers/types';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
-import { loadNetwork, type Network } from './motion/network';
 import { continuePoll, nextPollDelay } from './motion/loop';
+import { loadNetwork, type Network } from './motion/network';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
-import { tone } from './ui/canvas';
 import { createDialog, type DialogHandle } from './ui/dialog';
-import { escapeHtml } from './ui/dom/escape';
-import { MEANDER_STEPS, paintMeander, paintMeanderBar, quantise } from './ui/meander';
-import { paintPanorama } from './ui/panorama';
+import { createElementFromHTML, escapeAttribute } from './ui/dom/escape';
+import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { createQr } from './ui/qr';
+import type { ThemeController, ThemePreference } from './ui/theme';
 
-/** The meander's one-second step and the fine countdown line's own tick,
- *  independent of the poll (which only governs re-fetching city data) — the
- *  same constant kiosk.ts keeps for its own code meander. */
-const MEANDER_TICK_MS = 1_000;
+/** The per-second tick for the remaining time; the poll has its own aligned timer. */
+const TICK_MS = 1_000;
 
-/**
- * The layer last opened by the user, mirrored into sessionStorage so the next
- * unlock (the next scan) reopens it instead of always defaulting to the first
- * tab — the accessibility statement already promises this (R-60).
- */
+/** The layer last opened, mirrored so the next scan reopens it (R-60). */
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
 
-function readStoredLayer(): LayerId | null {
+/** Layers whose renderers declare interactions as data-action and are safe to reconcile in place. */
+const RECONCILED_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti']);
+
+function safeSessionStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
+  try { return globalThis.sessionStorage; } catch { return undefined; }
+}
+
+function readStoredLayer(storage: Pick<Storage, 'getItem'> | undefined): LayerId | null {
   try {
-    const stored = globalThis.sessionStorage?.getItem(LAYER_STORAGE_KEY);
+    const stored = storage?.getItem(LAYER_STORAGE_KEY);
     return stored && (LAYERS as readonly string[]).includes(stored) ? (stored as LayerId) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-function storeLayer(layer: LayerId): void {
-  try {
-    globalThis.sessionStorage?.setItem(LAYER_STORAGE_KEY, layer);
-  } catch {
-    /* ignore */
-  }
-}
-
-export interface SessionHashParams {
-  roomId: string;
-  ticket: string | null;
-  label: string | null;
-}
+export interface SessionHashParams { roomId: string; ticket: string | null; label: string | null }
 
 export function parseSessionHash(hash: string): SessionHashParams | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -66,206 +59,206 @@ export function parseSessionHash(hash: string): SessionHashParams | null {
   return { roomId, ticket: params.get('ticket'), label: params.get('label') };
 }
 
+export interface MediaLike { matches: boolean; addEventListener?(type: 'change', listener: () => void): void; removeEventListener?(type: 'change', listener: () => void): void }
+
 export interface DashboardDeps {
   i18n: I18n;
   session: SessionClient;
   now?: () => number;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
-  /** true = desktop grid of all seven layers; false = one layer at a time. */
+  /** Legacy hint for the surface when no matchMedia is available. */
   wide?: boolean;
   label?: string | null;
   reducedMotion?: boolean;
-  /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
+  /** Decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
-  /** Re-runs the canvas repaints on theme change (fires once immediately) and
-   *  on resize, coalesced onto one frame (ui/canvas.ts's `repaintOn`). Absent
-   *  in tests that don't care about theme/resize repainting. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
-  /** The network artefact for the schematic (T9); defaults to
-   *  motion/network.ts's loadNetwork over the page's own fetch, and is
-   *  never called in lightweight mode (R-L4). Injected so tests never fetch. */
   loadNetwork?: () => Promise<Network | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
   onShare?: (url: string, title: string) => void;
   onExport?: (kind: ExportKind, module: ModuleId) => void;
+  onItemExport?: (kind: 'ics' | 'geojson' | 'print', item: FeedItem, snapshot: ModuleSnapshot) => void;
+  onItemCopy?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
+  onItemShare?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
+  theme?: ThemeController;
+  /** Layer memory; null disables it, omitted uses sessionStorage. */
+  storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  location?: Pick<Location, 'pathname' | 'search' | 'hash'>;
+  history?: Pick<History, 'pushState' | 'replaceState'>;
+  matchMedia?: (query: string) => MediaLike;
+  onLocaleChange?: (locale: LocaleCode) => void;
+  scanUrl?: string;
 }
 
 export interface DashboardHandle {
   element: HTMLElement;
   selectLayer(layer: LayerId): void;
+  /** The layer on screen, for metrics such as `<layer>/<kind>` export dimensions. */
+  activeLayer(): LayerId;
+  /** Re-reads the fragment after a Back or Forward navigation. */
+  restore(hash: string): void;
   destroy(): void;
 }
-
 export function mountDashboard(root: HTMLElement, deps: DashboardDeps): DashboardHandle {
   const { i18n, session } = deps;
   const now = deps.now ?? (() => Date.now());
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
-  const wide = deps.wide ?? false;
   const lightweight = Boolean(deps.lightweight);
+  const storage = deps.storage === undefined ? safeSessionStorage() : deps.storage ?? undefined;
+  const scanUrl = deps.scanUrl ?? '/s/';
+  const doc = root.ownerDocument;
 
-  const snapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
-  // One network artefact for the page: the schematic and the full map both
-  // snap to it, so it is fetched once (R-L4) -- memoised here, since
-  // network.ts's loadNetwork deliberately is not. Never called in
-  // lightweight mode: the schematic host does not ask, and there is no map.
+  // --- state ---------------------------------------------------------------
+  const view = createViewStore({
+    initialLayer: readStoredLayer(storage) ?? LAYERS[0]!,
+    location: deps.location,
+    history: deps.history,
+    storage,
+    hash: deps.location?.hash ?? '',
+  });
+  const store = createFeedStore({
+    fetchData: deps.fetchData ?? (() => Promise.reject(new Error('no-fetch'))),
+    token: () => session.snapshot().dataToken,
+    now,
+  });
   let networkPromise: Promise<Network | null> | null = null;
   const loadNetworkOnce = (): Promise<Network | null> => {
     networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
     return networkPromise;
   };
-  // T10 / R-L2: the full MapLibre map is not rendered at all on the
-  // lightweight path -- no factory, so no slot ever yields a container --
-  // and ticks its reduced-motion loop on this page's own timer pair (R-F12).
   const maps = createMapSlots(
     lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
   );
-  // T9: one schematic for the page, handed to the U pokretu layer through
-  // the context exactly like `maps`, so a poll never throws away the motion
-  // model's fix history (R-P2). A session sees the whole network; the host
-  // fetches the artefact lazily, on that layer's first render (R-L4).
   const schematic = createSchematicHost({
-    i18n,
-    scope: { kind: 'network' },
-    lightweight,
-    reducedMotion: deps.reducedMotion,
-    now,
-    onRepaint: deps.onRepaint,
-    loadNetwork: loadNetworkOnce,
+    i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,
   });
-  let active: LayerId = readStoredLayer() ?? LAYERS[0]!;
+  const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
+  const surface = (): ScreenContext['surface'] => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
+
   let frozen = false;
-  // T10: the full-map view mode, a CSS state on this element (data-view),
-  // never the Fullscreen API -- so the header with the session meander is
-  // still in the flow above the map, pinned there by construction.
-  let mapFull = false;
   let paused = false;
   let countdownHidden = false;
+  let directory = false;
+  let mapFull = false;
+  let reconnecting = false;
+  let error: string | null = null;
+  let lastRefresh: number | null = null;
+  let totalSeconds: number | null = null;
   let warned60 = false;
   let warned20 = false;
-  let timer: unknown = null; // the armed poll: a one-shot re-armed after each refresh (see armPoll)
-  let meanderTimer: unknown = null;
+  let timer: unknown = null;
+  let tickTimer: unknown = null;
   let disposed = false;
-  // Captured once, the moment a live expiry first appears (join or resume):
-  // the denominator for the meander's fill fraction. The wire contract carries
-  // no session-start timestamp, so a reload mid-session sees the meander start
-  // full at whatever time is left then — the best any client can infer.
-  let totalSeconds: number | null = null;
+  let shareDenied = false;
+  let joinedOnce = false;
 
-  // The panorama and the meander each have exactly one path, chosen here from
-  // the lightweight flag, never toggled with CSS after the fact (R-L1/R-L2) —
-  // the same shape as kiosk.ts's own kioskMarkup().
-  const panoramaInner = lightweight
-    ? `<div class="dash-panorama-rule" data-testid="panorama" role="img" aria-label=""></div>`
-    : `<canvas class="dash-panorama-canvas" data-testid="panorama" role="img" aria-label=""></canvas>`;
-  const meanderInner = lightweight
-    ? `<div class="dash-meander-track" aria-hidden="true"><div class="dash-meander-bar" data-testid="session-ring"></div></div>`
-    : `<canvas class="dash-meander-canvas" data-testid="session-ring" aria-hidden="true"></canvas>`;
-
-  const element = document.createElement('div');
-  element.className = 'dash';
-  element.dataset.view = 'layers';
-  element.innerHTML = `
-    <figure class="dash-panorama">${panoramaInner}</figure>
-    <header class="dash-head">
-      <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
-      <div class="dash-head-top">
-        <p class="dash-label" data-testid="session-label"></p>
-        <button type="button" class="btn-ghost dash-share" data-testid="share-city" hidden>${escapeHtml(i18n.t('session.share'))}</button>
-      </div>
-      <div class="dash-clock">
-        <time class="dash-countdown" data-testid="countdown"></time>
-        <span class="dash-countdown-fine" data-testid="countdown-fine"></span>
-      </div>
-      <figure class="dash-meander">
-        ${meanderInner}
-        <figcaption class="dash-legend" data-testid="meander-legend"></figcaption>
-      </figure>
-      <div class="dash-toggles">
-        <button type="button" class="btn-ghost" data-testid="toggle-countdown" aria-pressed="false">${escapeHtml(i18n.t('session.hideCountdown'))}</button>
-        <button type="button" class="btn-ghost" data-testid="toggle-refresh" aria-pressed="false">${escapeHtml(i18n.t('session.pauseRefresh'))}</button>
-        <span class="dash-refresh-state panel-sub" data-testid="refresh-state"></span>
-      </div>
-    </header>
-    <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
-    <p class="dash-alert" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
-    <p class="dash-frozen" role="alert" data-testid="frozen-line" hidden></p>
-    <nav class="dash-tabs" role="tablist" aria-label="${escapeHtml(i18n.t('session.tabsLabel'))}"></nav>
-    <div class="dash-view" data-testid="dash-view" data-wide="${wide ? 'true' : 'false'}"></div>
-    <footer class="dash-foot panel-sub">${escapeHtml(i18n.t('session.openTier'))}</footer>`;
+  // --- stable shell --------------------------------------------------------
+  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting">
+<h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
+<p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
+<p class="ki-alert" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
+<div class="ki-top" data-region="top"></div>
+<div class="ki-session-slot" data-region="session"></div>
+<div class="ki-safety-slot" data-region="safety"></div>
+<nav class="ki-side" data-region="side" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
+<div class="ki-banners" data-region="banners" data-testid="banners"></div>
+<main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
+<nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
+</div>`);
   root.appendChild(element);
-
-  const tablist = element.querySelector<HTMLElement>('[role=tablist]')!;
-  const view = element.querySelector<HTMLElement>('[data-testid=dash-view]')!;
+  const region = (name: string): HTMLElement => element.querySelector<HTMLElement>(`[data-region=${name}]`)!;
+  const titleEl = element.querySelector<HTMLElement>('[data-testid=dash-title]')!;
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
-  const frozenLine = element.querySelector<HTMLElement>('[data-testid=frozen-line]')!;
-  const titleEl = element.querySelector<HTMLElement>('[data-testid=dash-title]')!;
-  const label = element.querySelector<HTMLElement>('[data-testid=session-label]')!;
-  const timeEl = element.querySelector<HTMLTimeElement>('[data-testid=countdown]')!;
-  const fineEl = element.querySelector<HTMLElement>('[data-testid=countdown-fine]')!;
-  const panoramaEl = element.querySelector<HTMLElement>('[data-testid=panorama]')!;
-  const meanderFig = element.querySelector<HTMLElement>('.dash-meander')!;
-  const meanderEl = element.querySelector<HTMLElement>('[data-testid=session-ring]')!;
-  const meanderLegend = element.querySelector<HTMLElement>('[data-testid=meander-legend]')!;
-  const refreshState = element.querySelector<HTMLElement>('[data-testid=refresh-state]')!;
-  const countdownToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
-  const refreshToggle = element.querySelector<HTMLButtonElement>('[data-testid=toggle-refresh]')!;
-  const shareButton = element.querySelector<HTMLButtonElement>('[data-testid=share-city]')!;
+  const main = element.querySelector<HTMLElement>('main')!;
+  const regions = { top: region('top'), session: region('session'), safety: region('safety'), side: region('side'), banners: region('banners'), tabs: region('tabs') };
 
-  const tabs = LAYERS.map((layer) => {
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.role = 'tab';
-    tab.id = `tab-${layer}`;
-    tab.dataset.layer = layer;
-    tab.textContent = i18n.t(`layers.${layer}`);
-    tab.setAttribute('aria-controls', `layer-${layer}`);
-    tab.addEventListener('click', () => select(layer, true));
-    tablist.appendChild(tab);
-    return tab;
-  });
-
-  /** /d has no visible h1 (the invitation lives on /); this hidden one names
-   *  the app and the active layer so the axe sweep finds exactly one, and is
-   *  where focus lands on join (R-M1). Runs wherever `active` changes. */
-  function updateDocumentTitle(): void {
-    titleEl.textContent = i18n.t('session.documentTitle', {
-      app: i18n.t('common.appName'),
-      layer: i18n.t(`layers.${active}`),
-    });
-  }
-
-  function paintTabs(): void {
-    for (const tab of tabs) {
-      const selected = tab.dataset.layer === active;
-      tab.setAttribute('aria-selected', selected ? 'true' : 'false');
-      tab.tabIndex = selected ? 0 : -1;
-      tab.disabled = frozen;
-    }
-  }
-
-  function layerContext() {
+  function shellState(): ShellState {
+    const s = session.snapshot();
     return {
-      i18n,
-      snapshots,
-      now: now(),
-      onCopy: deps.onCopy,
-      onShare: deps.onShare,
-      onExport: deps.onExport,
-      maps,
-      schematic,
-      mapView: lightweight ? undefined : { full: mapFull, toggle: () => setMapView(!mapFull) },
-      reducedMotion: deps.reducedMotion,
-      lightweight,
+      layer: view.snapshot().layer, directory, phase: s.phase, frozen, reconnecting,
+      secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownHidden, paused,
+      loading: store.snapshot().loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
+      label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
     };
   }
 
-  /** Enters or leaves the full-map view mode and re-renders so the button
-   *  reads the state it now leads to; render() hands focus back to it. */
+  function paintRegion(target: HTMLElement, markup: string): void {
+    reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
+  }
+
+  function paintShell(): void {
+    const s = shellState();
+    element.dataset.surface = surface();
+    element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
+    element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
+    paintRegion(regions.top, wordmarkMarkup(i18n));
+    paintRegion(regions.session, sessionMarkup(i18n, s));
+    paintRegion(regions.safety, safetyMarkup(i18n, s));
+    paintRegion(regions.side, sidebarMarkup(i18n, s));
+    paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
+    paintRegion(regions.tabs, tabbarMarkup(i18n, s));
+    regions.side.setAttribute('aria-label', i18n.t('nav.label'));
+    regions.tabs.setAttribute('aria-label', i18n.t('nav.label'));
+    if (!frozen && s.expiresAt !== null && s.phase === 'live') {
+      if (s.secondsLeft <= 60) announce(60);
+      if (s.secondsLeft <= 20) announce(20);
+    }
+    sheet.refresh();
+  }
+
+  function updateTitle(): void {
+    const layerName = directory ? i18n.t('nav.moreTitle') : i18n.t(`layers.${view.snapshot().layer}`);
+    const title = i18n.t('session.documentTitle', { app: i18n.t('common.appName'), layer: layerName });
+    titleEl.textContent = title;
+    doc.title = title;
+  }
+  // --- workspace -----------------------------------------------------------
+  const mapView = { get full(): boolean { return mapFull; }, toggle: (): void => setMapView(!mapFull) };
+  const navigateAction = (layer: LayerId, selection?: PublicSelection | null): void => navigate(layer, selection ?? null, true);
+  const setFilterAction = (key: string, value: string): void => view.setFilter(key, value);
+  const retryAction = (module: ModuleId): void => { void store.refresh([module]); };
+
+  function screen(): ScreenContext {
+    return {
+      surface: surface(), locale: i18n.getLocale(),
+      theme: deps.theme?.getResolvedTheme() ?? 'light', themePreference: deps.theme?.getPreference() ?? 'auto',
+      lightweight, reducedMotion: Boolean(deps.reducedMotion), stop: session.snapshot().screen?.stop ?? undefined,
+    };
+  }
+
+  function layerContext(): LayerContext {
+    const feed = store.snapshot();
+    return {
+      i18n, snapshots: feed.snapshots, now: now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
+      onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
+      onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
+      navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
+      maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
+    };
+  }
+
+  /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
+  function render(): void {
+    const ctx = layerContext();
+    const layer = view.snapshot().layer;
+    const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
+    if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
+      const wrapper = doc.createElement('div');
+      wrapper.appendChild(next);
+      reconcile(main, wrapper);
+    } else {
+      const focusId = doc.activeElement instanceof HTMLElement ? doc.activeElement.id : '';
+      main.replaceChildren(next);
+      if (focusId) doc.getElementById(focusId)?.focus();
+    }
+    maps.sweep();
+  }
+
   function setMapView(full: boolean): void {
     if (mapFull === full) return;
     mapFull = full;
@@ -273,123 +266,134 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     render();
   }
 
-  /** The panorama's vehicle count comes from the zet-rt snapshot already
-   *  fetched for grad-sada/u-pokretu, not a fetch of its own — repainted at
-   *  the end of every render() (a fresh snapshot may have just landed) and
-   *  from onRepaint (theme change, resize). A returning user can sit on a
-   *  stored layer (e.g. vijesti) that never fetches zet-rt for the whole
-   *  session, so "no snapshot yet" must read as unknown, not a false zero —
-   *  same distinction the kiosk's own panorama makes. The canvas draw itself
-   *  still falls back to zero beads for "unknown", which is visually
-   *  correct either way. */
-  function paintPanoramaFigure(): void {
-    const count = vehicleCount(snapshots['zet-rt']);
-    const alt = count === null ? i18n.t('session.panoramaAltLoading') : i18n.t('session.panoramaAlt', { count });
-    panoramaEl.setAttribute('aria-label', alt);
-    // R-L2: the lightweight rule carries the same label; there is nothing to
-    // paint on that path.
-    if (lightweight) return;
-    paintPanorama(panoramaEl as HTMLCanvasElement, {
-      fg: tone(panoramaEl, '--tone-text-primary', '#f2ead8'),
-      count: count ?? 0,
-    });
+  function focusWorkspace(id: string): void {
+    doc.getElementById(`layer-title-${id}`)?.focus();
   }
 
-  function render(): void {
-    const focusId = document.activeElement instanceof HTMLElement ? document.activeElement.id : '';
-    const ctx = layerContext();
-    const sections = (wide ? LAYERS : [active]).map((layer) => renderLayer(layer, ctx));
-    view.replaceChildren(...sections);
-    // Each map panel moved its own live container into the new section; the
-    // maps of a layer this render did not draw are torn down here (R-54).
-    maps.sweep();
-    if (focusId) document.getElementById(focusId)?.focus();
-    paintPanoramaFigure();
-  }
-
-  function select(layer: LayerId, fromUser: boolean): void {
-    if (frozen) return;
-    active = layer;
-    // Another layer has no full map to show: leave the view mode with it.
-    if (layer !== 'u-pokretu' && mapFull) {
-      mapFull = false;
-      element.dataset.view = 'layers';
-      // The narrow path re-renders just below; the wide grid would otherwise
-      // keep a button still reading "Skupi kartu".
-      if (wide) render();
-    }
-    paintTabs();
-    updateDocumentTitle();
-    if (!wide) render();
-    const heading = document.getElementById(`layer-title-${layer}`);
-    if (fromUser) {
-      storeLayer(layer);
-      heading?.focus();
-      session.sendView(layer);
-      session.event('panel_open', layer);
-      void refresh();
-    }
-  }
-
-  /** The modules the visible layer polls -- every layer's on the wide grid,
-   *  the active layer's own otherwise: what refresh() fetches, and the only
-   *  snapshots whose timestamps may aim the next poll. */
   function activeModules(): readonly ModuleId[] {
-    return wide ? ALL_LAYER_MODULES : LAYER_MODULES[active];
+    return directory ? DIRECTORY_MODULES : LAYER_MODULES[view.snapshot().layer];
   }
 
-  /** The timestamp the poll aligns to: zet-rt's, while the visible layer
-   *  actually polls zet-rt. A snapshot an earlier layer left behind describes
-   *  a 30 s tick that says nothing about when this layer's own modules
-   *  change, so the poll falls back to the fixed delay instead. */
-  function pollAnchor(): string | undefined {
-    return activeModules().includes('zet-rt') ? snapshots['zet-rt']?.sourceUpdatedAt : undefined;
-  }
-
-  async function refresh(): Promise<void> {
-    const token = session.snapshot().dataToken;
-    const fetchData = deps.fetchData;
-    if (!token || !fetchData || frozen || paused) return;
-    const ids = activeModules();
-    const results = await Promise.allSettled(ids.map((id) => fetchData(id, token)));
-    // The session may have expired while these were in flight; a frozen view
-    // must not be repainted by a fetch that started before the freeze.
+  function navigate(layer: LayerId, selection: PublicSelection | null, fromUser: boolean): void {
     if (frozen) return;
-    for (const result of results) if (result.status === 'fulfilled') snapshots[result.value.module] = result.value;
+    const previous = view.snapshot().layer;
+    const wasDirectory = directory;
+    directory = false;
+    if (layer !== 'u-pokretu' && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
+    // One history entry per distinct place: repeating the same selection replaces instead of pushing.
+    const same = layer === previous && JSON.stringify(selection) === JSON.stringify(view.snapshot().selection);
+    view.navigate(layer, selection, !fromUser || same);
+    updateTitle();
+    paintShell();
+    if (!fromUser) return;
+    session.sendView(layer, selectionParams(selection));
+    if (layer !== previous || wasDirectory) {
+      session.event('panel_open', layer);
+      focusWorkspace(layer);
+      continuePoll(refresh(), rearmPoll, 'dashboard layer refresh');
+    } else if (selection) {
+      doc.getElementById('ws-detail-title')?.focus();
+      if (surface() === 'phone' && typeof globalThis.scrollTo === 'function') globalThis.scrollTo({ top: 0 });
+    } else {
+      focusWorkspace(layer);
+    }
+  }
+
+  function toggleDirectory(open = !directory): void {
+    if (frozen) return;
+    directory = open;
+    updateTitle();
+    paintShell();
+    render();
+    if (open) {
+      focusWorkspace('directory');
+      continuePoll(refresh(), rearmPoll, 'dashboard directory refresh');
+    }
+  }
+
+  function findItem(module: ModuleId, id: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
+    const snapshot = store.snapshot().snapshots[module];
+    const item = snapshot?.items.find((candidate) => candidate.id === id);
+    return snapshot && item ? { item, snapshot } : null;
+  }
+
+  const sheet = createSessionSheet({
+    i18n, scanUrl,
+    state: () => ({
+      session: session.snapshot(), frozen, paused, countdownHidden, canShare: session.snapshot().role === 'scanner' && !shareDenied,
+      label: deps.label ?? null, themePreference: deps.theme?.getPreference() ?? null, lastRefresh,
+    }),
+    onAction: (action, value) => handleSheetAction(action, value),
+  });
+
+  function setPaused(value: boolean): void {
+    if (paused === value || frozen) return;
+    paused = value;
+    store.pause(value);
+    paintShell();
+    if (!value) continuePoll(refresh(), rearmPoll, 'dashboard resume refresh');
+  }
+
+  function setLocale(next: string): void {
+    const applied = i18n.setLocale(next);
+    storeLocale(applied);
+    doc.documentElement.lang = applied;
+    i18n.translatePage(doc);
+    deps.onLocaleChange?.(applied);
+    updateTitle();
+    paintShell();
     render();
   }
 
-  function paintTimer(): void {
-    const expiresAt = session.snapshot().expiresAt;
-    const seconds = frozen ? 0 : session.secondsLeft();
-    const minutes = Math.ceil(seconds / 60);
-    timeEl.textContent = i18n.t('common.minutes', { count: minutes });
-    timeEl.dateTime = `PT${seconds}S`;
-    timeEl.title = countdown(seconds);
-    fineEl.textContent = i18n.t('session.remainingFine', { time: countdown(seconds) });
-    meanderLegend.textContent = i18n.t('session.legendMeander', { time: zagrebTime(expiresAt ?? now()) });
-    const total = totalSeconds ?? Math.max(1, seconds);
-    const raw = total > 0 ? seconds / total : 0;
-    // Quantised under reduced motion or lightweight (R-L1/R-L2), same as the
-    // kiosk's own code meander.
-    const pct = deps.reducedMotion || lightweight ? quantise(raw, MEANDER_STEPS) : raw;
-    if (lightweight) {
-      paintMeanderBar(meanderEl, pct);
-    } else {
-      paintMeander(meanderEl as HTMLCanvasElement, {
-        ink: tone(meanderEl, '--tone-stroke', 'rgba(242,234,216,.2)'),
-        fill: tone(meanderEl, '--tone-text-primary', '#f2ead8'),
-        pct,
-      });
+  function handleSheetAction(action: SheetAction, value?: string): void {
+    switch (action) {
+      case 'share-city': session.share(); sheet.close(); return;
+      case 'pause': setPaused(true); return;
+      case 'resume': setPaused(false); return;
+      case 'hide-countdown': countdownHidden = true; paintShell(); return;
+      case 'show-countdown': countdownHidden = false; paintShell(); return;
+      case 'refresh': continuePoll(refresh(), rearmPoll, 'dashboard manual refresh'); return;
+      case 'lang': if (value) setLocale(value); return;
+      case 'theme': if (value) deps.theme?.setPreference(value as ThemePreference); render(); return;
+      default: return;
     }
-    // A session with no expiry yet (still connecting) is not "about to expire";
-    // only an actual live countdown may trip the warnings. 60 s and 20 s are
-    // the room's own 'expiring' frames and what the accessibility statement
-    // promises, so the local clock uses the same two marks (R-58).
-    if (!frozen && expiresAt !== null && seconds <= 60) announce(60);
-    if (!frozen && expiresAt !== null && seconds <= 20) announce(20);
+  }
+  // --- data ----------------------------------------------------------------
+  function pollAnchor(): string | undefined {
+    return activeModules().includes('zet-rt') ? store.snapshot().snapshots['zet-rt']?.sourceUpdatedAt : undefined;
   }
 
+  async function refresh(): Promise<void> {
+    if (frozen || paused || disposed || !session.snapshot().dataToken) return;
+    store.setModules(activeModules());
+    await store.refresh();
+    if (frozen || disposed) return;
+    lastRefresh = now();
+    paintShell();
+  }
+
+  /** The clock decides, not the socket: a phone whose socket died still freezes on time. */
+  function expiredByClock(): boolean {
+    return session.snapshot().expiresAt !== null && session.secondsLeft() === 0;
+  }
+
+  /** The poll, aligned to the feed's own tick (motion/loop.ts) and re-armed after each refresh. */
+  function armPoll(): void {
+    if (frozen || disposed || timer !== null) return;
+    timer = setTimer(() => {
+      clearTimer(timer);
+      timer = null;
+      if (expiredByClock()) { freeze(); return; }
+      continuePoll(refresh(), armPoll, 'dashboard refresh');
+    }, nextPollDelay(pollAnchor(), now()));
+  }
+
+  function rearmPoll(): void {
+    if (timer !== null) { clearTimer(timer); timer = null; }
+    armPoll();
+  }
+
+  /** 60 s politely, 20 s assertively: the room's own two marks, promised by the accessibility statement. */
   function announce(secondsLeft: number): void {
     if (secondsLeft <= 20) {
       if (warned20) return;
@@ -402,10 +406,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     polite.textContent = i18n.t('session.expiring60');
   }
 
-  // --- Podijeli grad ---------------------------------------------------------
-  // One hop: the person who scanned the screen may hand five minutes to someone
-  // beside them, and that person may not pass it on again. The room mints the
-  // peer batch; this only rotates it, exactly like the screen does (R-56).
+  // --- share the city: one hop, the room mints, this only rotates ----------
   let shareDialog: DialogHandle | null = null;
   let shareRotation: Rotation | null = null;
 
@@ -419,45 +420,28 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function openShare(batch: CodeSlot[], serverNow: number): void {
     closeShare();
-    const body = document.createElement('div');
+    const body = doc.createElement('div');
     body.className = 'share-body';
-    const qrBox = document.createElement('div');
+    const qrBox = doc.createElement('div');
     qrBox.className = 'share-qr';
-    const codeLine = document.createElement('p');
+    const codeLine = doc.createElement('p');
     codeLine.className = 'share-code';
     codeLine.dataset.testid = 'share-code';
-    const copy = document.createElement('p');
-    copy.className = 'panel-sub';
+    const copy = doc.createElement('p');
+    copy.className = 'meta';
     copy.textContent = i18n.t('session.shareBody');
-    body.append(qrBox, codeLine, copy);
-
-    shareDialog = createDialog({
-      titleId: 'share-title',
-      title: i18n.t('session.shareTitle'),
-      closeLabel: i18n.t('common.close'),
-      body,
-      className: 'dialog-share',
-    });
+    body.appendChild(qrBox);
+    body.appendChild(codeLine);
+    body.appendChild(copy);
+    shareDialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share' });
     shareDialog.element.dataset.testid = 'share-dialog';
     shareDialog.open();
-
     shareRotation = createRotation({
       now,
       onSlot: (slot) => {
-        // The room mints for the rest of the session and never for longer, so
-        // an empty slot means the peer window is over, not that more are due.
-        if (!slot) {
-          closeShare();
-          return;
-        }
+        if (!slot) { closeShare(); return; }
         codeLine.textContent = formatCode(slot.code);
-        qrBox.replaceChildren(
-          createQr({
-            payload: codeUrl(slot.code),
-            ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }),
-            unavailableText: formatCode(slot.code),
-          }).element,
-        );
+        qrBox.replaceChildren(createQr({ payload: codeUrl(slot.code), ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }), unavailableText: formatCode(slot.code) }).element);
       },
       onMore: () => {},
       setInterval: setTimer as (fn: () => void, ms: number) => unknown,
@@ -466,190 +450,136 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     shareRotation.setBatch(batch, serverNow);
   }
 
-  shareButton.addEventListener('click', () => {
-    session.share();
+  /** The end of the session: the view stays, refreshing stops, exports keep working. */
+  function freeze(): void {
+    if (frozen) return;
+    frozen = true;
+    closeShare();
+    sheet.close();
+    schematic.pause();
+    maps.pause();
+    store.pause(true);
+    if (timer !== null) { clearTimer(timer); timer = null; }
+    if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+    paintShell();
+  }
+  // --- session -------------------------------------------------------------
+  session.onJoined((snapshot) => {
+    reconnecting = false;
+    error = null;
+    totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
+    polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
+    paintShell();
+    render();
+    if (!joinedOnce) { joinedOnce = true; titleEl.focus(); }
+    continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
+  });
+  session.onExpiring((secondsLeft) => announce(secondsLeft));
+  session.onCount(() => paintShell());
+  session.onExpired(freeze);
+  session.onClose(() => {
+    if (frozen || disposed) return;
+    if (session.snapshot().phase === 'connecting') { reconnecting = true; paintShell(); }
+  });
+  session.onError((code) => {
+    if (code === 'share-not-allowed' || code === 'share-unavailable') {
+      if (code === 'share-not-allowed') shareDenied = true;
+      assertive.textContent = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
+      paintShell();
+      return;
+    }
+    if (code === 'no-ticket') { error = 'no-ticket'; paintShell(); }
   });
   session.onCodes((batch, serverNow) => openShare(batch, serverNow));
-  session.onError((code) => {
-    if (code !== 'share-not-allowed' && code !== 'share-unavailable') return;
-    // A room opened by another phone is already the second hop; a room with
-    // less than one rotation slot left cannot mint at all.
-    if (code === 'share-not-allowed') shareButton.hidden = true;
-    assertive.textContent = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
-  });
 
-  countdownToggle.addEventListener('click', () => {
-    countdownHidden = !countdownHidden;
-    // One flag hides all three time-pressure tells at once: the countdown
-    // itself, the fine minutes:seconds line, and the whole meander figure.
-    element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
-    timeEl.hidden = countdownHidden;
-    fineEl.hidden = countdownHidden;
-    meanderFig.hidden = countdownHidden;
-    countdownToggle.setAttribute('aria-pressed', countdownHidden ? 'true' : 'false');
-    countdownToggle.textContent = i18n.t(countdownHidden ? 'session.showCountdown' : 'session.hideCountdown');
+  // --- delegated interactions: stable roots, no closures on discarded nodes --
+  element.addEventListener('click', (event) => {
+    const target = (event.target as Element | null)?.closest<HTMLElement>('[data-action]');
+    if (!target || !element.contains(target)) return;
+    const d = target.dataset;
+    switch (d.action) {
+      case 'nav': {
+        event.preventDefault();
+        let selection: PublicSelection | null = null;
+        if (d.selection) { try { selection = parseSelection(JSON.parse(d.selection)); } catch { selection = null; } }
+        if (d.layer) navigate(d.layer as LayerId, selection, true);
+        return;
+      }
+      case 'directory': toggleDirectory(); return;
+      case 'select':
+        if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
+        return;
+      case 'back': navigate(view.snapshot().layer, null, true); return;
+      case 'filter': view.setFilter(d.filterKey ?? '', d.filterValue ?? ''); return;
+      case 'retry': if (d.module) void store.refresh([d.module as ModuleId]); return;
+      case 'export': if (d.kind && d.module) deps.onExport?.(d.kind as ExportKind, d.module as ModuleId); return;
+      case 'copy-item': case 'share-item': case 'ics-item': case 'print-item': {
+        const found = d.module ? findItem(d.module as ModuleId, d.itemId ?? '') : null;
+        if (!found) return;
+        if (d.action === 'copy-item') deps.onItemCopy?.(found.item, found.snapshot);
+        else if (d.action === 'share-item') deps.onItemShare?.(found.item, found.snapshot);
+        else deps.onItemExport?.(d.action === 'ics-item' ? 'ics' : 'print', found.item, found.snapshot);
+        return;
+      }
+      case 'session': sheet.open(); return;
+      case 'share-city': session.share(); return;
+      case 'resume': setPaused(false); return;
+      case 'map-full': setMapView(!mapFull); return;
+      default: return;
+    }
   });
-
-  refreshToggle.addEventListener('click', () => {
-    paused = !paused;
-    refreshToggle.setAttribute('aria-pressed', paused ? 'true' : 'false');
-    refreshToggle.textContent = i18n.t(paused ? 'session.resumeRefresh' : 'session.pauseRefresh');
-    refreshState.textContent = paused ? i18n.t('status.paused') : '';
-    if (!paused) void refresh();
+  element.addEventListener('input', (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement && input.dataset.filterKey) view.setFilter(input.dataset.filterKey, input.value);
   });
-
-  // Escape leaves the full map from anywhere inside the dashboard (the map
-  // canvas, its button, the header controls), the way a dialog closes.
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !mapFull) return;
     event.preventDefault();
     setMapView(false);
   });
 
-  tablist.addEventListener('keydown', (event) => {
-    const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'];
-    if (!keys.includes(event.key) || frozen) return;
-    event.preventDefault();
-    const index = LAYERS.indexOf(active);
-    const next =
-      event.key === 'Home' ? 0
-      : event.key === 'End' ? LAYERS.length - 1
-      : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (index + 1) % LAYERS.length
-      : (index - 1 + LAYERS.length) % LAYERS.length;
-    select(LAYERS[next]!, true);
-    tabs[next]!.focus();
-  });
-
-  session.onJoined((snapshot) => {
-    label.textContent = i18n.t('session.unlocked', {
-      label: deps.label ?? i18n.t('session.labelScreen'),
-      time: zagrebTime(snapshot.expiresAt ?? now()),
-    });
-    // Both unlocked surfaces carry the same expiry to the millisecond (R-52).
-    if (snapshot.expiresAt !== null) label.dataset.expiresAt = String(snapshot.expiresAt);
-    // Only the person who scanned the screen may pass the city on (R-56).
-    if (snapshot.role === 'scanner') shareButton.hidden = false;
-    polite.textContent = i18n.t('session.unlockedAnnounce', { time: zagrebTime(snapshot.expiresAt ?? now()) });
-    totalSeconds = snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
-    paintTimer();
-    titleEl.focus();
-    // The poll armed at mount had no data to align to; once this refresh has
-    // filled the snapshots it is re-aimed, so the first poll of the session
-    // lands on the feed's tick like every later one (and a refresh that
-    // throws still leaves the chain armed, continuePoll).
-    continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
-  });
-  function freeze(): void {
-    if (frozen) return;
-    frozen = true;
-    closeShare();
-    // "Prikaz je zamrznut": the drawn vehicles stop where they are, rather
-    // than dead-reckoning on for another five minutes under a frozen clock --
-    // on the schematic and on the MapLibre map alike (R-F6). Nothing resumes
-    // after a freeze; the next session is a new page.
-    schematic.pause();
-    maps.pause();
-    shareButton.hidden = true;
-    paintTabs();
-    paintTimer();
-    // The closing line is its own visible element, not another announcement in
-    // the assertive region: the izjava promises the person is told the session
-    // ended and that what is on the screen stays (R-52, WCAG 2.2.1).
-    frozenLine.hidden = false;
-    frozenLine.textContent = i18n.t('session.expired');
-    if (timer !== null) {
-      clearTimer(timer);
-      timer = null;
-    }
-    if (meanderTimer !== null) {
-      clearTimer(meanderTimer);
-      meanderTimer = null;
-    }
-  }
-
-  session.onExpiring((secondsLeft) => announce(secondsLeft));
-  session.onCount(() => paintTimer());
-  session.onExpired(freeze);
-
-  /** The poll, aligned to the feed's own tick (motion/loop.ts's
-   *  nextPollDelay): the next request lands 2 s after the realtime feed's
-   *  next 30 s tick when the visible layer polls zet-rt and its snapshot
-   *  says when it last ticked (pollAnchor), else 20 s out. A one-shot
-   *  re-armed after each refresh -- whether it rendered or threw
-   *  (continuePoll) -- rather than a fixed interval, since every delay is
-   *  computed from the freshest snapshot. */
-  function armPoll(): void {
-    if (frozen || disposed || timer !== null) return;
-    timer = setTimer(() => {
-      clearTimer(timer); // the injected pair is interval-shaped
-      timer = null;
-      if (expiredByClock()) {
-        freeze(); // never a fetch past the end of the session, whichever timer notices first
-        return;
-      }
-      continuePoll(refresh(), armPoll, 'dashboard refresh');
-    }, nextPollDelay(pollAnchor(), now()));
-  }
-
-  /** Withdraws the armed poll and arms it again from the freshest
-   *  snapshots -- for the moment the join's refresh lands, when the delay
-   *  computed before any data (the fixed fallback) can first be aligned. */
-  function rearmPoll(): void {
-    if (timer !== null) {
-      clearTimer(timer);
-      timer = null;
-    }
-    armPoll();
-  }
-
-  /** The clock decides, not the socket: a phone whose socket died on the way
-   *  to the camera app still freezes on time and still shows the closing
-   *  line (R-53). */
-  function expiredByClock(): boolean {
-    return session.snapshot().expiresAt !== null && session.secondsLeft() === 0;
-  }
-
-  paintTabs();
-  updateDocumentTitle();
-  render();
-  paintTimer();
+  // --- subscriptions and start ---------------------------------------------
+  const stopView = view.subscribe(() => { render(); paintShell(); });
+  const stopStore = store.subscribe(() => { render(); paintShell(); });
+  const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
+  const onMedia = (): void => { paintShell(); render(); };
+  media?.addEventListener?.('change', onMedia);
+  const onPopState = (): void => {
+    if (!deps.location) return;
+    directory = false;
+    view.restore(deps.location.hash);
+    updateTitle();
+    paintShell();
+  };
+  const win = globalThis as unknown as { addEventListener?: Window['addEventListener']; removeEventListener?: Window['removeEventListener'] };
+  if (deps.history && deps.location) win.addEventListener?.('popstate', onPopState);
+  updateTitle();
+  paintShell();
   armPoll();
-  // A second, finer timer: the fine countdown line and the meander drain by
-  // the second, independent of the poll (which only governs re-fetching city
-  // data) — cleared alongside `timer` in freeze() and destroy(). It is also
-  // where the end of the session is noticed to the second (expiredByClock),
-  // now that the poll itself is aligned to the feed and may be half a minute
-  // away.
-  meanderTimer = setTimer(() => {
-    if (expiredByClock()) {
-      freeze();
-      return;
-    }
-    paintTimer();
-  }, MEANDER_TICK_MS);
-
-  // Canvas colours are read off computed style (`tone()`), so a theme flip
-  // needs a repaint even with no new data; a resize needs one because the
-  // canvas backing store itself is sized off the box. `onRepaint` (fires
-  // once immediately, per its own contract) covers both in one subscription.
-  const stopRepaint = deps.onRepaint?.(() => {
-    paintPanoramaFigure();
-    paintTimer();
-  });
+  tickTimer = setTimer(() => {
+    if (expiredByClock()) { freeze(); return; }
+    paintShell();
+  }, TICK_MS);
 
   return {
     element,
-    selectLayer: (layer) => select(layer, false),
+    selectLayer: (layer) => navigate(layer, null, false),
+    activeLayer: () => view.snapshot().layer,
+    restore: (hash) => { directory = false; view.restore(hash); updateTitle(); paintShell(); },
     destroy() {
       disposed = true;
-      if (timer !== null) clearTimer(timer);
-      timer = null;
-      if (meanderTimer !== null) clearTimer(meanderTimer);
-      meanderTimer = null;
-      stopRepaint?.();
+      if (timer !== null) { clearTimer(timer); timer = null; }
+      if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+      stopView();
+      stopStore();
+      stopTheme?.();
+      media?.removeEventListener?.('change', onMedia);
+      win.removeEventListener?.('popstate', onPopState);
       closeShare();
+      sheet.destroy();
       maps.destroy();
       schematic.destroy();
+      store.destroy();
       element.remove();
     },
   };

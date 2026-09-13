@@ -1,45 +1,54 @@
-/* ═══════════════════════════════════════════════════════════════════════
-   Vidikovac — Design tokens. Ported from psdlat packages/ui/src/tokens.css
-   (AGPL-3.0-or-later, Copyright psh.lat contributors) and recoloured.
+/* Kaj ima? - design tokens
 
-   Layer 0  foundation (type, space, radius, motion)          theme-free
-   Layer 1  palettes `--palette-dark-*` / `--palette-light-*`   the only hex values
-            assigned to `--color-*` per resolved theme
-   Layer 2  role tokens `--tone-*`                             what components use
-   Layer 3  compatibility aliases                              copied psdlat CSS only
+   Layer 0  foundation: one Manrope family, a reading type scale, space,
+            radius and product motion (140-220 ms, ease-out).
+   Layer 1  palettes --palette-light-* / --palette-dark-*: the only colour
+            literals in the app. Every colour is written twice: an sRGB hex
+            that test/app/contrast.test.ts measures for WCAG AA, and the same
+            colour in OKLCH inside an @supports block for engines that render
+            it (perceptually even tints and hover steps).
+   Layer 2  role tokens --tone-*: what components consume. Colours have roles
+            (canvas, ink, action/peacock, weather/amber, events/violet,
+            urgency/rose, transit/deep blue), never one colour per panel.
+   Layer 3  compatibility aliases for stylesheets that predate this file.
 
-   The switch is `data-theme-resolved="dark|light"` on <html>, set by theme.ts
-   for every preference (auto, light, dark, solar). Without JS the page is dark,
-   or light when the OS prefers light. test/app/contrast.test.ts reads the
-   palette hexes and asserts 4.5:1 for every text/surface pair.
-   ═══════════════════════════════════════════════════════════════════════ */
+   The switch is data-theme-resolved="light|dark" on <html>, written by
+   ui/theme.ts for every preference (auto, light, dark, solar). Light is the
+   first-paint fallback; without JavaScript the page follows the OS. */
 
-/* ── Layer 0 ─────────────────────────────────────────────────────────── */
+/* Layer 0 */
 :root {
-  --font-display: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
-  --font-body: 'Inter', 'Manrope', 'Segoe UI', 'Avenir Next', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  /* One family. The system stack is what the lightweight path renders. */
+  --font-sans: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-sans);
+  /* Monospace is for pairing codes only, never for running text or labels. */
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 
-  --text-2xs: 0.6875rem;
+  /* Reading sizes: 16 px body, 14 px controls, 12 px metadata (PRODUCT.md). */
+  --text-2xs: 0.75rem;
   --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-md: 0.875rem;
+  --text-sm: 0.875rem;
+  --text-md: 0.9375rem;
   --text-body: 1rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
   --text-xl: 1.375rem;
   --text-2xl: 1.75rem;
   --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
   --text-panel-title: 1.125rem;
   --text-meta: 0.75rem;
 
   --leading-tight: 1.15;
-  --leading-normal: 1.45;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
   --leading-relaxed: 1.6;
 
+  /* Manrope ships in 400, 500 and 700; 600 resolves to 700. */
   --weight-normal: 400;
   --weight-medium: 500;
-  --weight-semi: 600;
+  --weight-semi: 700;
   --weight-bold: 700;
 
   --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem;
@@ -48,94 +57,116 @@
   --r-xs: 0.375rem; --r-sm: 0.5rem; --r-md: 0.75rem; --r-lg: 1rem;
   --r-xl: 1.25rem; --r-2xl: 1.5rem; --r-pill: 999px;
 
-  --dur-fast: 140ms; --dur-base: 200ms; --dur-slow: 320ms;
-  --ease: cubic-bezier(0.25, 1, 0.5, 1);
+  /* Product motion: 140-220 ms, ease-out. */
+  --dur-fast: 140ms; --dur-base: 180ms; --dur-slow: 220ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
 
   --z-sticky: 20; --z-drawer-backdrop: 40; --z-drawer: 50; --z-toast: 100;
 
-  /* Layer 1 palettes: modrotisak — indigo cloth, cream print. Two faces of one
-     bolt: dark is indigo ground with cream ink, light is the same cloth turned
-     over. `label` is the one permitted third shade. */
-  --palette-dark-canvas: #16226b;
-  --palette-dark-canvas-deep: #0b1440;
-  --palette-dark-surface-1: #0f1a52;
-  --palette-dark-surface-2: #0b1440;
-  --palette-dark-surface-3: #1d2f8a;
-  --palette-dark-text-primary: #f2ead8;
-  --palette-dark-text-muted: #c3cdf5;
-  --palette-dark-text-subtle: #a3aed8;
-  --palette-dark-label: #9db4ff;
-  --palette-dark-accent: #f2ead8;
-  --palette-dark-accent-deep: #ffffff;
-  --palette-dark-on-accent: #16226b;
-  --palette-dark-warning: #f2c078;
-  --palette-dark-danger: #ff9d9d;
-  --palette-dark-success: #7fd6a8;
-  --palette-dark-border: rgba(242, 234, 216, 0.22);
-  --palette-dark-border-strong: rgba(242, 234, 216, 0.45);
-  --palette-dark-glass: rgba(15, 26, 82, 0.78);
-  --palette-dark-scrim: rgba(4, 8, 32, 0.62);
-  --palette-dark-glow: rgba(157, 180, 255, 0.35);
-  --palette-dark-shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --palette-dark-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --palette-dark-shadow-heavy: 0 24px 64px rgba(0, 0, 0, 0.6);
+  /* Targets: 44 px minimum, 48 px for primary touch actions. */
+  --target: 2.75rem;
+  --target-primary: 3rem;
 
-  --palette-light-canvas: #f2ead8;
-  --palette-light-canvas-deep: #e9dfc6;
-  --palette-light-surface-1: #faf5e9;
-  --palette-light-surface-2: #e9dfc6;
-  --palette-light-surface-3: #ded2b2;
-  --palette-light-text-primary: #16226b;
-  --palette-light-text-muted: #4553a8;
-  --palette-light-text-subtle: #575f7d;
-  --palette-light-label: #3a49b0;
-  --palette-light-accent: #16226b;
-  --palette-light-accent-deep: #0b1440;
-  --palette-light-on-accent: #f2ead8;
+  /* Layer 1: light - mineral canvas, near-charcoal ink */
+  --palette-light-canvas: #f6f8f7;
+  --palette-light-canvas-deep: #edf1f0;
+  --palette-light-surface-1: #fbfcfc;
+  --palette-light-surface-2: #e9efed;
+  --palette-light-surface-3: #dbe4e1;
+  --palette-light-text-primary: #182423;
+  --palette-light-text-muted: #526461;
+  --palette-light-text-subtle: #5c6c69;
+  --palette-light-label: #3e5854;
+  --palette-light-accent: #08777b;
+  --palette-light-accent-deep: #065e61;
+  --palette-light-on-accent: #f6f8f7;
   --palette-light-warning: #8a5800;
   --palette-light-danger: #b3271e;
   --palette-light-success: #1e6f47;
-  --palette-light-border: rgba(22, 34, 107, 0.24);
-  --palette-light-border-strong: rgba(22, 34, 107, 0.5);
-  --palette-light-glass: rgba(250, 245, 233, 0.78);
-  --palette-light-scrim: rgba(22, 34, 107, 0.4);
-  --palette-light-glow: rgba(22, 34, 107, 0.25);
-  --palette-light-shadow-soft: 0 2px 12px rgba(20, 24, 31, 0.08);
-  --palette-light-shadow-md: 0 8px 24px rgba(20, 24, 31, 0.12);
-  --palette-light-shadow-heavy: 0 16px 48px rgba(20, 24, 31, 0.18);
+  --palette-light-events: #6b3fa0;
+  --palette-light-transit: #0b4f6c;
+  --palette-light-border: rgba(24, 36, 35, 0.14);
+  --palette-light-border-strong: rgba(24, 36, 35, 0.34);
+  --palette-light-glass: rgba(251, 252, 252, 0.86);
+  --palette-light-scrim: rgba(24, 36, 35, 0.42);
+  --palette-light-glow: rgba(8, 119, 123, 0.28);
+  --palette-light-shadow-soft: 0 1px 2px rgba(24, 36, 35, 0.05), 0 6px 20px rgba(24, 36, 35, 0.07);
+  --palette-light-shadow-md: 0 2px 4px rgba(24, 36, 35, 0.06), 0 12px 32px rgba(24, 36, 35, 0.12);
+  --palette-light-shadow-heavy: 0 16px 48px rgba(24, 36, 35, 0.2);
+
+  /* Layer 1: dark - deep green-neutral surfaces, three clear levels */
+  --palette-dark-canvas: #17201f;
+  --palette-dark-canvas-deep: #111918;
+  --palette-dark-surface-1: #1e2a28;
+  --palette-dark-surface-2: #263431;
+  --palette-dark-surface-3: #30403c;
+  --palette-dark-text-primary: #eff6f3;
+  --palette-dark-text-muted: #aebdb8;
+  --palette-dark-text-subtle: #9aaaa5;
+  --palette-dark-label: #9ec2bb;
+  --palette-dark-accent: #63d7c3;
+  --palette-dark-accent-deep: #8ae6d6;
+  --palette-dark-on-accent: #10201d;
+  --palette-dark-warning: #f0bf6b;
+  --palette-dark-danger: #ff9d9d;
+  --palette-dark-success: #7fd6a8;
+  --palette-dark-events: #c9b3ff;
+  --palette-dark-transit: #8fd0ec;
+  --palette-dark-border: rgba(239, 246, 243, 0.14);
+  --palette-dark-border-strong: rgba(239, 246, 243, 0.34);
+  --palette-dark-glass: rgba(30, 42, 40, 0.86);
+  --palette-dark-scrim: rgba(5, 9, 8, 0.6);
+  --palette-dark-glow: rgba(99, 215, 195, 0.32);
+  --palette-dark-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --palette-dark-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 36px rgba(0, 0, 0, 0.45);
+  --palette-dark-shadow-heavy: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+/* The same palette in OKLCH where the engine renders it: even tints, even
+   hover steps. The hex values above stay the measured fallback. */
+@supports (color: oklch(50% 0.1 180)) {
+  :root {
+    --palette-light-canvas: oklch(97.73% 0.0025 165);
+    --palette-light-canvas-deep: oklch(95.4% 0.005 170);
+    --palette-light-surface-1: oklch(99.03% 0.0011 170);
+    --palette-light-surface-2: oklch(94.7% 0.0069 174);
+    --palette-light-surface-3: oklch(91.12% 0.0105 174);
+    --palette-light-text-primary: oklch(24.87% 0.0168 190);
+    --palette-light-text-muted: oklch(48.73% 0.0224 184);
+    --palette-light-text-subtle: oklch(51.7% 0.0198 183);
+    --palette-light-label: oklch(43.81% 0.032 184);
+    --palette-light-accent: oklch(51.78% 0.0864 199);
+    --palette-light-accent-deep: oklch(43.84% 0.0728 199);
+    --palette-light-on-accent: oklch(97.73% 0.0025 165);
+    --palette-light-warning: oklch(50.38% 0.1082 71.5);
+    --palette-light-danger: oklch(50.21% 0.1776 29);
+    --palette-light-success: oklch(48.28% 0.1006 157);
+    --palette-light-events: oklch(46.85% 0.1522 302);
+    --palette-light-transit: oklch(40.32% 0.0787 233);
+
+    --palette-dark-canvas: oklch(23.44% 0.0131 188);
+    --palette-dark-canvas-deep: oklch(20.5% 0.012 187);
+    --palette-dark-surface-1: oklch(27.31% 0.0169 184);
+    --palette-dark-surface-2: oklch(31.13% 0.0194 180);
+    --palette-dark-surface-3: oklch(35.61% 0.0218 178);
+    --palette-dark-text-primary: oklch(96.7% 0.0084 169);
+    --palette-dark-text-muted: oklch(78.53% 0.018 174);
+    --palette-dark-text-subtle: oklch(72.4% 0.0193 175);
+    --palette-dark-label: oklch(78.57% 0.0398 182);
+    --palette-dark-accent: oklch(80.65% 0.1096 180.5);
+    --palette-dark-accent-deep: oklch(86.29% 0.0914 182);
+    --palette-dark-on-accent: oklch(22.81% 0.0226 181);
+    --palette-dark-warning: oklch(83.14% 0.1166 79.5);
+    --palette-dark-danger: oklch(79.59% 0.1174 20);
+    --palette-dark-success: oklch(80.85% 0.1076 160);
+    --palette-dark-events: oklch(81.24% 0.1076 297);
+    --palette-dark-transit: oklch(82.37% 0.0766 227);
+  }
 }
 
-/* ── Layer 1 assignment: dark is the default (no-JS first paint) ─────── */
+/* Layer 1 assignment: light is the default (no-JS first paint) */
 :root,
-:root[data-theme-resolved='dark'] {
-  color-scheme: dark;
-  --color-canvas: var(--palette-dark-canvas);
-  --color-canvas-deep: var(--palette-dark-canvas-deep);
-  --color-surface-1: var(--palette-dark-surface-1);
-  --color-surface-2: var(--palette-dark-surface-2);
-  --color-surface-3: var(--palette-dark-surface-3);
-  --color-text-primary: var(--palette-dark-text-primary);
-  --color-text-muted: var(--palette-dark-text-muted);
-  --color-text-subtle: var(--palette-dark-text-subtle);
-  --color-accent: var(--palette-dark-accent);
-  --color-accent-deep: var(--palette-dark-accent-deep);
-  --color-on-accent: var(--palette-dark-on-accent);
-  --color-warning: var(--palette-dark-warning);
-  --color-danger: var(--palette-dark-danger);
-  --color-success: var(--palette-dark-success);
-  --color-border: var(--palette-dark-border);
-  --color-border-strong: var(--palette-dark-border-strong);
-  --color-glass: var(--palette-dark-glass);
-  --color-scrim: var(--palette-dark-scrim);
-  --color-glow: var(--palette-dark-glow);
-  --color-label: var(--palette-dark-label);
-  --shadow-soft: var(--palette-dark-shadow-soft);
-  --shadow-md: var(--palette-dark-shadow-md);
-  --shadow-heavy: var(--palette-dark-shadow-heavy);
-}
-
 :root[data-theme-resolved='light'] {
   color-scheme: light;
   --color-canvas: var(--palette-light-canvas);
@@ -152,6 +183,8 @@
   --color-warning: var(--palette-light-warning);
   --color-danger: var(--palette-light-danger);
   --color-success: var(--palette-light-success);
+  --color-events: var(--palette-light-events);
+  --color-transit: var(--palette-light-transit);
   --color-border: var(--palette-light-border);
   --color-border-strong: var(--palette-light-border-strong);
   --color-glass: var(--palette-light-glass);
@@ -161,54 +194,117 @@
   --shadow-soft: var(--palette-light-shadow-soft);
   --shadow-md: var(--palette-light-shadow-md);
   --shadow-heavy: var(--palette-light-shadow-heavy);
+  /* Tinted fills, alpha over any surface; an OKLCH mix replaces them below. */
+  --tint-action: rgba(8, 119, 123, 0.1);
+  --tint-weather: rgba(138, 88, 0, 0.1);
+  --tint-events: rgba(107, 63, 160, 0.1);
+  --tint-urgency: rgba(179, 39, 30, 0.1);
+  --tint-transit: rgba(11, 79, 108, 0.1);
+  --tint-success: rgba(30, 111, 71, 0.1);
+}
+:root[data-theme-resolved='dark'] {
+  color-scheme: dark;
+  --color-canvas: var(--palette-dark-canvas);
+  --color-canvas-deep: var(--palette-dark-canvas-deep);
+  --color-surface-1: var(--palette-dark-surface-1);
+  --color-surface-2: var(--palette-dark-surface-2);
+  --color-surface-3: var(--palette-dark-surface-3);
+  --color-text-primary: var(--palette-dark-text-primary);
+  --color-text-muted: var(--palette-dark-text-muted);
+  --color-text-subtle: var(--palette-dark-text-subtle);
+  --color-accent: var(--palette-dark-accent);
+  --color-accent-deep: var(--palette-dark-accent-deep);
+  --color-on-accent: var(--palette-dark-on-accent);
+  --color-warning: var(--palette-dark-warning);
+  --color-danger: var(--palette-dark-danger);
+  --color-success: var(--palette-dark-success);
+  --color-events: var(--palette-dark-events);
+  --color-transit: var(--palette-dark-transit);
+  --color-border: var(--palette-dark-border);
+  --color-border-strong: var(--palette-dark-border-strong);
+  --color-glass: var(--palette-dark-glass);
+  --color-scrim: var(--palette-dark-scrim);
+  --color-glow: var(--palette-dark-glow);
+  --color-label: var(--palette-dark-label);
+  --shadow-soft: var(--palette-dark-shadow-soft);
+  --shadow-md: var(--palette-dark-shadow-md);
+  --shadow-heavy: var(--palette-dark-shadow-heavy);
+  --tint-action: rgba(99, 215, 195, 0.14);
+  --tint-weather: rgba(240, 191, 107, 0.14);
+  --tint-events: rgba(201, 179, 255, 0.14);
+  --tint-urgency: rgba(255, 157, 157, 0.14);
+  --tint-transit: rgba(143, 208, 236, 0.14);
+  --tint-success: rgba(127, 214, 168, 0.14);
 }
 
 /* No-JS fallback: before theme.ts has set the attribute, follow the OS. */
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root:not([data-theme-resolved]) {
-    color-scheme: light;
-    --color-canvas: var(--palette-light-canvas);
-    --color-canvas-deep: var(--palette-light-canvas-deep);
-    --color-surface-1: var(--palette-light-surface-1);
-    --color-surface-2: var(--palette-light-surface-2);
-    --color-surface-3: var(--palette-light-surface-3);
-    --color-text-primary: var(--palette-light-text-primary);
-    --color-text-muted: var(--palette-light-text-muted);
-    --color-text-subtle: var(--palette-light-text-subtle);
-    --color-accent: var(--palette-light-accent);
-    --color-accent-deep: var(--palette-light-accent-deep);
-    --color-on-accent: var(--palette-light-on-accent);
-    --color-warning: var(--palette-light-warning);
-    --color-danger: var(--palette-light-danger);
-    --color-success: var(--palette-light-success);
-    --color-border: var(--palette-light-border);
-    --color-border-strong: var(--palette-light-border-strong);
-    --color-glass: var(--palette-light-glass);
-    --color-scrim: var(--palette-light-scrim);
-    --color-glow: var(--palette-light-glow);
-    --color-label: var(--palette-light-label);
-    --shadow-soft: var(--palette-light-shadow-soft);
-    --shadow-md: var(--palette-light-shadow-md);
-    --shadow-heavy: var(--palette-light-shadow-heavy);
+    color-scheme: dark;
+    --color-canvas: var(--palette-dark-canvas);
+    --color-canvas-deep: var(--palette-dark-canvas-deep);
+    --color-surface-1: var(--palette-dark-surface-1);
+    --color-surface-2: var(--palette-dark-surface-2);
+    --color-surface-3: var(--palette-dark-surface-3);
+    --color-text-primary: var(--palette-dark-text-primary);
+    --color-text-muted: var(--palette-dark-text-muted);
+    --color-text-subtle: var(--palette-dark-text-subtle);
+    --color-accent: var(--palette-dark-accent);
+    --color-accent-deep: var(--palette-dark-accent-deep);
+    --color-on-accent: var(--palette-dark-on-accent);
+    --color-warning: var(--palette-dark-warning);
+    --color-danger: var(--palette-dark-danger);
+    --color-success: var(--palette-dark-success);
+    --color-events: var(--palette-dark-events);
+    --color-transit: var(--palette-dark-transit);
+    --color-border: var(--palette-dark-border);
+    --color-border-strong: var(--palette-dark-border-strong);
+    --color-glass: var(--palette-dark-glass);
+    --color-scrim: var(--palette-dark-scrim);
+    --color-glow: var(--palette-dark-glow);
+    --color-label: var(--palette-dark-label);
+    --shadow-soft: var(--palette-dark-shadow-soft);
+    --shadow-md: var(--palette-dark-shadow-md);
+    --shadow-heavy: var(--palette-dark-shadow-heavy);
+    --tint-action: rgba(99, 215, 195, 0.14);
+    --tint-weather: rgba(240, 191, 107, 0.14);
+    --tint-events: rgba(201, 179, 255, 0.14);
+    --tint-urgency: rgba(255, 157, 157, 0.14);
+    --tint-transit: rgba(143, 208, 236, 0.14);
+    --tint-success: rgba(127, 214, 168, 0.14);
   }
 }
 
-/* ── Layer 2: role tokens. Components consume THIS layer. ────────────── */
+/* Even tints where the engine can mix in OKLAB; the rgba above is the fallback. */
+@supports (color: color-mix(in oklab, red 10%, blue)) {
+  :root {
+    --tint-action: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-1));
+    --tint-weather: color-mix(in oklab, var(--color-warning) 14%, var(--color-surface-1));
+    --tint-events: color-mix(in oklab, var(--color-events) 12%, var(--color-surface-1));
+    --tint-urgency: color-mix(in oklab, var(--color-danger) 12%, var(--color-surface-1));
+    --tint-transit: color-mix(in oklab, var(--color-transit) 12%, var(--color-surface-1));
+    --tint-success: color-mix(in oklab, var(--color-success) 12%, var(--color-surface-1));
+  }
+}
+
+/* Layer 2: role tokens. Components consume THIS layer. */
 :root {
   --tone-surface-canvas: var(--color-canvas);
   --tone-surface-canvas-deep: var(--color-canvas-deep);
   --tone-surface-1: var(--color-surface-1);
   --tone-surface-2: var(--color-surface-2);
   --tone-surface-3: var(--color-surface-3);
+  --tone-surface-raised: var(--color-surface-1);
+  --tone-surface-sunken: var(--color-surface-2);
 
-  /* Catalogue numbers, quiet caps labels, footer links. The only third shade. */
+  /* Quiet caps labels, kickers, axis ticks. */
   --tone-label: var(--color-label);
 
-  /* A QR is a printed object, not a themed surface: cream paper and indigo ink
-     in both faces. Pinned to the palette so the pair can never be half
-     overridden — see the note in qr.css. */
-  --tone-qr-plate: var(--palette-light-canvas);
-  --tone-qr-ink: var(--palette-dark-canvas);
+  /* A QR is a printed object, not a themed surface: dark modules on a pale
+     plate in both themes, pinned to the light palette so the pair can never
+     be half overridden (see qr.css). */
+  --tone-qr-plate: var(--palette-light-surface-1);
+  --tone-qr-ink: var(--palette-light-text-primary);
 
   --tone-text-primary: var(--color-text-primary);
   --tone-text-muted: var(--color-text-muted);
@@ -228,9 +324,21 @@
   --tone-action-gradient: linear-gradient(135deg, var(--color-accent), var(--color-accent-deep));
   --tone-glow-brand: var(--color-glow);
 
-  /* One accent: "live" is the accent with a pulse glyph and the word Živo. */
+  /* Domain roles. */
+  --tone-weather: var(--color-warning);
+  --tone-events: var(--color-events);
+  --tone-urgency: var(--color-danger);
+  --tone-transit: var(--color-transit);
+  --tone-civic: var(--color-accent);
+  --tone-live: var(--color-success);
+  --tone-tint-action: var(--tint-action);
+  --tone-tint-weather: var(--tint-weather);
+  --tone-tint-events: var(--tint-events);
+  --tone-tint-urgency: var(--tint-urgency);
+  --tone-tint-transit: var(--tint-transit);
+  --tone-tint-success: var(--tint-success);
+
   --tone-accent-cool: var(--color-accent);
-  --tone-live: var(--color-accent);
 
   --tone-state-success: var(--color-success);
   --tone-state-danger: var(--color-danger);
@@ -245,16 +353,15 @@
   --tone-shadow-md: var(--shadow-md);
   --tone-shadow-heavy: var(--shadow-heavy);
 
-  /* aliases the copied psdlat component CSS uses */
+  /* aliases older component CSS uses */
   --tone-border: var(--tone-stroke);
-  --tone-surface-raised: var(--tone-surface-2);
   --tone-accent: var(--tone-action-brand);
   --tone-danger: var(--tone-state-danger);
   --tone-text-secondary: var(--tone-text-muted);
   --radius-sm: var(--r-sm);
 }
 
-/* ── Layer 3: compatibility aliases for copied psdlat selectors only ─── */
+/* Layer 3: compatibility aliases */
 :root {
   --surface-canvas: var(--tone-surface-canvas);
   --surface-1: var(--tone-surface-1);
@@ -265,7 +372,7 @@
   --brand-deep: var(--tone-action-brand-hover);
 }
 
-/* ── Motion: reduce to near-zero, never fully off (transitionend still fires). ── */
+/* Motion: reduce to near-zero, never fully off (transitionend still fires). */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-fast: 0.01ms; --dur-base: 0.01ms; --dur-slow: 0.01ms; }
   *, *::before, *::after {

@@ -35,37 +35,39 @@ describe('static pages', () => {
     // R-P8: the retired proposition never reappears on the landing page.
     expect(html).not.toContain('Plaća se pažnjom');
     expect(html).toContain('Nitko ništa ne plaća, ni novcem ni pažnjom');
-    expect(html).toContain('otvoren je svima, bez skeniranja i bez ograničenja trajanja');
+    expect(html).toContain('bez skeniranja i bez ograničenja trajanja');
+    expect(html).toContain('href="/hitno"');
+    // The approved self-service screen is the primary action, beside scanning and safety.
+    expect(html).toContain('data-testid="cta-kiosk"');
+    expect(html).toMatch(/href="\/kiosk\/"[^>]*data-testid="cta-kiosk"|data-testid="cta-kiosk"[^>]*href="\/kiosk\/"/);
+    expect(html).toContain('Otvori gradski zaslon');
+    expect(html).not.toContain('ld-domains');
     for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/']) {
       expect(html, href).toContain(`href="${href}"`);
     }
     // How to find a screen at all, in one sentence.
     expect(html).toContain('priđi mu, skeniraj kod kamerom ili upiši osam slova');
-    // The body font is the one the product actually ships (fonts.css).
+    // The shared token system, not an inline palette; one h1; no panorama,
+    // meander or gallery caption (PRODUCT.md anti-references).
+    expect(html).toContain('href="/src/ui/tokens.css"');
+    expect(html).not.toContain('<style>');
     expect(html).not.toContain('Inter');
-    expect(html).toContain("'Manrope'");
+    expect((html.match(/<h1\b/g) ?? []).length).toBe(1);
+    expect(html).toContain('Kaj ima?');
+    expect(html).not.toContain('Vidikovac');
+    expect(html).not.toMatch(/<canvas/);
+    expect(html).not.toContain('panorama');
+    expect(html).not.toContain('meander');
+    expect(html).not.toMatch(/SL\. \d/);
+    // The live strip is real data painted by the entry; before it runs the
+    // markup says loading, never a number.
+    expect(html).toContain('data-testid="live-strip"');
+    expect(html).toContain('data-live="weather"');
+    expect(html).toContain('data-live="safety"');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
     expect(html).toContain('id="health"');
-    // M7: modrotisak palette, both faces of the cloth (design.md §1).
-    expect(html).toContain('#16226b');
-    expect(html).toContain('#f2ead8');
-    expect(html).toContain('#c3cdf5');
-    expect(html).toContain('#9db4ff');
-    expect(html).toContain('#4553a8');
-    expect(html).toContain('#3a49b0');
-    // M7: the panorama figure sits right after the h1, sized per the brief.
-    const h1End = html.indexOf('</h1>');
-    const panoramaAt = html.indexOf('data-testid="panorama"');
-    const legendAt = html.indexOf('data-testid="panorama-legend"');
-    const leadAt = html.indexOf('class="lead"');
-    expect(h1End).toBeGreaterThan(-1);
-    expect(panoramaAt).toBeGreaterThan(h1End);
-    expect(legendAt).toBeGreaterThan(panoramaAt);
-    expect(leadAt).toBeGreaterThan(legendAt);
-    expect(html).toContain('clamp(120px, 22vw, 180px)');
-    expect(html).toMatch(/<canvas[^>]*role="img"/);
-    // The teaser fetch and the panorama paint live in the external module
-    // entry, never inline (CSP: script-src 'self').
+    // The strip and health line live in the external module entry, never
+    // inline (CSP: script-src 'self').
     expect(html).toContain('src="/src/entries/landing.ts"');
     expect(html).not.toContain('/src/health.ts');
   });

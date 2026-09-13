@@ -1,10 +1,19 @@
-/* Prose pages: /izvori, /privatnost, /pristupacnost. Readable at 200% zoom. */
-.page { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 6rem; line-height: 1.6; }
-.page h1 { font-family: var(--font-display, 'Space Grotesk', system-ui, sans-serif); font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; }
-.page h2 { font-size: 1.2rem; margin-block: 2rem 0.5rem; }
-.page ol { padding-inline-start: 1.25rem; }
-.page li { margin-block: 0.75rem; }
-.izvor { padding-block: 1rem; border-block-end: 1px solid var(--tone-border, color-mix(in oklab, CanvasText 15%, transparent)); }
+/* Kaj ima? - prose pages: /izvori, /privatnost, /pristupacnost. One measure,
+   readable at 200% zoom, the same tokens as the app. */
+.page { max-width: 46rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-12); line-height: var(--leading-relaxed); display: grid; gap: var(--sp-4); min-inline-size: 0; overflow-wrap: anywhere; }
+.page > *, .izvor > * { min-inline-size: 0; }
+.page h1 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.03em; line-height: 1.1; margin-block-start: var(--sp-4); }
+.page h2 { font-size: var(--text-xl); letter-spacing: -0.015em; margin-block-start: var(--sp-6); }
+.page h3 { font-size: var(--text-lg); margin-block-start: var(--sp-4); }
+.page p, .page li { max-width: 70ch; }
+.page ol, .page ul { padding-inline-start: 1.25rem; display: grid; gap: var(--sp-3); }
+.page li { line-height: var(--leading-relaxed); }
+.page a { min-height: auto; }
+.izvor { display: grid; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
+.izvor h2 { margin: 0; font-size: var(--text-lg); }
 .izvor-text { margin: 0; }
-.izvor-meta { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--tone-text-muted, color-mix(in oklab, CanvasText 65%, Canvas 35%)); }
-.page-nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; }
+.izvor-meta { margin: 0; font-size: var(--text-sm); color: var(--tone-text-muted); overflow-wrap: anywhere; }
+.izvor-podizvori, .izvor-iskljuceno { font-size: var(--text-sm); color: var(--tone-text-muted); }
+.page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
+.page-nav a { display: inline-flex; align-items: center; min-height: var(--target); }
+.page-brand { font-weight: var(--weight-bold); font-size: var(--text-lg); letter-spacing: -0.02em; color: var(--tone-text-primary) !important; text-decoration: none; }

@@ -315,7 +315,7 @@ describe('camera region', () => {
     scanner().deps.onResult('WIFI:S:kafic;T:WPA;P:tajna;;');
     await flush();
     expect(scan).not.toHaveBeenCalled();
-    expect(text(root.querySelector('[role=alert]'))).toBe('To nije kod s Vidikovca. Skeniraj QR kod sa zaslona.');
+    expect(text(root.querySelector('[role=alert]'))).toBe('To nije kod s našeg zaslona. Skeniraj QR kod sa zaslona ili upiši osam slova.');
   });
 
   it('a refused or missing camera closes the region and sends the person to the field', () => {

@@ -41,29 +41,28 @@ const panel = (section: HTMLElement, id: string): HTMLElement => {
 
 describe('every layer renders the real feed output', () => {
   it('shows the Maksimir observation as numbers, not placeholders', () => {
-    const body = panel(renderLayer('grad-sada', ctx()), 'grad-sada-observation');
+    const body = panel(renderLayer('grad-sada', ctx()), 'ov-weather');
     expect(clean(body.querySelector('[data-testid=temp]'))).toMatch(/^-?\d+([.,]\d+)? °C$/);
-    const facts = clean(body.querySelector('.panel-facts'));
+    const facts = clean(body.querySelector('.ov-weather-facts'));
     expect(facts).toMatch(/vlaga \d+ %/);
-    expect(facts).toMatch(/tlak \d+([.,]\d+)? hPa/);
-    expect(facts).toMatch(/vjetar \S+ \d+([.,]\d+)? m\/s/);
+    expect(facts).toMatch(/\S+ \d+([.,]\d+)? m\/s/);
     expect(clean(body)).not.toContain(UNAVAILABLE);
     expect(clean(body)).not.toContain(DASH);
+    // The full weather workspace also carries pressure as a measured fact.
+    const weather = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-now');
+    expect(clean(weather.querySelector('.wx-figures'))).toMatch(/\d+([.,]\d+)? hPa/);
   });
 
   it('shows today’s forecast as a real range on both layers that carry it', () => {
-    for (const [layer, id] of [
-      ['grad-sada', 'grad-sada-forecast'],
-      ['zrak-i-nebo', 'zrak-i-nebo-forecast'],
-    ] as const) {
-      const body = panel(renderLayer(layer, ctx()), id);
-      expect(clean(body.querySelector('.big-number')), id).toMatch(/^od -?\d+ do -?\d+ °C$/);
-      expect(clean(body), id).not.toContain(DASH);
-    }
+    const overview = panel(renderLayer('grad-sada', ctx()), 'ov-weather');
+    expect(clean(overview.querySelector('.ov-range-text'))).toMatch(/danas od -?\d+ do -?\d+ °C/);
+    const weather = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-range');
+    expect(clean(weather.querySelector('[data-testid=forecast-range]'))).toMatch(/^od -?\d+ do -?\d+ °C$/);
+    expect(clean(weather)).not.toContain(DASH);
   });
 
   it('shows every quake with a magnitude and a depth', () => {
-    const body = panel(renderLayer('zrak-i-nebo', ctx()), 'zrak-i-nebo-quakes');
+    const body = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-quakes');
     const rows = [...body.querySelectorAll('[data-testid=quake-row]')];
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
@@ -91,14 +90,14 @@ describe('every layer renders the real feed output', () => {
   });
 
   it('lists Događanja for culture/community sources and Grad radi for the Assembly and communal works, from the real dogadanja fixtures', () => {
-    const kultura = panel(renderLayer('kultura', ctx()), 'kultura-dogadanja');
-    const eventRows = [...kultura.querySelectorAll('[data-testid=event-row]')];
+    const kultura = renderLayer('kultura', ctx());
+    const eventRows = [...kultura.querySelectorAll('[data-testid=event-row], [data-testid=undated-row]')];
     expect(eventRows.length).toBeGreaterThan(0);
     for (const row of eventRows) expect(clean(row)).not.toBe('');
     expect(clean(kultura)).not.toContain(UNAVAILABLE);
     expect(eventRows.map(clean).join(' ')).not.toContain('Skupština');
 
-    const uprava = panel(renderLayer('uprava-i-pravo', ctx()), 'uprava-i-pravo-grad-radi');
+    const uprava = renderLayer('uprava-i-pravo', ctx());
     const cityRows = [...uprava.querySelectorAll('[data-testid=city-work-row]')];
     expect(cityRows.length).toBeGreaterThan(0);
     for (const row of cityRows) expect(clean(row)).not.toBe('');
@@ -106,17 +105,18 @@ describe('every layer renders the real feed output', () => {
   });
 
   it('numbers every act of the Glasnik', () => {
-    const body = panel(renderLayer('uprava-i-pravo', ctx()), 'uprava-i-pravo-acts');
+    const body = panel(renderLayer('uprava-i-pravo', ctx()), 'cv-gazette');
     const rows = [...body.querySelectorAll('[data-testid=act-row]')];
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(clean(row)).toMatch(/\d+\/\d{4}/);
   });
 
   it('labels every place in the city with its category', () => {
-    const body = panel(renderLayer('sigurnost', ctx()), 'sigurnost-poi');
-    const subs = [...body.querySelectorAll('.panel-sub')];
-    expect(subs.length).toBeGreaterThan(0);
-    for (const sub of subs) expect(clean(sub)).not.toBe('');
+    const body = panel(renderLayer('sigurnost', ctx()), 'sf-assembly');
+    const rows = [...body.querySelectorAll('[data-testid=assembly-point]')];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(clean(row.querySelector('.row-title'))).not.toBe('');
+    expect(clean(body)).toMatch(/Na popisu je \d+ mjesta/);
   });
 
   it('renders every layer without a single unavailable field', () => {
@@ -241,7 +241,7 @@ describe('the licence boundary: no CC BY-SA row ever reaches the open tier', () 
   });
 
   it('still shows the CC BY-SA rows where they belong: the session-tier Kultura panel, attributed as such', () => {
-    const kultura = clean(panel(renderLayer('kultura', ctx()), 'kultura-dogadanja'));
+    const kultura = clean(renderLayer('kultura', ctx()));
     expect(kultura).toContain('Kulturpunkt (CC BY-SA 3.0 HR)');
   });
 });

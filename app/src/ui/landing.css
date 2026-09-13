@@ -1,0 +1,42 @@
+/* Kaj ima? - the landing page. Reads as a finished product before any script
+   runs: the proposition, one live strip of real data, how it works, the seven
+   domains and the open pages. No banner, no ornament. */
+.ld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); max-width: 72rem; margin: 0 auto; padding: var(--sp-4) var(--sp-4) 0; }
+.ld-head .ki-wordmark { display: inline-flex; align-items: center; min-height: var(--target); color: var(--tone-text-primary); text-decoration: none; }
+.ld-head .ki-wordmark-text { font-weight: var(--weight-bold); font-size: var(--text-lg); letter-spacing: -0.02em; white-space: nowrap; }
+.ld-nav { display: flex; align-items: center; gap: var(--sp-2); }
+.ld-nav a:not(.btn) { display: inline-flex; align-items: center; min-height: var(--target); padding: 0 var(--sp-3); color: var(--tone-text-primary); font-weight: var(--weight-medium); text-decoration: none; border-radius: var(--r-md); }
+.ld-nav a:not(.btn):hover { background: var(--tone-surface-2); }
+.ld-nav a[href='/s/'] { display: none; }
+.ld-nav .btn { white-space: nowrap; }
+@media (min-width: 40rem) { .ld-nav a[href='/s/'] { display: inline-flex; } }
+.ld { max-width: 72rem; margin: 0 auto; padding: var(--sp-8) var(--sp-4) var(--sp-12); display: grid; gap: var(--sp-10); }
+.ld-hero { display: grid; gap: var(--sp-4); max-width: 44rem; }
+.ld-hero h1 { font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.03em; line-height: 1.05; }
+.ld-lead { font-size: var(--text-lg); line-height: var(--leading-relaxed); color: var(--tone-text-muted); max-width: 60ch; }
+.ld-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin: 0; }
+.ld-actions .btn-primary { padding-inline: var(--sp-6); }
+.ld-hero > .meta { max-width: 60ch; }
+.ld-live { display: grid; gap: var(--sp-3); padding: var(--sp-5); border: 1px solid var(--tone-stroke); border-radius: var(--r-xl); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
+.ld-strip { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.ld-strip li { display: grid; gap: 0.15rem; }
+.ld-k { font-size: var(--text-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.ld-v { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-snug); font-variant-numeric: tabular-nums; }
+.ld-v[data-state='unknown'] { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
+.ld-v[data-state='urgent'] { color: var(--tone-urgency); }
+@media (min-width: 48rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ld h2:not(.kicker) { font-size: var(--text-xl); letter-spacing: -0.015em; margin-block-end: var(--sp-3); }
+.ld-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-3); counter-reset: step; }
+.ld-steps li { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--sp-3); align-items: start; counter-increment: step; }
+.ld-steps li::before { content: counter(step); display: grid; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border-radius: 50%; background: var(--tone-tint-action); color: var(--tone-action-brand); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+@media (min-width: 48rem) { .ld-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ld-domains { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 40rem) { .ld-domains { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 64rem) { .ld-domains { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ld-domains li { display: grid; gap: 0.2rem; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
+.ld-domains b { font-weight: var(--weight-bold); }
+.ld-domains span { font-size: var(--text-sm); color: var(--tone-text-muted); line-height: var(--leading-snug); }
+.ld-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.ld-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
+.ld-foot { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-5); border-block-start: 1px solid var(--tone-stroke); color: var(--tone-text-muted); font-size: var(--text-sm); }
+.ld-foot code { font-family: var(--font-mono); font-size: 0.9em; }

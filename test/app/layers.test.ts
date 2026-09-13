@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import { publicItemKey } from '../../app/src/core/contracts';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
 import { cultureEvents, cultureEventsEmptyText } from '../../app/src/layers/kultura';
 import { delayWord, vehicleCount } from '../../app/src/layers/shared';
@@ -49,7 +50,7 @@ const SNAPSHOTS: Partial<Record<ModuleSnapshot['module'], ModuleSnapshot>> = {
       { id: 'kulturpunkt:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert u parku', link: 'https://kulturpunkt.hr/clanak/1', at: '2026-09-12T18:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time' } },
       { id: 'etnografski:2', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Izložba tradicijskog nakita', link: 'https://emz.hr/izlozba', at: '2026-09-10T09:00:00Z', until: '2026-10-01T18:00:00Z', data: { source: 'etnografski', category: 'izlozba', venue: 'Studentski centar', precision: 'time' } },
       { id: 'kvartovske:3', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Novo dječje igralište u Trešnjevci', link: 'https://aktivnosti.zagreb.hr/n/3', at: '2026-09-11T00:00:00Z', data: { source: 'kvartovske', precision: 'day' } },
-      { id: 'skupstina:4', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Poziv na 13. sjednicu Gradske skupštine Grada Zagreba', link: 'https://skupstina.zagreb.hr/poziv', at: '2026-09-14T09:00:00Z', data: { source: 'skupstina', organiser: 'Gradske skupštine Grada Zagreba', category: 'sjednica-skupstine', precision: 'time', venue: 'Stara gradska vijećnica', live: 'youtube' } },
+      { id: 'skupstina:4', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Poziv na 13. sjednicu Gradske skupštine Grada Zagreba', link: 'https://skupstina.zagreb.hr/poziv', at: '2026-09-14T09:00:00Z', dateBasis: 'event', data: { source: 'skupstina', organiser: 'Gradske skupštine Grada Zagreba', category: 'sjednica-skupstine', precision: 'time', venue: 'Stara gradska vijećnica', live: 'youtube' } },
       { id: 'komunalne:5', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Horvati, ulica Širanovići', summary: 'izrada projektne dokumentacije za vodoopskrbu', at: '2026-06-01T00:00:00Z', data: { source: 'komunalne', phase: 'Radovi u tijeku', status: 'U tijeku', amount: 1500, precision: 'day' } },
       { id: 'zet-novosti:6', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Izmjena reda vožnje linije 6', link: 'https://zet.hr/vijest/6', at: '2026-09-11T08:00:00Z', data: { source: 'zet-novosti', precision: 'time' } },
     ]),
@@ -70,7 +71,8 @@ describe('layer registry', () => {
     }
     expect(LAYER_MODULES.kultura).toEqual(['dogadanja']);
     expect(LAYER_MODULES['uprava-i-pravo']).toEqual(['glasnik', 'dogadanja']);
-    expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice']);
+    expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
+    expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
     expect(ALL_LAYER_MODULES).toContain('glasnik');
     expect(new Set(ALL_LAYER_MODULES).size).toBe(ALL_LAYER_MODULES.length);
   });
@@ -84,23 +86,35 @@ describe('layer registry', () => {
   });
 });
 
-describe('grad-sada', () => {
-  it('shows clock, observation, forecast, CAP state, vehicle count and closure count', () => {
+describe('grad-sada (Sada, the overview)', () => {
+  it('composes weather, safety, transit, agenda, news and the gazette from real values, with no clock and no fleet hero', () => {
     const section = renderLayer('grad-sada', ctx());
-    expect(text(section.querySelector('[data-testid=clock]'))).toBe('14:32');
+    expect(section.querySelector('[data-testid=clock]')).toBeNull();
     expect(text(section.querySelector('[data-testid=temp]'))).toBe('21 °C');
-    expect(text(section.querySelector('#grad-sada-observation'))).toContain('vlaga 54 %');
-    expect(text(section.querySelector('#grad-sada-forecast'))).toContain('od 12 do 24 °C');
-    expect(text(section.querySelector('#grad-sada-cap'))).toContain('žuto upozorenje');
-    expect(text(section.querySelector('[data-testid=vehicle-count]'))).toBe('3 vozila');
-    expect(text(section.querySelector('[data-testid=closure-count]'))).toBe('1 zatvaranje');
+    const weather = text(section.querySelector('#ov-weather'));
+    expect(weather).toContain('vlaga 54 %');
+    expect(weather).toContain('danas od 12 do 24 °C');
+    expect(weather).not.toContain('Sunčano'); // the forecast prose belongs to the weather domain
+    const safety = section.querySelector('#ov-safety')!;
+    expect(safety.getAttribute('data-level')).toBe('urgent');
+    expect(text(safety)).toContain('žuto upozorenje');
+    expect(text(safety)).toContain('1 zatvorena prometnica sada');
+    expect(text(section.querySelector('[data-testid=vehicle-count]'))).toContain('3 vozila');
+    expect(section.querySelectorAll('#ov-transit .route-link').length).toBeGreaterThan(0);
+    expect(text(section.querySelector('#ov-transit'))).toContain('kasni 2 min');
+    expect(text(section.querySelector('#ov-agenda'))).toContain('Koncert u parku');
+    expect(text(section.querySelector('#ov-news'))).toContain('Naslov vijesti');
+    expect(text(section.querySelector('#ov-civic'))).toContain('21/2026');
+    // Provenance is one expandable line, not a wall of dataset names.
+    expect(section.querySelector('details.provenance')).not.toBeNull();
   });
-  it('says so when a module is missing or down instead of showing a blank card', () => {
+  it('reads unknown, never all-clear, while a safety source is missing or down', () => {
     const section = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(text(section.querySelector('#grad-sada-observation'))).toContain('učitavanje podataka');
-    const down = renderLayer('grad-sada', ctx({ snapshots: { 'dhmz-cap': { ...SNAPSHOTS['dhmz-cap']!, status: 'down', items: [] } } }));
-    expect(text(down.querySelector('#grad-sada-cap'))).toContain('izvor nedostupan');
-    expect(text(down.querySelector('#grad-sada-cap'))).toContain('Nema upozorenja za Zagrebačku regiju.');
+    expect(text(section.querySelector('#ov-weather'))).toContain('učitavanje podataka');
+    expect(section.querySelector('#ov-safety')?.getAttribute('data-level')).toBe('unknown');
+    const down = renderLayer('grad-sada', ctx({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': { ...SNAPSHOTS['dhmz-cap']!, status: 'down', items: [] } } }));
+    expect(text(down.querySelector('#ov-safety'))).toContain('Stanje upozorenja nije potvrđeno');
+    expect(text(down.querySelector('#ov-safety'))).not.toContain('Nema aktivnih upozorenja');
   });
 });
 
@@ -315,31 +329,45 @@ describe('summariseRoutes', () => {
 });
 
 describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
-  it('lists quakes with magnitude, depth and a mini map', () => {
+  it('weather places quakes by distance and bearing, draws the computed sun path and never asks for a basemap', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
     const section = renderLayer('zrak-i-nebo', ctx({ maps: createMapSlots(factory as never) }));
-    expect(text(section.querySelector('[data-testid=quake-row]'))).toContain('M 1.6');
-    expect(text(section.querySelector('[data-testid=quake-row]'))).toContain('dubina 10 km');
-    expect(factory).toHaveBeenCalledTimes(1);
-    expect(text(section.querySelector('#zrak-i-nebo-sun'))).toMatch(/Izlazak \d\d:\d\d/);
-    expect(text(section.querySelector('#zrak-i-nebo-sun'))).toContain('Izračunato na uređaju');
+    const quake = text(section.querySelector('[data-testid=quake-row]'));
+    expect(quake).toContain('M 1,6');
+    expect(quake).toContain('dubina 10 km');
+    expect(quake).toMatch(/\d+ km od Zagreba/);
+    expect(section.querySelector('#wx-quakes .g-radar')).not.toBeNull();
+    expect(factory).not.toHaveBeenCalled();
+    expect(text(section.querySelector('#wx-sun'))).toMatch(/izlazak \d\d:\d\d/);
+    expect(text(section.querySelector('#wx-sun'))).toContain('Izračunato na uređaju');
+    // The measured value sits on today's forecast range; wind reads as a direction word, never "calm" while it blows.
+    expect(text(section.querySelector('[data-testid=forecast-range]'))).toBe('od 12 do 24 °C');
+    expect(text(section.querySelector('[data-testid=wind-text]'))).toBe('sjeverozapad 2 m/s');
+    expect(section.querySelector('#wx-range .g-range')).not.toBeNull();
   });
   it('sigurnost renders the open modules and points at the untimed page', () => {
     const section = renderLayer('sigurnost', ctx());
-    expect(section.querySelector('#sigurnost-cap')).not.toBeNull();
-    expect(section.querySelector('#sigurnost-quakes')).not.toBeNull();
-    expect(section.querySelector('#sigurnost-closures')).not.toBeNull();
-    expect(section.querySelector('#sigurnost-poi')).not.toBeNull();
+    for (const id of ['sf-numbers', 'sf-warnings', 'sf-closures', 'sf-pharmacies', 'sf-quakes', 'sf-assembly']) expect(section.querySelector(`#${id}`), id).not.toBeNull();
+    expect(section.querySelector('[data-testid=safety-level]')?.getAttribute('data-level')).toBe('urgent');
+    expect(section.querySelectorAll('a[href^="tel:"]').length).toBeGreaterThanOrEqual(5);
     const link = section.querySelector<HTMLAnchorElement>('[data-testid=hitno-link]')!;
     expect(link.getAttribute('href')).toBe('/hitno');
-    expect(text(section)).toContain('Ovaj je sloj otvoren svima, bez skeniranja i bez ograničenja trajanja.');
+    expect(text(section)).toContain('Otvoreno svima, bez skeniranja.');
+    // The fixture quake is 43 hours old: inside the 72 hour window, placed by its own distance.
+    expect(text(section.querySelector('#sf-quakes'))).toContain('M 1,6');
+    expect(text(section.querySelector('#sf-quakes'))).toMatch(/\d+ km od Zagreba/);
   });
-  it('uprava lists acts with their gazette number and offers printing', () => {
-    const onExport = vi.fn();
-    const section = renderLayer('uprava-i-pravo', ctx({ onExport }));
+  it('uprava lists acts with their gazette number, and the open act offers printing and the original', () => {
+    const section = renderLayer('uprava-i-pravo', ctx());
     expect(text(section.querySelector('[data-testid=act-row]'))).toContain('21/2026');
-    section.querySelector<HTMLButtonElement>('#uprava-i-pravo-acts-print')!.click();
-    expect(onExport).toHaveBeenCalledWith('print', 'glasnik');
+    expect(text(section.querySelector('[data-testid=gazette-issue]'))).toContain('21/2026');
+    expect(section.querySelector('[data-testid=civic-detail]')).toBeNull();
+    const open = renderLayer('uprava-i-pravo', ctx({ view: { layer: 'uprava-i-pravo', selection: { kind: 'item', id: publicItemKey('glasnik', 'a1'), module: 'glasnik' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=civic-detail]')!;
+    expect(text(detail)).toContain('Odluka o nečemu');
+    expect(detail.querySelector('[data-action=print-item][data-module=glasnik][data-item-id=a1]')).not.toBeNull();
+    expect(detail.querySelector('a[href="https://www1.zagreb.hr/akt"]')).not.toBeNull();
+    expect(text(detail)).toContain('sadržaj i pravni učinak akta su na izvorniku');
   });
   it('Grad radi lists Assembly sessions/consultations and communal works, with phase, amount and a livestream link on a plenary session', () => {
     const section = renderLayer('uprava-i-pravo', ctx());
@@ -349,16 +377,20 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     const skupstina = rows.find((r) => r.text.includes('Poziv na 13. sjednicu'))!;
     expect(skupstina.text).toContain('Gradske skupštine Grada Zagreba');
     expect(skupstina.text).toContain('Stara gradska vijećnica');
-    expect(skupstina.text).toContain('Skupština Grada Zagreba');
-    expect(skupstina.el.querySelector('a[href="https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA"]')).not.toBeNull();
-    expect(skupstina.el.querySelector('a[href="https://skupstina.zagreb.hr/poziv"]')).not.toBeNull();
+    expect(text(section.querySelector('#cv-assembly'))).toContain('Skupština Grada Zagreba');
+    const open = renderLayer('uprava-i-pravo', ctx({ view: { layer: 'uprava-i-pravo', selection: { kind: 'item', id: publicItemKey('dogadanja', 'skupstina:4'), module: 'dogadanja' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=civic-detail]')!;
+    expect(detail.querySelector('a[href="https://www.youtube.com/channel/UCRMm4Xt9ruoQ8FG7NpIHCsA"]')).not.toBeNull();
+    expect(detail.querySelector('a[href="https://skupstina.zagreb.hr/poziv"]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=ics-item]')).not.toBeNull(); // a timed, dated session may go into a calendar
 
     const komunalne = rows.find((r) => r.text.includes('Horvati'))!;
     expect(komunalne.text).toContain('Radovi u tijeku');
     expect(komunalne.text).toContain('1.500');
     expect(komunalne.text).toContain('€');
     expect(komunalne.text).toContain('izrada projektne dokumentacije za vodoopskrbu');
-    expect(komunalne.text).toContain('Plan komunalnih aktivnosti');
+    expect(text(section.querySelector('#cv-works'))).toContain('Plan komunalnih aktivnosti');
+    expect(text(section.querySelector('#cv-works'))).not.toMatch(/\d+ ?%/); // no invented progress
 
     // Never the ZET notice that also lives in the merged snapshot (E8's kiosk teaser owns that one).
     expect(text(section)).not.toContain('Izmjena reda vožnje');
@@ -366,34 +398,43 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
   it('Grad radi says so plainly, naming which of its two sources answered, when neither has anything', () => {
     const empty = { ...SNAPSHOTS.dogadanja!, items: [], sourceCounts: { kulturpunkt: 5, skupstina: 0, kvartovske: 5, komunalne: 0, 'zet-rss': 5, etnografski: 5 } };
     const section = renderLayer('uprava-i-pravo', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: empty } }));
-    const body = text(section.querySelector('#uprava-i-pravo-grad-radi'));
+    const body = text(section.querySelector('#cv-works'));
     expect(body).toContain('Trenutačno nema stavki');
     expect(body).toContain('Bez odgovora: Skupština Grada Zagreba, Plan komunalnih aktivnosti');
     expect(body).not.toContain('Odgovorili');
   });
-  it('kultura shows Događanja for culture and community sources only, each with a time, its venue when given, a link and its own source attribution', () => {
+  it('kultura shows Događanja for culture and community sources only: next starts by day, an ongoing exhibition apart, each with its venue and source', () => {
     const section = renderLayer('kultura', ctx());
     const rows = [...section.querySelectorAll('[data-testid=event-row]')].map(text);
     expect(rows).toHaveLength(3);
 
     const koncert = rows.find((r) => r.includes('Koncert u parku'))!;
-    expect(koncert).toContain('Kulturpunkt (CC BY-SA 3.0 HR)');
+    expect(koncert).toContain('Kulturpunkt');
+    expect(koncert).toContain('20:00'); // 18:00Z on 12 September is 20:00 in Zagreb
     const izlozba = rows.find((r) => r.includes('Izložba tradicijskog nakita'))!;
     expect(izlozba).toContain('Studentski centar'); // venue
     expect(izlozba).toContain('Etnografski muzej'); // per-source attribution
+    expect(izlozba).toContain('u tijeku · do'); // began before now, still runs: never listed as a next start
+    expect(section.querySelector('#ev-ongoing [data-testid=event-row]')).not.toBeNull();
     const igraliste = rows.find((r) => r.includes('Novo dječje igralište'))!;
     expect(igraliste).toContain('Kvartovske novosti');
+    expect(igraliste).toContain('cijeli dan'); // a day-precision entry is all day, not midnight
 
-    // Never Skupština, komunalne or the ZET notice: those belong to uprava-i-pravo (or, for ZET, only E8's kiosk teaser).
-    const whole = text(section.querySelector('#kultura-dogadanja'));
+    // The agenda groups by day, today first.
+    expect(text(section.querySelector('#ev-agenda .agenda-day'))).toBe('Danas');
+    // Never Skupština, komunalne or the ZET notice: those belong to uprava-i-pravo (or, for ZET, only the kiosk teaser).
+    const whole = text(section);
     expect(whole).not.toContain('Skupština');
     expect(whole).not.toContain('Horvati');
     expect(whole).not.toContain('Izmjena reda vožnje');
-    // Today (11 Sept, per NOW) is covered by kvartovske's own day and by the
-    // Etnografski exhibition's [at, until] window, so no "nothing today" notice.
-    expect(section.querySelector('[data-testid=events-today-notice]')).toBeNull();
+    // Licence and original stay one tap away, in the item detail.
+    const open = renderLayer('kultura', ctx({ view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('dogadanja', 'kulturpunkt:1'), module: 'dogadanja' }, filters: {} } }));
+    expect(text(open.querySelector('[data-testid=event-detail]'))).toContain('Kulturpunkt (CC BY-SA 3.0 HR)');
+    expect(open.querySelector('[data-testid=event-detail] a[href="https://kulturpunkt.hr/clanak/1"]')).not.toBeNull();
+    expect(section.querySelector('[data-filter-key=q]')).not.toBeNull();
+    expect(section.querySelectorAll('.chip').length).toBeGreaterThan(1);
   });
-  it('still lists real future rows, but plainly notes nothing is on today specifically, using zagrebDayKey over each item’s own [at, until] window', () => {
+  it('a future-only list groups under its own day and shows no today head', () => {
     const futureOnly = {
       ...SNAPSHOTS.dogadanja!,
       items: [
@@ -401,44 +442,49 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
       ] as ModuleSnapshot['items'],
     };
     const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: futureOnly } }));
-    expect(text(section.querySelector('[data-testid=events-today-notice]'))).toBe('Danas nema najavljenih događanja; slijede sljedeći dani.');
+    expect(text(section.querySelector('#ev-agenda .agenda-day'))).toMatch(/18\. 9\. 2026\./);
     expect([...section.querySelectorAll('[data-testid=event-row]')]).toHaveLength(1);
-    expect(text(section.querySelector('#kultura-dogadanja'))).toContain('Jesenski festival');
+    expect(text(section.querySelector('#ev-agenda'))).toContain('Jesenski festival');
   });
   it('kultura Događanja says so plainly, naming which of its three sources answered, when none of them has anything', () => {
     const empty = { ...SNAPSHOTS.dogadanja!, items: [], sourceCounts: { kulturpunkt: 0, skupstina: 5, kvartovske: 2, komunalne: 5, 'zet-rss': 5, etnografski: 0 } };
     const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: empty } }));
-    const body = text(section.querySelector('#kultura-dogadanja'));
+    const body = text(section.querySelector('#ev-agenda'));
     expect(body).toContain('Trenutačno nema najava');
     expect(body).toContain('Odgovorili: Kvartovske novosti');
     expect(body).toContain('Bez odgovora: Kulturpunkt, Etnografski muzej');
   });
-  it('kultura still carries the honest Referenca roadmap for the rest of the layer, now describing Događanja as live', () => {
-    const section = renderLayer('kultura', ctx());
-    expect(section.querySelector('[data-freshness=referenca]')).not.toBeNull();
-    expect(text(section)).not.toContain('U prvoj fazi ovaj sloj još nema živih podataka.');
-    expect(text(section)).toContain('Događanja iznad su živi izvor');
-    const hrefs = [...section.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-    expect(hrefs).toContain('https://www.europeana.eu/hr');
-    expect(hrefs).toContain('https://digitalna.nsk.hr/');
+  it('kultura keeps a venue outside Zagreb apart and never lists it as a Zagreb event', () => {
+    const split = { ...SNAPSHOTS.dogadanja!, items: [
+      ...SNAPSHOTS.dogadanja!.items,
+      { id: 'kulturpunkt:7', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert na rivi', at: '2026-09-12T19:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time', venue: 'Dioklecijanova palača, Split' } },
+    ] as ModuleSnapshot['items'] };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: split } }));
+    expect(text(section.querySelector('#ev-agenda'))).not.toContain('Koncert na rivi');
+    expect(text(section.querySelector('#ev-outside'))).toContain('Koncert na rivi');
+    expect(text(section.querySelector('#ev-outside'))).toContain('izvan Zagreba');
   });
-  it('vijesti shows headline, time, source and a link to the original', () => {
+  it('vijesti separates the two HRT sources, shows real publication times, and the open story links to the original', () => {
     const section = renderLayer('vijesti', ctx());
     const row = section.querySelector('[data-testid=news-row]')!;
     expect(text(row)).toContain('Naslov vijesti');
-    expect(text(row)).toContain('13:00');
-    expect(row.querySelector('a')?.getAttribute('href')).toBe('https://vijesti.hrt.hr/clanak');
+    expect(text(row)).toContain('prije 1 sat'); // 11:00Z is 13:00 in Zagreb, an hour and a half before NOW
+    expect(section.querySelector('#nw-hrt')).not.toBeNull();
+    expect(section.querySelector('#nw-sljeme')).not.toBeNull();
+    const open = renderLayer('vijesti', ctx({ view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=news-detail]')!;
+    expect(detail.querySelector('a[href="https://vijesti.hrt.hr/clanak"]')).not.toBeNull();
+    expect(text(detail)).toContain('Sažetak');
     expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain('Izvor: hrt-news');
   });
 });
 
 describe('exports wiring', () => {
-  it('a panel copy button hands the layer text and the module attribution to onCopy', () => {
-    const onCopy = vi.fn();
-    const section = renderLayer('vijesti', ctx({ onCopy }));
-    section.querySelector<HTMLButtonElement>('#vijesti-news-copy')!.click();
-    expect(onCopy).toHaveBeenCalledTimes(1);
-    expect(onCopy.mock.calls[0]![0]).toContain('Naslov vijesti');
-    expect(onCopy.mock.calls[0]![1]).toEqual(attr('Izvor: hrt-news'));
+  it('item actions are declared for delegation with the module and item id, and the calendar action follows the real eligibility helper', () => {
+    const open = renderLayer('kultura', ctx({ view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('dogadanja', 'kulturpunkt:1'), module: 'dogadanja' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=event-detail]')!;
+    expect(detail.querySelector('[data-action=copy-item][data-module=dogadanja][data-item-id="kulturpunkt:1"]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=share-item]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=ics-item]')).toBeNull(); // the fixture carries no dateBasis, so no calendar file
   });
 });

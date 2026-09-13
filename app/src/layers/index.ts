@@ -25,9 +25,12 @@ export const LAYER_RENDERERS: Record<LayerId, LayerRenderer> = {
 };
 
 export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
-  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice'],
-  'u-pokretu': ['zet-rt', 'prometnice'],
-  'zrak-i-nebo': ['emsc', 'dhmz-cap', 'dhmz-forecast'],
+  // The overview composes six domains: weather, safety, transit, the next
+  // dated events, the news lead and the gazette issue.
+  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'hrt-news', 'glasnik'],
+  // Transport notices (ZET's two feeds) ride in the dogadanja module.
+  'u-pokretu': ['zet-rt', 'prometnice', 'dogadanja'],
+  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc'],
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
   // dogadanja is one module, session tier, shared by both layers below: each
   // reads the same merged snapshot and filters to its own subset of the six

@@ -38,8 +38,19 @@ describe('tokens.css structure', () => {
     expect(TOKENS).toMatch(/:root\[data-theme-resolved='light'\]/);
     expect(TOKENS).not.toMatch(/\[data-theme='(dark|light|auto|solar)'\]/);
   });
-  it('has a no-JS light fallback keyed on the OS preference', () => {
-    expect(TOKENS).toMatch(/@media \(prefers-color-scheme: light\)\s*\{\s*:root:not\(\[data-theme-resolved\]\)/);
+  it('paints light first and follows a dark OS preference without JavaScript', () => {
+    expect(TOKENS).toMatch(/:root,\s*:root\[data-theme-resolved='light'\]/);
+    expect(TOKENS).toMatch(/@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme-resolved\]\)/);
+  });
+  it('never uses pure white or pure black as a large surface', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const surface of SURFACES) expect(['#ffffff', '#000000']).not.toContain(palette(theme, surface));
+    }
+  });
+  it('writes every palette colour in OKLCH too, for engines that render it', () => {
+    expect(TOKENS).toMatch(/@supports \(color: oklch\(/);
+    expect(TOKENS).toMatch(/--palette-light-canvas: oklch\(/);
+    expect(TOKENS).toMatch(/--palette-dark-accent: oklch\(/);
   });
 });
 
