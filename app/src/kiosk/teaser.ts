@@ -10,7 +10,7 @@ import type { I18n } from '../i18n/i18n';
 import { cityTeaserAttribution, cityTeaserBody, cityTeaserRows } from '../layers/grad-teaser';
 import { dataNumber, dataText } from '../panels/panel';
 import { fmtNumber } from './format';
-import { byModule, closuresNear, isLive, safetyStrip, weatherNow } from './local';
+import { byModule, closuresNear, isLive, recentQuakes, safetyStrip, weatherNow } from './local';
 import { kioskStrings } from './strings';
 
 export interface TeaserCard {
@@ -32,8 +32,8 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, now:
   const loading = i18n.t('status.loading');
   const weather = weatherNow(modules, s, locale);
   const quakes = map.emsc;
-  const quake = isLive(quakes) ? quakes.items.find((q) => q.at !== undefined && now - Date.parse(q.at) <= 7 * 86_400_000) ?? quakes.items[0] : undefined;
-  const near = closuresNear(modules, null);
+  const quake = recentQuakes(quakes, now)[0];
+  const near = closuresNear(modules, null, now);
   const hrt = map['hrt-news'];
   const news = isLive(hrt) ? hrt.items[0] : undefined;
   const city = map.dogadanja;
@@ -43,16 +43,21 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, now:
       : [weather.temperature ?? '', weather.condition].filter(Boolean).join(' · ');
   return [
     { id: 'weather', title: s.weather.title, body: weatherBody, attribution: filled(map['dhmz-now']) },
-    { id: 'quake', title: s.story.quake, body: quake ? `M ${fmtNumber(locale, dataNumber(quake, 'mag') ?? 0, 1)} · ${dataText(quake, 'region') || quake.title}` : quakes ? s.paired.quakeNone : loading, attribution: filled(quakes, quake) },
+    { id: 'quake', title: s.story.quake, body: quake ? quakeCard(quake) : isLive(quakes) ? s.paired.quakeNone : quakes ? s.paired.sourceDown : loading, attribution: filled(quakes, quake) },
     { id: 'closures', title: s.paired.closures, body: near.state === 'loading' ? loading : near.state === 'down' ? s.safety.closuresUnknown : i18n.t('panels.closuresCount', { count: near.count }), attribution: filled(map.prometnice) },
     { id: 'news', title: s.story.news, body: news ? news.title : hrt ? s.paired.newsNone : loading, attribution: filled(hrt, news) },
     { id: 'city', title: s.story.city, body: city ? (cityRow ? cityTeaserBody(cityRow, i18n) : s.story.empty) : loading, attribution: cityTeaserAttribution(city, cityRow) },
     { id: 'invitation', title: s.appName, body: `${s.invitation.lead} ${s.invitation.support}` },
   ];
+  /** "M 1,6 · CROATIA"; a magnitude the source did not give is named missing, never zero. */
+  function quakeCard(q: ModuleSnapshot['items'][number]): string {
+    const mag = dataNumber(q, 'mag');
+    return `${mag === null ? s.paired.magUnknown : `M ${fmtNumber(locale, mag, 1)}`} · ${dataText(q, 'region') || q.title}`;
+  }
 }
 
 /** The strip's three sentences with no stop to rank by: the same words the kiosk paints. */
-export function safetyStripText(modules: readonly ModuleSnapshot[], i18n: I18n): { cap: string; closures: string; pharmacy: string } {
-  const strip = safetyStrip(modules, null, i18n, kioskStrings(i18n.getLocale()));
+export function safetyStripText(modules: readonly ModuleSnapshot[], i18n: I18n, now: number = Date.now()): { cap: string; closures: string; pharmacy: string } {
+  const strip = safetyStrip(modules, null, i18n, kioskStrings(i18n.getLocale()), now);
   return { cap: strip.warning.text, closures: strip.closures.text, pharmacy: strip.pharmacy.label };
 }

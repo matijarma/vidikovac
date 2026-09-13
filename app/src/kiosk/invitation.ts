@@ -7,7 +7,7 @@ import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { linesAtStop, nearbyCountLine, stories, sunLine, sunToday, weatherNow, type LinesBoard, type Story, type WeatherNow } from './local';
+import { byModule, linesAtStop, nearbyCountLine, stories, sunLine, sunToday, weatherNow, type LinesBoard, type Story, type WeatherNow } from './local';
 import { plural, type KioskStrings } from './strings';
 
 export interface InvitationDeps {
@@ -77,8 +77,9 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   return `${head}<ul class="k-line-list">${board.rows.map((row) => lineRow(row, strings, locale)).join('')}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
 }
 
-export function storyMarkup(story: Story | null, strings: KioskStrings): string {
-  if (!story) return `${kicker(strings.story.city)}<p class="k-story-title k-story-title--empty">${escapeHtml(strings.story.empty)}</p>`;
+export function storyMarkup(story: Story | null, strings: KioskStrings, sourcesDown = false): string {
+  // No story because the sources are not answering is said so; only an answering source with nothing new is "nothing new".
+  if (!story) return `${kicker(strings.story.city)}<p class="k-story-title k-story-title--empty"${sourcesDown ? ' data-state="down"' : ''}>${escapeHtml(sourcesDown ? strings.paired.sourceDown : strings.story.empty)}</p>`;
   const meta = [story.meta, story.source].filter(Boolean).join(' · ');
   return `${kicker(story.kicker, '', story.tone)}<p class="k-story-title" title="${escapeAttribute(story.attribution)}">${escapeHtml(story.title)}</p><p class="k-meta">${escapeHtml(meta)}</p>`;
 }
@@ -134,7 +135,8 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       if (weather !== lastWeather) { weatherBox.innerHTML = weather; lastWeather = weather; }
       const list = stories(model.modules, s, locale, model.now);
       const story = list.length > 0 ? list[model.storyIndex % list.length]! : null;
-      const html = storyMarkup(story, s);
+      const sources = (['dogadanja', 'hrt-news', 'emsc'] as const).map((id) => byModule(model.modules)[id]);
+      const html = storyMarkup(story, s, sources.every((snapshot) => snapshot?.status === 'down'));
       if (html !== lastStory) {
         storyBox.innerHTML = html;
         storyBox.dataset.tone = story?.tone ?? 'empty';

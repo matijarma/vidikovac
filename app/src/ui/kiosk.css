@@ -287,6 +287,9 @@
 .k-strip-item[data-state='stale'] { color: var(--k-amber); }
 .k-strip-sub { color: var(--k-ink-3); }
 .kiosk[data-size='compact'] .k-strip-sub { display: none; }
+.k-strip--nosub .k-strip-sub { display: none; }
+.k-strip--tight { font-size: var(--k-meta-size); }
+.k-strip--tight .k-strip-item { margin-right: calc(var(--k-gap) * 0.6); padding-right: calc(var(--k-gap) * 0.6); }
 .k-strip-hitno { flex: none; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */

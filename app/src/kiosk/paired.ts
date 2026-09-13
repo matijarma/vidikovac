@@ -14,7 +14,7 @@ import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kicker, linesMarkup, weatherMarkup } from './invitation';
-import { cityDateLine, cityKicker, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, sunToday, weatherNow, type SunToday } from './local';
+import { activeWarnings, cityDateLine, cityKicker, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
 import { routeLongName, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
@@ -214,17 +214,19 @@ export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolea
 
 function warningRows(ctx: PairedContext): string[] {
   const cap = ctx.snapshots['dhmz-cap'];
-  return (cap?.items ?? []).map((w) => row(
+  const rowOf = (w: FeedItem, upcoming: boolean): string => row(
     `<strong>${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</strong> · ${escapeHtml(w.title)}`,
-    [w.summary ?? '', w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : ''].filter(Boolean).map(escapeHtml).join(' · '),
+    [upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '', w.summary ?? '', w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : ''].filter(Boolean).map(escapeHtml).join(' · '),
     '',
-    ` data-severity="${escapeAttribute(w.severity ?? 'info')}"`,
-  ));
+    ` data-severity="${escapeAttribute(w.severity ?? 'info')}" data-window="${upcoming ? 'upcoming' : 'active'}"`,
+  );
+  // Active warnings first, most severe on top; announced ones after, each saying from when. Ended ones are gone.
+  return [...activeWarnings(cap, ctx.now).map((w) => rowOf(w, false)), ...upcomingWarnings(cap, ctx.now).map((w) => rowOf(w, true))];
 }
 
 function warningsBlock(ctx: PairedContext, grow = false): string {
   const cap = ctx.snapshots['dhmz-cap'];
-  return block(ctx.strings.paired.warnings, listBody(cap, warningRows(ctx), ctx.strings.paired.warningsNone, ctx.strings), { s: ctx.strings, snapshot: cap, testid: 'k-warnings', tone: (cap?.items.length ?? 0) > 0 ? 'rose' : '', grow });
+  return block(ctx.strings.paired.warnings, listBody(cap, warningRows(ctx), ctx.strings.paired.warningsNone, ctx.strings), { s: ctx.strings, snapshot: cap, testid: 'k-warnings', tone: activeWarnings(cap, ctx.now).length > 0 ? 'rose' : '', grow });
 }
 
 /** The overview shows the warnings block when it says something the strip's
@@ -232,12 +234,12 @@ function warningsBlock(ctx: PairedContext, grow = false): string {
  *  A live, confirmed "no warnings" is already on the strip. */
 function warningsRelevant(ctx: PairedContext): boolean {
   const cap = ctx.snapshots['dhmz-cap'];
-  return !cap || cap.status !== 'live' || cap.items.length > 0;
+  return !cap || cap.status !== 'live' || activeWarnings(cap, ctx.now).length > 0 || upcomingWarnings(cap, ctx.now).length > 0;
 }
 
 function closureRows(ctx: PairedContext, limit: number): string[] {
   const { strings: s, i18n } = ctx;
-  return closuresByDistance(ctx.snapshots.prometnice, ctx.stop).slice(0, limit).map(({ item, distanceM }) => {
+  return closuresByDistance(ctx.snapshots.prometnice, ctx.stop, ctx.now).slice(0, limit).map(({ item, distanceM }) => {
     const type = i18n.t(`panels.closureType.${dataText(item, 'subtype') || 'ROAD_CLOSED'}`);
     const until = item.until ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : '';
     return row(escapeHtml(item.title), [type, until].filter(Boolean).map(escapeHtml).join(' · '), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
@@ -250,7 +252,7 @@ function fmtDistanceWord(locale: string, metres: number): string {
 
 function closuresBlock(ctx: PairedContext, limit: number, grow = false): string {
   const snap = ctx.snapshots.prometnice;
-  const near = closuresNear(modulesOf(ctx), ctx.stop);
+  const near = closuresNear(modulesOf(ctx), ctx.stop, ctx.now);
   const title = isLive(snap) && near.count > 0 ? `${ctx.strings.paired.closures} · ${near.count}` : ctx.strings.paired.closures;
   return block(title, listBody(snap, closureRows(ctx, limit), ctx.strings.paired.closuresNone, ctx.strings, near.count), { s: ctx.strings, snapshot: snap, testid: 'k-closures', grow });
 }
@@ -379,12 +381,17 @@ function sunBlock(ctx: PairedContext): string {
 
 function quakeRows(ctx: PairedContext, limit: number): string[] {
   const emsc = ctx.snapshots.emsc;
-  const recent = (isLive(emsc) ? emsc.items : []).filter((q) => q.at !== undefined && ctx.now - Date.parse(q.at) <= 7 * 86_400_000).slice(0, limit);
-  return recent.map((q) => row(
-    `<strong>M ${escapeHtml(fmtNumber(ctx.locale, dataNumber(q, 'mag') ?? 0, 1))}</strong> · ${escapeHtml(dataText(q, 'region') || q.title)}`,
-    escapeHtml(fill(ctx.strings.paired.depth, { depth: fmtNumber(ctx.locale, dataNumber(q, 'depth') ?? 0, 0) })),
-    escapeHtml(dayTime(q.at)),
-  ));
+  const { strings: s, locale } = ctx;
+  // Only quakes inside the declared window and radius; a missing measure is said to be missing, never zero.
+  return recentQuakes(emsc, ctx.now).slice(0, limit).map((q) => {
+    const mag = dataNumber(q, 'mag');
+    const depth = dataNumber(q, 'depth');
+    return row(
+      `<strong>${escapeHtml(mag === null ? s.paired.magUnknown : `M ${fmtNumber(locale, mag, 1)}`)}</strong> · ${escapeHtml(dataText(q, 'region') || q.title)}`,
+      escapeHtml(depth === null ? s.paired.depthUnknown : fill(s.paired.depth, { depth: fmtNumber(locale, depth, 0) })),
+      escapeHtml(dayTime(q.at)),
+    );
+  });
 }
 
 function quakesBlock(ctx: PairedContext, limit: number, grow = false): string {

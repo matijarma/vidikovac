@@ -26,7 +26,7 @@ import { essentialsRows } from './kiosk/essentials';
 import { clock, dayTime, weekdayDate } from './kiosk/format';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
-import { byModule, safetyStrip } from './kiosk/local';
+import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, safetyStrip, staleCopy } from './kiosk/local';
 import { createKioskMapAdapter, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
@@ -241,7 +241,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   // --- Safety strip: always painted, never a session's ------------------------
   function paintStrip(): void {
-    const parts = safetyStrip(teaser, stop, i18n, s);
+    const parts = safetyStrip(teaser, stop, i18n, s, now());
     const noBasics = phase === 'paired' || phase === 'setup';
     const w = parts.warning;
     strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
@@ -250,11 +250,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       <span class="k-strip-item" data-testid="strip-closures" data-state="${parts.closures.state}">${escapeHtml(parts.closures.text)}${parts.closures.nearestText ? ` <span class="k-strip-sub">${escapeHtml(parts.closures.nearestText)}</span>` : ''}</span>
       <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(s.safety.pharmacy)}: <strong>${escapeHtml(parts.pharmacy.label)}</strong></span>
       <a class="k-strip-hitno" href="/hitno">${escapeHtml(s.safety.hitno)}</a>`;
+    fitStrip();
+  }
+  /** Long words (a stale, unconfirmed state) must still fit one line: first the
+   *  nearest-street aside goes, then the type steps down; nothing is clipped. */
+  function fitStrip(): void {
+    strip.classList.remove('k-strip--nosub', 'k-strip--tight');
+    const overflows = (): boolean => strip.clientWidth > 0 && strip.scrollWidth > strip.clientWidth + 1;
+    if (!overflows()) return;
+    strip.classList.add('k-strip--nosub');
+    if (overflows()) strip.classList.add('k-strip--tight');
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
   function paintEssentials(): void {
-    basicsRows.innerHTML = essentialsRows(teaser, i18n, s, locale, stop).map((row) => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${escapeHtml(row.value)}</p>${row.detail ? `<p class="k-ess-detail">${escapeHtml(row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${escapeHtml(row.attribution)}</p>` : ''}</div>`).join('');
+    basicsRows.innerHTML = essentialsRows(teaser, i18n, s, locale, stop, now()).map((row) => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${escapeHtml(row.value)}</p>${row.detail ? `<p class="k-ess-detail">${escapeHtml(row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${escapeHtml(row.attribution)}</p>` : ''}</div>`).join('');
   }
   function disarmEssentialsIdle(): void {
     if (essentialsIdle === null) return;
@@ -312,7 +322,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintMap(): void {
     const host = currentMapHost();
     if (!host) { parkMap(); return; }
-    const snapshots = phase === 'paired' ? { ...byModule(teaser), ...sessionSnapshots } : byModule(teaser);
+    const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale, boardPx: boardHeight(),
       selection: phase === 'paired' ? selection : null,
@@ -332,7 +342,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4 };
   }
   function pairedContext(): PairedContext {
-    return { layer: activeLayer, strings: s, i18n, locale, snapshots: { ...byModule(teaser), ...sessionSnapshots }, now: now(), stop, selection, lightweight, size: layout.size, stops };
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size, stops };
+  }
+  /** Both tiers of one module: the session copy, unless it is no longer live and the teaser holds a live one. */
+  function mergedSnapshots(): Partial<Record<ModuleId, ModuleSnapshot>> {
+    const out: Partial<Record<ModuleId, ModuleSnapshot>> = { ...byModule(teaser) };
+    for (const copy of Object.values(sessionSnapshots)) {
+      if (!copy) continue;
+      const open = out[copy.module];
+      out[copy.module] = copy.status !== 'live' && open?.status === 'live' ? open : copy;
+    }
+    return out;
   }
   function paintLocal(): void {
     invitation?.update(invitationModel());
@@ -571,12 +591,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     activeLayer = 'grad-sada';
     setPhase(screenDead ?? 'invitation');
   }
+  let sessionSeq = 0;
   async function refreshSessionData(): Promise<void> {
     const token = unlockedToken;
     if (!token) return;
-    const results = await Promise.allSettled(KIOSK_LAYER_MODULES[activeLayer].map((id) => fetchData(id, token)));
-    if (disposed || unlockedToken !== token) return;
-    for (const result of results) if (result.status === 'fulfilled') sessionSnapshots[result.value.module] = result.value;
+    const seq = ++sessionSeq;
+    const modules = KIOSK_LAYER_MODULES[activeLayer];
+    const results = await Promise.allSettled(modules.map((id) => fetchData(id, token)));
+    // Another session, or a newer refresh, has spoken since: this answer is history.
+    if (disposed || unlockedToken !== token || seq !== sessionSeq) return;
+    const at = new Date(now()).toISOString();
+    results.forEach((result, i) => {
+      const id = modules[i]!;
+      if (result.status === 'fulfilled') sessionSnapshots[result.value.module] = result.value;
+      // A request that failed leaves its last-good copy stale, source by source; a module never seen is down.
+      else sessionSnapshots[id] = sessionSnapshots[id] ? staleCopy(sessionSnapshots[id]!, at) : downPlaceholder(id, at);
+    });
     paintLocal();
   }
   async function ensureStops(): Promise<void> {
@@ -595,17 +625,28 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
     }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now()));
   }
+  let teaserSeq = 0;
   async function loadTeaser(): Promise<void> {
     const stopId = stop?.id;
+    const seq = ++teaserSeq;
+    // A late answer -- for a stop the screen no longer has, or to a request a newer one has overtaken -- is dropped, not painted.
+    const outdated = (): boolean => disposed || stopId !== stop?.id || seq !== teaserSeq;
     try {
       const response = await fetchTeaser(stopId);
-      // A late answer for a stop the screen no longer has is dropped, not painted.
-      if (disposed || stopId !== stop?.id) return;
+      if (outdated()) return;
       clearAlert('teaser');
       teaser = response.modules;
       paintLocal();
     } catch {
-      if (!disposed) showAlert(s.status.dataDown, 'teaser');
+      if (outdated()) return;
+      // The request itself failed: every last-good copy is stale from now on, source by source,
+      // and a module with no copy is down -- the map holds and nothing reads as an all-clear.
+      const at = new Date(now()).toISOString();
+      const kept = teaser.map((m) => staleCopy(m, at));
+      const have = new Set(kept.map((m) => m.module));
+      teaser = [...kept, ...KIOSK_TEASER_MODULES.filter((m) => !have.has(m)).map((m) => downPlaceholder(m, at))];
+      showAlert(s.status.dataDown, 'teaser');
+      paintLocal();
     }
   }
 

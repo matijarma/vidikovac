@@ -13,7 +13,7 @@ import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/di
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { decideLayout, MIN_ZOOM } from '../../app/src/kiosk/layout';
-import { cityDateLine, closuresNear, compassLabel, linesAtStop, nearestPharmacy, safetyStrip, stories, sunToday, weatherNow } from '../../app/src/kiosk/local';
+import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { eventGroups, fitRows, pairedMarkup } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -192,24 +192,24 @@ describe('local content from the stop-scoped teaser', () => {
     expect(linesAtStop([], STOP, i18n).state).toBe('loading');
   });
   it('orders closures by distance from the stop and counts the ones within 1,5 km', () => {
-    const near = closuresNear(MODULES, STOP);
+    const near = closuresNear(MODULES, STOP, NOW);
     expect(near.count).toBe(2);
     expect(near.nearbyCount).toBe(1);
     expect(near.nearest?.title).toBe('Ilica');
     expect(near.nearest?.distanceM).toBeLessThan(700);
-    expect(closuresNear(MODULES.map((m) => (m.module === 'prometnice' ? { ...m, status: 'down' as const } : m)), STOP)).toMatchObject({ state: 'down', count: 0 });
+    expect(closuresNear(MODULES.map((m) => (m.module === 'prometnice' ? { ...m, status: 'down' as const } : m)), STOP, NOW)).toMatchObject({ state: 'down', count: 0 });
   });
   it('the safety strip names the warning state, the closure count with the nearest street, and the nearest on-duty pharmacy', () => {
-    const strip = safetyStrip(MODULES, STOP, i18n, hr);
+    const strip = safetyStrip(MODULES, STOP, i18n, hr, NOW);
     expect(strip.warning).toEqual({ state: 'none', text: 'Nema upozorenja DHMZ-a za Zagreb', severity: null });
     expect(strip.closures.text).toBe('2 zatvaranja');
     expect(strip.closures.nearestText).toBe('najbliže Ilica');
     expect(strip.pharmacy.label).toBe('Trg bana J. Jelačića 3');
     expect(nearestPharmacy({ ...STOP, lon: 15.934, lat: 45.811 }).label).toBe('Ilica 291');
-    const down = safetyStrip(MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, status: 'down' as const } : m)), STOP, i18n, hr);
+    const down = safetyStrip(MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, status: 'down' as const } : m)), STOP, i18n, hr, NOW);
     expect(down.warning.state).toBe('unknown');
-    expect(safetyStrip([], STOP, i18n, hr).warning.state).toBe('loading');
-    const active = safetyStrip(MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w', 'warning', 'Grmljavina', { severity: 'moderate' })]) : m)), STOP, i18n, hr);
+    expect(safetyStrip([], STOP, i18n, hr, NOW).warning.state).toBe('loading');
+    const active = safetyStrip(MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w', 'warning', 'Grmljavina', { severity: 'moderate' })]) : m)), STOP, i18n, hr, NOW);
     expect(active.warning).toEqual({ state: 'active', text: 'žuto upozorenje · Grmljavina', severity: 'moderate' });
   });
   it('interleaves city notices, headlines and the last quake into a bounded rotation with honest date lines', () => {
@@ -237,16 +237,18 @@ describe('local content from the stop-scoped teaser', () => {
     expect(cards[2]!.body).toBe('2 zatvaranja');
     expect(cards[4]!.body).toContain('13. sjednica Gradske skupštine');
     expect(cards.every((c) => !(c.attribution?.text ?? '').includes('{'))).toBe(true);
-    expect(safetyStripText(MODULES, i18n)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
+    // The strip is judged at the fixture's clock: by the real one the Ilica closure (until 12 September) has ended.
+    expect(safetyStripText(MODULES, i18n, NOW)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
+    expect(safetyStripText(MODULES, i18n, Date.parse('2026-09-13T12:00:00Z')).closures).toBe('1 zatvaranje');
   });
   it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
-    const rows = essentialsRows(MODULES, i18n, hr, 'hr', STOP);
+    const rows = essentialsRows(MODULES, i18n, hr, 'hr', STOP, NOW);
     expect(rows.map((r) => r.id)).toEqual(['closures', 'routes', 'weather', 'pharmacy']);
     expect(rows.find((r) => r.id === 'routes')).toMatchObject({ value: '6 kasni 2 min' });
     expect(rows.find((r) => r.id === 'closures')).toMatchObject({ value: '2 zatvaranja', detail: 'Ilica' });
     expect(rows.find((r) => r.id === 'weather')).toMatchObject({ value: '21,4 °C', detail: 'vedro' });
     expect(rows.find((r) => r.id === 'pharmacy')).toMatchObject({ value: 'Trg bana J. Jelačića 3' });
-    expect(essentialsRows([], i18n, hr, 'hr', STOP)).toEqual([{ id: 'empty', label: '', value: hr.basics.empty }]);
+    expect(essentialsRows([], i18n, hr, 'hr', STOP, NOW)).toEqual([{ id: 'empty', label: '', value: hr.basics.empty }]);
   });
   it('a six-hour route median is a stale trip update, not a delay: it reads as unknown', () => {
     const stale = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [...m.items, item('zet-rt', 'route:12', 'vehicle', '12', { data: { routeId: '12', medianDelaySeconds: 22_440, vehicles: 1 } })]) : m));
@@ -256,15 +258,15 @@ describe('local content from the stop-scoped teaser', () => {
   });
   it('computes the sun on the device for the day', () => {
     const staleCap = MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, status: 'stale' as const } : m));
-    expect(safetyStrip(staleCap, STOP, i18n, hr).warning).toEqual({ state: 'stale', text: 'Upozorenja DHMZ-a: zastarjelo, stanje nije potvrđeno', severity: null });
+    expect(safetyStrip(staleCap, STOP, i18n, hr, NOW).warning).toEqual({ state: 'stale', text: 'Upozorenja DHMZ-a: zastarjelo, nepotvrđeno', severity: null });
     const staleActive = MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w', 'warning', 'Grmljavina', { severity: 'moderate' })], 'stale') : m));
-    expect(safetyStrip(staleActive, STOP, i18n, hr).warning).toMatchObject({ state: 'active', text: 'žuto upozorenje · Grmljavina · zastarjelo' });
+    expect(safetyStrip(staleActive, STOP, i18n, hr, NOW).warning).toMatchObject({ state: 'active', text: 'žuto upozorenje · Grmljavina · zastarjelo' });
     const staleClosures = MODULES.map((m) => (m.module === 'prometnice' ? { ...m, status: 'stale' as const } : m));
-    expect(safetyStrip(staleClosures, STOP, i18n, hr).closures.text).toBe('2 zatvaranja · zastarjelo');
+    expect(safetyStrip(staleClosures, STOP, i18n, hr, NOW).closures.text).toBe('2 zatvaranja · zastarjelo');
     const staleEmpty = MODULES.map((m) => (m.module === 'prometnice' ? snap('prometnice', [], 'stale') : m));
-    expect(safetyStrip(staleEmpty, STOP, i18n, hr).closures.text).toBe('Zatvaranja: zastarjelo, stanje nije potvrđeno');
-    expect(essentialsRows(staleActive, i18n, hr, 'hr', STOP).find((r) => r.id === 'cap')).toMatchObject({ value: 'žuto upozorenje · zastarjelo' });
-    expect(essentialsRows(staleClosures, i18n, hr, 'hr', STOP).find((r) => r.id === 'closures')).toMatchObject({ value: '2 zatvaranja · zastarjelo' });
+    expect(safetyStrip(staleEmpty, STOP, i18n, hr, NOW).closures.text).toBe('Zatvaranja: zastarjelo, nepotvrđeno');
+    expect(essentialsRows(staleActive, i18n, hr, 'hr', STOP, NOW).find((r) => r.id === 'cap')).toMatchObject({ value: 'žuto upozorenje · zastarjelo' });
+    expect(essentialsRows(staleClosures, i18n, hr, 'hr', STOP, NOW).find((r) => r.id === 'closures')).toMatchObject({ value: '2 zatvaranja · zastarjelo' });
   });
   it('hides trailing rows that do not fit a block and counts them; without layout it touches nothing', () => {
     const host = document.createElement('div');
@@ -329,6 +331,60 @@ describe('local content from the stop-scoped teaser', () => {
 });
 
 describe('the one map, through the additive adapter', () => {
+  const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
+  const withCap = (items: Item[], status: ModuleSnapshot['status'] = 'live') => MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', items, status) : m));
+  const warn = (id: string, extra: Partial<Item>) => item('dhmz-cap', id, 'warning', `W ${id}`, { severity: 'moderate', ...extra });
+  it('a warning is judged by its own window: ended ones are gone, announced ones are said as announced, undated ones count', () => {
+    expect(windowOf({ at: at(-2), until: at(2) }, NOW)).toBe('active');
+    expect(windowOf({ at: at(1) }, NOW)).toBe('upcoming');
+    expect(windowOf({ until: at(-1) }, NOW)).toBe('expired');
+    expect(windowOf({}, NOW)).toBe('active');
+    const ended = withCap([warn('old', { at: at(-30), until: at(-5) })]);
+    expect(safetyStrip(ended, STOP, i18n, hr, NOW).warning).toEqual({ state: 'none', text: 'Nema upozorenja DHMZ-a za Zagreb', severity: null });
+    expect(safetyStrip(withCap([warn('old', { at: at(-30), until: at(-5) })], 'stale'), STOP, i18n, hr, NOW).warning.state).toBe('stale'); // a stale copy of an ended warning is no all-clear
+    const soon = safetyStrip(withCap([warn('soon', { at: at(3), until: at(9) })]), STOP, i18n, hr, NOW).warning;
+    expect(soon.state).toBe('upcoming');
+    expect(soon.text).toBe(`Najavljeno od 11. 9. 17:32: ${i18n.t('panels.severity.moderate')} · W soon`);
+    const both = safetyStrip(withCap([warn('soon', { at: at(3) }), warn('now', { severity: 'severe', at: at(-1), until: at(1) })]), STOP, i18n, hr, NOW).warning;
+    expect(both).toMatchObject({ state: 'active', text: `${i18n.t('panels.severity.severe')} · W now` });
+    expect(essentialsRows(ended, i18n, hr, 'hr', STOP, NOW).some((r) => r.id === 'cap')).toBe(false);
+  });
+  it('closures count only those open right now; a quake stays inside 72 h and 150 km and a missing measure is named, never zero', () => {
+    const closures = MODULES.map((m) => (m.module === 'prometnice' ? snap('prometnice', [
+      item('prometnice', 'now', 'closure', 'Ilica', { at: at(-24), until: at(24), geo: { type: 'Point', coordinates: [15.9705, 45.813] } }),
+      item('prometnice', 'ended', 'closure', 'Stara', { at: at(-48), until: at(-1) }),
+      item('prometnice', 'later', 'closure', 'Buduća', { at: at(5), until: at(30) }),
+      item('prometnice', 'open', 'closure', 'Bez kraja', {}),
+    ]) : m));
+    expect(closuresNear(closures, STOP, NOW)).toMatchObject({ count: 2, nearest: { title: 'Ilica' } });
+    expect(safetyStrip(closures, STOP, i18n, hr, NOW).closures.text).toBe('2 zatvaranja');
+    const q = (id: string, extra: Partial<Item>) => item('emsc', id, 'quake', `Q ${id}`, extra);
+    const emsc = snap('emsc', [
+      q('future', { at: at(1), data: { mag: 2, depth: 5, region: 'CROATIA' } }),
+      q('old', { at: at(-80), data: { mag: 3, depth: 5, region: 'CROATIA' } }),
+      q('far', { at: at(-1), geo: { type: 'Point', coordinates: [13, 44] }, data: { mag: 4, depth: 10, region: 'ADRIATIC' } }),
+      q('near', { at: at(-2), geo: { type: 'Point', coordinates: [16.1, 45.9] }, data: { region: 'CROATIA' } }),
+      q('skew', { at: new Date(NOW + 60_000).toISOString(), data: { mag: 1.5, depth: 8, region: 'CROATIA' } }),
+    ]);
+    expect(recentQuakes(emsc, NOW).map((x) => x.id)).toEqual(['skew', 'near']);
+    expect(quakeLine(emsc.items[3]!, hr, 'hr')).toBe('magnituda nepoznata · CROATIA · dubina nepoznata');
+    expect(quakeLine(emsc.items[4]!, hr, 'hr')).toBe('Magnituda 1,5 · CROATIA · dubina 8 km');
+    const modules = MODULES.map((m) => (m.module === 'emsc' ? emsc : m));
+    const main = pairedMarkup({ layer: 'sigurnost', strings: hr, i18n, locale: 'hr', snapshots: Object.fromEntries(modules.map((m) => [m.module, m])), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' }).main;
+    expect(main).toContain('magnituda nepoznata');
+    expect(main).not.toMatch(/Q future|Q old|Q far|M 0/);
+    expect(stories(modules, hr, 'hr', NOW).find((s) => s.tone === 'quake')!.title).toBe('Magnituda 1,5 · CROATIA · dubina 8 km');
+  });
+  it('a failed fetch turns each last-good copy stale, source by source, leaves a never-seen module down, and the basics say so', () => {
+    const zet = { ...MODULES.find((m) => m.module === 'zet-rt')!, sources: { rt: { status: 'live' as const, itemCount: 3 }, gtfs: { status: 'down' as const, itemCount: 0 } } };
+    const copy = staleCopy(zet, '2026-09-11T12:33:00Z');
+    expect(copy).toMatchObject({ status: 'stale', staleSince: '2026-09-11T12:33:00Z', sources: { rt: { status: 'stale', itemCount: 3 }, gtfs: { status: 'down', itemCount: 0 } } });
+    expect(staleCopy(copy, '2026-09-11T12:40:00Z').staleSince).toBe('2026-09-11T12:33:00Z'); // the first failure's time stays
+    expect(downPlaceholder('glasnik', '2026-09-11T12:33:00Z')).toMatchObject({ module: 'glasnik', status: 'down', items: [] });
+    expect(KIOSK_TEASER_MODULES).toContain('dhmz-cap');
+    const staleWeather = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { data: { temp: 11.2, weather: '-' } })], 'stale') : m));
+    expect(essentialsRows(staleWeather, i18n, hr, 'hr', STOP, NOW).find((r) => r.id === 'weather')).toMatchObject({ value: '11,2 °C · zastarjelo', detail: undefined });
+  });
   it('hands the factory the stop as centre with street zoom, keeps the handle, and pushes a changed view only', () => {
     const setView = vi.fn();
     const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView }));

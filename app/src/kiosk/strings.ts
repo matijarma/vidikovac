@@ -85,6 +85,8 @@ export interface KioskStrings {
     warningsNone: string;
     warningsUnknown: string;
     warningsStale: string;
+    /** No active warning, but one announced: said as such, never as an all-clear. */
+    warningsUpcoming: string;
     warningsLoading: string;
     closuresUnknown: string;
     closuresStale: string;
@@ -139,6 +141,9 @@ export interface KioskStrings {
     coverage: string;
     routeVehicles: PluralForms;
     depth: string;
+    magUnknown: string;
+    depthUnknown: string;
+    upcomingFrom: string;
     quakeNone: string;
     warningsNone: string;
     closuresNone: string;

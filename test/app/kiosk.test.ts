@@ -456,6 +456,82 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
+  it('a thrown teaser fetch marks every last-good copy stale and holds the map; the next good answer brings it back', async () => {
+    let fail = false;
+    const calls: string[] = [];
+    const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState: (s: string) => { calls.push(s); } };
+    const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
+    await flush();
+    expect(calls.at(-1)).toBe('live');
+    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('1 zatvaranje najbliže Ilica');
+    fail = true;
+    k.tick(POLL_FALLBACK_MS);
+    await flush();
+    expect(calls.at(-1)).toBe('stale');
+    expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
+    expect(text(q(k.root, '[data-testid=strip-closures]'))).toContain('1 zatvaranje · zastarjelo');
+    expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
+    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('zastarjelo');
+    expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
+    fail = false;
+    k.tick(POLL_FALLBACK_MS);
+    await flush();
+    expect(calls.at(-1)).toBe('live');
+    expect(text(q(k.root, '[data-testid=strip-closures]'))).not.toContain('zastarjelo');
+    expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
+  });
+  it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
+    const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
+    await flush();
+    expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
+    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('Zatvaranja: podaci trenutačno nedostupni');
+    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('ZET trenutačno ne odgovara.');
+    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('Podaci DHMZ-a trenutačno nisu dostupni.');
+    expect(text(q(k.root, '[data-testid=kiosk-story]'))).toContain('Izvor trenutačno ne odgovara');
+    expect(q(k.root, '[data-testid=kiosk-story] [data-state=down]')).not.toBeNull();
+  });
+  it('a failed session request leaves its copy stale and the teaser\u2019s live copy speaks; only when both fail does the map hold', async () => {
+    let failZet = false;
+    let failTeaser = false;
+    const calls: string[] = [];
+    const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState: (s: string) => { calls.push(s); } };
+    const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: async () => { if (failTeaser) throw new Error('down'); return { modules: MODULES }; } });
+    k.fetchData.mockImplementation(async (module: ModuleId) => { if (module === 'zet-rt' && failZet) throw new Error('down'); return MODULES.find((m) => m.module === module) ?? snap(module, []); });
+    await flush();
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(calls.at(-1)).toBe('live');
+    k.view('u-pokretu');
+    await flush();
+    failZet = true;
+    k.tick(ROTATE_MS);
+    await flush();
+    expect(calls.at(-1)).toBe('live'); // the teaser's live copy outranks the stale session copy
+    failTeaser = true;
+    k.tick(ROTATE_MS);
+    await flush();
+    expect(calls.at(-1)).toBe('stale');
+    expect(text(q(k.root, '[data-testid=k-delays]'))).toContain('zastarjelo');
+  });
+  it('a late answer from an earlier session request never overwrites a newer one', async () => {
+    const pending: ((value: ModuleSnapshot) => void)[] = [];
+    const k = mount({ stored: STORED });
+    const zet = MODULES.find((m) => m.module === 'zet-rt')!;
+    k.fetchData.mockImplementation((module: ModuleId) => (module === 'zet-rt' ? new Promise<ModuleSnapshot>((resolve) => { pending.push(resolve); }) : Promise.resolve(MODULES.find((m) => m.module === module) ?? snap(module, []))));
+    await flush();
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    k.view('u-pokretu');
+    await flush();
+    expect(pending).toHaveLength(2);
+    pending[1]!(zet); // the newer request answers first, live
+    await flush();
+    pending[0]!({ ...zet, status: 'stale' }); // then the older one, with older words: dropped
+    await flush();
+    expect(q(k.root, '[data-testid=k-delays]')!.dataset.status).toBe('live');
+  });
   function fakeMap() {
     const calls: string[] = [];
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };

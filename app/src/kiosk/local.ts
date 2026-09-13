@@ -6,7 +6,7 @@
 // yet" (loading), "the source is down" (unknown) and "the source answered
 // and there is nothing" (a true empty), because a public screen that prints
 // zero for an outage is lying (PRODUCT.md, principle 4).
-import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
+import type { FeedItem, ModuleId, ModuleSnapshot, SnapshotStatus } from '../../../worker/feed/schema';
 import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import { LJEKARNE } from '../../../worker/hitno/ljekarne';
 import { fillAttribution } from '../attribution';
@@ -81,8 +81,7 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
   return {
     state,
     temperature: temp === null ? null : fmtTemp(locale, temp),
-    // DHMZ prints "-" for "no phenomenon"; that is nothing to say, not a word.
-    condition: dataText(observation, 'weather').replace(/^[-–—]+$/, ''),
+    condition: cleanCondition(dataText(observation, 'weather')),
     station: observation.title,
     details,
     observedAt: Number.isFinite(observedMs) ? fill(strings.weather.observed, { time: clock(observedMs) }) : '',
@@ -260,16 +259,82 @@ function closureDistance(item: FeedItem, stop: ScreenStop): number | null {
   return best;
 }
 
-export function closuresNear(modules: readonly ModuleSnapshot[], stop: ScreenStop | null): ClosuresNear {
-  return summariseClosures(closuresByDistance(byModule(modules).prometnice, stop), sourceState(byModule(modules).prometnice), stop);
+// --- Time windows: what is current right now, and last-good copies ------------
+
+export type ItemWindow = 'active' | 'upcoming' | 'expired';
+
+/** Where an item's own window puts `now`. No stated start or end reads as
+ *  active (an undated warning is a warning), the rule the app's safety state
+ *  and the no-JS /hitno page apply too. */
+export function windowOf(item: Pick<FeedItem, 'at' | 'until'>, now: number): ItemWindow {
+  const start = item.at ? Date.parse(item.at) : NaN;
+  const end = item.until ? Date.parse(item.until) : NaN;
+  if (Number.isFinite(start) && start > now) return 'upcoming';
+  if (Number.isFinite(end) && end < now) return 'expired';
+  return 'active';
+}
+
+const SEVERITY_RANK: Record<string, number> = { info: 0, minor: 1, moderate: 2, severe: 3, extreme: 4 };
+const bySeverityThenStart = (a: FeedItem, b: FeedItem): number => {
+  const rank = (SEVERITY_RANK[b.severity ?? 'info'] ?? 0) - (SEVERITY_RANK[a.severity ?? 'info'] ?? 0);
+  return rank !== 0 ? rank : (a.at ? Date.parse(a.at) : 0) - (b.at ? Date.parse(b.at) : 0);
+};
+/** Warnings whose window includes now, most severe first; a down or missing snapshot gives none. */
+export function activeWarnings(cap: ModuleSnapshot | undefined, now: number): FeedItem[] {
+  return (isLive(cap) ? cap.items : []).filter((w) => windowOf(w, now) === 'active').sort(bySeverityThenStart);
+}
+export function upcomingWarnings(cap: ModuleSnapshot | undefined, now: number): FeedItem[] {
+  return (isLive(cap) ? cap.items : []).filter((w) => windowOf(w, now) === 'upcoming').sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!));
+}
+
+/** The declared quake window: 72 hours, within 150 km of Zagreb, minutes of clock skew tolerated. */
+export const QUAKE_WINDOW_MS = 72 * 3_600_000;
+export const QUAKE_FUTURE_TOLERANCE_MS = 5 * 60_000;
+export const QUAKE_RADIUS_KM = 150;
+const ZAGREB_CENTRE = { lon: 15.98, lat: 45.815 };
+export function recentQuakes(emsc: ModuleSnapshot | undefined, now: number): FeedItem[] {
+  return (isLive(emsc) ? emsc.items : [])
+    .filter((q) => {
+      const at = q.at ? Date.parse(q.at) : NaN;
+      if (!Number.isFinite(at) || now - at > QUAKE_WINDOW_MS || at - now > QUAKE_FUTURE_TOLERANCE_MS) return false;
+      if (q.geo?.type !== 'Point') return true;
+      const [lon, lat] = q.geo.coordinates as number[];
+      return Number.isFinite(lon) && Number.isFinite(lat) && stopDistanceM({ lon: lon!, lat: lat! }, ZAGREB_CENTRE) <= QUAKE_RADIUS_KM * 1000;
+    })
+    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!));
+}
+
+/** DHMZ prints a lone dash for "no phenomenon": nothing to say, not a word. */
+export function cleanCondition(value: string): string {
+  return value.replace(/^[-–—]+$/, '').trim();
+}
+
+/** The same snapshot as a last-good copy the source no longer confirms, each source's own status too. */
+export function staleCopy(snapshot: ModuleSnapshot, atIso: string): ModuleSnapshot {
+  if (snapshot.status === 'down') return snapshot;
+  const sources = snapshot.sources
+    ? Object.fromEntries(Object.entries(snapshot.sources).map(([key, s]) => [key, { ...s, status: (s.status === 'down' ? 'down' : 'stale') as SnapshotStatus }]))
+    : undefined;
+  return { ...snapshot, status: 'stale', staleSince: snapshot.staleSince ?? atIso, ...(sources ? { sources } : {}) };
+}
+/** A module the failed fetch would have carried but no copy exists for: down, with nothing to show. */
+export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot {
+  return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
+}
+/** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists. */
+export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-cap', 'emsc', 'hrt-news', 'ckan-geo', 'dogadanja'];
+
+export function closuresNear(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): ClosuresNear {
+  return summariseClosures(closuresByDistance(byModule(modules).prometnice, stop, now), sourceState(byModule(modules).prometnice), stop);
 }
 
 export interface ClosureAtDistance { item: FeedItem; distanceM: number | null }
 
-/** Every closure with its distance from the stop, nearest first (unknown
- *  distances last, in feed order). */
-export function closuresByDistance(snap: ModuleSnapshot | undefined, stop: ScreenStop | null): ClosureAtDistance[] {
-  const items = isLive(snap) ? snap.items.filter((item) => item.kind === 'closure') : [];
+/** Every closure whose window includes now, with its distance from the stop,
+ *  nearest first (unknown distances last, in feed order). Ended and announced
+ *  closures are not closures right now. */
+export function closuresByDistance(snap: ModuleSnapshot | undefined, stop: ScreenStop | null, now: number): ClosureAtDistance[] {
+  const items = isLive(snap) ? snap.items.filter((item) => item.kind === 'closure' && windowOf(item, now) === 'active') : [];
   const out = items.map((item) => ({ item, distanceM: stop ? closureDistance(item, stop) : null }));
   if (stop) out.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
   return out;
@@ -314,23 +379,26 @@ export function nearestPharmacy(stop: ScreenStop | null): OnDutyPharmacy {
 
 export interface SafetyStrip {
   /** 'stale': the source is not answering and the last good copy is shown, marked as such. */
-  warning: { state: 'loading' | 'unknown' | 'none' | 'stale' | 'active'; text: string; severity: string | null };
+  warning: { state: 'loading' | 'unknown' | 'none' | 'stale' | 'upcoming' | 'active'; text: string; severity: string | null };
   closures: { state: SourceState; text: string; nearestText: string };
   pharmacy: OnDutyPharmacy;
 }
 
-export function safetyStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, i18n: I18n, strings: KioskStrings): SafetyStrip {
+export function safetyStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, i18n: I18n, strings: KioskStrings, now: number): SafetyStrip {
   const cap = byModule(modules)['dhmz-cap'];
-  const first = cap?.items[0];
   const stale = (text: string, snapshot: ModuleSnapshot | undefined): string => (snapshot?.status === 'stale' ? `${text} · ${strings.paired.stale}` : text);
+  const severityWord = (w: FeedItem): string => i18n.t(`panels.severity.${w.severity ?? 'info'}`);
+  const active = activeWarnings(cap, now)[0];
+  const upcoming = upcomingWarnings(cap, now)[0];
   let warning: SafetyStrip['warning'];
   if (!cap) warning = { state: 'loading', text: strings.safety.warningsLoading, severity: null };
   else if (cap.status === 'down') warning = { state: 'unknown', text: strings.safety.warningsUnknown, severity: null };
-  else if (first) warning = { state: 'active', text: stale(`${i18n.t(`panels.severity.${first.severity ?? 'info'}`)} · ${first.title}`, cap), severity: first.severity ?? 'info' };
-  // Only a live, successful, empty answer establishes "no warnings"; a stale empty copy is unconfirmed.
+  else if (active) warning = { state: 'active', text: stale(`${severityWord(active)} · ${active.title}`, cap), severity: active.severity ?? 'info' };
+  // Only a live answer with nothing current establishes "no warnings"; a stale copy, even one whose warnings ended, is unconfirmed.
   else if (cap.status === 'stale') warning = { state: 'stale', text: strings.safety.warningsStale, severity: null };
+  else if (upcoming) warning = { state: 'upcoming', text: fill(strings.safety.warningsUpcoming, { time: dayTime(upcoming.at), severity: severityWord(upcoming), title: upcoming.title }), severity: upcoming.severity ?? 'info' };
   else warning = { state: 'none', text: strings.safety.warningsNone, severity: null };
-  const near = closuresNear(modules, stop);
+  const near = closuresNear(modules, stop, now);
   const text = near.state === 'loading' ? i18n.t('status.loading')
     : near.state === 'down' ? strings.safety.closuresUnknown
       : near.state === 'stale' && near.count === 0 ? strings.safety.closuresStale
@@ -411,12 +479,12 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
     tone: 'news' as const,
   }));
   const emsc = map.emsc;
-  const quake = isLive(emsc) ? emsc.items.find((q) => q.at !== undefined && now - Date.parse(q.at) <= 7 * 86_400_000) : undefined;
+  const quake = recentQuakes(emsc, now)[0];
   const quakes: Story[] = quake
     ? [{
         id: `quake:${quake.id}`,
         kicker: strings.story.quake,
-        title: fill(strings.story.quakeBody, { mag: fmtNumber(locale, dataNumber(quake, 'mag') ?? 0, 1), region: dataText(quake, 'region') || quake.title, depth: fmtNumber(locale, dataNumber(quake, 'depth') ?? 0, 1) }),
+        title: quakeLine(quake, strings, locale),
         meta: dayTime(quake.at),
         source: 'EMSC',
         attribution: fillAttribution(emsc!.attribution, emsc!, quake),
@@ -434,6 +502,15 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
     }
   }
   return out;
+}
+
+/** "Magnituda 1,6 · CROATIA · dubina 10 km"; a measure the source did not give is named missing, never zero. */
+export function quakeLine(quake: FeedItem, strings: KioskStrings, locale: string): string {
+  const mag = dataNumber(quake, 'mag');
+  const depth = dataNumber(quake, 'depth');
+  const region = dataText(quake, 'region') || quake.title;
+  if (mag !== null && depth !== null) return fill(strings.story.quakeBody, { mag: fmtNumber(locale, mag, 1), region, depth: fmtNumber(locale, depth, 1) });
+  return [mag === null ? strings.paired.magUnknown : `M ${fmtNumber(locale, mag, 1)}`, region, depth === null ? strings.paired.depthUnknown : fill(strings.paired.depth, { depth: fmtNumber(locale, depth, 1) })].join(' · ');
 }
 
 /** Nearby-lines count in words for a board caption; null before data. */

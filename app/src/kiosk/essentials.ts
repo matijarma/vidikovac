@@ -11,7 +11,7 @@ import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { dataNumber, dataText } from '../panels/panel';
 import { fmtTemp } from './format';
-import { closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
+import { activeWarnings, cleanCondition, closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
 import type { KioskStrings } from './strings';
 
 /** Never more than this many routes on the board: the wall-of-text bug of
@@ -26,14 +26,15 @@ export interface EssentialsRow {
   attribution?: string;
 }
 
-export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, strings: KioskStrings, locale: string, stop: ScreenStop | null): EssentialsRow[] {
+export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, strings: KioskStrings, locale: string, stop: ScreenStop | null, now: number): EssentialsRow[] {
   const map = byModule(modules);
   const rows: EssentialsRow[] = [];
   /** A last-good copy is shown, but says so. */
   const staleMark = (snapshot: ModuleSnapshot | undefined): string => (snapshot?.status === 'stale' ? ` · ${strings.paired.stale}` : '');
 
   const capSnap = map['dhmz-cap'];
-  const warning = capSnap?.items[0];
+  // The most severe warning whose window includes now; an ended or announced one is not a warning right now.
+  const warning = activeWarnings(capSnap, now)[0];
   if (isLive(capSnap) && warning) {
     rows.push({
       id: 'cap',
@@ -44,7 +45,7 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
     });
   }
 
-  const closures = closuresNear(modules, stop);
+  const closures = closuresNear(modules, stop, now);
   const closuresSnap = map.prometnice;
   if (isLive(closuresSnap) && closures.count > 0 && closures.nearest) {
     rows.push({
@@ -78,8 +79,8 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
     rows.push({
       id: 'weather',
       label: strings.basics.weather,
-      value: temp === null ? i18n.t('common.unavailable') : fmtTemp(locale, temp),
-      detail: dataText(observation, 'weather') || undefined,
+      value: `${temp === null ? i18n.t('common.unavailable') : fmtTemp(locale, temp)}${staleMark(weatherSnap)}`,
+      detail: cleanCondition(dataText(observation, 'weather')) || undefined,
       attribution: fillAttribution(weatherSnap.attribution, weatherSnap, observation),
     });
   }
