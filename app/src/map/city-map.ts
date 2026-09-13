@@ -364,6 +364,14 @@ export interface MapView {
   follow?: boolean;
 }
 
+/** Sides of the viewport a fit must keep clear, CSS px; a missing side is 0. */
+export interface FitPadding {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 export interface CityMapOptions {
   container: HTMLElement;
   ariaLabel: string;
@@ -410,6 +418,15 @@ export interface CityMapOptions {
   interactive?: boolean;
   /** Symbol and circle size multiplier: 1 on a phone or desk, more on a screen read from across a room. */
   symbolScale?: number;
+  /** MapLibre's cooperative gestures (two fingers to pan, Ctrl to zoom). Off by
+   *  default on every surface: Promet is a fixed stage, so a one-finger drag
+   *  never fights the page. A documented fallback for a scrolling host. */
+  cooperative?: boolean;
+  /** A compact attribution control (the credit behind one button) for the phone stage. */
+  attributionCompact?: boolean;
+  /** CSS px of the map covered by something (the sheet along the bottom): every
+   *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
+  fitPadding?: FitPadding;
   /** Pointer selection on the map: a vehicle, a stop, a closure, or nothing. */
   onSelect?: (selection: MapSelection | null) => void;
   onStatus?: (status: MapStatus) => void;
@@ -450,6 +467,8 @@ export interface CityMapHandle {
   setStop?(stop: ScreenStop | null): void;
   /** The inner city, the current selection, or the screen's stop. */
   fit?(target: 'city' | 'selection' | 'stop'): void;
+  /** The covered part of the viewport every later fit keeps clear (the sheet's height on the phone stage). */
+  setFitPadding?(padding: FitPadding): void;
   camera?(): MapCamera | null;
   status?(): MapStatus;
   network?(): Network | null;
@@ -539,6 +558,8 @@ const HIT_TOLERANCE_PX = 8;
 const CAMERA_MS = 600;
 /** Padding around a fitted route or closure, CSS px. */
 const FIT_PADDING_PX = 40;
+/** The least of the viewport a fit may be squeezed into on either axis, whatever covers the rest. */
+const FIT_ROOM_PX = 2 * FIT_PADDING_PX;
 /** Route follow refits the selected route's vehicles at most this often, so the camera settles between moves. */
 const ROUTE_FOLLOW_MS = 5000;
 
@@ -551,6 +572,27 @@ export function viewSelection(route: string | null | undefined, stopId: string |
 
 let mapUid = 0;
 
+/** MapLibre refuses a fit whose padding leaves it no room (cameraForBounds warns and moves nothing), so along each
+ *  axis the two sides together leave at least FIT_ROOM_PX of the box: the excess comes off the larger side first and
+ *  the breathing space last. A box with no size yet (not laid out) has nothing to fit inside and is left alone. */
+function fitInside(p: Required<FitPadding>, a: 'top' | 'left', b: 'bottom' | 'right', size: number): void {
+  if (!(size > 0)) return;
+  const room = Math.max(0, size - FIT_ROOM_PX);
+  let excess = p[a] + p[b] - room;
+  if (excess <= 0) return;
+  for (const key of p[a] >= p[b] ? [a, b] : [b, a]) {
+    const take = Math.min(excess, Math.max(0, p[key] - FIT_PADDING_PX));
+    p[key] -= take;
+    excess -= take;
+  }
+  if (excess > 0) {
+    // Even the breathing space is too much for this box: share what room there is in proportion.
+    const total = p[a] + p[b];
+    p[a] = total > 0 ? Math.floor((p[a] * room) / total) : 0;
+    p[b] = total > 0 ? Math.floor((p[b] * room) / total) : 0;
+  }
+}
+
 export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): CityMapHandle {
   const { container } = options;
   const now = deps.now ?? (() => Date.now());
@@ -558,6 +600,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   const doc = deps.documentRef ?? (typeof document === 'undefined' ? undefined : document);
   const interactive = options.interactive !== false;
   const reduced = options.reducedMotion === true;
+  let fitPadding: FitPadding = { ...options.fitPadding };
+
+  /** FIT_PADDING_PX of breathing space on every side, plus the covered part, plus a call's own extra, kept inside the container's box. */
+  function paddingFor(extra: FitPadding = {}): Required<FitPadding> {
+    const side = (key: keyof FitPadding): number => FIT_PADDING_PX + (fitPadding[key] ?? 0) + (extra[key] ?? 0);
+    const p = { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+    fitInside(p, 'top', 'bottom', container.clientHeight);
+    fitInside(p, 'left', 'right', container.clientWidth);
+    return p;
+  }
+  /** A point eased to (not fitted) lands in the middle of the uncovered area: half the padding difference, as MapLibre's `offset`. */
+  function offsetFor(extra: FitPadding = {}): [number, number] {
+    const p = paddingFor(extra);
+    return [(p.left - p.right) / 2, (p.top - p.bottom) / 2];
+  }
   const scale = options.symbolScale ?? 1;
   let points = options.points ?? [];
   let lines = options.lines ?? [];
@@ -719,6 +776,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       'NavigationControl.ZoomIn': tr(strings, 'zoomIn'),
       'NavigationControl.ZoomOut': tr(strings, 'zoomOut'),
       'NavigationControl.ResetBearing': tr(strings, 'resetBearing'),
+      'CooperativeGesturesHandler.WindowsHelpText': tr(strings, 'coopWindows'),
+      'CooperativeGesturesHandler.MacHelpText': tr(strings, 'coopMac'),
+      'CooperativeGesturesHandler.MobileHelpText': tr(strings, 'coopMobile'),
       'ScaleControl.Meters': 'm',
       'ScaleControl.Kilometers': 'km',
     };
@@ -752,6 +812,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       dragRotate: false,
       pitchWithRotate: false,
       touchPitch: false,
+      cooperativeGestures: options.cooperative === true,
       fadeDuration: reduced ? 0 : 300,
       locale: controlStrings(),
     }) as unknown as MapApi;
@@ -765,7 +826,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-labelledby', container.id);
     canvas.removeAttribute('aria-label');
-    created.addControl(new l.AttributionControl({ compact: false, customAttribution: l.MAP_ATTRIBUTION_HTML }), 'bottom-right');
+    // The compact credit sits bottom-left: on the phone stage the right edge holds the zoom and the tools, and on a
+    // short stage (a small phone, a landscape one) the two would collide.
+    const compact = options.attributionCompact === true;
+    created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), compact ? 'bottom-left' : 'bottom-right');
     created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
     if (interactive) created.addControl(new l.NavigationControl({ showCompass: false }), 'top-right');
     created.on('error', onMapError);
@@ -806,7 +870,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     fitCoordinates(points.filter((p) => !isVehicleReport(p) && Number.isFinite(p.lon) && Number.isFinite(p.lat)).map((p): [number, number] => [p.lon, p.lat]), 11);
   }
 
-  function fitCoordinates(coords: readonly [number, number][], maxZoom: number): void {
+  function fitCoordinates(coords: readonly [number, number][], maxZoom: number, padding?: FitPadding): void {
     if (!map || coords.length === 0) return;
     let w = Infinity;
     let s = Infinity;
@@ -818,8 +882,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       s = Math.min(s, lat);
       n = Math.max(n, lat);
     }
-    if (w === e && s === n) map.easeTo({ center: [w, s], zoom: maxZoom, duration: reduced ? 0 : CAMERA_MS });
-    else map.fitBounds([[w, s], [e, n]], { padding: FIT_PADDING_PX, maxZoom, duration: reduced ? 0 : CAMERA_MS });
+    if (w === e && s === n) map.easeTo({ center: [w, s], zoom: maxZoom, offset: offsetFor(padding), duration: reduced ? 0 : CAMERA_MS });
+    else map.fitBounds([[w, s], [e, n]], { padding: paddingFor(padding), maxZoom, duration: reduced ? 0 : CAMERA_MS });
   }
 
   /** A basemap asset not answering (a tile, a glyph range, the sprite): the overlays still draw over the background, so the status says so instead of the map going blank. */
@@ -946,14 +1010,15 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (opts.fit) fitSelection();
   }
 
-  function centreOn(vehicleId: string): void {
+  function centreOn(vehicleId: string, padding?: FitPadding): void {
     const v = lastDrawn.find((d) => d.id === vehicleId);
     if (!v || !map) return;
-    map.easeTo({ center: toLonLat(v.p), zoom: Math.max(map.getZoom(), FOCUS_ZOOM), duration: reduced ? 0 : CAMERA_MS });
+    map.easeTo({ center: toLonLat(v.p), zoom: Math.max(map.getZoom(), FOCUS_ZOOM), offset: offsetFor(padding), duration: reduced ? 0 : CAMERA_MS });
   }
 
-  /** The camera to the selection: a route's whole geometry, a closure's line, a stop or a vehicle centred, zoomed in to FOCUS_ZOOM and never out. */
-  function fitSelection(): void {
+  /** The camera to the selection: a route's whole geometry, a closure's line, a stop or a vehicle centred, zoomed in to FOCUS_ZOOM and never out.
+   *  `padding` is this fit's own extra clearance beyond the standing fitPadding. */
+  function fitSelection(padding?: FitPadding): void {
     const sel = selection;
     if (!map || !sel) return;
     switch (sel.kind) {
@@ -961,7 +1026,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         if (!net) return;
         const coords: [number, number][] = [];
         for (const idx of net.routes.get(sel.id)?.shapes ?? []) for (const p of net.shapes[idx]?.pts ?? []) coords.push(toLonLat(p));
-        fitCoordinates(coords, 15);
+        fitCoordinates(coords, 15, padding);
         return;
       }
       case 'stop': {
@@ -970,15 +1035,15 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         if (coords.length === 0 && stop && ids.has(stop.id)) coords.push([stop.lon, stop.lat]);
         if (coords.length === 0) return;
         const centre = coords.reduce<[number, number]>(([a, b], [x, y]) => [a + x / coords.length, b + y / coords.length], [0, 0]);
-        map.easeTo({ center: centre, zoom: Math.max(map.getZoom(), FOCUS_ZOOM), duration: reduced ? 0 : CAMERA_MS });
+        map.easeTo({ center: centre, zoom: Math.max(map.getZoom(), FOCUS_ZOOM), offset: offsetFor(padding), duration: reduced ? 0 : CAMERA_MS });
         return;
       }
       case 'vehicle':
-        centreOn(sel.id);
+        centreOn(sel.id, padding);
         return;
       case 'closure': {
         const line = lines.find((c) => c.id === sel.id);
-        if (line) fitCoordinates(line.coordinates, 16);
+        if (line) fitCoordinates(line.coordinates, 16, padding);
       }
     }
   }
@@ -1066,7 +1131,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   const move = (center: [number, number], zoom: number): void => {
-    map?.easeTo({ center, zoom, duration: reduced ? 0 : CAMERA_MS });
+    map?.easeTo({ center, zoom, offset: offsetFor(), duration: reduced ? 0 : CAMERA_MS });
   };
 
   return {
@@ -1143,6 +1208,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (target === 'city') move(ZAGREB_CENTER, lib.CITY_ZOOM);
       else if (target === 'selection') fitSelection();
       else if (stop && Number.isFinite(stop.lon) && Number.isFinite(stop.lat)) move([stop.lon, stop.lat], Math.max(map.getZoom(), 15));
+    },
+    setFitPadding(next) {
+      fitPadding = { ...next };
     },
     camera: () => (map ? cameraOf(map) : null),
     status: () => status,

@@ -73,6 +73,9 @@
     "paused": "Osvježavanje je zaustavljeno; prikaz stoji na podacima od {time}.",
     "pausedShort": "zaustavljeno",
     "staleNotice": "Neki izvori ne odgovaraju; prikazani su posljednji podaci.",
+    "sourcesDown_one": "{count} izvor ne odgovara.",
+    "sourcesDown_few": "{count} izvora ne odgovaraju.",
+    "sourcesDown_other": "{count} izvora ne odgovara.",
     "settings": "Postavke",
     "language": "Jezik",
     "theme": "Tema",
@@ -354,6 +357,8 @@
   "session": {
     "unlocked": "Otključano · {label} · do {time}",
     "unlockedAnnounce": "Otključano do {time}",
+    "pillLabel": "Otključano do {time}, otvori postavke",
+    "joinedNotice": "Otključano do {time} · {label}",
     "labelScreen": "zaslon",
     "labelPhone": "telefon",
     "remaining": "Preostalo",

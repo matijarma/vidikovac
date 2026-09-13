@@ -1,10 +1,15 @@
-/* The transport workspace (layers/u-pokretu.ts, transport/workspace.ts):
-   one map, one sheet, one toolbar, on the phone and the desk, in both faces.
-   Tokens only (tokens.css); no container queries, no :has(), so the sheet
-   still loads inert on the lightweight path (R-L3, R-L5) and lays out on a
-   2017 engine. The full-map view mode is a CSS state on .dash
-   (data-view="map"), never the Fullscreen API, so the session header stays
-   in the flow above the map. */
+/* The transport workspace (layers/u-pokretu.ts, transport/workspace.ts): one
+   map, one sheet, the mode chips and the tools floating over the map, on the
+   phone and the desk. On the phone the layer is a stage (.ki[data-stage='map'],
+   written by dashboard.ts): the map fills it and the sheet floats over its
+   lower part at one of three detents. transport/sheet.ts writes --sheet-h and
+   --sheet-open-h on the workspace root and the sheet moves by transform only,
+   so MapLibre's bottom controls, the status line and every fit ride above it.
+   On the desk (60rem and up) the sheet is a board column beside the map. The
+   full-map view mode is a CSS state on .ki (data-view="map"), never the
+   Fullscreen API, so the session header stays in flow above the map.
+   Tokens only (tokens.css); no container queries and no :has(), so the sheet
+   still loads inert on the lightweight path (R-L3, R-L5). */
 
 .transport {
   --t-tram: #08777b;
@@ -19,8 +24,8 @@
   min-width: 0;
   font-variant-numeric: tabular-nums;
 }
-/* The workspace hides its controls with the hidden attribute (a kiosk has no toolbar, a page without a view
-   mode no full-map button); the display rules of .btn-ghost and the flex rows must never override that. */
+/* The workspace hides its controls with the hidden attribute (a kiosk has no search, no chips and no full-map
+   button); the display rules of .btn-ghost and the flex rows must never override that. */
 .transport [hidden] { display: none !important; }
 :root[data-theme-resolved='dark'] .transport {
   --t-tram: #63d7c3;
@@ -32,181 +37,269 @@
   --t-closure: #ff8fa3;
 }
 
-/* --- Toolbar: search, modes, closures ---------------------------------- */
-.transport-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.t-search { position: relative; flex: 1 1 16rem; min-width: 0; display: flex; }
+/* --- Search: in the sheet, under its head ------------------------------- */
+.transport-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-3); }
+.t-search { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
 .t-search-input {
-  flex: 1 1 auto; min-width: 0; min-height: 2.75rem; padding: 0 2.75rem 0 var(--sp-3);
-  font: inherit; font-size: 1rem; color: var(--tone-text-primary);
-  background: var(--tone-surface-1); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-md);
+  flex: 1 1 auto; min-width: 0; min-block-size: var(--target); padding: 0 var(--target) 0 var(--sp-3);
+  font: inherit; font-size: var(--text-body); color: var(--tone-text-primary);
+  background: var(--tone-surface-canvas); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-md);
 }
 .t-search-input::-webkit-search-cancel-button { display: none; }
 .t-search-input:focus-visible { outline: none; border-color: var(--tone-focus-ring); box-shadow: var(--tone-focus-glow); }
 .t-search-clear {
-  position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: 2.75rem;
+  position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: var(--target);
   border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: 1.25rem; cursor: pointer; border-radius: var(--r-md);
+  touch-action: manipulation;
 }
-.t-search-clear:hover { color: var(--tone-text-primary); }
-.t-modes { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+@media (hover: hover) {
+  .t-search-clear:hover { color: var(--tone-text-primary); }
+}
+
+/* --- Chips on the map: trams, buses, closures -------------------------- */
+.t-map-chips {
+  position: absolute; inset-block-start: var(--sp-2); inset-inline: var(--sp-2); z-index: 2;
+  display: flex; gap: var(--sp-2); overflow-x: auto; overflow-y: hidden; padding-block-end: var(--sp-1); scrollbar-width: none;
+}
 .t-toggle {
-  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; padding: 0 0.9rem;
-  border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-pill); background: transparent;
-  color: var(--tone-text-primary); font: inherit; font-size: 0.875rem; font-weight: var(--weight-medium); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem; flex: none; min-block-size: var(--target); padding: 0 var(--sp-3);
+  border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft);
+  color: var(--tone-text-primary); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation;
 }
 .t-toggle::before { content: ''; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; background: var(--t-swatch, currentColor); opacity: 0.35; }
-.t-toggle[aria-pressed='true'] { background: var(--tone-surface-2); border-color: var(--tone-stroke-strong); }
+.t-toggle[aria-pressed='true'] { background: var(--tone-surface-2); border-color: var(--tone-stroke-strong); font-weight: var(--weight-bold); }
 .t-toggle[aria-pressed='true']::before { opacity: 1; }
 .t-toggle[data-mode='0'] { --t-swatch: var(--t-tram); }
 .t-toggle[data-mode='3'] { --t-swatch: var(--t-bus); }
 .t-toggle[data-action='toggle-closures'] { --t-swatch: var(--t-closure); }
 
-/* --- Body: map beside the sheet on a desk, map over the sheet on a phone -- */
+/* --- Body: the map and the sheet ------------------------------------------ */
 .transport-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--t-gap); min-width: 0; }
-.transport-map { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.transport-map { position: relative; min-width: 0; display: flex; flex-direction: column; }
 .t-map-canvas {
-  position: relative; block-size: clamp(16rem, 48vh, 30rem); border-radius: var(--r-lg); overflow: hidden;
+  position: relative; block-size: 24rem; border-radius: var(--r-lg); overflow: hidden;
   background: var(--tone-surface-2); border: 1px solid var(--tone-stroke);
 }
 .t-map-canvas .maplibregl-canvas:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: -3px; }
-.t-map-canvas .maplibregl-ctrl-attrib { font-size: 0.6875rem; background: var(--tone-surface-1); color: var(--tone-text-muted); }
+.t-map-canvas .maplibregl-ctrl-attrib { font-size: var(--text-meta); background: var(--tone-surface-1); color: var(--tone-text-muted); }
 .t-map-canvas .maplibregl-ctrl-attrib a { color: var(--tone-text-muted); }
+/* The compact credit: one 44 px button that opens the line. */
+.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { min-block-size: var(--target); padding-inline-end: var(--target); border-radius: var(--r-pill); box-shadow: var(--tone-shadow-soft); }
+.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding-inline-end: 0; min-inline-size: var(--target); }
+.t-map-canvas .maplibregl-ctrl-attrib-button { inline-size: var(--target); block-size: var(--target); background-repeat: no-repeat; background-position: center; }
+.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { line-height: var(--target); padding-inline-start: var(--sp-3); }
 .t-map-canvas .maplibregl-ctrl-group { background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); border-radius: var(--r-sm); }
-.t-map-canvas .maplibregl-ctrl-group button { inline-size: 2.75rem; block-size: 2.75rem; }
+.t-map-canvas .maplibregl-ctrl-group button { inline-size: var(--target); block-size: var(--target); }
 .t-map-canvas .maplibregl-ctrl-group button + button { border-top-color: var(--tone-stroke); }
 .t-map-canvas .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: var(--t-ctrl-filter, none); }
 :root[data-theme-resolved='dark'] .t-map-canvas { --t-ctrl-filter: invert(1) hue-rotate(180deg); }
-.t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: 0.6875rem; }
+.t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: var(--text-meta); }
+/* MapLibre's zoom control starts under the chip row, its right edge on the tools' edge. */
+.t-map-canvas .maplibregl-ctrl-top-right { margin-block-start: calc(var(--target) + var(--sp-3)); }
+.t-map-canvas .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px var(--sp-2) 0 0; }
+@media (max-width: 39.99rem) {
+  .t-map-canvas .maplibregl-ctrl-scale { display: none; }
+}
 
 /* --- Map status and tools ---------------------------------------------- */
 .t-map-status {
-  position: absolute; inset-inline: 0.75rem; inset-block-start: 0.75rem; z-index: 2; margin: 0;
-  padding: 0.5rem 0.75rem; border-radius: var(--r-md);
-  background: var(--tone-surface-1); color: var(--tone-text-primary); font-size: 0.875rem; box-shadow: var(--tone-shadow-soft);
+  position: absolute; inset-inline: var(--sp-2); inset-block-start: var(--sp-2); z-index: 2; margin: 0;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  background: var(--tone-surface-1); color: var(--tone-text-primary); font-size: var(--text-sm); box-shadow: var(--tone-shadow-soft);
 }
 .t-map-status[hidden] { display: none; }
+/* Below MapLibre's zoom control (44 px chips, 12 px, its own 10 px margin, two 44 px buttons and their hairline). */
+.t-map-tools {
+  position: absolute; inset-block-start: calc(var(--target) + var(--sp-3) + 10px + 5.5rem + var(--sp-2)); inset-inline-end: var(--sp-2); z-index: 2;
+  display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2);
+}
+.t-action { min-height: 2.75rem; font-size: 0.875rem; }
+.t-map-tools .t-action { gap: var(--sp-1); background: var(--tone-surface-1); border-color: var(--tone-stroke); box-shadow: var(--tone-shadow-soft); }
 .transport[data-status='unavailable'] .t-map-canvas { display: none; }
 .transport[data-status='unavailable'] .t-map-status { position: static; box-shadow: none; border: 1px solid var(--tone-stroke); }
 /* No map, no camera: nothing for the whole-city and full-map buttons to act on. */
 .transport[data-status='unavailable'] .t-map-tools { display: none; }
-.t-map-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.t-action { min-height: 2.75rem; font-size: 0.875rem; }
-.t-map-tools .t-action { min-height: 2.5rem; padding-inline: 0.75rem; }
 
-/* --- Sheet ------------------------------------------------------------- */
+/* --- Sheet: head (handle, peek, chevron), search, body ---------------------- */
 .transport-sheet {
   display: flex; flex-direction: column; min-width: 0;
   background: var(--tone-surface-1); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg);
 }
-.t-sheet-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; min-height: 3.5rem; }
-.t-peek { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1rem; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
-/* The peek line stands in for the body while the sheet is collapsed; the open body has its own title, so the head keeps only the way back down. */
-.transport[data-sheet='open'] .t-peek { display: none; }
-.transport[data-sheet='open'] .t-sheet-head { justify-content: flex-end; padding-block: 0.5rem; min-height: 0; }
-.t-sheet-toggle { flex: none; }
-.t-sheet-body { padding: 0 1rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
-.transport[data-sheet='peek'] .t-sheet-body { display: none; }
-.t-title { margin: 0; font-family: var(--font-body); font-size: 1.25rem; font-weight: var(--weight-semi); letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-.t-subtitle { margin: 0; font-family: var(--font-body); font-size: 0.75rem; font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tone-text-muted); }
-.t-lead { margin: 0; font-size: 1.0625rem; font-weight: var(--weight-medium); }
-.t-hint, .t-empty, .t-status, .t-note, .t-meta { margin: 0; color: var(--tone-text-muted); font-size: 0.875rem; }
+/* The head and the search keep their height; only the body gives way when the sheet is short. */
+.t-sheet-head, .transport-toolbar { flex: none; }
+.t-sheet-head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2);
+  padding: 0 var(--sp-3) var(--sp-2); min-block-size: 5rem; touch-action: none; cursor: grab;
+}
+.transport[data-dragging='true'] .t-sheet-head { cursor: grabbing; }
+.t-sheet-handle {
+  grid-column: 1 / -1; justify-self: center; inline-size: 2.25rem; block-size: 0.25rem; border-radius: var(--r-pill);
+  background: var(--tone-stroke-strong); margin-block: 0.625rem 0.375rem;
+}
+.t-peek { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; font-size: var(--text-sm); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.t-peek-lines { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.t-peek-more, .t-peek-count { color: var(--tone-text-muted); }
+.t-sheet-toggle { align-self: center; }
+.t-sheet-toggle .icon { transition: transform var(--dur-fast) var(--ease); }
+.t-sheet-toggle[data-next='up'] .icon { transform: rotate(180deg); }
+/* The body scrolls itself. At the top of its scroll only a downward pan is left to the browser's vertical scroll
+   (there is nothing above to scroll to), so the finger pulling down moves the sheet (transport/sheet.ts). */
+.t-sheet-body { overflow: auto; touch-action: pan-y; overscroll-behavior: contain; flex: 1 1 auto; min-block-size: 0; padding: 0 var(--sp-3) var(--sp-4); }
+.t-sheet-body[data-at-top='true'] { touch-action: pan-down; }
+.t-sheet-content { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.t-sheet-note { margin: var(--sp-4) 0 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
+.transport[data-sheet='peek'] .transport-toolbar, .transport[data-sheet='peek'] .t-sheet-body { visibility: hidden; }
+
+/* --- Type in the sheet --------------------------------------------------- */
+.t-title { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); letter-spacing: -0.01em; line-height: 1.2; display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.t-head { margin: 0; display: flex; align-items: center; min-block-size: var(--target); font-size: var(--text-lg); font-weight: var(--weight-bold); line-height: 1.2; }
+.t-lead { margin: 0; font-size: var(--text-body); font-weight: var(--weight-medium); }
+.t-hint, .t-empty, .t-status, .t-note, .t-meta { margin: 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
 .t-status { color: var(--tone-state-warning); }
-.t-block { display: flex; flex-direction: column; gap: 0.5rem; }
-.t-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.t-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9375rem; }
+.t-block { display: flex; flex-direction: column; gap: var(--sp-2); }
+.t-block + .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
+.t-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.t-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--text-md); }
+.t-fold { align-self: flex-start; }
 
 /* --- Rows and badges --------------------------------------------------- */
 .t-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .t-list > li + li { border-block-start: 1px solid var(--tone-stroke); }
 .t-row {
-  display: flex; align-items: center; gap: 0.75rem; inline-size: 100%; min-height: 3rem; padding: 0.5rem 0.25rem;
-  border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm);
+  display: flex; align-items: center; gap: var(--sp-3); inline-size: 100%; min-block-size: 3.25rem; padding: var(--sp-1);
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm); touch-action: manipulation;
 }
-button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
+@media (hover: hover) {
+  button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
+}
+@media (hover: none) {
+  button.t-row:active, .t-option:active, .t-toggle:active { background: var(--tone-surface-2); transition: none; }
+}
 .t-option[aria-selected='true'] { background: var(--tone-surface-2); outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
-.t-row-main { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
-.t-row-title { font-size: 1rem; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.t-row-main { display: flex; flex-direction: column; min-width: 0; gap: 0.125rem; }
+.t-row-title { font-size: var(--text-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
 .t-row-sub { font-size: 0.8125rem; color: var(--tone-text-muted); }
-.t-group-label { padding: 0.75rem 0.25rem 0.25rem; font-size: 0.75rem; font-weight: var(--weight-semi); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tone-text-muted); }
+.t-group-label { padding: var(--sp-3) var(--sp-1) var(--sp-1); font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
 .t-list > li.t-group-label + li { border-block-start: 0; }
-.t-badges { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; flex: none; max-inline-size: 9rem; }
+.t-badges { display: inline-flex; flex-wrap: wrap; gap: var(--sp-1); flex: none; max-inline-size: 9rem; }
+/* The line badge: shape carries the mode (tram a rounded rectangle, bus a capsule), colour repeats it.
+   `.line` and data-kind/data-size are the shared component's contract; wave 2 moves these rules onto it. */
 .t-badge {
-  display: inline-flex; align-items: center; justify-content: center; min-inline-size: 2rem; block-size: 1.625rem; padding: 0 0.45rem;
-  border-radius: var(--r-pill); font-size: 0.875rem; font-weight: var(--weight-bold); letter-spacing: 0.01em; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 0.45rem; flex: none;
+  block-size: 2rem; min-inline-size: 2.75rem; border-radius: 0.25rem; font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: 0.01em;
   background: var(--t-other); color: var(--t-other-ink);
 }
-.t-badge[data-kind='tram'] { background: var(--t-tram); color: var(--t-tram-ink); }
-.t-badge[data-kind='bus'] { background: var(--t-bus); color: var(--t-bus-ink); }
-.t-title .t-badge { min-inline-size: 2.75rem; block-size: 2.125rem; font-size: 1.125rem; }
-.t-badge-more { font-size: 0.75rem; color: var(--tone-text-muted); align-self: center; }
+.t-badge[data-size='s'] { block-size: 1.5rem; min-inline-size: 2rem; font-size: var(--text-sm); }
+.t-badge[data-size='m'] { block-size: 2rem; min-inline-size: 2.75rem; font-size: var(--text-lg); }
+.t-badge[data-size='l'] { block-size: 2.5rem; min-inline-size: 3.5rem; font-size: var(--text-xl); }
+.t-badge[data-kind='tram'] { background: var(--t-tram); color: var(--t-tram-ink); border-radius: 0.25rem; }
+.t-badge[data-kind='bus'] { background: var(--t-bus); color: var(--t-bus-ink); border-radius: var(--r-pill); }
+.t-badge-more { font-size: 0.8125rem; color: var(--tone-text-muted); align-self: center; }
 .t-mark { flex: none; inline-size: 0.75rem; block-size: 0.75rem; border-radius: 2px; }
 .t-mark-closure { background: var(--t-closure); }
-.t-notice { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.25rem; min-height: 3rem; }
+.t-notice { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1); min-block-size: 3.25rem; }
 .t-notice .t-row-main { flex: 1 1 auto; }
-.t-link { flex: none; font-size: 0.875rem; }
+.t-link { flex: none; display: inline-flex; align-items: center; min-block-size: var(--target); font-size: var(--text-sm); }
 .t-stops { counter-reset: stop; }
 .t-stops .t-row::before { counter-increment: stop; content: counter(stop); flex: none; inline-size: 1.75rem; font-size: 0.8125rem; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
 .t-stops .t-row[aria-current='true'] { background: var(--tone-surface-2); }
 
-/* --- A desk: the map beside the sheet, the sheet always open ------------ */
-@media (min-width: 60rem) {
-  .transport-body { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); align-items: start; }
-  .t-map-canvas { block-size: clamp(26rem, 64vh, 44rem); }
-  .transport-sheet { max-block-size: clamp(26rem, 64vh, 44rem); overflow: auto; position: sticky; inset-block-start: 0.5rem; }
-  .t-sheet-head { display: none; }
-  .transport[data-sheet='peek'] .t-sheet-body { display: flex; }
-  .t-sheet-body { padding-block-start: 1rem; }
-}
-
-/* --- The full-map view mode: .ki[data-view='map'] ------------------------
-   dashboard.ts sets data-view on the shell root. The shell stays: the top bar
-   with the session chip and the safety shortcut, the phone tab bar, the desk's
-   sidebar with the session card. The workspace changes shape: main becomes a
-   definite-height area the map fills, the sheet keeps its peek on a phone and
-   its column on a desk, the tools float over the map, and the session banners
-   (dashboard.css hides them in this mode) stay in view over it. */
-.ki[data-view='map'] .ki-main {
-  display: flex; flex-direction: column; min-block-size: 0; padding: 0; overflow: hidden;
-  block-size: calc(100vh - var(--ki-top, 3.5rem) - var(--ki-tabs, 3.75rem));
-  block-size: calc(100dvh - var(--ki-top, 3.5rem) - var(--ki-tabs, 3.75rem));
-}
-/* dashboard.css hides the banners in this mode; the expiry line must stay in view, and above MapLibre's controls (z-index 2). */
-.ki[data-view='map'] .ki-banners { display: grid; z-index: 3; }
-.ki[data-view='map'] .ki-main > .layer[data-layer='u-pokretu'] { flex: 1 1 auto; display: flex; flex-direction: column; min-block-size: 0; gap: 0; }
-.ki[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-title {
+/* --- The stage: .ki[data-stage='map'] ---------------------------------------
+   dashboard.ts writes data-stage while Promet is on. The shell is the viewport
+   (dashboard.css), main is the stage, the map fills it edge to edge and the
+   sheet floats over its lower part; the tab bar keeps its strip at the foot. */
+.ki[data-stage='map'] .layer[data-layer='u-pokretu'], .ki[data-stage='map'] .layer-panels, .ki[data-stage='map'] .transport, .ki[data-stage='map'] .transport-body { block-size: 100%; min-block-size: 0; }
+.ki[data-stage='map'] .layer[data-layer='u-pokretu'] { gap: 0; }
+.ki[data-stage='map'] .layer[data-layer='u-pokretu'] > .layer-title {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.ki[data-view='map'] .layer[data-layer='u-pokretu'] > .layer-panels { flex: 1 1 auto; display: flex; flex-direction: column; min-block-size: 0; }
-.ki[data-view='map'] .transport { flex: 1 1 auto; min-block-size: 0; --t-gap: 0.5rem; padding: 0.5rem var(--sp-4, 1rem); }
-.ki[data-view='map'] .transport-body { flex: 1 1 auto; min-block-size: 0; grid-template-rows: minmax(0, 1fr) auto; }
-.ki[data-view='map'] .transport-map { min-block-size: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
-.ki[data-view='map'] .t-map-canvas { block-size: 100%; min-block-size: 14rem; }
-.ki[data-view='map'] .t-map-tools { position: absolute; inset-block-end: 2.5rem; inset-inline-start: 0.75rem; z-index: 2; }
-.ki[data-view='map'] .t-map-tools .t-action { background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
-.ki[data-view='map'] .transport-sheet { max-block-size: 42vh; overflow: auto; }
-.ki[data-view='map'] .t-note { display: none; }
-@media (min-width: 60rem) {
-  .ki[data-view='map'] .ki-main { block-size: 100vh; block-size: 100dvh; padding-inline-end: var(--sp-5, 1.25rem); }
-  .ki[data-view='map'] .transport { padding: var(--sp-4, 1rem) 0; }
-  /* The ordinary desk layout starts its two columns at the top; the full map needs both stretched to the
-     definite row, or the canvas's 100% resolves to nothing and only its floor remains. */
-  .ki[data-view='map'] .transport-body { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .ki[data-view='map'] .transport-map { block-size: 100%; }
-  .ki[data-view='map'] .transport-sheet { block-size: 100%; max-block-size: 100%; position: static; }
+.ki[data-stage='map'] .layer-panels { display: block; }
+.ki[data-stage='map'] .transport { display: flex; flex-direction: column; gap: 0; padding-block-end: var(--ki-tabs); }
+.ki[data-stage='map'] .transport-body { position: relative; flex: 1 1 auto; display: block; overflow: hidden; overscroll-behavior: contain; }
+.ki[data-stage='map'] .transport-map, .ki[data-stage='map'] .t-map-canvas { position: absolute; inset: 0; block-size: 100%; border-radius: 0; border: 0; }
+/* The status line anchors bottom-left, above the sheet, the compact credit and MapLibre's scale. */
+.ki[data-stage='map'] .t-map-status { inset-block-start: auto; inset-inline-end: auto; max-inline-size: calc(100% - 2 * var(--sp-2)); inset-block-end: calc(var(--sheet-h, 5rem) + 6rem); }
+.ki[data-stage='map'] .transport[data-status='unavailable'] .t-map-status { position: static; margin: calc(var(--target) + var(--sp-4)) var(--sp-2) 0; }
+/* MapLibre's bottom controls ride above the sheet; an open sheet covers the map, so they go with it. */
+.ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-block-end: var(--sheet-h, 5rem); }
+.ki[data-stage='map'] .transport[data-sheet='open'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .transport[data-sheet='open'] .t-map-canvas .maplibregl-ctrl-bottom-right, .ki[data-stage='map'] .transport[data-sheet='open'] .t-map-status { visibility: hidden; }
+/* The sheet: sized to its open height, moved by transform to the detent's height; no transition while a finger holds it. */
+.ki[data-stage='map'] .transport-sheet {
+  position: absolute; inset-inline: 0; inset-block-end: 0; z-index: 3;
+  block-size: var(--sheet-open-h, 60%); transform: translateY(calc(var(--sheet-open-h, 60%) - var(--sheet-h, 5rem)));
+  transition: transform var(--dur-slow) var(--ease-enter);
+  border: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--tone-shadow-md);
+  display: flex; flex-direction: column;
 }
+.transport[data-dragging='true'] .transport-sheet, .transport[data-sheet-motion='none'] .transport-sheet { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .transport-sheet, .t-sheet-toggle .icon { transition: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .t-map-status { transition: opacity var(--dur-fast) var(--ease); }
+}
+
+/* --- A short stage (a small phone, a landscape one): the tools sit in a row beside the zoom control instead of
+   under it, so they stay above the sheet and clear of the credit at the foot. */
+@media (max-height: 40rem) {
+  .ki[data-stage='map'] .t-map-tools { inset-block-start: calc(var(--target) + var(--sp-3) + 10px); inset-inline-end: calc(var(--target) + 2 * var(--sp-2)); flex-direction: row; align-items: flex-start; }
+}
+
+/* --- Landscape phone: the sheet is a right column, the peek board stays at its edge ---- */
+@media (max-height: 30rem) and (orientation: landscape) {
+  .ki[data-stage='map'] .transport-sheet { inset: 0 0 0 auto; inline-size: 45%; min-inline-size: 16rem; block-size: 100%; transform: none; border-radius: var(--r-lg) 0 0 var(--r-lg); }
+  .ki[data-stage='map'][data-view='map'] .transport-sheet { transform: translateX(calc(100% - 5rem)); }
+  .ki[data-stage='map'] .t-sheet-handle { display: none; }
+  .ki[data-stage='map'] .t-sheet-head { min-block-size: var(--target); padding-block-start: var(--sp-2); touch-action: auto; cursor: default; }
+  .ki[data-stage='map'] .t-map-chips, .ki[data-stage='map'] .t-map-status { inset-inline-end: calc(max(45%, 16rem) + var(--sp-2)); }
+  .ki[data-stage='map'] .t-map-tools { inset-inline-end: calc(max(45%, 16rem) + var(--target) + 2 * var(--sp-2)); }
+  .ki[data-stage='map'] .t-map-status { inset-block-end: 6rem; }
+  .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-top-right, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-inline-end: max(45%, 16rem); }
+  .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-block-end: 0; visibility: visible; }
+  /* "Proširi kartu": the column slides out to a 5rem strip holding the chevron, like the desk's. */
+  .ki[data-stage='map'][data-view='map'] .t-map-chips, .ki[data-stage='map'][data-view='map'] .t-map-status { inset-inline-end: calc(5rem + var(--sp-2)); }
+  .ki[data-stage='map'][data-view='map'] .t-map-tools { inset-inline-end: calc(5rem + var(--target) + 2 * var(--sp-2)); }
+  .ki[data-stage='map'][data-view='map'] .t-map-canvas .maplibregl-ctrl-top-right, .ki[data-stage='map'][data-view='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-inline-end: 5rem; }
+  .ki[data-stage='map'][data-view='map'] .t-peek, .ki[data-stage='map'][data-view='map'] .transport-toolbar, .ki[data-stage='map'][data-view='map'] .t-sheet-body { display: none; }
+  .ki[data-stage='map'][data-view='map'] .t-sheet-head { grid-template-columns: auto; justify-content: start; padding: var(--sp-2) calc((5rem - var(--target)) / 2); }
+  .ki[data-stage='map'][data-view='map'] .t-sheet-toggle .icon { transform: rotate(90deg); }
+}
+
+/* --- A desk: the map beside a board column, no detents ------------------ */
+@media (min-width: 60rem) {
+  .ki[data-stage='map'] .transport { padding-block-end: 0; }
+  .ki[data-stage='map'] .transport-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); gap: 0; }
+  .ki[data-stage='map'] .transport-map { position: relative; inset: auto; block-size: 100%; min-block-size: 0; }
+  .ki[data-stage='map'] .transport-sheet {
+    position: static; transform: none; transition: none; block-size: 100%; min-block-size: 0; overflow: hidden;
+    border-radius: 0; border-inline-start: 1px solid var(--tone-stroke); box-shadow: none;
+  }
+  .ki[data-stage='map'] .t-sheet-handle, .ki[data-stage='map'] .t-sheet-toggle { display: none; }
+  .ki[data-stage='map'] .t-sheet-head { min-block-size: var(--target); padding-block-start: var(--sp-3); touch-action: auto; cursor: default; }
+  .ki[data-stage='map'] .t-map-status { inset-block-end: var(--sp-2); }
+  .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-block-end: 0; visibility: visible; }
+  /* "Proširi kartu": the board becomes a 3rem strip holding the chevron; Escape or the chevron bring it back. */
+  .ki[data-stage='map'][data-view='map'] .transport-body { grid-template-columns: minmax(0, 1fr) 3rem; }
+  .ki[data-stage='map'][data-view='map'] .t-peek, .ki[data-stage='map'][data-view='map'] .transport-toolbar, .ki[data-stage='map'][data-view='map'] .t-sheet-body { display: none; }
+  .ki[data-stage='map'][data-view='map'] .t-sheet-head { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-2) 0; }
+  .ki[data-stage='map'][data-view='map'] .t-sheet-toggle { display: inline-flex; }
+  .ki[data-stage='map'][data-view='map'] .t-sheet-toggle .icon { transform: rotate(90deg); }
+}
+
+/* --- The full-map view mode: .ki[data-view='map'] ------------------------
+   dashboard.css hides the banners in this mode; the expiry line must stay in view, and above MapLibre's controls (z-index 2). */
+.ki[data-view='map'] .ki-banners { display: grid; z-index: 3; }
 
 /* --- A public screen: bigger type, no controls to touch ----------------- */
 .transport[data-kiosk='true'] { --t-gap: 1rem; }
 .transport[data-kiosk='true'] .t-map-canvas { block-size: clamp(22rem, 56vh, 40rem); border-radius: var(--r-xl); }
+.transport[data-kiosk='true'] .t-sheet-head { display: none; }
 .transport[data-kiosk='true'] .t-row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
-.transport[data-kiosk='true'] .t-row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-facts { font-size: 1.125rem; }
+.transport[data-kiosk='true'] .t-row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-facts { font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-title { font-size: 1.75rem; }
 .transport[data-kiosk='true'] .t-badge { min-inline-size: 2.75rem; block-size: 2.125rem; font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-row { cursor: default; }
 
 /* --- The lightweight face: a list, no map ---------------------------------- */
 .t-light { display: flex; flex-direction: column; gap: 0.75rem; }
-
-@media (prefers-reduced-motion: no-preference) {
-  .t-sheet-body, .t-map-status { transition: opacity var(--dur-fast) var(--ease); }
-}

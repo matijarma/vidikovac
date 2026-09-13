@@ -41,7 +41,9 @@
 /* Links on a tinted fill take the deeper brand tone (tokens.css) so they keep
    AA on the tint; hover reads as ink. A state note is tinted too. */
 .ov-block.ov-safety, .sf-level, .ws .state { --tone-text-brand: var(--tone-text-brand-on-tint); }
-.ov-block.ov-safety a:hover, .sf-level a:hover { color: var(--tone-text-primary); }
+@media (hover: hover) {
+  .ov-block.ov-safety a:hover, .sf-level a:hover { color: var(--tone-text-primary); }
+}
 /* The brand-toned badge (a works phase) is brand text on the action tint too. */
 .ws .badge[data-tone='action'] { color: var(--tone-text-brand-on-tint); }
 
@@ -62,9 +64,11 @@
 /* Rows that open details. */
 .rows .row { border-block-start: 1px solid var(--tone-stroke); }
 .rows .row:first-child { border-block-start: 0; }
-.row-button { display: flex; align-items: center; gap: var(--sp-3); inline-size: 100%; min-height: var(--target); padding: var(--sp-3) 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm); }
-.row-button:hover { background: var(--tone-surface-2); margin-inline: calc(-1 * var(--sp-2)); padding-inline: var(--sp-2); inline-size: calc(100% + 2 * var(--sp-2)); }
-.row-button[aria-current='true'] { background: var(--tone-tint-action); margin-inline: calc(-1 * var(--sp-2)); padding-inline: var(--sp-2); inline-size: calc(100% + 2 * var(--sp-2)); }
+.row-button { display: flex; align-items: center; gap: var(--sp-3); inline-size: 100%; min-height: var(--target); padding: var(--sp-3) 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm); touch-action: manipulation; }
+@media (hover: hover) {
+  .row-button:hover { background: var(--tone-surface-2); }
+}
+.row-button[aria-current='true'] { background: var(--tone-tint-action); }
 .row-main { display: grid; gap: 0.15rem; flex: 1 1 auto; min-inline-size: 0; }
 .row-title { font-weight: var(--weight-medium); line-height: var(--leading-snug); }
 .row-meta { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }
@@ -101,8 +105,10 @@
 
 /* Actions and links. */
 .actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.link-arrow, .link-ext { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--target); color: var(--tone-text-brand); font-weight: var(--weight-medium); font-size: var(--text-sm); text-decoration: none; }
-.link-arrow:hover, .link-ext:hover { text-decoration: underline; }
+.link-arrow, .link-ext { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--target); color: var(--tone-text-brand); font-weight: var(--weight-medium); font-size: var(--text-sm); text-decoration: none; touch-action: manipulation; }
+@media (hover: hover) {
+  .link-arrow:hover, .link-ext:hover { text-decoration: underline; }
+}
 .icon-text { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .chip-count { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
 .chip[aria-pressed='true'] .chip-count { color: inherit; }
@@ -179,8 +185,10 @@
 .route-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3); min-height: var(--target); padding: var(--sp-1) 0; border-block-start: 1px solid var(--tone-stroke); }
 .route-row:first-child { border-block-start: 0; }
 .route-row-button { display: contents; }
-.route-link { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3); inline-size: 100%; min-height: var(--target); padding: var(--sp-1) var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
-.route-link:hover { background: var(--tone-surface-2); }
+.route-link { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3); inline-size: 100%; min-height: var(--target); padding: var(--sp-1) var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
+@media (hover: hover) {
+  .route-link:hover { background: var(--tone-surface-2); }
+}
 .route-name { min-inline-size: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); overflow-wrap: anywhere; }
 .route-delay { font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
@@ -233,7 +241,8 @@
 .provenance[open] summary .icon { rotate: 180deg; }
 .provenance ul { margin: var(--sp-2) 0 0; padding: 0; list-style: none; display: grid; gap: var(--sp-2); }
 .provenance li { line-height: var(--leading-snug); }
-.provenance .source-link { min-height: auto; }
+/* The one bare <a> in this block (the /izvori/ line) has no other class; it needs the target explicitly. */
+.provenance a { display: inline-flex; align-items: center; min-block-size: var(--target); }
 /* Civic: the issue number as a lockup. */
 .ov-civic .cv-issue { margin-block-start: var(--sp-1); }
 @media (min-width: 60rem) {
@@ -271,7 +280,7 @@
 }
 
 /* Directory ("Još"). */
-.dir-item { display: flex; align-items: center; gap: var(--sp-3); min-height: 3.5rem; padding: var(--sp-2) 0; color: inherit; text-decoration: none; }
+.dir-item { display: flex; align-items: center; gap: var(--sp-3); min-height: 3.5rem; padding: var(--sp-2) 0; color: inherit; text-decoration: none; touch-action: manipulation; }
 .dir-item .icon { flex: none; width: 1.5rem; height: 1.5rem; color: var(--tone-action-brand); }
 .dir-item[data-layer='sigurnost'] .icon { color: var(--tone-urgency); }
 .dir-text { display: grid; gap: 0.1rem; flex: 1 1 auto; min-inline-size: 0; }
@@ -318,12 +327,16 @@
 .sf-level[data-level='unknown'] .icon { color: var(--tone-weather); }
 .sf-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .sf-number { display: grid; gap: 0.15rem; min-height: var(--target-primary); padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-primary); text-decoration: none; }
-.sf-number:hover { background: var(--tone-surface-3); }
+@media (hover: hover) {
+  .sf-number:hover { background: var(--tone-surface-3); }
+}
 .sf-number-value { font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
 .sf-number-label { font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
 .sf-number-primary { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
 .sf-number-primary .sf-number-label { color: inherit; opacity: 0.85; }
-.sf-number-primary:hover { background: var(--tone-text-primary); opacity: 0.92; }
+@media (hover: hover) {
+  .sf-number-primary:hover { background: var(--tone-text-primary); opacity: 0.92; }
+}
 .sf-grid { display: grid; gap: var(--sp-4); }
 @media (min-width: 60rem) { .sf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .sf-wide { grid-column: 1 / -1; } }
 .sf-pharmacy { display: grid; gap: 0.2rem; }
@@ -335,11 +348,18 @@
 .source-line { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); font-size: var(--text-meta); line-height: var(--leading-snug); color: var(--tone-text-muted); }
 .source-text { flex: 1 1 16rem; min-inline-size: 0; }
 .source-licence { color: var(--tone-text-subtle); }
-.source-link { display: inline-flex; align-items: center; gap: 0.2rem; min-height: var(--target); color: var(--tone-text-brand); text-decoration: none; }
-.source-link:hover { text-decoration: underline; }
+.source-link { display: inline-flex; align-items: center; gap: 0.2rem; min-height: var(--target); color: var(--tone-text-brand); text-decoration: none; touch-action: manipulation; }
+@media (hover: hover) {
+  .source-link:hover { text-decoration: underline; }
+}
 .status-badge { flex: none; }
 .ov-sources { max-inline-size: 70ch; }
 .ov-sources a { display: inline-flex; align-items: center; min-height: var(--target); }
+
+/* Press feedback: a touch has no hover, so :active stands in for it. */
+@media (hover: none) {
+  .row-button:active, .route-link:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+}
 
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
    about 20rem wide and the viewport queries above no longer describe the

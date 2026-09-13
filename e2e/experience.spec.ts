@@ -5,6 +5,8 @@ import type { LayerId } from '../worker/protocol';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 
 const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+/** The 60rem desk breakpoint in CSS px. Area G lands it as `app/src/core/breakpoints.ts` (imported through `e2e/lib.ts`); until that merges, the literal lives here. */
+const DESKTOP_MIN_PX = 960;
 
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
   let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
@@ -84,25 +86,40 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
     });
 
     test('expanding the map changes its real size, keeps recovery visible, and retains the same canvas', async ({ page }) => {
+      const phone = viewport.width < DESKTOP_MIN_PX;
       const fixture = await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
       await openLayer(page, 'u-pokretu');
       const map = page.getByTestId('map-canvas');
       await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
       const canvas = await map.locator('canvas').elementHandle();
-      const before = (await map.boundingBox())!;
+      // On the phone stage the canvas fills the stage and the sheet floats over its lower part, so the map a
+      // person sees is the canvas above the sheet's top edge; on the desk the board column takes real width.
+      const uncovered = async (): Promise<{ width: number; height: number; stage: number }> => {
+        const box = (await map.boundingBox())!;
+        const sheet = (await page.getByTestId('transport-sheet').boundingBox())!;
+        return { width: box.width, height: Math.min(box.y + box.height, sheet.y) - box.y, stage: box.height };
+      };
+      const before = await uncovered();
       await page.getByTestId('map-full-toggle').click();
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
-      await expect.poll(async () => (await map.boundingBox())?.height ?? 0).toBeGreaterThan(before.height + 40);
+      if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 200);
+      else await expect.poll(async () => (await uncovered()).width).toBeGreaterThanOrEqual(before.width + 300);
       expect(await canvas!.evaluate((el) => el === document.querySelector('[data-testid=map-canvas] canvas'))).toBe(true);
       await expect(page.getByTestId('session-label')).toBeVisible();
-      if (viewport.width < 960) await expect(page.getByTestId('safety-shortcut')).toBeVisible();
+      if (phone) await expect(page.getByTestId('safety-shortcut')).toBeVisible();
       fixture.expire();
       await expect(page.getByTestId('frozen-line')).toBeVisible();
       await expect(page.getByTestId('frozen-line').locator('a')).toBeInViewport();
       await page.keyboard.press('Escape');
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'layers');
-      expect((await map.boundingBox())!.height).toBeLessThanOrEqual(before.height + 4);
+      // The frozen banner now sits in flow above the stage, so the stage is shorter than before; the sheet is
+      // back at half of it (half a stage is what "half" means), and the board column is back at its width.
+      await expect.poll(async () => {
+        const after = await uncovered();
+        if (!phone) return Math.abs(after.width - before.width);
+        return Math.abs(after.height - (before.height - (before.stage - after.stage) / 2));
+      }).toBeLessThanOrEqual(4);
     });
   });
 }

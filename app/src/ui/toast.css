@@ -10,6 +10,14 @@
   pointer-events: none;
 }
 
+/* Phone: the stack sits above the fixed tab bar, never behind it. */
+@media (max-width: 59.99rem) {
+  .toast-stack {
+    inset-block-end: calc(3.5rem + env(safe-area-inset-bottom, 0px) + var(--sp-2));
+    inset-inline: var(--sp-4);
+  }
+}
+
 .toast {
   display: flex;
   align-items: flex-start;
@@ -44,7 +52,7 @@
 .toast-message {
   flex: 1 1 auto;
   margin: 0;
-  font-size: var(--text-meta);
+  font-size: var(--text-body);
   line-height: var(--leading-normal);
 }
 
@@ -53,19 +61,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  inline-size: var(--target);
+  block-size: var(--target);
   padding: 0;
   border: none;
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--tone-text-muted);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.toast-dismiss:hover {
-  background: var(--tone-surface-2);
-  color: var(--tone-text-primary);
+@media (hover: hover) {
+  .toast-dismiss:hover {
+    background: var(--tone-surface-2);
+    color: var(--tone-text-primary);
+  }
 }
 
 .toast-dismiss:focus-visible {
