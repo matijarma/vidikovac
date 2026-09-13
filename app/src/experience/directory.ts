@@ -12,6 +12,7 @@ import { iconMarkup } from '../ui/icons';
 import { LAYER_ICONS, MORE_LAYERS } from './chrome';
 import { safetyState } from './safety-state';
 import { unusable } from './status';
+import { conditionText } from './text';
 
 /** What the directory polls: the modules of the four domains it summarises. */
 export const DIRECTORY_MODULES: readonly ModuleId[] = [...new Set(MORE_LAYERS.flatMap((layer) => LAYER_MODULES[layer]))];
@@ -21,7 +22,7 @@ function weatherLine(i18n: I18n, ctx: LayerContext): string {
   const o = observation?.items[0];
   const temp = dataNumber(o, 'temp');
   if (!o || temp === null || unusable(observation)) return i18n.t('directory.noSummary');
-  const condition = dataText(o, 'weather');
+  const condition = conditionText(dataText(o, 'weather'));
   return condition ? i18n.t('directory.weatherSummary', { temp: temp.toLocaleString(i18n.getLocale() === 'en' ? 'en-GB' : 'hr-HR'), condition }) : `${temp} °C`;
 }
 
@@ -66,7 +67,7 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-directory" id="layer-directory" data-layer="directory" data-reconcile aria-labelledby="layer-title-directory">
 <header class="ws-head"><h2 class="layer-title" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2><p class="meta">${escapeHtml(i18n.t('directory.intro'))}</p></header>
 <ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}</ul>
-<section class="sec" aria-labelledby="dir-session-title"><h3 class="sec-title" id="dir-session-title">${escapeHtml(i18n.t('directory.session'))}</h3><button type="button" class="btn-ghost" data-action="session">${iconMarkup('ticket')}<span>${escapeHtml(i18n.t('session.sheetTitle'))}</span></button></section>
+<section class="sec" aria-labelledby="dir-session-title"><h3 class="sec-title" id="dir-session-title">${escapeHtml(i18n.t('directory.session'))}</h3><button type="button" class="btn-ghost" data-action="session">${iconMarkup('ticket')}<span>${escapeHtml(i18n.t('shell.settings'))}</span></button></section>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }
