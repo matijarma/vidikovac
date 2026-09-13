@@ -122,7 +122,7 @@ export interface OverviewData {
 }
 
 function routeButton(i18n: I18n, row: RouteSummaryRow, route: RouteEntry): string {
-  const sub = `${trPlural(i18n, 'vehiclesNow', row.count)} · ${row.word}`;
+  const sub = [trPlural(i18n, 'vehiclesNow', row.count), row.word].filter(Boolean).join(' · ');
   return `<li><button type="button" class="t-row" data-action="select-route" data-id="${attr(row.routeId)}">${rowInner(badge(row.label, row.type), esc(route.long || kindWord(i18n, row.type)), esc(sub))}</button></li>`;
 }
 

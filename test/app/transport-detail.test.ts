@@ -15,9 +15,9 @@ const v = (id: string, routeId: string | undefined, type: number, over: Partial<
 const FLEET = [v('a', '6', 0), v('b', '6', 0, { bearing: 90, confidence: 0.9 }), v('c', '11', 0), v('d', '109', 3), v('e', undefined, -1)];
 
 describe('what runs now', () => {
-  it('lists one row per route with a vehicle moving, trams first, counting and reading the route delay in words; a vehicle without a route is no row', () => {
+  it('lists one row per route with a vehicle moving, trams first, counting and reading the route delay in words where the module has one and nothing where it has none; a vehicle without a route is no row', () => {
     const rows = runningRoutes(FLEET, new Map([['6', 130], ['109', -20]]), i18n);
-    expect(rows.map((r) => [r.routeId, r.count, r.word])).toEqual([['6', 2, 'kasni 2 min'], ['11', 1, 'na vrijeme'], ['109', 1, 'rani 1 min']]);
+    expect(rows.map((r) => [r.routeId, r.count, r.word])).toEqual([['6', 2, 'kasni 2 min'], ['11', 1, ''], ['109', 1, 'rani 1 min']]);
   });
   it('filters by GTFS type, on a route and at a stop, and counts per route', () => {
     expect(vehiclesOfModes(FLEET, new Set([0])).map((x) => x.id)).toEqual(['a', 'b', 'c']);

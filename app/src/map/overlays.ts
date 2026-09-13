@@ -149,6 +149,13 @@ export function closureWidth(selectedId: string | null, base: number): Expr {
 export const NETWORK_OPACITY: Expr = zoomInterpolate(10, 0.4, 14, 0.55, 17, 0.7);
 /** The rest of the network while one route is selected. */
 export const NETWORK_OPACITY_DIMMED = 0.14;
+/** The other routes' vehicles while one route is selected: still there, stepped back like their lines. */
+export const VEHICLE_OPACITY_DIMMED = 0.35;
+
+/** A vehicle's opacity: its confidence, and a step back for every other route while one is selected. */
+export function vehicleOpacity(selectedRoute: string | null): Expr {
+  return selectedRoute === null ? ['get', 'alpha'] : ['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], selectedRoute], 1, VEHICLE_OPACITY_DIMMED]];
+}
 
 /** The filters the selection layers carry for `selection`: NEVER on every layer while nothing is selected. */
 export function selectionFilters(selection: MapSelection | null): Record<string, Expr> {
@@ -176,7 +183,7 @@ export interface OverlayOptions {
   selection?: MapSelection | null;
 }
 
-function pillLayer(p: OverlayPalette, id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number): StyleLayerLike {
+function pillLayer(p: OverlayPalette, id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, opacity: Expr): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -201,14 +208,14 @@ function pillLayer(p: OverlayPalette, id: string, filter: Expr, overlap: boolean
       'icon-color': kindColor(p, 'fill'),
       'icon-halo-color': p.halo,
       'icon-halo-width': 1,
-      'icon-opacity': ['get', 'alpha'],
+      'icon-opacity': opacity,
       'text-color': kindColor(p, 'text'),
-      'text-opacity': ['get', 'alpha'],
+      'text-opacity': opacity,
     },
   };
 }
 
-function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, s: number): StyleLayerLike {
+function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, s: number, opacity: Expr): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -227,7 +234,7 @@ function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number,
       'icon-ignore-placement': true,
       'symbol-sort-key': SORT_KEY,
     },
-    paint: { 'icon-color': kindColor(p, 'fill'), 'icon-halo-color': p.halo, 'icon-halo-width': 1, 'icon-opacity': ['get', 'alpha'] },
+    paint: { 'icon-color': kindColor(p, 'fill'), 'icon-halo-color': p.halo, 'icon-halo-width': 1, 'icon-opacity': opacity },
   };
 }
 
@@ -250,6 +257,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const sel = options.selection ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
+  const alpha = vehicleOpacity(sel?.kind === 'route' ? sel.id : null);
   const filters = selectionFilters(sel);
   const kinds = vehicleKinds(modes);
   const round = { 'line-cap': 'round', 'line-join': 'round' };
@@ -297,15 +305,15 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       {
         'circle-radius': zoomInterpolate(10, 2 * s, PILL_ZOOM, 3.2 * s, 16, 4.5 * s),
         'circle-color': kindColor(p, 'fill'),
-        'circle-opacity': ['get', 'alpha'],
+        'circle-opacity': alpha,
         'circle-stroke-color': p.halo,
         'circle-stroke-width': 1,
-        'circle-stroke-opacity': ['get', 'alpha'],
+        'circle-stroke-opacity': alpha,
       },
       { filter: kindFilter(modes) },
     ),
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), PILL_OVERLAP_ZOOM, s),
-    pillLayer(p, LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s),
+    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), PILL_OVERLAP_ZOOM, s, alpha),
+    pillLayer(p, LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, alpha),
     {
       id: LAYERS.stopLabels,
       type: 'symbol',
@@ -331,8 +339,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       layout: { 'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': 13 * s, 'text-anchor': 'top', 'text-offset': [0, 0.9], 'text-max-width': 9, 'text-allow-overlap': true, 'text-ignore-placement': true },
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
-    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s),
-    pillLayer(p, LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s),
+    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s, alpha),
+    pillLayer(p, LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, alpha),
     {
       id: LAYERS.selectionRing,
       type: 'symbol',

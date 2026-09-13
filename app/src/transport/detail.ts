@@ -21,7 +21,12 @@ export function vehiclesOfModes(vehicles: readonly VehicleInfo[], modes: Readonl
 /** One row per route with a vehicle moving now, trams first, with the route's delay in words. */
 export function runningRoutes(vehicles: readonly VehicleInfo[], delays: ReadonlyMap<string, number>, i18n: I18n): RouteSummaryRow[] {
   const known = vehicles.filter((v): v is VehicleInfo & { routeId: string } => v.routeId !== undefined);
-  return summariseRoutes(known.map((v) => ({ routeId: v.routeId, label: v.short || v.routeId, type: v.type })), delays, i18n);
+  // summariseRoutes reads a route without a figure as on time (its lightweight
+  // list's old fallback). Here a missing median stays missing: the row carries
+  // no delay word at all -- missing data is not zero (design.md).
+  return summariseRoutes(known.map((v) => ({ routeId: v.routeId, label: v.short || v.routeId, type: v.type })), delays, i18n).map((row) =>
+    delays.has(row.routeId) ? row : { ...row, word: '' },
+  );
 }
 
 export function vehiclesOnRoute(vehicles: readonly VehicleInfo[], routeId: string): VehicleInfo[] {
