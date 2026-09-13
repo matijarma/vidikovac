@@ -15,6 +15,25 @@ export class DataError extends Error {
   }
 }
 
+/** Bounds response-body reading too, without requiring AbortSignal.timeout. */
+async function requestJson<T>(
+  url: string, init: RequestInit, fetchImpl: typeof fetch,
+): Promise<{ response: Response; body: T }> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new DataError(response.status);
+    if (!(response.headers.get('content-type') ?? '').includes('application/json')) {
+      throw new DataError(response.redirected ? 401 : 502, 'Expected data; the evaluation session may need to be reopened.');
+    }
+    const body = await response.json() as T;
+    return { response, body };
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 export async function scan(code: string, fetchImpl: typeof fetch = fetch): Promise<ScanOk | ScanFail> {
   const body: ScanRequest = { code: normalizeCode(code) };
   let response: Response;
@@ -38,17 +57,17 @@ export async function scan(code: string, fetchImpl: typeof fetch = fetch): Promi
 }
 
 export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: typeof fetch = fetch): Promise<ModuleSnapshot> {
-  const response = await fetchImpl(`/api/data/${module}`, {
+  const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
-  });
+  }, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
-  return (await response.json()) as ModuleSnapshot;
+  return body;
 }
 
 export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: string): Promise<TeaserResponse> {
   const path = stopId ? `/api/teaser?stop=${encodeURIComponent(stopId)}` : '/api/teaser';
-  const response = await fetchImpl(path, { cache: 'no-store' });
+  const { response, body } = await requestJson<TeaserResponse>(path, { cache: 'no-store' }, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
-  return (await response.json()) as TeaserResponse;
+  return body;
 }

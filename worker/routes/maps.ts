@@ -50,7 +50,15 @@ export const handleMaps: RouteHandler = async (request, env, ctx, url) => {
     return json({ error: 'method-not-allowed' }, 405, { allow: 'GET, HEAD' });
   }
   // Glyphs and sprites are versioned with the app build, not proxy-fetched.
-  if (/^\/maps\/(?:fonts|sprites)\//.test(url.pathname)) return env.ASSETS.fetch(request);
+  if (/^\/maps\/(?:fonts|sprites)\//.test(url.pathname)) {
+    const response = await env.ASSETS.fetch(request);
+    if (response.ok && url.pathname.endsWith('.pbf')) {
+      const headers = new Headers(response.headers);
+      headers.set('content-type', 'application/x-protobuf');
+      return new Response(response.body, { status: response.status, headers });
+    }
+    return response;
+  }
   const match = TILE.exec(url.pathname);
   if (!match) return json({ error: 'not-found' }, 404);
   const [z, x, y] = match.slice(1).map(Number);

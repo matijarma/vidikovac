@@ -4,7 +4,7 @@ Trajanje: 10 mjeseci od potpisa ugovora, u cijelosti unutar Programa (do 31. 12.
 
 ### M0 Prototip uživo (do 16. 9. 2026., prije potpisa)
 
-Isporuke: https://zagreb.aningfilm.hr s otvorenim slojem `/hitno`, javnim zaslonom s rotirajućim kodom, skeniranjem s karticom potvrde, sesijom od deset minuta sa zamrzavanjem, pet izvora u stvarnom vremenu (upozorenja DHMZ-a, potresi, ZET, zatvorene prometnice, vrijeme) i tri u dnevnom ritmu (vijesti HRT-a, prognoza, gradski prostorni slojevi), stranice `/izvori`, `/privatnost`, `/pristupacnost`, javni repozitorij pod AGPL-3.0-or-later, Playwright testovi zeleni protiv produkcije, demo video. Mjera: definicija gotovog prototipa iz dizajnerske specifikacije.
+Isporuke: evaluacijsko okruženje https://zagreb.aningfilm.hr s brendom Kaj ima?, sigurnošću bez sesije (`/hitno`), privremenim stvarnim zaslonima sa stajališnim kontekstom i rotirajućim kodom, uparivanjem na istoj i različitim mrežama, desetominutnim sesijama i petominutnim dijeljenjem. Sedam područja čita deset postojećih modula podataka; Karte koriste vlastiti regionalni vektorski izvadak. Stranice `/izvori`, `/privatnost`, `/pristupacnost`, otvoreni kod, pregled stvarno provedenih testova i demo video dio su prijavnog paketa. Mjera: Povjerenstvo može proći stvarno uparivanje i isprobati svako implementirano područje na telefonu, radnoj površini i zaslonu. Javna pilot-usluga kreće samo uz financiranje; evaluacijski pristup nije neovisno javno lansiranje.
 
 ### M1 Učvršćivanje protokola, izjave, prva revizija pristupačnosti (mjeseci 1 do 2)
 

@@ -1,21 +1,26 @@
-# Vidikovac (radni naziv) — Zagreb, povezan.
+# Kaj ima?
 
-Pogled na Zagreb u stvarnom vremenu, izgrađen isključivo na otvorenim podacima, koji se otključava na deset minuta skeniranjem rotirajućeg QR koda s javnog zaslona ili s telefona druge osobe. Plaća se pažnjom i prisutnošću, ne novcem. Sigurnosni sloj (upozorenja DHMZ-a, potresi, zatvorene prometnice, dežurne ljekarne, zborna mjesta civilne zaštite) otvoren je svima bez skeniranja, a javni zasloni su čitljivi i bez telefona.
+Radni prototip gradske informacijske usluge za prijavu na zagrebački poziv za otvorene podatke. Cilj je pretvoriti stvarne gradske podatke u razumljivu kartu, vrijeme, događanja, sigurnost, gradske aktivnosti i vijesti. Dizajn i interakcija dio su funkcionalnosti, ne dodatak tablicama.
 
-Prototip: https://zagreb.aningfilm.hr · Prijava na Javni poziv Grada Zagreba za financiranje projekata korištenja otvorenih podataka 2026.
+Pristup se na vlastitom uređaju otključava na deset minuta skeniranjem koda sa zaslona, odnosno na pet minuta s telefona druge osobe. Ista Wi-Fi mreža radi. Sigurnost je dostupna bez sesije, također bez JavaScripta. Ne postoji posebna demonstracija koja zaobilazi uparivanje.
 
-*English: a real-time, accessible "god's view" of Zagreb built only on open data, unlocked for ten minutes by scanning a rotating QR code on a public screen or on another person's phone. Emergency information is always open; public screens are always readable; anonymous, identifier-free usage counts go to the City under a closed licence. Code AGPL-3.0-or-later.*
+Evaluacijsko okruženje: https://zagreb.aningfilm.hr, zaštićeno Cloudflare Accessom. Prototip je namijenjen vlasniku projekta i Povjerenstvu. Javna dostupnost građanima, pilot i daljnji razvoj ovise o financiranju i partnerstvu s Gradom; bez toga nema zasebnog javnog projekta.
+
+*English: a working Zagreb city-information prototype for the City's open-data funding application. Real screens and rotating codes grant ten-minute sessions, with five-minute one-hop sharing. Safety is sessionless. Evaluation is Access-protected; a citizen rollout is conditional on City backing.*
 
 ## Tri površine, sedam slojeva
 
-Ruka (telefon, otključan), Prozor (javni zaslon, bez dodira, uvijek čitljiv), Stol (radna površina). Slojevi: Grad sada, U pokretu, Zrak i nebo, Sigurnost (otvoren), Uprava i pravo, Kultura i sjećanje, Vijesti. Svaki panel nosi oznaku svježine (Živo, Danas, Referenca) i atribuciju izvora.
+Telefon, radna površina i javni zaslon dijele podatke i vizualni jezik, s rasporedima za vlastiti način uporabe. Sedam područja: Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja i Vijesti. Vrijeme opažanja, objave ili događanja odvojeno je od vremena dohvata. Nedostupan izvor nije nula ili potvrda da nema upozorenja.
+
+Tehničko ime repozitorija, Workera, domena i postojeći ključevi pohrane ostaju `vidikovac`. Promjena brenda ne briše postojeće postave.
 
 ## Pokretanje
 
 ```sh
 npm install
-cp .dev.vars.example .dev.vars        # lokalne vrijednosti; NETWORK_CHECK=off za razvoj
+cp .dev.vars.example .dev.vars        # izričite lokalne tajne; APP_ENV=test samo lokalno
 npm run gtfs:routes                   # jednom: imena ZET linija u app/src/data/zet-routes.json
+node scripts/gtfs-stops.mjs            # katalog iz već postojećeg mrežnog artefakta
 npm run dev                           # wrangler dev na http://localhost:8787
 ```
 
@@ -33,7 +38,11 @@ Protiv produkcije: `E2E_NO_WEBSERVER=1 E2E_APP_URL=https://zagreb.aningfilm.hr E
 
 ## Postavljanje
 
-Deploy je `git push` na `main` (Cloudflare Workers Builds gradi `npm run build` i postavlja Worker). `wrangler deploy` se ne koristi. Tajne: `npx wrangler secret put SESSION_SECRET`, `npx wrangler secret put NET_KEY_SECRET`. Ostale runtime varijable žive u Cloudflare nadzornoj ploči (`keep_vars`).
+Deploy je `git push` na `main` (Cloudflare Workers Builds gradi `npm run build` i postavlja Worker). `wrangler deploy` se ne koristi. Potrebna je izričita `SESSION_SECRET`; nema ugrađene razvojne tajne. `NETWORK_CHECK` je umirovljen i ne uključuje razvojni način. `APP_ENV` nepostavljen znači produkcija, a `E2E_ADMIN_BYPASS` djeluje samo kada je `APP_ENV=test`.
+
+R2 spremnik `vidikovac-maps` nosi verzionirani regionalni PMTiles arhiv. Karta, glifovi i spriteovi poslužuju se s iste domene. Gradnja arhiva i podrijetlo navedeni su u `app/public/maps/README.md`. Za lokalni rad spremiti arhiv i u lokalni R2 pomoću `wrangler r2 object put --local`; bez njega ostaje pristupačan alternativni prikaz prijevoza.
+
+Evaluacijska zaštita ostaje uključena. `workers_dev` i pregledne adrese onemogućene su; privremeni zasloni stvaraju se kroz provjeren evaluacijski pristup. Njihovo korištenje ne ulazi u izvoz podataka o korištenju na pilot lokacijama.
 
 ## Struktura
 
@@ -49,7 +58,8 @@ test/          vitest; test/fixtures su spremljeni živi uzorci svakog izvora
 
 ## Dokumenti
 
-- Dizajn i odluke: `docs/superpowers/specs/2026-09-11-vidikovac-design.md`
+- Važeći produkt i dizajn: `PRODUCT.md`, `design.md`; provedba i status: `docs/implementation-kaj-ima.md`
+- Ranije specifikacije u `docs/superpowers/` su povijesni zapis, ne važeće vizualne upute.
 - Arhitektura: `docs/arhitektura.md` · Javni zasloni: `docs/kiosk.md` · Izvori i licence: `docs/izvori.md`
 - Prijava (hrvatski): `docs/prijava/prijedlog-projekta.md`, `obrazac-3-financijski-plan.md`, `plan-provedbe.md`, `rizici-i-odgovori.md`
 

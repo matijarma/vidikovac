@@ -24,6 +24,18 @@ describe('scan', () => {
 });
 
 describe('fetchData / fetchTeaser', () => {
+  it('aborts a hanging feed request and does not leave a permanent loading state', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('request-timeout')));
+      }));
+      const request = fetchData('zet-rt', 'tok', fetchImpl as unknown as typeof fetch);
+      const assertion = expect(request).rejects.toThrow('request-timeout');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await assertion;
+    } finally { vi.useRealTimers(); }
+  });
   it('sends the bearer token and returns the snapshot', async () => {
     const f = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('/api/data/zet-rt');
@@ -36,6 +48,12 @@ describe('fetchData / fetchTeaser', () => {
   it('throws DataError with the status on 401', async () => {
     await expect(fetchData('zet-rt', 'bad', (async () => json({ error: 'unauthorized' }, 401)) as unknown as typeof fetch)).rejects.toMatchObject({ name: 'DataError', status: 401 });
     expect(new DataError(401).status).toBe(401);
+    await expect(fetchData('zet-rt', 'bad', (async () => new Response('Access denied', { status: 403 })) as typeof fetch))
+      .rejects.toMatchObject({ name: 'DataError', status: 403 });
+  });
+  it('does not mistake an HTML login page for a data snapshot', async () => {
+    await expect(fetchData('zet-rt', 'tok', (async () => new Response('<html>Login</html>', { headers: { 'content-type': 'text/html' } })) as typeof fetch))
+      .rejects.toMatchObject({ name: 'DataError', status: 502 });
   });
   it('fetchTeaser returns the module list', async () => {
     const t = await fetchTeaser((async () => json({ modules: [{ module: 'dhmz-cap', tier: 'open', status: 'live', fetchedAt: 'x', attribution: { text: 'a', url: 'u', licence: 'l' }, items: [] }] })) as unknown as typeof fetch);

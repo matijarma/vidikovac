@@ -1,12 +1,29 @@
-# Javni zaslon (Prozor): postavljanje i održavanje
+# Kaj ima? · zaslon, postavljanje i održavanje
 
-Javni zaslon je bilo koji preglednik koji drži otvorenu stranicu `/kiosk/` na adresi https://zagreb.aningfilm.hr. Ne treba nikakav poseban softver: preporučeni uređaj je Raspberry Pi 5 s Chromiumom u kiosk načinu, ali jednako radi stari laptop, Windows PC iza televizora ili iPad u načinu "Vođeni pristup". Zaslon ne treba dodir da bi radio (rotacija kartica, koda i meandra ide sama), ali ako ga zaslon ima, dodir otvara "Osnovno" — vidi niže — i ništa više: nijedna druga navigacija po zaslonu nije dodirom. Zaslon prikazuje čitljiv javni pregled bez telefona i rotira QR kod koji otključava deset minuta nadzorne ploče.
+Zaslon je preglednik na `/kiosk/`. Postava za evaluaciju bira stvarno stajalište i četvrt te stvara privremeni zaslon na 24 sata. Nije poseban prikaz s izmišljenim podacima: isti kod, BeaconDO i RoomDO koriste se za stvarno uparivanje. Prototip ostaje iza evaluacijskog Accessa. Vodič za Povjerenstvo je u `docs/evaluacija.md`.
 
 ## Što zaslon radi
 
-- **Bez skeniranja (teaser):** uz donji rub stalno stoji sigurnosna traka (stanje upozorenja DHMZ-a, zatvorene prometnice u blizini, najbliža dežurna ljekarna); iznad nje se svakih 20 sekundi izmjenjuju kartice: vrijeme sada, sljedeći polasci na stanici koju je odabrao vlasnik prostora, zrak na najbližoj postaji, jedan naslov HRT-a, jedna arhivska slika "Zagreb, [godina]" s atribucijom i pozivna kartica ("Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba."). QR kod rotira svakih 30 sekundi, a pored njega se prazni meandar (Kniferov kvadratni val) koji odbrojava do sljedećeg koda; kod je ispisan u dvije skupine (`ABCD-EFGH`) da se može pročitati naglas ili utipkati.
-- **Nakon skeniranja:** zaslon prikazuje isti sloj koji gleda osoba koja je skenirala (ona upravlja), u rasporedu za velike zaslone, sa sigurnosnom trakom i malim QR kodom "pridruži se" uz rub. Jedan zaslon vodi jedna osoba; sljedeći koji skeniraju dobivaju vlastitu sesiju na telefonu, ali ne upravljaju zaslonom.
+- **Bez skeniranja:** lokalna karta i informacije oko odabranog stajališta, vrijeme i ograničeni izbor drugih obavijesti. Poziv za skeniranje i QR imaju stalno mjesto; payload koda rotira svakih 30 sekundi. Kôd je ispisan u dvije skupine (`ABCD-EFGH`). Panorama, meandar i kataloška dekoracija uklonjeni su iz smjera Kaj ima?.
+- **Nakon skeniranja:** zaslon pokazuje aktivno područje i odabranu javnu stavku, liniju ili stajalište, u rasporedu za gledanje s udaljenosti. Nova osoba koja skenira dobiva novu sesiju i preuzima prikaz zaslona; prethodna osoba zadržava svoj preostali pogled na telefonu.
 - **Nakon deset minuta:** zaslon se vraća na teaser i novi QR kod. Nema hlađenja; ista osoba može odmah ponovno skenirati.
+
+Telefon i zaslon mogu biti na istoj Wi-Fi mreži. Za provjeru radne površine
+može se utipkati kôd u drugoj kartici preglednika. Evaluacijski Access treba
+otvoriti i na telefonu prije skeniranja kako prijava ne bi potrošila prozor
+aktualnog koda.
+
+### Granice dostupnih podataka
+
+Prikazuju se položaji i kašnjenje linije, ne izračun dolaska na stajalište.
+Kvaliteta zraka i arhivske slike ostaju plan financiranog razdoblja.
+Lokacija ljekarne ne naziva se najbližom bez provjerene geometrije za usporedbu.
+Izvor bez odgovora ne prikazuje se kao nula ili potvrda da nema upozorenja.
+Sigurnost i „Osnovno” ne zahtijevaju sesiju.
+
+Upute i mjerenja niže za starije izdanje zadržani su kao povijesna podloga za
+pilot. Mjerenja novih rasporeda Kaj ima? objavljuju se u završnoj predaji;
+ne treba ih poistovjećivati s mjerenjima prethodnog Modrotisak izdanja.
 
 ## Osnovno, bez telefona
 

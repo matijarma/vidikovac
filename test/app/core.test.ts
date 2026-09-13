@@ -65,6 +65,16 @@ describe('feed store', () => {
     expect(store.snapshot().snapshots['dhmz-now']?.fetchedAt).toBe('2026-09-12T12:01:00Z');
     expect(store.snapshot().loading.size).toBe(0);
   });
+  it('marks previously successful subsources stale after the whole client request fails', async () => {
+    const composite = { ...weather, sources: { observation: { status: 'live' as const, itemCount: 0, fetchedAt: weather.fetchedAt } } };
+    const store = createFeedStore({
+      token: () => 'test',
+      fetchData: vi.fn().mockResolvedValueOnce(composite).mockRejectedValueOnce(new Error('offline')),
+    });
+    await store.refresh(['dhmz-now']);
+    await store.refresh(['dhmz-now']);
+    expect(store.snapshot().snapshots['dhmz-now']?.sources?.observation.status).toBe('stale');
+  });
 });
 
 describe('view store', () => {

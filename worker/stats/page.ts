@@ -300,6 +300,9 @@ export function renderStatsPage(view: StatsView): string {
     matrixTable('Dohvati izvora po ishodu', 'Izvor', pivot(rows, 'source_fetch', 'dim1', 'dim2'), 'još nema dohvata') +
     matrixTable('Zasloni online po četvrti', 'Četvrt', pivot(rows, 'kiosk_online', 'dim1', null), 'nijedan zaslon se još nije prijavio') +
     `</section>` +
+    `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +
+    matrixTable('Aktivnosti privremenih zaslona', 'Aktivnost', pivot(rows, 'evaluation', 'dim1', 'dim2'), 'još nema evaluacijskih aktivnosti') +
+    `</section>` +
     `<section>${dayTable(view)}</section>` +
     `<section>${hourTable(rows)}</section>`;
 

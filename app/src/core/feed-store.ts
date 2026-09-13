@@ -63,6 +63,12 @@ export function createFeedStore(deps: FeedStoreDeps): FeedStore {
             ...previous,
             status: previous.status === 'down' ? 'down' : 'stale',
             staleSince: previous.staleSince ?? new Date(now()).toISOString(),
+            ...(previous.sources ? {
+              sources: Object.fromEntries(Object.entries(previous.sources).map(([key, source]) => [
+                key, { ...source, status: source.status === 'down' ? 'down' as const : 'stale' as const },
+              ])),
+            } : {}),
+            ...(previous.coverage ? { coverage: { ...previous.coverage, limited: true } } : {}),
           };
           state = { ...state, snapshots, errors: { ...state.errors, [id]: error instanceof Error ? error.message : 'request-failed' } };
         } finally {
