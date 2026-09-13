@@ -19,6 +19,9 @@
   min-width: 0;
   font-variant-numeric: tabular-nums;
 }
+/* The workspace hides its controls with the hidden attribute (a kiosk has no toolbar, a page without a view
+   mode no full-map button); the display rules of .btn-ghost and the flex rows must never override that. */
+.transport [hidden] { display: none !important; }
 :root[data-theme-resolved='dark'] .transport {
   --t-tram: #63d7c3;
   --t-tram-ink: #17201f;
