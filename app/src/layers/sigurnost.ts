@@ -5,7 +5,7 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from '../../../worker/hitno/brojevi';
 import { LJEKARNE, LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
-import { externalLink, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
+import { actionButton, externalLink, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
 import { isActiveWarning, safetyState, type SafetyState } from '../experience/safety-state';
 import { coverageText, listState, provenanceBlock, stateBlock } from '../experience/status';
 import { distanceKm, numberText, pointOf, relativeTime, ZAGREB_LON_LAT } from '../experience/text';
@@ -17,7 +17,10 @@ import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
 
 export const ASSEMBLY_LAYER = 'zborna-mjesta';
-const ASSEMBLY_PREVIEW = 12;
+const ASSEMBLY_PAGE = 12;
+const ASSEMBLY_STEP = 24;
+const CLOSURES_PAGE = 5;
+const CLOSURES_STEP = 10;
 
 function sourceFoot(text: string, url: string, i18n: I18n): string {
   return `<footer class="source"><p class="source-line"><span class="source-text">${escapeHtml(text)}</span> ${externalLink(url, i18n.t('common.openSource'), 'source-link')}</p></footer>`;
@@ -68,8 +71,13 @@ function closureRow(i18n: I18n, c: FeedItem): string {
 function closuresSection(i18n: I18n, ctx: LayerContext, state: SafetyState): string {
   const roads = ctx.snapshots.prometnice;
   const items = state.activeClosures;
+  const shownCount = Math.min(items.length, Number(ctx.view?.filters.closures) || CLOSURES_PAGE);
+  const shown = items.slice(0, shownCount);
+  const more = shownCount < items.length
+    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(CLOSURES_STEP, items.length - shownCount) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'closures', 'filter-value': shownCount + CLOSURES_STEP } })
+    : '';
   const list = listState(i18n, roads, 'prometnice', items.length, i18n.t('safety.closuresNone'), ctx.errors?.prometnice)
-    || `<ul class="rows-plain" role="list" data-testid="safety-closures">${items.map((c) => closureRow(i18n, c)).join('')}</ul>`;
+    || `<ul class="rows-plain" role="list" data-testid="safety-closures">${shown.map((c) => closureRow(i18n, c)).join('')}</ul>${more}`;
   const exports = roads && roads.items.length
     ? `<div class="actions">${moduleExport('geojson', 'prometnice', i18n.t('export.geojsonAll'))}${moduleExport('ics', 'prometnice', i18n.t('export.icsAll'))}</div>`
     : '';
@@ -135,16 +143,17 @@ function assemblySection(i18n: I18n, ctx: LayerContext): string {
   const geo = ctx.snapshots['ckan-geo'];
   const all = assemblyPoints(geo);
   const query = ctx.view?.filters.zborna ?? '';
-  const showAll = ctx.view?.filters['zborna-all'] === '1';
   const filtered = query.trim() ? all.filter((p) => normalise(`${p.title} ${p.summary ?? ''}`).includes(normalise(query))) : all;
-  const shown = showAll || query ? filtered : filtered.slice(0, ASSEMBLY_PREVIEW);
+  // A search still filters every point; only the unfiltered list is paged (R-K4).
+  const shownCount = Math.min(filtered.length, Number(ctx.view?.filters.assembly) || ASSEMBLY_PAGE);
+  const shown = query.trim() ? filtered : filtered.slice(0, shownCount);
   const down = geo?.sources?.[ASSEMBLY_LAYER]?.status === 'down';
   let body = down
     ? stateBlock(i18n, 'down', i18n.t('safety.assemblyUnknown'), { retry: 'ckan-geo', testid: 'assembly-unknown' })
     : listState(i18n, geo, 'ckan-geo', all.length, i18n.t('safety.assemblyUnknown'), ctx.errors?.['ckan-geo']);
   if (!body) {
-    const more = !showAll && !query && filtered.length > shown.length
-      ? `<button type="button" class="btn-ghost sf-more" data-action="filter" data-filter-key="zborna-all" data-filter-value="1">${escapeHtml(i18n.t('safety.showAll', { count: filtered.length }))}</button>`
+    const more = !query.trim() && filtered.length > shown.length
+      ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(ASSEMBLY_STEP, filtered.length - shown.length) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'assembly', 'filter-value': shownCount + ASSEMBLY_STEP } })
       : '';
     const list = filtered.length
       ? `<ul class="rows-plain" role="list" data-testid="assembly-points">${shown.map((p) => pointRow(i18n, p)).join('')}</ul>${more}`

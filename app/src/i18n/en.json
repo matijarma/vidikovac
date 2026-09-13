@@ -23,6 +23,7 @@
     "all": "All",
     "showAll": "Show all",
     "showLess": "Show less",
+    "showMore": "Show {count} more",
     "openLayer": "Open {layer}",
     "links": { "hitno": "Safety (open to everyone)", "izvori": "Data sources", "privatnost": "Privacy", "pristupacnost": "Accessibility", "open": "Open data", "scan": "Type a code", "kiosk": "Set up a screen", "home": "Home" }
   },

@@ -5,7 +5,7 @@ import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { DogadanjaSourceId } from '../../../worker/feed/modules/dogadanja';
 import { SKUPSTINA_YOUTUBE_URL } from '../../../worker/feed/modules/dogadanja/skupstina';
 import { canExportCalendarItem } from '../export';
-import { chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
+import { actionButton, chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
 import { coverageText, listState, provenanceBlock, statusBadge } from '../experience/status';
 import { eventWhen, numberText } from '../experience/text';
 import { zagrebWeekdayDate } from '../format';
@@ -15,6 +15,9 @@ import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/es
 import { bars } from '../ui/graphics';
 import { filterBySource, sourceStatusEmptyText } from './kultura';
 import type { LayerContext } from './types';
+
+/** One default page of Gazette acts; the search field narrows the list first, so a search always covers every act. */
+const ACTS_PAGE = 10;
 
 const CITY_WORK_SOURCE_TUPLE = ['skupstina', 'komunalne'] as const;
 type CityWorkSource = (typeof CITY_WORK_SOURCE_TUPLE)[number];
@@ -123,7 +126,13 @@ function gazetteSection(i18n: I18n, ctx: LayerContext): string {
   const glasnik = ctx.snapshots.glasnik;
   const acts = glasnik?.items ?? [];
   const query = ctx.view?.filters.aq ?? '';
-  const filtered = query.trim() ? acts.filter((a) => normalise(a.title).includes(normalise(query))) : acts;
+  const matches = query.trim() ? acts.filter((a) => normalise(a.title).includes(normalise(query))) : acts;
+  const shown = Math.min(matches.length, Number(ctx.view?.filters.acts) || ACTS_PAGE);
+  const visible = matches.slice(0, shown);
+  const more = shown < matches.length
+    ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(ACTS_PAGE, matches.length - shown) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'acts', 'filter-value': shown + ACTS_PAGE } })
+    : '';
+  const coverage = matches.length ? `<p class="sec-note">${escapeHtml(i18n.t('status.coverage', { shown, total: matches.length }))}</p>` : '';
   const first = acts[0];
   const issue = first
     ? `<div class="cv-issue" data-testid="gazette-issue"><span class="cv-issue-no">${escapeHtml(`${dataText(first, 'broj')}/${dataText(first, 'godina')}`)}</span><span class="meta">${first.at ? `${escapeHtml(i18n.t('civic.issuePublished', { date: zagrebWeekdayDate(first.at) }))} · ` : ''}${escapeHtml(i18n.t('civic.actsCount', { count: acts.length }))}</span></div>`
@@ -131,11 +140,11 @@ function gazetteSection(i18n: I18n, ctx: LayerContext): string {
   const toolbar = acts.length
     ? `<div class="ws-toolbar">${searchField({ id: 'acts-search', key: 'aq', label: i18n.t('civic.searchActs'), placeholder: i18n.t('civic.searchActsPlaceholder'), value: query })}</div>`
     : '';
-  const state = listState(i18n, glasnik, 'glasnik', filtered.length, i18n.t(query ? 'civic.actsEmptyFiltered' : 'civic.actsEmpty'), ctx.errors?.glasnik);
+  const state = listState(i18n, glasnik, 'glasnik', matches.length, i18n.t(query ? 'civic.actsEmptyFiltered' : 'civic.actsEmpty'), ctx.errors?.glasnik);
   return section({
     id: 'cv-gazette', tone: 'civic', testid: 'cv-gazette',
     body: sectionHead(i18n, { kicker: i18n.t('freshness.referenca'), title: i18n.t('civic.gazette'), snapshot: glasnik, error: ctx.errors?.glasnik, id: 'cv-gazette-title' }) +
-      issue + toolbar + (state || `<ul class="rows" role="list" data-testid="acts">${filtered.map((a) => actRow(i18n, a, ctx)).join('')}</ul>`) +
+      issue + toolbar + (state || `<ul class="rows" role="list" data-testid="acts">${visible.map((a) => actRow(i18n, a, ctx)).join('')}</ul>${more}${coverage}`) +
       `<p class="sec-note">${escapeHtml(i18n.t('civic.legalNote'))}</p>`,
   });
 }

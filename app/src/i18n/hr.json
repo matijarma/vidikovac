@@ -25,6 +25,7 @@
     "all": "Sve",
     "showAll": "Prikaži sve",
     "showLess": "Prikaži manje",
+    "showMore": "Prikaži još {count}",
     "openLayer": "Otvori {layer}",
     "links": { "hitno": "Sigurnost (otvoreno svima)", "izvori": "Izvori podataka", "privatnost": "Privatnost", "pristupacnost": "Pristupačnost", "open": "Otvoreni podaci", "scan": "Upiši kod", "kiosk": "Postavi zaslon", "home": "Početna" }
   },
