@@ -27,6 +27,7 @@
 /* The workspace hides its controls with the hidden attribute (a kiosk has no search, no chips and no full-map
    button); the display rules of .btn-ghost and the flex rows must never override that. */
 .transport [hidden] { display: none !important; }
+
 /* --- Search: in the sheet, under its head ------------------------------- */
 .transport-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-3); }
 .t-search { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
