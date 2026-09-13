@@ -369,6 +369,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     await store.refresh();
     if (frozen || disposed) return;
     lastRefresh = now();
+    // A rejected data token means the session is over for this device; a refused
+    // Access check needs the protected entrance again. Both get a visible way out.
+    const messages = Object.values(store.snapshot().errors).filter((m): m is string => typeof m === 'string');
+    if (messages.some((m) => / 401\b/.test(m))) { freeze(); return; }
+    error = messages.some((m) => / 403\b/.test(m)) ? 'access' : error === 'access' ? null : error;
     paintShell();
   }
 

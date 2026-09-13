@@ -387,9 +387,63 @@ describe('failure and recovery', () => {
     expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
     expect(fetchData).not.toHaveBeenCalled();
   });
+  it('a refused Access check shows the way back to the protected entrance, and a rejected data token ends the session', async () => {
+    const denied = mount({ snapshot: () => { throw new Error('data request failed with 403'); } });
+    denied.session.join();
+    await flush();
+    expect(text(denied.root.querySelector('[data-testid=access-banner]'))).toContain('odbijen');
+    expect(denied.root.querySelector('[data-testid=access-banner] a[href="/"]')).not.toBeNull();
+    denied.handle.destroy();
+    const rejected = mount({ snapshot: () => { throw new Error('data request failed with 401'); } });
+    rejected.session.join();
+    await flush();
+    expect(rejected.root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+  });
+  it('keeps the frozen view when the clock runs out after a socket drop', async () => {
+    const { root, session, fetchData, tick } = mount();
+    session.join();
+    await flush();
+    fetchData.mockClear();
+    session.runOut();
+    tick();
+    await flush();
+    expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(fetchData).not.toHaveBeenCalled();
+  });
 });
 
 describe('the full map view (transport)', () => {
+  it('writes one history entry per place, none per poll, and Back through the fragment closes the detail', async () => {
+    const pushes: string[] = [];
+    const replaces: string[] = [];
+    const location = { pathname: '/d/', search: '', hash: '#room=r1' };
+    const history = {
+      pushState: (_s: unknown, _t: string, url?: string | URL | null) => { pushes.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
+      replaceState: (_s: unknown, _t: string, url?: string | URL | null) => { replaces.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
+    };
+    const { root, session, tick, handle } = mount({ deps: { location, history } });
+    session.join();
+    await flush();
+    click(root, '[data-action=nav][data-layer=kultura]');
+    await flush();
+    click(root, '[data-testid=event-row] [data-action=select]');
+    expect(pushes).toHaveLength(2);
+    expect(pushes[1]).toMatch(/room=r1/);
+    expect(pushes[1]).toMatch(/layer=kultura&kind=item&id=[0-9a-f]{16}&module=dogadanja/);
+    expect(pushes[1]).not.toMatch(/ticket/);
+    tick();
+    await flush();
+    tick();
+    await flush();
+    expect(pushes).toHaveLength(2); // polls never touch history
+    // Back: the browser restores the previous fragment and the entry hands it to the dashboard.
+    handle.restore('#room=r1&layer=kultura');
+    expect(root.querySelector('.ws-split')?.getAttribute('data-detail-open')).toBe('false');
+    expect(pushes).toHaveLength(2);
+    click(root, '[data-testid=event-row] [data-action=select]');
+    click(root, '[data-testid=event-row] [data-action=select]');
+    expect(pushes).toHaveLength(3); // the same selection again replaces instead of pushing
+  });
   it('is a view mode on the shell with the session chrome kept; Escape and another domain leave it', async () => {
     const mapFactory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
     const { root, session, handle } = mount({ mapFactory });

@@ -126,6 +126,8 @@ export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): strin
     out.push(`<div class="banner banner-frozen" role="alert" data-testid="frozen-line" data-key="frozen"><p class="banner-text">${escapeHtml(i18n.t('session.expired'))}</p><p class="banner-sub">${escapeHtml(i18n.t('session.expiredHint'))}</p><a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('session.expiredCta'))}</span></a></div>`);
   } else if (s.error === 'no-ticket') {
     out.push(`<div class="banner banner-warn" role="alert" data-key="no-ticket"><p class="banner-text">${escapeHtml(i18n.t('session.noTicket'))}</p><a class="btn" href="${escapeAttribute(scanUrl)}">${escapeHtml(i18n.t('common.links.scan'))}</a></div>`);
+  } else if (s.error === 'access') {
+    out.push(`<div class="banner banner-warn" role="alert" data-key="access" data-testid="access-banner"><p class="banner-text">${escapeHtml(i18n.t('session.accessDenied'))}</p><a class="btn" href="/">${escapeHtml(i18n.t('common.links.home'))}</a></div>`);
   } else if (s.reconnecting) {
     out.push(`<div class="banner banner-warn" role="status" data-key="reconnecting" data-testid="reconnecting">${iconMarkup('refresh-cw')}<p class="banner-text">${escapeHtml(i18n.t('session.disconnected'))}</p></div>`);
   }
