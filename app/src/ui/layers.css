@@ -8,8 +8,11 @@
 .map-canvas-mini { block-size: clamp(9rem, 24vh, 14rem); }
 .maplibregl-ctrl-attrib { font-size: 0.7rem; }
 
-/* The workspace of one domain. */
-.ws { display: grid; gap: var(--sp-5); min-inline-size: 0; }
+/* The workspace of one domain. It is a size container, so the inner grids
+   below follow the room they really have (measured in rem, so text zoom
+   counts), and a single word longer than its box wraps instead of pushing
+   the page sideways. */
+.ws { display: grid; gap: var(--sp-5); min-inline-size: 0; container-type: inline-size; container-name: ws; overflow-wrap: anywhere; }
 .ws-head { display: grid; gap: var(--sp-1); }
 .ws-head .layer-title { font-size: var(--text-2xl); letter-spacing: -0.02em; }
 .ws-head .meta { max-inline-size: 60ch; }
@@ -21,6 +24,15 @@
 .sec.wx-lead { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
 .ws-toolbar { display: grid; gap: var(--sp-3); }
 .ws-toolbar .field-search input { inline-size: 100%; }
+/* Control labels wrap rather than widen their column: a long label is never
+   the reason a section's implicit grid track grows past its own box. */
+.ws .btn, .ws .btn-ghost, .ws .btn-quiet { white-space: normal; text-align: start; padding-block: var(--sp-2); }
+/* Links on a tinted fill take the deeper brand tone (tokens.css) so they keep
+   AA on the tint; hover reads as ink. A state note is tinted too. */
+.ov-block.ov-safety, .sf-level, .ws .state { --tone-text-brand: var(--tone-text-brand-on-tint); }
+.ov-block.ov-safety a:hover, .sf-level a:hover { color: var(--tone-text-primary); }
+/* The brand-toned badge (a works phase) is brand text on the action tint too. */
+.ws .badge[data-tone='action'] { color: var(--tone-text-brand-on-tint); }
 
 /* Sections: opaque surfaces with one hairline and a tone on the head. */
 .sec { display: grid; align-content: start; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); min-inline-size: 0; }
@@ -45,7 +57,8 @@
 .row-main { display: grid; gap: 0.15rem; flex: 1 1 auto; min-inline-size: 0; }
 .row-title { font-weight: var(--weight-medium); line-height: var(--leading-snug); }
 .row-meta { font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
-.row-lead { flex: none; display: grid; justify-items: center; min-inline-size: 3.25rem; text-align: center; }
+/* The lead may give way (an undated notice's "vrijeme nepoznato" is two words) rather than push the chevron out of the row. */
+.row-lead { flex: 0 1 auto; display: grid; justify-items: center; min-inline-size: 3.25rem; text-align: center; }
 .row-lead-big { font-size: var(--text-lg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .row-lead-small { font-size: var(--text-meta); color: var(--tone-text-muted); }
 .row-chevron { flex: none; color: var(--tone-text-subtle); }
@@ -203,7 +216,7 @@
 .wx-temp { font-size: 3.5rem; font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }
 .wx-cond { font-size: var(--text-xl); font-weight: var(--weight-medium); }
 .wx-grid { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
-.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--sp-3); align-items: start; }
+.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr)); gap: var(--sp-3); align-items: start; }
 .wx-figure { display: grid; gap: var(--sp-1); justify-items: center; text-align: center; }
 .wx-figure .kicker { justify-self: start; }
 .wx-fact { display: grid; gap: 0.15rem; }
@@ -260,7 +273,7 @@
 .sf-level[data-level='urgent'] .icon { color: var(--tone-urgency); }
 .sf-level[data-level='calm'] .icon { color: var(--tone-live); }
 .sf-level[data-level='unknown'] .icon { color: var(--tone-weather); }
-.sf-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.sf-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .sf-number { display: grid; gap: 0.15rem; min-height: var(--target-primary); padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-primary); text-decoration: none; }
 .sf-number:hover { background: var(--tone-surface-3); }
 .sf-number-value { font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
@@ -284,3 +297,34 @@
 .status-badge { flex: none; }
 .ov-sources { max-inline-size: 70ch; }
 .ov-sources a { display: inline-flex; align-items: center; min-height: var(--target); }
+
+/* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
+   about 20rem wide and the viewport queries above no longer describe the
+   space. The compositions fall back to their single-column forms and an open
+   detail replaces the list, as on a phone. Measured against the .ws
+   container in rem, so the threshold moves with the text. Engines without
+   container queries keep the viewport forms above. */
+@container ws (max-width: 36rem) {
+  .ov { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; gap: var(--sp-5); }
+  .ov-weather, .ov-transit, .ov-safety, .ov-agenda, .ov-news, .ov-civic { grid-area: auto; }
+  .ov-block { border-block-start: 1px solid var(--tone-stroke); padding-block: var(--sp-4); }
+  .ov-block.ov-weather { border-block-start: 0; padding-block-start: 0; }
+  .ov-weather-row { column-gap: var(--sp-4); }
+  .ov-range .g-range { max-inline-size: 26rem; }
+  .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
+  .wx-wide, .cv-wide, .sf-wide { grid-column: auto; }
+  .ws-split[data-detail-open='true'] { grid-template-columns: minmax(0, 1fr); }
+  .ws-split[data-detail-open='true'] .ws-primary { display: none; }
+  .ws-split[data-detail-open='true'] .ws-detail { position: static; }
+  .ws-back { display: inline-flex; }
+}
+/* Very narrow room (a phone at 200% text is about 11rem): the measured
+   temperature and its condition stack instead of sharing one line. */
+@container ws (max-width: 16rem) {
+  .ov-weather-row { grid-template-columns: minmax(0, 1fr); }
+  .ov-temp { grid-column: 1; }
+  .ov-weather-text { grid-column: 1; }
+  /* A row's lead (time, all-day, amount) takes its own line above the title. */
+  .row-button { flex-wrap: wrap; }
+  .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }
+}

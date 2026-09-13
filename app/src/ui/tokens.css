@@ -169,6 +169,9 @@
 :root,
 :root[data-theme-resolved='light'] {
   color-scheme: light;
+  /* Links on a tinted fill: the deeper peacock keeps AA where the plain accent
+     renders at about 4.3:1 on the light tints (test/app/contrast.test.ts). */
+  --color-link-on-tint: var(--palette-light-accent-deep);
   --color-canvas: var(--palette-light-canvas);
   --color-canvas-deep: var(--palette-light-canvas-deep);
   --color-surface-1: var(--palette-light-surface-1);
@@ -204,6 +207,7 @@
 }
 :root[data-theme-resolved='dark'] {
   color-scheme: dark;
+  --color-link-on-tint: var(--palette-dark-accent);
   --color-canvas: var(--palette-dark-canvas);
   --color-canvas-deep: var(--palette-dark-canvas-deep);
   --color-surface-1: var(--palette-dark-surface-1);
@@ -241,6 +245,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme-resolved]) {
     color-scheme: dark;
+    --color-link-on-tint: var(--palette-dark-accent);
     --color-canvas: var(--palette-dark-canvas);
     --color-canvas-deep: var(--palette-dark-canvas-deep);
     --color-surface-1: var(--palette-dark-surface-1);
@@ -275,9 +280,12 @@
   }
 }
 
-/* Even tints where the engine can mix in OKLAB; the rgba above is the fallback. */
+/* Even tints where the engine can mix in OKLAB; the rgba above is the fallback.
+   The selectors match the theme blocks' specificity (:root plus one attribute
+   test) and come later, so the mix wins wherever it is supported; a bare :root
+   here would lose to every theme block and leave the alpha fallbacks rendering. */
 @supports (color: color-mix(in oklab, red 10%, blue)) {
-  :root {
+  :root[data-theme-resolved], :root:not([data-theme-resolved]) {
     --tint-action: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-1));
     --tint-weather: color-mix(in oklab, var(--color-warning) 14%, var(--color-surface-1));
     --tint-events: color-mix(in oklab, var(--color-events) 12%, var(--color-surface-1));
@@ -310,6 +318,8 @@
   --tone-text-muted: var(--color-text-muted);
   --tone-text-subtle: var(--color-text-subtle);
   --tone-text-brand: var(--color-accent);
+  /* The brand text tone inside a tinted block (a safety level, a state note). */
+  --tone-text-brand-on-tint: var(--color-link-on-tint);
   --tone-text-on-brand: var(--color-on-accent);
 
   --tone-stroke: var(--color-border);

@@ -90,8 +90,13 @@ export function chip(label: string, o: ChipOptions): string {
   return `<li><button type="button" class="chip" ${a}>${escapeHtml(label)}${count}</button></li>`;
 }
 
+/**
+ * A labelled group of filter chips. The group names what the chips filter
+ * (a reader hears "Kategorija, group"); the chips themselves stay a native
+ * list, so every `li` has a real list parent and the reader can count them.
+ */
 export function filterChips(items: string[], label: string): string {
-  return `<ul class="chips" role="group" aria-label="${escapeAttribute(label)}">${items.join('')}</ul>`;
+  return `<div class="chips-group" role="group" aria-label="${escapeAttribute(label)}"><ul class="chips" role="list">${items.join('')}</ul></div>`;
 }
 export interface SearchFieldOptions {
   id: string;

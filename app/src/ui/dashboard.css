@@ -5,7 +5,9 @@
 .ki {
   --ki-top: 3.5rem;
   --ki-tabs: calc(3.75rem + env(safe-area-inset-bottom, 0px));
-  --ki-side: 17rem;
+  /* The sidebar keeps its width at every viewport at 100%; only when text is
+     zoomed (rem grows, vw does not) does it yield room to the workspace. */
+  --ki-side: clamp(14rem, 30vw, 17rem);
   display: grid;
   grid-template-columns: 1fr auto auto;
   grid-template-rows: var(--ki-top) 1fr;
@@ -99,7 +101,7 @@
   .ki-alert { margin-inline: var(--sp-8); }
 }
 @media (min-width: 90rem) {
-  .ki { --ki-side: 19rem; }
+  .ki { --ki-side: clamp(14rem, 30vw, 19rem); }
   .ki-main { padding-inline: var(--sp-12); }
 }
 

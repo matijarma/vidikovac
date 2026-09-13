@@ -452,6 +452,25 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     expect(section.querySelector('[data-filter-key=q]')).not.toBeNull();
     expect(section.querySelectorAll('.chip').length).toBeGreaterThan(1);
   });
+  it('filter chips are a labelled group holding a native list, and no <li> in a workspace is orphaned from a list (axe: listitem)', () => {
+    const i18n = createDefaultI18n('hr');
+    for (const [layer, label] of [['kultura', i18n.t('events.categoryLabel')], ['uprava-i-pravo', i18n.t('civic.phase')]] as const) {
+      const section = renderLayer(layer, ctx());
+      const group = section.querySelector('.ws-toolbar [role=group]');
+      expect(group, layer).not.toBeNull();
+      expect(group!.tagName, `${layer}: the group must not be the list itself`).not.toBe('UL');
+      expect(group!.getAttribute('aria-label'), layer).toBe(label);
+      const list = group!.querySelector('ul.chips');
+      expect(list?.getAttribute('role'), `${layer}: the chips stay a native list`).toBe('list');
+      expect([...list!.children].every((li) => li.tagName === 'LI' && li.querySelector('button.chip[aria-pressed]') !== null), layer).toBe(true);
+      expect(list!.children.length).toBeGreaterThan(1);
+      for (const li of section.querySelectorAll('li')) {
+        const parent = li.parentElement!;
+        expect(['UL', 'OL'], `${layer}: <li> under <${parent.tagName.toLowerCase()}>`).toContain(parent.tagName);
+        expect(parent.getAttribute('role') ?? 'list', `${layer}: <li> under a ${parent.tagName} whose role is not list`).toBe('list');
+      }
+    }
+  });
   it('a future-only list groups under its own day and shows no today head', () => {
     const futureOnly = {
       ...SNAPSHOTS.dogadanja!,
