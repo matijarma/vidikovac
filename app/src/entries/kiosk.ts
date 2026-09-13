@@ -1,9 +1,11 @@
 // Page entry for /kiosk/. R-16: with the theme module in <head> these are the
-// page's only two scripts, both external. R-37: an entry imports the three
-// shared stylesheets plus the component stylesheets its page actually uses.
-// Reads the one-time provisioning fragment (or the stored credentials), mounts
-// the kiosk, and strips the secret from the address bar so a reload never
-// re-provisions from history.
+// page's only two scripts, both external. R-37: an entry imports the shared
+// stylesheets plus the component stylesheets its page actually uses -- the
+// kiosk's compositions (app/src/kiosk.ts, app/src/kiosk/*) draw with
+// kiosk.css and the QR plate alone. Reads the one-time provisioning fragment
+// (or the stored credentials, or nothing: then the self-service setup shows),
+// mounts the kiosk, and strips the secret from the address bar so a reload
+// never re-provisions from history.
 import { bootPage } from '../boot';
 import { mountKiosk } from '../kiosk';
 import { createCityMap } from '../map/city-map';
@@ -11,11 +13,8 @@ import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import '../ui/tokens.css';
 import '../ui/base.css';
-import '../ui/panel.css';
-import '../ui/layers.css';
 import '../ui/qr.css';
 import '../ui/kiosk.css';
-import '../motion/schematic.css';
 
 const { i18n, theme } = bootPage({ page: 'kiosk' });
 const root = document.querySelector<HTMLElement>('#kiosk')!;
@@ -46,13 +45,12 @@ const lightweight = detectLagano({
   canWebgl,
 });
 markLagano(document.documentElement, lightweight);
-// R-F3: the three Modrotisak faces are the modern path's typography and
-// never reach the lightweight graph -- Croatian text pulls latin and latin-ext
-// of every face, more than the whole 200 kB promise (§1.10) on their own. A
-// dynamic import makes Vite emit fonts.css as its own chunk, loaded here only
-// when the entry has decided against the light path; the lightweight screen
-// keeps the system stack tokens.css already names, the same honest degrade as
-// the canvas-free panorama (R-L2).
+// R-F3: the web fonts are the modern path's typography and never reach the
+// lightweight graph -- Croatian text pulls latin and latin-ext of every face,
+// more than the whole 200 kB promise (§1.10) on their own. A dynamic import
+// makes Vite emit fonts.css as its own chunk, loaded here only when the entry
+// has decided against the light path; the lightweight screen keeps the system
+// stack kiosk.css already names.
 if (!lightweight) void import('../ui/fonts.css');
 
 mountKiosk(root, {

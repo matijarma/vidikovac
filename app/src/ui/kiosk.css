@@ -1,451 +1,409 @@
-/* Prozor: the gallery sheet. Laid out against a 1920px design width; every
-   size below is calc(var(--kiosk-scale) * Npx), where --kiosk-scale is a
-   JS-computed multiplier (applyScale() in ui/canvas.ts, called from
-   kiosk.ts) written once to the .kiosk root from its own measured width.
-   That is R-L3's whole point: no @container rule anywhere in this file, so
-   the same layout serves a 2016 browser and a 4K TV alike.
+/* Kaj ima? public screen (app/src/kiosk.ts and app/src/kiosk/*).
 
-   R-F4, the same discipline for the rest of the sheet: where a modern
-   declaration has a 2017 equivalent, the old line comes first and the new
-   one after it (an engine that knows the new one takes it, one that does
-   not keeps the old); state the kiosk root already carries (data-mode,
-   data-live) stands in for :has(); and every lightweight-rendered list is
-   spaced with sibling margins, never flex gap alone -- Chrome before 84 and
-   Safari before 14.1 lay flex items out with no gap at all, and there is no
-   @supports probe that tells flex gap from grid gap, so margins carry the
-   spacing on every engine and gap is not used on those lists. */
-.kiosk-body { margin: 0; overflow: hidden; }
+   Two explicit compositions -- `wide` drawn for 1920 x 1080, `compact` for
+   1366 x 768 -- chosen in JS (kiosk/layout.ts writes data-size) and never a
+   proportional shrink of one drawing: every size below is a token per
+   composition, multiplied by --kiosk-zoom, which is 1 at both design sizes
+   and only departs from it on screens larger than 1080p (scaled up) or
+   slightly smaller than 1366 x 768 (down to 0.8, no further).
+
+   Palette: the approved mineral light / deep-neutral dark pair with peacock
+   as the one action colour, amber for weather, violet for events, rose for
+   urgency. OKLCH after its sRGB fallback on every token, so an engine
+   without OKLCH keeps the hex. The kiosk owns these `--k-*` tokens; the
+   shared `--tone-*` set can alias them once the UI workstream's tokens
+   land (kiosk/INTEGRATION.md).
+
+   Older engines: 100vh before 100dvh, `grid-gap` before `gap`, no
+   container queries and no :has() -- state is read off data attributes the
+   controller writes (data-mode, data-size, data-live). */
+
+.kiosk-body { margin: 0; overflow: hidden; background: #f6f8f7; }
 
 .kiosk {
-  --kiosk-scale: 1;
-  display: flex;
-  flex-direction: column;
+  --k-zoom: var(--kiosk-zoom, 1);
+  --k-canvas: #f6f8f7; --k-canvas: oklch(97.6% 0.004 170);
+  --k-surface: #fdfefd; --k-surface: oklch(99.3% 0.002 170);
+  --k-surface-2: #e9efec; --k-surface-2: oklch(94.5% 0.008 170);
+  --k-line: #d0dad6; --k-line: oklch(87.5% 0.012 170);
+  --k-ink: #182423; --k-ink: oklch(23.4% 0.014 185);
+  --k-ink-2: #526461; --k-ink-2: oklch(47.5% 0.02 185);
+  --k-ink-3: #6b7b78; --k-ink-3: oklch(56% 0.017 185);
+  --k-action: #08777b; --k-action: oklch(50.4% 0.083 194);
+  --k-action-ink: #f6f8f7;
+  --k-action-soft: #dcefee; --k-action-soft: oklch(93% 0.03 194);
+  --k-amber: #8f5b00; --k-amber: oklch(50% 0.11 75);
+  --k-amber-soft: #fbefd6; --k-amber-soft: oklch(95% 0.04 85);
+  --k-violet: #5a44b5; --k-violet: oklch(47% 0.16 290);
+  --k-violet-soft: #ebe6fa; --k-violet-soft: oklch(93% 0.03 290);
+  --k-rose: #b02c46; --k-rose: oklch(50% 0.17 15);
+  --k-rose-soft: #fbe7ea; --k-rose-soft: oklch(94% 0.03 15);
+  --k-qr-plate: #ffffff;
+  --k-qr-ink: #182423;
+  --k-focus: #08777b;
+  --k-shadow: 0 12px 32px rgba(24, 36, 35, 0.08);
+  --k-font: 'Manrope', 'Segoe UI', 'Avenir Next', system-ui, sans-serif;
+  --k-ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --k-dur: 180ms;
+  display: grid;
+  grid-template-rows: var(--k-head-h) minmax(0, 1fr) var(--k-strip-h);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  font-family: var(--font-body);
-  color: var(--tone-text-primary);
-  background: var(--tone-surface-canvas);
-}
-
-.kiosk-alert { margin: 0; flex: none; padding: calc(var(--kiosk-scale) * 20px) calc(var(--kiosk-scale) * 80px); font-size: calc(var(--kiosk-scale) * 24px); }
-.kiosk-alert[hidden] { display: none; }
-
-/* ── Header: wordmark + tagline, date + clock, a 2px rule beneath ────── */
-.kiosk-head {
-  flex: none;
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: calc(var(--kiosk-scale) * 40px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 24px);
-  line-height: 1.3; /* R-V1: the header is 120 with its rule, so its one line has a known height */
-  border-block-end: 2px solid var(--tone-text-primary);
-}
-.kiosk-head > * + * { margin-left: calc(var(--kiosk-scale) * 24px); }
-.kiosk-wordmark {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-size: calc(var(--kiosk-scale) * 38px);
-}
-.kiosk-tagline { margin-left: calc(var(--kiosk-scale) * 24px); font-family: var(--font-body); font-weight: 400; letter-spacing: 0; font-size: calc(var(--kiosk-scale) * 22px); color: var(--tone-text-muted); }
-.kiosk-when { margin: 0; display: flex; align-items: baseline; }
-.kiosk-when > * + * { margin-left: calc(var(--kiosk-scale) * 28px); }
-.kiosk-date { font-size: calc(var(--kiosk-scale) * 22px); color: var(--tone-text-muted); }
-.kiosk-clock { font-family: var(--font-mono); font-weight: 500; font-size: calc(var(--kiosk-scale) * 38px); font-variant-numeric: tabular-nums; }
-
-/* ── Shared figure/legend look: the panorama and the meander both carry a
-   mono, tracked, muted caption (design.md §2: "legenda … jedino mjesto za
-   duhovitost"). ─────────────────────────────────────────────────────── */
-.kiosk-fig { margin: 0; }
-/* tabular-nums: the legends carry counts and clock times; on the system
-   monospace stack (the lightweight typography, R-F3) figures are tabular
-   by construction, and on JetBrains Mono this asks for the same. */
-.legend { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.3; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; color: var(--tone-text-muted); }
-
-/* ── Panorama band: canvas full width at 264px (88px once a session or T's
-   live map owns the stage); its lightweight twin is a plain 2px rule
-   (R-L2) — no canvas, no apology, the legend still says the count. ───── */
-.kiosk-panorama { flex: none; }
-.kiosk-panorama .panorama,
-.kiosk-panorama .panorama-rule { display: block; inline-size: 100%; }
-.kiosk-panorama .panorama { block-size: calc(var(--kiosk-scale) * 264px); }
-.kiosk-panorama .panorama-rule { block-size: 2px; background: var(--tone-text-primary); }
-/* data-live is written by kiosk.ts the moment the stage schematic is
-   mounted (R-F4: the attribute a 2017 engine can match, in place of
-   :has(.kiosk-live:not(:empty))). The lightweight rule is not in this
-   list: R-L2 makes it a 2 px ink rule, and 88 px of solid ink is a block,
-   not a rule. */
-[data-mode='unlocked'] .kiosk-panorama .panorama,
-.kiosk[data-live='1'] .kiosk-panorama .panorama {
-  block-size: calc(var(--kiosk-scale) * 88px);
-}
-.kiosk-panorama .legend { margin-block-start: calc(var(--kiosk-scale) * 10px); padding-inline: calc(var(--kiosk-scale) * 80px); }
-
-/* ── Stage: the two-column gallery sheet ──────────────────────────────── */
-/* R-V1: at 1920 by 1080 the stage has budgets, not a flow. Above it the
-   header (120 with its rule) and the panorama strip (88 plus its legend);
-   below it the safety strip (120). The stage takes what is left -- about
-   715 at scale 1 -- and never grows past it: overflow:hidden is the last
-   defence, but every row below is sized so nothing ever reaches it. The
-   production screenshot of 12 September had the catalogue rows printed over
-   the Osnovno button because this was a flowing stack. */
-.kiosk-stage {
-  position: relative;
-  flex: 1;
-  min-block-size: 0;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: 1fr calc(var(--kiosk-scale) * 560px);
-  grid-gap: calc(var(--kiosk-scale) * 64px);
-  gap: calc(var(--kiosk-scale) * 64px);
-  padding: calc(var(--kiosk-scale) * 12px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 12px);
-}
-/* An author display beats the UA [hidden] rule, so hide explicitly (same as .kiosk-alert). */
-.kiosk-stage[hidden] { display: none; }
-/* The left column as explicit rows, top to bottom: the schematic takes
-   everything the fixed rows leave (about 380 at 1080p, the dominant element
-   of the stage as R-P1 intended); the headline row is 96; the meander is
-   its 72 canvas plus its legend; the catalogue is 96 with its top rule,
-   pinned last. */
-.kiosk-teaser {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) calc(var(--kiosk-scale) * 96px) auto calc(var(--kiosk-scale) * 96px);
-  grid-row-gap: calc(var(--kiosk-scale) * 8px);
-  row-gap: calc(var(--kiosk-scale) * 8px);
-  min-inline-size: 0;
-  min-block-size: 0;
-}
-
-/* ── The live stage (T9 / R-P1): T's schematic in the teaser column, above
-   the headline. Empty only before mountKiosk fills it, when it takes no
-   space. The canvas pair fills its whole row (the crop circle fits the
-   row's height; the wider canvas is empty cloth either side of it); the
-   lightweight list and every caption scale with the kiosk like the legends
-   do. ────────────────────────────────────────────────────────────────── */
-.kiosk-live:empty { display: none; }
-.kiosk-live { min-block-size: 0; overflow: hidden; }
-/* The stack every browser gets: host, slot and view each shrink to the row,
-   the canvas pair takes what the legend and the honesty note leave. */
-.kiosk-live .schematic-host { block-size: 100%; gap: calc(var(--kiosk-scale) * 4px); }
-.kiosk-live .schematic-slot { flex: 1; min-block-size: 0; display: flex; flex-direction: column; }
-.kiosk-live .schematic { flex: 1; min-block-size: 0; gap: calc(var(--kiosk-scale) * 4px); }
-.kiosk-live .schematic-canvases { flex: 1; min-block-size: 0; block-size: auto; aspect-ratio: auto; }
-/* R-V1: the schematic legend is mono 19, two lines at most; the honesty
-   note (R-P2's sentence) is 17. Both are capped to a narrow column so that,
-   laid into the figure's corner below, they never reach the drawing. */
-.kiosk-live .schematic-legend {
-  font-size: calc(var(--kiosk-scale) * 19px);
+  font-family: var(--k-font);
+  font-variant-numeric: tabular-nums;
+  color: var(--k-ink);
+  background: var(--k-canvas);
   line-height: 1.25;
-  max-block-size: calc(var(--kiosk-scale) * 19px * 1.25 * 2);
-  overflow: hidden;
 }
-.kiosk-live .schematic-note { font-size: calc(var(--kiosk-scale) * 17px); line-height: 1.3; }
-.kiosk-live .schematic-legend, .kiosk-live .schematic-note { max-inline-size: calc(var(--kiosk-scale) * 320px); }
-/* Where the browser can drop the slot's and the view's boxes, the host lays
-   the canvas pair over the whole row and sets the legend and the note into
-   the figure's own empty bottom-left corner: the crop circle is centred in
-   a column three times as wide as the row is tall, so that corner carries
-   no route and no vehicle (a 320 px caption column clears the circle up to
-   a 3:2 stage). That is what lets the canvas be the full ~380 px rather
-   than ~310 with two caption lines under it. A browser without
-   display:contents (before 2018) keeps the stack above: a shorter canvas
-   with the captions under it, nothing overlapping -- R-L3's shape of a
-   degrade. The canvas path is the only one with canvases; in lightweight
-   mode the list simply spans the row. */
-@supports (display: contents) {
-  .kiosk-live .schematic-slot, .kiosk-live .schematic { display: contents; }
-  .kiosk-live .schematic-host {
-    display: grid;
-    grid-template-columns: calc(var(--kiosk-scale) * 320px) 1fr;
-    grid-template-rows: minmax(0, 1fr) auto auto;
-    gap: 0;
+
+:root[data-theme-resolved='dark'] .kiosk-body { background: #17201f; }
+:root[data-theme-resolved='dark'] .kiosk,
+.kiosk[data-face='dark'] {
+  --k-canvas: #17201f; --k-canvas: oklch(21.6% 0.012 185);
+  --k-surface: #1f2a28; --k-surface: oklch(25.6% 0.013 185);
+  --k-surface-2: #293633; --k-surface-2: oklch(30.5% 0.014 185);
+  --k-line: #3a4845; --k-line: oklch(38% 0.014 185);
+  --k-ink: #eff6f3; --k-ink: oklch(96.4% 0.008 170);
+  --k-ink-2: #aebcb7; --k-ink-2: oklch(78% 0.014 175);
+  --k-ink-3: #8b9995; --k-ink-3: oklch(66% 0.014 175);
+  --k-action: #63d7c3; --k-action: oklch(80.6% 0.108 178);
+  --k-action-ink: #17201f;
+  --k-action-soft: #1f3b38; --k-action-soft: oklch(32% 0.04 185);
+  --k-amber: #f2c078; --k-amber: oklch(83% 0.11 80);
+  --k-amber-soft: #3a2f1c; --k-amber-soft: oklch(28% 0.04 80);
+  --k-violet: #b8a6f0; --k-violet: oklch(76% 0.11 290);
+  --k-violet-soft: #2d2946; --k-violet-soft: oklch(28% 0.05 290);
+  --k-rose: #ff9aab; --k-rose: oklch(78% 0.13 10);
+  --k-rose-soft: #3f2429; --k-rose-soft: oklch(27% 0.05 10);
+  --k-focus: #63d7c3;
+  --k-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-resolved]) .kiosk-body { background: #17201f; }
+  :root:not([data-theme-resolved]) .kiosk {
+    --k-canvas: #17201f; --k-surface: #1f2a28; --k-surface-2: #293633; --k-line: #3a4845;
+    --k-ink: #eff6f3; --k-ink-2: #aebcb7; --k-ink-3: #8b9995;
+    --k-action: #63d7c3; --k-action-ink: #17201f; --k-action-soft: #1f3b38;
+    --k-amber: #f2c078; --k-amber-soft: #3a2f1c; --k-violet: #b8a6f0; --k-violet-soft: #2d2946;
+    --k-rose: #ff9aab; --k-rose-soft: #3f2429; --k-focus: #63d7c3;
   }
-  .kiosk-live .schematic-canvases { grid-column: 1 / -1; grid-row: 1 / -1; block-size: 100%; }
-  .kiosk-live .schematic-list { grid-column: 1 / -1; grid-row: 1; }
-  .kiosk-live .schematic-legend { grid-column: 1; grid-row: 2; }
-  .kiosk-live .schematic-note { grid-column: 1; grid-row: 3; margin-block-start: calc(var(--kiosk-scale) * 4px); }
-  .kiosk-live .schematic-legend, .kiosk-live .schematic-note { position: relative; z-index: 1; align-self: end; }
-  /* The tap card moves to the top corner, out of the captions' way. */
-  .kiosk-live .schematic-card { inset-block-end: auto; inset-block-start: calc(var(--kiosk-scale) * 8px); }
-}
-.kiosk-live .schematic-card { font-size: calc(var(--kiosk-scale) * 24px); }
-/* R-V1 / R-F8: ten rows at 24 px with the base file's own 8 px sibling
-   margin is 320 px, inside the ~380 px the stage's schematic row leaves --
-   schematic.css already spaces every row with margins, never flex `gap`
-   (R-F4), so nothing here needs to zero or re-derive that spacing. */
-.kiosk-live .schematic-route-label,
-.kiosk-live .schematic-route-value,
-.kiosk-live .schematic-more,
-.kiosk-live .schematic-empty {
-  font-size: calc(var(--kiosk-scale) * 24px);
 }
 
-/* ── Headline row (R-V1): 96 tall for every card -- a kicker line, one
-   52 px line of title, and one small line under it: the card's attribution,
-   or for the invitation its second sentence in --tone-label. Every line is
-   nowrap with an ellipsis, so the row measures the same whatever the feed
-   says (an HRT headline, a long DHMZ observation). The title keeps its
-   descenders by painting them into its own bottom padding, which a negative
-   margin takes back out of the flow. ─────────────────────────────────── */
-.teaser-card { display: flex; flex-direction: column; min-inline-size: 0; opacity: 0; transition: opacity 600ms ease; }
-.teaser-card.is-in { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .teaser-card { transition: none; opacity: 1; } }
-.teaser-kicker {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: calc(var(--kiosk-scale) * 19px);
-  line-height: 1.08;
-  letter-spacing: 0.06em;
-  color: var(--tone-label);
-  white-space: nowrap;
+/* --- Per-composition tokens: every size is a token times --k-zoom --------- */
+.kiosk[data-size='wide'] {
+  --k-head-h: calc(84px * var(--k-zoom));
+  --k-strip-h: calc(72px * var(--k-zoom));
+  --k-pad: calc(24px * var(--k-zoom));
+  --k-gap: calc(20px * var(--k-zoom));
+  --k-side-w: calc(720px * var(--k-zoom));
+  --k-qr: calc(280px * var(--k-zoom));
+  --k-main: calc(40px * var(--k-zoom));
+  --k-main-2: calc(28px * var(--k-zoom));
+  --k-sup: calc(28px * var(--k-zoom));
+  --k-sup-2: calc(22px * var(--k-zoom));
+  --k-meta-size: calc(18px * var(--k-zoom));
+  --k-hero: calc(128px * var(--k-zoom));
+  --k-temp: calc(64px * var(--k-zoom));
+  --k-code-size: calc(64px * var(--k-zoom));
+  --k-badge: calc(60px * var(--k-zoom));
+  --k-radius: calc(24px * var(--k-zoom));
+  --k-radius-s: calc(14px * var(--k-zoom));
+  --k-control: calc(64px * var(--k-zoom));
 }
-.teaser-title {
-  margin: 0 0 -0.14em;
-  padding-block-end: 0.14em;
-  font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.06;
-  letter-spacing: -0.02em;
-  font-size: calc(var(--kiosk-scale) * 52px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* The invitation's second sentence: its own line under the first, in the
-   label tone, at the small-line size the other cards give their attribution
-   -- the headline and its deck. */
-.teaser-tagline {
-  display: block;
-  font-family: var(--font-body);
-  font-weight: 500;
-  letter-spacing: 0;
-  font-size: calc(var(--kiosk-scale) * 20px);
-  line-height: 1;
-  color: var(--tone-label);
-}
-.teaser-attr {
-  margin: 0 0 -0.2em;
-  padding-block-end: 0.2em;
-  font-size: calc(var(--kiosk-scale) * 17px);
-  line-height: 1.12;
-  color: var(--tone-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.kiosk[data-size='compact'] {
+  --k-head-h: calc(60px * var(--k-zoom));
+  --k-strip-h: calc(56px * var(--k-zoom));
+  --k-pad: calc(18px * var(--k-zoom));
+  --k-gap: calc(14px * var(--k-zoom));
+  --k-side-w: calc(540px * var(--k-zoom));
+  --k-qr: calc(240px * var(--k-zoom));
+  --k-main: calc(28px * var(--k-zoom));
+  --k-main-2: calc(22px * var(--k-zoom));
+  --k-sup: calc(22px * var(--k-zoom));
+  --k-sup-2: calc(18px * var(--k-zoom));
+  --k-meta-size: calc(15px * var(--k-zoom));
+  --k-hero: calc(88px * var(--k-zoom));
+  --k-temp: calc(52px * var(--k-zoom));
+  --k-code-size: calc(36px * var(--k-zoom));
+  --k-badge: calc(46px * var(--k-zoom));
+  --k-radius: calc(18px * var(--k-zoom));
+  --k-radius-s: calc(10px * var(--k-zoom));
+  --k-control: calc(52px * var(--k-zoom));
 }
 
-/* ── Meander (design.md §3.2): the 30s code countdown. Canvas by default;
-   the lightweight twin is a track + a bar whose width is the same
-   quantised percent, no canvas, no transition (R-L2). Its row is the 72
-   canvas plus the legend line (R-V1). ─────────────────────────────────── */
-.kiosk-meander { margin: 0; }
-.kiosk-meander .meander { display: block; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 72px); }
-.kiosk-meander .meander-track { position: relative; inline-size: calc(var(--kiosk-scale) * 860px); max-inline-size: 100%; block-size: calc(var(--kiosk-scale) * 24px); background: var(--tone-stroke); }
-.kiosk-meander .meander-bar { position: absolute; top: 0; bottom: 0; left: 0; height: 100%; inset-block: 0; inset-inline-start: 0; background: var(--tone-text-primary); }
-.kiosk-meander .legend { margin-block-start: calc(var(--kiosk-scale) * 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* --- Shell: header, stage, strip ------------------------------------------ */
+.kiosk { position: relative; }
+.kiosk p, .kiosk h1, .kiosk h2, .kiosk ul { margin: 0; }
+.kiosk ul { padding: 0; list-style: none; }
+.k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.k-park { display: none; }
 
-/* ── Catalogue: 01/02/03, a CSS counter (never the string itself). The last
-   row of the column, 96 tall with its rule (R-V1): rule 2, label 19, value
-   48, and the padding that makes up the rest. ─────────────────────────── */
-.kiosk-catalogue {
-  counter-reset: cat;
-  margin: 0;
-  display: flex;
-  align-items: flex-end;
-  padding-block: calc(var(--kiosk-scale) * 4px) calc(var(--kiosk-scale) * 6px);
-  border-block-start: 2px solid var(--tone-text-primary);
-}
-.cat-row { counter-increment: cat; min-inline-size: 0; }
-.cat-row + .cat-row { margin-left: calc(var(--kiosk-scale) * 60px); }
-.cat-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.3; letter-spacing: 0.08em; color: var(--tone-label); white-space: nowrap; }
-.cat-label::before { content: counter(cat, decimal-leading-zero) ' · '; }
-.cat-value { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 48px); line-height: 1.1; white-space: nowrap; }
-.cat-unit { font-weight: 500; font-size: calc(var(--kiosk-scale) * 30px); color: var(--tone-text-muted); }
+.k-head { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
+.k-head-brand { display: flex; align-items: center; min-width: 0; }
+.k-brand { font-size: var(--k-sup); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
+.k-brand-sub { margin-left: 0.5em; font-size: var(--k-sup-2); font-weight: 500; color: var(--k-ink-3); }
+.k-context { min-width: 0; margin-left: calc(var(--k-gap) * 1.5); padding-left: calc(var(--k-gap) * 1.5); border-left: 1px solid var(--k-line); font-size: var(--k-sup); font-weight: 600; color: var(--k-ink); white-space: nowrap; overflow: hidden; line-height: 1.15; }
+.k-context:empty { display: none; }
+.k-context-sub { display: block; font-size: var(--k-sup-2); font-weight: 500; color: var(--k-ink-3); }
+.k-head-mid { display: flex; flex: 1; justify-content: center; min-width: 0; padding: 0 var(--k-gap); }
+.k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action); font-size: var(--k-sup-2); font-weight: 700; white-space: nowrap; }
+.k-head-when { margin-left: auto; text-align: right; white-space: nowrap; }
+.k-date { font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-clock { display: block; font-size: var(--k-sup); font-weight: 700; line-height: 1.1; }
 
-/* ── Code card: vertically centred in the stage (R-V1) ─────────────────── */
-.kiosk-code { display: flex; flex-direction: column; justify-content: center; min-block-size: 0; }
-.code-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border: calc(var(--kiosk-scale) * 4px) solid var(--tone-text-primary);
-  background: var(--tone-surface-1);
-  padding: calc(var(--kiosk-scale) * 30px);
-}
-.code-card > * + * { margin-top: calc(var(--kiosk-scale) * 18px); }
-.kiosk-qr { inline-size: calc(var(--kiosk-scale) * 228px); block-size: calc(var(--kiosk-scale) * 228px); }
-.kiosk-qr .qr { width: 100%; height: 100%; max-width: none; border-radius: 0; padding: calc(var(--kiosk-scale) * 14px); }
-.kiosk-qr .qr svg { width: 100%; height: 100%; }
-.kiosk-code-value { margin: 0; font-family: var(--font-mono); font-weight: 500; font-size: calc(var(--kiosk-scale) * 52px); letter-spacing: 0.14em; font-variant-numeric: tabular-nums; }
-.code-dash { opacity: 0.45; padding-inline: 0.2em; }
-.kiosk-code-hint { font-size: calc(var(--kiosk-scale) * 18px); text-align: center; }
-.kiosk-code-hint .hint-emphasis { color: var(--tone-text-primary); }
+.k-alert { position: absolute; top: calc(var(--k-head-h) + var(--k-gap) * 0.5); right: var(--k-pad); z-index: 5; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-2); font-weight: 600; box-shadow: var(--k-shadow); }
+.k-alert[hidden] { display: none; }
 
-/* ── Essentials view (R-P7 / M3b, fitted for every combination by R-F11): a
-   locked kiosk answers without a phone. A sibling of .kiosk-stage, in the
-   same flow position — once .kiosk-stage is [hidden] this simply takes its
-   place, so the header and the safety strip above and below it never move
-   and stay visible while someone reads.
+.k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
+.k-stage > section { height: 100%; min-height: 0; }
 
-   R-F11: the header (below) is at most 140 px and the five possible rows
-   lay out as a two-column CSS Grid, so five populated rows are three grid
-   rows rather than five stacked ones. overflow: hidden replaces the old
-   overflow-y: auto -- R-P7 promised this board never scrolls, and a kiosk
-   has no scroll wheel to scroll it with -- and is the *last* defence, not
-   the layout: every row's own type sizes (below) are chosen so the real
-   content fits inside the grid's own 150 px-a-row cap; the per-row
-   overflow: hidden a few rules down only guards a feed string long enough
-   to defeat that budget from ever spilling into a neighbour, the way the
-   wall-of-text bug (12 September, P-1) once pushed Maksimir and the
-   pharmacy row off the bottom of the screen entirely. ────────────────── */
-.kiosk-essentials {
-  flex: 1;
-  min-block-size: 0;
-  overflow: hidden;
-  padding: calc(var(--kiosk-scale) * 24px) calc(var(--kiosk-scale) * 80px) calc(var(--kiosk-scale) * 32px);
-}
-.kiosk-essentials[hidden] { display: none; }
-.kiosk-essentials > header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-block-end: calc(var(--kiosk-scale) * 16px);
-  padding-block-end: calc(var(--kiosk-scale) * 14px);
-  border-block-end: 2px solid var(--tone-text-primary);
-}
-/* The title alone on its own line (flex-basis 100% forces the wrap, the
-   same trick the old rule used the other way round); the hint and the
-   close button share the line under it, both carrying the same top margin
-   so that second line sits a fixed distance under the title regardless of
-   which of the two is taller (never a flex `gap`: this is the same
-   flex-wrapped list R-F4 already covers on this file, so the fallback is a
-   margin, not row-gap). */
-.kiosk-essentials h2 { flex: 0 0 100%; min-inline-size: 0; font-size: calc(var(--kiosk-scale) * 40px); }
-.kiosk-essentials header .legend { flex: 1; min-inline-size: calc(var(--kiosk-scale) * 240px); margin-block-start: calc(var(--kiosk-scale) * 8px); }
-.kiosk-essentials-close {
-  flex: none;
-  margin-left: calc(var(--kiosk-scale) * 32px);
-  margin-block-start: calc(var(--kiosk-scale) * 8px);
-  border: 2px solid var(--tone-text-primary);
-  min-block-size: calc(var(--kiosk-scale) * 44px);
-  padding-inline: calc(var(--kiosk-scale) * 28px);
-  font: inherit;
-  font-weight: 700;
-  font-size: calc(var(--kiosk-scale) * 22px);
-  background: var(--tone-surface-1);
-  color: var(--tone-text-primary);
-  cursor: pointer;
-}
-/* R-F11: five rows as a two-column grid. CSS Grid's own row-major
-   auto-placement already starts top-left and, with an odd row count, lays
-   the lone last row into column 1 alone rather than stretching it across
-   both -- nothing here has to force either behaviour, it is the default.
-   grid-column-gap/grid-row-gap before their bare aliases is R-F4's own
-   pattern, already used a few hundred lines up on .kiosk-stage: Grid's
-   `gap` shipped with Grid itself in 2017, years before flex gap did, so
-   (unlike the flex lists R-F4 names) this needs no margin fallback.
-   grid-auto-rows: minmax(0, 150px) is a cap, not a stretch -- a short row
-   (a lone pharmacy row with no detail) does not grow to fill it -- so three
-   grid rows are at most 3 * 150 + 2 * 8 = 466 px, inside the roughly
-   580 px the stage leaves under the header at 1080p. */
-.ess-rows {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-column-gap: calc(var(--kiosk-scale) * 48px);
-  column-gap: calc(var(--kiosk-scale) * 48px);
-  grid-row-gap: calc(var(--kiosk-scale) * 8px);
-  row-gap: calc(var(--kiosk-scale) * 8px);
-  grid-auto-rows: minmax(0, calc(var(--kiosk-scale) * 150px));
-}
-.ess-row { min-inline-size: 0; min-block-size: 0; overflow: hidden; }
-.ess-label { margin: 0; font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); line-height: 1.2; letter-spacing: 0.06em; color: var(--tone-label); }
-.ess-value { margin: calc(var(--kiosk-scale) * 4px) 0 0; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--kiosk-scale) * 40px); line-height: 1.05; }
-/* R-F11: at most two lines, ellipsised on the second -- the routes row's
-   own detail can carry up to seven joined entries ("6 kasni 2 min · 11 na
-   vrijeme · …"), and a CAP or closure title can run long in its own right.
-   The fixed max-block-size is the pre-2019 fallback: an engine that does
-   not understand -webkit-line-clamp still clips at exactly two lines'
-   worth of height, just without the ellipsis glyph; the modern
-   improvement (an ellipsis on the truncated second line) is read after it,
-   R-F4's own old-then-new order. */
-.ess-detail {
-  margin: calc(var(--kiosk-scale) * 4px) 0 0;
-  font-family: var(--font-body);
-  font-size: calc(var(--kiosk-scale) * 22px);
-  line-height: 1.2;
-  color: var(--tone-text-muted);
-  max-block-size: calc(var(--kiosk-scale) * 22px * 1.2 * 2);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  text-overflow: ellipsis;
-}
-/* One line, ellipsised rather than wrapped -- the same budget discipline as
-   .ess-detail's own single line, .cat-value and the teaser headline. */
-.ess-attr { margin: calc(var(--kiosk-scale) * 6px) 0 0; font-size: calc(var(--kiosk-scale) * 16px); color: var(--tone-text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* --- Compositions: the map column and the side column ---------------------- */
+.kiosk { --k-glass: rgba(253, 254, 253, 0.94); }
+:root[data-theme-resolved='dark'] .kiosk, .kiosk[data-face='dark'] { --k-glass: rgba(31, 42, 40, 0.94); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme-resolved]) .kiosk { --k-glass: rgba(31, 42, 40, 0.94); } }
 
-/* ── Safety strip: 120 tall (R-V1), its text at most two lines of 26 ──── */
-.kiosk-safety {
-  flex: none;
-  box-sizing: border-box;
-  block-size: calc(var(--kiosk-scale) * 120px);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  padding: calc(var(--kiosk-scale) * 28px) calc(var(--kiosk-scale) * 80px);
-  font-size: calc(var(--kiosk-scale) * 26px);
-  line-height: 1.2;
-  background: var(--tone-surface-2);
-  color: var(--tone-text-primary);
-}
-/* The only other interactive control on a locked kiosk besides the /hitno
-   pill (M3b): a 44px target at scale 1, gone outright once a session is
-   live rather than merely dimmed — the driver's layer is already the full
-   thing (R-P7). */
-.kiosk-essentials-open {
-  flex: none;
-  border: 2px solid var(--tone-text-primary);
-  min-block-size: calc(var(--kiosk-scale) * 44px);
-  padding-inline: calc(var(--kiosk-scale) * 24px);
-  font: inherit;
-  font-weight: 700;
-  font-size: calc(var(--kiosk-scale) * 23px);
-  background: var(--tone-surface-1);
-  color: var(--tone-text-primary);
-  cursor: pointer;
-}
-.kiosk-safety > * + * { margin-left: calc(var(--kiosk-scale) * 44px); }
-/* A hidden Osnovno button (unlocked screen) takes no space, so its neighbour
-   starts at the strip's own padding, exactly where gap would have put it. */
-.kiosk-safety > [hidden] + * { margin-left: 0; }
-.strip-label { font-family: var(--font-mono); font-size: calc(var(--kiosk-scale) * 19px); letter-spacing: 0.08em; color: var(--tone-label); }
-/* The last text span takes the slack, which pins the pill to the far end
-   exactly as an auto margin would -- but keeps the sibling margin above as
-   the pill's minimum distance from the text when the strip is full (an
-   auto margin resolves to zero there, and on the system stack, wider than
-   Manrope, the strip is full). */
-.kiosk-safety > span:last-of-type { flex: 1 1 auto; }
-.strip-hitno {
-  flex: none;
-  border-radius: 999px;
-  padding: calc(var(--kiosk-scale) * 9px) calc(var(--kiosk-scale) * 24px);
-  font-size: calc(var(--kiosk-scale) * 23px);
-  font-weight: 700;
-  text-decoration: none;
-  background: var(--tone-action-brand);
-  color: var(--tone-action-brand-fg);
-}
-.strip-hitno:hover { background: var(--tone-action-brand-hover); }
+.k-invitation, .k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); grid-gap: var(--k-gap); gap: var(--k-gap); }
+.k-side { display: flex; flex-direction: column; min-height: 0; }
+.k-side > * + * { margin-top: var(--k-gap); }
+.k-side-blocks { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.k-side-blocks:empty { display: none; }
+.k-side-blocks > * + * { margin-top: var(--k-gap); }
 
-.corner-qr { position: absolute; inset-block-end: calc(var(--kiosk-scale) * 40px); inset-inline-end: calc(var(--kiosk-scale) * 80px); inline-size: calc(var(--kiosk-scale) * 120px); }
-/* The one line an unlocked screen carries besides the layer itself. */
-.kiosk-session { margin: 0; font-size: calc(var(--kiosk-scale) * 26px); color: var(--tone-text-muted); }
+.k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
+.k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.k-map-host[hidden] { display: none; }
+.k-map-canvas { width: 100%; height: 100%; }
+.k-lines--overlay { position: absolute; right: var(--k-gap); bottom: var(--k-gap); left: var(--k-gap); padding: var(--k-gap) calc(var(--k-gap) * 1.25); border-radius: var(--k-radius-s); background: var(--k-glass); box-shadow: var(--k-shadow); }
+.k-lines--board { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: var(--k-pad); }
+.k-lines--board .k-line-list { flex: 1; }
 
-[data-mode='unlocked'] .kiosk-teaser, [data-mode='unlocked'] .kiosk-code { display: none; }
-[data-mode='unlocked'] .kiosk-stage { grid-template-columns: 1fr; }
+.k-line-list { margin-top: calc(var(--k-gap) * 0.5); }
+.k-line { display: flex; align-items: center; padding: calc(var(--k-gap) * 0.22) 0; border-top: 1px solid var(--k-line); }
+.k-line:first-child { border-top: 0; }
+.k-line-badge { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; border-radius: calc(var(--k-radius-s) * 0.7); background: var(--k-action); color: var(--k-action-ink); font-size: var(--k-sup); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.k-line[data-kind='bus'] .k-line-badge { background: var(--k-ink-2); color: var(--k-canvas); }
+.k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup); font-weight: 600; }
+.k-line-word { flex: none; margin-left: var(--k-gap); font-size: var(--k-sup-2); font-weight: 600; color: var(--k-ink-2); }
+.k-line-near { flex: none; min-width: 9.5em; margin-left: var(--k-gap); text-align: right; font-size: var(--k-sup-2); color: var(--k-ink-3); }
+.k-line-more { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-board-note { padding: calc(var(--k-gap) * 0.5) 0; font-size: var(--k-sup); line-height: 1.3; color: var(--k-ink-2); }
+.k-board-note[data-state='down'] { color: var(--k-rose); }
+
+.k-kicker { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; font-size: var(--k-sup-2); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.k-kicker > span:first-child { min-width: 0; }
+.k-kicker-meta { flex: none; margin-left: auto; padding-left: var(--k-gap); text-transform: none; letter-spacing: 0; font-weight: 500; text-align: right; }
+.k-kicker--news { color: var(--k-violet); }
+.k-kicker--quake { color: var(--k-rose); }
+.k-kicker--city { color: var(--k-action); }
+.k-meta { font-size: var(--k-meta-size); line-height: 1.3; color: var(--k-ink-3); }
+.k-chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; font-size: var(--k-sup-2); font-weight: 600; }
+.k-chip--stale { background: var(--k-amber-soft); color: var(--k-amber); }
+
+/* --- The invitation card: QR, lead, code, remaining time -------------------- */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-areas: 'qr text' 'code code'; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); align-items: start; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.kiosk[data-size='compact'] .k-invite { grid-template-areas: 'qr text' 'qr code'; grid-template-rows: auto minmax(0, 1fr); }
+.k-invite .k-qr { grid-area: qr; }
+.k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
+.k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: #ffffff; color: #182423; }
+.k-qr .qr svg { width: 100%; height: 100%; }
+.k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface-2); text-align: center; font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-invite-text { grid-area: text; min-width: 0; }
+.k-invite-code { display: grid; grid-area: code; grid-template-columns: auto minmax(0, 1fr); grid-column-gap: var(--k-gap); column-gap: var(--k-gap); align-items: end; margin-top: var(--k-gap); }
+.kiosk[data-size='compact'] .k-invite-code { grid-template-columns: minmax(0, 1fr); align-self: end; margin-top: calc(var(--k-gap) * 0.6); }
+.k-invite-code .k-progress { grid-column: 1 / -1; }
+.kiosk[data-size='wide'] .k-invite-code .k-hint { margin: 0; text-align: right; }
+.k-lead { font-size: var(--k-main); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
+.k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); line-height: 1.3; color: var(--k-ink-2); }
+.k-code { display: flex; align-items: baseline; margin-top: var(--k-gap); font-size: var(--k-code-size); font-weight: 800; letter-spacing: 0.06em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--k-action); }
+.k-code[data-state='waiting'] { color: var(--k-ink-3); }
+.k-code-dash { margin: 0 0.15em; color: var(--k-ink-3); }
+.k-hint { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-progress { height: calc(8px * var(--k-zoom)); margin-top: calc(var(--k-gap) * 0.6); overflow: hidden; border-radius: 999px; background: var(--k-surface-2); }
+.k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action); transition: width 1s linear; }
+
+/* --- Blocks: weather, story, figures ------------------------------------------- */
+.k-block, .k-weather, .k-story { position: relative; display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
+.k-block--grow, .k-story { flex: 1; }
+/* Blocks in a column share the height: each may shrink to its floor (a kicker,
+   one row and the source line) and the row fitter trims what no longer fits. */
+.k-side-blocks > .k-block, .k-stack > .k-block { flex: none; min-height: 0; }
+.k-side-blocks > .k-block--list, .k-stack > .k-block--list { flex: 0 1 auto; min-height: var(--k-block-min, calc(240px * var(--k-zoom))); }
+.k-side-blocks > .k-block--grow, .k-stack > .k-block--grow { flex: 1 1 auto; }
+.k-side-blocks { overflow: hidden; }
+.k-invite-code .k-code { margin-top: 0; letter-spacing: 0.04em; white-space: nowrap; }
+.kiosk[data-size='compact'] .k-invite-code .k-code { letter-spacing: 0.02em; }
+.kiosk[data-size='wide'] { --k-block-min: calc(270px * var(--k-zoom)); --k-arc-w: calc(420px * var(--k-zoom)); --k-arc-h: calc(235px * var(--k-zoom)); }
+.kiosk[data-size='compact'] { --k-block-min: calc(205px * var(--k-zoom)); --k-arc-w: calc(300px * var(--k-zoom)); --k-arc-h: calc(168px * var(--k-zoom)); }
+.k-block-body { flex: 1; min-height: 0; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; }
+.k-row-more { margin-top: calc(var(--k-gap) * 0.4); }
+.k-block > .k-source { margin-top: calc(var(--k-gap) * 0.5); }
+.k-block--rose { box-shadow: inset 0 0 0 2px var(--k-rose); }
+.k-block--select { background: var(--k-action-soft); }
+.k-block--hero .k-temp { font-size: var(--k-hero); }
+.k-weather-main { display: flex; flex-wrap: wrap; align-items: baseline; margin-top: calc(var(--k-gap) * 0.4); }
+.k-temp { font-size: var(--k-temp); font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.k-condition { margin-left: var(--k-gap); font-size: var(--k-main-2); font-weight: 600; color: var(--k-ink-2); }
+.k-weather-main .k-chip { margin-left: var(--k-gap); }
+.k-weather-details { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-weather-sun { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-weather-note { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup); color: var(--k-ink-2); }
+.k-weather-note[data-state='down'] { color: var(--k-rose); }
+.k-weather > .k-meta, .k-story > .k-meta { margin-top: calc(var(--k-gap) * 0.5); }
+.k-story-title { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-main-2); font-weight: 700; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.k-story-title--empty { font-weight: 500; color: var(--k-ink-2); }
+.k-figure { font-size: var(--k-main); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.k-figure-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup); font-weight: 600; color: var(--k-ink-2); }
+.k-text { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-2); line-height: 1.3; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.k-text--long { font-size: var(--k-sup); -webkit-line-clamp: 7; }
+.k-select-main { display: flex; align-items: center; font-size: var(--k-main-2); font-weight: 700; line-height: 1.2; }
+.k-select-main .k-line-badge { margin-right: var(--k-gap); }
+.k-select-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-sunbar { height: calc(10px * var(--k-zoom)); margin-top: calc(var(--k-gap) * 0.6); overflow: hidden; border-radius: 999px; background: var(--k-surface-2); }
+.k-sunbar-fill { height: 100%; border-radius: 999px; background: var(--k-amber); }
+
+/* --- Rows inside blocks --------------------------------------------------------- */
+.k-rows { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.k-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-column-gap: var(--k-gap); column-gap: var(--k-gap); padding: calc(var(--k-gap) * 0.45) 0; border-top: 1px solid var(--k-line); }
+.k-row:first-child { padding-top: 0; border-top: 0; }
+.k-row-main { display: -webkit-box; min-width: 0; overflow: hidden; font-size: var(--k-sup); font-weight: 600; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.k-row-main .k-line-badge { vertical-align: middle; }
+.k-row-main .k-line-badge { margin-right: calc(var(--k-gap) * 0.6); }
+.k-row-sub { display: -webkit-box; grid-column: 1; margin-top: calc(var(--k-gap) * 0.15); overflow: hidden; font-size: var(--k-sup-2); line-height: 1.25; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.k-row-aside { grid-column: 2; grid-row: 1 / span 2; align-self: start; white-space: nowrap; text-align: right; font-size: var(--k-sup-2); font-weight: 600; color: var(--k-ink-2); font-variant-numeric: tabular-nums; }
+.k-row[data-severity='severe'] .k-row-main, .k-row[data-severity='extreme'] .k-row-main { color: var(--k-rose); }
+.k-row[data-severity='moderate'] .k-row-main, .k-row[data-severity='minor'] .k-row-main { color: var(--k-amber); }
+
+/* --- Safety strip: always there, never a session's ------------------------------ */
+.k-strip { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-sup-2); line-height: 1.2; }
+.k-strip-basics { flex: none; min-height: calc(var(--k-control) * 0.72); margin-right: var(--k-gap); padding: 0 var(--k-gap); border: 2px solid var(--k-action); border-radius: 999px; background: transparent; color: var(--k-action); font: inherit; font-weight: 700; cursor: pointer; }
+.k-strip-basics[hidden] { display: none; }
+.k-strip-label { flex: none; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.k-strip-item { min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); overflow: hidden; white-space: nowrap; color: var(--k-ink-2); }
+.k-strip-item strong { color: var(--k-ink); }
+.k-strip-item[data-state='active'] { color: var(--k-rose); font-weight: 700; }
+.k-strip-item[data-state='active'][data-severity='minor'], .k-strip-item[data-state='active'][data-severity='moderate'] { color: var(--k-amber); }
+.k-strip-item[data-state='unknown'], .k-strip-item[data-state='down'] { color: var(--k-ink-3); }
+.k-strip-item[data-state='stale'] { color: var(--k-amber); }
+.k-strip-sub { color: var(--k-ink-3); }
+.kiosk[data-size='compact'] .k-strip-sub { display: none; }
+.k-strip-hitno { flex: none; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
+
+/* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
+.k-basics { position: absolute; top: var(--k-head-h); right: 0; bottom: var(--k-strip-h); left: 0; z-index: 4; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--k-pad); background: var(--k-canvas); }
+.k-basics[hidden] { display: none; }
+.k-basics-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.k-basics-title { font-size: var(--k-main); font-weight: 800; line-height: 1.1; }
+.k-basics-hint { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-basics-rows { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: min-content; align-content: start; grid-gap: var(--k-gap); gap: var(--k-gap); min-height: 0; margin-top: var(--k-gap); }
+.k-ess-row { box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
+.k-ess-row[data-row='empty'] { grid-column: 1 / -1; }
+.k-ess-label { font-size: var(--k-sup-2); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.k-ess-value { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-main); font-weight: 800; line-height: 1.1; }
+.k-ess-detail { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup); line-height: 1.25; color: var(--k-ink-2); }
+.k-ess-row .k-meta { margin-top: calc(var(--k-gap) * 0.5); }
+
+/* --- Buttons and focus ----------------------------------------------------------- */
+.k-btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--k-control); padding: 0 calc(var(--k-gap) * 1.4); border: 2px solid transparent; border-radius: 999px; font: inherit; font-size: var(--k-sup); font-weight: 700; cursor: pointer; transition: background-color var(--k-dur) var(--k-ease), color var(--k-dur) var(--k-ease); }
+.k-btn--primary { border-color: var(--k-action); background: var(--k-action); color: var(--k-action-ink); }
+.k-btn--primary:disabled { border-color: var(--k-line); background: var(--k-surface-2); color: var(--k-ink-3); cursor: default; }
+.k-btn--ghost { border-color: var(--k-line); background: transparent; color: var(--k-ink); }
+.k-btn[hidden] { display: none; }
+.kiosk :focus-visible { outline: 3px solid var(--k-focus); outline-offset: 3px; }
+
+/* --- Setup wizard: two steps, one real creation per press ------------------------ */
+.k-setup { display: flex; flex-direction: column; box-sizing: border-box; max-width: calc(1240px * var(--k-zoom)); height: 100%; margin: 0 auto; padding: var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.k-setup-step { font-size: var(--k-sup-2); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-action); }
+.k-setup-title { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-main); font-weight: 800; line-height: 1.1; }
+.k-setup-intro { max-width: 44em; margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); line-height: 1.3; color: var(--k-ink-2); }
+.k-setup-form { display: flex; flex: 1; flex-direction: column; min-height: 0; margin-top: var(--k-gap); }
+.k-setup-step-box { flex: 1; min-width: 0; min-height: 0; margin: 0; padding: 0; overflow: hidden; border: 0; }
+.k-setup-step-box[hidden] { display: none; }
+.k-setup-legend { padding: 0; font-size: var(--k-sup); font-weight: 700; }
+.k-choice-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-gap: calc(var(--k-gap) * 0.6); gap: calc(var(--k-gap) * 0.6); margin-top: var(--k-gap); }
+.k-choice { position: relative; display: flex; min-width: 0; cursor: pointer; }
+.k-choice input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.k-choice-text { display: flex; flex: 1; align-items: center; box-sizing: border-box; min-width: 0; min-height: var(--k-control); padding: 0 var(--k-gap); border: 2px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-canvas); font-size: var(--k-sup-2); font-weight: 600; line-height: 1.2; }
+.k-choice input:checked + .k-choice-text { border-color: var(--k-action); background: var(--k-action-soft); color: var(--k-action); }
+.k-choice input:focus-visible + .k-choice-text { outline: 3px solid var(--k-focus); outline-offset: 2px; }
+.k-choice--stop .k-choice-text { flex-direction: column; align-items: flex-start; justify-content: center; padding: calc(var(--k-gap) * 0.5) var(--k-gap); }
+.k-stop-name { font-size: var(--k-sup); font-weight: 700; }
+.k-stop-meta { margin-top: 0.15em; font-size: var(--k-sup-2); font-weight: 500; color: var(--k-ink-2); }
+.k-choice input:checked + .k-choice-text .k-stop-meta { color: inherit; }
+.k-search { display: flex; align-items: center; margin-top: var(--k-gap); }
+.k-search-label { flex: none; margin-right: var(--k-gap); font-size: var(--k-sup-2); font-weight: 600; color: var(--k-ink-2); }
+.k-search-input { flex: 1; box-sizing: border-box; min-height: var(--k-control); padding: 0 var(--k-gap); border: 2px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-canvas); color: var(--k-ink); font: inherit; font-size: var(--k-sup); }
+.k-search-input:focus { border-color: var(--k-action); outline: none; }
+.k-setup-hint, .k-setup-count { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-2); color: var(--k-ink-2); }
+.k-setup-step-box[data-testid='setup-stops'] { display: flex; flex-direction: column; }
+.k-setup-step-box[data-testid='setup-stops'][hidden] { display: none; }
+.k-stop-list { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: min-content; grid-gap: calc(var(--k-gap) * 0.6); gap: calc(var(--k-gap) * 0.6); min-height: 0; margin-top: var(--k-gap); padding-right: calc(var(--k-gap) * 0.3); overflow-y: auto; }
+.kiosk[data-size='compact'] .k-setup-intro { display: none; }
+.k-setup-empty { font-size: var(--k-sup); color: var(--k-ink-2); }
+.k-setup-error { margin-top: var(--k-gap); padding: calc(var(--k-gap) * 0.6) var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-2); font-weight: 600; }
+.k-setup-error[hidden] { display: none; }
+.k-setup-actions { display: flex; align-items: center; margin-top: var(--k-gap); }
+.k-setup-actions > * + * { margin-left: var(--k-gap); }
+.k-setup-summary { margin-top: calc(var(--k-gap) * 0.6); font-size: var(--k-sup); font-weight: 600; }
+.k-setup-summary:empty { display: none; }
+.k-setup-meta { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-meta-size); color: var(--k-ink-3); }
+
+/* --- Expired / revoked notice ------------------------------------------------------ */
+.k-notice { display: flex; align-items: center; justify-content: center; height: 100%; }
+.k-notice-card { box-sizing: border-box; max-width: calc(900px * var(--k-zoom)); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); text-align: center; }
+.k-notice-card .k-kicker { justify-content: center; }
+.k-notice-title { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-main); font-weight: 800; line-height: 1.1; }
+.k-notice-body { margin-top: var(--k-gap); font-size: var(--k-sup); line-height: 1.3; color: var(--k-ink-2); }
+.k-notice-card .k-btn { margin-top: calc(var(--k-gap) * 1.5); }
+
+/* --- Paired compositions: one arrangement per domain ------------------------------ */
+.k-main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-gap: var(--k-gap); gap: var(--k-gap); min-height: 0; }
+.k-main:empty { display: none; }
+.k-paired[data-layer='zrak-i-nebo'] .k-main { grid-template-columns: 1.15fr 1fr; grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+.k-main-source { grid-column: 1 / -1; padding: 0 var(--k-pad); }
+.k-block--sun { grid-column: 1 / -1; }
+.k-block--sun .k-block-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); align-items: center; }
+.k-sunarc { display: block; width: var(--k-arc-w); height: var(--k-arc-h); }
+.k-sunarc-track, .k-sunarc-done { fill: none; stroke-width: 3; stroke-linecap: round; }
+.k-sunarc-track { stroke: var(--k-line); }
+.k-sunarc-done { stroke: var(--k-amber); }
+.k-sunarc-sun { fill: var(--k-amber); }
+.k-sunarc-horizon { stroke: var(--k-line); stroke-width: 1; }
+.k-paired[data-layer='sigurnost'] .k-main { grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr); }
+.kiosk[data-size='compact'] .k-paired[data-layer='sigurnost'] .k-main { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.k-paired[data-layer='uprava-i-pravo'] .k-main { grid-template-columns: 1.1fr 1fr; }
+.k-paired[data-layer='kultura'] .k-main { grid-template-columns: 1.1fr 1fr; }
+.kiosk [hidden] { display: none !important; }
+.k-paired[data-layer='vijesti'] .k-main { grid-template-columns: 1.15fr 1fr; }
+.k-main > .k-block { min-height: 0; }
+.k-stack { display: flex; flex-direction: column; min-height: 0; }
+.k-stack > * + * { margin-top: var(--k-gap); }
+.k-headline { font-size: var(--k-main); font-weight: 800; line-height: 1.12; letter-spacing: -0.015em; }
+.k-block--lead { background: var(--k-violet-soft); }
+.k-block--lead .k-kicker { color: var(--k-violet); }
+
+/* The join card: the small QR the next person scans, painted by the controller. */
+.k-join { display: flex; flex: none; align-items: center; box-sizing: border-box; margin-top: auto; padding: var(--k-gap) var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.k-side-blocks + .k-join { margin-top: var(--k-gap); }
+.k-join-qr { flex: none; width: calc(var(--k-qr) * 0.5); height: calc(var(--k-qr) * 0.5); }
+.k-join-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.4); border: 0; border-radius: var(--k-radius-s); background: #ffffff; color: #182423; }
+.k-join-qr .qr svg { width: 100%; height: 100%; }
+.k-join-qr:empty { border-radius: var(--k-radius-s); background: var(--k-surface-2); }
+.k-join-text { min-width: 0; margin-left: var(--k-gap); }
+.k-join-title { font-size: var(--k-sup); font-weight: 800; }
+.k-join-code { margin-top: calc(var(--k-gap) * 0.2); font-size: var(--k-main-2); font-weight: 800; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
+.k-join-text .k-meta { margin-top: calc(var(--k-gap) * 0.2); }
+
+/* --- Lightweight: system type, no shadows, the lines board fills the map column --- */
+:root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
+:root[data-lagano='1'] .k-map { background: var(--k-surface); }
+
+/* --- Portrait screens stack the two columns -------------------------------------- */
+.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-side-blocks { flex: none; }
+
+/* --- Motion: one transition, none when unwanted --------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
+}
+:root[data-lagano='1'] .kiosk * { transition: none !important; }

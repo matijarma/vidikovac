@@ -1,826 +1,577 @@
-// Prozor: the public screen. Teaser mode rotates cards above a fixed safety
-// strip and shows the rotating QR; unlocked mode renders the driver's layer with
-// a small corner QR so the next person can join. Nothing here talks to the
-// network directly: every dependency is injected.
-import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import type { CodeSlot, LayerId } from '../../worker/protocol';
-import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl } from './api';
-import { fillAttribution } from './attribution';
-import {
-  createBeaconClient,
-  parseProvisionHash,
-  readBeacon,
-  storeBeacon,
-  type BeaconClient,
-  type BeaconClientDeps,
-  type BeaconCredentials,
-} from './beacon';
+// Kaj ima? public screen: the controller. Decides the phase (setup,
+// invitation, paired, expired, revoked), mounts that phase's composition from
+// app/src/kiosk/*, and wires the real beacon and room sockets, the code
+// rotation, the stop-scoped teaser poll and the one map. Nothing here talks
+// to the network directly: every dependency is injected and defaults to the
+// real client, so tests drive the same paths with fakes. The screen secret is
+// stored and handed to the beacon client; it is never rendered or logged.
+import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
+import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
+import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { codeUrl, formatCode, speakableCode } from './code';
-import { zagrebTime, zagrebWeekdayDate } from './format';
+import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
+import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
-import { LAYER_MODULES, renderLayer } from './layers';
-import { cityTeaserAttribution, cityTeaserBody, cityTeaserRows } from './layers/grad-teaser';
-import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from './layers/route-summary';
-import { vehicleCount } from './layers/shared';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
-import { routeDelayMap, vehicleFixes } from './motion/fixes';
-import { loadNetwork, type Network } from './motion/network';
 import { continuePoll, nextPollDelay } from './motion/loop';
-import { createSchematicHost } from './motion/schematic-host';
-import { createRotation, slotProgress } from './rotation';
+import { loadNetwork, type Network } from './motion/network';
+import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
-import { dataNumber, dataText } from './panels/panel';
-import { applyScale, tone } from './ui/canvas';
-import { MEANDER_STEPS, paintMeander, paintMeanderBar, quantise } from './ui/meander';
-import { paintPanorama } from './ui/panorama';
-import { createQr } from './ui/qr';
 import { escapeHtml } from './ui/dom/escape';
-// Task A10's ckan-geo module (the only open-tier feed poi items come from)
-// covers city districts and civil-protection assembly points only; nothing in
-// its registered layers is ever tagged as a pharmacy, so the `category`
-// filter below can never match a real snapshot. Until Area A ships a tagged
-// pharmacy layer, the curated on-duty list already built for /hitno (task
-// D1) is the honest stand-in: it is real Grad Zagreb data, not a fixture.
-import { LJEKARNE, LJEKARNE_SOURCE } from '../../worker/hitno/ljekarne';
+import { createQr } from './ui/qr';
+import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
+import { essentialsRows } from './kiosk/essentials';
+import { clock, dayTime, weekdayDate } from './kiosk/format';
+import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
+import { byModule, safetyStrip } from './kiosk/local';
+import { createKioskMapAdapter, requestKioskMap } from './kiosk/mapview';
+import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
+import { mountSetup, type SetupHandle } from './kiosk/setup';
+import { DEFAULT_STOP_ID } from './kiosk/stops';
+import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
-/** Cross-fade interval for the teaser cards. */
-export const TEASER_ROTATE_MS = 20_000;
-/** Meander repaint cadence (design.md §3.2: "1 s korak, linearno"). */
-export const MEANDER_TICK_MS = 1_000;
-/** M3b / R-P7: how long the essentials panel waits, untouched, before it
- *  hands the screen back to the invitation. Long enough to read every row
- *  once; short enough that the next passer-by finds the invitation, not a
- *  stranger's reading session. */
+export type { KioskPhase } from './kiosk/credentials';
+
+/** The story, the clock line and the paired refresh all move on this tick. */
+export const ROTATE_MS = 20_000;
+/** The previous name of the same tick, kept for its callers. */
+export const TEASER_ROTATE_MS = ROTATE_MS;
+/** The code's remaining-time bar and the clock repaint once a second. */
+export const CODE_TICK_MS = 1_000;
+/** How long the basics panel waits, untouched, before the invitation returns. */
 export const ESSENTIALS_IDLE_MS = 90_000;
-/** R-P7: "nothing beyond eight routes is printed" -- the essentials board
- *  must never scroll, and the wall-of-text bug this cap fixes (12
- *  September) was exactly a route line with no ceiling at all. */
-export const ESSENTIALS_ROUTE_CAP = 8;
-/** Design width the whole kiosk is laid out against; applyScale() turns the
- *  element's real width into a --kiosk-scale multiplier of this (R-L3). */
-const KIOSK_DESIGN_WIDTH = 1920;
-
-export interface TeaserCard {
-  id: 'weather' | 'quake' | 'closures' | 'news' | 'city' | 'invitation';
-  title: string;
-  body: string;
-  attribution?: Attribution;
-}
-
-function byModule(modules: readonly ModuleSnapshot[]): Partial<Record<ModuleId, ModuleSnapshot>> {
-  const out: Partial<Record<ModuleId, ModuleSnapshot>> = {};
-  for (const snapshot of modules) out[snapshot.module] = snapshot;
-  return out;
-}
-
-/** The template in `snapshot.attribution.text` filled from that snapshot and
- *  a representative item (R-62); undefined when there is no snapshot yet. */
-function teaserAttribution(snapshot: ModuleSnapshot | undefined, item?: FeedItem): Attribution | undefined {
-  if (!snapshot) return undefined;
-  return { ...snapshot.attribution, text: fillAttribution(snapshot.attribution, snapshot, item) };
-}
-
-export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, _now: number): TeaserCard[] {
-  const map = byModule(modules);
-  const observation = map['dhmz-now']?.items[0];
-  const temp = dataNumber(observation, 'temp');
-  const news = map['hrt-news']?.items[0];
-  // The teaser payload carries emsc newest-first and the whole closure list
-  // (registry.teaserSubset), so both cards below are live open-tier data.
-  const quakes = map.emsc;
-  const quake = quakes?.items[0];
-  const closures = map.prometnice;
-  const closureCount = (closures?.items ?? []).filter((item) => item.kind === 'closure').length;
-  // E8: the one dogadanja card. The kiosk is the open tier, so only the
-  // Otvorena dozvola city rows reach it (layers/grad-teaser.ts).
-  const city = map.dogadanja;
-  const cityRow = cityTeaserRows(city)[0];
-  return [
-    {
-      id: 'weather',
-      title: i18n.t('kiosk.teaserWeather'),
-      body: observation
-        ? `${temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp })} · ${dataText(observation, 'weather') || observation.title}`
-        : i18n.t('status.loading'),
-      attribution: teaserAttribution(map['dhmz-now'], observation),
-    },
-    {
-      id: 'quake',
-      title: i18n.t('kiosk.teaserQuake'),
-      body: quake
-        ? [i18n.t('panels.quakeMag', { mag: dataNumber(quake, 'mag') ?? '–' }), dataText(quake, 'region') || quake.title]
-            .filter(Boolean)
-            .join(' · ')
-        : quakes
-          ? i18n.t('panels.quakeNone')
-          : i18n.t('status.loading'),
-      attribution: teaserAttribution(quakes, quake),
-    },
-    {
-      id: 'closures',
-      title: i18n.t('kiosk.teaserClosures'),
-      body: closures ? i18n.t('panels.closuresCount', { count: closureCount }) : i18n.t('status.loading'),
-      attribution: teaserAttribution(closures),
-    },
-    {
-      id: 'news',
-      title: i18n.t('kiosk.teaserNews'),
-      body: news ? news.title : i18n.t('status.loading'),
-      attribution: teaserAttribution(map['hrt-news'], news),
-    },
-    {
-      id: 'city',
-      title: i18n.t('kiosk.teaserCity'),
-      body: city ? (cityRow ? cityTeaserBody(cityRow, i18n) : i18n.t('kiosk.teaserCityEmpty')) : i18n.t('status.loading'),
-      attribution: cityTeaserAttribution(city, cityRow),
-    },
-    { id: 'invitation', title: i18n.t('common.appName'), body: i18n.t('kiosk.invitation') },
-  ];
-}
-
-export interface CatalogueEntry {
-  id: 'weather' | 'vehicles' | 'closures';
-  /** '01 · MAKSIMIR SADA' etc.; the '01 ·' prefix is a CSS counter (§4 kiosk.css), never part of this string. */
-  label: string;
-  /** The headline figure: '21 °C', a bare vehicle count, or a bare closure count. */
-  value: string;
-  /** The secondary word beside `value`: the weather word, or a plural unit ('vozila', 'zatvorena'). */
-  unit: string;
-}
-
-/** The three catalogue rows under the kiosk headline (design.md §4): Maksimir's
- *  temperature and weather word, ZET's live vehicle count, and the closure
- *  count — each with its plural unit resolved through i18n, never hand-pluralised. */
-export function catalogueRows(modules: readonly ModuleSnapshot[], i18n: I18n): CatalogueEntry[] {
-  const map = byModule(modules);
-  const observation = map['dhmz-now']?.items[0];
-  const temp = dataNumber(observation, 'temp');
-  const vehicles = vehicleCount(map['zet-rt']);
-  const closures = (map.prometnice?.items ?? []).filter((item) => item.kind === 'closure').length;
-  return [
-    {
-      id: 'weather',
-      label: i18n.t('kiosk.catalogueWeather'),
-      // Mirrors teaserCards' weather card: no observation yet is "loading",
-      // an observation with no temperature reading is "unavailable" — two
-      // different honest states, not one.
-      value: !observation ? i18n.t('status.loading') : temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp }),
-      unit: observation ? dataText(observation, 'weather') : '',
-    },
-    {
-      id: 'vehicles',
-      label: i18n.t('kiosk.catalogueVehicles'),
-      value: vehicles === null ? i18n.t('status.loading') : String(vehicles),
-      unit: vehicles === null ? '' : i18n.t('kiosk.unitVehicles', { count: vehicles }),
-    },
-    {
-      id: 'closures',
-      label: i18n.t('kiosk.catalogueClosures'),
-      // Mirrors the weather/vehicles rows above (and teaserCards' own
-      // closures card): no prometnice snapshot yet is an honest "loading",
-      // never a claimed zero.
-      value: map.prometnice ? String(closures) : i18n.t('status.loading'),
-      unit: map.prometnice ? i18n.t('kiosk.unitClosed', { count: closures }) : '',
-    },
-  ];
-}
-
-export function safetyStripText(
-  modules: readonly ModuleSnapshot[],
-  i18n: I18n,
-): { cap: string; closures: string; pharmacy: string } {
-  const map = byModule(modules);
-  const warning = map['dhmz-cap']?.items[0];
-  const closures = (map.prometnice?.items ?? []).filter((item) => item.kind === 'closure').length;
-  const pharmacy = (map['ckan-geo']?.items ?? []).find((item) => dataText(item, 'category') === 'ljekarne');
-  // Every curated entry runs both the day and the night duty shift (or, for
-  // Ljekarna ZEUS, is open outright 0-24), so none is ever "more on duty" than
-  // another at a given moment; with no per-kiosk location to rank by
-  // distance, the first entry is a stable, always-true answer rather than an
-  // arbitrary one.
-  const onDuty = LJEKARNE[0];
-  return {
-    cap: warning
-      ? `${i18n.t(`panels.severity.${warning.severity ?? 'info'}`)} · ${warning.title}`
-      : i18n.t('panels.capNone'),
-    closures: i18n.t('panels.closuresCount', { count: closures }),
-    pharmacy: pharmacy ? pharmacy.title : onDuty ? onDuty.label : i18n.t('status.empty'),
-  };
-}
-
-export interface EssentialsRow {
-  id: string;
-  label: string;
-  value: string;
-  detail?: string;
-  attribution?: string;
-}
-
-/** A module counts as answering when it has a snapshot at all and that
- *  snapshot isn't `down` — the same bar safetyStripText and catalogueRows
- *  already apply, made a named predicate here because an essentials row is
- *  skipped outright rather than shown with a placeholder (R-P7: the locked
- *  screen only says what it actually knows). */
-function isLive(snapshot: ModuleSnapshot | undefined): snapshot is ModuleSnapshot {
-  return snapshot !== undefined && snapshot.status !== 'down';
-}
-
-/** The five things a locked screen can answer without a phone (R-P7 / M3b),
- *  read from the very same open-tier ModuleSnapshot[] the teaser cards
- *  already receive — no new endpoint, no new fetch. Each row is skipped
- *  outright when its module is down or has nothing to say, rather than
- *  shown with a placeholder; when none of the five has anything, the panel
- *  says so honestly and points at /hitno instead of guessing (R-62's filled
- *  attribution runs on every row that does render, because an open screen
- *  is exactly where the Otvorena dozvola line has to appear). */
-export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, _now: number): EssentialsRow[] {
-  const map = byModule(modules);
-  const rows: EssentialsRow[] = [];
-
-  const capSnap = map['dhmz-cap'];
-  const warning = capSnap?.items[0];
-  if (isLive(capSnap) && warning) {
-    rows.push({
-      id: 'cap',
-      label: i18n.t('kiosk.teaserCap'),
-      value: i18n.t(`panels.severity.${warning.severity ?? 'info'}`),
-      detail: warning.title,
-      attribution: fillAttribution(capSnap.attribution, capSnap, warning),
-    });
-  }
-
-  const closuresSnap = map.prometnice;
-  const closureItems = isLive(closuresSnap) ? closuresSnap.items.filter((item) => item.kind === 'closure') : [];
-  // No per-kiosk location to rank by distance (same limit as safetyStripText's
-  // pharmacy pick): the first closure in a stable, always-open-tier order is
-  // a true answer, not an arbitrary one.
-  const nearestClosure = closureItems[0];
-  if (isLive(closuresSnap) && nearestClosure) {
-    rows.push({
-      id: 'closures',
-      label: i18n.t('kiosk.teaserClosures'),
-      value: i18n.t('panels.closuresCount', { count: closureItems.length }),
-      detail: nearestClosure.title,
-      attribution: fillAttribution(closuresSnap.attribution, closuresSnap, nearestClosure),
-    });
-  }
-
-  // R-F8 / R-P7: "what's running near here" is the vehicle pins already
-  // inside the kiosk's own box (registry.teaserSubset, R-P1) -- never the
-  // 'route:<id>' summary rows alone, which cover every route the whole
-  // network still runs regardless of the box (the wall-of-text bug found
-  // on production 12 September: every route in the city, in raw seconds).
-  // summariseRoutes (shared with the lightweight schematic list's own
-  // route rows, R-F8) turns the pins into one row per route; the 'route:'
-  // rows are read only for their own delay figure.
-  const zetSnap = map['zet-rt'];
-  const zetItems = isLive(zetSnap) ? zetSnap.items : [];
-  const routeDelayById = new Map(
-    zetItems
-      .filter((item) => item.id.startsWith('route:'))
-      .map((item): [string, number] => [dataText(item, 'routeId'), dataNumber(item, 'medianDelaySeconds') ?? 0])
-      .filter(([routeId]) => routeId !== ''),
-  );
-  const nearbyVehicles: RouteVehicle[] = zetItems
-    .filter((item) => item.id.startsWith('vehicle:'))
-    .map((item) => ({
-      routeId: dataText(item, 'routeId'),
-      label: dataText(item, 'routeShortName') || dataText(item, 'routeId'),
-      type: dataNumber(item, 'routeType') ?? -1,
-    }))
-    .filter((v) => v.routeId !== '');
-  const nearbyRoutes = summariseRoutes(nearbyVehicles, routeDelayById, i18n).slice(0, ESSENTIALS_ROUTE_CAP);
-  const [firstRoute, ...restRoutes] = nearbyRoutes;
-  if (isLive(zetSnap) && firstRoute) {
-    const routeLine = (r: RouteSummaryRow): string => `${r.label} ${r.word}`;
-    // The representative item for {naslov}/{id} template placeholders
-    // (R-08): the top route's own summary row when the wire carries one,
-    // else any vehicle pin, so a bare attribution template never falls
-    // back to an empty brace for lack of a FeedItem to read.
-    const representative = zetItems.find((item) => item.id === `route:${firstRoute.routeId}`) ?? zetItems.find((item) => item.id.startsWith('vehicle:'));
-    rows.push({
-      id: 'routes',
-      label: i18n.t('kiosk.linesNearby'),
-      value: routeLine(firstRoute),
-      detail: restRoutes.length > 0 ? restRoutes.map(routeLine).join(' · ') : undefined,
-      attribution: fillAttribution(zetSnap.attribution, zetSnap, representative),
-    });
-  }
-
-  const weatherSnap = map['dhmz-now'];
-  const observation = weatherSnap?.items[0];
-  if (isLive(weatherSnap) && observation) {
-    const temp = dataNumber(observation, 'temp');
-    rows.push({
-      id: 'weather',
-      label: i18n.t('kiosk.catalogueWeather'),
-      value: temp === null ? i18n.t('common.unavailable') : i18n.t('panels.temperature', { value: temp }),
-      detail: dataText(observation, 'weather') || undefined,
-      attribution: fillAttribution(weatherSnap.attribution, weatherSnap, observation),
-    });
-  }
-
-  // ckan-geo never actually tags a pharmacy (see the import comment above);
-  // when it answers at all, the curated on-duty list is the honest stand-in,
-  // carrying its own source line (LJEKARNE_SOURCE) rather than a filled
-  // template, because it isn't ckan-geo's data. Gated on ckan-geo the same
-  // way as the rows above — when the feed itself is down, this panel points
-  // at /hitno rather than a client-side guess; /hitno's own render carries
-  // the same curated fallback server-side, so the safety answer is never
-  // actually unavailable, just not duplicated here while the feed is out.
-  const poiSnap = map['ckan-geo'];
-  if (isLive(poiSnap) && poiSnap.items.length > 0) {
-    const pharmacyItem = poiSnap.items.find((item) => dataText(item, 'category') === 'ljekarne');
-    const onDuty = LJEKARNE[0];
-    rows.push({
-      id: 'pharmacy',
-      label: i18n.t('kiosk.safety'),
-      value: pharmacyItem ? pharmacyItem.title : onDuty!.label,
-      attribution: pharmacyItem ? fillAttribution(poiSnap.attribution, poiSnap, pharmacyItem) : LJEKARNE_SOURCE.text,
-    });
-  }
-
-  if (rows.length === 0) rows.push({ id: 'empty', label: '', value: i18n.t('kiosk.essentialsEmpty') });
-
-  return rows;
-}
+/** Under reduced motion or lightweight the remaining-time bar moves in ten steps. */
+export const PROGRESS_STEPS = 10;
 
 export interface KioskDeps {
   i18n: I18n;
   hash: string;
-  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  /** Where the ordinary credentials live; defaults to localStorage, null disables persistence. */
+  storage?: StorageLike | null;
   now?: () => number;
   codeBase?: string;
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
-  /** Re-runs the canvas repaints on theme change (fires once immediately) and
-   *  on resize, coalesced onto one frame (ui/canvas.ts's `repaintOn`). Absent
-   *  in tests that don't care about theme/resize repainting. */
+  /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
-  /** The network artefact for the schematics (T9); defaults to
-   *  motion/network.ts's loadNetwork over the page's own fetch, never called
-   *  in lightweight mode (R-L4). Injected so tests never fetch. */
   loadNetwork?: () => Promise<Network | null>;
-  fetchTeaser?: () => Promise<{ modules: ModuleSnapshot[] }>;
+  fetchTeaser?: (stopId?: string) => Promise<TeaserResponse>;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
+  /** One real POST /api/screens per press of the setup wizard's button. */
+  createScreen?: (input: { area: string; stopId: string }) => Promise<CreateBeaconResponse>;
+  loadStops?: () => Promise<ScreenStop[]>;
   createBeacon?: (deps: BeaconClientDeps) => BeaconClient;
   createSession?: (options: { roomId: string; ticket: string }) => SessionClient;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
   requestFullscreen?: () => Promise<void>;
   requestWakeLock?: () => Promise<void>;
+  /** Test seam: the viewport to lay out for; defaults to the root's box, then the window. */
+  viewport?: Viewport;
+  /** Test seam: the kiosk copy's locale; defaults to the i18n instance's. */
+  locale?: string;
 }
 
 export interface KioskHandle {
   element: HTMLElement;
+  phase(): KioskPhase;
   destroy(): void;
 }
 
-/** The kiosk's whole DOM, built once at mount from the lightweight flag (R-L1/R-L2):
- *  the panorama and the meander each have exactly one path, chosen here, never
- *  toggled with CSS after the fact. Everything dynamic (date, clock, legends,
- *  the code, the catalogue, the teaser) is painted into these elements afterwards. */
-function kioskMarkup(i18n: I18n, lightweight: boolean): string {
-  const panoramaInner = lightweight
-    ? `<div class="panorama-rule" aria-hidden="true"></div>`
-    : `<canvas class="panorama" data-testid="panorama" role="img" aria-label=""></canvas>`;
-  const meanderInner = lightweight
-    ? `<div class="meander-track" aria-hidden="true"><div class="meander-bar" data-testid="code-ring"></div></div>`
-    : `<canvas class="meander" data-testid="code-ring" data-motion="sweep" aria-hidden="true"></canvas>`;
-  return `
-    <p class="kiosk-alert" role="alert" data-testid="kiosk-alert" hidden></p>
-    <header class="kiosk-head">
-      <p class="kiosk-wordmark">${escapeHtml(i18n.t('common.appName'))} <span class="kiosk-tagline">${escapeHtml(i18n.t('common.tagline'))}</span></p>
-      <p class="kiosk-when"><span class="kiosk-date" data-testid="kiosk-date"></span>
-        <time class="kiosk-clock" data-testid="kiosk-clock"></time></p>
+function safeLocalStorage(): StorageLike | null {
+  try { return globalThis.localStorage; } catch { return null; }
+}
+
+/** The shell, built once: header, the stage every phase mounts into, the
+ *  basics overlay, the safety strip, and the hidden holder the one map
+ *  container is parked in while a composition without a map is shown. */
+function shellMarkup(s: KioskStrings): string {
+  return `<p class="k-alert" role="alert" data-testid="kiosk-alert" hidden></p>
+    <header class="k-head">
+      <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)} <span class="k-brand-sub">${escapeHtml(s.surface)}</span></p><p class="k-context" data-testid="kiosk-context"></p></div>
+      <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><time class="k-clock" data-testid="kiosk-clock"></time></div>
     </header>
-    <figure class="kiosk-fig kiosk-panorama">
-      ${panoramaInner}
-      <figcaption class="legend" data-testid="panorama-legend"></figcaption>
-    </figure>
-    <section class="kiosk-stage" data-testid="kiosk-stage">
-      <div class="kiosk-teaser">
-        <!-- T9 / R-P1: the live cropped tram map, mounted from mountKiosk. -->
-        <div class="kiosk-live" data-testid="kiosk-live"></div>
-        <article class="teaser-card" data-testid="teaser-card"></article>
-        <figure class="kiosk-fig kiosk-meander">
-          ${meanderInner}
-          <figcaption class="legend">${escapeHtml(i18n.t('kiosk.legendMeander'))}</figcaption>
-        </figure>
-        <div class="kiosk-catalogue" data-testid="kiosk-catalogue"></div>
-      </div>
-      <aside class="kiosk-code" aria-label="${escapeHtml(i18n.t('kiosk.codeLabel'))}">
-        <div class="code-card">
-          <div class="kiosk-qr" data-testid="kiosk-qr"></div>
-          <p class="kiosk-code-value" data-testid="pair-code"><span data-testid="code-a"></span><span class="code-dash">-</span><span data-testid="code-b"></span></p>
-          <p class="legend kiosk-code-hint">${escapeHtml(i18n.t('kiosk.legendQr'))}<br><span class="hint-emphasis">${escapeHtml(i18n.t('kiosk.typeCode'))}</span></p>
-        </div>
-        <!-- The QR's payload as text: what the camera reads, for anyone who
-             cannot read the QR (and the end-to-end contract, R-52). Hidden
-             until a code exists, because a link with no text is a serious
-             axe violation and there is nothing to link to yet. -->
-        <a class="visually-hidden" data-testid="pair-url" href="" hidden></a>
-      </aside>
-      <div class="kiosk-layer" data-testid="kiosk-layer" hidden></div>
-      <div class="corner-qr" data-testid="corner-qr" hidden></div>
-    </section>
-    <section class="kiosk-essentials" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
-      <header>
-        <h2 id="ess-title" tabindex="-1">${escapeHtml(i18n.t('kiosk.essentialsTitle'))}</h2>
-        <p class="legend">${escapeHtml(i18n.t('kiosk.essentialsHint'))}</p>
-        <button type="button" class="kiosk-essentials-close" data-testid="kiosk-essentials-close">${escapeHtml(i18n.t('kiosk.essentialsClose'))}</button>
+    <section class="k-stage" data-testid="kiosk-stage"></section>
+    <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
+      <header class="k-basics-head">
+        <div><h2 id="ess-title" class="k-basics-title" tabindex="-1">${escapeHtml(s.basics.title)}</h2><p class="k-basics-hint">${escapeHtml(s.basics.hint)}</p></div>
+        <button type="button" class="k-btn k-btn--ghost" data-testid="kiosk-essentials-close">${escapeHtml(s.basics.close)}</button>
       </header>
-      <div class="ess-rows" data-testid="kiosk-essentials-rows"></div>
+      <div class="k-basics-rows ess-rows" data-testid="kiosk-essentials-rows"></div>
     </section>
-    <footer class="kiosk-safety" data-testid="safety-strip"></footer>`;
+    <footer class="k-strip" data-testid="safety-strip"></footer>
+    <div class="k-park" hidden></div>`;
+}
+
+function noticeMarkup(kind: 'expired' | 'revoked', s: KioskStrings): string {
+  const title = kind === 'expired' ? s.notice.expiredTitle : s.notice.revokedTitle;
+  const body = kind === 'expired' ? s.notice.expiredBody : s.notice.revokedBody;
+  return `<div class="k-notice-card"><p class="k-kicker">${escapeHtml(s.appName)}</p><h1 class="k-notice-title">${escapeHtml(title)}</h1><p class="k-notice-body">${escapeHtml(body)}</p><button type="button" class="k-btn k-btn--primary" data-testid="kiosk-setup-again">${escapeHtml(s.notice.setupAgain)}</button></div>`;
 }
 
 export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const { i18n } = deps;
+  const locale = deps.locale ?? i18n.getLocale();
+  const s = kioskStrings(locale);
   const now = deps.now ?? (() => Date.now());
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
-
+  const storage = deps.storage === undefined ? safeLocalStorage() : deps.storage;
   const lightweight = Boolean(deps.lightweight);
+  const reducedMotion = Boolean(deps.reducedMotion);
+  const fetchTeaser = deps.fetchTeaser ?? ((stopId?: string) => fetchTeaserImpl(fetch, stopId));
+  const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
+  const loadStops = deps.loadStops ?? (() => loadStopsImpl());
+  const createScreen = deps.createScreen ?? ((input: { area: string; stopId: string }) => createTemporaryScreen(input));
+  const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
+  const makeSession = deps.createSession ?? ((o: { roomId: string; ticket: string }) => createSessionClient(o));
+
+  /** The injected pair is interval-shaped; this makes a one-shot of it. */
+  function oneShot(fn: () => void, ms: number): unknown {
+    const box: { handle: unknown } = { handle: null };
+    box.handle = setTimer(() => { clearTimer(box.handle); fn(); }, ms);
+    return box.handle;
+  }
 
   const element = document.createElement('div');
   element.className = 'kiosk';
   element.dataset.testid = 'kiosk';
-  element.dataset.mode = 'teaser';
-  element.innerHTML = kioskMarkup(i18n, lightweight);
+  element.innerHTML = shellMarkup(s);
   root.appendChild(element);
+  const q = <T extends HTMLElement>(selector: string): T => element.querySelector<T>(selector)!;
+  const alertBox = q('[data-testid=kiosk-alert]');
+  const contextEl = q('[data-testid=kiosk-context]');
+  const headMid = q('[data-testid=kiosk-head-mid]');
+  const dateEl = q('[data-testid=kiosk-date]');
+  const clockEl = q('[data-testid=kiosk-clock]');
+  const stage = q('[data-testid=kiosk-stage]');
+  const basics = q('[data-testid=kiosk-essentials]');
+  const basicsHeading = q('#ess-title');
+  const basicsClose = q<HTMLButtonElement>('[data-testid=kiosk-essentials-close]');
+  const basicsRows = q('[data-testid=kiosk-essentials-rows]');
+  const strip = q('[data-testid=safety-strip]');
+  const park = q('.k-park');
 
-  const alertBox = element.querySelector<HTMLElement>('[data-testid=kiosk-alert]')!;
-  const dateEl = element.querySelector<HTMLElement>('[data-testid=kiosk-date]')!;
-  const clockEl = element.querySelector<HTMLElement>('[data-testid=kiosk-clock]')!;
-  const panoramaCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=panorama]');
-  const panoramaLegend = element.querySelector<HTMLElement>('[data-testid=panorama-legend]')!;
-  const liveBox = element.querySelector<HTMLElement>('[data-testid=kiosk-live]')!;
-  const teaserCard = element.querySelector<HTMLElement>('[data-testid=teaser-card]')!;
-  const catalogueBox = element.querySelector<HTMLElement>('[data-testid=kiosk-catalogue]')!;
-  const qrBox = element.querySelector<HTMLElement>('[data-testid=kiosk-qr]')!;
-  const cornerQr = element.querySelector<HTMLElement>('[data-testid=corner-qr]')!;
-  const ring = element.querySelector<HTMLElement>('[data-testid=code-ring]')!;
-  const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]')!;
-  const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]')!;
-  const codeLink = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]')!;
-  const layerBox = element.querySelector<HTMLElement>('[data-testid=kiosk-layer]')!;
-  const strip = element.querySelector<HTMLElement>('[data-testid=safety-strip]')!;
-  const stage = element.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!;
-  const essentialsPanel = element.querySelector<HTMLElement>('[data-testid=kiosk-essentials]')!;
-  const essentialsHeading = element.querySelector<HTMLElement>('#ess-title')!;
-  const essentialsCloseBtn = element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-close]')!;
-  const essentialsRowsBox = element.querySelector<HTMLElement>('[data-testid=kiosk-essentials-rows]')!;
+  let layout: LayoutDecision = applyLayout(element, deps.viewport ?? measureViewport(element));
 
-  let teaser: ModuleSnapshot[] = [];
   let disposed = false;
-  let cards: TeaserCard[] = [];
-  let cardIndex = 0;
-  let currentCode: string | null = null;
-  let currentSlotRef: CodeSlot | null = null;
+  let phase: KioskPhase = 'setup';
+  let credentials: BeaconCredentials | null = null;
+  let stop: ScreenStop | null = null;
+  let stops: ScreenStop[] | null = null;
+  /** Set once the screen can issue no more codes; an open session runs on to its end. */
+  let screenDead: 'expired' | 'revoked' | null = null;
+  let teaser: ModuleSnapshot[] = [];
+  let storyIndex = 0;
+  let currentSlot: CodeSlot | null = null;
+  let beacon: BeaconClient | null = null;
+  let beaconWasLive = false;
   let session: SessionClient | null = null;
+  let unlockedToken: string | null = null;
   let sessionSnapshots: Partial<Record<ModuleId, ModuleSnapshot>> = {};
   let activeLayer: LayerId = 'grad-sada';
-  let unlockedToken: string | null = null;
-  // Only present while a session is open, so a screen back on the teaser has no
-  // stale "unlocked until" line anywhere in the page (R-52).
+  let selection: PublicSelection | null = null;
   let sessionLabel: HTMLElement | null = null;
-  // The essentials panel's own idle clock (R-P7 / M3b): no new KioskDeps
-  // member, just the same setInterval/clearInterval the meander tick and the
-  // teaser rotation already take, used as a resettable one-shot — always
-  // cleared before it is armed again, so it fires at most once per arming.
-  let essentialsIdleHandle: unknown = null;
+  let setup: SetupHandle | null = null;
+  let invitation: InvitationHandle | null = null;
+  let paired: PairedHandle | null = null;
+  let notice: HTMLElement | null = null;
+  let mapContainer: HTMLElement | null = null;
+  let essentialsIdle: unknown = null;
+  let expiryTimer: unknown = null;
+  let teaserTimer: unknown = null;
+  let pollingStarted = false;
 
-  // T9: two schematics on one screen -- the locked stage (the screen's own
-  // centre, trams only, R-P1) and the one the unlocked U pokretu layer gets
-  // (the whole network) -- sharing a single network load: the ~500 KB
-  // artefact is fetched once per screen life and never in lightweight mode
-  // (R-L4). Memoised here rather than in network.ts, whose loadNetwork
-  // deliberately does not. The kiosk's essentials idle (R-P7) is also how
-  // long a tapped vehicle's card may sit on a screen nobody is touching.
+  // One network artefact and one map for the screen's whole life (R-54); the
+  // lightweight path has neither: no factory, so map-slots hands out nothing.
   let networkPromise: Promise<Network | null> | null = null;
-  const loadNetworkOnce = (): Promise<Network | null> => {
-    networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
-    return networkPromise;
-  };
-  // T10 / R-L2: the unlocked layers' full map shares that one network load,
-  // ticks its reduced-motion loop on this page's own timer pair (R-F12),
-  // and is not rendered at all in lightweight mode (no factory, so no slot).
-  const maps = createMapSlots(
-    lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
-  );
-  const schematicDeps = {
-    i18n,
-    lightweight,
-    reducedMotion: deps.reducedMotion,
-    now,
-    onRepaint: deps.onRepaint,
-    loadNetwork: loadNetworkOnce,
-    cardIdleMs: ESSENTIALS_IDLE_MS,
-    setTimer: setTimer as (fn: () => void, ms: number) => unknown,
-    clearTimer,
-  };
-  const stageSchematic = createSchematicHost({ ...schematicDeps, scope: { kind: 'crop' } });
-  const layerSchematic = createSchematicHost({ ...schematicDeps, scope: { kind: 'network' } });
+  const loadNetworkOnce = (): Promise<Network | null> => (networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))());
+  const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer, clearTimer));
+  const maps = createMapSlots(mapAdapter.factory);
 
-  // The teaser fetch and the beacon socket are two independent failure
-  // domains sharing one alert line. Each keeps its own entry in this map
-  // instead of one shared flag, so a fix in one can never erase a warning
-  // the other is still raising (e.g. the beacon going live again while the
-  // teaser fetch is still failing), and a source's own resolved outage
-  // always self-heals even while another source is also complaining. When
-  // more than one is active, the worst (most blocking) one wins the single
-  // visible line; clearing it reveals whatever is still active underneath.
-  type AlertSource = 'provision' | 'revoked' | 'beacon' | 'teaser';
-  const ALERT_PRIORITY: readonly AlertSource[] = ['provision', 'revoked', 'beacon', 'teaser'];
-  const activeAlerts = new Map<AlertSource, string>();
-
+  // --- Alerts: the beacon socket and the teaser fetch fail independently -------
+  type AlertSource = 'beacon' | 'teaser';
+  const alerts = new Map<AlertSource, string>();
   function renderAlert(): void {
-    const source = ALERT_PRIORITY.find((candidate) => activeAlerts.has(candidate));
-    if (source === undefined) {
-      alertBox.hidden = true;
-      return;
+    const text = alerts.get('beacon') ?? alerts.get('teaser');
+    alertBox.hidden = text === undefined;
+    alertBox.textContent = text ?? '';
+  }
+  function showAlert(text: string, source: AlertSource): void { alerts.set(source, text); renderAlert(); }
+  function clearAlert(source: AlertSource): void { if (alerts.delete(source)) renderAlert(); }
+
+  // --- Header -----------------------------------------------------------------
+  function paintClock(): void {
+    const t = now();
+    const date = weekdayDate(t);
+    if (dateEl.textContent !== date) dateEl.textContent = date;
+    const time = clock(t);
+    if (clockEl.textContent !== time) {
+      clockEl.textContent = time;
+      clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
-    alertBox.hidden = false;
-    alertBox.textContent = i18n.t(activeAlerts.get(source)!);
   }
-
-  function showAlert(key: string, source: AlertSource): void {
-    activeAlerts.set(source, key);
-    renderAlert();
+  function paintContext(): void {
+    if (!credentials) { contextEl.textContent = ''; return; }
+    const screen = credentials.screen;
+    const sub = screen?.kind === 'temporary' && screen.expiresAt !== null
+      ? fill(s.header.temporaryUntil, { time: dayTime(screen.expiresAt) })
+      : screen ? s.header.venue : '';
+    contextEl.innerHTML = `${escapeHtml(stop?.name ?? '')}${sub ? `<span class="k-context-sub">${escapeHtml(sub)}</span>` : ''}`;
   }
-
-  function clearAlert(source: AlertSource): void {
-    if (!activeAlerts.delete(source)) return;
-    renderAlert();
-  }
-
-  /** M3b's note: the invitation's two sentences split onto two lines, the
-   *  first in ink and the second in `--tone-label` (Vidikovac.dc.html:69).
-   *  Scoped to the invitation card alone (see `paintTeaser`) — every other
-   *  card's body is live, uncontrolled feed text (an HRT headline, a DHMZ
-   *  observation) where a bare first '. ' is not a sentence boundary: Croatian
-   *  date notation ("11. rujna") and abbreviations ("dr. ", "npr. ") both
-   *  contain one, and would be spuriously split into a two-tone headline. */
-  function splitHeadline(text: string): { lead: string; tail: string } {
-    const cut = text.indexOf('. ');
-    return cut === -1 ? { lead: text, tail: '' } : { lead: text.slice(0, cut + 1), tail: text.slice(cut + 2) };
-  }
-
-  function paintTeaser(): void {
-    const card = cards[cardIndex % Math.max(1, cards.length)];
-    if (!card) return;
-    teaserCard.classList.remove('is-in');
-    const { lead, tail } = card.id === 'invitation' ? splitHeadline(card.body) : { lead: card.body, tail: '' };
-    teaserCard.innerHTML = `<p class="teaser-kicker">${escapeHtml(card.title)}</p>
-      <h1 class="teaser-title">${escapeHtml(lead)}${tail ? `<br><span class="teaser-tagline">${escapeHtml(tail)}</span>` : ''}</h1>
-      ${card.attribution ? `<p class="teaser-attr">${escapeHtml(card.attribution.text)}</p>` : ''}`;
-    // Restart the cross-fade by forcing a reflow before re-adding the class.
-    void teaserCard.offsetWidth;
-    teaserCard.classList.add('is-in');
-  }
-
-  function paintStrip(): void {
-    const parts = safetyStripText(teaser, i18n);
-    // R-P7: the one other interactive control a locked kiosk carries besides
-    // the /hitno pill, before it in the DOM (the pill's own margin-inline-start:
-    // auto in kiosk.css keeps it pinned to the far end regardless). Rebuilt
-    // fully on every poll like the rest of the strip, so its `hidden` state
-    // (never appears once a session is live) is driven by a delegated click
-    // listener on `strip` itself, not a listener re-bound on each repaint.
-    const essentialsHidden = element.dataset.mode === 'unlocked';
-    strip.innerHTML = `<button type="button" class="kiosk-essentials-open" data-testid="kiosk-essentials-open"${essentialsHidden ? ' hidden' : ''}>${escapeHtml(i18n.t('kiosk.essentialsOpen'))}</button>
-      <span class="strip-label">${escapeHtml(i18n.t('kiosk.safetyLabel'))}</span>
-      <span>${escapeHtml(i18n.t('kiosk.teaserCap'))}: ${escapeHtml(parts.cap)}</span>
-      <span>${escapeHtml(i18n.t('kiosk.teaserClosures'))}: ${escapeHtml(parts.closures)}</span>
-      <span>${escapeHtml(i18n.t('kiosk.safety'))}: ${escapeHtml(parts.pharmacy)}</span>
-      <a class="strip-hitno" href="/hitno">/hitno</a>`;
-  }
-
-  function paintEssentials(): void {
-    essentialsRowsBox.innerHTML = essentialsRows(teaser, i18n, now())
-      .map(
-        (row) => `<div class="ess-row" data-testid="ess-row">
-          ${row.label ? `<p class="ess-label">${escapeHtml(row.label)}</p>` : ''}
-          <p class="ess-value">${escapeHtml(row.value)}</p>
-          ${row.detail ? `<p class="ess-detail">${escapeHtml(row.detail)}</p>` : ''}
-          ${row.attribution ? `<p class="ess-attr">${escapeHtml(row.attribution)}</p>` : ''}
-        </div>`,
-      )
-      .join('');
-  }
-
-  function disarmEssentialsIdle(): void {
-    if (essentialsIdleHandle === null) return;
-    clearTimer(essentialsIdleHandle);
-    essentialsIdleHandle = null;
-  }
-
-  function armEssentialsIdle(): void {
-    disarmEssentialsIdle();
-    essentialsIdleHandle = setTimer(() => closeEssentials(), ESSENTIALS_IDLE_MS);
-  }
-
-  /** R-P7: reachable with one touch, no phone, no session, no countdown, no
-   *  metric beyond the kiosk's existing open-tier counter. Never over a live
-   *  session — the driver's own layer already shows more than this. */
-  function openEssentials(): void {
-    if (element.dataset.mode === 'unlocked') return;
-    paintEssentials();
-    essentialsPanel.hidden = false;
-    stage.hidden = true;
-    stageSchematic.pause(); // R-F6: a hidden stage paints nothing
-    essentialsHeading.focus();
-    armEssentialsIdle();
-  }
-
-  /** `restoreFocus` is false only when a scan closes the panel out from under
-   *  the reader (setMode('unlocked')): the open button is about to hide too,
-   *  so there is nothing useful to focus it back onto. */
-  function closeEssentials(restoreFocus = true): void {
-    disarmEssentialsIdle();
-    if (essentialsPanel.hidden) return;
-    essentialsPanel.hidden = true;
-    stage.hidden = false;
-    if (element.dataset.mode === 'teaser') stageSchematic.resume(); // under a session setMode keeps it paused
-    if (restoreFocus) essentialsBtn()?.focus();
-  }
-
-  function essentialsBtn(): HTMLButtonElement | null {
-    return element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]');
-  }
-
-  function paintHeader(): void {
-    dateEl.textContent = zagrebWeekdayDate(now());
-    clockEl.textContent = zagrebTime(now());
-    clockEl.setAttribute('datetime', new Date(now()).toISOString());
-  }
-
-  function paintPanoramaFigure(): void {
-    const count = vehicleCount(byModule(teaser)['zet-rt']);
-    const legendText =
-      count === null
-        ? i18n.t('kiosk.legendPanoramaLoading')
-        : i18n.t('kiosk.legendPanorama', { count, time: zagrebTime(now()) });
-    panoramaLegend.textContent = legendText;
-    // R-L2: lightweight has no canvas at all; the legend line stands alone
-    // and the band is a plain 2px rule (kiosk.css), so there is nothing more
-    // to paint here on that path.
-    if (!panoramaCanvas) return;
-    panoramaCanvas.setAttribute('aria-label', legendText);
-    paintPanorama(panoramaCanvas, {
-      fg: tone(panoramaCanvas, '--tone-text-primary', '#f2ead8'),
-      count: count ?? 0,
-    });
-  }
-
-  function paintCatalogue(): void {
-    const rows = catalogueRows(teaser, i18n);
-    catalogueBox.innerHTML = rows
-      .map(
-        (row) => `<div class="cat-row">
-          <p class="cat-label">${escapeHtml(row.label)}</p>
-          <p class="cat-value">${escapeHtml(row.value)}${row.unit ? ` <span class="cat-unit">${escapeHtml(row.unit)}</span>` : ''}</p>
-        </div>`,
-      )
-      .join('');
-  }
-
-  /** Replaces the old sweeping/segmented ring: chooses its path once
-   *  (lightweight -> the bar div, otherwise the canvas), quantises `pct`
-   *  under reduced motion or lightweight (R-L1/R-L2), and always writes
-   *  `data-motion`/`data-pct` so tests (and, on the canvas path, nothing
-   *  else) can read the current state without touching pixels. `pct` is the
-   *  interval REMAINING — 1 on a fresh slot, draining to 0 — matching
-   *  drawMeander's "empties linearly from the right". */
-  function paintCodeMeander(): void {
-    const progress = currentSlotRef ? slotProgress(currentSlotRef, rotation.serverNow()) : 0;
-    const raw = 1 - progress;
-    const pct = deps.reducedMotion || lightweight ? quantise(raw, MEANDER_STEPS) : raw;
-    ring.dataset.pct = pct.toFixed(2);
-    if (lightweight) {
-      paintMeanderBar(ring, pct);
-      return;
-    }
-    const canvas = ring as HTMLCanvasElement;
-    canvas.dataset.motion = deps.reducedMotion ? 'segments' : 'sweep';
-    paintMeander(canvas, {
-      ink: tone(canvas, '--tone-stroke', 'rgba(242,234,216,.2)'),
-      fill: tone(canvas, '--tone-text-primary', '#f2ead8'),
-      pct,
-    });
-  }
-
-  function paintCode(): void {
-    if (!currentCode) return;
-    const display = formatCode(currentCode);
-    codeA.textContent = display.slice(0, 4);
-    codeB.textContent = display.slice(5);
-    const payload = codeUrl(currentCode, deps.codeBase);
-    codeLink.href = payload;
-    codeLink.textContent = payload;
-    codeLink.hidden = false;
-    const spoken = speakableCode(currentCode);
-    const qr = createQr({
-      payload: codeUrl(currentCode, deps.codeBase),
-      ariaLabel: i18n.t('kiosk.qrLabel', { code: spoken }),
-      unavailableText: display,
-    });
-    qrBox.replaceChildren(qr.element);
-    if (element.dataset.mode === 'unlocked') {
-      const small = createQr({
-        payload: codeUrl(currentCode, deps.codeBase),
-        ariaLabel: i18n.t('kiosk.qrLabel', { code: spoken }),
-        unavailableText: display,
-      });
-      cornerQr.replaceChildren(small.element);
-    }
-    paintCodeMeander();
-  }
-
-  function paintLayer(): void {
-    layerBox.replaceChildren(
-      renderLayer(activeLayer, {
-        i18n,
-        snapshots: sessionSnapshots,
-        now: now(),
-        kiosk: true,
-        maps,
-        schematic: layerSchematic,
-        reducedMotion: deps.reducedMotion,
-        lightweight,
-      }),
-    );
-    // One live map per panel for the screen's whole session (R-54): a TV
-    // browser that re-created one every twenty seconds would run out of WebGL
-    // contexts long before the ten minutes are up.
-    maps.sweep();
-  }
-
-  /** The one line the room is open for, on the screen and in the DOM contract. */
   function showSessionLabel(expiresAt: number | null): void {
     if (expiresAt === null) return;
-    sessionLabel ??= stage.insertBefore(document.createElement('p'), stage.firstChild);
-    sessionLabel.className = 'kiosk-session';
-    sessionLabel.dataset.testid = 'session-label';
+    if (!sessionLabel) {
+      sessionLabel = document.createElement('p');
+      sessionLabel.className = 'k-session';
+      sessionLabel.dataset.testid = 'session-label';
+      headMid.appendChild(sessionLabel);
+    }
     sessionLabel.dataset.expiresAt = String(expiresAt);
-    sessionLabel.textContent = i18n.t('kiosk.unlockedUntil', { time: zagrebTime(expiresAt) });
+    sessionLabel.textContent = fill(s.header.unlockedUntil, { time: clock(expiresAt) });
+  }
+  function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; }
+
+  // --- Safety strip: always painted, never a session's ------------------------
+  function paintStrip(): void {
+    const parts = safetyStrip(teaser, stop, i18n, s);
+    const noBasics = phase === 'paired' || phase === 'setup';
+    const w = parts.warning;
+    strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
+      <span class="k-strip-label">${escapeHtml(s.safety.label)}</span>
+      <span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeHtml(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>
+      <span class="k-strip-item" data-testid="strip-closures" data-state="${parts.closures.state}">${escapeHtml(parts.closures.text)}${parts.closures.nearestText ? ` <span class="k-strip-sub">${escapeHtml(parts.closures.nearestText)}</span>` : ''}</span>
+      <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(s.safety.pharmacy)}: <strong>${escapeHtml(parts.pharmacy.label)}</strong></span>
+      <a class="k-strip-hitno" href="/hitno">${escapeHtml(s.safety.hitno)}</a>`;
   }
 
-  function setMode(mode: 'teaser' | 'unlocked'): void {
-    element.dataset.mode = mode;
-    layerBox.hidden = mode !== 'unlocked';
-    cornerQr.hidden = mode !== 'unlocked';
-    // R-P7: never render the essentials panel over a live session — the
-    // driver's own layer already shows more than this. `paintStrip()` below
-    // also hides the essentials-open button itself the moment a scan lands.
-    if (mode === 'unlocked') closeEssentials(false);
-    // The stage is display:none under a session and the layer box is empty
-    // outside one: whichever schematic is off screen stops asking for frames.
-    if (mode === 'unlocked') {
-      stageSchematic.pause();
-      layerSchematic.resume();
-    } else {
-      layerSchematic.pause();
-      stageSchematic.resume();
+  // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
+  function paintEssentials(): void {
+    basicsRows.innerHTML = essentialsRows(teaser, i18n, s, locale, stop).map((row) => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${escapeHtml(row.value)}</p>${row.detail ? `<p class="k-ess-detail">${escapeHtml(row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${escapeHtml(row.attribution)}</p>` : ''}</div>`).join('');
+  }
+  function disarmEssentialsIdle(): void {
+    if (essentialsIdle === null) return;
+    clearTimer(essentialsIdle);
+    essentialsIdle = null;
+  }
+  function armEssentialsIdle(): void {
+    disarmEssentialsIdle();
+    essentialsIdle = setTimer(() => closeEssentials(), ESSENTIALS_IDLE_MS);
+  }
+  /** Never over a grant (the driver's layer shows more) and never over the wizard. */
+  function openEssentials(): void {
+    if (phase === 'paired' || phase === 'setup') return;
+    paintEssentials();
+    basics.hidden = false;
+    stage.hidden = true;
+    mapAdapter.handle()?.pause();
+    basicsHeading.focus();
+    armEssentialsIdle();
+  }
+  function closeEssentials(restoreFocus = true): void {
+    disarmEssentialsIdle();
+    if (basics.hidden) return;
+    basics.hidden = true;
+    stage.hidden = false;
+    if (mapContainer && mapContainer.parentElement !== park) mapAdapter.handle()?.resume();
+    if (restoreFocus) element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')?.focus();
+  }
+
+  // --- The one map and the local content --------------------------------------
+  function currentMapHost(): HTMLElement | null {
+    if (lightweight) return null;
+    if (phase === 'invitation') return invitation?.mapHost ?? null;
+    if (phase === 'paired') return paired?.mapHost ?? null;
+    return null;
+  }
+  /** A composition without a map keeps the container alive, off screen and paused. */
+  function parkMap(): void {
+    if (!mapContainer || mapContainer.parentElement === park) return;
+    park.appendChild(mapContainer);
+    mapAdapter.handle()?.pause();
+  }
+  function paintMap(): void {
+    const host = currentMapHost();
+    if (!host) { parkMap(); return; }
+    const snapshots = phase === 'paired' ? { ...byModule(teaser), ...sessionSnapshots } : byModule(teaser);
+    const container = requestKioskMap(maps, {
+      stop, snapshots, now: now(), reducedMotion,
+      selection: phase === 'paired' ? selection : null,
+      ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
+    }, mapAdapter);
+    if (!container) return;
+    mapContainer = container;
+    if (container.parentElement !== host) {
+      host.appendChild(container);
+      mapAdapter.handle()?.resume();
     }
+    element.dataset.live = '1';
+  }
+  function invitationModel(): InvitationModel {
+    return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4 };
+  }
+  function pairedContext(): PairedContext {
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: { ...byModule(teaser), ...sessionSnapshots }, now: now(), stop, selection, lightweight, size: layout.size, stops };
+  }
+  function paintLocal(): void {
+    invitation?.update(invitationModel());
+    paired?.update(pairedContext());
     paintStrip();
-    if (mode === 'teaser') {
-      layerBox.replaceChildren();
-      sessionLabel?.remove();
-      sessionLabel = null;
-      paintTeaser();
-    }
+    paintMap();
+    if (!basics.hidden) paintEssentials();
+    // Rows that do not fit a paired block are hidden and counted, never half-shown.
+    if (paired) fitRows(paired.element, s.paired.coverage);
   }
 
-  /** Back to the teaser: the room is over, whatever the socket thinks. */
+  // --- Codes: the rotation's slot into the QR and the readable code -------------
+  function codesAllowed(): boolean {
+    return beacon !== null && screenDead === null;
+  }
+  function paintCode(): void {
+    const slot = codesAllowed() ? currentSlot : null;
+    const qrBox = element.querySelector<HTMLElement>('[data-testid=kiosk-qr]');
+    const codeEl = element.querySelector<HTMLElement>('[data-testid=pair-code]');
+    const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]');
+    const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]');
+    const link = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]');
+    const corner = element.querySelector<HTMLElement>('[data-testid=corner-qr]');
+    const joinCode = element.querySelector<HTMLElement>('[data-testid=join-code]');
+    if (!slot) {
+      if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p>`;
+      if (codeA) codeA.textContent = '····';
+      if (codeB) codeB.textContent = '····';
+      if (codeEl) codeEl.dataset.state = 'waiting';
+      if (link) { link.hidden = true; link.removeAttribute('href'); link.textContent = ''; }
+      if (corner) corner.replaceChildren();
+      if (joinCode) joinCode.textContent = screenDead ? s.notice.endsAfterSession : s.invitation.codeWaiting;
+      paintProgress();
+      return;
+    }
+    const display = formatCode(slot.code);
+    const payload = codeUrl(slot.code, deps.codeBase);
+    const label = fill(s.invitation.qrLabel, { code: speakableCode(slot.code) });
+    if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
+    if (codeA) codeA.textContent = display.slice(0, 4);
+    if (codeB) codeB.textContent = display.slice(5);
+    if (codeEl) codeEl.dataset.state = 'live';
+    if (link) { link.href = payload; link.textContent = payload; link.hidden = false; }
+    if (corner) corner.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
+    if (joinCode) joinCode.textContent = display;
+    paintProgress();
+  }
+  /** The remaining share of the current slot; quantised where motion is unwanted. */
+  function paintProgress(): void {
+    const bar = element.querySelector<HTMLElement>('[data-testid=code-progress]');
+    if (!bar) return;
+    const slot = codesAllowed() ? currentSlot : null;
+    const raw = slot ? 1 - slotProgress(slot, rotation.serverNow()) : 0;
+    const pct = reducedMotion || lightweight ? Math.round(raw * PROGRESS_STEPS) / PROGRESS_STEPS : raw;
+    bar.dataset.pct = pct.toFixed(2);
+    bar.setAttribute('aria-valuenow', String(Math.round(pct * 100)));
+    const fillEl = bar.firstElementChild as HTMLElement | null;
+    if (fillEl) fillEl.style.width = `${Math.round(pct * 1000) / 10}%`;
+  }
+  /** A rotation belongs to one screen: forgetting the screen starts a fresh one,
+   *  so a dead screen's still-open slots can never surface as the next screen's code. */
+  function newRotation(): Rotation {
+    return createRotation({
+      now,
+      onSlot: (slot) => { currentSlot = slot; paintCode(); },
+      onMore: () => beacon?.requestMore(),
+      setInterval: setTimer,
+      clearInterval: clearTimer,
+    });
+  }
+  let rotation = newRotation();
+
+  // --- Phases -------------------------------------------------------------------
+  function clearStage(): void {
+    parkMap();
+    setup?.destroy(); setup = null;
+    invitation?.destroy(); invitation = null;
+    paired?.destroy(); paired = null;
+    notice?.remove(); notice = null;
+  }
+  function setPhase(next: KioskPhase): void {
+    phase = next;
+    element.dataset.phase = next;
+    element.dataset.mode = next === 'paired' ? 'unlocked' : 'teaser';
+    clearStage();
+    if (next === 'paired') closeEssentials(false);
+    else removeSessionLabel();
+    if (next === 'setup') mountSetupPhase();
+    else if (next === 'invitation') invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight });
+    else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
+    else mountNotice(next);
+    paintContext();
+    paintLocal();
+    paintCode();
+  }
+  function mountNotice(kind: 'expired' | 'revoked'): void {
+    notice = document.createElement('section');
+    notice.className = 'k-notice';
+    notice.dataset.testid = 'kiosk-notice';
+    notice.dataset.kind = kind;
+    notice.innerHTML = noticeMarkup(kind, s);
+    stage.appendChild(notice);
+    notice.querySelector<HTMLButtonElement>('[data-testid=kiosk-setup-again]')?.addEventListener('click', startOver);
+  }
+  /** The one way back from a dead screen: forget it and open the wizard.
+   *  Nothing automatic -- no recreation, no retry, one person's press. */
+  function startOver(): void {
+    beacon?.close(); beacon = null;
+    rotation.stop(); rotation = newRotation(); currentSlot = null;
+    forgetBeacon(storage);
+    credentials = null; stop = null; screenDead = null;
+    disarmExpiry();
+    setPhase('setup');
+    if (pollingStarted) void loadTeaser();
+  }
+  function mountSetupPhase(): void {
+    setup = mountSetup(stage, {
+      strings: s,
+      locale,
+      loadStops: async () => { stops = await loadStops(); return stops; },
+      createScreen,
+      onCreated: (response) => adoptCredentials({ beaconId: response.beaconId, secret: response.secret, ...(response.screen ? { screen: response.screen } : {}) }, true),
+      now,
+      setTimeout: oneShot,
+      clearTimeout: clearTimer,
+      initialStopId: DEFAULT_STOP_ID,
+    });
+  }
+  /** Credentials from the fragment, storage or a fresh creation take one path.
+   *  A screen already past its expiry never connects (no reconnect loop against
+   *  a socket the DO refuses) and shows the notice instead. */
+  function adoptCredentials(creds: BeaconCredentials, persist: boolean): void {
+    credentials = creds;
+    if (persist) storeBeacon(storage, creds);
+    stop = creds.screen?.stop ?? null;
+    screenDead = null;
+    if (screenExpired(creds.screen, now())) {
+      screenDead = 'expired';
+      setPhase('expired');
+      return;
+    }
+    setPhase('invitation');
+    startBeacon(creds);
+    armExpiry();
+    if (pollingStarted) void loadTeaser();
+  }
+
+  // --- The beacon socket ---------------------------------------------------------
+  function startBeacon(creds: BeaconCredentials): void {
+    beacon = makeBeacon({
+      credentials: creds,
+      onCodes: (batch, serverNow) => rotation.setBatch(batch, serverNow),
+      onContext: applyScreen,
+      onUnlocked: ({ roomId, ticket }) => openSession(roomId, ticket),
+      onRevoked: () => {
+        screenDead = screenExpired(credentials?.screen, now()) ? 'expired' : 'revoked';
+        if (phase === 'paired') paintCode();
+        else setPhase(screenDead);
+      },
+      onStatus: (status) => {
+        if (status === 'offline') showAlert(s.status.offline, 'beacon');
+        else if (status === 'connecting' && beaconWasLive) showAlert(s.status.reconnecting, 'beacon');
+        else if (status === 'live') { beaconWasLive = true; clearAlert('beacon'); }
+      },
+    });
+    beacon.connect();
+  }
+  /** The DO's copy of the screen metadata is authoritative: it is stored beside
+   *  the existing credentials, never a new secret. */
+  function applyScreen(screen: ScreenMetadata): void {
+    if (!credentials) return;
+    const before = stop?.id;
+    credentials = withScreen(credentials, screen);
+    storeBeacon(storage, credentials);
+    stop = screen.stop;
+    paintContext();
+    armExpiry();
+    if (stop?.id !== before) void loadTeaser();
+    else paintLocal();
+  }
+
+  // --- Expiry: past 24 h a temporary screen issues no codes; a session runs on ---
+  function disarmExpiry(): void {
+    if (expiryTimer === null) return;
+    clearTimer(expiryTimer);
+    expiryTimer = null;
+  }
+  function armExpiry(): void {
+    disarmExpiry();
+    const ms = msUntilExpiry(credentials?.screen, now());
+    if (ms === null) return;
+    expiryTimer = oneShot(() => { expiryTimer = null; onScreenExpired(); }, ms);
+  }
+  function onScreenExpired(): void {
+    screenDead = 'expired';
+    beacon?.close();
+    beacon = null;
+    if (phase === 'paired') { paintCode(); paintContext(); }
+    else setPhase('expired');
+  }
+
+  // --- The room session: the driver's phone steers, the kiosk mirrors ------------
+  function openSession(roomId: string, ticket: string): void {
+    // A second redeem mid-session opens a fresh room; the socket of the one it
+    // replaces must not leak.
+    session?.close();
+    const live = makeSession({ roomId, ticket });
+    session = live;
+    live.onJoined((snapshot) => {
+      if (session !== live || disposed) return;
+      unlockedToken = snapshot.dataToken;
+      if (phase !== 'paired') setPhase('paired');
+      showSessionLabel(snapshot.expiresAt);
+      void refreshSessionData();
+    });
+    live.onView((layer, params) => {
+      if (session !== live || disposed) return;
+      activeLayer = layer;
+      // The allowlist is the whole relay contract: a layer, a route, a stop or a
+      // public item key. Filters, search text and coordinates never arrive here.
+      selection = params ? parseSelection(params) : null;
+      if (selection?.kind === 'stop' && !stops) void ensureStops();
+      paintLocal();
+      void refreshSessionData();
+    });
+    live.onExpired(() => { if (session === live) endSession(); });
+    live.connect();
+  }
+  /** Back to the invitation -- or to the notice, when the screen died meanwhile. */
   function endSession(): void {
     session?.close();
     session = null;
     unlockedToken = null;
     sessionSnapshots = {};
-    setMode('teaser');
-    maps.destroy();
+    selection = null;
+    activeLayer = 'grad-sada';
+    setPhase(screenDead ?? 'invitation');
   }
-
   async function refreshSessionData(): Promise<void> {
-    const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
-    if (!unlockedToken) return;
-    const results = await Promise.allSettled(LAYER_MODULES[activeLayer].map((id) => fetchData(id, unlockedToken!)));
+    const token = unlockedToken;
+    if (!token) return;
+    const results = await Promise.allSettled(KIOSK_LAYER_MODULES[activeLayer].map((id) => fetchData(id, token)));
+    if (disposed || unlockedToken !== token) return;
     for (const result of results) if (result.status === 'fulfilled') sessionSnapshots[result.value.module] = result.value;
-    paintLayer();
+    paintLocal();
+  }
+  async function ensureStops(): Promise<void> {
+    try {
+      stops = await loadStops();
+      if (!disposed) paintLocal();
+    } catch { /* the selection keeps its id */ }
   }
 
-  /** The teaser poll, aligned to the realtime feed's own tick
-   *  (motion/loop.ts's nextPollDelay): the next request lands 2 s after the
-   *  feed's next 30 s tick when the zet-rt snapshot says when it last
-   *  ticked, else 20 s out. A one-shot re-armed after every load -- success,
-   *  a caught failure, or a load that rejected outright (continuePoll) --
-   *  since each delay is computed from the freshest snapshot. */
-  let teaserTimer: unknown = null;
+  // --- The stop-scoped teaser poll, aligned to the realtime feed's own tick -------
   function armTeaserPoll(): void {
     if (disposed || teaserTimer !== null) return;
     teaserTimer = setTimer(() => {
@@ -829,84 +580,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
     }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now()));
   }
-
   async function loadTeaser(): Promise<void> {
-    const fetchTeaser = deps.fetchTeaser ?? (() => fetchTeaserImpl());
+    const stopId = stop?.id;
     try {
-      const response = await fetchTeaser();
-      clearAlert('teaser'); // this poll succeeded: any outage it raised is over
+      const response = await fetchTeaser(stopId);
+      // A late answer for a stop the screen no longer has is dropped, not painted.
+      if (disposed || stopId !== stop?.id) return;
+      clearAlert('teaser');
       teaser = response.modules;
-      cards = teaserCards(teaser, i18n, now());
-      paintTeaser();
-      paintStrip();
-      paintPanoramaFigure();
-      paintCatalogue();
-      // R-P1: the teaser's zet-rt now carries the pins inside this screen's
-      // box; they are evidence for the stage's motion model, never drawn as
-      // reported (R-P2).
-      const zet = byModule(teaser)['zet-rt'];
-      stageSchematic.update({ fixes: vehicleFixes(zet, now()), delays: routeDelayMap(zet), snapshot: zet }, now());
-      if (!essentialsPanel.hidden) paintEssentials(); // stays live while open, same source as the teaser
+      paintLocal();
     } catch {
-      showAlert('status.down', 'teaser');
+      if (!disposed) showAlert(s.status.dataDown, 'teaser');
     }
   }
 
-  const rotation = createRotation({
-    now,
-    onSlot: (slot) => {
-      currentSlotRef = slot;
-      currentCode = slot?.code ?? null;
-      if (slot) paintCode();
-    },
-    onMore: () => beacon?.requestMore(),
-    setInterval: setTimer as (fn: () => void, ms: number) => unknown,
-    clearInterval: clearTimer,
-  });
-
-  const credentials: BeaconCredentials | null = parseProvisionHash(deps.hash) ?? readBeacon(deps.storage);
-  if (parseProvisionHash(deps.hash)) storeBeacon(deps.storage, credentials!);
-
-  let beacon: BeaconClient | null = null;
-  if (!credentials) {
-    showAlert('kiosk.notProvisioned', 'provision');
-  } else {
-    const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
-    beacon = makeBeacon({
-      credentials,
-      onCodes: (batchSlots, serverNow) => rotation.setBatch(batchSlots, serverNow),
-      onUnlocked: ({ roomId, ticket }) => {
-        // The corner QR keeps minting codes throughout an active session so
-        // the next person can join; a second redeem mid-session (BeaconDO's
-        // redeem() always opens a fresh room, task B6) must not leak the
-        // still-open RoomDO connection from the session it is replacing.
-        session?.close();
-        const makeSession = deps.createSession ?? ((o: { roomId: string; ticket: string }) => createSessionClient(o));
-        session = makeSession({ roomId, ticket });
-        session.onJoined((snapshot) => {
-          unlockedToken = snapshot.dataToken;
-          setMode('unlocked');
-          showSessionLabel(snapshot.expiresAt);
-          paintCode();
-          void refreshSessionData();
-        });
-        session.onView((layer) => {
-          activeLayer = layer;
-          paintLayer();
-          void refreshSessionData();
-        });
-        session.onExpired(endSession);
-        session.connect();
-      },
-      onRevoked: () => showAlert('kiosk.revoked', 'revoked'),
-      onStatus: (status) => {
-        if (status === 'offline') showAlert('kiosk.offline', 'beacon');
-        else if (status === 'live') clearAlert('beacon');
-      },
-    });
-    beacon.connect();
-  }
-
+  // --- Wiring ---------------------------------------------------------------------
   // First tap only: a kiosk browser grants fullscreen and the wake lock on a
   // user gesture, and never asks again.
   const onFirstTap = (): void => {
@@ -917,87 +605,67 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }))().catch(() => {});
   };
   element.addEventListener('pointerdown', onFirstTap);
-
-  // The essentials button lives inside `strip`, whose whole innerHTML is
-  // rebuilt on every paintStrip() call — a listener bound to the button
-  // itself would be lost on the next poll, so this one is bound to `strip`,
-  // which is never replaced, and delegates by testid instead.
+  // The strip is rebuilt on every poll, so its button is reached by delegation.
   strip.addEventListener('click', (event) => {
     if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
   });
-  essentialsCloseBtn.addEventListener('click', () => closeEssentials());
+  basicsClose.addEventListener('click', () => closeEssentials());
   // Any touch or key inside the open panel means someone is still reading it.
-  essentialsPanel.addEventListener('pointerdown', armEssentialsIdle);
-  essentialsPanel.addEventListener('keydown', (event) => {
+  basics.addEventListener('pointerdown', armEssentialsIdle);
+  basics.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') { closeEssentials(); return; }
     armEssentialsIdle();
   });
 
-  // R-L3: the kiosk sizes itself from a JS-computed scale (--kiosk-scale)
-  // instead of container queries, from the element's own width — works even
-  // if `onRepaint` is absent (falls back to scale 1 with no layout box, e.g.
-  // under happy-dom).
-  applyScale(element, KIOSK_DESIGN_WIDTH);
-  paintHeader();
-  paintPanoramaFigure();
-  paintCodeMeander();
-  paintCatalogue();
-  paintStrip();
-  // The stage's live map (T9 / R-P1): mounted after the first paints above,
-  // so its network fetch starts after first paint, never before it (R-L4).
-  liveBox.appendChild(stageSchematic.mount());
-  // R-F4: the panorama band shrinks once the stage is live. CSS reads this
-  // attribute rather than `:has(.kiosk-live:not(:empty))`, which no 2017
-  // engine understands.
-  element.dataset.live = '1';
+  // Credentials: the one-time fragment, then storage, else the setup wizard.
+  const fromHash = parseProvisionHash(deps.hash);
+  const initial = fromHash ?? readBeacon(storage);
+  if (initial) adoptCredentials(initial, fromHash !== null);
+  else setPhase('setup');
+  paintClock();
+  pollingStarted = true;
   continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
 
-  // Canvas colours are read off computed style (`tone()`), so a theme flip
-  // needs a repaint even with no new data; a resize needs one because the
-  // canvas backing store itself is sized off the box. `onRepaint` (fires
-  // once immediately, per its own contract) covers both in one subscription;
-  // the plain-text paints above don't depend on either and are not repeated
-  // here.
+  // A theme flip or a resize re-decides the composition; the content repaints
+  // only when the composition actually changed.
   const stopRepaint = deps.onRepaint?.(() => {
-    applyScale(element, KIOSK_DESIGN_WIDTH);
-    paintPanoramaFigure();
-    paintCodeMeander();
+    const next = applyLayout(element, deps.viewport ?? measureViewport(element));
+    const changed = next.size !== layout.size;
+    layout = next;
+    if (changed) paintLocal();
   });
 
-  const meanderTimer = setTimer(() => paintCodeMeander(), MEANDER_TICK_MS);
-
+  const codeTimer = setTimer(() => { paintClock(); paintProgress(); }, CODE_TICK_MS);
   const rotateTimer = setTimer(() => {
-    paintHeader();
-    if (element.dataset.mode === 'teaser') {
-      cardIndex += 1;
-      paintTeaser();
-    } else {
-      // An unlocked screen is the one evaluators watch: the ZET dots and the
-      // counts have to move without anyone touching the driver's phone (R-55).
-      // And if the room's clock ran out while the socket was down, the screen
-      // returns to the teaser on its own rather than freezing for good (R-53).
+    paintClock();
+    if (phase === 'paired') {
+      // The big screen is the one nobody touches: it moves itself, and if the
+      // room's clock ran out while the socket was down it returns on its own.
       const live = session;
       if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
       else void refreshSessionData();
+    } else {
+      storyIndex += 1;
+      invitation?.update(invitationModel());
     }
-  }, TEASER_ROTATE_MS);
+  }, ROTATE_MS);
 
   return {
     element,
+    phase: () => phase,
     destroy() {
       disposed = true;
       rotation.stop();
       clearTimer(rotateTimer);
-      clearTimer(meanderTimer);
-      if (teaserTimer !== null) clearTimer(teaserTimer);
-      teaserTimer = null;
+      clearTimer(codeTimer);
+      if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
+      disarmExpiry();
       disarmEssentialsIdle();
       stopRepaint?.();
-      beacon?.close();
-      session?.close();
+      beacon?.close(); beacon = null;
+      session?.close(); session = null;
+      clearStage();
       maps.destroy();
-      stageSchematic.destroy();
-      layerSchematic.destroy();
       element.remove();
     },
   };

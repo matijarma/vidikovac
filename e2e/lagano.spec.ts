@@ -12,13 +12,12 @@
 //   - no <canvas> anywhere (R-L2);
 //   - the pairing code inside the viewport with nothing to scroll -- a screen
 //     nobody touches must show the code without help;
-//   - the lightweight meander bar taller than 20 px, so the countdown is a
-//     visible bar and not a hairline (R-F4's explicit height beside
-//     inset-block is what keeps it so on an older engine);
-//   - with the teaser stubbed to place vehicles in the box, the list under
-//     the legend actually has rows (R-F8) rather than the production defect
-//     it always printed ("Trenutačno nema stavki." under a nonzero count),
-//     and those rows never push past the headline row below them.
+//   - the code's remaining-time bar is a visible bar with a box of its own,
+//     never a hairline (R-F4);
+//   - with the teaser stubbed to place vehicles in the box, the lines board
+//     in the map column actually has rows (R-F8) rather than the production
+//     defect it once printed ("Trenutačno nema stavki." under a nonzero
+//     count), and those rows never overflow the board or the stage.
 //
 // The screenshot lands in test-results/kiosk-lagano.png.
 import { expect, test, type Page, type Route } from '@playwright/test';
@@ -26,7 +25,7 @@ import { APP_URL, provisionKiosk } from './helpers';
 
 const KIOSK = { width: 1920, height: 1080 };
 const SHOTS_DIR = 'test-results';
-const MIN_METER_HEIGHT_PX = 20;
+const MIN_METER_HEIGHT_PX = 6;
 
 const FONT_REQUEST = /\.(woff2?|ttf|otf)(\?|$)|\/assets\/fonts-/;
 const NETWORK_ARTEFACT = /zet-network\.json/;
@@ -85,7 +84,7 @@ async function stubTeaserWithVehicles(page: Page): Promise<void> {
 }
 
 test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
-  test('loads no webfont and no network artefact, draws no canvas, and lays the code and the meander out -- screenshot saved', async ({ page, request }) => {
+  test('loads no webfont and no network artefact, draws no canvas, and lays the code and its bar out -- screenshot saved', async ({ page, request }) => {
     const requested: string[] = [];
     page.on('request', (req) => requested.push(req.url()));
 
@@ -93,7 +92,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('[data-testid=kiosk-live] [data-testid=schematic-list]')).toBeAttached();
+    await expect(page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]')).toBeAttached();
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: `${SHOTS_DIR}/kiosk-lagano.png`, fullPage: false });
 
@@ -123,35 +122,36 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     expect(scroll.height, 'nothing below the fold').toBeLessThanOrEqual(KIOSK.height);
     expect(scroll.width, 'nothing past the right edge').toBeLessThanOrEqual(KIOSK.width);
 
-    const bar = await page.locator('[data-testid=kiosk-meander] .meander-bar, .kiosk-meander .meander-bar').first().boundingBox();
-    expect(bar, 'the lightweight meander bar has a box').not.toBeNull();
-    expect(bar!.height, `the meander bar is taller than ${MIN_METER_HEIGHT_PX} px`).toBeGreaterThan(MIN_METER_HEIGHT_PX);
-    const track = await page.locator('.kiosk-meander .meander-track').first().boundingBox();
+    const bar = await page.locator('[data-testid=code-progress] .k-progress-bar').first().boundingBox();
+    expect(bar, 'the remaining-time bar has a box').not.toBeNull();
+    expect(bar!.height, `the bar is taller than ${MIN_METER_HEIGHT_PX} px`).toBeGreaterThan(MIN_METER_HEIGHT_PX);
+    const track = await page.getByTestId('code-progress').boundingBox();
     expect(track).not.toBeNull();
     expect(Math.abs(bar!.height - track!.height), 'the bar fills the track top to bottom').toBeLessThan(1);
   });
 
-  test('R-F8: with vehicles in the box, the lightweight list actually shows the lines it counts, never past the headline row', async ({ page, request }) => {
+  test('R-F8: with vehicles in the box, the lightweight lines board actually shows the lines it counts, inside its own box', async ({ page, request }) => {
     await stubTeaserWithVehicles(page);
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
-    const list = page.locator('[data-testid=kiosk-live] [data-testid=schematic-list]');
+    const list = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
     await expect(list).toBeAttached();
     // The production defect this task fixes: the legend counted vehicles
     // while the list under it stayed on "Trenutačno nema stavki." -- so the
     // list must actually carry a row, not merely exist.
-    await expect(list.locator('li')).not.toHaveCount(0);
-    await expect(page.locator('[data-testid=schematic-route]').first()).toBeVisible();
+    await expect(list.locator('li.k-line')).not.toHaveCount(0);
+    await expect(list.locator('li.k-line').first()).toBeVisible();
     expect(await page.locator('canvas').count(), 'still no canvas on the lightweight path').toBe(0);
 
     const listBox = await list.boundingBox();
-    const headline = await page.locator('[data-testid=teaser-card]').boundingBox();
+    const stage = await page.getByTestId('kiosk-stage').boundingBox();
     expect(listBox).not.toBeNull();
-    expect(headline).not.toBeNull();
-    expect(listBox!.y + listBox!.height, 'the route list ends above the headline row, never over it').toBeLessThanOrEqual(headline!.y + 0.5);
+    expect(stage).not.toBeNull();
+    expect(listBox!.y + listBox!.height, 'the board ends inside the stage, never over the strip').toBeLessThanOrEqual(stage!.y + stage!.height + 0.5);
+    expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), 'the board never overflows its box').toBe(true);
   });
 
   // R-V1: "at ten rows of 24 px with 8 px spacing that is 320 px, inside the
@@ -162,7 +162,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
   // in jsdom -- through a real Chromium layout, so the cap's arithmetic is
   // checked against a real box model (fonts, borders, line-height) rather
   // than assumed to add up.
-  test('R-F8/R-V1: eleven routes in the box render ten rows plus "još 1 linija", still ending above the headline row', async ({ page, request }) => {
+  test('R-F8/R-V1: eleven routes in the box render ten rows plus "još 1 linija", still inside the board', async ({ page, request }) => {
     const routeIds = Array.from({ length: 11 }, (_, i) => String(i + 1));
     const zet = {
       module: 'zet-rt',
@@ -186,18 +186,19 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
-    const list = page.locator('[data-testid=kiosk-live] [data-testid=schematic-list]');
+    const list = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
     await expect(list).toBeAttached();
     // Eleven distinct routes in the box, ten shown plus the overflow row --
     // the count and the list agree (R-F8's own words), proven here in the
     // real DOM, not just jsdom.
-    await expect(page.locator('[data-testid=schematic-route]')).toHaveCount(10);
-    await expect(page.locator('[data-testid=schematic-more]')).toHaveText('još 1 linija');
+    await expect(list.locator('li.k-line')).toHaveCount(10);
+    await expect(list.locator('.k-line-more')).toHaveText('još 1 linija');
 
     const listBox = await list.boundingBox();
-    const headline = await page.locator('[data-testid=teaser-card]').boundingBox();
+    const stage = await page.getByTestId('kiosk-stage').boundingBox();
     expect(listBox).not.toBeNull();
-    expect(headline).not.toBeNull();
-    expect(listBox!.y + listBox!.height, 'ten rows plus the overflow row still end above the headline row (R-V1’s row budget, measured for real)').toBeLessThanOrEqual(headline!.y + 0.5);
+    expect(stage).not.toBeNull();
+    expect(listBox!.y + listBox!.height, 'ten rows plus the overflow row still end inside the stage (R-V1’s row budget, measured for real)').toBeLessThanOrEqual(stage!.y + stage!.height + 0.5);
+    expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), 'the board never overflows its box').toBe(true);
   });
 });
