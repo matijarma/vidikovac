@@ -6,7 +6,7 @@ import type { DogadanjaSourceId } from '../../../worker/feed/modules/dogadanja';
 import { SKUPSTINA_YOUTUBE_URL } from '../../../worker/feed/modules/dogadanja/skupstina';
 import { canExportCalendarItem } from '../export';
 import { chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
-import { attributionFoot, coverageText, listState, statusBadge } from '../experience/status';
+import { coverageText, listState, provenanceBlock, statusBadge } from '../experience/status';
 import { eventWhen, numberText } from '../experience/text';
 import { zagrebWeekdayDate } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -136,7 +136,7 @@ function gazetteSection(i18n: I18n, ctx: LayerContext): string {
     id: 'cv-gazette', tone: 'civic', testid: 'cv-gazette',
     body: sectionHead(i18n, { kicker: i18n.t('freshness.referenca'), title: i18n.t('civic.gazette'), snapshot: glasnik, error: ctx.errors?.glasnik, id: 'cv-gazette-title' }) +
       issue + toolbar + (state || `<ul class="rows" role="list" data-testid="acts">${filtered.map((a) => actRow(i18n, a, ctx)).join('')}</ul>`) +
-      `<p class="sec-note">${escapeHtml(i18n.t('civic.legalNote'))}</p>` + attributionFoot(i18n, glasnik),
+      `<p class="sec-note">${escapeHtml(i18n.t('civic.legalNote'))}</p>`,
   });
 }
 function facts(rows: [string, string][]): string {
@@ -175,6 +175,6 @@ export function renderUpravaIPravo(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-civic" id="layer-uprava-i-pravo" data-layer="uprava-i-pravo" data-reconcile aria-labelledby="layer-title-uprava-i-pravo">
 <header class="ws-head"><div class="sec-title-row"><h2 class="layer-title" id="layer-title-uprava-i-pravo" tabindex="-1">${escapeHtml(i18n.t('layers.uprava-i-pravo'))}</h2>${statusBadge(i18n, dogadanja, ctx.errors?.dogadanja)}</div></header>
 ${listDetail(i18n, { list, detail, detailTitle: i18n.t('civic.actDetail') })}
-${attributionFoot(i18n, dogadanja)}
+${provenanceBlock(i18n, [dogadanja, glasnik])}
 </section>`);
 }

@@ -12,14 +12,18 @@ const hr = createDefaultI18n('hr');
 const text = (html: string): string => { const el = document.createElement('div'); el.innerHTML = html; return (el.textContent ?? '').replace(/\s+/g, ' ').trim(); };
 
 describe('statusBadge', () => {
-  it('says live without a time: a successful fetch is not an observation time', () => {
-    expect(text(statusBadge(hr, snap({ sourceUpdatedAt: '2026-09-11T10:00:00Z' })))).toBe('Živo');
+  it('shows no pill for a live source: a successful fetch is neither freshness nor an observation time', () => {
+    expect(statusBadge(hr, snap({ sourceUpdatedAt: '2026-09-11T10:00:00Z' }))).toBe('');
+  });
+  it('names reference material as such instead of calling a gazette live', () => {
+    expect(text(statusBadge(hr, snap({ module: 'glasnik' })))).toBe('Referenca');
+    expect(text(statusBadge(hr, snap({ module: 'ckan-geo' })))).toBe('Referenca');
   });
   it('names the moment a stale copy stopped being confirmed, and says unavailable when down', () => {
     expect(text(statusBadge(hr, snap({ status: 'stale', staleSince: '2026-09-11T12:00:00Z' })))).toBe('zastarjelo od 14:00');
     expect(text(statusBadge(hr, snap({ status: 'down' })))).toBe('izvor nedostupan');
     expect(text(statusBadge(hr, undefined))).toBe('učitavanje podataka');
-    expect(text(statusBadge(hr, undefined, 'request-failed'))).toBe('Stanje nije potvrđeno: izvor ne odgovara.');
+    expect(text(statusBadge(hr, undefined, 'request-failed'))).toBe('izvor nedostupan');
   });
 });
 
@@ -36,7 +40,7 @@ describe('listState and coverage', () => {
     expect(text(listState(hr, undefined, 'emsc', 0, 'Nema.'))).toBe('učitavanje podataka');
     expect(listState(hr, undefined, 'emsc', 0, 'Nema.', 'boom')).toContain('data-action="retry"');
     expect(listState(hr, snap({ status: 'stale' }), 'emsc', 0, 'Nema.')).toContain('Stanje nije potvrđeno');
-    expect(text(listState(hr, snap(), 'emsc', 0, 'Nema.'))).toBe('Nema.');
+    expect(text(listState(hr, snap(), 'emsc', 0, 'Nema.'))).toBe('Nema. Potvrđeno 14:31.');
     expect(listState(hr, snap(), 'emsc', 3, 'Nema.')).toBe('');
   });
   it('states coverage only when the shown set is a limited part of the dataset', () => {

@@ -5,7 +5,7 @@
 import type { FeedItem } from '../../../worker/feed/schema';
 import { externalLink, section, sectionHead } from '../experience/blocks';
 import { isActiveWarning } from '../experience/safety-state';
-import { attributionFoot, listState, stateBlock, unconfirmed } from '../experience/status';
+import { listState, provenanceBlock, stateBlock, unconfirmed } from '../experience/status';
 import { bearingDeg, compassWord, conditionText, distanceKm, numberText, pointOf, relativeTime, windBearing, ZAGREB_LON_LAT } from '../experience/text';
 import { zagrebDateTime, zagrebTime, zagrebWeekdayDate } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -29,6 +29,7 @@ function nowSection(i18n: I18n, ctx: LayerContext): string {
   const observation = ctx.snapshots['dhmz-now'];
   const o = observation?.items[0];
   const temp = dataNumber(o, 'temp');
+  const condition = o ? conditionText(dataText(o, 'weather')) : '';
   let body: string;
   if (!observation) body = loadingOrDown(i18n, ctx, 'dhmz-now');
   else if (!o || temp === null) body = listState(i18n, observation, 'dhmz-now', 0, i18n.t('status.empty'), ctx.errors?.['dhmz-now']);
@@ -47,12 +48,11 @@ function nowSection(i18n: I18n, ctx: LayerContext): string {
       humidity !== null ? `<div class="wx-figure"><p class="kicker">${escapeHtml(i18n.t('weather.humidity'))}</p>${arcGauge({ fraction: humidity / 100, value: `${numberText(i18n, humidity)} %`, caption: i18n.t('weather.humidity'), label: i18n.t('panels.humidity', { value: humidity }) })}</div>` : '',
       pressure !== null ? `<div class="wx-figure wx-fact"><p class="kicker">${escapeHtml(i18n.t('weather.pressure'))}</p><p class="wx-fact-value">${escapeHtml(numberText(i18n, pressure, 1))} hPa</p></div>` : '',
     ].join('');
-    const condition = conditionText(dataText(o, 'weather'));
-    body = `<div class="wx-now"><p class="wx-temp" data-testid="temp">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p>${condition ? `<p class="wx-cond">${escapeHtml(condition)}</p>` : ''}<p class="meta">${escapeHtml(o.at ? i18n.t('weather.observedAt', { time: zagrebTime(o.at) }) : i18n.t('time.unknown'))} · ${escapeHtml(i18n.t('weather.station'))}</p></div><div class="wx-figures">${figures}</div>`;
+    body = `<div class="wx-now"><p class="wx-temp" data-testid="temp">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p><p class="meta">${escapeHtml(o.at ? i18n.t('weather.observedAt', { time: zagrebTime(o.at) }) : i18n.t('time.unknown'))}</p></div><div class="wx-figures">${figures}</div>`;
   }
   return section({
-    id: 'wx-now', tone: 'weather', className: 'wx-wide', testid: 'wx-now',
-    body: sectionHead(i18n, { kicker: i18n.t('weather.now'), title: i18n.t('weather.station'), snapshot: observation, error: ctx.errors?.['dhmz-now'], id: 'wx-now-title' }) + body + attributionFoot(i18n, observation),
+    id: 'wx-now', tone: 'weather', className: 'wx-wide wx-lead', testid: 'wx-now',
+    body: sectionHead(i18n, { kicker: i18n.t('overview.weatherKicker'), title: condition || i18n.t('weather.now'), snapshot: observation, error: ctx.errors?.['dhmz-now'], id: 'wx-now-title' }) + body,
   });
 }
 
@@ -73,7 +73,7 @@ function rangeSection(i18n: I18n, ctx: LayerContext): string {
   }
   return section({
     id: 'wx-range', tone: 'weather', testid: 'wx-range',
-    body: sectionHead(i18n, { kicker: i18n.t('weather.forecast'), title: i18n.t('weather.range'), snapshot: forecast, error: ctx.errors?.['dhmz-forecast'], id: 'wx-range-title' }) + body + attributionFoot(i18n, forecast),
+    body: sectionHead(i18n, { kicker: i18n.t('weather.forecast'), title: i18n.t('weather.range'), snapshot: forecast, error: ctx.errors?.['dhmz-forecast'], id: 'wx-range-title' }) + body,
   });
 }
 function sunSection(i18n: I18n, ctx: LayerContext): string {
@@ -122,7 +122,7 @@ function warningsSection(i18n: I18n, ctx: LayerContext): string {
   const list = state || `<ul class="rows-plain" role="list" data-testid="warnings">${items.map((w) => warningRow(i18n, w, ctx.now)).join('')}</ul>`;
   return section({
     id: 'wx-warnings', tone: 'urgency', testid: 'wx-warnings',
-    body: sectionHead(i18n, { kicker: 'DHMZ', title: i18n.t('weather.warnings'), snapshot: cap, error: ctx.errors?.['dhmz-cap'], id: 'wx-warnings-title' }) + list + attributionFoot(i18n, cap),
+    body: sectionHead(i18n, { kicker: 'DHMZ', title: i18n.t('weather.warnings'), snapshot: cap, error: ctx.errors?.['dhmz-cap'], id: 'wx-warnings-title' }) + list,
   });
 }
 interface PlacedQuake { q: FeedItem; mag: number | null; km: number | null; bearing: number | null }
@@ -168,7 +168,7 @@ function quakesSection(i18n: I18n, ctx: LayerContext): string {
   }
   return section({
     id: 'wx-quakes', tone: 'urgency', className: 'wx-wide', testid: 'wx-quakes',
-    body: sectionHead(i18n, { kicker: i18n.t('weather.quakesWindow'), title: i18n.t('weather.quakes'), snapshot: emsc, error: ctx.errors?.emsc, id: 'wx-quakes-title' }) + body + attributionFoot(i18n, emsc),
+    body: sectionHead(i18n, { kicker: i18n.t('weather.quakesWindow'), title: i18n.t('weather.quakes'), snapshot: emsc, error: ctx.errors?.emsc, id: 'wx-quakes-title' }) + body,
   });
 }
 export function renderZrakINebo(ctx: LayerContext): HTMLElement {
@@ -176,5 +176,6 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2></header>
 <div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${sunSection(i18n, ctx)}${warningsSection(i18n, ctx)}${quakesSection(i18n, ctx)}</div>
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
 </section>`);
 }

@@ -31,6 +31,7 @@
     "live": "data as of {time}",
     "stale": "data as of {time} · source not responding right now",
     "staleShort": "stale since {time}",
+    "confirmedAt": "Confirmed {time}.",
     "down": "source unavailable",
     "loading": "loading data",
     "paused": "refresh paused",

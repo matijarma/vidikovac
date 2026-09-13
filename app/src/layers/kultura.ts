@@ -215,7 +215,8 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
     chip(i18n.t('events.allCategories'), { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': '' }, selected: !category, count: upcoming.length }),
     ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => chip(categoryLabel(i18n, key), { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': key }, selected: category === key, count })),
   ], i18n.t('events.categoryLabel'));
-  const toolbar = `<div class="ws-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${chips}</div>`;
+  // Filters only when there is something to filter; the empty state speaks for itself.
+  const toolbar = `<div class="ws-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? chips : ''}</div>`;
   const emptyText = query || category ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
   const agenda = section({

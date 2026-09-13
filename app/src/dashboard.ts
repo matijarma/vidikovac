@@ -542,6 +542,13 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     event.preventDefault();
     setMapView(false);
   });
+  // Input modality: a pointer tap never paints a keyboard focus ring around
+  // the heading focus moves to; keyboard users keep every ring, and readers
+  // still get the focus relocation.
+  element.addEventListener('pointerdown', () => { element.dataset.modality = 'pointer'; }, true);
+  element.addEventListener('keydown', (event) => {
+    if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) element.dataset.modality = 'keyboard';
+  }, true);
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });

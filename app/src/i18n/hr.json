@@ -33,6 +33,7 @@
     "live": "podaci od {time}",
     "stale": "podaci od {time} · izvor trenutačno ne odgovara",
     "staleShort": "zastarjelo od {time}",
+    "confirmedAt": "Potvrđeno {time}.",
     "down": "izvor nedostupan",
     "loading": "učitavanje podataka",
     "paused": "osvježavanje zaustavljeno",

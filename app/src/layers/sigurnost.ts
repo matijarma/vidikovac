@@ -7,7 +7,7 @@ import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from '../../../worker/hit
 import { LJEKARNE, LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
 import { externalLink, moduleExport, searchField, section, sectionHead } from '../experience/blocks';
 import { isActiveWarning, safetyState, type SafetyState } from '../experience/safety-state';
-import { attributionFoot, coverageText, listState, stateBlock, unconfirmed } from '../experience/status';
+import { coverageText, listState, provenanceBlock, stateBlock } from '../experience/status';
 import { distanceKm, numberText, pointOf, relativeTime, ZAGREB_LON_LAT } from '../experience/text';
 import { zagrebDateTime, zagrebTime, zagrebWeekdayDate } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -53,7 +53,7 @@ function warningsSection(i18n: I18n, ctx: LayerContext, state: SafetyState): str
     || `<ul class="rows-plain" role="list" data-testid="safety-warnings">${items.map((w) => warningRow(i18n, w, ctx.now)).join('')}</ul>`;
   return section({
     id: 'sf-warnings', tone: 'urgency', testid: 'sf-warnings',
-    body: sectionHead(i18n, { title: i18n.t('safety.warnings'), snapshot: cap, error: ctx.errors?.['dhmz-cap'], id: 'sf-warnings-title' }) + list + attributionFoot(i18n, cap),
+    body: sectionHead(i18n, { title: i18n.t('safety.warnings'), snapshot: cap, error: ctx.errors?.['dhmz-cap'], id: 'sf-warnings-title' }) + list,
   });
 }
 
@@ -75,7 +75,7 @@ function closuresSection(i18n: I18n, ctx: LayerContext, state: SafetyState): str
     : '';
   return section({
     id: 'sf-closures', tone: 'transit', testid: 'sf-closures',
-    body: sectionHead(i18n, { title: i18n.t('safety.closures'), snapshot: roads, error: ctx.errors?.prometnice, id: 'sf-closures-title' }) + list + exports + attributionFoot(i18n, roads),
+    body: sectionHead(i18n, { title: i18n.t('safety.closures'), snapshot: roads, error: ctx.errors?.prometnice, id: 'sf-closures-title' }) + list + exports,
   });
 }
 function pharmaciesSection(i18n: I18n): string {
@@ -109,7 +109,7 @@ function quakesSection(i18n: I18n, ctx: LayerContext, state: SafetyState): strin
     || `<ul class="rows-plain" role="list" data-testid="safety-quakes">${items.map((q) => quakeRow(i18n, q, ctx.now)).join('')}</ul>`;
   return section({
     id: 'sf-quakes', tone: 'urgency', testid: 'sf-quakes',
-    body: sectionHead(i18n, { title: i18n.t('safety.quakes'), snapshot: emsc, error: ctx.errors?.emsc, id: 'sf-quakes-title' }) + list + attributionFoot(i18n, emsc),
+    body: sectionHead(i18n, { title: i18n.t('safety.quakes'), snapshot: emsc, error: ctx.errors?.emsc, id: 'sf-quakes-title' }) + list,
   });
 }
 function normalise(value: string): string {
@@ -154,7 +154,7 @@ function assemblySection(i18n: I18n, ctx: LayerContext): string {
   }
   return section({
     id: 'sf-assembly', tone: 'action', className: 'sf-wide', testid: 'sf-assembly',
-    body: sectionHead(i18n, { title: i18n.t('safety.assembly'), snapshot: geo, error: ctx.errors?.['ckan-geo'], id: 'sf-assembly-title' }) + body + attributionFoot(i18n, geo),
+    body: sectionHead(i18n, { title: i18n.t('safety.assembly'), snapshot: geo, error: ctx.errors?.['ckan-geo'], id: 'sf-assembly-title' }) + body,
   });
 }
 export function renderSigurnost(ctx: LayerContext): HTMLElement {
@@ -164,5 +164,6 @@ export function renderSigurnost(ctx: LayerContext): HTMLElement {
 <header class="ws-head"><h2 class="layer-title" id="layer-title-sigurnost" tabindex="-1">${escapeHtml(i18n.t('layers.sigurnost'))}</h2></header>
 ${levelHeader(i18n, state)}
 <div class="sf-grid">${numbersSection(i18n)}${warningsSection(i18n, ctx, state)}${closuresSection(i18n, ctx, state)}${pharmaciesSection(i18n)}${quakesSection(i18n, ctx, state)}${assemblySection(i18n, ctx)}</div>
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-cap'], ctx.snapshots.prometnice, ctx.snapshots.emsc, ctx.snapshots['ckan-geo']])}
 </section>`);
 }

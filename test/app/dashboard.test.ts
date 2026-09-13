@@ -413,6 +413,17 @@ describe('failure and recovery', () => {
 });
 
 describe('the full map view (transport)', () => {
+  it('records the input modality so a pointer tap paints no heading ring while keyboard focus keeps it', () => {
+    const { root } = mount();
+    const shell = root.querySelector<HTMLElement>('.ki')!;
+    expect(shell.dataset.modality).toBeUndefined();
+    shell.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(shell.dataset.modality).toBe('pointer');
+    shell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(shell.dataset.modality).toBe('keyboard');
+    shell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+    expect(shell.dataset.modality).toBe('keyboard');
+  });
   it('writes one history entry per place, none per poll, and Back through the fragment closes the detail', async () => {
     const pushes: string[] = [];
     const replaces: string[] = [];

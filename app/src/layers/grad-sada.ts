@@ -4,11 +4,11 @@
 // block; every value is real and a missing source reads as unknown.
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
-import { fillAttribution } from '../attribution';
 import { ZET_ROUTES } from '../data/routes';
 import { attrs, itemSelection, navLink } from '../experience/blocks';
+import { delayTone } from '../experience/delay';
 import { safetyState, type SafetyState } from '../experience/safety-state';
-import { listState, stateBlock, statusBadge, statusLine, unconfirmed } from '../experience/status';
+import { listState, provenanceBlock, stateBlock, statusBadge, statusLine, unconfirmed } from '../experience/status';
 import { compassWord, conditionText, dayHeading, distanceKm, eventWhen, numberText, pointOf, relativeTime, windBearing, ZAGREB_LON_LAT } from '../experience/text';
 import { zagrebTime, zagrebWeekdayDate } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -82,16 +82,12 @@ function weatherBlock(i18n: I18n, ctx: LayerContext): string {
   }
   return block({ id: 'ov-weather', tone: 'weather', title: i18n.t('overview.weatherKicker'), badge, body, more: { layer: 'zrak-i-nebo', label: i18n.t('layers.zrak-i-nebo') } });
 }
-function delayState(seconds: number | undefined): string {
-  if (seconds === undefined) return 'none';
-  return seconds > 15 ? 'late' : seconds < -15 ? 'early' : 'ontime';
-}
-
 function routeRow(i18n: I18n, routeId: string, delay: number | undefined): string {
   const route = ZET_ROUTES[routeId];
+  const tone = delayTone(i18n, delay);
   const word = delay === undefined ? i18n.t('transit.noDelayData') : delayWord(i18n, delay);
   const selection = JSON.stringify({ kind: 'route', id: routeId });
-  return `<li data-key="${escapeAttribute(routeId)}"><button type="button" class="route-link" data-action="nav" data-layer="u-pokretu" data-selection="${escapeAttribute(selection)}" aria-label="${escapeAttribute(i18n.t('transit.openRoute', { route: route?.shortName ?? routeId }))}"><span class="route-no"${route ? ` data-type="${route.type}"` : ''}>${escapeHtml(route?.shortName ?? routeId)}</span><span class="route-name">${escapeHtml(route?.longName ?? '')}</span><span class="route-delay" data-state="${delayState(delay)}">${escapeHtml(word)}</span></button></li>`;
+  return `<li data-key="${escapeAttribute(routeId)}"><button type="button" class="route-link" data-action="nav" data-layer="u-pokretu" data-selection="${escapeAttribute(selection)}" aria-label="${escapeAttribute(i18n.t('transit.openRoute', { route: route?.shortName ?? routeId }))}"><span class="route-no"${route ? ` data-type="${route.type}"` : ''}>${escapeHtml(route?.shortName ?? routeId)}</span><span class="route-name">${escapeHtml(route?.longName ?? '')}</span><span class="route-delay" data-state="${tone}">${escapeHtml(word)}</span></button></li>`;
 }
 
 /** The transport action: the lines from this screen's stop and how they run now; without a stop, the lines deviating most. */
@@ -102,7 +98,10 @@ function transitBlock(i18n: I18n, ctx: LayerContext): string {
   const byRoute = new Map(delays.map((d) => [d.routeId, d.meanDelay]));
   const count = vehicleCount(zet);
   const title = stop ? i18n.t('transit.fromStop', { stop: stop.name }) : i18n.t('transit.mostDeviating');
-  const routeIds = stop ? stop.routes.slice(0, MAX_STOP_ROUTES) : delays.slice(0, MAX_DEVIATING).map((d) => d.routeId);
+  // Without a stop, only figures the shared helper asserts as a delay are ranked; a word it declines to assert never leads the list.
+  const routeIds = stop
+    ? stop.routes.slice(0, MAX_STOP_ROUTES)
+    : delays.filter((d) => delayTone(i18n, d.meanDelay) !== 'none').slice(0, MAX_DEVIATING).map((d) => d.routeId);
   const state = listState(i18n, zet, 'zet-rt', routeIds.length, i18n.t('overview.transitEmpty'), ctx.errors?.['zet-rt']);
   const list = state || `<ul class="route-list" role="list" data-testid="overview-routes">${routeIds.map((id) => routeRow(i18n, id, byRoute.get(id))).join('')}</ul>`;
   const meta = zet && count !== null ? `<p class="meta" data-testid="vehicle-count">${escapeHtml(i18n.t('transit.vehiclesMoving', { count }))} · ${escapeHtml(statusLine(i18n, zet))}</p>` : '';
@@ -220,19 +219,11 @@ function civicBlock(i18n: I18n, ctx: LayerContext): string {
     more: { layer: 'uprava-i-pravo', label: i18n.t('layers.uprava-i-pravo') },
   });
 }
-/** One expandable line of provenance for every module shown, with the required credits inside. */
-function provenance(i18n: I18n, ctx: LayerContext): string {
-  const rows = (Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])
-    .filter((s): s is ModuleSnapshot => Boolean(s))
-    .map((s) => `<li data-key="${escapeAttribute(s.module)}"><span class="source-text">${escapeHtml(fillAttribution(s.attribution, s, s.items[0]))}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(s.attribution.licence)}</span> <a class="source-link" href="${escapeAttribute(s.attribution.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`);
-  return `<details class="provenance" data-key="provenance" data-testid="provenance"><summary>${iconMarkup('chevron-down')}<span>${escapeHtml(i18n.t('attribution.sources'))}</span></summary><ul>${rows.join('')}</ul><p class="meta"><a href="/izvori/">${escapeHtml(i18n.t('common.links.izvori'))}</a></p></details>`;
-}
-
 export function renderGradSada(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   return createElementFromHTML(`<section class="layer ws ws-overview" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">
 <h2 class="layer-title visually-hidden" id="layer-title-grad-sada" tabindex="-1">${escapeHtml(i18n.t('layers.grad-sada'))}</h2>
 <div class="ov">${weatherBlock(i18n, ctx)}${transitBlock(i18n, ctx)}${safetyBlock(i18n, ctx)}${agendaBlock(i18n, ctx)}${newsBlock(i18n, ctx)}${civicBlock(i18n, ctx)}</div>
-${provenance(i18n, ctx)}
+${provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])}
 </section>`);
 }

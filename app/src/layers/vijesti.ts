@@ -5,7 +5,7 @@ import type { FeedItem, ModuleSnapshot, SourceAvailability } from '../../../work
 import { externalLink, findSelected, isSelected, itemActions, itemRow, listDetail, section, sectionHead } from '../experience/blocks';
 import { attributionFoot, listState, statusBadge } from '../experience/status';
 import { relativeTime } from '../experience/text';
-import { zagrebDateTime } from '../format';
+import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -35,9 +35,10 @@ function publishedText(i18n: I18n, item: FeedItem, now: number): string {
 }
 
 function sourceBadge(i18n: I18n, availability: SourceAvailability | undefined): string {
-  if (!availability) return '';
+  // A feed that answered needs no pill; the stories carry their own publication times.
+  if (!availability || availability.status === 'live') return '';
   const tone = availability.status;
-  const word = tone === 'down' ? i18n.t('status.down') : tone === 'stale' ? i18n.t('freshness.danas') : i18n.t('freshness.zivo');
+  const word = tone === 'down' ? i18n.t('status.down') : i18n.t('status.staleShort', { time: zagrebTime(availability.fetchedAt) });
   return `<span class="badge" data-tone="${tone}" data-testid="news-source-status">${escapeHtml(word)}</span>`;
 }
 

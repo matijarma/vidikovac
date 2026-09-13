@@ -7,6 +7,7 @@ import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
+import { REFERENCE_MODULES } from '../panels/panel';
 
 export type SourceState = 'loading' | 'live' | 'stale' | 'down';
 
@@ -91,7 +92,8 @@ export function listState(
   if (count > 0) return '';
   if (snapshot.status === 'down') return stateBlock(i18n, 'down', i18n.t('status.unknown'), { retry: module });
   if (snapshot.status === 'stale') return stateBlock(i18n, 'stale', `${i18n.t('status.unknown')} ${i18n.t('status.staleNote')}`, { retry: module });
-  return stateBlock(i18n, 'empty', emptyText);
+  // A confirmed absence says when it was confirmed; the fetch time is exactly that.
+  return stateBlock(i18n, 'empty', `${emptyText} ${i18n.t('status.confirmedAt', { time: zagrebTime(snapshot.fetchedAt) })}`);
 }
 
 /** The compact source footer: filled attribution, licence and the link to the original. */
@@ -103,19 +105,32 @@ export function attributionFoot(i18n: I18n, snapshot: ModuleSnapshot | undefined
 }
 
 /**
- * Source health as a word plus a shape, never colour alone. Live carries no
- * time: a successful fetch is not an observation or publication time, and each
- * domain states its real data time in its own words. Stale names the moment
- * the last good copy stopped being confirmed.
+ * Source health as a word plus a shape, never colour alone. A live source
+ * shows no pill at all: a successful fetch is neither freshness nor an
+ * observation time, and each domain states its real data time in its own
+ * words. Reference material is named as such; stale names the moment the
+ * last good copy stopped being confirmed; down and loading say so.
  */
 export function statusBadge(i18n: I18n, snapshot: ModuleSnapshot | undefined, error?: string): string {
   const state = snapshot ? snapshot.status : error ? 'down' : 'loading';
+  if (snapshot && state === 'live') {
+    if (!REFERENCE_MODULES.includes(snapshot.module)) return '';
+    return `<span class="badge badge-plain status-badge" data-tone="info" data-testid="panel-status" data-status="reference">${escapeHtml(i18n.t('freshness.referenca'))}</span>`;
+  }
+  // The pill is one short word; the body's state block carries the full sentence and the retry.
   const word = !snapshot
-    ? i18n.t(error ? 'status.unknown' : 'status.loading')
+    ? i18n.t(error ? 'status.down' : 'status.loading')
     : state === 'down'
       ? i18n.t('status.down')
-      : state === 'stale'
-        ? i18n.t('status.staleShort', { time: zagrebTime(snapshot.staleSince ?? snapshot.fetchedAt) })
-        : i18n.t('freshness.zivo');
+      : i18n.t('status.staleShort', { time: zagrebTime(snapshot.staleSince ?? snapshot.fetchedAt) });
   return `<span class="badge status-badge" data-tone="${state === 'loading' ? 'info' : state}" data-testid="panel-status" data-status="${state}">${escapeHtml(word)}</span>`;
+}
+
+/** One expandable line of provenance for the modules shown, with the required credits and links inside. */
+export function provenanceBlock(i18n: I18n, snapshots: readonly (ModuleSnapshot | undefined)[], testid = 'provenance'): string {
+  const rows = snapshots
+    .filter((s): s is ModuleSnapshot => Boolean(s))
+    .map((s) => `<li data-key="${escapeAttribute(s.module)}"><span class="source-text">${escapeHtml(fillAttribution(s.attribution, s, s.items[0]))}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(s.attribution.licence)}</span> <a class="source-link" href="${escapeAttribute(s.attribution.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`);
+  if (!rows.length) return '';
+  return `<details class="provenance" data-key="${escapeAttribute(testid)}" data-testid="${escapeAttribute(testid)}"><summary>${iconMarkup('chevron-down')}<span>${escapeHtml(i18n.t('attribution.sources'))}</span></summary><ul>${rows.join('')}</ul><p class="meta"><a href="/izvori/">${escapeHtml(i18n.t('common.links.izvori'))}</a></p></details>`;
 }

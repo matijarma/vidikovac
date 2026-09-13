@@ -15,6 +15,10 @@
 .ws-head .meta { max-inline-size: 60ch; }
 .layer-title { inline-size: fit-content; }
 .layer-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
+/* Programmatic focus after a pointer tap: no ring on a non-interactive heading; keyboard keeps it. */
+.ki[data-modality='pointer'] .layer-title:focus-visible, .ki[data-modality='pointer'] .detail-title:focus-visible, .ki[data-modality='pointer'] .ki-main:focus-visible { outline: none; }
+/* The weather lead is a flat line, not another card. */
+.sec.wx-lead { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
 .ws-toolbar { display: grid; gap: var(--sp-3); }
 .ws-toolbar .field-search input { inline-size: 100%; }
 
@@ -151,10 +155,11 @@
 .ov-weather-facts .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
 .ov-range { grid-column: 1 / -1; display: grid; }
 .ov-range .g-range { max-inline-size: 26rem; }
-/* Safety: a strip whose leading edge carries the level. */
-.ov-safety { padding-inline-start: var(--sp-4); border-inline-start: 4px solid var(--tone-live); }
-.ov-safety[data-level='urgent'] { border-inline-start-color: var(--tone-urgency); background: var(--tone-tint-urgency); padding: var(--sp-3) var(--sp-4); border-block-start: 0; border-radius: 0 var(--r-md) var(--r-md) 0; }
-.ov-safety[data-level='unknown'] { border-inline-start-color: var(--tone-weather); }
+/* Safety: a grouped, tinted block whose icon and title carry the level. */
+.ov-block.ov-safety { padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
+.ov-block.ov-safety[data-level='calm'] { background: var(--tone-tint-success); border-color: transparent; }
+.ov-block.ov-safety[data-level='unknown'] { background: var(--tone-tint-weather); border-color: transparent; }
+.ov-block.ov-safety[data-level='urgent'] { background: var(--tone-tint-urgency); border-color: var(--tone-urgency); }
 .ov-strip { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
 .ov-strip li { display: flex; align-items: center; gap: var(--sp-3); min-height: 2.5rem; }
 .ov-strip .icon { flex: none; }
@@ -205,7 +210,7 @@
 .wx-fact-value { font-size: var(--text-xl); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
 .wx-forecast-text { margin: 0; line-height: var(--leading-relaxed); }
 @media (min-width: 60rem) {
-  .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .wx-wide { grid-column: 1 / -1; }
 }
 
