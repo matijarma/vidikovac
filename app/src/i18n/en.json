@@ -56,7 +56,7 @@
     "kultura": "Events",
     "vijesti": "News"
   },
-  "nav": { "label": "Domains", "more": "More", "moreTitle": "Other domains", "safety": "Safety", "safetyHint": "Safety information, always at hand" },
+  "nav": { "label": "Domains", "more": "More", "moreTitle": "More", "safety": "Safety", "safetyHint": "Safety information, always at hand" },
   "shell": {
     "session": "Session",
     "sessionTitle": "This session",
@@ -331,7 +331,8 @@
     "intro": "The other domains, the session and the pages.",
     "domains": "Domains",
     "open": "Open {layer}",
-    "session": "Session and settings",
+    "session": "Unlocked until {time}",
+    "sessionSub": "Settings, language and theme",
     "pages": "Pages",
     "weatherSummary": "{temp} °C, {condition}",
     "safetySummaryCalm": "No urgent warnings",

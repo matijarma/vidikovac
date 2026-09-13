@@ -78,7 +78,7 @@ describe('contrast.test.ts keeps parsing tokens.css (brief acceptance check)', (
 describe('layers.css: the 13 px floor (T1.5)', () => {
   it('moves row seconds lines and timestamps to the secondary role', () => {
     expect(LAYERS).toMatch(/\.row-meta \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/\.dir-line \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(LAYERS).toMatch(/\.dir-item \.row-sub \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.row-lead-small \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.sec-note \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.route-name \{[^}]*font-size: var\(--type-secondary\);/);
@@ -96,7 +96,7 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
 
   it('leaves the changed rules at the body line height', () => {
     expect(LAYERS).toMatch(/\.row-meta \{[^}]*line-height: var\(--lh-body\);/);
-    expect(LAYERS).toMatch(/\.dir-line \{[^}]*line-height: var\(--lh-body\);/);
+    expect(LAYERS).toMatch(/\.dir-item \.row-sub \{[^}]*line-height: var\(--lh-body\);/);
   });
 
   it('keeps the attribution-level selectors at the meta size (12 px), never bumped', () => {

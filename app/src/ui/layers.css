@@ -281,12 +281,14 @@
 }
 
 /* Directory ("Još"). */
-.dir-item { display: flex; align-items: center; gap: var(--sp-3); min-height: 3.5rem; padding: var(--sp-2) 0; color: inherit; text-decoration: none; touch-action: manipulation; }
-.dir-item .icon { flex: none; width: 1.5rem; height: 1.5rem; color: var(--tone-action-brand); }
-.dir-item[data-layer='sigurnost'] .icon { color: var(--tone-urgency); }
-.dir-text { display: grid; gap: 0.1rem; flex: 1 1 auto; min-inline-size: 0; }
-.dir-title { font-weight: var(--weight-medium); }
-.dir-line { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.row-dir { min-block-size: 4.5rem; }
+.dir-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3); inline-size: 100%; min-block-size: 4.5rem; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; text-decoration: none; cursor: pointer; touch-action: manipulation; }
+.dir-icon { width: 1.5rem; height: 1.5rem; }
+.dir-item .row-sub { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.dir-item[data-layer='zrak-i-nebo'] .dir-icon { color: var(--tone-weather); }
+.dir-item[data-layer='sigurnost'] .dir-icon { color: var(--tone-urgency); }
+.dir-item[data-layer='uprava-i-pravo'] .dir-icon { color: var(--tone-action-brand); }
+.dir-item[data-layer='vijesti'] .dir-icon { color: var(--tone-text-primary); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .dir-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
 /* Events: a dated agenda with category controls; undated notices apart. */
