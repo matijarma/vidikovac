@@ -16,7 +16,7 @@ import {
   ringCentroid,
   titleCaseHr,
 } from '../../worker/feed/modules/ckan-geo';
-import type { FetchContext } from '../../worker/feed/schema';
+import { DATA_KEYS, type FetchContext } from '../../worker/feed/schema';
 
 const cetvrti = JSON.parse(readFileSync(new URL('../fixtures/gradske_cetvrti.geojson', import.meta.url), 'utf8'));
 const packageShow = JSON.parse(readFileSync(new URL('../fixtures/prometnice_package_show.json', import.meta.url), 'utf8'));
@@ -185,6 +185,20 @@ describe('ckanResourceUrl and parseCkanRecords', () => {
     expect(items[1].title).toBe('OŠ Markueevec');
     expect(parseCkanRecords({ features: [...features].reverse() }, ZBORNA_MJESTA_LAYER).map((item) => item.id))
       .toEqual(['zborna-mjesta:4', 'zborna-mjesta:1']);
+  });
+
+  it('carries the district as data.district when the record names one, and no key at all when it does not (R-K4)', () => {
+    const items = parseCkanRecords({ type: 'FeatureCollection', features: [
+      { type: 'Feature', id: 1, geometry: { type: 'Point', coordinates: [15.9807010621406, 45.8157108589494] },
+        properties: { OBJECTID: 1, gradska_ce: 'Gornji Grad-Medveščak', zboriste: 'Park Ribnjak', adresa: 'Ribnjak 1' } },
+      { type: 'Feature', id: 2, geometry: { type: 'Point', coordinates: [15.978, 45.811] },
+        properties: { OBJECTID: 2, zboriste: 'Zrinjevac' } },
+    ] }, ZBORNA_MJESTA_LAYER);
+    expect(items[0].data).toEqual({ layer: ZBORNA_MJESTA_LAYER, category: POI_CATEGORIES[ZBORNA_MJESTA_LAYER], district: 'Gornji Grad-Medveščak' });
+    // The address still wins the summary; the district is its own field now, not only the fallback.
+    expect(items[0].summary).toBe('Ribnjak 1');
+    expect(items[1].data).toEqual({ layer: ZBORNA_MJESTA_LAYER, category: POI_CATEGORIES[ZBORNA_MJESTA_LAYER] });
+    expect(DATA_KEYS.poi).toContain('district');
   });
 
   it.each([null, undefined, '', ' ', false, true, {}, [], [0], 'NaN', Infinity])(

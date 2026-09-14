@@ -214,7 +214,7 @@ export function parseCkanRecords(json: unknown, layer: string): ItemInput[] {
       title,
       ...(address ? { summary: address } : {}),
       ...(centroid ? { geo: { type: 'Point' as const, coordinates: centroid } } : {}),
-      data: compactData({ layer, category: POI_CATEGORIES[layer] }),
+      data: compactData({ layer, category: POI_CATEGORIES[layer], district: pick(record, DISTRICT_KEYS) }),
     });
   }
   return items;

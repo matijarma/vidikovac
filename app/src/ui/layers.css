@@ -24,8 +24,6 @@
 .layer-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
 /* Programmatic focus after a pointer tap: no ring on a non-interactive heading; keyboard keeps it. */
 .ki[data-modality='pointer'] .layer-title:focus-visible, .ki[data-modality='pointer'] .detail-title:focus-visible, .ki[data-modality='pointer'] .ki-main:focus-visible { outline: none; }
-/* The weather lead is a flat line, not another card. */
-.sec.wx-lead { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
 .ws-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .ws-toolbar > * { min-inline-size: 0; }
 .ws-toolbar .field-search input { inline-size: 100%; }
@@ -135,10 +133,6 @@
 .g-dot { fill: var(--tone-text-primary); stroke: var(--tone-surface-1); stroke-width: 2; }
 .g-dot-urgency { fill: var(--tone-urgency); fill-opacity: 0.8; }
 .g-centre { fill: var(--tone-action-brand); }
-.g-label { fill: var(--tone-text-muted); font-size: 13px; }
-.g-label-strong { fill: var(--tone-text-primary); font-weight: 700; }
-.g-caption { fill: var(--tone-text-muted); font-size: 13px; }
-.g-value { fill: var(--tone-text-primary); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .g-path { fill: none; stroke: var(--tone-weather); stroke-width: 2; stroke-dasharray: 4 5; opacity: 0.8; }
 .g-horizon { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
 .g-tick { stroke: var(--tone-stroke-strong); stroke-width: 1.5; }
@@ -146,11 +140,7 @@
 .g-sun { fill: var(--tone-weather); }
 .g-sun-down { fill: var(--tone-text-subtle); }
 .g-sun-halo { fill: var(--tone-weather); opacity: 0.18; }
-.g-arrow { stroke: var(--tone-text-primary); stroke-width: 2.5; stroke-linecap: round; }
-.g-arrow-head { fill: var(--tone-text-primary); }
 .g-radar { inline-size: min(100%, 16rem); aspect-ratio: 4 / 3; }
-.g-compass { inline-size: min(100%, 9rem); }
-.g-arc { inline-size: min(100%, 9rem); }
 .g-sun { inline-size: min(100%, 20rem); }
 /* Every figure's box is rem-sized, so its SVG grows with the reader's own
    text zoom the way a fixed-px box never could (finding 6). The wrap is a
@@ -287,20 +277,64 @@
   .ov-range .g-wrap-range { max-inline-size: 32rem; }
 }
 
-/* Weather workspace. */
-.wx-now { display: grid; gap: var(--sp-3); }
-.wx-temp { font-size: 3.5rem; font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }
-.wx-cond { font-size: var(--text-xl); font-weight: var(--weight-medium); }
-.wx-grid { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
-.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr)); gap: var(--sp-3); align-items: start; }
-.wx-figure { display: grid; gap: var(--sp-1); justify-items: center; text-align: center; }
-.wx-figure .kicker { justify-self: start; }
-.wx-fact { display: grid; gap: 0.15rem; }
-.wx-fact-value { font-size: var(--text-xl); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
-.wx-forecast-text { margin: 0; line-height: var(--leading-relaxed); }
+/* Weather workspace (T3.1, plan "Vrijeme"). Flat sections: a hairline and
+   24 px of air between them, no card (plan, "Surfaces"). The grid names and
+   the container-query lines that collapse them are pinned. */
+.wx-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
+.sec.wx-sec { padding: var(--sp-6) 0 0; margin-block-start: var(--sp-6); border: 0; border-block-start: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; box-shadow: none; }
+.wx-grid > .wx-sec:first-child { padding-block-start: 0; margin-block-start: 0; border-block-start: 0; }
+/* The layer title is for readers of the tree on a phone (the temperature is
+   the head); the desk shows it at the title role with the observation line
+   beside it, and the copy of that line under the temperature steps aside. */
+.wx-head { display: contents; }
+.wx-head .layer-title { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.wx-head .wx-head-obs { display: none; }
+/* The observation: the temperature as the largest object, the condition beside it, the station line under them. */
+.wx-lead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-4); align-items: center; }
+.wx-temp { margin: 0; font-size: var(--type-numeral-xl); font-weight: var(--weight-bold); letter-spacing: -0.035em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+.wx-cond { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--type-title); font-weight: var(--weight-medium); line-height: var(--lh-title); }
+.wx-cond .icon { width: 3rem; height: 3rem; color: var(--tone-weather); }
+.wx-obs, .wx-head-obs { flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.wx-obs { display: flex; grid-column: 1 / -1; }
+/* Three facts on one strip under a hairline: a label at the secondary role over a bold tabular value. The
+   strip has no hairline of its own below it; the next section's hairline is the one that follows. */
+.wx-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr)); gap: var(--sp-3); margin: 0; padding-block: var(--sp-3) 0; border-block-start: 1px solid var(--tone-stroke); }
+.wx-fact { display: grid; gap: 0.15rem; min-inline-size: 0; }
+.wx-fact-label { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.wx-fact-value { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
+/* The wind arrow flies with the wind; the span is what turns, so the icon keeps its sprite box. */
+.wx-arrow { display: inline-flex; color: var(--tone-text-muted); }
+/* Today: the range bar full width with its numbers at the head role, the sentence, the DHMZ prose, the validity line. */
+.wx-range .g-labels { font-size: var(--type-head); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
+.wx-range-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); }
+.wx-prose { margin: 0; max-inline-size: 68ch; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); }
+/* The sun: a 20rem box for the arc with its axis words under it; the numbers once, in the line below. */
+.wx-sun .g-wrap-sun { inline-size: min(100%, 20rem); }
+.wx-sun .g-sun { inline-size: min(100%, 20rem); }
+.wx-sun .g-wrap-sun .g-labels { inline-size: 100%; }
+.wx-sun-times { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
+.wx-nowrap { white-space: nowrap; }
+.wx-sun-until { margin: 0; font-size: var(--type-control); line-height: var(--lh-body); }
+/* Warnings: the level as a word with its shape, the event, the window, the text as prose. */
+.wx-warnings { display: grid; margin: 0; padding: 0; list-style: none; }
+.wx-warning { display: grid; gap: var(--sp-1); padding-block: var(--sp-3); border-block-start: 1px solid var(--tone-stroke); }
+.wx-warning:first-child { padding-block-start: 0; border-block-start: 0; }
+.wx-warning-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; }
+.wx-warning-event { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
+.wx-warning-window { margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+/* Quakes: rows first with the magnitude as the lead, then the radar in a 16rem box with its legend. */
+.wx-quake-rows { margin: 0; padding: 0; list-style: none; }
+.wx-mag { font-size: var(--type-body); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wx-quakes .g-radar { inline-size: min(100%, 16rem); }
+.wx-quakes .g-wrap-radar { inline-size: min(100%, 16rem); margin-block-start: var(--sp-2); }
+.wx-quakes .g-wrap-radar .g-labels { inline-size: 100%; flex-wrap: wrap; justify-content: center; gap: var(--sp-1) var(--sp-3); }
 @media (min-width: 60rem) {
-  .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .wx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-8); align-items: start; }
   .wx-wide { grid-column: 1 / -1; }
+  .wx-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-4); }
+  .wx-head .layer-title { position: static; inline-size: auto; block-size: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: var(--type-title); }
+  .wx-head .wx-head-obs { display: flex; }
+  .wx-now .wx-obs { display: none; }
 }
 
 /* Directory ("Još"). */
@@ -419,32 +453,69 @@
 .nw-source-head { display: flex; align-items: center; gap: var(--sp-2); }
 .nw-source-head .icon { color: var(--tone-text-muted); }
 
-/* Safety: priorities and practical actions first. */
-.sf-level { display: grid; gap: var(--sp-2); padding: var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); }
-.sf-level[data-level='urgent'] { border-color: var(--tone-urgency); background: var(--tone-tint-urgency); }
-.sf-level[data-level='unknown'] { background: var(--tone-tint-weather); }
-.sf-level[data-level='calm'] { background: var(--tone-tint-success); }
-.sf-level-title { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-xl); }
+/* Safety workspace (T3.2, plan "Sigurnost"). The verdict is one band and the
+   first thing on the page; every section is flat, a hairline and 24 px of air
+   between them; the emergency-number tiles are the only boxes (R-D3). The
+   grid name, the numbers grid's pinned string and the container-query line
+   that collapses the grid are pinned by tests. */
+.sf-head { display: contents; }
+/* On a phone the verdict is the head; the layer title stays in the tree for its readers and shows on a desk. */
+.sf-head .layer-title { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sf-verdict { display: grid; gap: var(--sp-2); }
+/* The band (signage.css): 72 px tall here, the verdict at title size over one line of body, the shield 24 px. */
+.sf-level { min-block-size: 4.5rem; padding-block: var(--sp-2); }
+.sf-level > .icon { flex: none; width: 1.5rem; height: 1.5rem; }
 .sf-level[data-level='urgent'] .icon { color: var(--tone-urgency); }
 .sf-level[data-level='calm'] .icon { color: var(--tone-live); }
 .sf-level[data-level='unknown'] .icon { color: var(--tone-weather); }
-.sf-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-.sf-number { display: grid; gap: 0.15rem; min-height: var(--target-primary); padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-primary); text-decoration: none; }
+.sf-verdict-text { display: grid; gap: var(--sp-1); min-inline-size: 0; }
+.sf-level .band-title { font-size: var(--type-title); line-height: var(--lh-title); }
+.sf-verdict-note { font-size: var(--type-body); line-height: var(--lh-body); }
+.sf-hitno { justify-self: start; }
+.sf-grid { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
+/* Blocks 24 px apart with the hairline centred (plan, "Spacing"): 12 px of
+   margin above the line, 12 px of padding under it. The section's one column
+   is capped at its own width: an untemplated grid column grows to its items'
+   min-content contribution, and a source line's text (flex-basis 16rem) would
+   lay every child of the section out 16rem wide in a 390 px phone at 200%
+   text, pushing the page sideways. */
+.sec.sf-sec { grid-template-columns: minmax(0, 1fr); padding: var(--sp-3) 0 0; margin-block-start: var(--sp-3); border: 0; border-block-start: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; box-shadow: none; }
+.sf-grid > .sf-sec:first-child { padding-block-start: 0; margin-block-start: 0; border-block-start: 0; }
+/* Two rows always: 112 across two columns, the four others under it. The cap
+   holds the grid to three columns so no width strands the last tile alone. */
+.sf-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr)); gap: var(--sp-2); max-inline-size: 35rem; margin: 0; padding: 0; list-style: none; }
+.sf-numbers > li:first-child { grid-column: span 2; }
 @media (hover: hover) {
   .sf-number:hover { background: var(--tone-surface-3); }
-}
-.sf-number-value { font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
-.sf-number-label { font-size: var(--type-control); color: var(--tone-text-muted); line-height: var(--lh-body); }
-.sf-number-primary { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
-.sf-number-primary .sf-number-label { color: inherit; opacity: 0.85; }
-@media (hover: hover) {
   .sf-number-primary:hover { background: var(--tone-text-primary); opacity: 0.92; }
 }
-.sf-grid { display: grid; gap: var(--sp-4); }
-@media (min-width: 60rem) { .sf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .sf-wide { grid-column: 1 / -1; } }
-.sf-pharmacy { display: grid; gap: 0.2rem; }
-.sf-call { justify-self: start; margin-block-start: var(--sp-1); }
-.sf-more { justify-self: start; }
+.sf-rows { margin: 0; padding: 0; list-style: none; }
+.sf-all, .sf-more { justify-self: start; }
+.sf-intro { margin: 0; max-inline-size: 68ch; font-size: var(--type-body); line-height: var(--lh-body); }
+/* A pharmacy: the name in bold with the nearest badge beside it, two secondary lines, the call button at the row's end. */
+.sf-pharmacy { min-block-size: 3.5rem; }
+.sf-pharmacy .row-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+.sf-pharmacy-name { font-weight: var(--weight-bold); }
+.sf-call { min-block-size: var(--target-primary); }
+.sf-no-phone { text-align: end; }
+/* Districts: one closed <details> per gradska četvrt on a 44 px summary; the rows inside are the dense rows every list here uses. */
+.sf-districts { display: grid; border-block-start: 1px solid var(--tone-stroke); }
+.sf-district { border-block-end: 1px solid var(--tone-stroke); }
+.sf-district-head { display: flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-block: var(--sp-1); cursor: pointer; font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); list-style: none; touch-action: manipulation; }
+.sf-district-head::-webkit-details-marker { display: none; }
+.sf-district-count { color: var(--tone-text-muted); }
+.sf-district-head .icon { flex: none; margin-inline-start: auto; color: var(--tone-text-muted); transition: rotate var(--dur-fast) var(--ease); }
+.sf-district[open] > .sf-district-head .icon { rotate: 180deg; }
+.sf-district > .sf-rows { padding-inline-start: var(--sp-4); }
+.sf-district > .sf-rows > .row:first-child { border-block-start: 1px solid var(--tone-stroke); }
+.sf-district > .sf-more { margin-block: var(--sp-2) var(--sp-3); margin-inline-start: var(--sp-4); }
+@media (prefers-reduced-motion: reduce) { .sf-district-head .icon { transition: none; } }
+@media (min-width: 60rem) {
+  .sf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-8); align-items: start; }
+  .sf-wide { grid-column: 1 / -1; }
+  .sf-head { display: grid; }
+  .sf-head .layer-title { position: static; inline-size: auto; block-size: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: var(--type-title); }
+}
 .badge-sev { text-transform: none; }
 /* Source footers: readable and compact, never a wall under the content. */
 .source { margin: 0; padding-block-start: var(--sp-2); border-block-start: 1px solid var(--tone-stroke); }
@@ -488,6 +559,7 @@
   .ov-col { display: contents; }
   .ov-weather-row { column-gap: var(--sp-4); }
   .ov-range .g-range { max-inline-size: 26rem; }
+  .ov-range .g-wrap-range { max-inline-size: 26rem; }
   .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
   .wx-wide, .cv-wide, .sf-wide { grid-column: auto; }
   .ws-split[data-detail-open='true'] { grid-template-columns: minmax(0, 1fr); }
@@ -508,4 +580,26 @@
   /* A row's lead (time, all-day, amount) takes its own line above the title. */
   .row-button { flex-wrap: wrap; }
   .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }
+}
+/* Weather in its room. In a narrow one (a 320 phone, or a phone at 200% text)
+   the temperature and its condition stack instead of sharing a line; in a
+   phone-sized room at normal text the three facts share one row instead of
+   falling to two and one, which the 8rem auto-fit minimum above would do at
+   390 px. Both measured against the .ws container in rem, like the blocks
+   above, so text zoom counts. */
+@container ws (max-width: 20rem) {
+  .wx-lead { grid-template-columns: minmax(0, 1fr); }
+}
+@container ws (min-width: 20rem) and (max-width: 36rem) {
+  .wx-figures { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Safety in a narrow room (a phone at 200% text): two number tiles no longer
+   fit side by side (2 × 8.5rem and the gap), so 112 takes one cell like the
+   others instead of spanning into an implicit column beyond the box; and the
+   verdict drops under the shield to take the whole width, so a word of the
+   title is not broken letter by letter beside it. */
+@container ws (max-width: 17.5rem) {
+  .sf-numbers > li:first-child { grid-column: auto; }
+  .sf-level { flex-wrap: wrap; row-gap: var(--sp-1); }
+  .sf-verdict-text { flex: 1 0 100%; }
 }

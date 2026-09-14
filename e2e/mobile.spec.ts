@@ -351,8 +351,6 @@ test(`with fixtures at 390 px Grad stays under ${GRAD_MAX_HEIGHT_PX} px of docum
 });
 
 test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
-  // Expected red until T3.2 lays Sigurnost out as hairline sections with 52 px rows; the pre-wave-3 cards measure about 3600 px with the same content. T3.2 removes this line.
-  test.fail(true, 'red until T3.2 (Sigurnost composition) brings the layout under the bound');
   const fixture = await openDashboard(page, PHONE);
   await openLayer(page, 'sigurnost');
   await settle(page, fixture);

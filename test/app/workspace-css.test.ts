@@ -27,6 +27,11 @@ describe('layers.css reflows the workspace by its own room', () => {
     // The container rules come after the viewport rules they override, at equal specificity.
     expect(LAYERS.lastIndexOf('@media (min-width: 80rem)')).toBeLessThan(LAYERS.indexOf('@container ws'));
   });
+  it('caps the overview range wrap together with its svg in a narrow container, so the "now" label stays over its marker (the parked T1.5 finding)', () => {
+    const block = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
+    expect(block).toContain('.ov-range .g-range { max-inline-size: 26rem; }');
+    expect(block).toContain('.ov-range .g-wrap-range { max-inline-size: 26rem; }');
+  });
   it('stacks the weather lead and row leads once the room is about a phone at 200% text', () => {
     const block = /@container ws \(max-width: 16rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
     expect(block).toMatch(/\.ov-weather-row \{ grid-template-columns: minmax\(0, 1fr\); \}/);

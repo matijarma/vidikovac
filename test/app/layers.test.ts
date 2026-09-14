@@ -507,10 +507,10 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     expect(section.querySelector('#wx-quakes .g-radar')).not.toBeNull();
     expect(factory).not.toHaveBeenCalled();
     expect(text(section.querySelector('#wx-sun'))).toMatch(/izlazak \d\d:\d\d/);
-    expect(text(section.querySelector('#wx-sun'))).toContain('Izračunato na uređaju');
-    // The measured value sits on today's forecast range; wind reads as a direction word, never "calm" while it blows.
+    expect(section.querySelector('#wx-sun .g-sun')).not.toBeNull();
+    // The measured value sits on today's forecast range; wind reads as a compass point, never "calm" while it blows.
     expect(text(section.querySelector('[data-testid=forecast-range]'))).toBe('od 12 do 24 °C');
-    expect(text(section.querySelector('[data-testid=wind-text]'))).toBe('sjeverozapad 2 m/s');
+    expect(text(section.querySelector('[data-testid=wind-text]'))).toBe('SZ 2 m/s');
     expect(section.querySelector('#wx-range .g-range')).not.toBeNull();
   });
   it('sigurnost renders the open modules and points at the untimed page', () => {
@@ -520,7 +520,7 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     expect(section.querySelectorAll('a[href^="tel:"]').length).toBeGreaterThanOrEqual(5);
     const link = section.querySelector<HTMLAnchorElement>('[data-testid=hitno-link]')!;
     expect(link.getAttribute('href')).toBe('/hitno');
-    expect(text(section)).toContain('Otvoreno svima, bez skeniranja.');
+    expect(text(link)).toBe('Ista stranica bez skeniranja: Sigurnost');
     // The fixture quake is 43 hours old: inside the 72 hour window, placed by its own distance.
     expect(text(section.querySelector('#sf-quakes'))).toContain('M 1,6');
     expect(text(section.querySelector('#sf-quakes'))).toMatch(/\d+ km od Zagreba/);
@@ -675,6 +675,395 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
   });
 });
 
+// T3.1 (plan "Vrijeme", finding 13): the observation as the largest object,
+// three facts on one hairline strip, today's range with the DHMZ prose, the
+// sun as the only other figure, warnings as rows, quakes as rows first. No
+// dial, no arc gauge, no magnitude bars, no card boxes.
+describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
+  const weather = (over: Partial<LayerContext> = {}) => renderLayer('zrak-i-nebo', ctx(over));
+  const quakeAt = (i: number, geo: [number, number] | null): ModuleSnapshot['items'][number] => ({
+    id: `q${i}`, module: 'emsc', kind: 'quake', tier: 'open', title: 'CROATIA',
+    at: new Date(NOW - i * 3_600_000 * 7).toISOString(),
+    ...(geo ? { geo: { type: 'Point', coordinates: geo } } : {}),
+    data: { mag: 1 + i / 10, depth: 10 },
+  });
+  // Eight quakes inside 150 km and 7 days; the last one has no coordinates, so the radar cannot place it.
+  const MANY_QUAKES: ModuleSnapshot = base('emsc', [
+    quakeAt(1, [15.5, 45.5]), quakeAt(2, [16.2, 45.9]), quakeAt(3, [15.9, 46.2]), quakeAt(4, [16.5, 45.6]),
+    quakeAt(5, [15.2, 45.9]), quakeAt(6, [16.0, 45.3]), quakeAt(7, [15.7, 46.0]), quakeAt(8, null),
+  ]);
+  const EMPTY_CAP: ModuleSnapshot = base('dhmz-cap', []);
+  const CALM: ModuleSnapshot = base('dhmz-now', [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', at: '2026-09-11T12:00:00Z', data: { temp: 21, humidity: 54, pressure: 1013, windDir: 'C', windSpeed: 0, weather: 'vedro' } }]);
+
+  it('leads with the measured temperature as temp-now, the condition beside it with its icon, and the station line under them', () => {
+    const now = weather().querySelector('#wx-now')!;
+    expect(text(now.querySelector('[data-testid=temp-now]'))).toBe('21 °C');
+    expect(text(now.querySelector('[data-testid=temp-now]'))).toMatch(/ °C$/);
+    expect(now.querySelector('.wx-temp')).not.toBeNull();
+    expect(text(now.querySelector('.wx-cond'))).toBe('vedro');
+    expect(now.querySelector('.wx-cond .icon use')?.getAttribute('href')).toBe('#icon-sun');
+    expect(text(now.querySelector('.wx-obs'))).toBe('Maksimir · izmjereno 14:00');
+    // The observation carries no kicker and no card head; its heading is for readers of the tree only.
+    expect(now.querySelector('.kicker')).toBeNull();
+    expect(now.querySelector('#wx-now-title')).not.toBeNull();
+  });
+
+  it('draws no dial and no gauge anywhere in the layer, and no magnitude bars', () => {
+    const section = weather();
+    expect(section.querySelector('.g-compass')).toBeNull();
+    expect(section.querySelector('.g-arc')).toBeNull();
+    expect(section.querySelector('.g-bars')).toBeNull();
+    // The sun path is the only figure besides the range bar and the radar.
+    expect([...section.querySelectorAll('svg.g')].map((svg) => svg.getAttribute('class'))).toEqual(['g g-range', 'g g-sun', 'g g-radar']);
+  });
+
+  it('reads wind, humidity and pressure as three labelled facts on one strip, the wind with an arrow that flies with it', () => {
+    const facts = weather().querySelector('#wx-now .wx-figures')!;
+    expect(facts.querySelectorAll('.wx-fact')).toHaveLength(3);
+    expect(text(facts)).toContain('hPa');
+    expect(text(facts)).toContain('1013 hPa');
+    expect(text(facts)).toContain('54 %');
+    expect([...facts.querySelectorAll('.wx-fact-label')].map(text)).toEqual(['Vjetar', 'Vlaga', 'Tlak']);
+    expect(text(facts.querySelector('[data-testid=wind-text]'))).toBe('SZ 2 m/s');
+    // A north-west wind blows towards the south-east: the up arrow turns 135 degrees, and it is named for a reader of the tree.
+    const arrow = facts.querySelector('.wx-arrow')!;
+    expect(arrow.getAttribute('style')).toBe('rotate: 135deg');
+    expect(arrow.getAttribute('aria-label')).toBe('sjeverozapad');
+    expect(arrow.querySelector('use')?.getAttribute('href')).toBe('#icon-arrow-up');
+  });
+
+  it('says "bez vjetra" with no arrow when the station reads zero', () => {
+    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('#wx-now .wx-figures')!;
+    expect(text(facts.querySelector('[data-testid=wind-text]'))).toBe('bez vjetra');
+    expect(facts.querySelector('.wx-arrow')).toBeNull();
+  });
+
+  it('heads today with "Danas", keeps the range sentence, sets the DHMZ narrative as prose and dates its validity', () => {
+    const range = weather().querySelector('#wx-range')!;
+    expect(text(range.querySelector('.sec-title'))).toBe('Danas');
+    expect(range.querySelector('.kicker')).toBeNull();
+    expect(text(range.querySelector('[data-testid=forecast-range]'))).toBe('od 12 do 24 °C');
+    expect(text(range.querySelector('.wx-prose'))).toBe('Sunčano');
+    expect(text(range.querySelector('.sec-note'))).toContain('Prognoza DHMZ-a za Zagreb');
+    expect(range.querySelector('.g-wrap-range .g-label-min')?.textContent).toBe('12°');
+    expect(range.querySelector('.g-wrap-range .g-label-max')?.textContent).toBe('24°');
+  });
+
+  it('gives the sun its path, one line of numerals, the time to the next horizon crossing and the honesty foot', () => {
+    const sun = weather().querySelector('#wx-sun')!;
+    expect(text(sun.querySelector('.sec-title'))).toBe('Sunce');
+    expect(sun.querySelector('.g-sun')).not.toBeNull();
+    expect(text(sun.querySelector('.wx-sun-times'))).toMatch(/^izlazak \d\d:\d\d · zalazak \d\d:\d\d · dan traje \d+ h \d+ min$/);
+    // Each part holds together on a narrow line: the break falls after a separator, never inside a number.
+    expect(sun.querySelectorAll('.wx-sun-times .wx-nowrap')).toHaveLength(3);
+    // 14:32 in Zagreb on 11 September: the sun is up, so the next crossing is the sunset.
+    expect(text(sun.querySelector('.wx-sun-until'))).toMatch(/^do zalaska \d+ h \d+ min$/);
+    expect(text(sun.querySelector('.sec-note'))).toBe('Izračunato na uređaju, nije prognoza.');
+    // The axis under the arc names its three points in words; the numbers live once, in the line above.
+    expect([...sun.querySelectorAll('.g-labels span')].map(text)).toEqual(['izlazak', 'podne', 'zalazak']);
+  });
+
+  it('says "do izlaska" at night', () => {
+    const night = weather({ now: Date.parse('2026-09-11T21:00:00Z') }).querySelector('#wx-sun')!;
+    expect(text(night.querySelector('.wx-sun-until'))).toMatch(/^do izlaska \d+ h \d+ min$/);
+  });
+
+  it('lists a warning as the severity word with its shape, the event, its window and its text', () => {
+    const row = weather().querySelector('#wx-warnings [data-testid=warning-row]')!;
+    expect(row).not.toBeNull();
+    const badge = row.querySelector('.badge-sev')!;
+    expect(badge.getAttribute('data-tone')).toBe('moderate');
+    expect(text(badge)).toBe('žuto upozorenje');
+    expect(text(row.querySelector('.wx-warning-event'))).toBe('Grmljavinsko nevrijeme');
+    // Both ends fall today, so the window reads as times, and the state word says it is in force.
+    expect(text(row.querySelector('.wx-warning-window'))).toBe('na snazi · od 14:00 do 20:00');
+    expect(text(row.querySelector('.wx-prose'))).toBe('Moguć jak vjetar');
+  });
+
+  it('confirms an empty warnings list with the time it was confirmed', () => {
+    const warnings = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': EMPTY_CAP } }).querySelector('#wx-warnings')!;
+    expect(text(warnings.querySelector('.state[data-kind=empty]'))).toBe('Nema upozorenja DHMZ-a za Zagreb. Potvrđeno 14:31.');
+    expect(warnings.querySelector('[data-testid=warning-row]')).toBeNull();
+  });
+
+  it('lists quakes as rows first, five then "Prikaži još", the radar after them with an honest count of what it could place', () => {
+    const quakes = weather({ snapshots: { ...SNAPSHOTS, emsc: MANY_QUAKES } }).querySelector('#wx-quakes')!;
+    expect(text(quakes.querySelector('.sec-title'))).toBe('Potresi, 7 dana, 150 km');
+    const rows = [...quakes.querySelectorAll('[data-testid=quake-row]')];
+    expect(rows).toHaveLength(5);
+    expect(text(rows[0]!.querySelector('.wx-mag'))).toBe('M 1,1');
+    expect(text(rows[0]!.querySelector('.row-title'))).toMatch(/^\d+ km od Zagreba · dubina 10 km$/);
+    expect(text(rows[0]!.querySelector('.row-sub'))).toMatch(/^\d+\. \d+\. \d\d:\d\d$/);
+    const more = quakes.querySelector('[data-action=filter][data-filter-key=quakes]')!;
+    expect(text(more)).toBe('Prikaži još 3');
+    expect(more.getAttribute('data-filter-value')).toBe('15');
+    // Rows come before the figure in reading order.
+    const list = quakes.querySelector('[data-testid=quakes]')!;
+    const radar = quakes.querySelector('.g-wrap-radar')!;
+    expect(list.compareDocumentPosition(radar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(radar.querySelectorAll('circle[data-key]')).toHaveLength(7);
+    expect(text(quakes.querySelector('.wx-on-figure'))).toBe('na slici 7 od 8');
+
+    const expanded = weather({ snapshots: { ...SNAPSHOTS, emsc: MANY_QUAKES }, view: { layer: 'zrak-i-nebo', selection: null, filters: { quakes: '15' } } });
+    expect(expanded.querySelectorAll('[data-testid=quake-row]')).toHaveLength(8);
+    expect(expanded.querySelector('[data-action=filter][data-filter-key=quakes]')).toBeNull();
+  });
+
+  it('needs no honesty sentence and no "more" button for the three-quake week the fixture describes', () => {
+    const quakes = weather().querySelector('#wx-quakes')!;
+    expect(quakes.querySelector('.wx-on-figure')).toBeNull();
+    expect(quakes.querySelector('[data-action=filter][data-filter-key=quakes]')).toBeNull();
+    // A quake without a distance still says where it was, from the source's own region name.
+    const shallow = { ...quakeAt(1, null), data: { mag: 1.1, depth: 0.7 } };
+    const unplaced = weather({ snapshots: { ...SNAPSHOTS, emsc: base('emsc', [shallow]) } }).querySelector('[data-testid=quake-row] .row-title');
+    expect(text(unplaced)).toBe('CROATIA · dubina 0,7 km');
+  });
+
+  it('keeps the layer heading for the tree and the grid names the container rules pin, and every section is flat', () => {
+    const section = weather();
+    expect(text(section.querySelector('.layer-title'))).toBe('Vrijeme');
+    expect(section.querySelector('.ws-head.wx-head')).not.toBeNull();
+    expect(section.querySelector('.wx-grid')).not.toBeNull();
+    for (const id of ['wx-now', 'wx-range', 'wx-sun', 'wx-warnings', 'wx-quakes']) {
+      const sec = section.querySelector(`#${id}`)!;
+      expect(sec, id).not.toBeNull();
+      expect(sec.classList.contains('wx-sec'), `${id} is a flat weather section`).toBe(true);
+      expect(sec.classList.contains(id), `${id} carries its id as the class its own rules hook on`).toBe(true);
+    }
+    expect(section.querySelector('#wx-now')!.classList.contains('wx-wide')).toBe(true);
+  });
+});
+
+// T3.2 (plan "Sigurnost", findings 9 and 12, R-K1, R-K4): the verdict first as
+// one band, the numbers as the only tiles, warnings and quakes as the rows
+// Vrijeme uses, five closures then the way into Promet, the six on-duty
+// pharmacies nearest the screen first, and the assembly points grouped by
+// gradska četvrt when the source names one. No card except the tiles.
+describe('Sigurnost: verdict, numbers, pharmacies, assembly points (T3.2)', () => {
+  const safety = (over: Partial<LayerContext> = {}) => renderLayer('sigurnost', ctx(over));
+  const emptyLive = (module: ModuleSnapshot['module']): ModuleSnapshot => base(module, []);
+  const CALM_SNAPSHOTS = { ...SNAPSHOTS, 'dhmz-cap': emptyLive('dhmz-cap'), emsc: emptyLive('emsc') };
+  const point = (i: number, district: string | undefined, geo?: [number, number]): ModuleSnapshot['items'][number] => ({
+    id: `p${i}`, module: 'ckan-geo', kind: 'poi', tier: 'open', title: `Zborno mjesto ${i}`, summary: `Ulica ${i}`,
+    ...(geo ? { geo: { type: 'Point', coordinates: geo } } : {}),
+    data: { layer: 'zborna-mjesta', category: 'Zborno mjesto civilne zaštite', ...(district ? { district } : {}) },
+  });
+  // Forty points as the official GeoJSON spells its districts ("Gornji Grad-Medveščak"): twenty in Gornji grad,
+  // fifteen in Donji grad, three in Podsljeme, one in a district the table does not know, one with none.
+  const DISTRICT_POINTS: ModuleSnapshot = base('ckan-geo', [
+    ...Array.from({ length: 20 }, (_, i) => point(i + 1, 'Gornji Grad-Medveščak', [15.98, 45.82])),
+    ...Array.from({ length: 15 }, (_, i) => point(i + 21, 'Donji Grad', [15.978, 45.811])),
+    ...Array.from({ length: 3 }, (_, i) => point(i + 36, 'Podsljeme')),
+    point(39, 'Nova četvrt'),
+    point(40, undefined),
+  ]);
+  const quakesWithin72h = (count: number): ModuleSnapshot => base('emsc', Array.from({ length: count }, (_, i) => ({
+    id: `q${i + 1}`, module: 'emsc', kind: 'quake', tier: 'open', title: 'CROATIA',
+    at: new Date(NOW - (i + 1) * 3_600_000 * 9).toISOString(), geo: { type: 'Point', coordinates: [15.5 + i / 10, 45.5] }, data: { mag: 1 + i / 10, depth: 10 },
+  })) as ModuleSnapshot['items']);
+
+  it('opens with the verdict as one band: shield, the warning that is the reason in the DHMZ colour word, its window under it', () => {
+    const band = safety().querySelector('[data-testid=safety-level]')!;
+    expect(band.classList.contains('band')).toBe(true);
+    expect(band.classList.contains('sf-level'), 'the print rule and the on-tint literal hook on .sf-level').toBe(true);
+    expect(band.getAttribute('data-level')).toBe('urgent');
+    expect(band.querySelector('svg use')?.getAttribute('href')).toBe('#icon-shield');
+    expect(text(band.querySelector('.band-title'))).toBe('Žuto upozorenje: grmljavinsko nevrijeme');
+    expect(text(band.querySelector('.sf-verdict-note'))).toBe('na snazi · od 14:00 do 20:00');
+    expect(text(band)).not.toContain('zeleno');
+  });
+
+  it('confirms calm with the time and the sentence about numbers and pharmacies, and never claims it while a source is silent', () => {
+    const calm = safety({ snapshots: CALM_SNAPSHOTS }).querySelector('[data-testid=safety-level]')!;
+    expect(calm.getAttribute('data-level')).toBe('calm');
+    expect(text(calm.querySelector('.band-title'))).toBe('Nema hitnih upozorenja');
+    expect(text(calm.querySelector('.sf-verdict-note'))).toMatch(/^Potvrđeno \d\d:\d\d\. Brojevi i ljekarne vrijede uvijek\.$/);
+
+    const unknown = safety({ snapshots: { ...CALM_SNAPSHOTS, emsc: undefined } }).querySelector('[data-testid=safety-level]')!;
+    expect(unknown.getAttribute('data-level')).toBe('unknown');
+    expect(text(unknown.querySelector('.band-title'))).toBe('Stanje nije potvrđeno');
+    expect(text(unknown.querySelector('.sf-verdict-note'))).toBe('Dio sigurnosnih izvora ne odgovara; stanje nije potvrđeno.');
+  });
+
+  it('names the quake as the reason when no warning is one, in the domain word and never a lesser warning\u2019s colour (R-K1)', () => {
+    const minor = base('dhmz-cap', [{ id: 'w2', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Vjetar u gorju', severity: 'minor', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' }]);
+    const felt = base('emsc', [{ id: 'q2', module: 'emsc', kind: 'quake', tier: 'open', title: 'ZAGREB', at: '2026-09-11T09:00:00Z', geo: { type: 'Point', coordinates: [15.98, 45.81] }, data: { mag: 3.5, depth: 8 } }]);
+    const band = safety({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': minor, emsc: felt } }).querySelector('[data-testid=safety-level]')!;
+    expect(band.getAttribute('data-level')).toBe('urgent');
+    expect(text(band.querySelector('.band-title'))).toBe('Hitno sada');
+    expect(text(band.querySelector('.sf-verdict-note'))).toMatch(/^M 3,5 · \d+ km od Zagreba · prije 3 sata$/);
+    expect(text(band)).not.toContain('Vjetar u gorju');
+  });
+
+  it('offers the same page without a scan as a 44 px link right under the band', () => {
+    const section = safety();
+    const link = section.querySelector<HTMLAnchorElement>('[data-testid=hitno-link]')!;
+    expect(link.getAttribute('href')).toBe('/hitno');
+    expect(text(link)).toBe('Ista stranica bez skeniranja: Sigurnost');
+    expect(link.classList.contains('link-arrow')).toBe(true);
+    expect(link.parentElement?.classList.contains('sf-verdict')).toBe(true);
+    expect(link.previousElementSibling?.getAttribute('data-testid')).toBe('safety-level');
+  });
+
+  it('sets the five emergency numbers as tiles, 112 first and inverted across two columns, every one a tel: link', () => {
+    const list = safety().querySelector('#sf-numbers .sf-numbers')!;
+    const tiles = [...list.querySelectorAll<HTMLAnchorElement>('a.tile')];
+    expect(tiles).toHaveLength(5);
+    expect(tiles.map((t) => text(t.querySelector('.tile-value')))).toEqual(['112', '192', '193', '194', '1987']);
+    expect(tiles.every((t) => t.getAttribute('href')?.startsWith('tel:'))).toBe(true);
+    expect(tiles.every((t) => t.classList.contains('sf-number'))).toBe(true);
+    expect(tiles[0]!.classList.contains('tile-primary')).toBe(true);
+    expect(tiles[0]!.classList.contains('sf-number-primary'), 'print.css draws the inverted tile a border by this class').toBe(true);
+    expect(tiles.slice(1).some((t) => t.classList.contains('tile-primary'))).toBe(false);
+    expect(text(tiles[0]!.querySelector('.tile-label'))).toBe('jedinstveni europski broj za hitne službe');
+    // The accessible name is the tile's own content, so it can never disagree with what is printed on it.
+    expect(tiles.some((t) => t.hasAttribute('aria-label'))).toBe(false);
+    expect(list.parentElement!.querySelectorAll('.source-line')).toHaveLength(1);
+  });
+
+  it('lists a warning the way Vrijeme does, with the onset time of one that is only announced', () => {
+    const row = safety().querySelector('#sf-warnings [data-testid=warning-row]')!;
+    expect(text(row.querySelector('.badge-sev'))).toBe('žuto upozorenje');
+    expect(text(row)).toContain('Grmljavinsko nevrijeme');
+    expect(text(row.querySelector('.wx-warning-window'))).toBe('na snazi · od 14:00 do 20:00');
+
+    const announced = base('dhmz-cap', [{ id: 'w4', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Vjetar', severity: 'moderate', at: new Date(NOW + 3_600_000).toISOString(), until: '2026-09-11T20:00:00Z' }]);
+    const later = safety({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': announced } }).querySelector('#sf-warnings [data-testid=warning-row]')!;
+    expect(text(later.querySelector('.wx-warning-window'))).toBe('najavljeno · od 15:32 do 22:00');
+  });
+
+  it('shows five closures as rows with the closure mark and one line of type, direction and end, then the way to all of them in Promet', () => {
+    const section = safety({ snapshots: { ...SNAPSHOTS, prometnice: MANY_CLOSURES } }).querySelector('#sf-closures')!;
+    const rows = [...section.querySelectorAll('[data-testid=closure-row]')];
+    expect(rows).toHaveLength(5);
+    for (const row of rows) {
+      expect(row.classList.contains('row')).toBe(true);
+      expect(row.querySelector('.mark-closure')).not.toBeNull();
+    }
+    expect(text(rows[0]!.querySelector('.row-title'))).toBe('Ulica 1');
+    expect(text(rows[0]!.querySelector('.row-sub'))).toBe('radovi · jedan smjer · do 30. 9. 02:00');
+    const all = section.querySelector('[data-action=nav][data-layer=u-pokretu]')!;
+    expect(text(all)).toBe('sve zatvaranja (20)');
+    expect(section.querySelector('[data-action=filter][data-filter-key=closures]')).toBeNull();
+    // A closure without an announced end says so instead of inventing one.
+    const open = base('prometnice', [{ ...MANY_CLOSURES.items[0]!, until: undefined }]);
+    const openRow = safety({ snapshots: { ...SNAPSHOTS, prometnice: open } }).querySelector('#sf-closures [data-testid=closure-row]')!;
+    expect(text(openRow.querySelector('.row-sub'))).toBe('radovi · jedan smjer · kraj nije najavljen');
+  });
+
+  it('lists all six on-duty pharmacies nearest the screen first, badges the nearest without printing a distance, and keeps the source order without a stop', () => {
+    const near = safety(atStop());
+    const rows = [...near.querySelectorAll('#sf-pharmacies [data-testid=pharmacy]')];
+    expect(rows).toHaveLength(6);
+    expect(text(rows[0]!.querySelector('.row-title'))).toContain('Trg bana J. Jelačića 3');
+    expect(text(rows[0]!.querySelector('.badge'))).toBe('najbliža zaslonu');
+    expect(near.querySelectorAll('#sf-pharmacies .badge').length, 'one nearest badge and the provjeriti mark').toBe(2);
+    expect(text(near.querySelector('#sf-pharmacies'))).not.toMatch(/\d+ (m|km)\b/);
+    for (const row of rows) {
+      expect(row.classList.contains('row')).toBe(true);
+      expect(row.querySelectorAll('.row-sub').length).toBeGreaterThanOrEqual(2);
+    }
+
+    const plain = safety();
+    const order = [...plain.querySelectorAll('#sf-pharmacies [data-testid=pharmacy] .sf-pharmacy-name')].map(text);
+    expect(order).toEqual(['Trg bana J. Jelačića 3', 'Ilica 291', 'Ozaljska 1', 'Grižanska 4', 'Av. V. Holjevca 22', 'Ljekarna ZEUS']);
+    expect(text(plain.querySelector('#sf-pharmacies'))).not.toContain('najbliža zaslonu');
+  });
+
+  it('gives every pharmacy with a number a "Nazovi" tel: button named with the number, marks the list provjeriti with its checked-on date', () => {
+    const section = safety().querySelector('#sf-pharmacies')!;
+    const calls = [...section.querySelectorAll<HTMLAnchorElement>('a.sf-call[href^="tel:"]')];
+    expect(calls).toHaveLength(5);
+    expect(text(calls[0]!)).toBe('Nazovi');
+    expect(calls[0]!.getAttribute('aria-label')).toBe('Nazovi 01 4816 198');
+    expect(calls[0]!.getAttribute('href')).toBe('tel:+38514816198');
+    expect(text(section)).toContain('telefon nije naveden');
+    expect(text(section.querySelector('.sec-head .badge'))).toBe('provjeriti');
+    expect(text(section)).toContain('provjeren pet 11. 9. 2026. prema stranici Grada Zagreba');
+  });
+
+  it('lists quakes of the last 72 hours as Vrijeme\u2019s rows, five at most, and says how many there were', () => {
+    const one = safety().querySelector('#sf-quakes')!;
+    expect(one.querySelectorAll('[data-testid=quake-row]')).toHaveLength(1);
+    expect(text(one.querySelector('[data-testid=quake-row] .wx-mag'))).toBe('M 1,6');
+    expect(text(one)).toMatch(/\d+ km od Zagreba/);
+    expect(one.querySelector('.g-radar'), 'no figure here; Vrijeme draws the radar').toBeNull();
+
+    const swarm = safety({ snapshots: { ...SNAPSHOTS, emsc: quakesWithin72h(7) } }).querySelector('#sf-quakes')!;
+    expect(swarm.querySelectorAll('[data-testid=quake-row]')).toHaveLength(5);
+    expect(text(swarm)).toContain('prikazano 5 od 7');
+    // Nine hours apart: the ninth is 81 hours old, outside the window, and is not counted.
+    const beyond = safety({ snapshots: { ...SNAPSHOTS, emsc: quakesWithin72h(9) } }).querySelector('#sf-quakes')!;
+    expect(text(beyond)).toContain('prikazano 5 od 8');
+  });
+
+  it('groups assembly points under one <details> per gradska četvrt in the table\u2019s order, counted, paged inside, never all rendered', () => {
+    const section = safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': DISTRICT_POINTS } }).querySelector('#sf-assembly')!;
+    expect(text(section)).toContain('Na popisu je 40 mjesta');
+    expect(section.querySelector('#assembly-search')).not.toBeNull();
+    const groups = [...section.querySelectorAll('details.sf-district')];
+    expect(groups.map((g) => text(g.querySelector('summary')))).toEqual([
+      'Donji grad · 15 mjesta', 'Gornji grad – Medveščak · 20 mjesta', 'Podsljeme · 3 mjesta', 'Nova četvrt · 1 mjesto', 'Četvrt nije navedena · 1 mjesto',
+    ]);
+    expect(groups.every((g) => !g.hasAttribute('open'))).toBe(true);
+    expect(section.querySelectorAll('[data-testid=assembly-point]').length).toBe(12 + 12 + 3 + 1 + 1);
+    const donji = groups[0]!;
+    expect(donji.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(12);
+    const more = donji.querySelector('[data-action=filter]')!;
+    expect(text(more)).toBe('Prikaži još 3');
+    expect(more.getAttribute('data-filter-key')).toBe('zm-donji-grad');
+    expect(more.getAttribute('data-filter-value')).toBe('36');
+    expect(text(groups[1]!.querySelector('[data-action=filter]'))).toBe('Prikaži još 8');
+    expect(groups[1]!.querySelector('[data-action=filter]')?.getAttribute('data-filter-key')).toBe('zm-gornji-grad-medvescak');
+    expect(groups[2]!.querySelector('[data-action=filter]')).toBeNull();
+    // A row: the place as its title, the source's summary as the second line, the map as a 44 px link.
+    const row = donji.querySelector('[data-testid=assembly-point]')!;
+    expect(text(row.querySelector('.row-title'))).toBe('Zborno mjesto 21');
+    expect(text(row.querySelector('.row-sub'))).toBe('Ulica 21');
+    expect(text(row.querySelector('a.link-ext'))).toBe('karta');
+    expect(row.querySelector('a.link-ext')?.getAttribute('href')).toContain('openstreetmap.org');
+    expect(groups[2]!.querySelector('[data-testid=assembly-point] a'), 'no coordinates, no map link').toBeNull();
+
+    const expanded = safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': DISTRICT_POINTS }, view: { layer: 'sigurnost', selection: null, filters: { 'zm-donji-grad': '36' } } });
+    const donjiOpen = expanded.querySelector('#sf-assembly details.sf-district')!;
+    expect(donjiOpen.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(15);
+    expect(donjiOpen.querySelector('[data-action=filter]')).toBeNull();
+  });
+
+  it('answers a search with one flat list of every match, no groups, and reads the true total from the assembly source when it is capped', () => {
+    const searched = safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': DISTRICT_POINTS }, view: { layer: 'sigurnost', selection: null, filters: { zborna: 'mjesto 3' } } }).querySelector('#sf-assembly')!;
+    expect(searched.querySelector('details.sf-district')).toBeNull();
+    // "mjesto 3", "mjesto 30" to "mjesto 39": eleven matches.
+    expect(searched.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(11);
+
+    // ckan-geo serves two layers in one module, so the module's coverage.total counts the 17 districts too; the
+    // assembly layer's own totalItems is the register's size, and the sentence names that.
+    const capped: ModuleSnapshot = {
+      ...DISTRICT_POINTS,
+      sources: { 'zborna-mjesta': { status: 'live', itemCount: 40, totalItems: 512 }, 'gradske-cetvrti': { status: 'live', itemCount: 17 } },
+      coverage: { shown: 57, total: 529, limited: true },
+    };
+    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': capped } }).querySelector('#sf-assembly'))).toContain('Na popisu je 512 mjesta');
+    const uncapped: ModuleSnapshot = { ...DISTRICT_POINTS, sources: { 'zborna-mjesta': { status: 'live', itemCount: 40 }, 'gradske-cetvrti': { status: 'live', itemCount: 17 } }, coverage: { shown: 57, limited: false } };
+    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': uncapped } }).querySelector('#sf-assembly'))).toContain('Na popisu je 40 mjesta');
+  });
+
+  it('keeps the section ids and grid the gates pin, and lays every section flat: no card but the tiles', () => {
+    const section = safety();
+    for (const id of ['sf-numbers', 'sf-warnings', 'sf-closures', 'sf-pharmacies', 'sf-quakes', 'sf-assembly']) {
+      const sec = section.querySelector(`#${id}`)!;
+      expect(sec, id).not.toBeNull();
+      expect(sec.classList.contains('sf-sec'), `${id} is a flat safety section`).toBe(true);
+    }
+    expect(section.querySelector('.sf-grid')).not.toBeNull();
+    expect(section.querySelector('#sf-numbers')!.classList.contains('sf-wide')).toBe(true);
+    expect(section.querySelector('#sf-assembly')!.classList.contains('sf-wide')).toBe(true);
+    expect(section.querySelector('#layer-title-sigurnost')?.getAttribute('tabindex')).toBe('-1');
+    expect(section.querySelector('.sf-level-title'), 'the old card head is gone').toBeNull();
+    expect(section.querySelector('.sf-number-value'), 'the old tile markup is gone').toBeNull();
+  });
+});
+
 describe('bounded lists, one-row chips and venue only when known (T1.4)', () => {
   it('Grad pages the gazette by ten acts, offers the rest ten at a time, and a filter value renders exactly that many', () => {
     const withActs = { ...SNAPSHOTS, glasnik: MANY_ACTS };
@@ -708,18 +1097,16 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     expect(searched.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(40);
   });
 
-  it('Sigurnost pages road closures by five and offers ten more at a time', () => {
+  it('Sigurnost shows five closures and sends the rest to Promet, where they are on the map (T3.2 replaces the fold)', () => {
     const withClosures = { ...SNAPSHOTS, prometnice: MANY_CLOSURES };
     const section = renderLayer('sigurnost', ctx({ snapshots: withClosures }));
     expect(section.querySelectorAll('[data-testid=closure-row]')).toHaveLength(5);
-    const more = section.querySelector('[data-action=filter][data-filter-key=closures]')!;
-    expect(text(more)).toBe('Prikaži još 10');
-    expect(more.getAttribute('data-filter-value')).toBe('15');
-    // Same grid-stretch escape as the gazette and assembly "more" buttons.
-    expect(more.classList.contains('sf-more')).toBe(true);
-
-    const expanded = renderLayer('sigurnost', ctx({ snapshots: withClosures, view: { layer: 'sigurnost', selection: null, filters: { closures: '15' } } }));
-    expect(expanded.querySelectorAll('[data-testid=closure-row]')).toHaveLength(15);
+    expect(section.querySelector('[data-action=filter][data-filter-key=closures]')).toBeNull();
+    const all = section.querySelector('#sf-closures [data-action=nav][data-layer=u-pokretu]')!;
+    expect(text(all)).toBe('sve zatvaranja (20)');
+    // A filter value from an earlier fold cannot widen the list past five any more.
+    const stale = renderLayer('sigurnost', ctx({ snapshots: withClosures, view: { layer: 'sigurnost', selection: null, filters: { closures: '15' } } }));
+    expect(stale.querySelectorAll('[data-testid=closure-row]')).toHaveLength(5);
   });
 
   it('shows a venue only when the source has one: no row in kultura or on Grad now claims an unknown location', () => {

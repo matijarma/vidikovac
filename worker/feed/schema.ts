@@ -136,7 +136,7 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   quake: ['mag', 'depth', 'magType', 'region'],
   news: ['source'],
   act: ['broj', 'godina', 'category'],
-  poi: ['layer', 'category'],
+  poi: ['layer', 'category', 'district'],
   // The dogadanja module's six sub-fetchers between them use every one of
   // these nine keys (worker/feed/modules/dogadanja/index.ts); no single
   // source uses all nine itself, and none uses a key outside this set.
