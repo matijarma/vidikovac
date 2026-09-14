@@ -43,7 +43,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await openLayer(page, 'sigurnost');
       const surface = page.getByTestId('dash-view');
       await expect(surface).not.toContainText('Nema hitnih upozorenja');
-      await expect(surface).not.toContainText('Nema upozorenja za Zagrebačku regiju.');
+      await expect(surface).not.toContainText('Nema upozorenja DHMZ-a za Zagreb.');
       await expect(surface.locator('a[href="tel:112"]')).toBeVisible();
       await openLayer(page, 'kultura');
       await expect(page.getByTestId('dash-view')).toContainText(/nedostup|nepozn|ne odgovar|potvrđen/);
@@ -81,7 +81,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await openLayer(page, 'sigurnost');
       await expect(page.locator('[data-testid="dash-view"] [data-status="stale"]').first()).toBeVisible();
       await expect(page.getByTestId('dash-view')).not.toContainText('Nema hitnih upozorenja');
-      await expect(page.getByTestId('dash-view')).not.toContainText('Nema upozorenja za Zagrebačku regiju.');
+      await expect(page.getByTestId('dash-view')).not.toContainText('Nema upozorenja DHMZ-a za Zagreb.');
     });
 
     test('expanding the map changes its real size, keeps recovery visible, and retains the same canvas', async ({ page }) => {
