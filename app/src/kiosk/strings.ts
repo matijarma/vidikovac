@@ -1,44 +1,42 @@
-// Kiosk copy in Croatian and English. The shared i18n catalogues (i18n/*.json)
-// belong to the UI workstream, so every sentence the new kiosk compositions
-// say lives here, keyed once and typed so hr and en can never drift apart
-// (test/app/kiosk-strings.test.ts walks both). Shared vocabulary that already
-// exists in the catalogues -- severity words, delay words, closure plurals,
-// "Otključano do" -- is still read through i18n.t so the two surfaces agree.
+// Kiosk copy lives in the one catalogue (i18n/hr.json, en.json) under
+// `kiosk.*`; this is the thin typed adapter that builds the KioskStrings tree
+// every composition reads as `s.group.leaf`, once per locale. Shared
+// vocabulary is read where it lives so the two surfaces agree: the app name
+// (common.appName), the domain names (layers.*), the compass words
+// (motion.compass.*) and the canonical sentences (shared.*). Severity words,
+// delay words and closure plurals keep going through i18n.t at the call
+// site, as before. Every catalogue key named here is checked against the
+// Croatian JSON at compile time; hr/en parity is the i18n test's.
 import type { LayerId } from '../../../worker/protocol';
-import type { ThemePreference } from '../ui/theme';
-import { en } from './strings-en';
-import { hr } from './strings-hr';
+import { createDefaultI18n, type SupportedLocale } from '../i18n/create-default-i18n';
+import en from '../i18n/en.json';
+import hr from '../i18n/hr.json';
+import { THEME_PREFERENCES, type ThemePreference } from '../ui/theme';
 
 export type PluralForms = { one: string; few?: string; other: string };
 
 export interface KioskStrings {
   appName: string;
   surface: string;
-  languageName: string;
   header: {
-    context: string; clockLabel: string; sessionLabel: string; driver: string; temporaryUntil: string; venue: string; unlockedUntil: string;
+    temporaryUntil: string; venue: string; unlockedUntil: string;
     /** "Tema: {pref}", filled with themeWord[preference]; the header button's own label. */
     theme: string;
     themeWord: Record<ThemePreference, string>;
   };
   status: {
-    connecting: string;
     offline: string;
     reconnecting: string;
     dataDown: string;
-    dataStale: string;
-    lightweight: string;
   };
   invitation: {
     lead: string;
     support: string;
     /** `{host}` is the code base's hostname with `/s`, filled by the composition. */
     typeCode: string;
-    codeLabel: string;
     qrLabel: string;
     qrWaiting: string;
     codeWaiting: string;
-    codeValid: string;
     progressLabel: string;
   };
   weather: {
@@ -48,7 +46,7 @@ export interface KioskStrings {
     windCalm: string;
     /** A measured speed whose direction the station did not state. */
     windNoDir: string;
-    /** The eight compass points, the same words the app's weather uses. */
+    /** The eight compass points, the same words the app's vehicle cards use (motion.compass.*). */
     compass: Record<'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW', string>;
     pressure: string;
     observed: string;
@@ -91,6 +89,7 @@ export interface KioskStrings {
   };
   safety: {
     label: string;
+    /** The strip's cell: the shared sentence without its full stop. */
     warningsNone: string;
     warningsUnknown: string;
     warningsStale: string;
@@ -111,7 +110,6 @@ export interface KioskStrings {
     selected: string;
     selectedRoute: string;
     selectedStop: string;
-    ended: string;
   };
   layers: Record<LayerId, string>;
   /** Words for the event sources' category slugs; an unknown slug is not printed. */
@@ -131,12 +129,10 @@ export interface KioskStrings {
     acts: string;
     sessions: string;
     works: string;
-    agenda: string;
     notices: string;
     ongoing: string;
     ongoingWord: string;
     ongoingUntil: string;
-    zetNotices: string;
     headlines: string;
     overviewTransport: string;
     allDay: string;
@@ -164,12 +160,9 @@ export interface KioskStrings {
     actsNone: string;
     worksNone: string;
     sessionsNone: string;
-    sunUnknown: string;
     rangeUnknown: string;
     untilTime: string;
-    direction: string;
     lineWord: string;
-    stopWord: string;
     licence: string;
     /** "Izvor" / "Izvori": the label a compact credit line opens with. */
     sourceLabel: string;
@@ -217,11 +210,102 @@ export interface KioskStrings {
   };
 }
 
-export const KIOSK_CATALOGUES: Readonly<Record<'hr' | 'en', KioskStrings>> = Object.freeze({ hr, en });
+type Kiosk = typeof hr.kiosk;
+type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
+type Leaf<G extends Group> = keyof Kiosk[G] & string;
+type PluralBase<K extends string> = K extends `${infer Base}_one` ? Base : never;
 
-/** The catalogue for a locale code; anything that is not English reads Croatian. */
+const RAW: Record<SupportedLocale, typeof hr | typeof en> = { hr, en };
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+
+function build(code: SupportedLocale): KioskStrings {
+  const i18n = createDefaultI18n(code);
+  const t = (key: string): string => i18n.t(key);
+  const raw = RAW[code];
+  /** The named leaves of one `kiosk.*` group. */
+  const group = <G extends Group, K extends Leaf<G>>(name: G, keys: readonly K[]): Record<K, string> =>
+    Object.fromEntries(keys.map((key) => [key, t(`kiosk.${name}.${key}`)])) as Record<K, string>;
+  /** `_one`, `_few` (only where this locale writes one) and `_other` of a kiosk plural. */
+  const forms = <G extends Group>(name: G, base: PluralBase<Leaf<G>>): PluralForms => {
+    const own = raw.kiosk[name] as Record<string, unknown>;
+    return {
+      one: t(`kiosk.${name}.${base}_one`),
+      ...(`${base}_few` in own ? { few: t(`kiosk.${name}.${base}_few`) } : {}),
+      other: t(`kiosk.${name}.${base}_other`),
+    };
+  };
+  const record = <K extends string>(keys: readonly K[], key: (k: K) => string): Record<K, string> =>
+    Object.fromEntries(keys.map((k) => [k, t(key(k))])) as Record<K, string>;
+  /** The strip cell is the shared sentence without its full stop. */
+  const fragment = (sentence: string): string => sentence.replace(/\.$/, '');
+
+  return {
+    appName: t('common.appName'),
+    surface: t('kiosk.surface'),
+    header: {
+      ...group('header', ['temporaryUntil', 'venue', 'theme']),
+      unlockedUntil: t('shared.unlockedUntil'),
+      themeWord: record(THEME_PREFERENCES, (pref) => `kiosk.header.themeWord.${pref}`),
+    },
+    status: group('status', ['offline', 'reconnecting', 'dataDown']),
+    invitation: group('invite', ['lead', 'support', 'typeCode', 'qrLabel', 'qrWaiting', 'codeWaiting', 'progressLabel']),
+    weather: {
+      ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
+      compass: record(COMPASS, (point) => `motion.compass.${point}`),
+    },
+    lines: {
+      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'noStop', 'modelNote']),
+      nearby: forms('lines', 'nearby'),
+      more: forms('lines', 'more'),
+      vehiclesMoving: forms('lines', 'vehiclesMoving'),
+    },
+    story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'news', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    safety: {
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics']),
+      label: t('shared.safetyPage'),
+      hitno: t('shared.safetyPage'),
+      warningsNone: fragment(t('shared.warningsNone')),
+    },
+    basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'pharmacy', 'warnings', 'closures']),
+    session: group('session', ['join', 'joinHint', 'selected', 'selectedRoute', 'selectedStop']),
+    layers: record(Object.keys(raw.layers) as LayerId[], (layer) => `layers.${layer}`),
+    events: record(Object.keys(raw.kiosk.events), (slug) => `kiosk.events.${slug}`),
+    paired: {
+      ...group('paired', [
+        'warnings', 'closures', 'delays', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
+        'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'ongoingUntil', 'headlines', 'overviewTransport', 'allDay',
+        'noData', 'sourceDown', 'unconfirmed', 'dataFrom', 'fetchedAt', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
+        'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'newsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
+        'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',
+      ]),
+      coverageLines: forms('paired', 'coverageLines'),
+      routeVehicles: forms('paired', 'routeVehicles'),
+      warningsNone: t('shared.warningsNone'),
+      closuresNone: t('shared.closuresNone'),
+    },
+    notice: group('notice', ['expiredTitle', 'expiredBody', 'revokedTitle', 'revokedBody', 'setupAgain', 'endsAfterSession']),
+    setup: {
+      ...group('setup', [
+        'title', 'intro', 'step1', 'step2', 'districtLegend', 'stopLegend', 'search', 'searchHint', 'nearest', 'noResults', 'routesAt',
+        'next', 'back', 'create', 'creating', 'summary', 'validity', 'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid',
+        'errorFailed', 'errorStops', 'retry', 'retryIn', 'loadingStops', 'provisionHint',
+      ]),
+      results: forms('setup', 'results'),
+    },
+  };
+}
+
+const BUILT = new Map<SupportedLocale, KioskStrings>();
+
+/** The strings for a locale code, built once; anything that is not English reads Croatian. */
 export function kioskStrings(locale: string): KioskStrings {
-  return locale.slice(0, 2).toLowerCase() === 'en' ? en : hr;
+  const code: SupportedLocale = locale.slice(0, 2).toLowerCase() === 'en' ? 'en' : 'hr';
+  let strings = BUILT.get(code);
+  if (!strings) {
+    strings = build(code);
+    BUILT.set(code, strings);
+  }
+  return strings;
 }
 
 /** `{name}` interpolation, the same shape the shared i18n uses. */

@@ -23,6 +23,20 @@ export function cadenceWords(ttl: number): string {
   return `svakih ${m} minuta`;
 }
 
+/**
+ * The registry's attribution strings are templates ({vrijeme}, {datum}, {naziv})
+ * filled from a live snapshot where one exists (worker/open/attribution.ts). This
+ * page has none, so a clause that exists only to carry a placeholder is left out
+ * and no brace reaches a reader; the footer says the times live with each
+ * dataset. The DCAT JSON keeps the template verbatim (R-08).
+ */
+export function staticAttribution(text: string): string {
+  return text
+    .replace(/\s*[,;]\s*[^,;{}]*\{\w+\}[^,;]*/g, '')
+    .replace(/\s*\{\w+\}\s*/g, ' ')
+    .trim();
+}
+
 /** The footer set every public page shares (/hitno, /open/, the prose pages, /s/): href and label, in this order. */
 export const PAGE_LINKS: readonly (readonly [href: string, label: string])[] = [
   ['/hitno', 'Sigurnost'],
@@ -52,7 +66,7 @@ function datasetCard(d: OpenDataset): string {
       .map((x) => `<li><a href="${escapeHtml(x.path)}" type="${escapeHtml(x.mediaType)}">${escapeHtml(x.format)}</a></li>`)
       .join('') +
     `</ul>` +
-    `<p class="src">${escapeHtml(d.source.text)} · ${escapeHtml(d.source.licence)} · ` +
+    `<p class="src">${escapeHtml(staticAttribution(d.source.text))} · ${escapeHtml(d.source.licence)} · ` +
     `<a href="${escapeHtml(d.source.url)}" rel="noopener">izvornik</a>. Objavljeno pod: Otvorena dozvola. Prikaz je prilagodba izvora.</p>` +
     `</article>`
   );

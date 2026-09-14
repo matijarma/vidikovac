@@ -1,0 +1,195 @@
+// The copy rules of the overhaul, checked against the files that carry copy:
+// the two catalogues, the two no-JS worker pages, every static HTML entry,
+// the worker's string literals, and the delay words that stand beside a
+// `.line` badge. Canonical sentences live under `shared.*`; the dashboard
+// keys that say the same thing are pinned equal to them so they cannot drift.
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import en from '../../app/src/i18n/en.json';
+import hr from '../../app/src/i18n/hr.json';
+
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
+
+type Catalogue = Record<string, unknown>;
+const HR = hr as unknown as Catalogue;
+const EN = en as unknown as Catalogue;
+
+function leaf(catalogue: Catalogue, key: string): string | undefined {
+  const node = key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Catalogue)[part] : undefined), catalogue);
+  return typeof node === 'string' ? node : undefined;
+}
+function leafKeys(node: unknown, prefix = ''): string[] {
+  if (typeof node === 'string') return [prefix];
+  if (node && typeof node === 'object') return Object.entries(node as Catalogue).flatMap(([k, v]) => leafKeys(v, prefix ? `${prefix}.${k}` : k));
+  return [];
+}
+
+// The static entries Vite serves: the HTML files directly under app/ and every app/<dir>/index.html
+// (app/dist is the build's output, not a source).
+function staticHtml(): string[] {
+  const out = readdirSync(join(ROOT, 'app')).filter((name) => name.endsWith('.html')).map((name) => `app/${name}`);
+  for (const dir of readdirSync(join(ROOT, 'app'))) {
+    if (dir === 'dist') continue;
+    if (statSync(join(ROOT, 'app', dir)).isDirectory() && readdirSync(join(ROOT, 'app', dir)).includes('index.html')) out.push(`app/${dir}/index.html`);
+  }
+  return out.sort();
+}
+function walk(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(join(ROOT, dir))) {
+    const rel = `${dir}/${name}`;
+    if (statSync(join(ROOT, rel)).isDirectory()) walk(rel, out);
+    else if (name.endsWith('.ts')) out.push(rel);
+  }
+  return out;
+}
+/** Every quoted string and template literal in a TypeScript source, comments left out. */
+function literals(source: string): string[] {
+  return source.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) ?? [];
+}
+
+const PUNCTUATION_FILES = ['app/src/i18n/hr.json', 'app/src/i18n/en.json', 'worker/hitno/render.ts', 'worker/open/index-page.ts', ...staticHtml()];
+// Word boundaries that know Croatian letters: JavaScript's \b is ASCII-only, so "Više" would read as "Vi" + "še".
+const VI = /(?<![\p{L}\p{N}_])(?:Vi|Vam)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])Vaš|Skenirajte|Kopirajte|Podijelite|Plaćate/u;
+
+describe('punctuation: no em dash and no double hyphen in copy', () => {
+  it('covers the catalogues, the two worker pages and every static HTML entry', () => {
+    expect(staticHtml()).toEqual(['app/d/index.html', 'app/index.html', 'app/izvori/index.html', 'app/kiosk/index.html', 'app/pristupacnost/index.html', 'app/privatnost/index.html', 'app/s/index.html']);
+  });
+  it.each(PUNCTUATION_FILES)('%s carries no U+2014 and no " -- "', (file) => {
+    const text = read(file);
+    expect(text, 'U+2014').not.toContain('—');
+    expect(text, '" -- "').not.toContain(' -- ');
+  });
+});
+
+describe('address: one person, informal, never Vi', () => {
+  it('the Croatian catalogue never addresses the reader as Vi', () => {
+    expect(JSON.stringify(hr)).not.toMatch(VI);
+  });
+  it('no string literal anywhere under worker/ addresses the reader as Vi', () => {
+    for (const file of walk('worker')) {
+      for (const literal of literals(read(file))) expect(literal, file).not.toMatch(VI);
+    }
+  });
+});
+
+describe('canonical sentences', () => {
+  const SHARED_HR = {
+    closuresNone: 'Nema zatvorenih prometnica.',
+    warningsNone: 'Nema upozorenja DHMZ-a za Zagreb.',
+    unlockedUntil: 'Otključano do {time}',
+    safetyPage: 'Sigurnost',
+    safetyOpen: 'Sigurnost, bez skeniranja',
+  };
+  /** Dashboard keys read by call sites that do not change; each says exactly what its shared sentence says. */
+  const TWINS: Record<keyof typeof SHARED_HR, string[]> = {
+    closuresNone: ['safety.closuresNone', 'transport.noClosures'],
+    warningsNone: ['weather.warningsNone'],
+    unlockedUntil: ['session.unlockedAnnounce', 'session.sheetTitle'],
+    safetyPage: ['layers.sigurnost', 'nav.safety'],
+    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
+    safetyOpen: ['common.links.hitno', 'landing.actions.safety', 'scan.errors.actions.safety'],
+  };
+  it('shared.* carries the five canonical Croatian sentences', () => {
+    expect(hr.shared).toEqual(SHARED_HR);
+  });
+  it.each(Object.entries(TWINS))('every twin of shared.%s says the same sentence in both languages', (key, twins) => {
+    for (const twin of twins) {
+      expect(leaf(HR, twin), `${twin} (hr)`).toBe(leaf(HR, `shared.${key}`));
+      expect(leaf(EN, twin), `${twin} (en)`).toBe(leaf(EN, `shared.${key}`));
+    }
+  });
+  it('the kiosk reads the shared sentences for the same concepts', () => {
+    expect(leaf(HR, 'kiosk.paired.closuresNone')).toBeUndefined();
+    expect(leaf(HR, 'kiosk.paired.warningsNone')).toBeUndefined();
+    expect(leaf(HR, 'kiosk.header.unlockedUntil')).toBeUndefined();
+    expect(leaf(HR, 'kiosk.safety.hitno')).toBeUndefined();
+  });
+  it('the Još heading is "Još" and the safety verdict has one calm sentence', () => {
+    expect(hr.nav.moreTitle).toBe('Još');
+    expect(hr.overview.allClear).toBe(hr.safety.calm);
+    expect(hr.directory.safetySummaryCalm).toBe(hr.safety.calm);
+  });
+});
+
+describe('severity words follow the DHMZ colour convention (R-K1)', () => {
+  it('names the five levels in Croatian and never "zeleno"', () => {
+    expect(hr.panels.severity).toEqual({ info: 'obavijest', minor: 'manje upozorenje', moderate: 'žuto upozorenje', severe: 'narančasto upozorenje', extreme: 'crveno upozorenje' });
+    expect(en.panels.severity).toEqual({ info: 'notice', minor: 'minor warning', moderate: 'yellow warning', severe: 'orange warning', extreme: 'red warning' });
+    expect(JSON.stringify(hr)).not.toMatch(/\bzeleno\b/);
+    expect(JSON.stringify(en)).not.toMatch(/"green"/);
+  });
+  it('matches the words /hitno prints', () => {
+    const select = read('worker/hitno/select.ts');
+    for (const word of Object.values(hr.panels.severity)) expect(select).toContain(`'${word}'`);
+  });
+});
+
+describe('quake window and radius', () => {
+  it('says 72 hours on the safety surfaces, 7 days on Vrijeme, 150 km everywhere a radius is named', () => {
+    expect(hr.safety.quakes).toContain('72 sata');
+    expect(hr.safety.quakesNone).toContain('72 sata');
+    expect(hr.kiosk.paired.quakes).toContain('72 sata');
+    expect(hr.kiosk.paired.quakes).toContain('150 km');
+    expect(hr.kiosk.paired.quakeNone).toContain('72 sata');
+    expect(hr.weather.quakes).toContain('7 dana');
+    expect(hr.weather.quakes).toContain('150 km');
+    expect(hr.weather.quakesNone).toContain('7 dana');
+    expect(read('worker/hitno/render.ts')).toContain('72 sata');
+  });
+});
+
+describe('theme words', () => {
+  it('are sentence case and agree with "tema" in Croatian; the kiosk keeps its lower-case mid-sentence words', () => {
+    expect(hr.common.theme).toEqual({ label: 'Tema', auto: 'Automatski', light: 'Svijetla', dark: 'Tamna', solar: 'Po suncu' });
+    expect(hr.kiosk.header.themeWord).toEqual({ auto: 'automatski', light: 'svijetla', dark: 'tamna', solar: 'po suncu' });
+  });
+});
+
+describe('hostname', () => {
+  it('never appears in a catalogue; the share sentence and the kiosk hint carry a {host} slot', () => {
+    expect(JSON.stringify(hr)).not.toContain('zagreb.aningfilm.hr');
+    expect(JSON.stringify(en)).not.toContain('zagreb.aningfilm.hr');
+    expect(hr.session.shareBody).toContain('{host}/s');
+    expect(en.session.shareBody).toContain('{host}/s');
+    expect(hr.kiosk.invite.typeCode).toContain('{host}');
+    expect(en.kiosk.invite.typeCode).toContain('{host}');
+  });
+});
+
+describe('no copy promises an evaluation login (public since 14 September)', () => {
+  it('neither catalogue mentions Cloudflare Access, signing in or an evaluator identity', () => {
+    for (const [name, catalogue] of [['hr', hr], ['en', en]] as const) {
+      expect(JSON.stringify(catalogue), name).not.toMatch(/Cloudflare Access|Prijavi se|Sign in|zaštićeni pristup|protected access|po ocjenjivaču|per evaluator/);
+    }
+  });
+});
+
+describe('delay words beside a .line badge', () => {
+  it('every key delayWord() and delayTone() read exists in both languages', () => {
+    const keys = new Set<string>();
+    for (const file of ['app/src/layers/shared.ts', 'app/src/experience/delay.ts']) {
+      for (const match of read(file).matchAll(/i18n\.t\('([\w.-]+)'/g)) keys.add(match[1]);
+    }
+    expect([...keys].sort()).toEqual(['panels.delayEarly', 'panels.delayLate', 'panels.delayOnTime', 'panels.until', 'transit.noDelayData']);
+    for (const key of keys) {
+      expect(leaf(HR, key), `${key} (hr)`).toBeTypeOf('string');
+      expect(leaf(EN, key), `${key} (en)`).toBeTypeOf('string');
+    }
+  });
+});
+
+describe('leaves', () => {
+  it('no leaf is empty in either catalogue and no leaf keeps a raw dotted key as its text', () => {
+    for (const [name, catalogue] of [['hr', HR], ['en', EN]] as const) {
+      for (const key of leafKeys(catalogue)) {
+        const value = leaf(catalogue, key)!;
+        expect(value.trim().length, `${key} (${name})`).toBeGreaterThan(0);
+        expect(value, `${key} (${name})`).not.toMatch(/^[a-z]+(\.[\w-]+)+$/);
+      }
+    }
+  });
+});

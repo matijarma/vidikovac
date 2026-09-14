@@ -166,7 +166,7 @@ describe('setup: two real steps, one creation per press', () => {
     expect(k.root.innerHTML).not.toContain('S3CR3TXYZ');
     expect(q(k.root, '[data-testid=kiosk-setup]')).toBeNull();
   });
-  it('a 403 ends in the Access sentence with no retry, a 429 counts its retry down, a network failure offers one; nothing loops', async () => {
+  it('a 403 ends in the refused-connection sentence with no retry, a 429 counts its retry down, a network failure offers one; nothing loops', async () => {
     const attempts: unknown[] = [new ScreenError('evaluation-access-required', 403), new ScreenError('screen-limit', 429, 90), new TypeError('Failed to fetch')];
     const createScreen = vi.fn(async () => { throw attempts.shift(); });
     const k = mount({ createScreen });
@@ -174,7 +174,7 @@ describe('setup: two real steps, one creation per press', () => {
     await flush();
     submit(k.root);
     await flush();
-    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Postavljanje traži ocjenjivački pristup (Cloudflare Access). Prijavi se pa pokušaj ponovno.');
+    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.');
     expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(true);
     submit(k.root);
     await flush();
@@ -645,7 +645,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(alert.hidden).toBe(false);
     expect(text(alert)).toBe('Osvježavanje pregleda zaslona nije uspjelo.');
     k.handlers.onStatus('offline');
-    expect(text(alert)).toBe('Bez veze sa zaslonom — kod se ne može izdati');
+    expect(text(alert)).toBe('Bez veze sa zaslonom; kod se ne može izdati');
     k.handlers.onStatus('live');
     expect(alert.hidden).toBe(false);
     expect(text(alert)).toBe('Osvježavanje pregleda zaslona nije uspjelo.');

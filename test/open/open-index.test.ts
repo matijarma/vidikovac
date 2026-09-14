@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { OPEN_DATASETS } from '../../worker/open/catalog';
-import { renderOpenIndex } from '../../worker/open/index-page';
+import { renderOpenIndex, staticAttribution } from '../../worker/open/index-page';
 
 const ORIGIN = 'https://zagreb.aningfilm.hr';
 const NOW = new Date('2026-09-11T08:00:00Z');
@@ -16,10 +16,27 @@ describe('renderOpenIndex', () => {
     expect(html).not.toContain('<link');
     for (const d of OPEN_DATASETS) {
       expect(html).toContain(d.title);
-      expect(html).toContain(d.source.text.replace(/'/g, '&#39;'));
       for (const x of d.distributions) expect(html).toContain(`href="${x.path}"`);
     }
     expect(html).toContain('href="/open/catalog.json"');
+  });
+
+  // The registry's attribution strings are templates ({vrijeme}, {datum}, {naziv}) filled
+  // from a live snapshot where one exists. The human page has none, so the clause that
+  // exists only to carry the placeholder is left out and no brace reaches a reader; the
+  // footer says where the times live. The DCAT JSON keeps the template verbatim (R-08).
+  it('prints every source line without a placeholder clause and without a brace (T6.3)', () => {
+    expect(staticAttribution('Izvor: DHMZ, Otvorena dozvola, {vrijeme}')).toBe('Izvor: DHMZ, Otvorena dozvola');
+    expect(staticAttribution('Izvor: EMSC, seismicportal.eu')).toBe('Izvor: EMSC, seismicportal.eu');
+    expect(staticAttribution("Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena {datum}"))
+      .toBe("Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'");
+    expect(staticAttribution("Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup '{naziv}', posljednja izmjena {datum}"))
+      .toBe('Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom');
+    expect(staticAttribution('{vrijeme} bez odvajanja')).toBe('bez odvajanja');
+    expect(html).toContain('<p class="src">Izvor: DHMZ, Otvorena dozvola · Otvorena dozvola (NN 67/17) · ');
+    expect(html).toContain("skup &#39;Zatvaranje prometnica na području Grada Zagreba&#39; · Otvorena dozvola (NN 67/17) · ");
+    expect(html).toContain('<p class="src">Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom · Otvorena dozvola (NN 67/17) · ');
+    expect(html).not.toMatch(/\{\w+\}/);
   });
 
   it('states refresh cadence in words and the licence once per dataset', () => {
