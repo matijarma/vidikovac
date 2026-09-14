@@ -349,13 +349,13 @@ describe('the basemap and the overlays on it', () => {
     const { map, handle } = await harness();
     const layersBefore = map.layers.length;
     handle.setTheme!('dark');
-    expect(map.paint['background']?.['background-color']).toBe('#151d1c');
-    expect(map.paint['vehicles']?.['icon-halo-color']).toBe('#17201f');
+    expect(map.paint['background']?.['background-color']).toBe('#0b1150');
+    expect(map.paint['vehicles']?.['icon-halo-color']).toBe('#0b1150');
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/dark');
     expect(map.layers).toHaveLength(layersBefore);
     document.documentElement.setAttribute('data-theme-resolved', 'light');
     await new Promise((r) => setTimeout(r, 0));
-    expect(map.paint['background']?.['background-color']).toBe('#e9eeec');
+    expect(map.paint['background']?.['background-color']).toBe('#f4f2ec');
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/light');
   });
 });
