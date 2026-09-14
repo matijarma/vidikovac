@@ -13,12 +13,23 @@
 // rather than the screen. It is never a compact drawing cropped at 0.8: zoom
 // stays 1, the page scrolls (kiosk.css) and, once a screen exists, the stage
 // shows the provisioning link and the code card alone (kiosk.ts).
+//
+// A portrait screen (taller than wide, at least the handheld bound across) is
+// one more drawing, not a landscape one on its side: the compact tokens with
+// the blocks stacked (kiosk.css [data-portrait='1']), designed for a
+// 1080 x 1920 totem and scaled from that size the way the landscape drawings
+// scale from theirs -- up for a 4K totem, down to 0.8 for a squat or narrow
+// one. Measured as the compact landscape it would shrink to 0.8 and put the
+// credit line under the 13 px floor and the QR under 240 px on a wall that
+// has the room.
 import { KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../core/breakpoints';
 
 export type KioskSize = 'wide' | 'compact' | 'handheld';
 
 export const WIDE = { width: 1920, height: 1080 } as const;
 export const COMPACT = { width: 1366, height: 768 } as const;
+/** The portrait drawing's design size: a 1080p screen stood up. */
+export const PORTRAIT = { width: 1080, height: 1920 } as const;
 /** From this width up the wide composition has room to breathe. */
 export const WIDE_MIN_WIDTH = KIOSK_WIDE_MIN_PX;
 /** Below this width the kiosk is a handheld. */
@@ -33,12 +44,15 @@ export function decideLayout(viewport: Viewport): LayoutDecision {
   const { width, height } = viewport;
   const portrait = height > width;
   if (width < HANDHELD_MAX_WIDTH) return { size: 'handheld', zoom: 1, portrait };
-  const size: KioskSize = width >= WIDE_MIN_WIDTH ? 'wide' : 'compact';
-  const design = size === 'wide' ? WIDE : COMPACT;
+  const size: KioskSize = !portrait && width >= WIDE_MIN_WIDTH ? 'wide' : 'compact';
+  // The drawing this screen is measured against: the largest one (wide, or the
+  // portrait drawing itself) for scaling up, its own for scaling down.
+  const largest = portrait ? PORTRAIT : WIDE;
+  const design = portrait ? PORTRAIT : size === 'wide' ? WIDE : COMPACT;
   let zoom = 1;
-  if (width > WIDE.width && height > WIDE.height) {
-    zoom = Math.min(width / WIDE.width, height / WIDE.height);
-  } else if (width < COMPACT.width || height < COMPACT.height) {
+  if (width > largest.width && height > largest.height) {
+    zoom = Math.min(width / largest.width, height / largest.height);
+  } else if (width < design.width || height < design.height) {
     zoom = Math.min(width / design.width, height / design.height);
   }
   zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));

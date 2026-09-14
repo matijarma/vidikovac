@@ -14,9 +14,9 @@ import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
-import { kicker, linesMarkup, weatherMarkup } from './invitation';
+import { kBadge, kicker, linesMarkup, weatherMarkup } from './invitation';
 import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
-import { routeLongName, sortRouteIds, stopDistanceM } from './stops';
+import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
@@ -151,13 +151,15 @@ export interface BlockOptions {
   meta?: string;
   /** The source is stated once for the whole layer (mainSource), not under this block. */
   noSource?: boolean;
+  /** A further class on the article: the departure board's five-row floor. */
+  extraClass?: string;
   s: KioskStrings;
 }
 
 export function block(title: string, body: string, o: BlockOptions): string {
   const status = [o.meta ?? '', statusLine(o.snapshot, o.s)].filter(Boolean).join(' · ');
   const list = body.includes('class="k-rows"') ? ' k-block--list' : '';
-  return `<article class="k-block${o.tone ? ` k-block--${escapeAttribute(o.tone)}` : ''}${o.grow ? ' k-block--grow' : ''}${list}"${o.testid ? ` data-testid="${escapeAttribute(o.testid)}"` : ''}${o.snapshot ? ` data-status="${o.snapshot.status}"` : ''}>
+  return `<article class="k-block${o.tone ? ` k-block--${escapeAttribute(o.tone)}` : ''}${o.grow ? ' k-block--grow' : ''}${list}${o.extraClass ? ` ${escapeAttribute(o.extraClass)}` : ''}"${o.testid ? ` data-testid="${escapeAttribute(o.testid)}"` : ''}${o.snapshot ? ` data-status="${o.snapshot.status}"` : ''}>
     ${kicker(title, status)}
     <div class="k-block-body">${body}</div>
     ${o.noSource ? '' : sourceLine(o.snapshot, o.items ?? (o.item ? [o.item] : []), o.s)}
@@ -183,6 +185,12 @@ export function row(main: string, sub = '', aside = '', attrs = ''): string {
   return `<span class="k-row-main"${attrs}>${aside ? `<span class="k-row-aside">${aside}</span>` : ''}${main}</span>${sub ? `<span class="k-row-sub">${sub}</span>` : ''}`;
 }
 
+/** A box and its content snap to whole pixels separately: a 159.4 px body reads
+ *  clientHeight 159 against scrollHeight 160 with nothing cut (a block sized to
+ *  its content, as under the portrait map), so an overflow counts from the
+ *  second pixel. e2e/kiosk-layout.spec.ts allows the same pixel. */
+const ROUNDING_PX = 1;
+
 /** After a paint, trailing rows that do not fit their block are hidden and
  *  counted in one "prikazano N od M" line, so a block never shows half a row
  *  or runs into its own source line. A DOM without layout (tests) measures
@@ -203,7 +211,8 @@ export function fitRows(
       note.className = 'k-line-more k-row-more';
       body.appendChild(note);
     }
-    note.textContent = fill(coverage, { shown: visible, total });
+    // The departure board counts in lines (data-coverage); every other list uses the shared sentence.
+    note.textContent = fill(body.querySelector<HTMLElement>('.k-rows')?.dataset.coverage ?? coverage, { shown: visible, total });
   };
   for (const body of bodies) {
     const rows = rowsOf(body);
@@ -211,9 +220,9 @@ export function fitRows(
     body.querySelector('.k-row-more')?.remove();
     setNote(body, rows.length, totalOf(body));
     let m = measure(body);
-    if (m.client === 0 || m.scroll <= m.client) continue;
+    if (m.client === 0 || m.scroll <= m.client + ROUNDING_PX) continue;
     let visible = rows.length;
-    while (visible > 1 && m.scroll > m.client) {
+    while (visible > 1 && m.scroll > m.client + ROUNDING_PX) {
       visible -= 1;
       rows[visible]!.hidden = true;
       setNote(body, visible, totalOf(body));
@@ -229,7 +238,7 @@ export function fitRows(
       rows[visible]!.hidden = false;
       setNote(body, visible + 1, totalOf(body));
       const m = measure(body);
-      if (m.client === 0 || m.scroll > m.client) {
+      if (m.client === 0 || m.scroll > m.client + ROUNDING_PX) {
         rows[visible]!.hidden = true;
         setNote(body, visible, totalOf(body));
         break;
@@ -264,7 +273,7 @@ export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolea
 function warningRows(ctx: PairedContext): string[] {
   const cap = ctx.snapshots['dhmz-cap'];
   const rowOf = (w: FeedItem, upcoming: boolean): string => row(
-    `<strong>${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</strong> · ${escapeHtml(w.title)}`,
+    `<span class="badge k-badge" data-tone="${escapeAttribute(w.severity ?? 'info')}">${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</span> ${escapeHtml(w.title)}`,
     [upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '', w.summary ?? '', w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : ''].filter(Boolean).map(escapeHtml).join(' · '),
     '',
     ` data-severity="${escapeAttribute(w.severity ?? 'info')}" data-window="${upcoming ? 'upcoming' : 'active'}"`,
@@ -308,7 +317,7 @@ function closuresBlock(ctx: PairedContext, limit: number, grow = false): string 
 
 function weatherBlock(ctx: PairedContext): string {
   const snap = ctx.snapshots['dhmz-now'];
-  return `<article class="k-block k-block--weather" data-testid="k-weather"${snap ? ` data-status="${snap.status}"` : ''}>${weatherMarkup(weatherNow(modulesOf(ctx), ctx.strings, ctx.locale), ctx.now, ctx.strings)}</article>`;
+  return `<article class="k-block k-block--weather" data-testid="k-weather"${snap ? ` data-status="${snap.status}"` : ''}>${weatherMarkup(weatherNow(modulesOf(ctx), ctx.strings, ctx.locale), ctx.strings, ctx.size === 'wide' ? 3 : 2)}</article>`;
 }
 
 function renderSada(ctx: PairedContext): PairedMarkup {
@@ -317,30 +326,67 @@ function renderSada(ctx: PairedContext): PairedMarkup {
   return { lines: linesBox(ctx), main: '', side: `${selected}${weatherBlock(ctx)}${!selected && warningsRelevant(ctx) ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}` };
 }
 
-function delayRows(ctx: PairedContext, limit: number): string[] {
+/** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */
+function kindOfRoute(routeId: string): 'tram' | 'bus' | 'other' {
+  const type = routeType(routeId);
+  return type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
+}
+
+interface RouteSummary { delay: number | null; count: number | null }
+
+/** Every route the feed summarises: its median delay when plausible (a six-hour figure is a stale trip update, not a delay) and its vehicle count. */
+function routeSummaries(zet: ModuleSnapshot | undefined): Map<string, RouteSummary> {
+  const out = new Map<string, RouteSummary>();
+  for (const item of zet?.items ?? []) {
+    if (!item.id.startsWith('route:')) continue;
+    const routeId = dataText(item, 'routeId');
+    if (!routeId) continue;
+    const delay = dataNumber(item, 'medianDelaySeconds');
+    out.set(routeId, { delay: plausibleDelay(delay) ? delay : null, count: dataNumber(item, 'vehicles') });
+  }
+  return out;
+}
+
+/** One line of the departure board: the badge, the destination, the word for the state, the vehicles out. */
+function boardRow(ctx: PairedContext, routeId: string, summary: RouteSummary | undefined, atStop: boolean): string {
+  const count = summary?.count ?? null;
+  const vehicles = count === null ? '' : `<span class="k-row-aside">${escapeHtml(plural(ctx.locale, ctx.strings.paired.routeVehicles, count))}</span>`;
+  return `<li class="k-row k-row--line" data-route="${escapeAttribute(routeId)}"${atStop ? ' data-at-stop="1"' : ''}>${kBadge(routeId, kindOfRoute(routeId))}<span class="k-row-name">${escapeHtml(routeLongName(routeId))}</span><span class="k-row-word">${escapeHtml(delayWord(ctx.i18n, summary?.delay))}</span>${vehicles}</li>`;
+}
+
+/** The transport board: the stop's lines first, each with its delay word and
+ *  vehicle count, then the five largest deviations elsewhere on the network,
+ *  and "prikazano N od M linija" for the routes the feed knows. When the
+ *  board leads the column it keeps five rows (k-block--board); under a
+ *  selection card it takes the general floor, the selection being the subject. */
+function delaysBoard(ctx: PairedContext, lead: boolean): string {
+  const { strings: s } = ctx;
   const zet = ctx.snapshots['zet-rt'];
-  const rows = (zet?.items ?? [])
-    .filter((item) => item.id.startsWith('route:'))
-    .map((item) => ({ routeId: dataText(item, 'routeId'), delay: dataNumber(item, 'medianDelaySeconds'), count: dataNumber(item, 'vehicles') ?? 0 }))
-    .filter((r): r is { routeId: string; delay: number; count: number } => r.routeId !== '' && plausibleDelay(r.delay))
-    .sort((a, b) => Math.abs(b.delay) - Math.abs(a.delay) || a.routeId.localeCompare(b.routeId, 'hr', { numeric: true }))
-    .slice(0, limit);
-  return rows.map((r) => row(
-    `<span class="k-line-badge">${escapeHtml(r.routeId)}</span> ${escapeHtml(routeLongName(r.routeId))}`,
-    escapeHtml(delayWord(ctx.i18n, r.delay)),
-    escapeHtml(plural(ctx.locale, ctx.strings.paired.routeVehicles, r.count)),
-    ` data-route="${escapeAttribute(r.routeId)}"`,
-  ));
+  const summaries = routeSummaries(zet);
+  const atStop = ctx.stop ? sortRouteIds(ctx.stop.routes) : [];
+  const stopSet = new Set(atStop);
+  const deviations = [...summaries]
+    .filter(([routeId, summary]) => !stopSet.has(routeId) && summary.delay !== null)
+    .sort((a, b) => Math.abs(b[1].delay!) - Math.abs(a[1].delay!) || a[0].localeCompare(b[0], 'hr', { numeric: true }))
+    .slice(0, 5)
+    .map(([routeId]) => routeId);
+  const known = [...summaries].filter(([, summary]) => summary.delay !== null).map(([routeId]) => routeId);
+  const total = new Set([...atStop, ...known]).size;
+  const rows = [...atStop.map((routeId) => boardRow(ctx, routeId, summaries.get(routeId), true)), ...deviations.map((routeId) => boardRow(ctx, routeId, summaries.get(routeId), false))];
+  const body = rows.length === 0
+    ? listBody(zet, [], s.paired.noData, s)
+    : `<ul class="k-rows"${total > rows.length ? ` data-total="${total}"` : ''} data-coverage="${escapeAttribute(plural(ctx.locale, s.paired.coverageLines, total))}">${rows.join('')}</ul>`;
+  return block(s.paired.delays, body, { s, snapshot: zet, testid: 'k-delays', grow: true, extraClass: lead ? 'k-block--board' : '' });
 }
 
 function renderPromet(ctx: PairedContext): PairedMarkup {
-  const zet = ctx.snapshots['zet-rt'];
+  // The board and the join card are the composition at both sizes: five rows,
+  // their coverage line and ZET's mandated three-line credit fill what the
+  // column has beside the join card (measured at 1920: 500 of 640 px), so no
+  // second block fits. Closures stay on Sada and Sigurnost; ZET's own notices
+  // are Događanja's undated notices (`k-notices`, see NOTICE_SOURCES).
   const selected = selectionCard(ctx);
-  const all = delayRows(ctx, Infinity).length;
-  const delays = block(ctx.strings.paired.delays, listBody(zet, delayRows(ctx, selected ? 4 : ctx.size === 'wide' ? 7 : 5), ctx.strings.paired.noData, ctx.strings, all), { s: ctx.strings, snapshot: zet, testid: 'k-delays', grow: true });
-  // ZET's notices, when there are any, outrank road closures beside the delays; closures stay on Sada and Sigurnost.
-  const notices = selected ? '' : zetNoticesBlock(ctx, 2);
-  return { lines: linesBox(ctx), main: '', side: `${selected}${delays}${notices || (selected ? '' : closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2))}` };
+  return { lines: linesBox(ctx), main: '', side: `${selected}${delaysBoard(ctx, !selected)}` };
 }
 
 // --- The public selection the phone relayed --------------------------------
@@ -366,7 +412,7 @@ function selectionCard(ctx: PairedContext): string {
     const delay = plausibleDelay(median) ? median : null;
     const count = dataNumber(summary, 'vehicles');
     const sub = [delay === null ? '' : delayWord(i18n, delay), count === null ? '' : plural(ctx.locale, s.paired.routeVehicles, count)].filter(Boolean).join(' · ');
-    const body = `<p class="k-select-main"><span class="k-line-badge">${escapeHtml(selection.id)}</span> ${escapeHtml(routeLongName(selection.id) || fill(s.session.selectedRoute, { route: selection.id }))}</p>${sub ? `<p class="k-select-sub">${escapeHtml(sub)}</p>` : ''}`;
+    const body = `<p class="k-select-main">${kBadge(selection.id, kindOfRoute(selection.id))} ${escapeHtml(routeLongName(selection.id) || fill(s.session.selectedRoute, { route: selection.id }))}</p>${sub ? `<p class="k-select-sub">${escapeHtml(sub)}</p>` : ''}`;
     return block(s.session.selected, body, { ...o, snapshot: zet, item: summary });
   }
   if (selection.kind === 'stop') {
@@ -387,7 +433,7 @@ function selectionCard(ctx: PairedContext): string {
 
 function weatherHero(ctx: PairedContext): string {
   const snap = ctx.snapshots['dhmz-now'];
-  return `<article class="k-block k-block--hero" data-testid="k-weather"${snap ? ` data-status="${snap.status}"` : ''}>${weatherMarkup(weatherNow(modulesOf(ctx), ctx.strings, ctx.locale), ctx.now, ctx.strings)}</article>`;
+  return `<article class="k-block k-block--weather" data-testid="k-weather"${snap ? ` data-status="${snap.status}"` : ''}>${weatherMarkup(weatherNow(modulesOf(ctx), ctx.strings, ctx.locale), ctx.strings, ctx.size === 'wide' ? 3 : 2)}</article>`;
 }
 
 function forecastBlock(ctx: PairedContext): string {
@@ -564,24 +610,18 @@ function renderGrad(ctx: PairedContext): PairedMarkup {
   return { lines: '', main, side: `${selectionCard(ctx)}${worksBlock(ctx, wide ? 5 : 3)}` };
 }
 
-const ZET_NOTICE_SOURCES: ReadonlySet<string> = new Set(['zet-promet', 'zet-rss', 'zet-novosti']);
-
-/** ZET's own notices (a detour, works on a line) belong beside the delays, not among culture. */
-function zetNoticesBlock(ctx: PairedContext, limit: number): string {
-  const dog = ctx.snapshots.dogadanja;
-  const items = (isLive(dog) ? dog.items : []).filter((item) => ZET_NOTICE_SOURCES.has(dataText(item, 'source')));
-  if (items.length === 0) return '';
-  const rows = items.slice(0, limit).map((item) => row(escapeHtml(item.title), escapeHtml(cityDateLine(item, ctx.strings, ctx.locale))));
-  return block(ctx.strings.paired.zetNotices, listBody(dog, rows, ctx.strings.paired.noData, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, items, testid: 'k-zet-notices' });
-}
-
 // --- Događanja (kultura) --------------------------------------------------------
 
+/** Sources whose rows are notices, not dated events, when they state no date basis:
+ *  the neighbourhood news and ZET's own notices (a detour, works on a line). ZET's
+ *  notices live in this layer's `k-notices` block: Promet's column is the departure
+ *  board alone (its five rows, coverage line and mandated credit fill it), and the
+ *  unpaired invitation's story rotation carries them too. */
 const NOTICE_SOURCES: ReadonlySet<string> = new Set(['kvartovske', 'zet-promet', 'zet-rss', 'zet-novosti']);
 
-/** Rows the culture layer leaves to their own domains: the Assembly and the
- *  works register to Grad, ZET's notices to Promet. */
-const CULTURE_ELSEWHERE: ReadonlySet<string> = new Set(['skupstina', 'komunalne', 'zet-promet', 'zet-rss', 'zet-novosti']);
+/** Rows the culture layer leaves to their own domain: the Assembly and the
+ *  works register to Grad. */
+const CULTURE_ELSEWHERE: ReadonlySet<string> = new Set(['skupstina', 'komunalne']);
 /** A Zagreb screen lists Zagreb events; a venue naming another town is not one. */
 const NON_ZAGREB_VENUE = /\b(Split|Hvar|Rijeka|Osijek|Zadar|Dubrovnik|Pula|Varaždin|Šibenik|Karlovac|Sisak|Vukovar|Bjelovar|Koprivnica|Čakovec|Poreč|Rovinj|Makarska|Trogir|Vinkovci|Požega|Opatija|Krk)\b/;
 

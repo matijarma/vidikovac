@@ -20,13 +20,15 @@ import { loadNetwork, type Network } from './motion/network';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
+import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
+import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, dayTime, weekdayDate } from './kiosk/format';
-import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { codeBlockMarkup, hintMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
-import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, safetyStrip, staleCopy } from './kiosk/local';
+import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, safetyStrip, staleCopy, sunLine, sunToday } from './kiosk/local';
 import { createKioskMapAdapter, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
@@ -35,6 +37,7 @@ import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
+export { STORY_LEAVE_MS } from './kiosk/invitation';
 
 /** The story, the clock line and the paired refresh all move on this tick. */
 export const ROTATE_MS = 20_000;
@@ -46,10 +49,16 @@ export const CODE_TICK_MS = 1_000;
 export const ESSENTIALS_IDLE_MS = 90_000;
 /** Under reduced motion or lightweight the remaining-time bar moves in ten steps. */
 export const PROGRESS_STEPS = 10;
+/** A slot change crossfades the code digits: the old ones fade out beside the new for this long. */
+export const CODE_SWAP_MS = 180;
 
 export interface KioskDeps {
   i18n: I18n;
   hash: string;
+  /** T5.3: the same controller entries/kiosk.ts already resolved (solar by
+   *  default, or ?tema=) before this component ever sees it; the header
+   *  button only ever calls setPreference, which does the persisting. */
+  theme: ThemeController;
   /** Where the ordinary credentials live; defaults to localStorage, null disables persistence. */
   storage?: StorageLike | null;
   now?: () => number;
@@ -96,7 +105,7 @@ function shellMarkup(s: KioskStrings): string {
     <header class="k-head">
       <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)} <span class="k-brand-sub">${escapeHtml(s.surface)}</span></p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
-      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><time class="k-clock" data-testid="kiosk-clock"></time></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
     <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
@@ -122,7 +131,7 @@ function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): s
  *  speaks the page's language) and the code card the rotation paints through
  *  the same testids the wall's invitation carries. No map, board, weather or
  *  story: those are drawn for a wall (kiosk/invitation.ts). */
-function handheldMarkup(s: KioskStrings, i18n: I18n, url: string): string {
+function handheldMarkup(s: KioskStrings, i18n: I18n, url: string, codeBase?: string): string {
   return `<div class="k-handheld-link" data-testid="handheld-link-block">
       <h1 class="k-handheld-title" id="k-handheld-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h1>
       <a class="k-handheld-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>
@@ -132,13 +141,9 @@ function handheldMarkup(s: KioskStrings, i18n: I18n, url: string): string {
       <div class="k-invite-text">
         <p class="k-lead">${escapeHtml(s.invitation.lead)}</p>
         <p class="k-support">${escapeHtml(s.invitation.support)}</p>
+        ${hintMarkup(s, codeBase)}
       </div>
-      <div class="k-invite-code">
-        <p class="k-code" data-testid="pair-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">-</span><span data-testid="code-b">····</span></p>
-        <a class="k-visually-hidden" data-testid="pair-url" href="" hidden></a>
-        <p class="k-hint">${escapeHtml(s.invitation.typeCode)}</p>
-        <div class="k-progress" data-testid="code-progress" role="progressbar" aria-label="${escapeAttribute(s.invitation.progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="k-progress-bar"></div></div>
-      </div>
+      ${codeBlockMarkup(s)}
     </article>`;
 }
 
@@ -182,6 +187,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const contextEl = q('[data-testid=kiosk-context]');
   const headMid = q('[data-testid=kiosk-head-mid]');
   const dateEl = q('[data-testid=kiosk-date]');
+  const themeBtn = q<HTMLButtonElement>('[data-testid=kiosk-theme]');
   const clockEl = q('[data-testid=kiosk-clock]');
   const stage = q('[data-testid=kiosk-stage]');
   const basics = q('[data-testid=kiosk-essentials]');
@@ -211,6 +217,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let activeLayer: LayerId = 'grad-sada';
   let selection: PublicSelection | null = null;
   let sessionLabel: HTMLElement | null = null;
+  let sessionExpiresAt: number | null = null;
+  let swapTimer: unknown = null;
   let setup: SetupHandle | null = null;
   let invitation: InvitationHandle | null = null;
   let handheld: HTMLElement | null = null;
@@ -251,6 +259,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
   }
+  /** "Tema: po suncu": the header button's own label, always the controller's
+   *  current word -- never guessed, never stale between its own clicks and a
+   *  change made elsewhere (?tema=, another tab). */
+  function paintTheme(preference: ThemePreference): void {
+    themeBtn.textContent = fill(s.header.theme, { pref: s.header.themeWord[preference] });
+  }
+  function cycleTheme(): void {
+    const i = THEME_PREFERENCES.indexOf(deps.theme.getPreference());
+    deps.theme.setPreference(THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length]!);
+  }
   function paintContext(): void {
     if (!credentials) { contextEl.textContent = ''; return; }
     const screen = credentials.screen;
@@ -267,10 +285,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       sessionLabel.dataset.testid = 'session-label';
       headMid.appendChild(sessionLabel);
     }
+    sessionExpiresAt = expiresAt;
     sessionLabel.dataset.expiresAt = String(expiresAt);
-    sessionLabel.textContent = fill(s.header.unlockedUntil, { time: clock(expiresAt) });
+    paintSessionLabel();
   }
-  function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; }
+  /** "Otključano do 13:57 · Promet": the room's end and the domain the screen mirrors right now. */
+  function paintSessionLabel(): void {
+    if (!sessionLabel || sessionExpiresAt === null) return;
+    sessionLabel.textContent = `${fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })} · ${s.layers[activeLayer]}`;
+  }
+  function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; sessionExpiresAt = null; }
 
   // --- Safety strip: always present, sharing the visible source state --------
   function paintStrip(): void {
@@ -280,25 +304,31 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const parts = safetyStrip(modules, stop, i18n, s, now());
     const noBasics = phase === 'paired' || phase === 'setup';
     const w = parts.warning;
+    // R-K7: the sun line left the weather lockup; while a story is on show the strip carries it (the story's foot does otherwise).
+    const sun = phase === 'invitation' && invitation?.storyShowing() ? sunLine(sunToday(now()), s) : '';
     strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
-      <span class="k-strip-label">${escapeHtml(s.safety.label)}</span>
+      <span class="k-strip-label">${iconMarkup('shield', undefined, 'icon k-icon')}<span>${escapeHtml(s.safety.label)}</span></span>
       <div class="k-strip-items" data-testid="strip-items">
       <span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeHtml(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>
       <span class="k-strip-item" data-testid="strip-closures" data-state="${parts.closures.state}">${escapeHtml(parts.closures.text)}${parts.closures.nearestText ? ` <span class="k-strip-sub">${escapeHtml(parts.closures.nearestText)}</span>` : ''}</span>
       <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(s.safety.pharmacy)}: <strong>${escapeHtml(parts.pharmacy.label)}</strong></span>
+      ${sun ? `<span class="k-strip-item k-strip-item--sun" data-testid="strip-sun">${escapeHtml(sun)}</span>` : ''}
       </div>
       <a class="k-strip-hitno" href="/hitno">${escapeHtml(s.safety.hitno)}</a>`;
     fitStrip();
   }
-  /** The three sentences share one wrapping box with room for two lines, so
-   *  long words (a stale, unconfirmed state) move a sentence down whole. Only
-   *  when two lines are not enough does the nearest-street aside go. The type
-   *  never steps down and nothing is clipped mid-word. */
+  /** The sentences share one wrapping box with room for two lines, so long
+   *  words (a stale, unconfirmed state) move a sentence down whole. When two
+   *  lines are not enough the sun line goes first (the least safety in it),
+   *  then the nearest-street aside. The type never steps down and nothing is
+   *  clipped mid-word. */
   function fitStrip(): void {
-    strip.classList.remove('k-strip--nosub');
+    strip.classList.remove('k-strip--nosub', 'k-strip--nosun');
     const items = strip.querySelector<HTMLElement>('.k-strip-items');
     if (!items || items.clientHeight === 0) return;
-    if (items.scrollHeight > items.clientHeight + 1) strip.classList.add('k-strip--nosub');
+    const over = (): boolean => items.scrollHeight > items.clientHeight + 1;
+    if (over()) strip.classList.add('k-strip--nosun');
+    if (over()) strip.classList.add('k-strip--nosub');
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
@@ -378,7 +408,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     element.dataset.live = '1';
   }
   function invitationModel(): InvitationModel {
-    return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4 };
+    return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4, size: layout.size === 'wide' ? 'wide' : 'compact' };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -400,8 +430,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintStrip();
     paintMap();
     if (!basics.hidden) paintEssentials();
-    // Rows that do not fit a paired block are hidden and counted, never half-shown.
+    fitAll();
+  }
+  /** Rows that do not fit a paired block are hidden and counted, never half-shown; the story title gets the lines its box has; the strip drops its sun line and its street when two lines are not enough. Runs after every paint and once a second, so fonts arriving late and a resize are absorbed. */
+  function fitAll(): void {
+    invitation?.fit();
     if (paired) fitRows(paired.element, s.paired.coverage);
+    fitStrip();
   }
 
   // --- Codes: the rotation's slot into the QR and the readable code -------------
@@ -431,6 +466,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const display = formatCode(slot.code);
     const payload = codeUrl(slot.code, deps.codeBase);
     const label = fill(s.invitation.qrLabel, { code: speakableCode(slot.code) });
+    // A slot change (a live code giving way to a different one) crossfades; the first code, a re-sent batch and a fresh mount paint at once.
+    const previous = codeEl?.dataset.state === 'live' ? (codeEl.textContent ?? '').trim() : null;
     if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
     if (codeA) codeA.textContent = display.slice(0, 4);
     if (codeB) codeB.textContent = display.slice(5);
@@ -438,7 +475,33 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (link) { link.href = payload; link.textContent = payload; link.hidden = false; }
     if (corner) corner.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
     if (joinCode) joinCode.textContent = display;
+    if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous, joinCode);
     paintProgress();
+  }
+  /** The outgoing digits stay 180 ms as a ghost over the live code, fading, while the new ones fade in (data-swap); the join code fades in the same beat.
+   *  The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits) so both copies sit on the same pixels and the
+   *  crossfade never reads as the second half sliding sideways; it carries no testid, so `pair-code` stays one element mid-swap. */
+  function swapCode(codeEl: HTMLElement, previous: string, joinCode: HTMLElement | null): void {
+    const box = codeEl.parentElement;
+    if (!box || !box.classList.contains('k-code-box')) return;
+    box.querySelector('.k-code-ghost')?.remove();
+    const ghost = document.createElement('p');
+    ghost.className = 'k-code k-code-ghost';
+    ghost.setAttribute('aria-hidden', 'true');
+    const dash = previous.indexOf('-');
+    ghost.innerHTML = dash === -1
+      ? `<span>${escapeHtml(previous)}</span>`
+      : `<span>${escapeHtml(previous.slice(0, dash))}</span><span class="k-code-dash">-</span><span>${escapeHtml(previous.slice(dash + 1))}</span>`;
+    box.appendChild(ghost);
+    codeEl.dataset.swap = '1';
+    if (joinCode) joinCode.dataset.swap = '1';
+    if (swapTimer !== null) clearTimer(swapTimer);
+    swapTimer = oneShot(() => {
+      swapTimer = null;
+      ghost.remove();
+      delete codeEl.dataset.swap;
+      if (joinCode) delete joinCode.dataset.swap;
+    }, CODE_SWAP_MS);
   }
   /** The remaining share of the current slot; quantised where motion is unwanted. */
   function paintProgress(): void {
@@ -483,7 +546,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
     else if (next === 'invitation' && layout.size === 'handheld') mountHandheld();
-    else if (next === 'invitation') invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight });
+    else if (next === 'invitation') invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); } });
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
     else mountNotice(next);
     paintContext();
@@ -497,7 +560,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     handheld.className = 'k-handheld';
     handheld.dataset.testid = 'kiosk-handheld';
     handheld.setAttribute('aria-labelledby', 'k-handheld-title');
-    handheld.innerHTML = handheldMarkup(s, i18n, provisionUrl(credentials, deps.codeBase));
+    handheld.innerHTML = handheldMarkup(s, i18n, provisionUrl(credentials, deps.codeBase), deps.codeBase);
     stage.appendChild(handheld);
   }
   function mountNotice(kind: 'expired' | 'revoked'): void {
@@ -623,6 +686,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     live.onView((layer, params) => {
       if (session !== live || disposed) return;
       activeLayer = layer;
+      paintSessionLabel();
       // The allowlist is the whole relay contract: a layer, a route, a stop or a
       // public item key. Filters, search text and coordinates never arrive here.
       selection = params ? parseSelection(params) : null;
@@ -721,6 +785,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
   });
   basicsClose.addEventListener('click', () => closeEssentials());
+  themeBtn.addEventListener('click', cycleTheme);
+  // Repaints on every change: the button's own clicks, ?tema= landing after
+  // this mount, another tab, or the OS answer for auto -- one source of truth.
+  const stopTheme = deps.theme.onChange((state) => paintTheme(state.preference));
   // Any touch or key inside the open panel means someone is still reading it.
   basics.addEventListener('pointerdown', armEssentialsIdle);
   basics.addEventListener('keydown', (event) => {
@@ -750,7 +818,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else paintLocal();
   });
 
-  const codeTimer = setTimer(() => { paintClock(); paintProgress(); }, CODE_TICK_MS);
+  const codeTimer = setTimer(() => { paintClock(); paintProgress(); fitAll(); }, CODE_TICK_MS);
   const rotateTimer = setTimer(() => {
     paintClock();
     if (phase === 'paired') {
@@ -773,10 +841,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       rotation.stop();
       clearTimer(rotateTimer);
       clearTimer(codeTimer);
+      if (swapTimer !== null) { clearTimer(swapTimer); swapTimer = null; }
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
       disarmExpiry();
       disarmEssentialsIdle();
       stopRepaint?.();
+      stopTheme();
       beacon?.close(); beacon = null;
       session?.close(); session = null;
       clearStage();

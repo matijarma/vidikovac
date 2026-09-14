@@ -13,6 +13,8 @@ export const hr: KioskStrings = {
     temporaryUntil: 'privremeni zaslon · vrijedi do {time}',
     venue: 'zaslon u prostoru',
     unlockedUntil: 'Otključano do {time}',
+    theme: 'Tema: {pref}',
+    themeWord: { auto: 'automatski', light: 'svijetla', dark: 'tamna', solar: 'po suncu' },
   },
   status: {
     connecting: 'Povezivanje sa zaslonom…',
@@ -25,7 +27,7 @@ export const hr: KioskStrings = {
   invitation: {
     lead: 'Skeniraj za 10 minuta grada.',
     support: 'Promet, vrijeme, događanja i sigurnost na tvom telefonu. Bez računa i bez instalacije.',
-    typeCode: 'ili upiši kod na zagreb.aningfilm.hr/s',
+    typeCode: 'ili upiši kod na {host}',
     codeLabel: 'Kod za otključavanje',
     qrLabel: 'QR kod za otključavanje. Kod: {code}',
     qrWaiting: 'Kod stiže…',
@@ -89,7 +91,7 @@ export const hr: KioskStrings = {
     closuresStale: 'Zatvaranja: zastarjelo, nepotvrđeno',
     closuresNearest: 'najbliže {street}',
     pharmacy: 'Dežurna ljekarna',
-    hitno: '/hitno',
+    hitno: 'Sigurnost',
     basics: 'Osnovno',
   },
   basics: {
@@ -171,6 +173,7 @@ export const hr: KioskStrings = {
     phase: 'faza: {phase}',
     amount: 'iznos {amount} €',
     coverage: 'prikazano {shown} od {total}',
+    coverageLines: { one: 'prikazano {shown} od {total} linije', few: 'prikazano {shown} od {total} linije', other: 'prikazano {shown} od {total} linija' },
     routeVehicles: { one: '{count} vozilo', few: '{count} vozila', other: '{count} vozila' },
     depth: 'dubina {depth} km',
     magUnknown: 'magnituda nepoznata',

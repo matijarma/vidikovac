@@ -13,6 +13,8 @@ export const en: KioskStrings = {
     temporaryUntil: 'temporary screen · valid until {time}',
     venue: 'venue screen',
     unlockedUntil: 'Unlocked until {time}',
+    theme: 'Theme: {pref}',
+    themeWord: { auto: 'automatic', light: 'light', dark: 'dark', solar: 'solar' },
   },
   status: {
     connecting: 'Connecting to the screen…',
@@ -25,7 +27,7 @@ export const en: KioskStrings = {
   invitation: {
     lead: 'Scan for 10 minutes of the city.',
     support: 'Transit, weather, events and safety on your phone. No account, nothing to install.',
-    typeCode: 'or type the code at zagreb.aningfilm.hr/s',
+    typeCode: 'or type the code at {host}',
     codeLabel: 'Unlock code',
     qrLabel: 'QR code to unlock. Code: {code}',
     qrWaiting: 'Code on its way…',
@@ -89,7 +91,7 @@ export const en: KioskStrings = {
     closuresStale: 'Closures: stale, unconfirmed',
     closuresNearest: 'nearest {street}',
     pharmacy: 'On-duty pharmacy',
-    hitno: '/hitno',
+    hitno: 'Safety',
     basics: 'Essentials',
   },
   basics: {
@@ -171,6 +173,7 @@ export const en: KioskStrings = {
     phase: 'phase: {phase}',
     amount: 'amount €{amount}',
     coverage: 'showing {shown} of {total}',
+    coverageLines: { one: 'showing {shown} of {total} line', other: 'showing {shown} of {total} lines' },
     routeVehicles: { one: '{count} vehicle', other: '{count} vehicles' },
     depth: 'depth {depth} km',
     magUnknown: 'magnitude unknown',

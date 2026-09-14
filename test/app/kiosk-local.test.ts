@@ -14,7 +14,7 @@ import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/di
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
-import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM } from '../../app/src/kiosk/layout';
+import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
@@ -96,7 +96,21 @@ describe('layout: two compositions, never a proportional shrink, and a handheld 
     expect(decideLayout({ width: 3840, height: 2160 })).toEqual({ size: 'wide', zoom: 2, portrait: false });
     expect(decideLayout({ width: 1280, height: 720 }).zoom).toBe(0.937);
     expect(decideLayout({ width: 1000, height: 560 }).zoom).toBe(MIN_ZOOM);
-    expect(decideLayout({ width: 1080, height: 1920 })).toMatchObject({ size: 'compact', portrait: true });
+  });
+  // T5.4: a portrait screen is one drawing on the compact tokens, designed for
+  // 1080 x 1920 (kiosk.css [data-portrait='1']) and scaled from that size the
+  // way the landscape ones scale from theirs: never the compact landscape
+  // shrunk to 0.8, which would put the credit line under the 13 px floor and
+  // the QR under 240 px on a wall that has the room.
+  it('draws a portrait screen on the compact tiers at zoom 1 at 1080 x 1920, and scales it from that size, never below 0.8', () => {
+    expect(decideLayout({ width: 1080, height: 1920 })).toEqual({ size: 'compact', zoom: 1, portrait: true });
+    expect(PORTRAIT).toEqual({ width: 1080, height: 1920 });
+    // A 4K totem: the same drawing twice the size, compact tiers, never the wide composition on its side.
+    expect(decideLayout({ width: 2160, height: 3840 })).toEqual({ size: 'compact', zoom: 2, portrait: true });
+    expect(decideLayout({ width: 1440, height: 2560 })).toEqual({ size: 'compact', zoom: 1.333, portrait: true });
+    // A rotated 1600 x 900 screen: scaled down by its narrower ratio; a squat portrait stops at the floor.
+    expect(decideLayout({ width: 900, height: 1600 })).toEqual({ size: 'compact', zoom: 0.833, portrait: true });
+    expect(decideLayout({ width: 1080, height: 1200 })).toEqual({ size: 'compact', zoom: MIN_ZOOM, portrait: true });
   });
   // T4.4: a kiosk opened on a phone is a handheld, never a compact screen
   // shrunk to 0.8 and cropped: zoom stays 1 and the page scrolls (kiosk.css).
@@ -303,6 +317,22 @@ describe('local content from the stop-scoped teaser', () => {
     expect(host.querySelectorAll('.k-row[hidden]')).toHaveLength(0);
     expect(host.querySelector('.k-row-more')).toBeNull();
   });
+  // T5.4: a block sized to its content (the portrait column under the map)
+  // reads its body a rounding pixel over its box (clientHeight 159 against
+  // scrollHeight 160 for a 159.4 px body, nothing cut); a row that fits by
+  // half a pixel is never hidden for it. The e2e sweep allows the same pixel.
+  it('keeps every row when the body overflows by a rounding pixel alone, and still trims from the second pixel', () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<article class="k-block"><div class="k-block-body"><ul class="k-rows">${[1, 2, 3].map((n) => `<li class="k-row">${n}</li>`).join('')}</ul></div></article>`;
+    fitRows(host, hr.paired.coverage, () => ({ client: 159, scroll: 160 }));
+    expect(host.querySelectorAll('.k-row[hidden]')).toHaveLength(0);
+    expect(host.querySelector('.k-row-more')).toBeNull();
+    // Rows of 60 px in a 120 px box, two pixels over: a real overflow, trimmed until it fits.
+    const measure = (el: HTMLElement) => ({ client: 120, scroll: 60 * [...el.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden).length + 2 });
+    fitRows(host, hr.paired.coverage, measure);
+    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(1);
+    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 1 od 3');
+  });
   it('computes the sun on the device for the day', () => {
     const sun = sunToday(NOW);
     expect(sun.sunrise).toMatch(/^06:[12]\d$/);
@@ -320,12 +350,19 @@ describe('local content from the stop-scoped teaser', () => {
     expect(markup.main).toContain('Močvara');
     expect(markup.main).not.toMatch(/sjednica-odbora|kulturpunkt|class="k-row-sub"><\/span>/);
     expect(markup.side).toContain('k-notices');
+    // ZET's own notices (a detour, works on a line) live in this block with the neighbourhood news: Promet's column is the board alone, and the layer's one credit names ZET among the publishers.
+    const side = document.createElement('div');
+    side.innerHTML = markup.side;
+    const noticeBlock = side.querySelector('[data-testid=k-notices]')!;
+    expect(noticeBlock.textContent).toContain('Obilazak linija 6 i 11');
+    expect(noticeBlock.textContent).toContain('ZET obavijest · objavljeno 11. 9. 11:10');
+    expect(markup.main).toMatch(/k-main-source">[^<]*\bZET \(/);
     const items = MODULES.find((m) => m.module === 'dogadanja')!.items;
     const groups = eventGroups(items, NOW);
     expect(groups.today.map((e) => e.id)).toEqual(['kp:1']);
     expect(groups.tomorrow.map((e) => e.id)).toEqual(['kp:2']);
     expect(groups.later).toEqual([]); // the Assembly session belongs to Grad
-    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1']); // ZET notices belong to Promet
+    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1', 'zet-promet:1']); // undated notices, ZET's included
     const extra = [
       item('dogadanja', 'ex:1', 'event', 'Izložba koja traje', { at: '2026-09-01T09:00:00Z', until: '2026-09-30T18:00:00Z', dateBasis: 'event', data: { source: 'etnografski', category: 'izlozba', venue: 'Etnografski muzej, Zagreb' } }),
       item('dogadanja', 'ex:2', 'event', 'Izložba u Splitu', { at: '2026-09-11T09:00:00Z', dateBasis: 'event', data: { source: 'etnografski', venue: 'Etnografski muzej, Split' } }),
@@ -340,10 +377,11 @@ describe('local content from the stop-scoped teaser', () => {
     expect(culture.main).toContain('do sri 30. 9.');
     expect(culture.main).not.toContain('13. sjednica');
     expect(culture.main).not.toContain('Splitu');
-    // ZET's notices sit beside the delays on Promet, in place of road closures when present.
+    // Promet's column is the departure board alone: ZET's notices are Događanja's undated notices (asserted above), closures stay on Sada and Sigurnost.
     const promet = pairedMarkup({ ...withOngoing, layer: 'u-pokretu' as const });
-    expect(promet.side).toContain('data-testid="k-zet-notices"');
-    expect(promet.side).toContain('Obilazak linija 6 i 11');
+    expect(promet.side).toContain('data-testid="k-delays"');
+    expect(promet.side).not.toContain('k-zet-notices');
+    expect(promet.side).not.toContain('Obilazak linija 6 i 11');
     expect(promet.side).not.toContain('data-testid="k-closures"');
     const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
     expect(grad.main).toContain('13. sjednica');
@@ -475,7 +513,8 @@ describe('credits and rows on a screen read from steps away', () => {
     expect(grad.main).toContain('Izvori: Skupština Grada Zagreba (Otvorena dozvola) · Grad Zagreb, plan komunalnih aktivnosti (Otvorena dozvola) · potpuna atribucija: /izvori');
     expect(grad.side).not.toContain('k-source');
     const kultura = ctx('kultura');
-    expect(kultura.main).toContain('Izvori: Kulturpunkt (CC BY-SA 3.0 HR) · Grad Zagreb, kvartovske novosti (Otvorena dozvola) · potpuna atribucija: /izvori');
+    // ZET's notices are on the screen (the k-notices block), so the layer's one credit names ZET as a publisher too.
+    expect(kultura.main).toContain('Izvori: Kulturpunkt (CC BY-SA 3.0 HR) · Grad Zagreb, kvartovske novosti (Otvorena dozvola) · ZET (Otvorena dozvola) · potpuna atribucija: /izvori');
     expect(kultura.main).not.toContain('Šest izvora');
     expect(kultura.side).not.toContain('k-source'); // the notices block is covered by the layer's one credit
     expect(creditText(MODULES.find((m) => m.module === 'zet-rt')!, [], hr)).toBe('Izvor: test · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
@@ -490,8 +529,75 @@ describe('credits and rows on a screen read from steps away', () => {
     expect(selected).toContain('class="k-select-main k-select-main--item"');
     expect(selected).toContain('Izvor: HRT · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
     const noTemp = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { humidity: 60 } })]) : m));
-    const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), NOW, hr);
+    const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), hr);
     expect(markup).toContain('bez očitanja temperature');
     expect(markup).not.toMatch(/kiosk-temp">[–-]</);
+  });
+});
+
+// T5.2: the shapes the compositions render, without a controller.
+describe('T5.2 markup shapes: the two-line lockup, the departure board, badges and the pill', () => {
+  const all = () => Object.fromEntries(MODULES.map((m) => [m.module, m]));
+  const paired = (layer: 'u-pokretu' | 'zrak-i-nebo' | 'grad-sada', extra: Partial<Parameters<typeof pairedMarkup>[0]> = {}) => pairedMarkup({ layer, strings: hr, i18n, locale: 'hr', snapshots: all(), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const, ...extra });
+  it('the weather lockup is two lines under a 48 px condition icon, the station in the credit, no kicker and no sun line', () => {
+    const markup = weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr);
+    expect(markup).toContain('class="icon k-weather-icon"');
+    expect(markup).toContain('href="#icon-sun"');
+    expect(markup).not.toContain('k-kicker');
+    expect(markup).not.toContain('k-weather-sun');
+    expect(markup).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s · 1016 hPa</p>');
+    expect(markup).toContain('<p class="k-meta">opaženo 14:00 · Zagreb-Maksimir · DHMZ</p>');
+    // The compact column holds two details on its one facts line; the pressure yields.
+    expect(weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr, 2)).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s</p>');
+    // A sky the words do not name gets no picture, and the word still prints.
+    const fog = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Grič', { at: '2026-09-11T12:00:00Z', data: { temp: 9, weather: 'lahor' } })]) : m));
+    const quiet = weatherMarkup(weatherNow(fog, hr, 'hr'), hr);
+    expect(quiet).not.toContain('k-weather-icon');
+    expect(quiet).toContain('<span class="k-condition">lahor</span>');
+    const loading = weatherMarkup(weatherNow([], hr, 'hr'), hr);
+    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a…</p>');
+  });
+  it('Promet: the board leads with the stop\u2019s lines as single-line rows with k badges, then the largest deviations, and names its coverage in lines', () => {
+    const { side } = paired('u-pokretu');
+    expect(side).toContain('data-testid="k-delays"');
+    expect(side).toContain('k-block--board');
+    expect(side.match(/<li class="k-row k-row--line"/g)!.length).toBeGreaterThanOrEqual(9);
+    expect(side).toContain('data-coverage="prikazano {shown} od {total} linija"');
+    expect(side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
+    expect(side).toContain('<span class="k-row-word">kasni 2 min</span>');
+    expect(side).toContain('<span class="k-row-aside">12 vozila</span>');
+    expect(side.match(/data-testid="k-delays"[\s\S]*?<\/article>/)![0]).not.toContain('k-row-sub');
+    // The board and the join card are the column at both sizes: five rows, the coverage line and ZET's three-line credit leave no room for a second block.
+    expect(side).not.toContain('k-zet-notices');
+    expect(side).not.toContain('k-closures');
+    const compact = paired('u-pokretu', { size: 'compact' });
+    expect(compact.side).toContain('data-testid="k-delays"');
+    expect(compact.side).not.toContain('k-zet-notices');
+    expect(compact.side).not.toContain('k-closures');
+    // With a selection the board keeps the general floor: the selection is the column's subject.
+    const selected = paired('u-pokretu', { selection: { kind: 'route', id: '6' } });
+    expect(selected.side).toContain('data-testid="k-selection"');
+    expect(selected.side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
+    expect(selected.side.match(/data-testid="k-delays"/)).not.toBeNull();
+    expect(selected.side).not.toContain('k-block--board');
+  });
+  it('a warning row carries its level as a badge word with its shape; the Sada weather block is the same lockup', () => {
+    const cap = snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe', summary: 'Jaki udari vjetra.' })]);
+    const { side } = paired('zrak-i-nebo', { snapshots: { ...all(), 'dhmz-cap': cap } });
+    expect(side).toContain('<span class="badge k-badge" data-tone="severe">narančasto upozorenje</span> Grmljavina');
+    expect(side).not.toContain('<strong>narančasto upozorenje</strong>');
+    const sada = paired('grad-sada');
+    expect(sada.side).toContain('k-weather-icon');
+    expect(sada.side).not.toContain('k-weather-sun');
+  });
+  it('the strip pill and the coverage sentence exist in both catalogues; the hostname sentence carries a {host} slot', () => {
+    expect(hr.safety.hitno).toBe('Sigurnost');
+    expect(kioskStrings('en').safety.hitno).toBe('Safety');
+    expect(hr.invitation.typeCode).toBe('ili upiši kod na {host}');
+    expect(kioskStrings('en').invitation.typeCode).toBe('or type the code at {host}');
+    expect(plural('hr', hr.paired.coverageLines, 15)).toBe('prikazano {shown} od {total} linija');
+    expect(plural('hr', hr.paired.coverageLines, 3)).toBe('prikazano {shown} od {total} linije');
+    expect(plural('en', kioskStrings('en').paired.coverageLines, 15)).toBe('showing {shown} of {total} lines');
+    expect(JSON.stringify(KIOSK_CATALOGUES.hr)).not.toContain('zagreb.aningfilm.hr');
   });
 });
