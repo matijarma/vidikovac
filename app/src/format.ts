@@ -37,6 +37,14 @@ export function zagrebTime(value: TimeInput): string {
   return `${(p.hour ?? '').padStart(2, '0')}:${(p.minute ?? '').padStart(2, '0')}`;
 }
 
+/** The wall-clock hour in Zagreb, 0 to 23; null when there is nothing to read.
+ *  The time band reads its service day (04:00) and its day or night mode from it. */
+export function zagrebHour(value: TimeInput): number | null {
+  const date = parseIso(value);
+  if (!date) return null;
+  return Number(parts(date).hour);
+}
+
 /** '11. 9. 14:32' — Croatian day-month order, no year (pages state the year once). */
 export function zagrebDateTime(value: TimeInput): string {
   const date = parseIso(value);
@@ -85,6 +93,27 @@ export function zagrebWeekdayDate(value: TimeInput): string {
     if (part.type !== 'literal') p[part.type] = part.value;
   }
   return `${p.weekday} ${Number(p.day)}. ${Number(p.month)}. ${p.year}.`;
+}
+
+const WEEKDAY_SHORT_PARTS = new Intl.DateTimeFormat('hr-HR', {
+  timeZone: ZAGREB_TZ,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'numeric',
+});
+
+/** 'uto 15. 9.': the short weekday and the Croatian day-month, no year. The
+ *  head of a time-band column (sutra, tjedan), where zagrebWeekdayDate's year
+ *  would not fit a 1fr head at 24 px; the band reaches seven days, so the
+ *  year is never in doubt. */
+export function zagrebWeekdayShort(value: TimeInput): string {
+  const date = parseIso(value);
+  if (!date) return '';
+  const p: Record<string, string> = {};
+  for (const part of WEEKDAY_SHORT_PARTS.formatToParts(date)) {
+    if (part.type !== 'literal') p[part.type] = part.value;
+  }
+  return `${p.weekday} ${Number(p.day)}. ${Number(p.month)}.`;
 }
 
 /** 'YYYY-MM-DD' in Zagreb local time (R-O2): a stable per-day grouping key,

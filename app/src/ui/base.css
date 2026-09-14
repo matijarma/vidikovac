@@ -126,13 +126,6 @@ input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; a
 .badge[data-tone='action'] { background: var(--tone-tint-action); color: var(--tone-action-brand); }
 .badge-plain::before { display: none; }
 
-/* Route numbers: the line badge of signage.css under the name the overview
-   still uses. Declaration for declaration `.line[data-kind='tram'][data-size='s']`
-   and, for a bus, `.line[data-kind='bus']`, so T2.2 swaps the markup to the
-   component and nothing moves (test/app/signage-css.test.ts holds them equal). */
-.route-no { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 0.45rem; border-radius: 0.25rem; background: var(--tone-action-brand); color: var(--tone-action-brand-fg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; line-height: 1; block-size: 1.5rem; min-inline-size: 2rem; font-size: var(--type-control); }
-.route-no[data-type='3'] { background: var(--tone-transit); border-radius: var(--r-pill); }
-
 /* Lists of rows: hairline separators, generous targets. */
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows > li { border-block-start: 1px solid var(--tone-stroke); }

@@ -14,6 +14,13 @@ describe('lineBadge', () => {
     expect(lineBadge('ZET', 'other', 'k')).toBe('<span class="line" data-kind="other" data-size="k">ZET</span>');
   });
 
+  // The fifth size: a line *mentioned* in a context line (an event's nearest
+  // stop, the last tram), never the line the tile is about.
+  it('writes the xs size for a line mentioned in a context line', () => {
+    expect(lineBadge('6', 'tram', 'xs')).toBe('<span class="line" data-kind="tram" data-size="xs">6</span>');
+    expect(lineBadge('268', 'bus', 'xs')).toBe('<span class="line" data-kind="bus" data-size="xs">268</span>');
+  });
+
   it('carries further attributes a caller needs, values escaped', () => {
     expect(lineBadge('4', 'tram', 'l', { 'data-testid': 'route-badge', 'aria-hidden': 'true' }))
       .toBe('<span class="line" data-kind="tram" data-size="l" data-testid="route-badge" aria-hidden="true">4</span>');
@@ -87,4 +94,3 @@ describe('a caller class joins the component instead of writing a second attribu
     expect(html).toContain('data-testid="stop-row"');
   });
 });
-

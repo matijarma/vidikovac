@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdown, minutesSince, parseIso, zagrebDateTime, zagrebDayKey, zagrebTime, zagrebWeekdayDate } from '../../app/src/format';
+import { countdown, minutesSince, parseIso, zagrebDateTime, zagrebDayKey, zagrebHour, zagrebTime, zagrebWeekdayDate, zagrebWeekdayShort } from '../../app/src/format';
 
 describe('Europe/Zagreb formatting in the browser', () => {
   it('formats HH:MM on the 24-hour clock, in summer and winter time', () => {
@@ -40,5 +40,36 @@ describe('Europe/Zagreb formatting in the browser', () => {
     expect(zagrebDayKey('2026-09-11T12:32:00Z')).toBe('2026-09-11');
     expect(zagrebDayKey('2026-09-11T22:30:00Z')).toBe('2026-09-12'); // next day in Zagreb (CEST)
     expect(zagrebDayKey(null)).toBe('');
+  });
+});
+
+// The two helpers the time band (plan A.1, A.3) reads its columns from: the
+// Zagreb wall-clock hour decides day or night mode and the service day, and
+// the short weekday date is the head of the sutra and tjedan columns, where
+// the year would not fit a 1fr head at 24 px.
+describe('zagrebHour', () => {
+  it('is the wall-clock hour in Zagreb, 0 to 23, in summer and winter time', () => {
+    expect(zagrebHour('2026-09-11T12:32:00Z')).toBe(14); // CEST
+    expect(zagrebHour('2026-01-15T23:30:00Z')).toBe(0); // CET: 00:30 the next day, never 24
+    expect(zagrebHour(Date.parse('2026-01-15T07:05:00Z'))).toBe(8);
+    expect(zagrebHour('2026-09-11T01:59:00Z')).toBe(3); // the last hour before the 04:00 service day
+  });
+  it('is null when there is nothing to read', () => {
+    expect(zagrebHour(undefined)).toBeNull();
+    expect(zagrebHour('nije datum')).toBeNull();
+    expect(zagrebHour('')).toBeNull();
+  });
+});
+
+describe('zagrebWeekdayShort', () => {
+  it('is the short weekday and the Croatian day-month, no year', () => {
+    expect(zagrebWeekdayShort('2026-09-15T10:00:00Z')).toBe('uto 15. 9.');
+    expect(zagrebWeekdayShort('2026-09-11T12:32:00Z')).toBe('pet 11. 9.');
+    expect(zagrebWeekdayShort(Date.parse('2026-01-15T07:05:00Z'))).toBe('čet 15. 1.');
+    expect(zagrebWeekdayShort('2026-09-11T22:30:00Z')).toBe('sub 12. 9.'); // next day in Zagreb
+  });
+  it('returns an empty string rather than "Invalid Date"', () => {
+    expect(zagrebWeekdayShort(undefined)).toBe('');
+    expect(zagrebWeekdayShort('nije datum')).toBe('');
   });
 });
