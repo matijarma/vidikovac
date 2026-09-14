@@ -198,7 +198,7 @@ const ERRORS: [ScanFail['error'], string][] = [
   ['code-expired', 'Kod je istekao. Zaslon već pokazuje novi.'],
   ['code-used', 'Taj je kod već iskorišten. Pričekaj novi na zaslonu.'],
   ['screen-offline', 'Zaslon je trenutačno bez veze. Pokušaj za minutu.'],
-  ['same-network', 'Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.'],
+  ['same-network', 'Ovaj kod trenutačno nije moguće iskoristiti s ove veze. Skeniraj ponovno.'],
   ['slow-down', 'Previše pokušaja. Pričekaj minutu.'],
   ['rate-limited', 'Previše pokušaja s ove mreže. Pričekaj minutu.'],
   ['revoked', 'Ovaj je zaslon isključen.'],

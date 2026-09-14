@@ -599,7 +599,7 @@
       "code-expired": "The code has expired. The screen already shows a new one.",
       "code-used": "That code has already been used. Wait for the next one on the screen.",
       "screen-offline": "The screen is offline right now. Try again in a minute.",
-      "same-network": "This screen and your phone share a network. Turn off Wi-Fi and scan on mobile data.",
+      "same-network": "This code cannot be used from this connection right now. Scan again.",
       "slow-down": "Too many attempts. Wait a minute.",
       "rate-limited": "Too many attempts from this network. Wait a minute.",
       "revoked": "This screen has been switched off.",

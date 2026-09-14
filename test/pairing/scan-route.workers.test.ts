@@ -147,7 +147,7 @@ describe('POST /api/scan', () => {
 
   it('keeps the same-network sentence exactly as the spec writes it', () => {
     expect(SCAN_MESSAGES['same-network']).toBe(
-      'Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.',
+      'Ovaj kod trenutačno nije moguće iskoristiti s ove veze. Skeniraj ponovno.',
     );
   });
 });

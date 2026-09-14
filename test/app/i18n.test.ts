@@ -66,7 +66,7 @@ describe('catalogs', () => {
     expect(hr.session.unlocked).toBe('Otključano · {label} · do {time}');
     expect(hr.session.expiring60).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
     expect(hr.session.expired).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');
-    expect(hr.scan.errors['same-network']).toBe('Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.');
+    expect(hr.scan.errors['same-network']).toBe('Ovaj kod trenutačno nije moguće iskoristiti s ove veze. Skeniraj ponovno.');
   });
 });
 
