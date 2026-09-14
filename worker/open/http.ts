@@ -36,8 +36,7 @@ export async function openRateLimited(env: Env, bucket: string, request: Request
 }
 
 export function cacheControl(seconds: number): string {
-  // no-transform: the edge serves the page as rendered (no beacon injection into the no-JS pages).
-  return `public, max-age=0, s-maxage=${seconds}, no-transform`;
+  return `public, max-age=0, s-maxage=${seconds}`;
 }
 
 /**

@@ -39,7 +39,7 @@ describe('security headers on Worker responses', () => {
     const response = await open('sec-hitno.test', '/hitno');
     expect(response.status).toBe(200);
     expectHeaders(response, PAGE_SECURITY_HEADERS);
-    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60, no-transform');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60');
   });
 
   it('/open/*.json carries the data set and keeps CORS', async () => {

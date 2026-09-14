@@ -69,12 +69,19 @@ describe('Area D through the Worker', () => {
     expect(body['dcat:dataset'].map((d) => d['dct:identifier'])).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo']);
   });
 
+  it('GET /hitno through the whole Worker carries no-transform, so the edge serves the page as rendered', async () => {
+    const response = await SELF.fetch('https://zagreb.aningfilm.hr/hitno');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60, no-transform');
+  });
+
   it('GET /open/ and GET /open serve the HTML index with the page set', async () => {
     for (const path of ['/open/', '/open']) {
       const response = await SELF.fetch(`https://zagreb.aningfilm.hr${path}`);
       expect(response.status, path).toBe(200);
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
-      expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=3600');
+      expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=3600, no-transform');
       for (const [k, v] of Object.entries(PAGE_SECURITY_HEADERS)) expect(response.headers.get(k)).toBe(v);
       const html = await response.text();
       expect(html).toContain('Ponuda Gradu Zagrebu');

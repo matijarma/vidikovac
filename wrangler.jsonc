@@ -16,8 +16,10 @@
     // Only these paths reach the Worker; every other GET is served straight from
     // the static-asset store (free and off the request meter). /hitno is
     // server-rendered (open safety tier), /open/* is derived data, /stats is the
-    // Access-gated operator page.
-    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*"],
+    // Access-gated operator page. The HTML pages pass through the Worker too, only
+    // so their response can carry Cache-Control: no-transform (the edge would
+    // otherwise inject the zone's Web Analytics beacon, which the CSP blocks).
+    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*", "/", "/d", "/d/", "/s", "/s/", "/kiosk", "/kiosk/", "/izvori", "/izvori/", "/privatnost", "/privatnost/", "/pristupacnost", "/pristupacnost/"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },

@@ -44,7 +44,7 @@ export default {
     }
     for (const handler of ROUTES) {
       const response = await handler(request, env, ctx, url);
-      if (response) return response;
+      if (response) return withoutEdgeTransforms(response);
     }
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) {
       return json({ error: 'not-found' }, 404);
