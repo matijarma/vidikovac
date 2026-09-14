@@ -223,7 +223,7 @@ describe('renderHitnoPage', () => {
     expect(out).toContain('Zastarjelo od <time datetime="2026-09-11T07:30:00.000Z">09:30</time>');
     expect(out).toContain('posljednji uspješan dohvat <time datetime="2026-09-11T07:58:00.000Z">09:58</time>');
     expect(out).toContain('Stanje prometnica nije potvrđeno.');
-    expect(out).not.toContain('Nema aktivnih zatvaranja.');
+    expect(out).not.toContain('Nema zatvorenih prometnica.');
   });
 
   it('keeps the status sentence in one span beside the shape, so a flex gap never splits it', () => {

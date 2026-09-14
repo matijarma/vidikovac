@@ -193,7 +193,7 @@ function closuresSection(panel: HitnoPanel, now: Date): string {
   let list: string;
   if (panel.items.length === 0) {
     list = `<p class="empty">${panel.state === 'empty'
-      ? 'Nema aktivnih zatvaranja.'
+      ? 'Nema zatvorenih prometnica.'
       : 'Stanje prometnica nije potvrđeno. Provjeri službeni izvor.'}</p>`;
   } else {
     const rows = panel.items.map((c) =>

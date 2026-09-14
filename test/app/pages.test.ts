@@ -207,8 +207,11 @@ describe('static pages', () => {
     expect(html).not.toContain('tile.openstreetmap.org');
     expect(html).toContain('učitavaju se s iste domene');
     expect(html).toContain('Zaslon i telefon smiju biti na istom Wi-Fiju.');
-    expect(html).toContain('Cloudflare Access');
-    expect(html).toContain('vlastiti autentikacijski kolačić');
+    // Public since 14 September 2026: no Access login, the screen quota keyed by network.
+    expect(html).not.toContain('Cloudflare Access');
+    expect(html).toContain('Stvaranje zaslona je javno, bez prijave.');
+    expect(html).toContain('sažetak mrežne adrese');
+    expect(html).toContain('nema prijave ni autentikacijskog kolačića');
     expect(html).toContain('Repozitorij prototipa trenutačno je privatan');
     // Every browser-stored value, named (the data token is new in this wave).
     expect(html).toContain('token za nastavak sesije i token kojim ta sesija dohvaća podatke');
