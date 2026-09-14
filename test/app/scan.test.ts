@@ -498,7 +498,7 @@ describe('one recovery per error', () => {
     await flush();
     const link = errorBox.querySelector<HTMLAnchorElement>('a[data-testid=scan-safety]')!;
     expect(link).not.toBeNull();
-    expect(text(link)).toBe('Sigurnost bez skeniranja');
+    expect(text(link)).toBe('Sigurnost, bez skeniranja');
     expect(link.getAttribute('href')).toBe('/hitno');
     expect(link.classList.contains('btn-ghost')).toBe(true);
     expect(errorBox.querySelector('button')).toBeNull();

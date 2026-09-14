@@ -173,9 +173,9 @@ export function buildCatalog(origin: string, issued: Date): CatalogDocument {
     },
     '@type': 'dcat:Catalog',
     '@id': `${origin}/open/catalog.json`,
-    'dct:title': 'Vidikovac – izvedeni otvoreni podaci o Zagrebu',
+    'dct:title': 'Kaj ima?: izvedeni otvoreni podaci o Zagrebu',
     'dct:description':
-      'Normalizirani, strojno čitljivi prikazi otvorenih izvora koje nadzorna ploča Vidikovac koristi u stvarnom vremenu. ' +
+      'Normalizirani, strojno čitljivi prikazi otvorenih izvora koje Kaj ima? koristi u stvarnom vremenu. ' +
       'Svaki skup nosi izvornu atribuciju i oznaku prilagodbe. Objavljeno pod Otvorenom dozvolom. ' +
       'Grad Zagreb može svaki skup preuzeti i ponovno objaviti na data.zagreb.hr bez daljnjeg odobrenja; ovaj katalog je dovoljna poveznica.',
     'dct:publisher': { '@type': 'foaf:Agent', 'foaf:name': PUBLISHER.name, 'foaf:homepage': origin },

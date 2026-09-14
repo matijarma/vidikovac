@@ -15,9 +15,46 @@ function leafKeys(node: unknown, prefix = ''): string[] {
 const PLURAL = ['_zero', '_one', '_two', '_few', '_many', '_other'];
 const base = (k: string): string => { const s = PLURAL.find((p) => k.endsWith(p)); return s ? k.slice(0, -s.length) : k; };
 
+// Keys every wave found dead and parked for the consolidation (T6.3), plus the
+// old flat kiosk keys the typed adapter replaced. None may come back.
+const DEAD_KEYS = [
+  'kiosk.legendPanorama', 'kiosk.legendPanoramaLoading', 'kiosk.legendQr', 'kiosk.legendMeander', 'kiosk.safetyLabel',
+  'kiosk.catalogueWeather', 'kiosk.catalogueVehicles', 'kiosk.catalogueClosures', 'kiosk.typeCode', 'kiosk.invitationEn',
+  'kiosk.teaserSoon', 'kiosk.teaserCity', 'kiosk.essentialsTitle', 'kiosk.unitVehicles_one', 'kiosk.unitClosed_one',
+  'session.legendMeander', 'session.panoramaAlt', 'session.panoramaAltLoading', 'session.remainingFine',
+  'session.labelPhone', 'session.remaining', 'session.noRoom', 'session.tabsLabel', 'session.openTier',
+  'scan.steps.find', 'scan.steps.scan', 'scan.steps.use', 'scan.safetyNote', 'scan.scanDialogTitle',
+  'shell.frozenCta', 'shell.sessionTitle', 'shell.staleNotice',
+  'panels.culture', 'panels.cultureStage1', 'panels.cultureEuropeana', 'panels.cultureNsk', 'panels.capNone', 'panels.quakes', 'panels.quakeNone',
+  'common.links.kiosk', 'common.links.open', 'events.venueUnknown', 'safety.showAll',
+  'civic.coverage', 'civic.coverageLimited', 'civic.worksEmpty', 'civic.worksCount_one', 'civic.worksCount_few', 'civic.worksCount_other',
+  'overview.weatherKicker', 'overview.closuresNone', 'overview.closuresNow_one', 'overview.quakeRecent', 'overview.warningsUnknown',
+  'transit.tram', 'transit.bus', 'transit.closuresTitle', 'directory.title', 'export.ics', 'export.geojson', 'time.labelEvent',
+  'common.tagline', 'common.showAll', 'common.openLayer', 'common.seconds_one', 'attribution.updated', 'attribution.adapted',
+];
+function has(catalog: unknown, key: string): boolean {
+  return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';
+}
+
 describe('catalogs', () => {
   it('hr and en have identical key sets (plural forms compared on base names)', () => {
     expect([...new Set(leafKeys(hr).map(base))].sort()).toEqual([...new Set(leafKeys(en).map(base))].sort());
+  });
+  it('is the one catalogue: the transport workspace, the kiosk and the shared sentences live here', () => {
+    expect(hr.transport.trams).toBe('Tramvaji');
+    expect(en.transport.trams).toBe('Trams');
+    expect(hr.transport.vehiclesNow_few).toBe('{count} vozila u pokretu');
+    expect(hr.kiosk.invite.lead).toBe('Skeniraj za 10 minuta grada.');
+    expect(hr.kiosk.setup.handheld).toBe('Otvori ovu adresu na zaslonu širem od 900 px.');
+    expect(hr.kiosk.lines.nearby_few).toBe('{count} vozila u blizini');
+    expect(hr.shared.closuresNone).toBe('Nema zatvorenih prometnica.');
+    expect(en.shared.closuresNone).toBe('No road closures.');
+  });
+  it('carries none of the keys the waves found dead', () => {
+    for (const key of DEAD_KEYS) {
+      expect(has(hr, key), `${key} (hr)`).toBe(false);
+      expect(has(en, key), `${key} (en)`).toBe(false);
+    }
   });
   it('no leaf is empty and hr never addresses the reader as Vi', () => {
     for (const k of leafKeys(hr)) expect(k.length).toBeGreaterThan(0);

@@ -47,5 +47,7 @@
   .provenance summary { display: none; }
   .source, .source-line, .meta, .row-meta, .sec-note, .izvor-meta { color: #000; }
   a[href^='http']::after, .source-link::after { content: ' (' attr(href) ')'; font-size: 0.8em; }
+  /* On /izvori a licence line and an excluded-source line already print the URL as the link's text. */
+  .izvor-meta a::after, .izvor-iskljuceno a::after { content: none; }
   .map-canvas, .g-ring, .schematic { display: none; }
 }

@@ -22,7 +22,7 @@ import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from 
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
-import { fill, KIOSK_CATALOGUES, kioskStrings, plural } from '../../app/src/kiosk/strings';
+import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
@@ -72,17 +72,32 @@ describe('kiosk copy', () => {
     return Object.entries(node as Record<string, unknown>).flatMap(([key, value]) => paths(value, prefix ? `${prefix}.${key}` : key)).sort();
   }
   it('hr and en carry exactly the same keys, and plurals go through Intl', () => {
-    expect(paths(KIOSK_CATALOGUES.en)).toEqual(paths(KIOSK_CATALOGUES.hr));
+    expect(paths(kioskStrings('en'))).toEqual(paths(hr));
     expect(plural('hr', hr.lines.nearby, 1)).toBe('1 vozilo u blizini');
     expect(plural('hr', hr.lines.nearby, 3)).toBe('3 vozila u blizini');
     expect(plural('hr', hr.lines.more, 5)).toBe('još 5 linija');
     expect(plural('en', kioskStrings('en').lines.nearby, 1)).toBe('1 vehicle nearby');
+    expect(kioskStrings('en').lines.nearby.few).toBeUndefined();
     expect(fill('{a} · {b}', { a: 'x', b: 2 })).toBe('x · 2');
-    expect(kioskStrings('en-GB').languageName).toBe('English');
-    expect(kioskStrings('de').languageName).toBe('Hrvatski');
+    expect(kioskStrings('en-GB').surface).toBe('public screen');
+    expect(kioskStrings('de').surface).toBe('javni zaslon');
+    expect(kioskStrings('hr')).toBe(hr);
   });
-  it('speaks to one person and never promises "Uskoro"', () => {
-    expect(JSON.stringify(KIOSK_CATALOGUES.hr)).not.toMatch(/\bVi\b|\bVaš|Skenirajte|Uskoro/);
+  it('is a thin adapter over the one catalogue: shared concepts come from shared.*, layers.* and motion.compass.*', () => {
+    expect(hr.appName).toBe(i18n.t('common.appName'));
+    expect(hr.paired.closuresNone).toBe(i18n.t('shared.closuresNone'));
+    expect(hr.paired.warningsNone).toBe(i18n.t('shared.warningsNone'));
+    expect(hr.safety.warningsNone).toBe('Nema upozorenja DHMZ-a za Zagreb');
+    expect(hr.header.unlockedUntil).toBe(i18n.t('shared.unlockedUntil'));
+    expect(hr.safety.hitno).toBe(i18n.t('shared.safetyPage'));
+    expect(hr.safety.label).toBe(i18n.t('shared.safetyPage'));
+    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja', vijesti: 'Vijesti' });
+    expect(hr.weather.compass.NW).toBe(i18n.t('motion.compass.NW'));
+    expect(kioskStrings('en').status.offline).toBe('Screen offline; no code can be issued');
+    expect(hr.setup.errorAccess).toBe('Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.');
+  });
+  it('speaks to one person, never promises "Uskoro", and never a login', () => {
+    expect(JSON.stringify(hr)).not.toMatch(/\bVi\b|\bVaš|Skenirajte|Uskoro|Cloudflare Access|Prijavi se|ocjenjivaču/);
   });
 });
 
@@ -213,7 +228,7 @@ describe('local content from the stop-scoped teaser', () => {
     expect(wind({ temp: 11, windSpeed: 2.3 })).toEqual(['vjetar 2,3 m/s']);
     expect(wind({ temp: 11, windSpeed: 1.2, windDir: '-' })).toEqual(['vjetar 1,2 m/s']);
     expect(wind({ temp: 11, windSpeed: 4, windDir: 'NNE' })).toEqual(['vjetar sjeveroistok 4 m/s']);
-    expect(compassLabel('ese', kioskStrings('en'))).toBe('southeast');
+    expect(compassLabel('ese', kioskStrings('en'))).toBe('south-east');
     expect(compassLabel('XYZ', hr)).toBe('');
     const board = linesAtStop(MODULES, STOP, i18n, 6);
     expect(board.state).toBe('live');
@@ -598,6 +613,6 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(plural('hr', hr.paired.coverageLines, 15)).toBe('prikazano {shown} od {total} linija');
     expect(plural('hr', hr.paired.coverageLines, 3)).toBe('prikazano {shown} od {total} linije');
     expect(plural('en', kioskStrings('en').paired.coverageLines, 15)).toBe('showing {shown} of {total} lines');
-    expect(JSON.stringify(KIOSK_CATALOGUES.hr)).not.toContain('zagreb.aningfilm.hr');
+    expect(JSON.stringify(hr)).not.toContain('zagreb.aningfilm.hr');
   });
 });

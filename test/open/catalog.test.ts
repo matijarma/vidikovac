@@ -63,4 +63,14 @@ describe('open data catalog', () => {
     expect(catalog['dct:description']).toContain('data.zagreb.hr');
     expect(catalog['dct:description']).toContain('Grad Zagreb');
   });
+
+  it('names Kaj ima? in the catalogue title and description, with no dash and no Vidikovac (T6.3)', () => {
+    const catalog = buildCatalog(ORIGIN, ISSUED);
+    expect(catalog['dct:title']).toBe('Kaj ima?: izvedeni otvoreni podaci o Zagrebu');
+    expect(catalog['dct:description']).toContain('Kaj ima?');
+    for (const text of [catalog['dct:title'], catalog['dct:description']]) {
+      expect(text).not.toContain('Vidikovac');
+      expect(text).not.toMatch(/[—–]| -- /);
+    }
+  });
 });
