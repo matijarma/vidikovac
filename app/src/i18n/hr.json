@@ -14,7 +14,7 @@
     "dismiss": "Ukloni obavijest",
     "openSource": "Otvori izvornik",
     "language": "Jezik",
-    "theme": { "label": "Tema", "auto": "Automatski", "light": "Svijetla", "dark": "Tamna", "solar": "Po suncu" },
+    "theme": { "label": "Tema", "auto": "Automatski", "light": "Svijetlo", "dark": "Tamno", "solar": "Po Suncu" },
     "minutes_one": "{count} minuta",
     "minutes_few": "{count} minute",
     "minutes_other": "{count} minuta",

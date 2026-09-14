@@ -10,6 +10,7 @@ import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
 import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { stubSessionStorage } from './helpers';
 
 stubSessionStorage();
@@ -252,7 +253,7 @@ describe('session states', () => {
     click(peer.root, '[data-testid=session-label]');
     expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
   });
-  it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, sentence-case theme words and the four pages', () => {
+  it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, the theme words read from the catalogue in preference order, and the four pages', () => {
     const stop = { id: 's1', name: 'Trg bana J. Jelačića', lon: 15.98, lat: 45.81, routes: ['6', '11'] };
     const theme = { getPreference: () => 'auto' as const, getResolvedTheme: () => 'light' as const, setPreference: vi.fn(), onChange: () => () => {}, destroy: vi.fn() };
     const { root, session } = mount({ deps: { theme } });
@@ -276,7 +277,8 @@ describe('session states', () => {
     expect(text(sheet.querySelector('[data-testid=toggle-refresh]'))).toBe('Zaustavi osvježavanje');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Sakrij odbrojavanje');
     expect(text(sheet.querySelector('[data-testid=refresh-now]'))).toBe('Osvježi sada');
-    expect([...sheet.querySelectorAll('[data-sheet-action=theme]')].map((b) => text(b))).toEqual(['Automatski', 'Svijetla', 'Tamna', 'Po suncu']);
+    // The words themselves belong to `common.theme.*` (T6.3's catalogue), so the sheet is held to reading them, not to their spelling.
+    expect([...sheet.querySelectorAll('[data-sheet-action=theme]')].map((b) => text(b))).toEqual(THEME_PREFERENCES.map((pref) => hr.common.theme[pref]));
     expect([...sheet.querySelectorAll('.sheet-links a')].map((a) => a.getAttribute('href'))).toEqual(['/hitno', '/izvori/', '/privatnost/', '/pristupacnost/']);
     expect(text(sheet.querySelector('.sheet-links'))).not.toContain('Upiši kod');
   });
