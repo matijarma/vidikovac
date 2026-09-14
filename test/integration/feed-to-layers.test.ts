@@ -149,8 +149,22 @@ describe('the kiosk teaser renders the real feed output', () => {
   // Exactly what /api/teaser answers: the open modules plus the three session
   // teasers, each through teaserSubset (worker/routes/feed.ts).
   const teaser = [...OPEN_MODULES, ...TEASER_MODULES].map((id) => teaserSubset(snapshots[id]!));
+  // The two sentences kiosk/teaser.ts puts in a body when a source gives it
+  // nothing: the loading word for a module the payload lacks, the empty
+  // sentence for a city feed with no licensed row. Pinned as literals, because
+  // i18n.t answers a missing leaf with the bare key, and "not.toBe('kiosk.…')"
+  // holds whatever the card says (the kiosk.teaser* keys went with T6.3). The
+  // first test checks the literals against the catalogue, so a reworded
+  // sentence fails here and updates the pins instead of hollowing them.
+  const LOADING = 'učitavanje podataka';
+  const CITY_EMPTY = 'Trenutačno nema novih obavijesti.';
 
-  it('puts real values on every card and no "coming soon" sign', () => {
+  it('pins the two placeholder sentences a card can fall back to', () => {
+    expect(i18n.t('status.loading')).toBe(LOADING);
+    expect(i18n.t('kiosk.story.empty')).toBe(CITY_EMPTY);
+  });
+
+  it('puts real values on every card and leaves none on the loading word', () => {
     const cards = teaserCards(teaser, i18n, NOW);
     const card = (id: string) => cards.find((c) => c.id === id)!;
     expect(card('weather').body).toMatch(/-?\d+([.,]\d+)? °C/);
@@ -160,7 +174,7 @@ describe('the kiosk teaser renders the real feed output', () => {
     for (const c of cards) {
       expect(c.body, c.id).not.toContain(UNAVAILABLE);
       expect(c.body, c.id).not.toContain(DASH);
-      expect(c.body, c.id).not.toBe(i18n.t('kiosk.teaserSoon'));
+      expect(c.body, c.id).not.toBe(LOADING);
     }
   });
 
@@ -178,8 +192,8 @@ describe('the kiosk teaser renders the real feed output', () => {
     const card = teaserCards(teaser, i18n, NOW).find((c) => c.id === 'city')!;
     expect(card).toBeDefined();
     expect(card.body).not.toBe('');
-    expect(card.body).not.toBe(i18n.t('status.loading'));
-    expect(card.body).not.toBe(i18n.t('kiosk.teaserCityEmpty'));
+    expect(card.body).not.toBe(LOADING);
+    expect(card.body).not.toBe(CITY_EMPTY);
     expect(card.body).not.toContain(UNAVAILABLE);
     expect(card.attribution?.licence).toBe(OPEN_LICENCE);
     expect(card.attribution?.text).toContain('Otvorena dozvola');

@@ -18,11 +18,17 @@ const snapshot: ModuleSnapshot = {
 // shows its source alone, on every surface, never a placeholder sentence
 // ("Lokacija nije navedena" / "Location not provided" never prints, and no
 // "Mjesto"/"Venue" fact appears in the detail when there is nothing to show).
+// The placeholder is pinned as a literal per locale: its key
+// (events.venueUnknown) left the catalogue with T6.3, and i18n.t answers a
+// missing leaf with the bare key, which no rendered text contains, so a pin
+// through i18n.t would hold whatever the surfaces print.
 describe('events without a venue show the source alone, never an unknown-location placeholder', () => {
-  it.each(['hr', 'en'])('names no missing location in %s overview, agenda or detail; the source stands alone', (locale) => {
+  it.each([
+    ['hr', 'Lokacija nije navedena'],
+    ['en', 'Location not provided'],
+  ] as const)('names no missing location in %s overview, agenda or detail; the source stands alone', (locale, missing) => {
     const i18n = createDefaultI18n(locale);
     const ctx = { i18n, now, snapshots: { dogadanja: snapshot } };
-    const missing = i18n.t('events.venueUnknown');
     const venueLabel = i18n.t('events.venue');
     const source = i18n.t('events.sources.kulturpunkt');
     const overview = renderGradSada(ctx).querySelector('#ov-agenda')!.textContent!;
