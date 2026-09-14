@@ -4,13 +4,13 @@
 // behind. /hitno and /open/ paint the app palette without loading a stylesheet.
 
 /** The palette, radii, targets and the system stack as custom properties, for a page that brings its own layout (the 429 page). */
-export const PAGE_PALETTE = `:root{color-scheme:light dark;--canvas:#f6f8f7;--canvas-deep:#edf1f0;--surface-1:#fbfcfc;--surface-2:#e9efed;--ink:#182423;--muted:#526461;--accent:#08777b;--accent-deep:#065e61;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(24, 36, 35, 0.14);--stroke-strong:rgba(24, 36, 35, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-@media (prefers-color-scheme:dark){:root{--canvas:#17201f;--canvas-deep:#111918;--surface-1:#1e2a28;--surface-2:#263431;--ink:#eff6f3;--muted:#aebdb8;--accent:#63d7c3;--accent-deep:#8ae6d6;--warning:#f0bf6b;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(239, 246, 243, 0.14);--stroke-strong:rgba(239, 246, 243, 0.34)}}
+export const PAGE_PALETTE = `:root{color-scheme:light dark;--canvas:#f4f2ec;--canvas-deep:#ece9df;--surface-1:#fbfaf6;--surface-2:#ebe8df;--ink:#0c1250;--muted:#4a5178;--accent:#1428d8;--accent-deep:#0e1ca6;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(12, 18, 80, 0.14);--stroke-strong:rgba(12, 18, 80, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--canvas:#0b1150;--canvas-deep:#080c40;--surface-1:#121a63;--surface-2:#1a2373;--ink:#f4f2ec;--muted:#b6bbe0;--accent:#f4f2ec;--accent-deep:#ffffff;--warning:#f2c46f;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(244, 242, 236, 0.14);--stroke-strong:rgba(244, 242, 236, 0.34)}}
 `;
 
 /** The one inline stylesheet of /hitno. */
-export const HITNO_STYLE = `:root{color-scheme:light dark;--canvas:#f6f8f7;--canvas-deep:#edf1f0;--surface-1:#fbfcfc;--surface-2:#e9efed;--ink:#182423;--muted:#526461;--accent:#08777b;--accent-deep:#065e61;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(24, 36, 35, 0.14);--stroke-strong:rgba(24, 36, 35, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-@media (prefers-color-scheme:dark){:root{--canvas:#17201f;--canvas-deep:#111918;--surface-1:#1e2a28;--surface-2:#263431;--ink:#eff6f3;--muted:#aebdb8;--accent:#63d7c3;--accent-deep:#8ae6d6;--warning:#f0bf6b;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(239, 246, 243, 0.14);--stroke-strong:rgba(239, 246, 243, 0.34)}}
+export const HITNO_STYLE = `:root{color-scheme:light dark;--canvas:#f4f2ec;--canvas-deep:#ece9df;--surface-1:#fbfaf6;--surface-2:#ebe8df;--ink:#0c1250;--muted:#4a5178;--accent:#1428d8;--accent-deep:#0e1ca6;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(12, 18, 80, 0.14);--stroke-strong:rgba(12, 18, 80, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--canvas:#0b1150;--canvas-deep:#080c40;--surface-1:#121a63;--surface-2:#1a2373;--ink:#f4f2ec;--muted:#b6bbe0;--accent:#f4f2ec;--accent-deep:#ffffff;--warning:#f2c46f;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(244, 242, 236, 0.14);--stroke-strong:rgba(244, 242, 236, 0.34)}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--canvas);color:var(--ink);font:1rem/1.4 var(--font);-webkit-text-size-adjust:100%}
 a{color:var(--accent);text-underline-offset:.15em}
@@ -91,8 +91,8 @@ details[open]>summary::before{transform:translateY(.15rem) rotate(225deg)}
 `;
 
 /** The one inline stylesheet of /open/. */
-export const OPEN_STYLE = `:root{color-scheme:light dark;--canvas:#f6f8f7;--canvas-deep:#edf1f0;--surface-1:#fbfcfc;--surface-2:#e9efed;--ink:#182423;--muted:#526461;--accent:#08777b;--accent-deep:#065e61;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(24, 36, 35, 0.14);--stroke-strong:rgba(24, 36, 35, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-@media (prefers-color-scheme:dark){:root{--canvas:#17201f;--canvas-deep:#111918;--surface-1:#1e2a28;--surface-2:#263431;--ink:#eff6f3;--muted:#aebdb8;--accent:#63d7c3;--accent-deep:#8ae6d6;--warning:#f0bf6b;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(239, 246, 243, 0.14);--stroke-strong:rgba(239, 246, 243, 0.34)}}
+export const OPEN_STYLE = `:root{color-scheme:light dark;--canvas:#f4f2ec;--canvas-deep:#ece9df;--surface-1:#fbfaf6;--surface-2:#ebe8df;--ink:#0c1250;--muted:#4a5178;--accent:#1428d8;--accent-deep:#0e1ca6;--warning:#8a5800;--danger:#b3271e;--success:#1e6f47;--stroke:rgba(12, 18, 80, 0.14);--stroke-strong:rgba(12, 18, 80, 0.34);--r-lg:1rem;--r-md:.75rem;--target:2.75rem;--target-primary:3rem;--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--canvas:#0b1150;--canvas-deep:#080c40;--surface-1:#121a63;--surface-2:#1a2373;--ink:#f4f2ec;--muted:#b6bbe0;--accent:#f4f2ec;--accent-deep:#ffffff;--warning:#f2c46f;--danger:#ff9d9d;--success:#7fd6a8;--stroke:rgba(244, 242, 236, 0.14);--stroke-strong:rgba(244, 242, 236, 0.34)}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--canvas);color:var(--ink);font:1rem/1.4 var(--font);-webkit-text-size-adjust:100%}
 a{color:var(--accent);text-underline-offset:.15em}
