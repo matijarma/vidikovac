@@ -74,3 +74,16 @@ describe('Grad: the phase bars are a desk figure', () => {
   });
 });
 
+describe('sections are content, not cards (plan "Surfaces", R-D3)', () => {
+  it('.sec and .detail carry no border, background or shadow; the hairline rhythm belongs to each domain rule', () => {
+    const sec = /\n\.sec \{([^}]*)\}/.exec(LAYERS)?.[1] ?? '';
+    const detail = /\n\.detail \{ display: grid;([^}]*)\}/.exec(LAYERS)?.[1] ?? '';
+    for (const rule of [sec, detail]) {
+      expect(rule).not.toContain('border: 1px');
+      expect(rule).not.toContain('background:');
+      expect(rule).not.toContain('box-shadow: var(');
+    }
+    expect(sec).toContain('display: grid');
+  });
+});
+

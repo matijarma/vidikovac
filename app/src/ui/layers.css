@@ -47,7 +47,10 @@
 .ws .badge[data-tone='action'] { color: var(--tone-text-brand-on-tint); }
 
 /* Sections: opaque surfaces with one hairline and a tone on the head. */
-.sec { display: grid; align-content: start; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); min-inline-size: 0; }
+/* A section is content on the canvas, separated from its neighbours by a hairline and air (plan, "Surfaces"):
+   no border, background or shadow. Cards are for things that float or are objects (the transport sheet,
+   the number tiles, the QR plate, the confirm card). Each domain's own rhythm rule sets its hairline and spacing. */
+.sec { display: grid; align-content: start; gap: var(--sp-3); padding: 0; min-inline-size: 0; }
 .detail { align-content: start; }
 .sec-head { display: grid; gap: var(--sp-1); }
 .sec-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3); }
@@ -85,7 +88,7 @@
 .ws-split[data-detail-open='true'] .ws-detail { display: grid; gap: var(--sp-3); align-content: start; }
 .ws-back { justify-self: start; padding-inline-start: var(--sp-2); }
 .ws-detail-hint { margin: 0; color: var(--tone-text-subtle); font-size: var(--type-secondary); line-height: var(--lh-body); }
-.detail { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
+.detail { display: grid; gap: var(--sp-3); padding: 0; }
 .detail-title { font-size: var(--text-xl); letter-spacing: -0.015em; }
 .detail-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
 .detail-facts { display: grid; gap: var(--sp-2); margin: 0; }
