@@ -222,7 +222,7 @@ describe('static pages', () => {
   it('/pristupacnost carries the deviation clause verbatim from the spec', () => {
     const html = read('app/pristupacnost/index.html');
     expect(html).toContain(DEVIATION);
-    expect(html).toContain('sigurnosni sloj /hitno radi bez skeniranja i bez ograničenja trajanja');
+    expect(html).toContain('Sigurnosni sloj /hitno radi javno, bez skeniranja i bez ograničenja trajanja');
     expect(html).toContain('Posljednji otvoreni sloj čuva se lokalno u kartici i vraća pri sljedećem skeniranju.');
     expect(html).not.toContain('kvaliteta zraka');
     expect(html).not.toContain('izvorni kod objavljen');

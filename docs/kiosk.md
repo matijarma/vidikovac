@@ -3,18 +3,19 @@
 Važeće upute za prototip od 13. rujna 2026. Zamjenjuju starije upute s
 panoramom, meandrom, rasterskom kartom i zabranom iste mreže.
 Tehničko ime `vidikovac`, domena i ključevi pohrane ostaju nepromijenjeni.
-Evaluacijski pristup za prijavu Gradu ostaje iza Cloudflare Accessa.
+Adresa je javna od 14. rujna 2026.; Cloudflare Access štiti samo operaterske
+rute `/api/admin/*` i `/stats`.
 
-## Stvarni zaslon za evaluaciju
+## Postavljanje stvarnog zaslona
 
-1. Na računalu ili zaslonu otvoriti evaluacijsku adresu i dovršiti Access
-   prijavu. Na početnoj stranici odabrati „Otvori gradski zaslon”.
+1. Na računalu ili zaslonu otvoriti https://zagreb.aningfilm.hr i na početnoj
+   stranici odabrati „Otvori gradski zaslon” (stranica `/kiosk/`).
 2. Odabrati gradsku četvrt, zatim stvarno ZET-ovo stajalište. Zadana postava
    je Donji grad i Trg bana J. Jelačića (`106_1`).
 3. Potvrditi stvaranje. `POST /api/screens` vraća redovnu postavu zaslona
    koja vrijedi 24 sata. Postava sama ne daje otključanu sesiju.
-4. Na telefonu unaprijed proći Access prijavu, zatim skenirati aktualni QR
-   ili utipkati kod na `/s/`. Potvrditi „Otključaj”.
+4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Potvrditi
+   „Otključaj”.
 5. Telefon dobiva deset minuta i vodi povezani zaslon. Za provjeru radne
    površine istu stvar napraviti u drugoj kartici preglednika.
 
@@ -22,8 +23,8 @@ Isti Wi-Fi je dopušten. Ne treba isključivati Wi-Fi ili trošiti mobilne podat
 Kod je jednokratan, prikazuje se kao dvije skupine po četiri znaka i mijenja
 svakih 30 sekundi. Istekli ili iskorišteni kod zamijeniti aktualnim sa zaslona.
 
-Stvaranje je ograničeno na pet postava po evaluacijskom identitetu u kliznom
-satu i trideset ukupno. Osvježavanje već postavljenog zaslona koristi postojeće
+Stvaranje je ograničeno na pet postava u kliznom satu po mreži s koje zahtjev
+dolazi (ključ je HMAC prefiksa adrese, adresa se ne pohranjuje) i trideset ukupno. Osvježavanje već postavljenog zaslona koristi postojeće
 vjerodajnice; ne stvara novu postavu. Nakon isteka ili opoziva nova se postava
 pokreće izričitom radnjom, ne automatskom petljom.
 
@@ -56,8 +57,7 @@ podaci nisu potvrda da je sve u redu. „Natrag”, Escape ili 90 sekundi bez
 aktivnosti vraćaju poziv za skeniranje. Taj se vremenski povratak primjenjuje
 samo izvan aktivne povezane sesije.
 
-Sigurnosni `/hitno` također radi bez kratke sesije i bez JavaScripta, unutar
-evaluacijskog Accessa.
+Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 
 ### Granice podataka
 
@@ -105,15 +105,15 @@ arhiv; podrijetlo i licence su u `app/public/maps/README.md`.
 
 Vjerodajnice postavljenog zaslona čuvaju se u njegovu pregledniku. One nisu kod
 za goste i ne šalju se e-poštom, ne stavljaju u snimke zaslona ni repozitorij.
-Brisanje podataka preglednika uklanja lokalnu postavu. Za evaluaciju koristiti
-običan profil: privatni prozor pri zatvaranju briše i postavu i Access prijavu.
+Brisanje podataka preglednika uklanja lokalnu postavu. Za trajni zaslon koristiti
+običan profil: privatni prozor pri zatvaranju briše postavu.
 
 Administrativni API `/api/admin/beacons` služi postavama i opozivu uz
 provjerenu Access autorizaciju. Samoposluga `/api/screens` koristi isti
 BeaconDO/RoomDO protokol. Nema zasebne demonstracijske sesije.
 
 Za prikaz preko cijelog zaslona upotrijebiti mogućnost preglednika. U postavkama
-uređaja osigurati da se zaslon ne gasi tijekom evaluacije. Automatsko pokretanje
+uređaja osigurati da se zaslon ne gasi tijekom rada. Automatsko pokretanje
 na ciljnom Raspberry Pi ili doniranom uređaju provjerava se u pilotu; ova
 verzija ne tvrdi da su fizičke postave već testirane.
 
@@ -121,7 +121,7 @@ verzija ne tvrdi da su fizičke postave već testirane.
 
 Lokalni Worker mora imati `APP_ENV=test` i izričite tajne iz `.dev.vars`.
 `E2E_ADMIN_BYPASS` vrijedi samo u tom okruženju, ne ovisi o umirovljenoj
-postavci `NETWORK_CHECK`. Ne postavljati razvojni način na evaluacijskom Workeru.
+postavci `NETWORK_CHECK`. Ne postavljati razvojni način na produkcijskom Workeru.
 
 ```sh
 npm run typecheck
@@ -131,8 +131,8 @@ node scripts/review-experience.mjs
 ```
 
 Playwright ima zaseban lokalni poslužitelj za 12-sekundni test isteka.
-Za provjeru zaštićene evaluacijske adrese potrebni su Access pristup i
-izričito postavljen testni zaslon, bez slanja vjerodajnica u izvještaje.
+Za provjeru javne adrese dovoljan je postojeći testni zaslon (`E2E_KIOSK_URL`),
+bez slanja vjerodajnica u izvještaje.
 
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja
@@ -143,7 +143,7 @@ bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
 | Simptom | Provjera i postupak |
 |---|---|
 | Pojavljuje se postavljanje | Nema valjane lokalne postave; odabrati četvrt i stajalište. |
-| Stvaranje je odbijeno | Provjeriti Access prijavu. Kod 429 znači dosegnuto ograničenje; slijediti navedeno vrijeme ponovnog pokušaja. |
+| Stvaranje je odbijeno | Kod 429 znači dosegnuto ograničenje po mreži ili ukupno; slijediti navedeno vrijeme ponovnog pokušaja. Kod 403 znači zahtjev s druge domene. |
 | Postava je istekla ili opozvana | Pokrenuti novu postavu izričito. Ne ponavljati automatski stvaranje. |
 | Kod je istekao ili iskorišten | Upisati novi aktualni kod; provjeriti automatsko podešavanje sata uređaja. |
 | Telefon ne završava povezivanje | Nakon kratkih ponovnih pokušaja sučelje nudi novi ulazak; upotrijebiti svježi kod. |
@@ -151,4 +151,4 @@ bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
 | Karta ne radi | Koristiti pretragu i popis ili `?lagano=1`; provjeriti lokalni R2 arhiv pri razvoju. |
 
 Isporuka ide isključivo kroz provjereni `git push` i postojeći Cloudflare Build.
-Ne koristi se `wrangler deploy`; Access i privatnost repozitorija ostaju očuvani.
+Ne koristi se `wrangler deploy`; Access na operaterskim rutama i privatnost repozitorija ostaju očuvani.

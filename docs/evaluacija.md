@@ -6,13 +6,12 @@ slijede samo uz financiranje. Nema zasebnog javnog lansiranja.
 
 ## Stvarni scenarij na dva uređaja
 
-1. Otvoriti evaluacijsku adresu na prijenosniku ili zaslonu i proći evaluacijsku
-   prijavu. Odabrati otvaranje gradskog zaslona, četvrt i stvarno stajalište.
+1. Otvoriti https://zagreb.aningfilm.hr na prijenosniku ili zaslonu. Odabrati
+   otvaranje gradskog zaslona, četvrt i stvarno stajalište.
 2. Zaslon dobiva vlastitu, privremenu postavu za 24 sata. Podaci su stvarni.
    Kôd na zaslonu jednokratan je i rotira svakih 30 sekundi.
-3. Na telefonu otvoriti istu evaluacijsku adresu i prijaviti se u evaluacijsko
-   okruženje prije skeniranja. Skenirati aktualni QR kod ili upisati prikazani
-   kôd. Ista Wi-Fi mreža dopuštena je.
+3. Telefonom skenirati aktualni QR kod ili na `/s/` upisati prikazani kôd.
+   Ista Wi-Fi mreža dopuštena je.
 4. Potvrditi ulazak. Telefon dobiva redovnu desetominutnu sesiju. Provjeriti
    svih sedam područja, odabrati liniju/stajalište ili stavku i pratiti kako se
    kontekst prenosi na zaslon.

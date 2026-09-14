@@ -4,9 +4,9 @@ Radni prototip gradske informacijske usluge za prijavu na zagrebački poziv za o
 
 Pristup se na vlastitom uređaju otključava na deset minuta skeniranjem koda sa zaslona, odnosno na pet minuta s telefona druge osobe. Ista Wi-Fi mreža radi. Sigurnost je dostupna bez sesije, također bez JavaScripta. Ne postoji posebna demonstracija koja zaobilazi uparivanje.
 
-Evaluacijsko okruženje: https://zagreb.aningfilm.hr, zaštićeno Cloudflare Accessom. Prototip je namijenjen vlasniku projekta i Povjerenstvu. Javna dostupnost građanima, pilot i daljnji razvoj ovise o financiranju i partnerstvu s Gradom; bez toga nema zasebnog javnog projekta.
+Prototip: https://zagreb.aningfilm.hr, javno dostupan od 14. rujna 2026. Namijenjen je ocjenjivanju u prijavi Gradu. Javni zasloni u prostorima, pilot i daljnji razvoj ovise o financiranju i partnerstvu s Gradom; bez toga nema zasebnog javnog projekta. Operaterske rute `/api/admin/*` i `/stats` traže Cloudflare Access i svima ostalima odgovaraju 404.
 
-*English: a working Zagreb city-information prototype for the City's open-data funding application. Real screens and rotating codes grant ten-minute sessions, with five-minute one-hop sharing. Safety is sessionless. Evaluation is Access-protected; a citizen rollout is conditional on City backing.*
+*English: a working Zagreb city-information prototype for the City's open-data funding application. Real screens and rotating codes grant ten-minute sessions, with five-minute one-hop sharing. Safety is sessionless. The prototype is public since 14 September 2026; only the operator routes require Cloudflare Access. A citizen rollout is conditional on City backing.*
 
 ## Tri površine, sedam slojeva
 
@@ -42,16 +42,16 @@ Deploy je `git push` na `main` (Cloudflare Workers Builds gradi `npm run build` 
 
 R2 spremnik `vidikovac-maps` nosi verzionirani regionalni PMTiles arhiv. Karta, glifovi i spriteovi poslužuju se s iste domene. Gradnja arhiva i podrijetlo navedeni su u `app/public/maps/README.md`. Za lokalni rad spremiti arhiv i u lokalni R2 pomoću `wrangler r2 object put --local`; bez njega ostaje pristupačan alternativni prikaz prijevoza.
 
-Evaluacijska zaštita ostaje uključena. `workers_dev` i pregledne adrese onemogućene su; privremeni zasloni stvaraju se kroz provjeren evaluacijski pristup. Njihovo korištenje ne ulazi u izvoz podataka o korištenju na pilot lokacijama.
+`workers_dev` i pregledne adrese onemogućene su. Privremeni zasloni stvaraju se javno na `/kiosk/` (`POST /api/screens`), najviše pet postava po mreži i trideset ukupno u kliznom satu; adresa mreže se ne pohranjuje, ključ je HMAC njezina prefiksa. Njihovo korištenje vodi se kao `evaluation` i ne ulazi u izvoz podataka o korištenju na pilot lokacijama.
 
 ## Struktura
 
 ```
 worker/        Worker: index.ts (usmjerivač), routes/, feed/ (moduli izvora), do/ (BeaconDO, RoomDO, IndexDO, MetricsDO), protocol.ts
-app/           statičke stranice (vite): index, hitno, s, d, kiosk, izvori, privatnost, pristupacnost, open; src/ui, src/layers
-e2e/           Playwright: pairing.spec.ts, a11y.spec.ts
-scripts/       gtfs-routes.mjs, check-plan-links.mjs, lighthouse-a11y.mjs
-docs/          izvori.md, kiosk.md, arhitektura.md, privatnost.md, pristupacnost.md, video/, prijava/ (tekst prijave)
+app/           statičke stranice (vite): index, s, d, kiosk, izvori, privatnost, pristupacnost; src/ui, src/layers, src/kiosk, src/map, src/motion (/hitno i /open/ iscrtava Worker)
+e2e/           Playwright: pairing, screen-creation, mobile, kiosk-layout, kiosk-recovery, lagano, motion, map-transfer, experience, a11y, a11y-session
+scripts/       gtfs-routes.mjs, gtfs-stops.mjs, gtfs-shapes.mjs, check-plan-links.mjs, lighthouse-a11y.mjs, review-experience.mjs, audit-production.mjs, map-assets.mjs, build-hitno-style.mjs
+docs/          izvori.md, kiosk.md, arhitektura.md, evaluacija.md, kaj-verification.md, video/, prijava/ (tekst prijave); stranice /privatnost i /pristupacnost su u app/
 video/         Remotion: naslovna i završna kartica demo videa
 test/          vitest; test/fixtures su spremljeni živi uzorci svakog izvora
 ```
