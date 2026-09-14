@@ -166,11 +166,16 @@ function windowText(i18n: I18n, w: FeedItem, now: number): string {
   return w.until ? i18n.t('panels.until', { time: format(w.until) }) : i18n.t('panels.from', { time: format(w.at!) });
 }
 
-/** The level as a word with its shape (R-K1), the event as DHMZ names it, the window, the text as prose. */
-function warningRow(i18n: I18n, w: FeedItem, now: number): string {
+/** "na snazi · od 14:00 do 22:00": whether the warning is in force or only announced, then its window. */
+export function warningWindow(i18n: I18n, w: FeedItem, now: number): string {
+  return [i18n.t(isActiveWarning(w, now) ? 'weather.active' : 'weather.announced'), windowText(i18n, w, now)].filter(Boolean).join(' · ');
+}
+
+/** The level as a word with its shape (R-K1), the event as DHMZ names it, the window, the text as prose. Sigurnost lists its warnings with this same row. */
+export function warningRow(i18n: I18n, w: FeedItem, now: number): string {
   const severity = w.severity ?? 'info';
   const event = dataText(w, 'event') || w.title;
-  const window = [i18n.t(isActiveWarning(w, now) ? 'weather.active' : 'weather.announced'), windowText(i18n, w, now)].filter(Boolean).join(' · ');
+  const window = warningWindow(i18n, w, now);
   return `<li class="wx-warning" data-key="${escapeAttribute(w.id)}" data-testid="warning-row"><p class="wx-warning-head"><span class="badge badge-sev" data-tone="${severity}">${escapeHtml(i18n.t(`panels.severity.${severity}`))}</span>${event ? `<span class="wx-warning-event">${escapeHtml(event)}</span>` : ''}</p><p class="wx-warning-window">${escapeHtml(window)}</p>${w.summary ? `<p class="wx-prose">${escapeHtml(w.summary)}</p>` : ''}</li>`;
 }
 
@@ -187,9 +192,10 @@ function warningsSection(i18n: I18n, ctx: LayerContext): string {
   });
 }
 
-interface PlacedQuake { q: FeedItem; mag: number | null; km: number | null; bearing: number | null }
+export interface PlacedQuake { q: FeedItem; mag: number | null; km: number | null; bearing: number | null }
 
-function placeQuakes(items: readonly FeedItem[]): PlacedQuake[] {
+/** Each quake with its magnitude, and its distance and bearing from Zagreb when it has coordinates. */
+export function placeQuakes(items: readonly FeedItem[]): PlacedQuake[] {
   return items.map((q) => {
     const p = pointOf(q);
     return {
@@ -200,8 +206,8 @@ function placeQuakes(items: readonly FeedItem[]): PlacedQuake[] {
   });
 }
 
-/** The magnitude leads; the title says how far and how deep (the source's region name when it cannot be placed); the time is the second line. */
-function quakeRow(i18n: I18n, p: PlacedQuake): string {
+/** The magnitude leads; the title says how far and how deep (the source's region name when it cannot be placed); the time is the second line. Sigurnost lists its 72 hours with this same row. */
+export function quakeRow(i18n: I18n, p: PlacedQuake): string {
   const depth = dataNumber(p.q, 'depth');
   const where = p.km !== null ? i18n.t('weather.quakeDistance', { km: Math.round(p.km) }) : dataText(p.q, 'region') || p.q.title;
   return signRow({
