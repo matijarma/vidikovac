@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_CSP,
   APP_SECURITY_HEADERS,
+  withoutEdgeTransforms,
   DATA_SECURITY_HEADERS,
   PAGE_SECURITY_HEADERS,
   STATS_SECURITY_HEADERS,
@@ -85,3 +86,21 @@ describe('security header policy', () => {
     expect(rules['/*']).toEqual(APP_SECURITY_HEADERS);
   });
 });
+
+describe('HTML leaves the origin with no-transform, so the edge does not rewrite it', () => {
+  const html = (cache: string | null) => {
+    const headers: Record<string, string> = { 'content-type': 'text/html; charset=utf-8' };
+    if (cache) headers['cache-control'] = cache;
+    return new Response('<!doctype html>', { headers });
+  };
+  it('appends no-transform to an existing cache-control and adds it where none is set', () => {
+    expect(withoutEdgeTransforms(html('public, max-age=0, must-revalidate')).headers.get('cache-control')).toBe('public, max-age=0, must-revalidate, no-transform');
+    expect(withoutEdgeTransforms(html(null)).headers.get('cache-control')).toBe('no-transform');
+    expect(withoutEdgeTransforms(html('public, no-transform')).headers.get('cache-control')).toBe('public, no-transform');
+  });
+  it('leaves non-HTML responses alone', () => {
+    const json = new Response('{}', { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60' } });
+    expect(withoutEdgeTransforms(json).headers.get('cache-control')).toBe('public, max-age=60');
+  });
+});
+

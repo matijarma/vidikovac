@@ -1,3 +1,4 @@
+import { withoutEdgeTransforms } from './security-headers';
 import type { Env } from './env';
 import { VERSION, networkCheck } from './config';
 import { json } from './http';
@@ -48,7 +49,7 @@ export default {
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) {
       return json({ error: 'not-found' }, 404);
     }
-    return env.ASSETS.fetch(request);
+    return withoutEdgeTransforms(await env.ASSETS.fetch(request));
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     await warmFeeds(env, ctx);

@@ -106,6 +106,21 @@ export function withSecurityHeaders(response: Response, headers: Readonly<Record
   return secured;
 }
 
+/**
+ * HTML is served as written: `no-transform` tells the edge not to rewrite it (Cloudflare
+ * injects the Web Analytics beacon into HTML for the whole zone, and this page's CSP
+ * forbids third-party scripts on purpose). Other directives stay; non-HTML is untouched.
+ */
+export function withoutEdgeTransforms(response: Response): Response {
+  const type = response.headers.get('content-type') ?? '';
+  if (!type.startsWith('text/html')) return response;
+  const current = response.headers.get('cache-control') ?? '';
+  if (current.split(',').some((d) => d.trim() === 'no-transform')) return response;
+  const out = new Response(response.body, response);
+  out.headers.set('cache-control', current ? `${current}, no-transform` : 'no-transform');
+  return out;
+}
+
 /** Pages get the page set, everything else the data set. */
 export function securityHeadersFor(response: Response): Readonly<Record<string, string>> {
   const type = response.headers.get('content-type') ?? '';
