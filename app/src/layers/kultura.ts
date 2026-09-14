@@ -1,18 +1,33 @@
 // Događanja: a dated agenda from the culture and community sources of the
-// dogadanja module (Kulturpunkt, Etnografski muzej, kvartovske novosti),
-// with category controls, search and an item detail. Date-only entries are
-// all-day; notices without a date stand apart and are never today's listing.
+// dogadanja module (Kulturpunkt, Etnografski muzej, kvartovske novosti). The
+// search and one row of category chips come first, a count line under them,
+// then the agenda under day heads, what is running apart with its end date,
+// the undated notices in a well and venues outside Zagreb folded away. A
+// date-only entry is all day; a notice without an event date is never
+// today's listing.
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { DogadanjaSourceId } from '../../../worker/feed/modules/dogadanja';
 import { canExportCalendarItem } from '../export';
-import { chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, searchField, section, sectionHead } from '../experience/blocks';
-import { attributionFoot, coverageText, downSources, listState } from '../experience/status';
-import { coversDay, dayHeading, eventWhen } from '../experience/text';
-import { zagrebDayKey, zagrebTime, zagrebWeekdayDate } from '../format';
+import { actionButton, chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, searchField, section, sectionHead } from '../experience/blocks';
+import { attributionFoot, coverageText, downSources, listState, statusBadge } from '../experience/status';
+import { coversDay, dayOffset, eventWhen } from '../experience/text';
+import { parseIso, ZAGREB_TZ, zagrebDayKey, zagrebTime, type TimeInput } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
+
+/** One default page of agenda rows; the chips and the search narrow the list first, so a filter always covers every match. */
+const AGENDA_PAGE = 12;
+/** Running exhibitions shown before "Još N" reveals the rest. */
+const ONGOING_ROWS = 4;
+/** One default page of undated notices. */
+const UNDATED_PAGE = 6;
+/** One default page of venues outside Zagreb, inside the folded details. */
+const OUTSIDE_PAGE = 8;
+/** The blocks are flat sections on the canvas, hairline apart, never cards; the attribute declares it for the tests and the stylesheet. */
+const FLAT = { 'data-flat': '' };
 
 const CULTURE_EVENT_SOURCE_TUPLE = ['kulturpunkt', 'etnografski', 'kvartovske'] as const;
 type CultureEventSource = (typeof CULTURE_EVENT_SOURCE_TUPLE)[number];
@@ -102,7 +117,8 @@ export function matchesQuery(item: FeedItem, query: string): boolean {
 const startMs = (item: FeedItem): number => Date.parse(item.at!);
 const endMs = (item: FeedItem): number => Date.parse(item.until ?? item.at!);
 
-function isAllDay(item: FeedItem): boolean {
+/** A day- or range-precision entry, or a bare date: all day, never "at midnight". */
+export function isAllDay(item: FeedItem): boolean {
   const precision = item.data?.precision;
   return precision === 'day' || precision === 'range' || /^\d{4}-\d{2}-\d{2}$/.test(item.at ?? '');
 }
@@ -140,65 +156,155 @@ export function venueOutsideZagreb(item: FeedItem): boolean {
   return OUTSIDE_ZAGREB.test(withoutStreetNames) && !place.includes('zagreb');
 }
 
-function leadCell(i18n: I18n, item: FeedItem): string {
-  const precision = item.data?.precision;
-  const allDay = precision === 'day' || precision === 'range' || /^\d{4}-\d{2}-\d{2}$/.test(item.at ?? '');
-  return allDay ? `<span class="ev-allday">${escapeHtml(i18n.t('time.allDay'))}</span>` : `<span class="ev-time">${escapeHtml(zagrebTime(item.at))}</span>`;
+// The agenda's own short dates in the Croatian day-month order format.ts
+// uses ("čet 17. 9.", "do 18. 10."), without the year an agenda of the coming
+// weeks does not need; a date in another year keeps it.
+const SHORT_DATE = new Intl.DateTimeFormat('hr-HR', { timeZone: ZAGREB_TZ, weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
+function dateParts(value: TimeInput): Record<string, string> | null {
+  const date = parseIso(value);
+  if (!date) return null;
+  const out: Record<string, string> = {};
+  for (const part of SHORT_DATE.formatToParts(date)) {
+    if (part.type !== 'literal') out[part.type] = part.value;
+  }
+  return out;
+}
+function yearSuffix(p: Record<string, string>, now: number): string {
+  return p.year === dateParts(now)?.year ? '' : ` ${p.year}.`;
+}
+/** "18. 10.", or "18. 10. 2027." in another year; '' when there is nothing to format. */
+function dayMonth(value: TimeInput, now: number): string {
+  const p = dateParts(value);
+  return p ? `${Number(p.day)}. ${Number(p.month)}.${yearSuffix(p, now)}` : '';
+}
+/** "Danas", "Sutra", else "čet 17. 9.": the agenda's day head. */
+function agendaDay(i18n: I18n, value: TimeInput, now: number): string {
+  const offset = dayOffset(zagrebDayKey(value), zagrebDayKey(now));
+  if (offset === 0) return i18n.t('events.today');
+  if (offset === 1) return i18n.t('events.tomorrow');
+  const p = dateParts(value);
+  return p ? `${p.weekday} ${Number(p.day)}. ${Number(p.month)}.${yearSuffix(p, now)}` : i18n.t('time.unknown');
+}
+/** A line of its own opens with a capital: "Sutra 20:00", "Danas, cijeli dan". */
+function sentence(text: string): string {
+  return text.charAt(0).toLocaleUpperCase('hr') + text.slice(1);
 }
 
-function eventRow(i18n: I18n, item: FeedItem, ctx: LayerContext, ongoing = false): string {
+/** The 3.5rem time column: the start time, or the all-day word for a day-precision entry. */
+function timeCell(i18n: I18n, item: FeedItem): string {
+  const inner = isAllDay(item)
+    ? `<span class="ev-allday">${escapeHtml(i18n.t('time.allDay'))}</span>`
+    : `<span class="ev-time">${escapeHtml(zagrebTime(item.at))}</span>`;
+  return `<span class="row-lead ev-lead">${inner}</span>`;
+}
+
+/** The second line: the venue when the source has one, then the source (never a placeholder), then an optional end date. */
+function subLine(i18n: I18n, item: FeedItem, until = ''): string {
   const venue = dataText(item, 'venue');
-  const untilKey = item.until ? zagrebDayKey(item.until) : '';
-  const multiDay = untilKey !== '' && untilKey !== zagrebDayKey(item.at);
-  const meta = [
+  const parts = [
     venue ? escapeHtml(venue) : '',
     `<span class="ev-source">${escapeHtml(i18n.t(`events.sources.${dataText(item, 'source')}`))}</span>`,
-    ongoing ? escapeHtml(i18n.t('events.ongoingUntil', { date: zagrebWeekdayDate(item.until) })) : multiDay ? escapeHtml(i18n.t('events.untilDate', { date: zagrebWeekdayDate(item.until) })) : '',
-  ].filter(Boolean).join(' · ');
-  const lead = ongoing ? `<span class="ev-allday">${escapeHtml(i18n.t('events.ongoing'))}</span>` : leadCell(i18n, item);
-  const body = `<span class="row-lead">${lead}</span><span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span><span class="row-meta">${meta}</span></span>`;
+    until ? escapeHtml(until) : '',
+  ].filter(Boolean);
+  return `<span class="row-sub">${parts.join(' · ')}</span>`;
+}
+
+function untilText(i18n: I18n, item: FeedItem, now: number): string {
+  return i18n.t('events.untilDate', { date: dayMonth(item.until, now) });
+}
+
+/** An agenda row: the time column, the title, the venue or the source; a start that runs on for days says until when. */
+function eventRow(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
+  const untilKey = item.until ? zagrebDayKey(item.until) : '';
+  const multiDay = untilKey !== '' && untilKey !== zagrebDayKey(item.at);
+  const body = `${timeCell(i18n, item)}<span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span>${subLine(i18n, item, multiDay ? untilText(i18n, item, ctx.now) : '')}</span>`;
   return itemRow(item, body, { selected: isSelected(item, ctx.view?.selection), testid: 'event-row' });
 }
+
+/** A running exhibition: no lead (the head already says the state), the end date at the row's end. */
+function ongoingRow(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
+  const body = `<span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span>${subLine(i18n, item)}</span><span class="ev-until">${escapeHtml(untilText(i18n, item, ctx.now))}</span>`;
+  return itemRow(item, body, { selected: isSelected(item, ctx.view?.selection), testid: 'event-row' });
+}
+
+/** A notice without an event date: the title and the source, no time column. */
+function undatedRow(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
+  const body = `<span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span>${subLine(i18n, item)}</span>`;
+  return itemRow(item, body, { selected: isSelected(item, ctx.view?.selection), testid: 'undated-row' });
+}
+
 /** Rows grouped under day heads; an event still running today is listed under today. */
 function agendaRows(i18n: I18n, items: readonly FeedItem[], ctx: LayerContext): string {
   let last = '';
   return items.map((item) => {
     const today = coversDay(item, ctx.now);
     const key = today ? zagrebDayKey(ctx.now) : zagrebDayKey(item.at);
-    const label = today ? i18n.t('events.today') : dayHeading(i18n, item.at, ctx.now);
+    const label = today ? i18n.t('events.today') : agendaDay(i18n, item.at, ctx.now);
     const head = key !== last ? `<li class="agenda-day" data-key="day-${escapeAttribute(key)}" role="presentation">${escapeHtml(label)}</li>` : '';
     last = key;
     return head + eventRow(i18n, item, ctx);
   }).join('');
 }
 
-/** Notices whose source gives no event date: shown apart, never as today's listing. */
-function undatedSection(i18n: I18n, items: readonly FeedItem[], ctx: LayerContext): string {
+/** How many rows of a list the view shows: the filter value once "Prikaži još" was pressed, else the list's own page. */
+function shownCount(ctx: LayerContext, key: string, page: number, total: number): number {
+  return Math.min(total, Number(ctx.view?.filters[key]) || page);
+}
+
+/** "Prikaži još N": a filter button that extends the list by one page, only while something is left. */
+function moreButton(i18n: I18n, key: string, shown: number, total: number, page: number): string {
+  if (shown >= total) return '';
+  return actionButton('filter', i18n.t('common.showMore', { count: Math.min(page, total - shown) }), { className: 'btn-ghost ev-more', extra: { 'filter-key': key, 'filter-value': shown + page } });
+}
+
+/** U tijeku: up to four rows with their end dates, then "Još N" reveals the rest at once. */
+function ongoingSection(i18n: I18n, items: readonly FeedItem[], ctx: LayerContext): string {
   if (!items.length) return '';
-  const rows = items.map((item) => itemRow(item,
-    `<span class="row-lead"><span class="row-lead-small">${escapeHtml(i18n.t('events.timeUnknown'))}</span></span><span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span><span class="row-meta"><span class="ev-source">${escapeHtml(i18n.t(`events.sources.${dataText(item, 'source')}`))}</span></span></span>`,
-    { selected: isSelected(item, ctx.view?.selection), testid: 'undated-row', className: 'ev-undated' })).join('');
+  const shown = shownCount(ctx, 'ongoing', ONGOING_ROWS, items.length);
+  const more = shown < items.length
+    ? actionButton('filter', i18n.t('events.ongoingMore', { count: items.length - shown }), { className: 'btn-ghost ev-more', extra: { 'filter-key': 'ongoing', 'filter-value': items.length } })
+    : '';
   return section({
-    id: 'ev-undated', className: 'sec-undated', testid: 'ev-undated',
-    body: sectionHead(i18n, { title: i18n.t('events.undated'), id: 'ev-undated-title', noStatus: true, level: 3 }) + `<p class="sec-note">${escapeHtml(i18n.t('events.undatedNote'))}</p><ul class="rows" role="list">${rows}</ul>`,
+    id: 'ev-ongoing', tone: 'events', className: 'ev-sec', testid: 'ev-ongoing', extra: FLAT,
+    body: sectionHead(i18n, { title: i18n.t('events.ongoingTitle'), id: 'ev-ongoing-title', noStatus: true, level: 3 }) +
+      `<ul class="rows" role="list" data-testid="ongoing">${items.slice(0, shown).map((item) => ongoingRow(i18n, item, ctx)).join('')}</ul>${more}`,
   });
 }
 
+/** Bez datuma: notices whose source gives no event date, in a sunken well, never as today's listing. */
+function undatedSection(i18n: I18n, items: readonly FeedItem[], ctx: LayerContext): string {
+  if (!items.length) return '';
+  const shown = shownCount(ctx, 'undated', UNDATED_PAGE, items.length);
+  return section({
+    id: 'ev-undated', tone: 'events', className: 'ev-sec', testid: 'ev-undated', extra: FLAT,
+    body: `<div class="ev-well">${sectionHead(i18n, { title: i18n.t('events.undated'), id: 'ev-undated-title', noStatus: true, level: 3 })}<p class="sec-note">${escapeHtml(i18n.t('events.undatedNote'))}</p><ul class="rows" role="list">${items.slice(0, shown).map((item) => undatedRow(i18n, item, ctx)).join('')}</ul>${moreButton(i18n, 'undated', shown, items.length, UNDATED_PAGE)}</div>`,
+  });
+}
+
+/** Izvan Zagreba: folded by default, the whole count in the summary, eight rows then more; the reconciler keeps an open state across polls. */
+function outsideSection(i18n: I18n, items: readonly FeedItem[], ctx: LayerContext): string {
+  if (!items.length) return '';
+  const shown = shownCount(ctx, 'outside', OUTSIDE_PAGE, items.length);
+  return `<details class="ev-sec ev-outside" id="ev-outside" data-key="ev-outside" data-testid="ev-outside"><summary class="ev-summary">${iconMarkup('chevron-down')}<span>${escapeHtml(i18n.t('events.outside'))}</span> <span class="chip-count">${items.length}</span></summary><p class="sec-note">${escapeHtml(i18n.t('events.outsideNote'))}</p><ul class="rows" role="list">${items.slice(0, shown).map((item) => eventRow(i18n, item, ctx)).join('')}</ul>${moreButton(i18n, 'outside', shown, items.length, OUTSIDE_PAGE)}</details>`;
+}
+
+/** The open event: the title, when, the facts the source gave, the summary, one row of actions ending in the original. */
 function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
   const source = dataText(item, 'source') as CultureEventSource;
-  const category = categoryLabel(i18n, eventCategory(item));
+  const when = isDated(item) ? eventWhen(i18n, item, ctx.now) : i18n.t('events.timeUnknown');
   const facts: [string, string][] = [
-    [i18n.t('events.when'), isDated(item) ? eventWhen(i18n, item, ctx.now) : i18n.t('events.timeUnknown')],
     [i18n.t('events.venue'), dataText(item, 'venue')],
     [i18n.t('events.organiser'), dataText(item, 'organiser')],
-    [i18n.t('events.categoryLabel'), category],
+    [i18n.t('events.categoryLabel'), categoryLabel(i18n, eventCategory(item))],
     [i18n.t('events.source'), CULTURE_SOURCE_ATTRIBUTION[source] ?? source],
   ];
-  const dl = facts.filter(([, v]) => v).map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
+  const dl = `<dl class="detail-facts">${facts.filter(([, v]) => v).map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl>`;
   const summary = typeof item.summary === 'string' && item.summary ? `<p class="detail-summary">${escapeHtml(item.summary)}</p>` : '';
   const calendar = canExportCalendarItem(item);
-  return `<article class="detail" data-key="detail-${escapeAttribute(item.id)}" data-testid="event-detail"><p class="kicker">${escapeHtml(category)}</p><h3 class="detail-title" id="ws-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3><dl class="detail-facts">${dl}</dl>${summary}${item.link ? externalLink(item.link, i18n.t('common.openSource')) : ''}${itemActions(i18n, item, { calendar })}${calendar ? '' : `<p class="sec-note">${escapeHtml(i18n.t('events.noCalendar'))}</p>`}</article>`;
+  const actions = `<div class="ev-actions">${itemActions(i18n, item, { calendar })}${item.link ? externalLink(item.link, i18n.t('common.openSource')) : ''}</div>`;
+  return `<article class="detail ev-detail" data-key="detail-${escapeAttribute(item.id)}" data-testid="event-detail"><h3 class="detail-title" id="ws-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3><p class="ev-when">${escapeHtml(sentence(when))}</p>${dl}${summary}${actions}${calendar ? '' : `<p class="sec-note">${escapeHtml(i18n.t('events.noCalendar'))}</p>`}</article>`;
 }
+
 export function renderKultura(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const dogadanja = ctx.snapshots.dogadanja;
@@ -214,44 +320,41 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   for (const item of upcoming) counts.set(eventCategory(item), (counts.get(eventCategory(item)) ?? 0) + 1);
   const keep = (item: FeedItem): boolean => (!category || eventCategory(item) === category) && matchesQuery(item, query);
   const filtered = upcoming.filter(keep);
+  const ongoingShown = ongoing.filter(keep);
+  const chipOf = (label: string, value: string, count: number): string =>
+    chip(label, { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': value, tone: 'events' }, selected: category === value, count });
   const chips = filterChips([
-    chip(i18n.t('events.allCategories'), { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': '' }, selected: !category, count: upcoming.length }),
-    ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => chip(categoryLabel(i18n, key), { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': key }, selected: category === key, count })),
+    chipOf(i18n.t('events.allCategories'), '', upcoming.length),
+    ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => chipOf(categoryLabel(i18n, key), key, count)),
   ], i18n.t('events.categoryLabel'));
+  // The count line names what the lists below hold; the status word, never a head, sits beside it.
+  const countText = filtered.length + ongoingShown.length
+    ? ongoingShown.length ? i18n.t('events.countLine', { count: filtered.length, ongoing: ongoingShown.length }) : i18n.t('events.count', { count: filtered.length })
+    : '';
+  const badge = statusBadge(i18n, dogadanja, ctx.errors?.dogadanja);
+  const countLine = countText || badge ? `<p class="ev-count" data-testid="ev-count">${countText ? `<span>${escapeHtml(countText)}</span>` : ''}${badge}</p>` : '';
   // Filters only when there is something to filter; the empty state speaks for itself.
-  const toolbar = `<div class="ws-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? chips : ''}</div>`;
+  const toolbar = `<div class="ws-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? chips : ''}${countLine}</div>`;
   const emptyText = query || category ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
+  const shown = shownCount(ctx, 'events', AGENDA_PAGE, filtered.length);
+  // The agenda has no visible head: the day heads structure it, the hidden one names the region for assistive technology.
   const agenda = section({
-    id: 'ev-agenda', tone: 'events', testid: 'ev-agenda',
-    body: sectionHead(i18n, { kicker: i18n.t('events.kicker'), title: i18n.t('events.count', { count: filtered.length }), snapshot: dogadanja, error: ctx.errors?.dogadanja, id: 'ev-agenda-title' }) +
-      (state || `<ul class="rows agenda" role="list" data-testid="agenda">${agendaRows(i18n, filtered, ctx)}</ul>`),
+    id: 'ev-agenda', tone: 'events', className: 'ev-sec', testid: 'ev-agenda', extra: FLAT,
+    body: `<h3 class="visually-hidden" id="ev-agenda-title">${escapeHtml(i18n.t('events.agenda'))}</h3>` +
+      (state || `<ul class="rows agenda" role="list" data-testid="agenda">${agendaRows(i18n, filtered.slice(0, shown), ctx)}</ul>${moreButton(i18n, 'events', shown, filtered.length, AGENDA_PAGE)}`),
   });
   const selected = findSelected(dogadanja, ctx.view?.selection);
   const detail = selected && all.includes(selected) ? eventDetail(i18n, selected, ctx) : null;
-  const ongoingShown = ongoing.filter(keep);
-  const ongoingSection = ongoingShown.length
-    ? section({
-      id: 'ev-ongoing', tone: 'events', testid: 'ev-ongoing',
-      body: sectionHead(i18n, { title: i18n.t('events.ongoingTitle'), id: 'ev-ongoing-title', noStatus: true, level: 3, aside: `<span class="badge badge-plain" data-tone="events">${escapeHtml(i18n.t('events.ongoingCount', { count: ongoingShown.length }))}</span>` }) +
-        `<ul class="rows" role="list" data-testid="ongoing">${ongoingShown.slice(0, 6).map((item) => eventRow(i18n, item, ctx, true)).join('')}</ul>`,
-    })
-    : '';
-  const outsideShown = outside.filter(keep);
-  const outsideSection = outsideShown.length
-    ? section({
-      id: 'ev-outside', className: 'sec-undated', testid: 'ev-outside',
-      body: sectionHead(i18n, { title: i18n.t('events.outside'), id: 'ev-outside-title', noStatus: true, level: 3 }) + `<p class="sec-note">${escapeHtml(i18n.t('events.outsideNote'))}</p>` +
-        `<ul class="rows" role="list">${outsideShown.slice(0, 8).map((item) => eventRow(i18n, item, ctx)).join('')}</ul>`,
-    })
-    : '';
+  const list = agenda + ongoingSection(i18n, ongoingShown, ctx) + undatedSection(i18n, undated.filter(keep), ctx) + outsideSection(i18n, outside.filter(keep), ctx);
   const down = downSources(dogadanja);
   const notes = [coverageText(i18n, dogadanja), down.length ? i18n.t('status.sourcesDown', { list: down.join(', ') }) : '']
     .filter(Boolean).map((t) => `<p class="sec-note">${escapeHtml(t)}</p>`).join('');
+  // The domain's name is the tab's: hidden on the phone, shown as the desk's title (layers.css .ev-title); it stays for aria-labelledby and the focus after a switch.
   return createElementFromHTML(`<section class="layer ws ws-events" id="layer-kultura" data-layer="kultura" data-reconcile aria-labelledby="layer-title-kultura">
-<header class="ws-head"><h2 class="layer-title" id="layer-title-kultura" tabindex="-1">${escapeHtml(i18n.t('layers.kultura'))}</h2></header>
+<h2 class="layer-title ev-title" id="layer-title-kultura" tabindex="-1">${escapeHtml(i18n.t('layers.kultura'))}</h2>
 ${toolbar}
-${listDetail(i18n, { list: agenda + ongoingSection + undatedSection(i18n, undated.filter(keep), ctx) + outsideSection, detail, detailTitle: i18n.t('events.detailTitle') })}
+${listDetail(i18n, { list, detail, detailTitle: i18n.t('events.detailTitle') })}
 ${notes}${attributionFoot(i18n, dogadanja)}
 </section>`);
 }
