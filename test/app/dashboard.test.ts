@@ -241,6 +241,8 @@ describe('session states', () => {
     expect(scanner.handle.element.dataset.countdown).toBe('hidden');
     expect(text(scanner.root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
     click(sheet, '[data-sheet-action=lang][data-value=en]');
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
+    expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
     expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'Events', 'More']);
     scanner.handle.destroy();
@@ -329,6 +331,20 @@ describe('session states', () => {
     expect(sheet.querySelector('[data-sheet-action=lang][data-value=en]')).not.toBeNull();
     temp.handle.destroy();
   });
+  it('a reloaded view names no screen but still says where it came from; a reconnecting view keeps its end, its remaining time and its toggles', () => {
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+    click(root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    expect(text(sheet.querySelector('.dialog-body'))).toContain('Sa zaslona u blizini.');
+    expect(text(sheet.querySelector('.dialog-body'))).not.toContain('Sa zaslona zaslon');
+    session.drop();
+    click(root, '[data-testid=session-label]');
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
+    expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
+    expect(sheet.querySelector('[data-testid=toggle-countdown]')).not.toBeNull();
+    expect(text(sheet.querySelector('.dialog-body'))).not.toContain('Povezivanje');
+  });
   it('the share dialog rotates the peer code as a QR with the letters, a rotation bar and a read-aloud line, copies the code, notes a joined device, and withdraws sharing on the room’s refusal', async () => {
     const slot = (code: string, index: number) => ({ code, slotStart: NOW + index * 30_000, slotEnd: NOW + (index + 1) * 30_000 });
     let at = NOW;
@@ -337,6 +353,9 @@ describe('session states', () => {
     session.codes([slot('ABCDEFGH', 0), slot('JKMNPQRS', 1)], NOW);
     const dialog = document.querySelector<HTMLElement>('[data-testid=share-dialog]')!;
     expect(dialog.classList.contains('dialog-sheet')).toBe(true);
+    const status = dialog.querySelector<HTMLElement>('[data-testid=share-status]')!;
+    expect(status.getAttribute('role'), 'the live region is in the tree, empty, before it has news').toBe('status');
+    expect(text(status)).toBe('');
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('ABCD-EFGH');
     expect(dialog.querySelector('.qr')?.getAttribute('role')).toBe('img');
     expect(text(dialog)).toContain('Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja.');
@@ -354,17 +373,24 @@ describe('session states', () => {
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('JKMN-PQRS');
     expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: J K M N, P Q R S');
     expect(fill.style.width).toBe('0%');
+    expect(fill.style.transition, 'the reset switches the transition off only for the committed zero').toBe('');
+    at = NOW + 31_000;
+    tick();
+    expect(fill.style.width).toBe('3.3%');
+    expect(fill.style.transition).toBe('');
+    expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 29 s');
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     const copy = click(dialog, '[data-action=copy-share-code]');
     expect(text(copy)).toBe('Kopiraj kod');
     expect(writeText).toHaveBeenCalledWith('JKMN-PQRS');
     await flush();
-    expect(text(dialog.querySelector('[data-testid=share-status]'))).toBe('Kod je kopiran.');
+    expect(text(status)).toBe('Kod je kopiran.');
+    click(dialog, '[data-action=copy-share-code]');
+    await flush();
+    expect(status.querySelectorAll('p'), 'a second copy re-says the line, it does not repeat it').toHaveLength(1);
     writeText.mockRestore();
-    expect(dialog.querySelector('[data-testid=share-joined]')?.hasAttribute('hidden')).toBe(true);
     session.count(3);
-    expect(text(dialog.querySelector('[data-testid=share-joined]'))).toBe('Pridružio se još jedan uređaj.');
-    expect(dialog.querySelector('[data-testid=share-joined]')?.hasAttribute('hidden')).toBe(false);
+    expect([...status.querySelectorAll('p')].map((p) => text(p))).toEqual(['Kod je kopiran.', 'Pridružio se još jedan uređaj.']);
     session.error('share-not-allowed');
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.');
     click(root, '[data-testid=session-label]');

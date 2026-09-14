@@ -543,8 +543,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <p class="share-text">${escapeHtml(i18n.t('session.shareBody', { host }))}</p>
 <p class="share-read" data-share="read"></p>
 <button type="button" class="btn-ghost share-copy" data-action="copy-share-code">${iconMarkup('copy')}<span>${escapeHtml(i18n.t('session.shareCopy'))}</span></button>
-<p class="share-status" role="status" data-testid="share-status" data-share="status" hidden></p>
-<p class="share-status" role="status" data-testid="share-joined" data-share="joined" hidden></p>
+<div class="share-status" role="status" data-testid="share-status" data-share="status"></div>
 </div>`);
     const part = (name: string): HTMLElement => body.querySelector<HTMLElement>(`[data-share=${name}]`)!;
     const qrBox = part('qr');
@@ -553,14 +552,24 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const rotates = part('rotates');
     const read = part('read');
     const status = part('status');
-    const joined = part('joined');
-    const say = (node: HTMLElement, text: string): void => { node.textContent = text; node.hidden = false; };
+    // One live region, in the tree and empty from the start (a region that appears together with its
+    // text is not announced); each kind of news gets one line, re-said in place rather than repeated.
+    const say = (kind: 'copied' | 'joined', text: string): void => {
+      let line = status.querySelector<HTMLElement>(`[data-share-line=${kind}]`);
+      if (!line) { line = doc.createElement('p'); line.dataset.shareLine = kind; status.appendChild(line); }
+      line.textContent = text;
+    };
     // The bar fills over the slot and the sentence counts down to the next code, on the server's clock.
-    const paintProgress = (): void => {
+    // A new code puts the bar back to zero in one step, never as a one-second drain: the CSS transition
+    // is switched off, the zero is committed by a forced style read, and the transition returns for the
+    // next tick (two timers landing in one frame cannot undo that, unlike a flag the tick clears).
+    const paintProgress = (fresh = false): void => {
       const slot = shareRotation?.current();
       if (!slot || !shareRotation) return;
       const at = shareRotation.serverNow();
-      fill.style.width = `${Math.round(slotProgress(slot, at) * 1000) / 10}%`;
+      const width = `${Math.round(slotProgress(slot, at) * 1000) / 10}%`;
+      if (fresh) { fill.style.transition = 'none'; fill.style.width = width; void fill.offsetWidth; fill.style.transition = ''; }
+      else fill.style.width = width;
       rotates.textContent = i18n.t('session.shareRotates', { seconds: Math.max(0, Math.ceil((slot.slotEnd - at) / 1000)) });
     };
     // The dialog lives in the top layer outside the shell root, so its one action is handled here.
@@ -568,13 +577,13 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       if (!(event.target as Element | null)?.closest('[data-action=copy-share-code]')) return;
       const code = shareRotation?.current()?.code;
       if (!code) return;
-      void copyCode(formatCode(code)).then((ok) => say(status, i18n.t(ok ? 'session.shareCopied' : 'export.copyFailed')));
+      void copyCode(formatCode(code)).then((ok) => say('copied', i18n.t(ok ? 'session.shareCopied' : 'export.copyFailed')));
     });
     shareDialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share dialog-sheet' });
     shareDialog.element.dataset.testid = 'share-dialog';
     shareDialog.open();
     const participantsAtOpen = session.snapshot().participants;
-    stopShareCount = session.onCount((count) => { if (count > participantsAtOpen) say(joined, i18n.t('session.sharePeerJoined')); });
+    stopShareCount = session.onCount((count) => { if (count > participantsAtOpen) say('joined', i18n.t('session.sharePeerJoined')); });
     shareRotation = createRotation({
       now,
       onSlot: (slot) => {
@@ -582,14 +591,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         codeLine.textContent = formatCode(slot.code);
         read.textContent = i18n.t('session.shareReadAloud', { spelled: speakableCode(slot.code) });
         qrBox.replaceChildren(createQr({ payload: codeUrl(slot.code), ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }), unavailableText: formatCode(slot.code) }).element);
-        paintProgress();
+        paintProgress(true);
       },
       onMore: () => {},
       setInterval: setTimer as (fn: () => void, ms: number) => unknown,
       clearInterval: clearTimer,
     });
     shareRotation.setBatch(batch, serverNow);
-    shareTick = setTimer(paintProgress, 1_000);
+    shareTick = setTimer(() => paintProgress(), 1_000);
   }
 
   /** The end of the session: the view stays, refreshing stops, exports keep working. */

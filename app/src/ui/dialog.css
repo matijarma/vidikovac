@@ -170,11 +170,14 @@
 
 /* The sheet variant (the session sheet, the share dialog): a bottom sheet on the
    phone, full width, rounded at the top, the safe area under its foot and the
-   small viewport as its ceiling; from 60rem the same element is a centred 32rem
-   dialog again (the UA's inset: 0 plus margin: auto centres a modal dialog, so
-   the desk rule restores both). The scrim stays and the blur goes: the sheet
-   belongs to the content under it, and a blurred city behind a settings sheet
-   reads as a different app. */
+   small viewport as its ceiling, entering with a short rise instead of the
+   dialog's zoom; from 60rem the same element is a centred 32rem dialog again.
+   The desk rule says inset: 0, not auto: a fixed box with every inset auto sits
+   at its static position (the top-left corner of the top layer) and auto
+   margins have nothing to centre in, so restoring the UA's inset: 0 next to
+   margin: auto is what centres a modal dialog. The scrim stays and the blur
+   goes: the sheet belongs to the content under it, and a blurred city behind a
+   settings sheet reads as a different app. */
 .dialog-sheet {
   inset: auto 0 0 0;
   inline-size: 100%;
@@ -183,6 +186,13 @@
   margin: 0;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding-block-end: env(safe-area-inset-bottom, 0px);
+  transform: translateY(var(--sp-6));
+}
+
+@starting-style {
+  .dialog-sheet[open] {
+    transform: translateY(var(--sp-6));
+  }
 }
 
 .dialog-sheet::backdrop {

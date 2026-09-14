@@ -404,6 +404,7 @@
     "sheetScreen": "Sa zaslona {label}, stanica {stop}.",
     "sheetScreenOnly": "Sa zaslona {label}.",
     "sheetStop": "Sa zaslona na stanici {stop}.",
+    "sheetScreenNearby": "Sa zaslona u blizini.",
     "sheetDevices_one": "Na ovom pogledu je {count} uređaj.",
     "sheetDevices_few": "Na ovom pogledu su {count} uređaja.",
     "sheetDevices_other": "Na ovom pogledu je {count} uređaja.",

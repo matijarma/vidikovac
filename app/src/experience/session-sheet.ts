@@ -44,14 +44,17 @@ export interface SessionSheet {
   destroy(): void;
 }
 
-/** Where the session came from, as one sentence; a peer session says whose five minutes these are. */
+/** Where the session came from, as one sentence; a peer session says whose five minutes these are.
+ *  The label lives in the hash /s/ hands over and a reload drops it (the entry keeps only the room),
+ *  so a view without a label still names its origin: a screen nearby. Nothing before the join. */
 function originSentence(i18n: I18n, s: SheetState): string {
+  if (!s.session.role) return '';
   if (s.session.role === 'phone') return i18n.t('session.sheetPeer');
   const stop = s.session.screen?.stop?.name ?? null;
   if (s.label && stop) return i18n.t('session.sheetScreen', { label: s.label, stop });
   if (s.label) return i18n.t('session.sheetScreenOnly', { label: s.label });
   if (stop) return i18n.t('session.sheetStop', { stop });
-  return '';
+  return i18n.t('session.sheetScreenNearby');
 }
 
 function actionRow(key: string, action: SheetAction, icon: IconName, label: string, testid: string, sub?: string): string {
@@ -71,14 +74,16 @@ export function createSessionSheet(deps: SessionSheetDeps): SessionSheet {
   const now = deps.now ?? (() => Date.now());
   let dialog: DialogHandle | null = null;
 
+  // The end of the session is known from the join on and stands while the socket reconnects (the
+  // countdown goes on, the banner says so), so the title and the remaining time follow `expiresAt`,
+  // not the socket's phase; before the join there is nothing to count and the title says so once.
   function titleText(s: SheetState): string {
     if (s.frozen) return i18n.t('session.expiredTitle');
-    if (s.session.phase === 'live' && s.session.expiresAt !== null) return i18n.t('session.sheetTitle', { time: zagrebTime(s.session.expiresAt) });
+    if (s.session.expiresAt !== null) return i18n.t('session.sheetTitle', { time: zagrebTime(s.session.expiresAt) });
     return i18n.t('session.connecting');
   }
 
   function timeText(s: SheetState): string {
-    if (s.session.phase !== 'live') return i18n.t('session.connecting');
     return i18n.t('shell.remaining', { time: `${Math.floor(s.session.secondsLeft / 60)}:${String(s.session.secondsLeft % 60).padStart(2, '0')}` });
   }
 
@@ -109,7 +114,7 @@ export function createSessionSheet(deps: SessionSheetDeps): SessionSheet {
     ];
     // No whitespace between siblings: every child is a keyed element the reconciler matches by key.
     return [
-      `<div class="sheet-sec sheet-status" data-key="status">${s.frozen ? '' : `<p class="sheet-time tabular" data-key="time" data-sheet-time data-testid="sheet-time">${escapeHtml(timeText(s))}</p>`}${lines
+      `<div class="sheet-sec sheet-status" data-key="status">${!s.frozen && s.session.expiresAt !== null ? `<p class="sheet-time tabular" data-key="time" data-sheet-time data-testid="sheet-time">${escapeHtml(timeText(s))}</p>` : ''}${lines
         .filter(([, sentence]) => sentence !== '')
         .map(([key, sentence]) => `<p class="sheet-line" data-key="${key}">${escapeHtml(sentence)}</p>`)
         .join('')}</div>`,

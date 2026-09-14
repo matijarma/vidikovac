@@ -390,6 +390,7 @@
     "sheetScreen": "From the screen {label}, stop {stop}.",
     "sheetScreenOnly": "From the screen {label}.",
     "sheetStop": "From the screen at stop {stop}.",
+    "sheetScreenNearby": "From a screen nearby.",
     "sheetDevices_one": "There is {count} device on this view.",
     "sheetDevices_other": "There are {count} devices on this view.",
     "sheetPeer": "Five minutes from the person beside you.",
