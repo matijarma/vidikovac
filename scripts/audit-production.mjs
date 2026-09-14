@@ -204,8 +204,7 @@ async function openDomain(page, layer) {
   // A pointer click can wait forever on a control the page keeps repainting or has disabled
   // (a frozen tab); the journey goes on through the same handler and says so.
   try { await nav.click({ timeout: 10_000 }); }
-  catch (e) { log(`nav ${layer}: pointer click did not land (${String(e.message).split('
-')[0]}); DOM click instead`); await nav.evaluate((el) => el.click()); }
+  catch (e) { log(`nav ${layer}: pointer click did not land (${String(e.message).split(/\r?\n/)[0]}); DOM click instead`); await nav.evaluate((el) => el.click()); }
   await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor({ timeout: 15_000 });
   if (layer === 'u-pokretu') await page.waitForFunction(() => ['ready', 'tiles-failed', 'unavailable'].includes(document.querySelector('[data-testid=map-canvas]') && document.querySelector('[data-testid=map-canvas]').getAttribute('data-map-status')), null, { timeout: 30_000 }).catch(() => log('map status not settled in 30 s'));
   await page.waitForTimeout(1500);
