@@ -76,6 +76,34 @@ describe('static pages', () => {
     expect(html).toContain('<!--IZVORI-->');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
+  it('every prose page has a skip link, the accent wordmark, one h1 and the shared six-link footer, the current page marked', () => {
+    for (const [path, current] of [
+      ['app/izvori/index.html', '/izvori/'],
+      ['app/privatnost/index.html', '/privatnost/'],
+      ['app/pristupacnost/index.html', '/pristupacnost/'],
+    ] as const) {
+      const html = read(path);
+      // No inline style or script (CSP: script-src 'self'; the palette lives in tokens.css, not a <style> tag).
+      expect(html, path).not.toContain('<style>');
+      expect(html, path).not.toMatch(/<script(?![^>]*\bsrc=)/);
+      // One h1: the page's one heading landmark.
+      expect((html.match(/<h1\b/g) ?? []).length, path).toBe(1);
+      // A skip link, as the landing page has, that actually lands on the page (past the repeated brand line).
+      const skip = html.match(/<a class="skip-link" href="#([\w-]+)">([^<]+)<\/a>/);
+      expect(skip, path).toBeTruthy();
+      expect(html, path).toContain(`id="${skip![1]}"`);
+      // The wordmark, its "?" in the accent span, same markup as /hitno and /open/.
+      expect(html, path).toContain('Kaj ima<span class="mark">?</span>');
+      // The shared footer set, in order, the current page marked for assistive technology.
+      for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/']) {
+        expect(html, `${path} ${href}`).toContain(`href="${href}"`);
+      }
+      expect(html, path).toContain(`href="${current}" aria-current="page"`);
+      // The language toggle is dropped until the prose is translated (lang="hr" stays literal).
+      expect(html, path).not.toContain('data-testid="lang-slot"');
+      expect(html, path).toContain('<html lang="hr">');
+    }
+  });
   it('/privatnost lists the nine privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
     for (let i = 1; i <= 9; i += 1) expect(html).toContain(`id="tocka-${i}"`);
