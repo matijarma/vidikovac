@@ -91,7 +91,7 @@ describe('POST /api/scan', () => {
     const unlocked = await kiosk.inbox.nextOfType('unlocked');
     expect(unlocked.roomId).toBe(ok.roomId);
     expect(unlocked.ticket).not.toBe(ok.ticket);
-    expect(await waitForRow((row) => row.event === 'session_start' && row.dim1 === 'kiosk' && row.dim2 === 'donji-grad')).toBeDefined();
+    expect(await waitForRow((row) => row.event === 'session_start' && row.dim1 === 'kafic' && row.dim2 === 'donji-grad')).toBeDefined();
   });
 
   it('accepts the typed lowercase form and refuses the same code twice', async () => {

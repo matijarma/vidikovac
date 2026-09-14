@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FetchContext, ModuleId } from '../../worker/feed/schema';
-import { CKAN_PACKAGE_SHOW, ZBORNA_MJESTA_DATASET } from '../../worker/feed/modules/ckan-geo';
+import { ZBORNA_MJESTA_URL } from '../../worker/feed/modules/ckan-geo';
 
 export const FIXTURE_NOW = new Date('2026-09-11T12:00:00.000Z');
 
@@ -30,14 +30,6 @@ function fixtureContext(routes: [string, () => BodyInit][]): FetchContext {
 }
 
 const AKTI = JSON.stringify({ data: [{ id: 'a1b2', naziv: 'Odluka o proračunu Grada Zagreba' }] });
-const ZBORNA_PACKAGE = JSON.stringify({
-  success: true,
-  result: {
-    name: ZBORNA_MJESTA_DATASET,
-    metadata_modified: '2026-09-01T08:00:00.000000',
-    resources: [{ format: 'JSON', url: 'https://data.zagreb.hr/zborna-mjesta.json' }],
-  },
-});
 const ZBORNA_RECORDS = JSON.stringify([{ naziv: 'Zrinjevac', adresa: 'Trg N. Š. Zrinskog', lat: 45.811, lon: 15.978 }]);
 
 // dogadanja's own real, saved fixtures (test/fixtures/dogadanja/*, task E1),
@@ -79,8 +71,7 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
   ]),
   'ckan-geo': fixtureContext([
     ['Gradske_cetvrti', () => text('gradske_cetvrti.geojson')],
-    [CKAN_PACKAGE_SHOW, () => ZBORNA_PACKAGE],
-    ['zborna-mjesta.json', () => ZBORNA_RECORDS],
+    [ZBORNA_MJESTA_URL, () => ZBORNA_RECORDS],
   ]),
   dogadanja: dogadanjaFixtureContext(),
 };

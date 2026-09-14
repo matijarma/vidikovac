@@ -106,7 +106,7 @@ describe('provision, unlock, join, view', () => {
       body: JSON.stringify({ code: batch[0]!.code }),
     });
     expect(replay.status).toBe(409);
-    const counted = await waitForRow((row) => row.event === 'session_start' && row.dim1 === 'kiosk' && row.dim2 === 'donji-grad');
+    const counted = await waitForRow((row) => row.event === 'session_start' && row.dim1 === 'kafic' && row.dim2 === 'donji-grad');
     expect(counted.count).toBeGreaterThanOrEqual(1);
     expect(counted.hour).toBeGreaterThanOrEqual(0);
     expect(counted.hour).toBeLessThan(24);
