@@ -111,6 +111,14 @@ prolaza; nijedan korak nije objavljen s crvenim testom.
 Nakon svakog koraka provjereno je da paket `/d/` koji poslužuje evaluacijska
 adresa ima isti otisak kao paket koji je prošao lanac.
 
+Isporuka od 14. 9. navečer (prijavni paket nakon tri neprijateljska čitanja,
+teaser bez HRT-ovih uvoda, vrsta prostora u brojačima sesija, zborna mjesta
+izravno s adrese resursa umjesto CKAN `/api/`): TypeScript oba projekta,
+Vitest 147 datoteka / 2.141 testova i gradnja prolaze; Playwright je proveden
+ciljano (kiosk raspored i oporavak, uparivanje, samoposluga zaslona, axe:
+33 prolaze, 1 preskočen po dizajnu) jer promjene ne diraju raspored telefona;
+vizualna matrica i Lighthouse nisu ponovno pokrenuti za ovu isporuku.
+
 Dvije provjere iz plana još nisu provedene i ovaj ih dokument ne tvrdi:
 
 - provjera na fizičkom iPhoneu i Androidu (težina Manropea, povlačenje plahte,
