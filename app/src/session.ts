@@ -217,7 +217,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
       case 'expired': fireExpired(); return;
       case 'error':
         if (message.error === 'ticket-invalid' || message.error === 'resume-invalid' || message.error === 'room-closed') {
-          rejectGrant(message.error === 'room-closed' ? 'revoked' : 'no-ticket');
+          rejectGrant(message.error === 'room-closed' && expiresAt !== null ? 'revoked' : 'no-ticket');
         } else error.forEach((l) => l(message.error));
         return;
       default: return;

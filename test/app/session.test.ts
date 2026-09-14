@@ -74,11 +74,11 @@ describe('createSessionClient', () => {
     expect(err).toHaveBeenCalledWith('no-ticket');
     expect(client.snapshot().phase).toBe('closed');
   });
-  // R-K3 (T4.1): the one additive field. A closed room is a screen switched off under a
-  // live session, not a spent ticket, so the listener hears the same recovery event with
-  // the reason beside it and the dashboard can tell the two closing cards apart.
+  // R-K3 (T4.1): the one additive field. Before any join a closed room is only a credential
+  // that opens nothing any more (a reload, or a tab restored after the ten minutes ended): a
+  // spent ticket, told with the truthful no-ticket banner. Revoked is the case after this one.
   it.each([
-    ['ticket-invalid', 'no-ticket'], ['resume-invalid', 'no-ticket'], ['room-closed', 'revoked'],
+    ['ticket-invalid', 'no-ticket'], ['resume-invalid', 'no-ticket'], ['room-closed', 'no-ticket'],
   ] as const)('recovers from %s by clearing unusable credentials and asking for a fresh scan, naming the reason %s', (error, why) => {
     const b = boot({ store: storage({
       [RESUME_KEY]: JSON.stringify({ roomId: 'room1', resumeToken: 'old' }),
@@ -91,6 +91,22 @@ describe('createSessionClient', () => {
     expect(b.client.snapshot().phase).toBe('closed');
     expect(b.client.snapshot().dataToken).toBeNull();
     expect(errors).toHaveBeenCalledWith('no-ticket', why);
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(b.st.raw[RESUME_KEY]).toBeUndefined();
+    expect(b.st.raw[DATA_TOKEN_KEY]).toBeUndefined();
+    expect(b.retries).toHaveLength(0);
+  });
+  it('a room closed under a live session (the screen switched off) is the same recovery event, named revoked', () => {
+    const b = boot();
+    const errors = vi.fn();
+    b.client.onError(errors);
+    b.sock.emit('open');
+    b.sock.server(JOINED);
+    expect(b.client.snapshot().phase).toBe('live');
+    b.sock.server({ t: 'error', error: 'room-closed' });
+    expect(b.client.snapshot().phase).toBe('closed');
+    expect(b.client.snapshot().dataToken).toBeNull();
+    expect(errors).toHaveBeenCalledWith('no-ticket', 'revoked');
     expect(errors).toHaveBeenCalledTimes(1);
     expect(b.st.raw[RESUME_KEY]).toBeUndefined();
     expect(b.st.raw[DATA_TOKEN_KEY]).toBeUndefined();

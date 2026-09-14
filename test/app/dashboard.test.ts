@@ -794,6 +794,24 @@ describe('the sticky header and notices in flow', () => {
     expect(spent.root.querySelector('[data-key=no-ticket]')).not.toBeNull();
     expect(spent.root.querySelector('.ki-snapshot')).toBeNull();
   });
+  it('a closed room reported before any join is a spent credential: the no-ticket banner, nothing frozen, nothing dated', () => {
+    const { root, session } = mount();
+    session.error('no-ticket', 'revoked');
+    expect(root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(root.querySelector('[data-key=no-ticket]')).not.toBeNull();
+    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).not.toBe('zamrznuto');
+  });
+  it('the snapshot line dates the data by the end of the session, not by the late moment the end was learnt', () => {
+    const time = clock();
+    const { root, session } = mount({ now: time.now });
+    session.join();
+    // A phone whose socket dropped in the background hears of the end five minutes after it.
+    time.set(EXPIRES + 5 * 60_000);
+    session.expire();
+    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:42');
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+  });
   it('the visible reconnecting banner says the countdown goes on, while the pill sentence for readers keeps the disconnected line', () => {
     const { root, session } = mount();
     session.join();

@@ -553,8 +553,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function freeze(): void {
     if (frozen) return;
     frozen = true;
-    // The session's clock, not the phone's: the natural end lands on the very minute the pill promised.
-    frozenAt = session.serverNow();
+    // The session's clock, not the phone's, and never later than the session's end: a phone that
+    // hears of the end late (a socket dropped in the background, a resume after the room is gone)
+    // still dates its data by the minute the pill promised. Revoked keeps the moment itself, its
+    // expiry being in the future.
+    frozenAt = Math.min(session.serverNow(), session.snapshot().expiresAt ?? Infinity);
     closeShare();
     sheet.close();
     schematic.pause();
@@ -603,8 +606,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     }
     if (code === 'no-ticket') {
       // A room closed under a live session (the screen switched off) ends this session too: the
-      // view freezes behind the revoked card. A spent ticket only needs a fresh scan.
-      if (reason === 'revoked') { error = 'revoked'; freeze(); return; }
+      // view freezes behind the revoked card. A spent ticket only needs a fresh scan; a view that
+      // never joined has nothing to freeze, whatever the reason says.
+      if (reason === 'revoked' && joinedOnce) { error = 'revoked'; freeze(); return; }
       error = 'no-ticket';
       reconnecting = false;
       store.pause(true);
