@@ -11,7 +11,7 @@ import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, ROTATE_MS, type KioskDeps } from '../../app/src/kiosk';
+import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, ROTATE_MS, STORY_LEAVE_MS, type KioskDeps } from '../../app/src/kiosk';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -47,7 +47,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n'>> & { stored?: string | null };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase'>> & { stored?: string | null };
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
@@ -70,7 +70,7 @@ function mount(opts: MountOptions = {}) {
   /** The theme-or-resize listener the controller registers; a test fires it after mutating its viewport object. */
   let repaint: (() => void) | null = null;
   const handle = mountKiosk(root, {
-    i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: 'https://zagreb.aningfilm.hr',
+    i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
@@ -291,7 +291,7 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-map-host]')).not.toBeNull();
     const label = q(k.root, '[data-testid=session-label]')!;
     expect(label.dataset.expiresAt).toBe(String(NOW + 600_000));
-    expect(text(label)).toBe('Otključano do 14:42');
+    expect(text(label)).toBe('Otključano do 14:42 · Sada');
     expect(q(k.root, '[data-testid=corner-qr] .qr')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=join-code]'))).toBe('ABCD-EFG0');
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(true);
@@ -303,7 +303,7 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
   it('mirrors each of the seven domains with its own blocks; the join QR survives every layer change', async () => {
     const k = await pairedKiosk();
     const expectations: [string, string[]][] = [
-      ['u-pokretu', ['k-delays', 'k-closures', 'kiosk-map-host']],
+      ['u-pokretu', ['k-delays', 'kiosk-map-host']],
       ['zrak-i-nebo', ['k-weather', 'k-forecast', 'k-sun', 'k-quakes', 'k-warnings']],
       ['sigurnost', ['k-warnings', 'k-closures', 'k-quakes', 'k-assembly', 'k-pharmacies']],
       ['uprava-i-pravo', ['k-acts', 'k-sessions', 'k-works']],
@@ -668,6 +668,169 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(k.beacon.close).toHaveBeenCalledTimes(1);
     expect(k.sessions[0]!.close).toHaveBeenCalledTimes(1);
     expect(k.root.childElementCount).toBe(0);
+  });
+});
+
+// T5.2: the city first, icons and one badge, paired boards that name their
+// domain, a quiet rotation. R-K7 composes the side column so it fits its
+// stage: the weather lockup (two lines, a 48 px condition icon) leads, the
+// QR-bound invitation card follows, the story closes the column; the sun
+// line moves out of the lockup to the story's foot (no story) or the strip.
+describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation', () => {
+  it('orders the side column weather, invitation, story; the lockup carries the 48 px condition icon and no sun line; the card has no fourth line', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const side = q(k.root, '[data-testid=kiosk-invitation] .k-side')!;
+    expect([...side.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-weather', 'kiosk-invite', 'kiosk-story']);
+    const weather = q(k.root, '[data-testid=kiosk-weather]')!;
+    expect(q(weather, '.k-weather-icon use')!.getAttribute('href')).toBe('#icon-sun'); // 'vedro'
+    expect(q(weather, '.k-weather-sun')).toBeNull();
+    expect(q(weather, '.k-kicker')).toBeNull();
+    expect(text(q(weather, '.k-weather-details'))).toBe('vlaga 55 % · vjetar sjeverozapad 2,3 m/s');
+    expect(text(q(weather, '.k-meta'))).toBe('opaženo 14:00 · Zagreb-Maksimir · DHMZ');
+    const card = q(k.root, '[data-testid=kiosk-invite]')!;
+    expect(q(card, '.k-support')).toBeNull();
+    expect(text(q(card, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
+    expect(text(q(card, '.k-hint-host'))).toBe('zagreb.aningfilm.hr/s');
+    expect(text(q(card, '.k-hint'))).toBe('ili upiši kod na zagreb.aningfilm.hr/s');
+    // The card's text column: the lead, then the hint; the code column: the code and its bar.
+    expect([...q(card, '.k-invite-text')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint']);
+    expect(q(card, '.k-invite-code [data-testid=pair-code]')).not.toBeNull();
+    expect(q(card, '.k-invite-code [data-testid=code-progress] .k-progress-bar')).not.toBeNull();
+  });
+  it('the sun line rides the strip while a story shows and becomes the story block\u2019s foot when none does', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const sun = /^izlazak \d\d:\d\d · zalazak \d\d:\d\d · dan traje \d+ h \d+ min$/;
+    k.tick(STORY_LEAVE_MS); // the loading item's fade is over
+    expect(q(k.root, '[data-testid=kiosk-story] .k-story-sun')).toBeNull();
+    expect(text(q(k.root, '[data-testid=strip-sun]'))).toMatch(sun);
+    const quiet = mount({ stored: STORED, fetchTeaser: async () => ({ modules: MODULES.filter((m) => !['dogadanja', 'hrt-news', 'emsc'].includes(m.module)).concat([snap('dogadanja', []), snap('hrt-news', []), snap('emsc', [])]) }) });
+    await flush();
+    quiet.tick(STORY_LEAVE_MS);
+    expect(text(q(quiet.root, '[data-testid=kiosk-story] .k-story-title--empty'))).toBe('Trenutačno nema novih obavijesti.');
+    expect(text(q(quiet.root, '[data-testid=kiosk-story] .k-story-sun'))).toMatch(sun);
+    expect(q(quiet.root, '[data-testid=strip-sun]')).toBeNull();
+  });
+  it('builds the hostname sentence from codeBase, never from a literal', async () => {
+    const k = mount({ stored: STORED, codeBase: 'https://example.test' });
+    await flush();
+    expect(k.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
+    expect(text(q(k.root, '.k-hint-host'))).toBe('example.test/s');
+    expect(text(q(k.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
+    const phone = mount({ stored: STORED, codeBase: 'https://example.test', viewport: { width: 390, height: 844 } });
+    expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
+    expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
+  });
+  it('the lines board rows keep li.k-line and carry one .line badge at k size, tram and bus by kind', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const rows = [...k.root.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-line')];
+    expect(rows.length).toBe(5);
+    for (const row of rows) {
+      const badge = q(row, '.k-line-badge')!;
+      expect(badge.classList.contains('line')).toBe(true);
+      expect(badge.dataset.size).toBe('k');
+      expect(badge.dataset.kind).toBe(row.dataset.kind);
+    }
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['tram', 'tram', 'tram', 'tram', 'tram']);
+  });
+  it('the strip label carries the shield and the pill reads Sigurnost, linking the same page', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const label = q(k.root, '.k-strip-label')!;
+    expect(q(label, 'svg use')!.getAttribute('href')).toBe('#icon-shield');
+    expect(text(label)).toBe('Sigurnost');
+    const pill = q(k.root, '.k-strip-hitno') as HTMLAnchorElement;
+    expect(text(pill)).toBe('Sigurnost');
+    expect(pill.getAttribute('href')).toBe('/hitno');
+    expect(k.root.innerHTML).not.toContain('>/hitno<');
+  });
+  it('paired: the header centre names the mirrored domain and follows every layer change', async () => {
+    const k = await pairedKiosk();
+    const label = q(k.root, '[data-testid=session-label]')!;
+    expect(text(label)).toBe('Otključano do 14:42 · Sada');
+    k.view('u-pokretu');
+    await flush();
+    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Promet');
+    k.view('vijesti');
+    await flush();
+    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Vijesti');
+  });
+  it('paired Promet: the board shows the stop\u2019s lines first, then the five largest deviations with vehicle counts, and says how many of all lines it shows', async () => {
+    const route = (id: string, delay: number, vehicles: number) => item('zet-rt', 'route:' + id, 'vehicle', id, { data: { routeId: id, routeShortName: id, medianDelaySeconds: delay, vehicles } });
+    const zet = snap('zet-rt', [
+      item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
+      route('6', 130, 12), route('11', -5, 8),
+      route('109', 600, 3), route('268', -500, 2), route('7', 400, 9), route('205', 300, 4), route('2', -200, 6), route('4', 100, 5),
+    ]);
+    const modules = MODULES.map((m) => (m.module === 'zet-rt' ? zet : m));
+    const k = await pairedKiosk({ fetchTeaser: async () => ({ modules }) });
+    k.fetchData.mockImplementation(async (module: ModuleId) => modules.find((m) => m.module === module) ?? snap(module, []));
+    k.view('u-pokretu');
+    await flush();
+    const board = q(k.root, '[data-testid=k-delays]')!;
+    const rows = [...board.querySelectorAll<HTMLElement>('.k-row')];
+    // Nine lines at the stop, then the five deviations (600, 500, 400, 300, 200 s); line 4 at 100 s is the sixth and stays off.
+    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13', '14', '17', '31', '32', '34', '109', '268', '7', '205', '2']);
+    expect(rows.slice(0, 9).every((r) => r.dataset.atStop === '1')).toBe(true);
+    expect(rows.slice(9).every((r) => r.dataset.atStop === undefined)).toBe(true);
+    const first = rows[0]!;
+    expect(q(first, '.line[data-size=k][data-kind=tram]')!.textContent).toBe('6');
+    expect(text(q(first, '.k-row-word'))).toBe('kasni 2 min');
+    expect(text(q(first, '.k-row-aside'))).toBe('12 vozila');
+    expect(text(q(rows[2]!, '.k-row-word'))).toBe('nema podataka');
+    expect(text(q(rows[9]!, '.k-row-word'))).toBe('kasni 10 min');
+    expect(text(q(rows[10]!, '.k-row-word'))).toBe('rani 8 min');
+    expect(text(q(board, '.k-row-more'))).toBe('prikazano 14 od 15 linija');
+    expect(board.classList.contains('k-block--board')).toBe(true);
+  });
+  it('paired: a warning row names its level as a badge word with its shape', async () => {
+    const k = await pairedKiosk();
+    k.view('zrak-i-nebo');
+    await flush();
+    const badge = q(k.root, '[data-testid=k-warnings] .k-row .badge')!;
+    expect(badge.dataset.tone).toBe('moderate');
+    expect(text(badge)).toBe('žuto upozorenje');
+    expect(text(q(k.root, '[data-testid=k-warnings] .k-row-main'))).toBe('žuto upozorenje Grmljavina');
+  });
+  it('rotation: the outgoing story leaves under data-leaving for 180 ms while the next enters; the block\u2019s box is one item afterwards', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const box = q(k.root, '[data-testid=kiosk-story]')!;
+    expect(box.querySelectorAll('.k-story-item')).toHaveLength(2); // the loading item is leaving, the first story has entered
+    k.tick(STORY_LEAVE_MS);
+    expect(box.querySelectorAll('.k-story-item')).toHaveLength(1);
+    const first = box.dataset.storyId;
+    k.tick(ROTATE_MS);
+    const items = [...box.querySelectorAll<HTMLElement>('.k-story-item')];
+    expect(items).toHaveLength(2);
+    expect(items[0]!.dataset.leaving).toBe('1');
+    expect(items[1]!.dataset.leaving).toBeUndefined();
+    expect(box.dataset.storyId).not.toBe(first);
+    expect(STORY_LEAVE_MS).toBe(180);
+    k.tick(STORY_LEAVE_MS);
+    expect(box.querySelectorAll('.k-story-item')).toHaveLength(1);
+    expect(q(box, '[data-leaving]')).toBeNull();
+  });
+  it('rotation: a slot change crossfades the code digits under data-swap for 180 ms, with the old digits as a ghost beside the live code; the first code never swaps', () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    k.handlers.onCodes(batch(NOW), NOW);
+    const code = q(k.root, '[data-testid=pair-code]')!;
+    expect(code.dataset.swap).toBeUndefined();
+    expect(q(k.root, '.k-code-ghost')).toBeNull();
+    now = NOW + 30_000;
+    k.tick(250); // the rotation's own tick
+    expect(text(code)).toBe('ABCD-EFG1');
+    expect(code.dataset.swap).toBe('1');
+    expect(text(q(k.root, '.k-code-ghost'))).toBe('ABCD-EFG0');
+    expect(q(k.root, '.k-code-ghost')!.getAttribute('aria-hidden')).toBe('true');
+    expect(CODE_SWAP_MS).toBe(180);
+    k.tick(CODE_SWAP_MS);
+    expect(code.dataset.swap).toBeUndefined();
+    expect(q(k.root, '.k-code-ghost')).toBeNull();
+    expect(text(code)).toBe('ABCD-EFG1');
   });
 });
 

@@ -150,7 +150,7 @@ describe('four type tiers per composition, each a token times --k-zoom', () => {
     for (const head of ['.k-lead', '.k-headline', '.k-basics-title', '.k-setup-title', '.k-notice-title', '.k-figure', '.k-ess-value']) {
       expect(decls(head)['font-size'], head).toBe('var(--k-main-size)');
     }
-    for (const line of ['.k-line-name', '.k-line-word', '.k-line-near', '.k-line-more', '.k-story-title', '.k-row-main', '.k-row-sub', '.k-strip']) {
+    for (const line of ['.k-line-name', '.k-line-word', '.k-line-near', '.k-line-more', '.k-story-item .k-story-title', '.k-row-main', '.k-row-sub', '.k-strip']) {
       expect(decls(line)['font-size'], line).toBe('var(--k-sup-size)');
     }
   });
@@ -169,5 +169,93 @@ describe('the header context', () => {
     expect(context.overflow).toBe('hidden');
     expect(context['text-overflow']).toBe('ellipsis');
     expect(context['white-space']).toBe('nowrap');
+  });
+});
+
+// T5.2: the side column composed to R-K7, one badge component, icons at the
+// kiosk's sizes, and a rotation that reports a fact and stops under reduced
+// motion or lightweight.
+describe('T5.2: the composition, the badge, the icons and the rotation', () => {
+  it('the invitation side column is a grid of three rows with the card pinned to the second', () => {
+    const side = decls('.k-invitation .k-side');
+    expect(side.display).toBe('grid');
+    expect(side['grid-template-rows']).toBe('auto auto minmax(0, 1fr)');
+    expect(decls('.k-invitation .k-weather')['grid-row']).toBe('1');
+    expect(decls('.k-invitation .k-invite')['grid-row']).toBe('2');
+    expect(decls('.k-invitation .k-story')['grid-row']).toBe('3');
+  });
+  it('the card is QR-bound: the text column holds the lead and the hint above the code, the host line never wraps', () => {
+    expect(decls('.k-invite')['grid-template-areas']).toBe("'qr text' 'code code'");
+    expect(decls(".kiosk[data-size='compact'] .k-invite")['grid-template-areas']).toBe("'qr text' 'qr code'");
+    const text = decls('.k-invite-text');
+    expect(text.display).toBe('flex');
+    expect(text['flex-direction']).toBe('column');
+    // Scoped under the text column: `.kiosk p { margin: 0 }` would otherwise outrank a bare class.
+    expect(decls('.k-invite-text .k-hint')['margin-top']).toBe('auto');
+    const host = decls('.k-hint-host');
+    expect(host.display).toBe('block');
+    expect(host['white-space']).toBe('nowrap');
+    expect(host.overflow).toBe('hidden');
+    expect(host['text-overflow']).toBe('ellipsis');
+    // The support sentence stays on the handheld's card alone (a phone scrolls; the wall's card has no fourth line).
+    expect(BARE.match(/\.k-support/g)).toHaveLength(1);
+    expect(BARE).toContain(".kiosk[data-size='handheld'] .k-support");
+  });
+  it('the lockup: a 48 px condition icon, inline icons at 28/22, and the story title clamped by its room', () => {
+    const icon = decls('.kiosk .k-weather-icon');
+    expect(icon.width).toBe('calc(48px * var(--k-zoom))');
+    expect(icon.height).toBe('calc(48px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='wide']")['--k-icon-size']).toBe('calc(28px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-icon-size']).toBe('calc(22px * var(--k-zoom))');
+    expect(decls('.kiosk .k-icon').width).toBe('var(--k-icon-size)');
+    expect(decls('.k-story-item .k-story-title')['-webkit-line-clamp']).toBe('2');
+    // The title never shrinks in the flex column: a line without room overflows the block instead, which the fit measures.
+    expect(decls('.k-story-item .k-story-title').flex).toBe('none');
+    const facts = decls('.k-weather-details');
+    expect(facts['white-space']).toBe('nowrap');
+    expect(facts['text-overflow']).toBe('ellipsis');
+    expect(decls(".k-story[data-lines='1'] .k-story-title")['-webkit-line-clamp']).toBe('1');
+    expect(BARE).not.toContain('.k-weather-sun');
+  });
+  it('one badge: .k-line-badge keeps the kiosk geometry and no colour of its own; .line paints the mode', () => {
+    const badge = decls('.kiosk .k-line-badge');
+    expect(badge['min-width']).toBe('var(--k-badge)');
+    expect(badge.height).toBe('calc(var(--k-badge) * 0.62)');
+    expect(badge['font-size']).toBe('var(--k-sup-size)');
+    expect(badge.background).toBeUndefined();
+    expect(badge.color).toBeUndefined();
+    expect(badge['border-radius']).toBeUndefined();
+    expect(BARE).not.toContain(".k-line[data-kind='bus'] .k-line-badge");
+    expect(BARE).not.toMatch(/\n\.k-line-badge \{/);
+  });
+  it('the severity badge is the shared .badge at the supporting tier with its shape scaled to the word', () => {
+    expect(decls('.k-badge')['font-size']).toBe('var(--k-sup-size)');
+    expect(decls('.k-badge::before')['inline-size']).toBe('0.5em');
+  });
+  it('the departure board keeps five single-line rows: --k-block-min for the board at both sizes', () => {
+    expect(decls(".kiosk[data-size='wide'] .k-block--board")['--k-block-min']).toMatch(/^calc\(\d+px \* var\(--k-zoom\)\)$/);
+    expect(decls(".kiosk[data-size='compact'] .k-block--board")['--k-block-min']).toMatch(/^calc\(\d+px \* var\(--k-zoom\)\)$/);
+    const row = decls('.k-row--line');
+    expect(row.display).toBe('flex');
+    expect(row['align-items']).toBe('center');
+    // The destination column takes what the badge, the word and the count leave; the count has no fixed width to steal from it.
+    expect(decls('.k-row--line .k-row-aside')['min-width']).toBeUndefined();
+    expect(decls('.k-main .k-weather-details')['white-space']).toBe('normal');
+  });
+  it('the rotation: the outgoing story fades 180 ms, the incoming settles 220 ms on --ease-enter, the code crossfades 180 ms, the bar keeps its linear second', () => {
+    expect(decls('.k-story-item').animation).toBe('k-story-in 220ms var(--ease-enter) both');
+    expect(decls('.k-story-item[data-leaving]').animation).toBe('k-story-out 180ms var(--ease-exit) both');
+    expect(decls('.k-story-item[data-leaving]').position).toBe('absolute');
+    expect(decls(".k-code[data-swap='1']").animation).toBe('k-code-in 180ms var(--ease-enter) both');
+    expect(decls('.k-code-ghost').animation).toBe('k-story-out 180ms var(--ease-exit) both');
+    expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
+    expect(BARE).toMatch(/@keyframes k-story-in \{ from \{ opacity: 0; transform: translateY\(calc\(6px \* var\(--k-zoom\)\)\); \}/);
+  });
+  it('both animations stop under reduced motion and lightweight, and the leaving copies never show', () => {
+    const reduced = BARE.slice(BARE.indexOf('@media (prefers-reduced-motion: reduce)'));
+    for (const rule of ['.kiosk .k-story-item', ".kiosk .k-code[data-swap='1']", ".kiosk .k-join-code[data-swap='1']"]) expect(reduced).toContain(rule);
+    expect(reduced).toMatch(/\.kiosk \.k-story-item\[data-leaving\], \.kiosk \.k-code-ghost \{ display: none; \}/);
+    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-story-item, :root\[data-lagano='1'\] \.k-code\[data-swap='1'\], :root\[data-lagano='1'\] \.k-join-code\[data-swap='1'\] \{ animation: none; \}/);
+    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-story-item\[data-leaving\], :root\[data-lagano='1'\] \.k-code-ghost \{ display: none; \}/);
   });
 });

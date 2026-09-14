@@ -7,10 +7,12 @@
 //   - the map column is the stage's dominant element and the lines board
 //     leaves most of it visible;
 //   - the basics panel fits its rows without a scroller;
-//   - once a phone unlocks the screen, the paired composition obeys the same
-//     rules.
+//   - once a phone unlocks the screen, each of the seven paired compositions
+//     obeys the same rules, the header names the mirrored domain, and no
+//     column or strip line is cut by its box.
 //
-// A screenshot per size and face lands in test-results/kiosk-<w>-<face>.png.
+// A screenshot per size and face lands in test-results/kiosk-<w>-<face>.png,
+// and one per paired composition in kiosk-<w>-<face>-paired-<layer>.png.
 import { expect, test, type Page } from '@playwright/test';
 import { APP_URL, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { KIOSK_WIDE_MIN_PX } from './lib';
@@ -18,6 +20,8 @@ import { KIOSK_WIDE_MIN_PX } from './lib';
 const SIZES = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }] as const;
 const FACES = ['light', 'dark'] as const;
 type Face = (typeof FACES)[number];
+/** The seven mirrored domains and the word the kiosk's header names each by (kiosk/strings-hr.ts layers). */
+const LAYERS = { 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja', vijesti: 'Vijesti' } as const;
 const SHOTS_DIR = 'test-results';
 const MIN_QR_PX = 240;
 
@@ -27,7 +31,8 @@ function geometryIssues(page: Page): Promise<string[]> {
     const out: string[] = [];
     const shown = (sel: string): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null);
     const tag = (el: HTMLElement): string => `${el.className.split(' ')[0]}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`;
-    for (const el of shown('.k-block, .k-invite, .k-story, .k-weather, .k-lines, .k-join, .k-ess-row, .k-block-body')) {
+    // The side column's block box and the strip's line box clip their children when a column or a third line does not fit.
+    for (const el of shown('.k-block, .k-invite, .k-story, .k-weather, .k-lines, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
       if (el.scrollHeight > el.clientHeight + 1) out.push(`overflow-y ${tag(el)} ${el.scrollHeight}>${el.clientHeight}`);
       if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     }
@@ -93,27 +98,39 @@ for (const size of SIZES) {
   }
 }
 
-test('paired at 1920 by 1080: the phone unlocks the screen and the mirrored composition obeys the same geometry', async ({ browser, request }) => {
-  const kioskCtx = await browser.newContext({ viewport: SIZES[0] });
-  const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  try {
-    const { kioskUrl } = await provisionKiosk(request, APP_URL);
-    const kiosk = await kioskCtx.newPage();
-    await openInvitation(kiosk, 'light', SIZES[0], kioskUrl);
-    const { scanUrl } = await readPairing(kiosk, APP_URL);
-    await unlockOnPhone(await phoneCtx.newPage(), scanUrl, '10 minuta');
-    await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
-    await expect(kiosk.getByTestId('kiosk-layer')).toBeVisible();
-    await expect(kiosk.locator('[data-testid=corner-qr] .qr')).toBeVisible();
-    await expect(kiosk.getByTestId('kiosk-essentials-open')).toBeHidden();
-    await kiosk.waitForTimeout(2500);
-    expect(await geometryIssues(kiosk)).toEqual([]);
-    await kiosk.screenshot({ path: `${SHOTS_DIR}/kiosk-1920-paired.png`, fullPage: false });
-  } finally {
-    await phoneCtx.close();
-    await kioskCtx.close();
+for (const size of SIZES) {
+  for (const face of FACES) {
+    test(`paired at ${size.width} by ${size.height}, ${face}: the phone unlocks the screen and every mirrored composition obeys the same geometry`, async ({ browser, request }) => {
+      const kioskCtx = await browser.newContext({ viewport: size, colorScheme: face });
+      const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+      try {
+        const { kioskUrl } = await provisionKiosk(request, APP_URL);
+        const kiosk = await kioskCtx.newPage();
+        await openInvitation(kiosk, face, size, kioskUrl);
+        const { scanUrl } = await readPairing(kiosk, APP_URL);
+        const phone = await phoneCtx.newPage();
+        await unlockOnPhone(phone, scanUrl, '10 minuta');
+        await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
+        await expect(kiosk.getByTestId('kiosk-layer')).toBeVisible();
+        await expect(kiosk.locator('[data-testid=corner-qr] .qr')).toBeVisible();
+        await expect(kiosk.getByTestId('kiosk-essentials-open')).toBeHidden();
+        for (const [layer, word] of Object.entries(LAYERS)) {
+          // The phone steers through its own history: the dashboard restores the hash and relays the view to the room.
+          await phone.evaluate((id) => { location.hash = `#layer=${id}`; }, layer);
+          await expect(kiosk.locator(`[data-testid=kiosk-layer][data-layer="${layer}"]`)).toBeVisible({ timeout: 15_000 });
+          await expect(kiosk.getByTestId('session-label'), 'the header names the mirrored domain').toContainText(`· ${word}`);
+          // The layer's own data has arrived and the row fitter has run on the final face.
+          await kiosk.waitForTimeout(2500);
+          expect(await geometryIssues(kiosk), layer).toEqual([]);
+          await kiosk.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}-paired-${layer}.png`, fullPage: false });
+        }
+      } finally {
+        await phoneCtx.close();
+        await kioskCtx.close();
+      }
+    });
   }
-});
+}
 
 test('a stale ZET feed holds the map: the screen tells the map the feed state and nothing animates through an outage', async ({ page, request }) => {
   // Every teaser answer arrives with zet-rt marked stale, as the Worker serves a last-good copy during an outage.

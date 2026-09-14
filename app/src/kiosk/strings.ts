@@ -26,6 +26,7 @@ export interface KioskStrings {
   invitation: {
     lead: string;
     support: string;
+    /** `{host}` is the code base's hostname with `/s`, filled by the composition. */
     typeCode: string;
     codeLabel: string;
     qrLabel: string;
@@ -142,6 +143,8 @@ export interface KioskStrings {
     phase: string;
     amount: string;
     coverage: string;
+    /** The departure board's own coverage line, counted in lines; `{shown}` and `{total}` stay for the row fitter. */
+    coverageLines: PluralForms;
     routeVehicles: PluralForms;
     depth: string;
     magUnknown: string;

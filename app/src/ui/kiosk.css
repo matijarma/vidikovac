@@ -18,12 +18,29 @@
    Type: four tiers per composition, each a token times --k-zoom. Display
    (72/52 px) for exactly two things, the pairing code and the temperature;
    main (40/28) for heads and lead sentences; supporting (28/22) for lines,
-   rows, the strip and story bodies; credit (20/16) for attribution lines
+   rows, the strip and story titles; credit (20/16) for attribution lines
    alone (.k-meta). Nothing on the sheet is set below the credit tier.
 
-   Older engines: 100vh before 100dvh, `grid-gap` before `gap`, no
-   container queries and no :has() -- state is read off data attributes the
-   controller writes (data-mode, data-size, data-live). */
+   Composition of the invitation's side column (R-K7): the city first. The
+   weather lockup leads (a 48 px condition icon, the reading with its word,
+   one facts line, the credit), the QR-bound invitation card is pinned to
+   the second row (the lead and the hint beside the QR, the code under it at
+   wide where the 72 px code is wider than the column beside a 280 px QR,
+   beside it at compact), and the story takes what remains, its title given
+   two lines when they fit and one otherwise (kiosk/invitation.ts measures).
+
+   Icons: the Lucide sprite base.css draws as .icon; the kiosk sizes it
+   with --k-icon-size (28/22) and draws the condition at 48 px. One badge:
+   signage.css's .line paints the mode, .k-line-badge keeps the kiosk's
+   geometry over it. Motion reports a fact: the story rotation (out 180 ms,
+   in 220 ms on --ease-enter) and the code's crossfade (180 ms) stop under
+   prefers-reduced-motion and lightweight, the remaining-time bar keeps its
+   one-second linear fill and steps under both.
+
+   Older engines: 100vh before 100dvh, `grid-gap` before `gap`. State is
+   read off data attributes the controller writes (data-mode, data-size,
+   data-live); the two exceptions are the code's column cap (a container
+   query) and the handheld body (a :has), both with a safe fallback. */
 
 .kiosk-body { margin: 0; overflow: hidden; background: var(--tone-surface-canvas); }
 
@@ -81,6 +98,7 @@
   --k-sup-size: calc(28px * var(--k-zoom));
   --k-credit-size: calc(20px * var(--k-zoom));
   --k-badge: calc(60px * var(--k-zoom));
+  --k-icon-size: calc(28px * var(--k-zoom));
   --k-radius: calc(24px * var(--k-zoom));
   --k-radius-s: calc(14px * var(--k-zoom));
   --k-control: calc(64px * var(--k-zoom));
@@ -97,6 +115,7 @@
   --k-sup-size: calc(22px * var(--k-zoom));
   --k-credit-size: calc(16px * var(--k-zoom));
   --k-badge: calc(46px * var(--k-zoom));
+  --k-icon-size: calc(22px * var(--k-zoom));
   --k-radius: calc(18px * var(--k-zoom));
   --k-radius-s: calc(10px * var(--k-zoom));
   --k-control: calc(52px * var(--k-zoom));
@@ -108,6 +127,9 @@
 .kiosk ul { padding: 0; list-style: none; }
 .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .k-park { display: none; }
+/* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label), 48 for the sky in the lockup. */
+.kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
+.kiosk .k-weather-icon { width: calc(48px * var(--k-zoom)); height: calc(48px * var(--k-zoom)); flex: none; align-self: center; margin-right: calc(var(--k-gap) * 0.5); color: var(--k-amber); }
 
 .k-head { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
 .k-head-brand { display: flex; align-items: center; min-width: 0; }
@@ -132,6 +154,14 @@
 .k-invitation, .k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); grid-gap: var(--k-gap); gap: var(--k-gap); }
 .k-side { display: flex; flex-direction: column; min-height: 0; }
 .k-side > * + * { margin-top: var(--k-gap); }
+/* The invitation's column is three rows: the weather, the card pinned to the
+   second row, and the story with whatever remains (never less than a title
+   line and its credit; the title yields a line before the block overflows). */
+.k-invitation .k-side { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-row-gap: var(--k-gap); row-gap: var(--k-gap); }
+.k-invitation .k-side > * + * { margin-top: 0; }
+.k-invitation .k-weather { grid-row: 1; }
+.k-invitation .k-invite { grid-row: 2; }
+.k-invitation .k-story { grid-row: 3; }
 .k-side-blocks { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .k-side-blocks:empty { display: none; }
 .k-side-blocks > * + * { margin-top: var(--k-gap); }
@@ -147,8 +177,10 @@
 .k-line-list { margin-top: calc(var(--k-gap) * 0.5); }
 .k-line { display: flex; align-items: center; padding: calc(var(--k-gap) * 0.22) 0; border-top: 1px solid var(--k-line); }
 .k-line:first-child { border-top: 0; }
-.k-line-badge { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; border-radius: calc(var(--k-radius-s) * 0.7); background: var(--k-action); color: var(--k-action-ink); font-size: var(--k-sup-size); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-.k-line[data-kind='bus'] .k-line-badge { background: var(--k-ink-2); color: var(--k-canvas); }
+/* The line badge is signage.css's .line (tram a rounded rectangle in peacock,
+   bus a capsule in the transit blue, other a plain rectangle); the kiosk only
+   sizes it, so the same badge reads the same on the phone and the wall. */
+.kiosk .k-line-badge { min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; font-size: var(--k-sup-size); }
 .k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
 .k-line-word { flex: none; margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-line-near { flex: none; min-width: 9.5em; margin-left: var(--k-gap); text-align: right; font-size: var(--k-sup-size); color: var(--k-ink-3); }
@@ -167,26 +199,34 @@
 .k-chip--stale { background: var(--k-amber-soft); color: var(--k-amber); }
 
 /* --- The invitation card: QR, lead, code, remaining time -------------------- */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-areas: 'qr text' 'code code'; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); align-items: start; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.kiosk[data-size='compact'] .k-invite { grid-template-areas: 'qr text' 'qr code'; grid-template-rows: auto minmax(0, 1fr); }
+/* QR-bound: the lead and the hint share the QR's height beside it; at wide
+   the 72 px code (433 px for nine glyphs, 570 for the widest) is wider than
+   the 368 px beside a 280 px QR, so it spans the card under both; at compact
+   the code stays beside the QR at its column cap and the card is exactly the
+   QR plus its padding. */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: var(--k-qr) auto; grid-template-areas: 'qr text' 'code code'; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.kiosk[data-size='compact'] .k-invite { grid-template-areas: 'qr text' 'qr code'; grid-template-rows: minmax(0, 1fr) auto; }
 .k-invite .k-qr { grid-area: qr; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface-2); text-align: center; font-size: var(--k-sup-size); color: var(--k-ink-2); }
-.k-invite-text { grid-area: text; min-width: 0; }
-/* The code, the URL line and the bar in one column at every size: measured at
-   1920, a display-size code leaves 218 px beside it and the URL line's one
-   unbreakable word is wider than that. */
-.k-invite-code { display: grid; grid-area: code; grid-template-columns: minmax(0, 1fr); margin-top: var(--k-gap); container-type: inline-size; }
-.kiosk[data-size='compact'] .k-invite-code { align-self: end; margin-top: calc(var(--k-gap) * 0.6); }
+.k-invite-text { grid-area: text; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* The code and its bar in one column; the code's size follows this column (the cap below). */
+.k-invite-code { display: grid; grid-area: code; grid-template-columns: minmax(0, 1fr); margin-top: calc(var(--k-gap) * 0.8); container-type: inline-size; }
+.kiosk[data-size='compact'] .k-invite-code { margin-top: calc(var(--k-gap) * 0.6); }
 .k-lead { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
-.k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
+/* The hint sits at the foot of the text column, right above the code it introduces; the address has its own line and never wraps or breaks. */
+.k-invite-text .k-hint { margin-top: auto; padding-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
+.k-hint-host { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; color: var(--k-ink); }
+.k-code-box { position: relative; }
+.k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-story-out 180ms var(--ease-exit) both; }
+.k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
+.k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 /* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier. */
 .k-code { display: flex; align-items: baseline; margin-top: var(--k-gap); font-size: min(var(--k-display-size), 11.5cqi); font-weight: 800; letter-spacing: 0.06em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--k-action); }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .k-code-dash { margin: 0 0.15em; color: var(--k-ink-3); }
-.k-hint { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-progress { height: calc(8px * var(--k-zoom)); margin-top: calc(var(--k-gap) * 0.6); overflow: hidden; border-radius: 999px; background: var(--k-surface-2); }
 .k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action); transition: width 1s linear; }
 
@@ -208,18 +248,30 @@
 .k-block > .k-source { margin-top: calc(var(--k-gap) * 0.5); }
 .k-block--rose { box-shadow: inset 0 0 0 2px var(--k-rose); }
 .k-block--select { background: var(--k-action-soft); }
-.k-weather-main { display: flex; flex-wrap: wrap; align-items: baseline; margin-top: calc(var(--k-gap) * 0.4); }
+.k-weather-main { display: flex; flex-wrap: wrap; align-items: baseline; }
 .k-temp { font-size: var(--k-display-size); font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .k-temp--none { font-size: var(--k-sup-size); font-weight: 600; line-height: 1.2; letter-spacing: 0; color: var(--k-ink-2); }
 .k-condition { margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-weather-main .k-chip { margin-left: var(--k-gap); }
-.k-weather-details { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); color: var(--k-ink-2); }
-.k-weather-sun { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); color: var(--k-ink-2); }
-.k-weather-note { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); color: var(--k-ink-2); }
+.k-weather-details { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); color: var(--k-ink-2); }
+/* The Vrijeme hero sits in a narrower, taller block of the main grid: its facts may wrap where the side column's lockup keeps one line. */
+.k-main .k-weather-details { white-space: normal; }
+.k-weather-note { font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-weather-note[data-state='down'] { color: var(--k-rose); }
-.k-weather > .k-meta, .k-story > .k-meta { margin-top: calc(var(--k-gap) * 0.5); }
-.k-story-title { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.k-weather > .k-meta, .k-story-item > .k-meta { margin-top: calc(var(--k-gap) * 0.5); }
+/* The story: kicker, headline, credit. The outgoing item leaves in place
+   (absolute inside the block's padding, fading) while the next enters low
+   and settles, so the block's box never moves; the title has two lines when
+   the block has room and one otherwise (data-lines, measured after paint). */
+.k-story-item { display: flex; flex: 1; flex-direction: column; min-height: 0; animation: k-story-in 220ms var(--ease-enter) both; }
+.k-story-item[data-leaving] { position: absolute; top: calc(var(--k-gap) * 1.1); right: var(--k-pad); bottom: calc(var(--k-gap) * 1.1); left: var(--k-pad); pointer-events: none; animation: k-story-out 180ms var(--ease-exit) both; }
+.k-story-item .k-story-title { display: -webkit-box; flex: none; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.k-story[data-lines='1'] .k-story-title { -webkit-line-clamp: 1; }
 .k-story-title--empty { font-weight: 500; color: var(--k-ink-2); }
+.k-story-item .k-story-sun { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); color: var(--k-ink-2); }
+@keyframes k-story-in { from { opacity: 0; transform: translateY(calc(6px * var(--k-zoom))); } }
+@keyframes k-story-out { to { opacity: 0; } }
+@keyframes k-code-in { from { opacity: 0; } }
 .k-figure { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .k-figure-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-text { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
@@ -248,13 +300,25 @@
 .k-row-aside { float: right; margin-left: var(--k-gap); padding-top: calc(var(--k-sup-size) * 0.12); white-space: nowrap; text-align: right; font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); font-variant-numeric: tabular-nums; }
 .k-row-main[data-severity='severe'], .k-row-main[data-severity='extreme'] { color: var(--k-rose); }
 .k-row-main[data-severity='moderate'], .k-row-main[data-severity='minor'] { color: var(--k-amber); }
+/* The departure board's row: a badge, a destination, a word for the state, the vehicles out, on one line. */
+.k-row--line { display: flex; align-items: center; }
+.k-row--line .k-row-name { flex: 1; min-width: 0; margin-left: calc(var(--k-gap) * 0.7); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
+.k-row--line .k-row-word { flex: none; margin-left: calc(var(--k-gap) * 0.7); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
+.k-row--line .k-row-aside { float: none; flex: none; margin-left: calc(var(--k-gap) * 0.7); padding-top: 0; }
+/* Leading the Promet column, the board keeps five rows, their coverage line and ZET's three-line credit (measured: 500 px at wide, 380 at compact). */
+.kiosk[data-size='wide'] .k-block--board { --k-block-min: calc(500px * var(--k-zoom)); }
+.kiosk[data-size='compact'] .k-block--board { --k-block-min: calc(380px * var(--k-zoom)); }
+/* The severity word with its shape (base.css .badge) at the supporting tier. */
+.k-badge { min-height: 0; padding: 0.1em 0.5em; gap: 0.35em; font-size: var(--k-sup-size); letter-spacing: 0; line-height: 1.2; vertical-align: baseline; }
+.k-badge::before { inline-size: 0.5em; block-size: 0.5em; }
 
 /* --- Safety strip: always there, never a session's ------------------------------ */
 .k-strip { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-sup-size); line-height: 1.2; }
 /* Both strip controls keep a 44 px touch target inside the strip's own height. */
 .k-strip-basics { flex: none; min-height: 44px; min-height: max(44px, calc(var(--k-control) * 0.72)); margin-right: var(--k-gap); padding: 0 var(--k-gap); border: 2px solid var(--k-action); border-radius: 999px; background: transparent; color: var(--k-action); font: inherit; font-weight: 700; cursor: pointer; }
 .k-strip-basics[hidden] { display: none; }
-.k-strip-label { flex: none; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
 /* The three sentences share one wrapping box with room for two lines: a long
    sentence moves down whole, the type never steps down, nothing is clipped. */
 .k-strip-items { display: flex; flex: 1; flex-wrap: wrap; align-items: center; align-content: center; align-self: stretch; min-width: 0; overflow: hidden; }
@@ -266,6 +330,7 @@
 .k-strip-item[data-state='stale'] { color: var(--k-amber); }
 .k-strip-sub { color: var(--k-ink-3); }
 .k-strip--nosub .k-strip-sub { display: none; }
+.k-strip--nosun .k-strip-item--sun { display: none; }
 .k-strip-hitno { display: inline-flex; flex: none; align-items: center; box-sizing: border-box; min-height: 44px; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
@@ -384,8 +449,12 @@
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
+  .kiosk .k-story-item, .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
+  .kiosk .k-story-item[data-leaving], .kiosk .k-code-ghost { display: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
+:root[data-lagano='1'] .k-story-item, :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-story-item[data-leaving], :root[data-lagano='1'] .k-code-ghost { display: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
@@ -409,6 +478,7 @@
   --k-sup-size: 18px;
   --k-credit-size: 13px;
   --k-badge: 36px;
+  --k-icon-size: 20px;
   --k-radius: 16px;
   --k-radius-s: 10px;
   --k-control: 48px;
@@ -451,6 +521,8 @@
 .kiosk[data-size='handheld'] .k-handheld-link { padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .kiosk[data-size='handheld'] .k-handheld-title { font-size: var(--k-main-size); font-weight: 800; line-height: 1.15; letter-spacing: -0.015em; }
 .kiosk[data-size='handheld'] .k-handheld-url { display: inline-block; min-height: 44px; margin-top: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
-.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'text' 'code'; row-gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: 'qr' 'text' 'code'; row-gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
+.kiosk[data-size='handheld'] .k-invite-text .k-hint { margin-top: calc(var(--k-gap) * 0.5); padding-top: 0; }
 .kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
 .kiosk[data-size='handheld'] .k-invite-code { margin-top: 0; }

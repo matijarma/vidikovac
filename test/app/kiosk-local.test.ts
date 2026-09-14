@@ -340,10 +340,10 @@ describe('local content from the stop-scoped teaser', () => {
     expect(culture.main).toContain('do sri 30. 9.');
     expect(culture.main).not.toContain('13. sjednica');
     expect(culture.main).not.toContain('Splitu');
-    // ZET's notices sit beside the delays on Promet, in place of road closures when present.
+    // Promet's column is the departure board alone; ZET's notices stay out of culture and closures stay on Sada and Sigurnost.
     const promet = pairedMarkup({ ...withOngoing, layer: 'u-pokretu' as const });
-    expect(promet.side).toContain('data-testid="k-zet-notices"');
-    expect(promet.side).toContain('Obilazak linija 6 i 11');
+    expect(promet.side).toContain('data-testid="k-delays"');
+    expect(promet.side).not.toContain('k-zet-notices');
     expect(promet.side).not.toContain('data-testid="k-closures"');
     const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
     expect(grad.main).toContain('13. sjednica');
@@ -490,8 +490,75 @@ describe('credits and rows on a screen read from steps away', () => {
     expect(selected).toContain('class="k-select-main k-select-main--item"');
     expect(selected).toContain('Izvor: HRT · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
     const noTemp = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { humidity: 60 } })]) : m));
-    const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), NOW, hr);
+    const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), hr);
     expect(markup).toContain('bez očitanja temperature');
     expect(markup).not.toMatch(/kiosk-temp">[–-]</);
+  });
+});
+
+// T5.2: the shapes the compositions render, without a controller.
+describe('T5.2 markup shapes: the two-line lockup, the departure board, badges and the pill', () => {
+  const all = () => Object.fromEntries(MODULES.map((m) => [m.module, m]));
+  const paired = (layer: 'u-pokretu' | 'zrak-i-nebo' | 'grad-sada', extra: Partial<Parameters<typeof pairedMarkup>[0]> = {}) => pairedMarkup({ layer, strings: hr, i18n, locale: 'hr', snapshots: all(), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const, ...extra });
+  it('the weather lockup is two lines under a 48 px condition icon, the station in the credit, no kicker and no sun line', () => {
+    const markup = weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr);
+    expect(markup).toContain('class="icon k-weather-icon"');
+    expect(markup).toContain('href="#icon-sun"');
+    expect(markup).not.toContain('k-kicker');
+    expect(markup).not.toContain('k-weather-sun');
+    expect(markup).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s · 1016 hPa</p>');
+    expect(markup).toContain('<p class="k-meta">opaženo 14:00 · Zagreb-Maksimir · DHMZ</p>');
+    // The compact column holds two details on its one facts line; the pressure yields.
+    expect(weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr, 2)).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s</p>');
+    // A sky the words do not name gets no picture, and the word still prints.
+    const fog = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Grič', { at: '2026-09-11T12:00:00Z', data: { temp: 9, weather: 'lahor' } })]) : m));
+    const quiet = weatherMarkup(weatherNow(fog, hr, 'hr'), hr);
+    expect(quiet).not.toContain('k-weather-icon');
+    expect(quiet).toContain('<span class="k-condition">lahor</span>');
+    const loading = weatherMarkup(weatherNow([], hr, 'hr'), hr);
+    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a…</p>');
+  });
+  it('Promet: the board leads with the stop\u2019s lines as single-line rows with k badges, then the largest deviations, and names its coverage in lines', () => {
+    const { side } = paired('u-pokretu');
+    expect(side).toContain('data-testid="k-delays"');
+    expect(side).toContain('k-block--board');
+    expect(side.match(/<li class="k-row k-row--line"/g)!.length).toBeGreaterThanOrEqual(9);
+    expect(side).toContain('data-coverage="prikazano {shown} od {total} linija"');
+    expect(side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
+    expect(side).toContain('<span class="k-row-word">kasni 2 min</span>');
+    expect(side).toContain('<span class="k-row-aside">12 vozila</span>');
+    expect(side.match(/data-testid="k-delays"[\s\S]*?<\/article>/)![0]).not.toContain('k-row-sub');
+    // The board and the join card are the column at both sizes: five rows, the coverage line and ZET's three-line credit leave no room for a second block.
+    expect(side).not.toContain('k-zet-notices');
+    expect(side).not.toContain('k-closures');
+    const compact = paired('u-pokretu', { size: 'compact' });
+    expect(compact.side).toContain('data-testid="k-delays"');
+    expect(compact.side).not.toContain('k-zet-notices');
+    expect(compact.side).not.toContain('k-closures');
+    // With a selection the board keeps the general floor: the selection is the column's subject.
+    const selected = paired('u-pokretu', { selection: { kind: 'route', id: '6' } });
+    expect(selected.side).toContain('data-testid="k-selection"');
+    expect(selected.side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
+    expect(selected.side.match(/data-testid="k-delays"/)).not.toBeNull();
+    expect(selected.side).not.toContain('k-block--board');
+  });
+  it('a warning row carries its level as a badge word with its shape; the Sada weather block is the same lockup', () => {
+    const cap = snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe', summary: 'Jaki udari vjetra.' })]);
+    const { side } = paired('zrak-i-nebo', { snapshots: { ...all(), 'dhmz-cap': cap } });
+    expect(side).toContain('<span class="badge k-badge" data-tone="severe">narančasto upozorenje</span> Grmljavina');
+    expect(side).not.toContain('<strong>narančasto upozorenje</strong>');
+    const sada = paired('grad-sada');
+    expect(sada.side).toContain('k-weather-icon');
+    expect(sada.side).not.toContain('k-weather-sun');
+  });
+  it('the strip pill and the coverage sentence exist in both catalogues; the hostname sentence carries a {host} slot', () => {
+    expect(hr.safety.hitno).toBe('Sigurnost');
+    expect(kioskStrings('en').safety.hitno).toBe('Safety');
+    expect(hr.invitation.typeCode).toBe('ili upiši kod na {host}');
+    expect(kioskStrings('en').invitation.typeCode).toBe('or type the code at {host}');
+    expect(plural('hr', hr.paired.coverageLines, 15)).toBe('prikazano {shown} od {total} linija');
+    expect(plural('hr', hr.paired.coverageLines, 3)).toBe('prikazano {shown} od {total} linije');
+    expect(plural('en', kioskStrings('en').paired.coverageLines, 15)).toBe('showing {shown} of {total} lines');
+    expect(JSON.stringify(KIOSK_CATALOGUES.hr)).not.toContain('zagreb.aningfilm.hr');
   });
 });
