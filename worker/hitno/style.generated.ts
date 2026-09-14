@@ -121,7 +121,7 @@ article p,.offer p{margin:.5rem 0 0;line-height:1.5}
 ul.dl{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;margin:.75rem 0 0;padding:0}
 ul.dl a{display:inline-flex;align-items:center;min-height:var(--target);padding:0 1rem;border:1px solid var(--stroke-strong);border-radius:var(--r-md);font-weight:700;text-decoration:none}
 .src{margin:.75rem 0 0;color:var(--muted);font-size:.75rem;line-height:1.5;max-width:none}
-.src a,.lede a,.offer a,footer.page p a{display:inline-block;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem}
+.src a,.lede a,.offer a,footer.page p a{display:inline-block;min-width:2.75rem;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem;text-align:center}
 @media (hover:hover){ul.dl a:hover,.foot-links a:hover{background:var(--surface-2)}}
 @media (hover:none){ul.dl a:active,.foot-links a:active{background:var(--surface-2)}}
 @media (max-width:30rem){.wrap{padding:1rem 1rem 3rem}ul.dl li{flex:1 1 8rem}ul.dl a{width:100%;justify-content:center}}

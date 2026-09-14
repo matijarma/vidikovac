@@ -202,7 +202,7 @@
 .ov-block { display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; }
 .ov-head { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-block-size: 2.75rem; }
 .ov-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
-.ov-more { display: inline-flex; align-items: center; min-height: var(--target); margin-inline-start: auto; font-size: var(--text-sm); }
+.ov-more { display: inline-flex; align-items: center; justify-content: center; min-height: var(--target); min-inline-size: var(--target); margin-inline-start: auto; font-size: var(--text-sm); }
 /* The way into the domain keeps its own width; a long place name wraps instead of breaking the link in half. */
 .ov-head .ov-more { flex: none; }
 .ov-foot { margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
