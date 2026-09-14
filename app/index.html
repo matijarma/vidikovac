@@ -13,55 +13,53 @@
 <script type="module" src="/src/entries/theme-init.ts"></script>
 </head>
 <body>
-<a class="skip-link" href="#ld-main">Prijeđi na sadržaj</a>
+<a class="skip-link" href="#ld-main" data-i18n="shell.skip">Prijeđi na sadržaj</a>
 <header class="ld-head">
-  <a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica"><span class="ki-wordmark-text">Kaj ima?</span></a>
-  <nav class="ld-nav" aria-label="Brzi pristup">
-    <a href="/hitno">Sigurnost</a>
-    <a href="/s/">Upiši kod</a>
-    <a class="btn" href="/kiosk/">Otvori zaslon</a>
+  <a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica" data-i18n-aria-label="shell.wordmarkLabel"><span class="ki-wordmark-text">Kaj ima<span class="ki-wordmark-mark">?</span></span></a>
+  <nav class="ld-nav" aria-label="Brzi pristup" data-i18n-aria-label="landing.quickNav">
+    <a href="/hitno" data-i18n="nav.safety">Sigurnost</a>
+    <a href="/s/" data-i18n="common.links.scan">Upiši kod</a>
+    <span data-lang-toggle></span>
   </nav>
 </header>
 <main id="ld-main" class="ld">
   <section class="ld-hero" aria-labelledby="ld-title">
-    <p class="kicker">Zagreb u stvarnom vremenu</p>
-    <h1 id="ld-title">Deset minuta grada na tvom uređaju.</h1>
-    <p class="ld-lead">Promet, vrijeme, događanja, gradske odluke, sigurnost i vijesti iz otvorenih podataka Grada Zagreba i javnih službi, s izvorom uz svaki prikaz. Bez računa, bez instalacije i bez praćenja. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.</p>
+    <h1 id="ld-title" data-i18n="landing.title">Deset minuta grada na tvom uređaju.</h1>
+    <p class="ld-lead" data-i18n="landing.lead">Promet, vrijeme, događanja, odluke Grada, sigurnost i vijesti iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.</p>
     <div class="ld-actions" data-testid="landing-actions">
-      <a class="btn btn-primary" href="/kiosk/" data-testid="cta-kiosk">Otvori gradski zaslon</a>
-      <a class="btn-ghost" href="/s/" data-testid="cta-scan">Skeniraj ili upiši kod</a>
-      <a class="btn-quiet" href="/hitno" data-testid="cta-safety">Sigurnost, bez skeniranja</a>
+      <a class="btn btn-primary" href="/s/" data-testid="cta-scan" data-i18n="landing.actions.scan">Skeniraj ili upiši kod</a>
+      <a class="btn-ghost" href="/hitno" data-testid="cta-safety" data-i18n="landing.actions.safety">Sigurnost, bez skeniranja</a>
+      <a class="btn-quiet" href="/kiosk/" data-testid="cta-kiosk" data-i18n="landing.actions.kiosk">Otvori gradski zaslon</a>
     </div>
-    <p class="meta">Gradski zaslon je pravi zaslon za kafić, knjižnicu ili stanicu: postavi se u dva koraka, pokazuje kod koji se mijenja svakih trideset sekundi i otključava telefone u blizini.</p>
   </section>
   <section class="ld-live" aria-labelledby="ld-live-title">
-    <h2 id="ld-live-title" class="kicker">Sada u Zagrebu</h2>
+    <h2 id="ld-live-title" class="ld-live-title" data-i18n="landing.liveTitle">Sada u Zagrebu</h2>
     <ul class="ld-strip" data-testid="live-strip">
-      <li><span class="ld-k">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather">učitavanje…</span></li>
-      <li><span class="ld-k">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety">učitavanje…</span></li>
-      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit">učitavanje…</span></li>
+      <li><span class="ld-k" data-i18n="landing.liveWeather">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather" lang="hr">učitavanje…</span></li>
+      <li><span class="ld-k" data-i18n="nav.safety">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety" lang="hr">učitavanje…</span></li>
+      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit" lang="hr">učitavanje…</span></li>
     </ul>
-    <p class="meta">Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.</p>
+    <p class="meta" data-i18n="landing.liveSources">Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.</p>
   </section>
   <section class="ld-how" aria-labelledby="ld-how-title">
-    <h2 id="ld-how-title">Kako radi</h2>
+    <h2 id="ld-how-title" data-i18n="landing.howTitle">Kako radi</h2>
     <ol class="ld-steps">
-      <li><span>Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.</span></li>
-      <li><span>Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta.</span></li>
-      <li><span>Sesija sama završi, a prikaz ostaje na posljednjim podacima. <a href="/hitno">Sigurnost</a> je otvorena svima, bez skeniranja i bez ograničenja trajanja.</span></li>
+      <li><span data-i18n="landing.steps.find">Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.</span></li>
+      <li><span data-i18n="landing.steps.unlock">Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.</span></li>
+      <li><span><span data-i18n="landing.steps.end">Sesija sama završi, a prikaz ostaje na posljednjim podacima.</span> <a class="ld-step-link" href="/hitno" data-i18n="landing.steps.endLink">Sigurnost je otvorena svima, bez skeniranja i bez ograničenja trajanja.</a></span></li>
     </ol>
   </section>
-  <nav class="ld-pages" aria-label="Stranice">
-    <a href="/hitno">Sigurnost, otvoreno svima</a>
-    <a href="/s/">Upiši kod sa zaslona</a>
-    <a href="/izvori/">Izvori podataka i licence</a>
-    <a href="/open/">Otvoreni podaci za preuzimanje</a>
-    <a href="/privatnost/">Privatnost</a>
-    <a href="/pristupacnost/">Pristupačnost</a>
+  <nav class="ld-pages" aria-label="Stranice" data-i18n-aria-label="landing.pagesNav">
+    <a href="/hitno" data-i18n="landing.pages.hitno">Sigurnost, otvoreno svima</a>
+    <a href="/s/" data-i18n="landing.pages.scan">Upiši kod sa zaslona</a>
+    <a href="/izvori/" data-i18n="landing.pages.izvori">Izvori podataka i licence</a>
+    <a href="/open/" data-i18n="landing.pages.open">Otvoreni podaci za preuzimanje</a>
+    <a href="/privatnost/" data-i18n="common.links.privatnost">Privatnost</a>
+    <a href="/pristupacnost/" data-i18n="common.links.pristupacnost">Pristupačnost</a>
   </nav>
   <footer class="ld-foot">
-    <p>Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
-    <p role="status">Stanje poslužitelja: <code id="health">…</code></p>
+    <p data-i18n="landing.footerLicence">Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
+    <p class="ld-health" role="status" id="health" lang="hr">…</p>
   </footer>
 </main>
 <script type="module" src="/src/entries/landing.ts"></script>

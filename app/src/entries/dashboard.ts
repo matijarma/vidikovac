@@ -9,10 +9,12 @@ import { bootPage } from '../boot';
 import { mountDashboard, parseSessionHash, type DashboardHandle } from '../dashboard';
 import { canExportCalendarItem, copyWithAttribution, geojsonFile, icsFile, icsForItem, itemExportText, printAct, shareLink } from '../export';
 import { fillAttribution } from '../attribution';
+import { wordmarkMarkup } from '../experience/chrome';
 import { createCityMap } from '../map/city-map';
 import { createSessionClient } from '../session';
 import { repaintOn } from '../ui/canvas';
 import { downloadFile } from '../ui/dom/download';
+import { escapeHtml } from '../ui/dom/escape';
 import { detectLagano, markLagano } from '../ui/lagano';
 import '../ui/tokens.css';
 import '../ui/base.css';
@@ -70,42 +72,24 @@ markLagano(document.documentElement, lightweight);
 if (!lightweight) void import('../ui/fonts.css');
 
 if (!params) {
-  // Reached with no room in the fragment (a bookmark, a stray share): a
-  // composed empty state with the two real ways in and the open safety page.
-  // The page's one main landmark, and the target the skip link in d/index.html
+  // Reached with no room in the fragment (a bookmark, a stray share): the
+  // composed page of the plan's "Entry", in the shell's own roles. The
+  // wordmark with its one brand gesture, the title at display size, one
+  // sentence, the primary way in and the open safety page; the same two
+  // actions the landing leads with, from the same catalogue keys. It is the
+  // page's one main landmark, and the target the skip link in d/index.html
   // names, so the no-room state is as reachable as a running session.
   const empty = document.createElement('main');
   empty.className = 'ki-empty';
   empty.id = 'ki-main';
   empty.tabIndex = -1;
-  const wordmark = document.createElement('a');
-  wordmark.className = 'ki-wordmark';
-  wordmark.href = '/';
-  wordmark.setAttribute('aria-label', i18n.t('shell.wordmarkLabel'));
-  const wordmarkText = document.createElement('span');
-  wordmarkText.className = 'ki-wordmark-text';
-  wordmarkText.textContent = i18n.t('common.appName');
-  wordmark.appendChild(wordmarkText);
-  const heading = document.createElement('h1');
-  heading.className = 'ki-empty-title';
-  heading.textContent = i18n.t('session.noRoom');
-  heading.setAttribute('role', 'alert');
-  const hint = document.createElement('p');
-  hint.className = 'meta';
-  hint.textContent = i18n.t('shell.footerNote');
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-  for (const [href, key, cls] of [['/s/', 'common.links.scan', 'btn btn-primary'], ['/kiosk/', 'common.links.kiosk', 'btn-ghost'], ['/hitno', 'common.links.hitno', 'btn-quiet']] as const) {
-    const link = document.createElement('a');
-    link.className = cls;
-    link.href = href;
-    link.textContent = i18n.t(key);
-    actions.appendChild(link);
-  }
-  empty.appendChild(wordmark);
-  empty.appendChild(heading);
-  empty.appendChild(hint);
-  empty.appendChild(actions);
+  empty.innerHTML = `${wordmarkMarkup(i18n)}
+<h1 class="ki-empty-title">${escapeHtml(i18n.t('shell.emptyTitle'))}</h1>
+<p class="ki-empty-lead">${escapeHtml(i18n.t('shell.emptyLead'))}</p>
+<div class="ki-empty-actions">
+<a class="btn btn-primary" href="/s/">${escapeHtml(i18n.t('landing.actions.scan'))}</a>
+<a class="btn-ghost" href="/hitno">${escapeHtml(i18n.t('landing.actions.safety'))}</a>
+</div>`;
   root.appendChild(empty);
 } else {
   const session = createSessionClient({ roomId: params.roomId, ticket: params.ticket });

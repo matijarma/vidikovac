@@ -2,6 +2,8 @@
 // The kiosk controller with every dependency faked: the setup wizard, the
 // invitation, codes, the paired compositions, expiry and revocation, the
 // basics panel, alerts, polling and disposal.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, ScreenMetadata } from '../../worker/protocol';
@@ -45,7 +47,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now'>> & { stored?: string | null };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n'>> & { stored?: string | null };
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
@@ -65,8 +67,11 @@ function mount(opts: MountOptions = {}) {
   const loadStops = opts.loadStops ?? vi.fn(async () => STOPS);
   const requestFullscreen = vi.fn(async () => {});
   const requestWakeLock = vi.fn(async () => {});
+  /** The theme-or-resize listener the controller registers; a test fires it after mutating its viewport object. */
+  let repaint: (() => void) | null = null;
   const handle = mountKiosk(root, {
-    i18n: createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: 'https://zagreb.aningfilm.hr',
+    i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: 'https://zagreb.aningfilm.hr',
+    onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -83,6 +88,7 @@ function mount(opts: MountOptions = {}) {
   return {
     root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, requestFullscreen, requestWakeLock,
     get handlers() { return handlers!; },
+    repaint: () => repaint?.(),
     expire: () => sessionExpired?.(),
     view: (layer: string, params?: Record<string, string>) => sessionView?.(layer, params),
     runOut: () => { secondsLeft = 0; },
@@ -662,5 +668,82 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(k.beacon.close).toHaveBeenCalledTimes(1);
     expect(k.sessions[0]!.close).toHaveBeenCalledTimes(1);
     expect(k.root.childElementCount).toBe(0);
+  });
+});
+
+// T4.4: /kiosk/ opened on a phone. A handheld (kiosk/layout.ts, below
+// core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) is the hand that sets a screen
+// up, not the screen: no fullscreen, no wake lock, the wizard scrolls, and
+// after creation the stage carries the provisioning link to open on a wide
+// screen and the code card the same rotation paints, nothing else.
+describe('handheld: the kiosk on a phone', () => {
+  const PHONE = { width: 390, height: 844 };
+  it('lays out as handheld and never asks for fullscreen or a wake lock, however often it is tapped', () => {
+    const k = mount({ stored: STORED, viewport: PHONE });
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('handheld');
+    q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(k.requestFullscreen).not.toHaveBeenCalled();
+    expect(k.requestWakeLock).not.toHaveBeenCalled();
+    k.handle.destroy();
+  });
+  it('kiosk.css lets a handheld scroll instead of cropping (the body through :has, no mirrored attribute) and folds the wizard grids to as many columns as fit', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \{[^}]*block-size: auto;\s*overflow: visible;/);
+    expect(css).toContain(".kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }");
+    expect(css).not.toContain('data-kiosk-size');
+  });
+  it('after creation shows the provisioning link block with the handheld sentence and the code card, nothing else', async () => {
+    const k = mount({ viewport: PHONE });
+    expect(k.handle.phase()).toBe('setup');
+    q(k.root, '[data-testid=setup-next]')!.click();
+    await flush();
+    submit(k.root);
+    await flush();
+    expect(k.handle.phase()).toBe('invitation');
+    expect(k.beacon.connect).toHaveBeenCalledTimes(1);
+    const block = q(k.root, '[data-testid=kiosk-handheld]');
+    expect(block).not.toBeNull();
+    expect(text(q(block!, 'h1'))).toBe('Otvori ovu adresu na zaslonu širem od 900 px.');
+    const link = q(block!, '[data-testid=handheld-link]') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
+    expect(text(link)).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
+    expect(k.root.querySelectorAll('h1')).toHaveLength(1);
+    // The code card is the same one the rotation paints on a wall.
+    k.handlers.onCodes(batch(NOW), NOW);
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
+    expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
+    expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
+    for (const absent of ['kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-weather', 'kiosk-story', 'kiosk-invitation']) {
+      expect(q(k.root, `[data-testid=${absent}]`), absent).toBeNull();
+    }
+    expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
+  });
+  it('a stored screen opened on a phone rebuilds the link from its credentials on the code base', () => {
+    const k = mount({ stored: STORED, viewport: PHONE });
+    expect((q(k.root, '[data-testid=handheld-link]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#BEACON01.tajna');
+  });
+  it('speaks English when the page does', () => {
+    const k = mount({ stored: STORED, viewport: PHONE, i18n: createDefaultI18n('en'), locale: 'en' });
+    expect(text(q(k.root, '[data-testid=kiosk-handheld] h1'))).toBe('Open this address on a screen wider than 900 px.');
+    expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
+  });
+  it('crossing the handheld bound re-composes the invitation both ways: the map column appears at 1366, the block returns at 390', () => {
+    const viewport = { ...PHONE };
+    const k = mount({ stored: STORED, viewport });
+    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
+    viewport.width = 1366; viewport.height = 768;
+    k.repaint();
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
+    expect(q(k.root, '[data-testid=kiosk-handheld]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
+    expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
+    viewport.width = 390; viewport.height = 844;
+    k.repaint();
+    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).toBeNull();
+    expect(k.handle.phase()).toBe('invitation');
   });
 });

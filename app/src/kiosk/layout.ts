@@ -7,12 +7,22 @@
 // 0.8, below which the code and the text would stop being readable from a
 // few steps away -- at that point the layout is simply cropped by its own
 // overflow rule rather than made minuscule.
-export type KioskSize = 'wide' | 'compact';
+//
+// Anything narrower than KIOSK_HANDHELD_MAX_PX (core/breakpoints.ts) is a
+// `handheld`: a phone that opened /kiosk/, the hand that sets a screen up
+// rather than the screen. It is never a compact drawing cropped at 0.8: zoom
+// stays 1, the page scrolls (kiosk.css) and, once a screen exists, the stage
+// shows the provisioning link and the code card alone (kiosk.ts).
+import { KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../core/breakpoints';
+
+export type KioskSize = 'wide' | 'compact' | 'handheld';
 
 export const WIDE = { width: 1920, height: 1080 } as const;
 export const COMPACT = { width: 1366, height: 768 } as const;
 /** From this width up the wide composition has room to breathe. */
-export const WIDE_MIN_WIDTH = 1700;
+export const WIDE_MIN_WIDTH = KIOSK_WIDE_MIN_PX;
+/** Below this width the kiosk is a handheld. */
+export const HANDHELD_MAX_WIDTH = KIOSK_HANDHELD_MAX_PX;
 export const MIN_ZOOM = 0.8;
 export const MAX_ZOOM = 2.5;
 
@@ -22,6 +32,7 @@ export interface LayoutDecision { size: KioskSize; zoom: number; portrait: boole
 export function decideLayout(viewport: Viewport): LayoutDecision {
   const { width, height } = viewport;
   const portrait = height > width;
+  if (width < HANDHELD_MAX_WIDTH) return { size: 'handheld', zoom: 1, portrait };
   const size: KioskSize = width >= WIDE_MIN_WIDTH ? 'wide' : 'compact';
   const design = size === 'wide' ? WIDE : COMPACT;
   let zoom = 1;

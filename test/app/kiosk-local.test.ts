@@ -13,7 +13,8 @@ import { forgetBeacon, msUntilExpiry, screenExpired, withScreen } from '../../ap
 import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/districts';
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
-import { decideLayout, MIN_ZOOM } from '../../app/src/kiosk/layout';
+import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
+import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
@@ -85,7 +86,7 @@ describe('kiosk copy', () => {
   });
 });
 
-describe('layout: two compositions, never a proportional shrink', () => {
+describe('layout: two compositions, never a proportional shrink, and a handheld below 900 px', () => {
   it('draws wide at 1920 x 1080 and compact at 1366 x 768, both at zoom 1', () => {
     expect(decideLayout({ width: 1920, height: 1080 })).toEqual({ size: 'wide', zoom: 1, portrait: false });
     expect(decideLayout({ width: 1366, height: 768 })).toEqual({ size: 'compact', zoom: 1, portrait: false });
@@ -94,8 +95,17 @@ describe('layout: two compositions, never a proportional shrink', () => {
     expect(decideLayout({ width: 1600, height: 900 })).toEqual({ size: 'compact', zoom: 1, portrait: false });
     expect(decideLayout({ width: 3840, height: 2160 })).toEqual({ size: 'wide', zoom: 2, portrait: false });
     expect(decideLayout({ width: 1280, height: 720 }).zoom).toBe(0.937);
-    expect(decideLayout({ width: 800, height: 600 }).zoom).toBe(MIN_ZOOM);
+    expect(decideLayout({ width: 1000, height: 560 }).zoom).toBe(MIN_ZOOM);
     expect(decideLayout({ width: 1080, height: 1920 })).toMatchObject({ size: 'compact', portrait: true });
+  });
+  // T4.4: a kiosk opened on a phone is a handheld, never a compact screen
+  // shrunk to 0.8 and cropped: zoom stays 1 and the page scrolls (kiosk.css).
+  it('calls anything narrower than KIOSK_HANDHELD_MAX_PX a handheld at zoom 1, portrait as measured', () => {
+    expect(HANDHELD_MAX_WIDTH).toBe(KIOSK_HANDHELD_MAX_PX);
+    expect(decideLayout({ width: 390, height: 844 })).toEqual({ size: 'handheld', zoom: 1, portrait: true });
+    expect(decideLayout({ width: 844, height: 390 })).toEqual({ size: 'handheld', zoom: 1, portrait: false });
+    expect(decideLayout({ width: KIOSK_HANDHELD_MAX_PX - 1, height: 600 }).size).toBe('handheld');
+    expect(decideLayout({ width: KIOSK_HANDHELD_MAX_PX, height: 600 }).size).toBe('compact');
   });
 });
 
