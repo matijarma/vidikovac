@@ -185,6 +185,12 @@ export function row(main: string, sub = '', aside = '', attrs = ''): string {
   return `<span class="k-row-main"${attrs}>${aside ? `<span class="k-row-aside">${aside}</span>` : ''}${main}</span>${sub ? `<span class="k-row-sub">${sub}</span>` : ''}`;
 }
 
+/** A box and its content snap to whole pixels separately: a 159.4 px body reads
+ *  clientHeight 159 against scrollHeight 160 with nothing cut (a block sized to
+ *  its content, as under the portrait map), so an overflow counts from the
+ *  second pixel. e2e/kiosk-layout.spec.ts allows the same pixel. */
+const ROUNDING_PX = 1;
+
 /** After a paint, trailing rows that do not fit their block are hidden and
  *  counted in one "prikazano N od M" line, so a block never shows half a row
  *  or runs into its own source line. A DOM without layout (tests) measures
@@ -214,9 +220,9 @@ export function fitRows(
     body.querySelector('.k-row-more')?.remove();
     setNote(body, rows.length, totalOf(body));
     let m = measure(body);
-    if (m.client === 0 || m.scroll <= m.client) continue;
+    if (m.client === 0 || m.scroll <= m.client + ROUNDING_PX) continue;
     let visible = rows.length;
-    while (visible > 1 && m.scroll > m.client) {
+    while (visible > 1 && m.scroll > m.client + ROUNDING_PX) {
       visible -= 1;
       rows[visible]!.hidden = true;
       setNote(body, visible, totalOf(body));
@@ -232,7 +238,7 @@ export function fitRows(
       rows[visible]!.hidden = false;
       setNote(body, visible + 1, totalOf(body));
       const m = measure(body);
-      if (m.client === 0 || m.scroll > m.client) {
+      if (m.client === 0 || m.scroll > m.client + ROUNDING_PX) {
         rows[visible]!.hidden = true;
         setNote(body, visible, totalOf(body));
         break;

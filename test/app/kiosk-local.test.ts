@@ -317,6 +317,22 @@ describe('local content from the stop-scoped teaser', () => {
     expect(host.querySelectorAll('.k-row[hidden]')).toHaveLength(0);
     expect(host.querySelector('.k-row-more')).toBeNull();
   });
+  // T5.4: a block sized to its content (the portrait column under the map)
+  // reads its body a rounding pixel over its box (clientHeight 159 against
+  // scrollHeight 160 for a 159.4 px body, nothing cut); a row that fits by
+  // half a pixel is never hidden for it. The e2e sweep allows the same pixel.
+  it('keeps every row when the body overflows by a rounding pixel alone, and still trims from the second pixel', () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<article class="k-block"><div class="k-block-body"><ul class="k-rows">${[1, 2, 3].map((n) => `<li class="k-row">${n}</li>`).join('')}</ul></div></article>`;
+    fitRows(host, hr.paired.coverage, () => ({ client: 159, scroll: 160 }));
+    expect(host.querySelectorAll('.k-row[hidden]')).toHaveLength(0);
+    expect(host.querySelector('.k-row-more')).toBeNull();
+    // Rows of 60 px in a 120 px box, two pixels over: a real overflow, trimmed until it fits.
+    const measure = (el: HTMLElement) => ({ client: 120, scroll: 60 * [...el.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden).length + 2 });
+    fitRows(host, hr.paired.coverage, measure);
+    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(1);
+    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 1 od 3');
+  });
   it('computes the sun on the device for the day', () => {
     const sun = sunToday(NOW);
     expect(sun.sunrise).toMatch(/^06:[12]\d$/);
