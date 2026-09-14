@@ -5,7 +5,10 @@
    proportional shrink of one drawing: every size below is a token per
    composition, multiplied by --kiosk-zoom, which is 1 at both design sizes
    and only departs from it on screens larger than 1080p (scaled up) or
-   slightly smaller than 1366 x 768 (down to 0.8, no further).
+   slightly smaller than 1366 x 768 (down to 0.8, no further). A portrait
+   screen (data-portrait='1', kiosk/layout.ts) is a third drawing on the
+   compact tokens, designed for a 1080 x 1920 totem and scaled from that
+   size the same way: one column, the map on top (the portrait section).
 
    Palette: every `--k-*` colour is an alias of a shared `--tone-*` role
    (ui/tokens.css), which already switches on data-theme-resolved and
@@ -446,9 +449,28 @@
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
 :root[data-lagano='1'] .k-map { background: var(--k-surface); }
 
-/* --- Portrait screens stack the two columns -------------------------------------- */
-.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-.kiosk[data-portrait='1'] .k-side-blocks { flex: none; }
+/* --- Portrait: one column, the map on top ----------------------------------------
+   A 1080 x 1920 totem (kiosk/layout.ts: the compact tokens at zoom 1 there,
+   data-portrait='1'). The map takes 55% of the stage with the board over its
+   foot; under it the invitation card spans the width, the compact card's own
+   drawing (the 240 px QR, the lead and the hint beside it, the code under
+   them) given a wider text column; the weather and the story share the last
+   row side by side, each with its content centred, because the two have far
+   more room than their lines need and a tile half void reads as unfinished.
+   The paired compositions stack the same way, the main region on top at 55%
+   and the side column under it with the join card at its foot; on the two
+   map layers the side takes its content's height and the map the rest,
+   because a map is legible at any size and a two-row block is not (the
+   side never exceeds the room: its blocks shrink to their floors and the
+   row fitter trims). Compact tiers and the compact QR: these rules place
+   blocks and set no token. */
+.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: 55% minmax(0, 1fr); }
+.kiosk[data-portrait='1'] .k-paired:has(> .k-map) { grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
+.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); grid-column-gap: var(--k-gap); column-gap: var(--k-gap); }
+.kiosk[data-portrait='1'] .k-invitation .k-invite { grid-column: 1 / -1; grid-row: 1; }
+.kiosk[data-portrait='1'] .k-invitation .k-weather { grid-column: 1; grid-row: 2; justify-content: center; }
+.kiosk[data-portrait='1'] .k-invitation .k-story { grid-column: 2; grid-row: 2; }
+.kiosk[data-portrait='1'] .k-story-item { justify-content: center; }
 
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {

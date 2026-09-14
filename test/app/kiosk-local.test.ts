@@ -14,7 +14,7 @@ import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/di
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
-import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM } from '../../app/src/kiosk/layout';
+import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
 import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
@@ -96,7 +96,21 @@ describe('layout: two compositions, never a proportional shrink, and a handheld 
     expect(decideLayout({ width: 3840, height: 2160 })).toEqual({ size: 'wide', zoom: 2, portrait: false });
     expect(decideLayout({ width: 1280, height: 720 }).zoom).toBe(0.937);
     expect(decideLayout({ width: 1000, height: 560 }).zoom).toBe(MIN_ZOOM);
-    expect(decideLayout({ width: 1080, height: 1920 })).toMatchObject({ size: 'compact', portrait: true });
+  });
+  // T5.4: a portrait screen is one drawing on the compact tokens, designed for
+  // 1080 x 1920 (kiosk.css [data-portrait='1']) and scaled from that size the
+  // way the landscape ones scale from theirs: never the compact landscape
+  // shrunk to 0.8, which would put the credit line under the 13 px floor and
+  // the QR under 240 px on a wall that has the room.
+  it('draws a portrait screen on the compact tiers at zoom 1 at 1080 x 1920, and scales it from that size, never below 0.8', () => {
+    expect(decideLayout({ width: 1080, height: 1920 })).toEqual({ size: 'compact', zoom: 1, portrait: true });
+    expect(PORTRAIT).toEqual({ width: 1080, height: 1920 });
+    // A 4K totem: the same drawing twice the size, compact tiers, never the wide composition on its side.
+    expect(decideLayout({ width: 2160, height: 3840 })).toEqual({ size: 'compact', zoom: 2, portrait: true });
+    expect(decideLayout({ width: 1440, height: 2560 })).toEqual({ size: 'compact', zoom: 1.333, portrait: true });
+    // A rotated 1600 x 900 screen: scaled down by its narrower ratio; a squat portrait stops at the floor.
+    expect(decideLayout({ width: 900, height: 1600 })).toEqual({ size: 'compact', zoom: 0.833, portrait: true });
+    expect(decideLayout({ width: 1080, height: 1200 })).toEqual({ size: 'compact', zoom: MIN_ZOOM, portrait: true });
   });
   // T4.4: a kiosk opened on a phone is a handheld, never a compact screen
   // shrunk to 0.8 and cropped: zoom stays 1 and the page scrolls (kiosk.css).
