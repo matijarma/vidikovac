@@ -130,8 +130,10 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
   html:has(.ki) { scroll-padding-block: 0; }
   .ki { grid-template-columns: var(--ki-side) minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: 'rail banners' 'rail main'; }
   /* A sticky rail never scrolls with the page, so in a viewport shorter than its content (a quarter-screen
-     window is about 430 px tall) it scrolls on its own rather than losing the session card below the fold. */
-  .ki-rail { display: flex; flex-direction: column; grid-area: rail; position: sticky; inset-block-start: 0; block-size: 100vh; block-size: 100dvh; padding: var(--sp-4) var(--sp-3); background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); overflow-y: auto; }
+     window is about 430 px tall) it scrolls on its own rather than losing the session card below the fold.
+     It is sized by the small viewport, as the shell is (R-D5): in dvh it would resize while a tablet's
+     browser chrome hides on scroll. */
+  .ki-rail { display: flex; flex-direction: column; grid-area: rail; position: sticky; inset-block-start: 0; block-size: 100vh; block-size: 100svh; padding: var(--sp-4) var(--sp-3); background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); overflow-y: auto; }
   .ki-head { display: contents; }
   .ki-head::after { content: none; }
   /* The polling hairline moves to the wordmark's bottom edge. */

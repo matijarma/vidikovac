@@ -107,6 +107,8 @@ describe('dashboard.css phone shell', () => {
   it('makes the Promet stage the viewport with the dynamic-viewport unit and its fallback line', () => {
     const stage = rule(".ki[data-stage='map']");
     expect(stage).toContain('block-size: 100vh; block-size: 100dvh');
+    // R-D5: the stage is the one rule in this file that may size by the dynamic viewport.
+    expect([...new Set(owners(CSS, '100dvh'))]).toEqual([".ki[data-stage='map']"]);
     expect(stage).toContain('overflow: hidden');
     expect(rule(".ki[data-stage='map'] .ki-main")).toContain('padding: 0');
   });
@@ -166,7 +168,10 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rail).toContain('flex-direction: column');
     expect(rail).toContain('position: sticky');
     expect(rail).toContain('inset-block-start: 0');
-    expect(rail).toContain('block-size: 100vh; block-size: 100dvh');
+    // R-D5: the small viewport, as the shell itself is sized; a sticky rail in dvh would resize while a
+    // tablet's browser chrome hides on scroll. dvh belongs to the Promet stage and dialogs only.
+    expect(rail).toContain('block-size: 100vh; block-size: 100svh');
+    expect(rail).not.toContain('dvh');
     expect(rail).toContain('background: var(--tone-surface-1)');
     expect(rail).toContain('border-inline-end: 1px solid var(--tone-stroke)');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
