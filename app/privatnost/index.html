@@ -11,9 +11,10 @@
 <script type="module" src="/src/entries/theme-init.ts"></script>
 </head>
 <body>
+<a class="skip-link" href="#sadrzaj">Prijeđi na sadržaj</a>
 <main class="page">
-  <p class="page-nav"><a class="page-brand" href="/">Kaj ima?</a> <span data-testid="lang-slot"></span></p>
-  <h1>Privatnost</h1>
+  <p class="page-nav"><a class="page-brand" href="/">Kaj ima<span class="mark">?</span></a></p>
+  <h1 id="sadrzaj">Privatnost</h1>
   <p>Bez korisničkog računa u aplikaciji, oglašavanja i praćenja kretanja. Ovdje je opis podataka potrebnih za rad zaslona i kratkih sesija.</p>
   <ol>
     <li id="tocka-1"><strong>Što pohranjujemo.</strong> Registar zaslona (oznaka lokacije, vrsta prostora, gradska četvrt i odabrana javna stanica), kratkotrajne zapise sesije, kodove i brojače opisane u točki 4. Privremeni evaluacijski zaslon vrijedi 24 sata. Skeniranje daje 10 minuta; jednokratno dijeljenje daje drugoj osobi vlastitih 5 minuta bez daljnjeg dijeljenja.</li>
@@ -26,7 +27,7 @@
     <li id="tocka-8"><strong>Karta i mrežni zahtjevi.</strong> Kartografske pločice, fontovi, simboli, skripte i podaci učitavaju se s iste domene. Preglednik ne šalje zahtjeve poslužitelju OpenStreetMapa radi prikaza karte. Poslužitelj dohvaća izvore; pojedini izvor posjećuješ tek kada otvoriš njegovu poveznicu. <a href="/hitno">Sigurnost</a> i <a href="/open/">otvoreni podaci</a> rade bez karte.</li>
     <li id="tocka-9"><strong>Kod i podaci.</strong> Repozitorij prototipa trenutačno je privatan. Kod nosi licencu AGPL-3.0-or-later; licenca ne znači da je evaluacijski repozitorij javno dostupan. Dopušteni izvedeni podaci dostupni su unutar evaluacijskog pristupa na <a href="/open/">/open</a>; licence pojedinih izvora popisane su na <a href="/izvori/">/izvori</a>. Pitanja i zahtjeve šalji na <a href="mailto:kontakt@aningfilm.hr">kontakt@aningfilm.hr</a>.</li>
   </ol>
-  <p class="page-nav"><a href="/hitno">Sigurnost</a> <a href="/izvori/">Izvori</a> <a href="/pristupacnost/">Pristupačnost</a></p>
+  <nav class="page-nav" aria-label="Stranice"><a href="/hitno">Sigurnost</a> <a href="/s/">Upiši kod</a> <a href="/izvori/">Izvori</a> <a href="/open/">Otvoreni podaci</a> <a href="/privatnost/" aria-current="page">Privatnost</a> <a href="/pristupacnost/">Pristupačnost</a></nav>
 </main>
 <script type="module" src="/src/entries/static.ts"></script>
 </body>

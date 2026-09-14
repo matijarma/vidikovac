@@ -1,19 +1,23 @@
 /* Kaj ima? - prose pages: /izvori, /privatnost, /pristupacnost. One measure,
-   readable at 200% zoom, the same tokens as the app. */
-.page { max-width: 46rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-12); line-height: var(--leading-relaxed); display: grid; gap: var(--sp-4); min-inline-size: 0; overflow-wrap: anywhere; }
+   readable at 200% zoom, the same tokens and type roles as the rest of the
+   product. Sections are content, not cards (plan, "Surfaces"): a hairline
+   above every h2 and every licence entry, no border or background, the way
+   the domain workspaces already read. */
+.page { max-width: 46rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-12); line-height: var(--lh-prose); display: grid; gap: var(--sp-6); min-inline-size: 0; overflow-wrap: anywhere; }
 .page > *, .izvor > * { min-inline-size: 0; }
-.page h1 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.03em; line-height: 1.1; margin-block-start: var(--sp-4); }
-.page h2 { font-size: var(--text-xl); letter-spacing: -0.015em; margin-block-start: var(--sp-6); }
-.page h3 { font-size: var(--text-lg); margin-block-start: var(--sp-4); }
-.page p, .page li { max-width: 70ch; }
+.page h1 { font-size: var(--type-display); line-height: var(--lh-title); letter-spacing: -0.02em; margin-block-start: var(--sp-4); }
+.page h2 { font-size: var(--type-title); letter-spacing: -0.015em; margin-block-start: 0; padding-block-start: var(--sp-6); border-block-start: 1px solid var(--tone-stroke); }
+.page h3 { font-size: var(--type-head); margin-block-start: var(--sp-4); }
+.page p, .page li { max-width: 68ch; font-size: var(--type-body); font-weight: 400; line-height: var(--lh-prose); }
 .page ol, .page ul { padding-inline-start: 1.25rem; display: grid; gap: var(--sp-3); }
-.page li { line-height: var(--leading-relaxed); }
 .page a { min-height: auto; }
-.izvor { display: grid; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
-.izvor h2 { margin: 0; font-size: var(--text-lg); }
+/* A licence entry is a hairline section, not a card: nothing here floats or is an object. */
+.izvor { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-6); border-block-start: 1px solid var(--tone-stroke); }
+.izvor h2 { margin: 0; padding-block-start: 0; border-block-start: 0; font-size: var(--type-head); }
 .izvor-text { margin: 0; }
-.izvor-meta { margin: 0; font-size: var(--text-sm); color: var(--tone-text-muted); overflow-wrap: anywhere; }
-.izvor-podizvori, .izvor-iskljuceno { font-size: var(--text-sm); color: var(--tone-text-muted); }
-.page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
+.izvor-meta { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); overflow-wrap: anywhere; }
+.izvor-podizvori, .izvor-iskljuceno { font-size: var(--type-meta); color: var(--tone-text-muted); }
+.page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); font-size: var(--type-control); }
 .page-nav a { display: inline-flex; align-items: center; min-height: var(--target); }
-.page-brand { font-weight: var(--weight-bold); font-size: var(--text-lg); letter-spacing: -0.02em; color: var(--tone-text-primary) !important; text-decoration: none; }
+.page-brand { font-weight: var(--weight-bold); font-size: var(--type-head); letter-spacing: -0.02em; color: var(--tone-text-primary) !important; text-decoration: none; }
+.page-brand .mark { color: var(--tone-action-brand); }
