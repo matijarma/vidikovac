@@ -22,6 +22,7 @@ import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
+import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, dayTime, weekdayDate } from './kiosk/format';
@@ -54,6 +55,10 @@ export const CODE_SWAP_MS = 180;
 export interface KioskDeps {
   i18n: I18n;
   hash: string;
+  /** T5.3: the same controller entries/kiosk.ts already resolved (solar by
+   *  default, or ?tema=) before this component ever sees it; the header
+   *  button only ever calls setPreference, which does the persisting. */
+  theme: ThemeController;
   /** Where the ordinary credentials live; defaults to localStorage, null disables persistence. */
   storage?: StorageLike | null;
   now?: () => number;
@@ -100,7 +105,7 @@ function shellMarkup(s: KioskStrings): string {
     <header class="k-head">
       <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)} <span class="k-brand-sub">${escapeHtml(s.surface)}</span></p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
-      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><time class="k-clock" data-testid="kiosk-clock"></time></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
     <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
@@ -182,6 +187,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const contextEl = q('[data-testid=kiosk-context]');
   const headMid = q('[data-testid=kiosk-head-mid]');
   const dateEl = q('[data-testid=kiosk-date]');
+  const themeBtn = q<HTMLButtonElement>('[data-testid=kiosk-theme]');
   const clockEl = q('[data-testid=kiosk-clock]');
   const stage = q('[data-testid=kiosk-stage]');
   const basics = q('[data-testid=kiosk-essentials]');
@@ -252,6 +258,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.textContent = time;
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
+  }
+  /** "Tema: po suncu": the header button's own label, always the controller's
+   *  current word -- never guessed, never stale between its own clicks and a
+   *  change made elsewhere (?tema=, another tab). */
+  function paintTheme(preference: ThemePreference): void {
+    themeBtn.textContent = fill(s.header.theme, { pref: s.header.themeWord[preference] });
+  }
+  function cycleTheme(): void {
+    const i = THEME_PREFERENCES.indexOf(deps.theme.getPreference());
+    deps.theme.setPreference(THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length]!);
   }
   function paintContext(): void {
     if (!credentials) { contextEl.textContent = ''; return; }
@@ -769,6 +785,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
   });
   basicsClose.addEventListener('click', () => closeEssentials());
+  themeBtn.addEventListener('click', cycleTheme);
+  // Repaints on every change: the button's own clicks, ?tema= landing after
+  // this mount, another tab, or the OS answer for auto -- one source of truth.
+  const stopTheme = deps.theme.onChange((state) => paintTheme(state.preference));
   // Any touch or key inside the open panel means someone is still reading it.
   basics.addEventListener('pointerdown', armEssentialsIdle);
   basics.addEventListener('keydown', (event) => {
@@ -826,6 +846,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       disarmExpiry();
       disarmEssentialsIdle();
       stopRepaint?.();
+      stopTheme();
       beacon?.close(); beacon = null;
       session?.close(); session = null;
       clearStage();

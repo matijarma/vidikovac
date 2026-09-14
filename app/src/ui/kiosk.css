@@ -142,7 +142,11 @@
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
 .k-head-when { margin-left: auto; text-align: right; white-space: nowrap; }
 .k-date { font-size: var(--k-sup-size); color: var(--k-ink-2); }
+.k-clock-row { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--k-gap) * 0.6); }
 .k-clock { display: block; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.1; }
+/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the
+   clock, never the --k-control size the primary buttons use. */
+.k-theme { display: inline-flex; align-items: center; min-height: 44px; padding: 0 calc(var(--k-gap) * 0.6); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-sup-size); font-weight: 600; cursor: pointer; }
 
 .k-alert { position: absolute; top: calc(var(--k-head-h) + var(--k-gap) * 0.5); right: var(--k-pad); z-index: 5; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-size); font-weight: 600; box-shadow: var(--k-shadow); }
 .k-alert[hidden] { display: none; }

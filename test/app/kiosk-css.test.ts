@@ -259,3 +259,19 @@ describe('T5.2: the composition, the badge, the icons and the rotation', () => {
     expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-story-item\[data-leaving\], :root\[data-lagano='1'\] \.k-code-ghost \{ display: none; \}/);
   });
 });
+
+// T5.3: the theme button, literally 44 px (the WCAG floor, not a --k-control
+// scale) and left of the clock in its own row so the two share a line.
+describe('T5.3: the theme button is a literal 44 px target beside the clock', () => {
+  it('sets a 44 px minimum height on the button itself, sized from a tier token, not the composition scale', () => {
+    const btn = decls('.k-theme');
+    expect(btn['min-height']).toBe('44px');
+    expect(btn['font-size']).toBe('var(--k-sup-size)');
+    expect(btn.cursor).toBe('pointer');
+  });
+  it('lays the clock row out left to right so the button sits directly before the clock', () => {
+    const row = decls('.k-clock-row');
+    expect(row.display).toBe('flex');
+    expect(row['align-items']).toBe('center');
+  });
+});

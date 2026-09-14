@@ -5,6 +5,7 @@
 // exists in the catalogues -- severity words, delay words, closure plurals,
 // "Otključano do" -- is still read through i18n.t so the two surfaces agree.
 import type { LayerId } from '../../../worker/protocol';
+import type { ThemePreference } from '../ui/theme';
 import { en } from './strings-en';
 import { hr } from './strings-hr';
 
@@ -14,7 +15,12 @@ export interface KioskStrings {
   appName: string;
   surface: string;
   languageName: string;
-  header: { context: string; clockLabel: string; sessionLabel: string; driver: string; temporaryUntil: string; venue: string; unlockedUntil: string };
+  header: {
+    context: string; clockLabel: string; sessionLabel: string; driver: string; temporaryUntil: string; venue: string; unlockedUntil: string;
+    /** "Tema: {pref}", filled with themeWord[preference]; the header button's own label. */
+    theme: string;
+    themeWord: Record<ThemePreference, string>;
+  };
   status: {
     connecting: string;
     offline: string;

@@ -11,6 +11,7 @@ import { mountKiosk } from '../kiosk';
 import { createCityMap } from '../map/city-map';
 import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
+import { THEME_STORAGE_KEY, type ThemePreference } from '../ui/theme';
 import '../ui/tokens.css';
 import '../ui/base.css';
 import '../ui/signage.css';
@@ -24,6 +25,18 @@ const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)'
 function safeLocalStorage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
 }
+
+// T5.3 (grant §1.2): dark after sunset, light by day -- a screen nobody has
+// touched yet opens by the sun's own theme, never the OS guess auto would
+// give it; the dashboard keeps auto (bootPage's own default, untouched here).
+// ?tema=auto|svijetla|tamna|sunce always wins, once, over both the default
+// and any preference already stored, so a screen nobody touches can still be
+// set by hand from the URL that provisioned it.
+const TEMA_WORD: Record<string, ThemePreference> = { auto: 'auto', svijetla: 'light', tamna: 'dark', sunce: 'solar' };
+const temaParam = new URLSearchParams(location.search).get('tema');
+const temaPreference = temaParam ? TEMA_WORD[temaParam] : undefined;
+if (temaPreference) theme.setPreference(temaPreference);
+else if (safeLocalStorage()?.getItem(THEME_STORAGE_KEY) == null) theme.setPreference('solar');
 
 // A WebGL context is the cheapest real probe for "old/weak GPU or driver",
 // which deviceMemory and prefers-reduced-data both miss on their own (R-L1).
@@ -57,10 +70,12 @@ if (!lightweight) void import('../ui/fonts.css');
 mountKiosk(root, {
   i18n,
   hash: location.hash,
+  theme,
   reducedMotion,
   lightweight,
   onRepaint: repaintOn(theme),
   mapFactory: createCityMap,
 });
-// The secret is in localStorage now; keep it out of the address bar and history.
-if (location.hash) history.replaceState(null, '', '/kiosk/');
+// The secret is in localStorage now, and ?tema= only ever needed to land
+// once: keep both out of the address bar and history, the same way as before.
+if (location.hash || temaParam) history.replaceState(null, '', '/kiosk/');

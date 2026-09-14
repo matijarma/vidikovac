@@ -13,6 +13,8 @@ export const hr: KioskStrings = {
     temporaryUntil: 'privremeni zaslon · vrijedi do {time}',
     venue: 'zaslon u prostoru',
     unlockedUntil: 'Otključano do {time}',
+    theme: 'Tema: {pref}',
+    themeWord: { auto: 'automatski', light: 'svijetla', dark: 'tamna', solar: 'po suncu' },
   },
   status: {
     connecting: 'Povezivanje sa zaslonom…',

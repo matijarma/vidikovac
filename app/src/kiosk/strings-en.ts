@@ -13,6 +13,8 @@ export const en: KioskStrings = {
     temporaryUntil: 'temporary screen · valid until {time}',
     venue: 'venue screen',
     unlockedUntil: 'Unlocked until {time}',
+    theme: 'Theme: {pref}',
+    themeWord: { auto: 'automatic', light: 'light', dark: 'dark', solar: 'solar' },
   },
   status: {
     connecting: 'Connecting to the screen…',

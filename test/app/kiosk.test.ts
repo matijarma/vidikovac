@@ -13,6 +13,7 @@ import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, ROTATE_MS, STORY_LEAVE_MS, type KioskDeps } from '../../app/src/kiosk';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
@@ -47,7 +48,25 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase'>> & { stored?: string | null };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase'>> & { stored?: string | null; themeInitial?: ThemePreference };
+
+/** A theme controller the test drives and inspects: every `setPreference` call
+ *  is recorded in order, and `onChange` behaves exactly like the real one
+ *  (fires once, synchronously, with the current state, per ui/theme.ts). */
+function fakeThemeController(initial: ThemePreference): { theme: ThemeController; calls: ThemePreference[]; listenerCount: () => number } {
+  let preference = initial;
+  const calls: ThemePreference[] = [];
+  const listeners = new Set<(state: { preference: ThemePreference; resolved: 'light' | 'dark' }) => void>();
+  const notify = () => { for (const l of listeners) l({ preference, resolved: 'light' }); };
+  const theme: ThemeController = {
+    getPreference: () => preference,
+    getResolvedTheme: () => 'light',
+    setPreference(next) { preference = next; calls.push(next); notify(); },
+    onChange(listener) { listeners.add(listener); listener({ preference, resolved: 'light' }); return () => { listeners.delete(listener); }; },
+    destroy() { listeners.clear(); },
+  };
+  return { theme, calls, listenerCount: () => listeners.size };
+}
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
@@ -69,11 +88,13 @@ function mount(opts: MountOptions = {}) {
   const requestWakeLock = vi.fn(async () => {});
   /** The theme-or-resize listener the controller registers; a test fires it after mutating its viewport object. */
   let repaint: (() => void) | null = null;
+  const themeFake = fakeThemeController(opts.themeInitial ?? 'solar');
   const handle = mountKiosk(root, {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
+    theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
       const joined = { phase: 'live' as const, role: 'kiosk' as const, expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 };
@@ -87,6 +108,7 @@ function mount(opts: MountOptions = {}) {
   });
   return {
     root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, requestFullscreen, requestWakeLock,
+    theme: themeFake.theme, themeCalls: themeFake.calls, themeListenerCount: themeFake.listenerCount,
     get handlers() { return handlers!; },
     repaint: () => repaint?.(),
     expire: () => sessionExpired?.(),
@@ -915,5 +937,46 @@ describe('handheld: the kiosk on a phone', () => {
     expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).toBeNull();
     expect(k.handle.phase()).toBe('invitation');
+  });
+});
+
+// T5.3: a 44 px header button left of the clock, labelled "Tema: <word>" from
+// the theme controller's own preference, cycling auto -> light -> dark ->
+// solar through setPreference (which persists vidikovac-theme itself --
+// ui/theme.ts is untouched and does the writing). The controller is always
+// supplied: entries/kiosk.ts hands mountKiosk the same instance bootPage()
+// created and resolved (default solar, or ?tema=) before this component ever
+// sees it, so the label is correct on the very first paint.
+describe('T5.3: the theme button', () => {
+  it('sits left of the clock, labelled with the current preference, and four clicks cycle auto -> light -> dark -> solar in order', () => {
+    const k = mount(); // themeInitial defaults to 'solar', the kiosk's own default
+    const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.type).toBe('button');
+    expect(text(btn)).toBe('Tema: po suncu');
+    // Left of the clock: its very next sibling is the clock itself.
+    expect(btn.nextElementSibling?.getAttribute('data-testid')).toBe('kiosk-clock');
+    btn.click();
+    expect(text(btn)).toBe('Tema: automatski');
+    btn.click();
+    expect(text(btn)).toBe('Tema: svijetla');
+    btn.click();
+    expect(text(btn)).toBe('Tema: tamna');
+    btn.click();
+    expect(text(btn)).toBe('Tema: po suncu');
+    expect(k.themeCalls).toEqual(['auto', 'light', 'dark', 'solar']);
+  });
+  it('reads every word straight from the theme controller, never the locale it started in', () => {
+    const k = mount({ locale: 'en', themeInitial: 'light' });
+    const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
+    expect(text(btn)).toBe('Theme: light');
+    btn.click();
+    expect(text(btn)).toBe('Theme: dark');
+  });
+  it('lets go of the theme controller on destroy, like every other subscription', () => {
+    const k = mount();
+    expect(k.themeListenerCount()).toBe(1);
+    k.handle.destroy();
+    expect(k.themeListenerCount()).toBe(0);
   });
 });
