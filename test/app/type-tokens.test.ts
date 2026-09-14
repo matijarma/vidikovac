@@ -87,6 +87,17 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(LAYERS).toMatch(/\.ov \.agenda-day \{[^}]*font-size: var\(--type-secondary\);/);
     // T3.5 lifts the lead's lede to prose at the body role (68ch, no clamp);
     // .nw-summary no longer exists, replaced by .nw-lead-lede at --type-body.
+    //
+    // CONTROLLER FLAG (T3.5 fix round 1): this file is not in T3.5's (or any
+    // wave-3 task's) "Files" list, but the pinned assertions in this single
+    // it() also cover .ev-allday (owned by ki-C/T3.4, two lines above) and,
+    // further down in "the 13 px floor holds for the shared labels too",
+    // .sf-number-label (owned by ki-W/T3.2). If either of those branches
+    // renames or restructures its own class the way T3.5 renamed
+    // .nw-summary -> .nw-lead-lede, it will have to edit this same file, and
+    // a merge here will not be mechanical. Diff ki-W's and ki-C's branches
+    // against this file before merging wave 3 rather than assuming, from the
+    // ownership table alone, that nobody else touched it.
     expect(LAYERS).toMatch(/\.nw-lead-lede \{[^}]*font-size: var\(--type-body\);/);
     expect(LAYERS).toMatch(/\.detail-facts div \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.ws-detail-hint \{[^}]*font-size: var\(--type-secondary\);/);
