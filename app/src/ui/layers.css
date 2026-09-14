@@ -349,7 +349,6 @@
 .nw-lead .row-main { gap: var(--sp-2); }
 .nw-lead .row-title { font-size: var(--type-title); font-weight: 700; line-height: var(--lh-title); }
 .nw-lead-lede { display: block; font-size: var(--type-body); font-weight: 400; line-height: var(--lh-prose); max-inline-size: 68ch; }
-.nw-disclaimer { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
 
 /* Safety: priorities and practical actions first. */
 .sf-level { display: grid; gap: var(--sp-2); padding: var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); }
