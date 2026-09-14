@@ -56,7 +56,6 @@
 .sec-title { font-size: var(--text-lg); letter-spacing: -0.01em; }
 .sec-title-row .status-badge { margin-inline-start: auto; }
 .sec[data-tone='weather'] .kicker { color: var(--tone-weather); }
-.sec[data-tone='events'] .kicker { color: var(--tone-events); }
 .sec[data-tone='urgency'] .kicker { color: var(--tone-urgency); }
 .sec[data-tone='transit'] .kicker { color: var(--tone-transit); }
 .sec[data-tone='civic'] .kicker, .sec[data-tone='action'] .kicker { color: var(--tone-civic); }
@@ -315,16 +314,56 @@
 .dir-item[data-layer='vijesti'] .dir-icon { color: var(--tone-text-primary); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .dir-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
-/* Events: a dated agenda with category controls; undated notices apart. */
-.agenda { display: grid; gap: var(--sp-2); }
-.agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: uppercase; letter-spacing: 0.04em; }
-.agenda .row-lead { min-inline-size: 3.5rem; }
-.ev-time { font-size: var(--text-sm); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
-.ev-allday { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-events); font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.03em; }
+/* Events: the search and one chip row first, a count line under them, then a
+   dated agenda on the canvas. The blocks are flat sections a hairline apart
+   (`.ev-sec` follows `.sec` at equal specificity, so it wins on screen while
+   print.css, loaded later, still boxes the section on paper). A row is
+   signage.css's `.row` at 3.25rem: a 3.5rem time column, the title, the
+   venue or the source, a chevron. Violet only where it carries meaning: the
+   day heads, the all-day word, the source dot and the pressed chip. */
+/* The domain's name is the tab's on a phone; a desk shows it as the title. */
+.ev-title { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.chip[aria-pressed='true'][data-tone='events'] { background: var(--tone-tint-events); border-color: var(--tone-events); color: var(--tone-events); }
+/* "6 događanja · 4 u tijeku", with the status word beside it when the source is not live. */
+.ev-count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.ev-sec { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.ev-sec + .ev-sec { margin-block-start: var(--sp-6); padding-block-start: var(--sp-6); border-block-start: 1px solid var(--tone-stroke); }
+.ev-sec .sec-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
+/* The agenda: day heads in sentence case, each over a hairline; the row under a head needs none of its own. */
+.agenda { display: grid; }
+.agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); border-block-start: 1px solid var(--tone-stroke); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); }
+.agenda .agenda-day + .row { border-block-start: 0; }
+/* Rows at 3.25rem: the button gives up its own vertical padding, the row's hairline-to-hairline height does the spacing. */
+.ev-sec .row-button { padding-block: 0; }
+.ev-lead { flex: none; inline-size: 3.5rem; }
+.ev-time { font-size: var(--type-control); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
+.ev-allday { font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); }
 .ev-source { display: inline-flex; align-items: center; gap: 0.3rem; }
 .ev-source::before { content: ''; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 2px; background: var(--tone-events); }
-.ev-undated .row-lead { color: var(--tone-text-subtle); }
-.sec-undated { background: var(--tone-surface-2); box-shadow: none; }
+/* U tijeku: the end date at the row's end, before the chevron. */
+.ev-until { flex: none; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ev-more { justify-self: start; }
+/* Bez datuma: a sunken well, not a raised card; its rows press to the next surface level. */
+.ev-well { display: grid; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); }
+@media (hover: hover) {
+  .ev-well .row-button:hover { background: var(--tone-surface-3); }
+}
+/* Izvan Zagreba: folded by default; the summary is the block's head and a 44 px control. */
+.ev-summary { display: flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); cursor: pointer; list-style: none; font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); touch-action: manipulation; }
+.ev-summary::-webkit-details-marker { display: none; }
+.ev-summary .icon { color: var(--tone-text-muted); transition: rotate var(--dur-fast) var(--ease); }
+.ev-outside[open] .ev-summary .icon { rotate: 180deg; }
+.ev-outside > .sec-note, .ev-outside > .rows { margin-block-start: var(--sp-2); }
+/* The open event: a flat article; the date sentence under the title, one row of actions. */
+.ev-detail { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.ev-when { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
+.ev-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.ev-actions .actions { display: contents; }
+@media (min-width: 60rem) {
+  .ev-title { position: static; inline-size: fit-content; block-size: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: var(--type-title); font-weight: var(--weight-bold); line-height: var(--lh-title); letter-spacing: -0.01em; }
+}
+/* On paper print.css boxes .sec and .detail again; the blocks get their inner air back inside that box. */
+@media print { .ev-sec, .ev-sec + .ev-sec, .ev-detail { padding: var(--sp-3); } }
 
 /* Civic: three blocks on one canvas, a hairline apart, no card. The next
    session is a calendar tile (the day numeral over the month word), the
@@ -423,6 +462,8 @@
 /* Press feedback: a touch has no hover, so :active stands in for it. */
 @media (hover: none) {
   .row-button:active, .route-link:active, .ov-link:active, .ov-row:active, .ov-safety .band:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+  /* Rows inside the events well already sit on surface-2; their press goes one level further. */
+  .ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }
 }
 
 /* Middling room (a 960 to about 1130 px desk, or a wide desk at 125% text):

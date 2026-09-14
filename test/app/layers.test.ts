@@ -582,8 +582,9 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     const izlozba = rows.find((r) => r.includes('Izložba tradicijskog nakita'))!;
     expect(izlozba).toContain('Studentski centar'); // venue
     expect(izlozba).toContain('Etnografski muzej'); // per-source attribution
-    expect(izlozba).toContain('u tijeku · do'); // began before now, still runs: never listed as a next start
-    expect(section.querySelector('#ev-ongoing [data-testid=event-row]')).not.toBeNull();
+    // Began before now, still runs: never listed as a next start; its row sits under "U tijeku" with the end date at the row's end.
+    expect(izlozba).toMatch(/do 1. 10.$/);
+    expect(text(section.querySelector('#ev-ongoing [data-testid=event-row]'))).toContain('Izložba tradicijskog nakita');
     const igraliste = rows.find((r) => r.includes('Novo dječje igralište'))!;
     expect(igraliste).toContain('Kvartovske novosti');
     expect(igraliste).toContain('cijeli dan'); // a day-precision entry is all day, not midnight
@@ -629,7 +630,8 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
       ] as ModuleSnapshot['items'],
     };
     const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: futureOnly } }));
-    expect(text(section.querySelector('#ev-agenda .agenda-day'))).toMatch(/18\. 9\. 2026\./);
+    // The head is the short weekday date in sentence case ("pet 18. 9."): this year's agenda needs no year.
+    expect(text(section.querySelector('#ev-agenda .agenda-day'))).toBe('pet 18. 9.');
     expect([...section.querySelectorAll('[data-testid=event-row]')]).toHaveLength(1);
     expect(text(section.querySelector('#ev-agenda'))).toContain('Jesenski festival');
   });
@@ -892,5 +894,136 @@ describe('Grad: the next session as a date, the gazette issue as a lockup with l
     expect([...figure.querySelectorAll('.g-bar-label')].map(text)).toEqual(['Ugovaranje', 'Radovi u tijeku']);
     expect([...figure.querySelectorAll('.g-bar-value')].map(text)).toEqual(['10', '10']);
     expect(works.querySelector('.kicker')).toBeNull();
+  });
+});
+
+describe('Događanja: search and one chip row, a dated agenda without cards, ongoing and undated apart (T3.4)', () => {
+  const event = (id: string, over: Record<string, unknown>) => ({ id, module: 'dogadanja', kind: 'event', tier: 'session', dateBasis: 'event', ...over });
+  // Thirty starts every three hours from now (four days of heads), six running exhibitions, eight undated notices, one venue outside Zagreb.
+  const MANY_EVENTS: ModuleSnapshot = {
+    ...SNAPSHOTS.dogadanja!,
+    items: [
+      ...Array.from({ length: 30 }, (_, i) => event(`kulturpunkt:m${i + 1}`, {
+        title: `Događaj ${i + 1}`, link: `https://kulturpunkt.hr/m/${i + 1}`, at: new Date(NOW + (i + 1) * 3 * 3_600_000).toISOString(),
+        data: { source: 'kulturpunkt', category: i % 2 ? 'koncert' : 'film', precision: 'time' },
+      })),
+      ...Array.from({ length: 6 }, (_, i) => event(`etnografski:o${i + 1}`, {
+        title: `Izložba ${i + 1}`, link: `https://emz.hr/o/${i + 1}`, at: '2026-09-01T09:00:00Z', until: `2026-10-${10 + i}T18:00:00Z`,
+        data: { source: 'etnografski', category: 'izlozba', venue: 'Etnografski muzej, Zagreb', precision: 'time' },
+      })),
+      ...Array.from({ length: 8 }, (_, i) => event(`kvartovske:u${i + 1}`, {
+        title: `Obavijest kvarta ${i + 1}`, link: `https://aktivnosti.zagreb.hr/n/u${i + 1}`, at: '2026-09-10T08:00:00Z', dateBasis: 'published', data: { source: 'kvartovske' },
+      })),
+      event('kulturpunkt:out', { title: 'Koncert na rivi', at: '2026-09-12T19:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time', venue: 'Dioklecijanova palača, Split' } }),
+    ] as ModuleSnapshot['items'],
+  };
+  const many = (filters: Record<string, string> = {}): LayerContext => ctx({ snapshots: { ...SNAPSHOTS, dogadanja: MANY_EVENTS }, view: { layer: 'kultura', selection: null, filters } });
+
+  it('opens with the title hidden on the phone, the search field, one row of events-toned chips with Sve first, then the count line in the right plural', () => {
+    const section = renderLayer('kultura', ctx());
+    const title = section.querySelector('h2.layer-title')!;
+    expect(title.classList.contains('ev-title')).toBe(true);
+    expect(section.querySelector('.ws-head')).toBeNull();
+    const toolbar = section.querySelector('.ws-toolbar')!;
+    expect(toolbar.children[0]!.querySelector('[data-filter-key=q]')).not.toBeNull();
+    expect(toolbar.children[1]!.matches('[role=group]')).toBe(true);
+    const chips = [...toolbar.querySelectorAll('ul.chips li button.chip[aria-pressed]')];
+    expect(chips.length).toBeGreaterThan(1);
+    expect(text(chips[0]!)).toMatch(/^Sve/);
+    expect(chips.every((c) => c.getAttribute('data-tone') === 'events')).toBe(true);
+    const count = section.querySelector('[data-testid=ev-count]')!;
+    expect(text(count)).toBe('2 događanja · 1 u tijeku');
+    // No kicker and no "Agenda" heading anywhere in the workspace.
+    expect(section.querySelector('.kicker')).toBeNull();
+    expect(text(section)).not.toMatch(/\bAgenda\b/);
+    // Concerts only: one start and no exhibition, so the singular and no ongoing part.
+    const koncerti = renderLayer('kultura', ctx({ view: { layer: 'kultura', selection: null, filters: { category: 'koncert' } } }));
+    expect(text(koncerti.querySelector('[data-testid=ev-count]'))).toBe('1 događanje');
+    const en = renderLayer('kultura', ctx({ i18n: createDefaultI18n('en') }));
+    expect(text(en.querySelector('[data-testid=ev-count]'))).toBe('2 events · 1 ongoing');
+  });
+
+  it('lists the agenda flat under sentence-case day heads: twelve rows with a time column, then Prikaži još 12 as a filter button', () => {
+    const section = renderLayer('kultura', many());
+    const agenda = section.querySelector('#ev-agenda')!;
+    expect(agenda.hasAttribute('data-flat')).toBe(true);
+    expect(agenda.querySelector('.sec-head')).toBeNull();
+    expect(agenda.querySelector('#ev-agenda-title')!.classList.contains('visually-hidden')).toBe(true);
+    const rows = [...agenda.querySelectorAll('[data-testid=event-row]')];
+    expect(rows).toHaveLength(12);
+    const more = agenda.querySelector('[data-action=filter][data-filter-key=events]')!;
+    expect(text(more)).toBe('Prikaži još 12');
+    expect(more.getAttribute('data-filter-value')).toBe('24');
+    const heads = [...agenda.querySelectorAll('.agenda-day')].map(text);
+    expect(heads.slice(0, 3)).toEqual(['Danas', 'Sutra', 'ned 13. 9.']);
+    expect(heads.some((h) => /2026|[A-ZČŠŽ]{2}/.test(h))).toBe(false);
+    expect(rows[0]!.querySelector('.ev-lead .ev-time')).not.toBeNull();
+    expect(text(rows[0]!.querySelector('.row-title'))).toBe('Događaj 1');
+    expect(text(rows[0]!.querySelector('.row-sub'))).toBe('Kulturpunkt');
+    const paged = renderLayer('kultura', many({ events: '24' }));
+    expect(paged.querySelectorAll('#ev-agenda [data-testid=event-row]')).toHaveLength(24);
+    expect(text(paged.querySelector('#ev-agenda [data-filter-key=events]'))).toBe('Prikaži još 6');
+  });
+
+  it('sets what is running apart: four rows with the end date at the row end and no state word, then Još N reveals the rest', () => {
+    const section = renderLayer('kultura', many());
+    const ongoing = section.querySelector('#ev-ongoing')!;
+    expect(ongoing.hasAttribute('data-flat')).toBe(true);
+    expect(text(ongoing.querySelector('.sec-title'))).toBe('U tijeku');
+    const rows = [...ongoing.querySelectorAll('[data-testid=event-row]')];
+    expect(rows).toHaveLength(4);
+    expect(text(rows[0]!.querySelector('.ev-until'))).toBe('do 10. 10.');
+    expect(rows[0]!.querySelector('.ev-lead')).toBeNull();
+    expect(text(rows[0]!)).not.toContain('Traje');
+    expect(text(rows[0]!.querySelector('.row-sub'))).toBe('Etnografski muzej, Zagreb · Etnografski muzej');
+    const more = ongoing.querySelector('[data-action=filter][data-filter-key=ongoing]')!;
+    expect(text(more)).toBe('Još 2');
+    const all = renderLayer('kultura', many({ ongoing: '6' }));
+    expect(all.querySelectorAll('#ev-ongoing [data-testid=event-row]')).toHaveLength(6);
+    expect(all.querySelector('#ev-ongoing [data-filter-key=ongoing]')).toBeNull();
+  });
+
+  it('keeps undated notices in a well with title and source, six then more, and folds venues outside Zagreb into a closed details that counts them', () => {
+    const section = renderLayer('kultura', many());
+    const undated = section.querySelector('#ev-undated')!;
+    expect(undated.hasAttribute('data-flat')).toBe(true);
+    expect(undated.querySelector('.ev-well')).not.toBeNull();
+    expect(text(undated.querySelector('.sec-title'))).toBe('Bez datuma');
+    const rows = [...undated.querySelectorAll('[data-testid=undated-row]')];
+    expect(rows).toHaveLength(6);
+    expect(text(rows[0]!.querySelector('.row-title'))).toBe('Obavijest kvarta 1');
+    expect(text(rows[0]!.querySelector('.row-sub'))).toBe('Kvartovske novosti');
+    expect(text(rows[0]!)).not.toContain('vrijeme nije navedeno');
+    expect(text(undated.querySelector('[data-action=filter][data-filter-key=undated]'))).toBe('Prikaži još 2');
+    expect(renderLayer('kultura', many({ undated: '12' })).querySelectorAll('[data-testid=undated-row]')).toHaveLength(8);
+    const outside = section.querySelector('#ev-outside')!;
+    expect(outside.tagName).toBe('DETAILS');
+    expect(outside.hasAttribute('open')).toBe(false);
+    expect(text(outside.querySelector('summary'))).toBe('Izvan Zagreba 1');
+    expect(text(outside)).toContain('Koncert na rivi');
+    expect(text(section.querySelector('#ev-agenda'))).not.toContain('Koncert na rivi');
+    // Ten venues outside Zagreb: the summary counts them all, the fold lists eight, then Prikaži još 2.
+    const tenOut = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: { ...SNAPSHOTS.dogadanja!, items: Array.from({ length: 10 }, (_, i) => event(`kulturpunkt:out${i + 1}`, { title: `Na rivi ${i + 1}`, at: '2026-09-12T19:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time', venue: 'Riva, Split' } })) as ModuleSnapshot['items'] } } }));
+    expect(text(tenOut.querySelector('#ev-outside summary'))).toBe('Izvan Zagreba 10');
+    expect(tenOut.querySelectorAll('#ev-outside [data-testid=event-row]')).toHaveLength(8);
+    expect(text(tenOut.querySelector('#ev-outside [data-action=filter][data-filter-key=outside]'))).toBe('Prikaži još 2');
+    // Every block in the list column is a hairline-separated flat section, never a card.
+    expect([...section.querySelectorAll('.ws-primary > *')].every((el) => el.classList.contains('ev-sec'))).toBe(true);
+  });
+
+  it('opens a detail as a flat article: the title, the date sentence, venue and organiser only when present, category, source, and one actions row ending in the original', () => {
+    const select = (id: string) => ctx({ view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('dogadanja', id), module: 'dogadanja' }, filters: {} } });
+    const detail = renderLayer('kultura', select('kulturpunkt:1')).querySelector('[data-testid=event-detail]')!;
+    expect(detail.classList.contains('ev-detail')).toBe(true);
+    expect(detail.querySelector('.kicker')).toBeNull();
+    expect(text(detail.querySelector('.detail-title'))).toBe('Koncert u parku');
+    expect(text(detail.querySelector('.ev-when'))).toBe('Sutra 20:00');
+    expect([...detail.querySelectorAll('.detail-facts dt')].map(text)).toEqual(['Kategorija', 'Izvor']);
+    expect([...detail.querySelectorAll('.detail-facts dd')].map(text)).toEqual(['Koncerti', 'Kulturpunkt (CC BY-SA 3.0 HR)']);
+    const controls = [...detail.querySelectorAll('.ev-actions button, .ev-actions a')];
+    expect(controls.map((c) => c.getAttribute('data-action') ?? c.tagName)).toEqual(['copy-item', 'share-item', 'A']);
+    expect(text(controls.at(-1)!)).toBe('Otvori izvornik');
+    const withVenue = renderLayer('kultura', select('etnografski:2')).querySelector('[data-testid=event-detail]')!;
+    expect([...withVenue.querySelectorAll('.detail-facts dt')].map(text)).toEqual(['Mjesto', 'Kategorija', 'Izvor']);
   });
 });
