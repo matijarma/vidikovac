@@ -4,80 +4,26 @@
 // carry `default-src 'none'` (worker/security-headers.ts, Task D4).
 //
 // Every value from a feed passes through escapeHtml. Severity, freshness and
-// status are always a word plus a shape; colour only reinforces.
+// status are always a word plus a shape; colour only reinforces. The style is
+// generated from the app's tokens (scripts/build-hitno-style.mjs), so this
+// file paints no colour of its own.
+import { DISTRICTS, type District } from '../../app/src/kiosk/districts';
 import type { FeedItem, Severity } from '../feed/schema';
 import { fillAttribution } from '../open/attribution';
 import { escapeHtml } from '../open/html';
-import { formatZagrebDateTime, formatZagrebTime, parseIso } from '../open/time';
+import { pageFooter } from '../open/index-page';
+import { formatZagrebDateTime, formatZagrebTime, parseIso, zagrebDay } from '../open/time';
 import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from './brojevi';
 import { LJEKARNE, LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE } from './ljekarne';
 import { SEVERITY_WORDS, isActiveWarning, type HitnoData, type HitnoPanel } from './select';
+import { HITNO_STYLE, PAGE_PALETTE } from './style.generated';
 
 /** "Živo" while the last fetch is younger than this; "Danas" otherwise. */
 export const LIVE_WINDOW_MS = 5 * 60 * 1000;
-
-const STYLE = `
-:root{color-scheme:light dark;--bg:#f6f8f7;--fg:#182423;--muted:#526461;--accent:#08777b;
---line:#d6e1de;--card:#fcfdfc;--soft:#e9efec;--amber:#845807;--red:#b63750;--ok:#237151}
-@media (prefers-color-scheme:dark){:root{--bg:#17201f;--fg:#eff6f3;--muted:#acbdb6;
---accent:#63d7c3;--line:#3b4b45;--card:#202d29;--soft:#2b3a34;--amber:#f5c978;--red:#ff9dad;--ok:#7ddeaf}}
-*{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg);
-font:1rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-html{scroll-padding-top:6rem}
-a{color:var(--accent);text-underline-offset:.2em}
-a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
-.wrap{max-width:76rem;margin:0 auto;padding:2rem 2.5rem 4rem}
-.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;z-index:3;background:var(--card);padding:.75rem}
-header{padding-bottom:1rem}
-header .brand{display:inline-block;margin-bottom:2rem;font-size:1.35rem;font-weight:800;letter-spacing:-.06em;text-decoration:none;color:var(--fg)}
-h1{font-size:2.5rem;line-height:1.1;margin:0 0 .75rem;letter-spacing:-.04em}
-.lede{max-width:60ch;margin:0 0 .75rem;font-size:1.125rem}
-.stamp{color:var(--muted);margin:0;font-size:.875rem}
-nav.toc{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);margin-bottom:2rem}
-nav.toc ul{display:flex;flex-wrap:wrap;gap:.25rem 1rem;list-style:none;margin:0;padding:.4rem 0}
-nav.toc a{display:inline-flex;align-items:center;min-height:44px;font-size:.875rem;font-weight:650;text-decoration:none}
-main{display:block}
-.safety-columns{display:grid;grid-template-columns:1.2fr 1fr;gap:2.5rem;margin-top:2rem;align-items:start}
-.safety-columns>div>section+section{margin-top:1.75rem}
-section{min-width:0;margin:0;padding:1.5rem 0;border-top:1px solid var(--line)}
-#brojevi{border:0;padding:0 0 1.75rem}
-#upozorenja{border-radius:18px;background:var(--card);padding:1.5rem;border:1px solid var(--line)}
-h2{margin:0 0 .65rem;font-size:1.4rem;line-height:1.25;letter-spacing:-.025em;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
-.check{font-size:.75rem;font-weight:650;color:var(--amber);border:1px solid currentColor;border-radius:999px;padding:.1rem .55rem}
-.status{margin:0 0 1rem;color:var(--muted);font-size:.875rem}
-.status.stale .dot{color:var(--amber)}.status.down .dot{color:var(--red)}.status.live .dot{color:var(--ok)}
-ul.items{list-style:none;margin:0;padding:0}
-ul.items>li{padding:1rem 0;border-top:1px solid var(--line)}
-ul.items>li:first-child{border-top:0}
-.title{font-weight:700}
-.meta{color:var(--muted);font-size:.875rem;margin-top:.3rem}
-.sev{display:inline-block;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.8rem;
-border-radius:999px;padding:.1rem .6rem;border:1px solid currentColor;margin-right:.4rem}
-.sev-moderate,.sev-minor{color:var(--amber)}.sev-severe,.sev-extreme{color:var(--red)}
-.sev-info{color:var(--muted)}
-.empty{margin:.25rem 0;color:var(--muted)}
-.src{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--line);color:var(--muted);font-size:.75rem;line-height:1.55}
-.src p{margin:0}
-.numbers{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:.75rem;list-style:none;margin:0;padding:0}
-.numbers a{display:flex;flex-direction:column;justify-content:space-between;gap:.75rem;min-height:140px;text-decoration:none;border-radius:16px;padding:1.15rem;background:var(--soft);color:var(--fg)}
-.numbers li:first-child a{background:var(--fg);color:var(--bg)}
-.numbers b{display:block;font-size:2rem;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
-.numbers li:first-child b{font-size:2.75rem}
-.numbers span{font-size:.875rem;line-height:1.35}
-.pharmacies{list-style:none;margin:0;padding:0}
-.pharmacies li{padding:1.15rem 0;border-top:1px solid var(--line)}
-.pharmacies h3{font-size:1rem;margin:0 0 .2rem;letter-spacing:-.01em}
-.pharmacies p{margin:.25rem 0}
-.pharmacy-call{display:inline-flex;align-items:center;min-height:44px;margin-top:.5rem;padding:.4rem .9rem;border:1px solid var(--line);border-radius:9px;text-decoration:none;font-weight:650}
-details summary{cursor:pointer;font-weight:600;padding:.65rem 0;min-height:44px}
-footer.page{border-top:1px solid var(--line);margin-top:3rem;padding-top:1.5rem;color:var(--muted);font-size:.8rem;max-width:75ch}
-@media (max-width:850px){.wrap{padding:1.25rem 1.25rem 3rem}.numbers{grid-template-columns:repeat(4,1fr)}.numbers li:first-child{grid-column:1/-1}.numbers li:first-child a{min-height:100px;flex-direction:row;align-items:center}.numbers li:first-child span{max-width:18ch}.numbers a{min-height:125px;padding:1rem}.safety-columns{display:block}section{margin-bottom:1.5rem}header .brand{margin-bottom:1.5rem}}
-@media (max-width:480px){h1{font-size:2rem}.numbers{grid-template-columns:repeat(2,1fr)}.numbers a{min-height:112px}nav.toc ul{gap:.2rem 1rem}#upozorenja{padding:1.1rem}.wrap{padding:1rem 1rem 3rem}}
-@media print{html,body{background:#fff;color:#000;font-size:11pt}section{border-color:#999;background:#fff;break-inside:avoid}
-main,.safety-columns{display:block}nav.toc,.skip{display:none}a{color:#000}.numbers a,.numbers li:first-child a{background:transparent;color:#000;border:1px solid #999}.src a[href]::after,.numbers a[href]::after{content:""}
-a.ext[href]::after{content:" (" attr(href) ")";font-size:.8em;color:#555}}
-`;
+/** Assembly points on the page before the "Prikaži još" fold, when no point names its district (R-K4). */
+export const ASSEMBLY_PAGE = 24;
+/** Closures on the page before the fold. */
+export const CLOSURES_SHOWN = 5;
 
 function timeTag(iso: string | undefined): string {
   const d = parseIso(iso);
@@ -85,23 +31,44 @@ function timeTag(iso: string | undefined): string {
   return `<time datetime="${escapeHtml(d.toISOString())}">${formatZagrebDateTime(d)}</time>`;
 }
 
+/** A clock for an instant on the same Zagreb day as `now` ("09:58"); the day-and-clock form otherwise ("9. 9. 08:00"). */
+function clockTag(d: Date, now: Date): string {
+  const text = zagrebDay(d) === zagrebDay(now) ? formatZagrebTime(d) : formatZagrebDateTime(d);
+  return `<time datetime="${escapeHtml(d.toISOString())}">${text}</time>`;
+}
+
+/**
+ * The freshness line: a shape, a state word, and the time it refers to,
+ * named for what it is (R-25). "ažurirano" only for the source's own
+ * timestamp; "dohvaćeno" when only our fetch time exists; "zastarjelo od"
+ * from the moment the live fetch first failed.
+ */
 function freshness(panel: HitnoPanel, now: Date): string {
   const s = panel.snapshot;
   if (s === null || panel.state === 'unavailable') {
-    return `<p class="status down"><span class="dot" aria-hidden="true">○</span> Izvor trenutačno nedostupan.</p>`;
-  }
-  if (panel.state === 'stale') {
-    return (
-      `<p class="status stale"><span class="dot" aria-hidden="true">◐</span> Zastarjelo: ` +
-      `posljednji uspješan dohvat ${timeTag(panel.availability?.fetchedAt ?? s.fetchedAt)}.</p>`
-    );
+    return `<p class="status down"><span class="dot" aria-hidden="true">○</span> <span>Izvor trenutačno nedostupan.</span></p>`;
   }
   const fetched = parseIso(panel.availability?.fetchedAt ?? s.fetchedAt);
+  if (panel.state === 'stale') {
+    const since = parseIso(s.staleSince);
+    const lastGood = `posljednji uspješan dohvat ${fetched === null ? 'nepoznat' : clockTag(fetched, now)}`;
+    const text = since === null ? `Zastarjelo: ${lastGood}.` : `Zastarjelo od ${clockTag(since, now)}, ${lastGood}.`;
+    return `<p class="status stale"><span class="dot" aria-hidden="true">◐</span> <span>${text}</span></p>`;
+  }
   const live = fetched !== null && now.getTime() - fetched.getTime() < LIVE_WINDOW_MS;
-  return (
-    `<p class="status live"><span class="dot" aria-hidden="true">●</span> ${live ? 'Živo' : 'Danas'}: ` +
-    `ažurirano ${fetched === null ? 'nepoznato' : formatZagrebTime(fetched)}.</p>`
-  );
+  const source = parseIso(panel.availability?.sourceUpdatedAt);
+  // The state word describes the copy: "Živo" within five minutes of the fetch,
+  // "Danas" when the time shown is today, neutral when the source's own time
+  // is from another day (so "Danas: ažurirano 2. 1." can never be printed).
+  const shown = source ?? fetched;
+  const today = shown !== null && zagrebDay(shown) === zagrebDay(now);
+  const word = live ? 'Živo' : today ? 'Danas' : 'Stanje';
+  const when = source !== null
+    ? `ažurirano ${clockTag(source, now)}`
+    : fetched !== null
+      ? `dohvaćeno ${clockTag(fetched, now)}`
+      : 'vrijeme nepoznato';
+  return `<p class="status live"><span class="dot" aria-hidden="true">●</span> <span>${word}: ${when}.</span></p>`;
 }
 
 /** `panel`'s attribution text may be an R-08 template; it is filled from the
@@ -124,7 +91,13 @@ function osmLink(item: FeedItem): string {
   const [lon, lat] = item.geo.coordinates as number[];
   if (typeof lat !== 'number' || typeof lon !== 'number') return '';
   const href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
-  return ` · <a class="ext" href="${escapeHtml(href)}" rel="noopener">karta</a>`;
+  return `<a class="ext" href="${escapeHtml(href)}" rel="noopener">karta</a>`;
+}
+
+/** The second line of a row: its non-empty parts separated by a middle dot, nothing when there are none. */
+function metaLine(parts: readonly string[]): string {
+  const shown = parts.filter((p) => p !== '');
+  return shown.length === 0 ? '' : `<div class="meta">${shown.join(' · ')}</div>`;
 }
 
 /**
@@ -133,7 +106,7 @@ function osmLink(item: FeedItem): string {
  * unmapped CAP severity string, or a future field could hand this a value
  * outside the closed 5-word vocabulary. That value is about to become part
  * of an HTML class attribute (`sev-${sev}`), so it is normalised against the
- * one true list of valid keys — `SEVERITY_WORDS` — and anything not on that
+ * one true list of valid keys, `SEVERITY_WORDS`, and anything not on that
  * list becomes 'info' before it ever reaches markup. This is stronger than
  * escaping: an unrecognised value can't reach the page in any form, not even
  * escaped.
@@ -147,6 +120,11 @@ function section(id: string, heading: string, body: string, badge = ''): string 
     `<section id="${id}" aria-labelledby="h-${id}">` +
     `<h2 id="h-${id}">${heading}${badge}</h2>${body}</section>`
   );
+}
+
+/** The rest of a list behind a closed `<details>`, or nothing when it all fits. */
+function fold(summary: string, rows: readonly string[]): string {
+  return rows.length === 0 ? '' : `<details><summary>${summary}</summary><ul class="items">${rows.join('')}</ul></details>`;
 }
 
 function warningsSection(panel: HitnoPanel, now: Date): string {
@@ -193,9 +171,11 @@ function quakesSection(panel: HitnoPanel, now: Date): string {
         .map(
           (q) =>
             `<li><span class="title">${escapeHtml(q.title)}</span>` +
-            `<div class="meta">${timeTag(q.at)}${osmLink(q)}` +
-            (q.link ? ` · <a class="ext" href="${escapeHtml(q.link)}" rel="noopener">EMSC</a>` : '') +
-            `</div>` +
+            metaLine([
+              timeTag(q.at),
+              osmLink(q),
+              q.link ? `<a class="ext" href="${escapeHtml(q.link)}" rel="noopener">EMSC</a>` : '',
+            ]) +
             (q.summary ? `<p>${escapeHtml(q.summary)}</p>` : '') +
             `</li>`,
         )
@@ -217,19 +197,95 @@ function closuresSection(panel: HitnoPanel, now: Date): string {
       : 'Stanje prometnica nije potvrđeno. Provjeri službeni izvor.'}</p>`;
   } else {
     const rows = panel.items.map((c) =>
-            `<li><span class="title">${escapeHtml(c.title)}</span>` +
-            (c.summary ? `<div>${escapeHtml(c.summary)}</div>` : '') +
-            `<div class="meta">od ${timeTag(c.at)} · ${c.until ? `očekivano otvaranje ${timeTag(c.until)}` : 'kraj nije najavljen'}</div>` +
-            `</li>`);
-    list = `<ul class="items">${rows.slice(0, 5).join('')}</ul>`;
-    if (rows.length > 5) list += `<details><summary>Prikaži preostala zatvaranja (${rows.length - 5})</summary><ul class="items">${rows.slice(5).join('')}</ul></details>`;
+      `<li><span class="title">${escapeHtml(c.title)}</span>` +
+      (c.summary ? `<div>${escapeHtml(c.summary)}</div>` : '') +
+      `<div class="meta">od ${timeTag(c.at)} · ${c.until ? `očekivano otvaranje ${timeTag(c.until)}` : 'kraj nije najavljen'}</div>` +
+      `</li>`);
+    list =
+      `<ul class="items">${rows.slice(0, CLOSURES_SHOWN).join('')}</ul>` +
+      fold(`Prikaži preostala zatvaranja (${rows.length - CLOSURES_SHOWN})`, rows.slice(CLOSURES_SHOWN));
   }
   return section(
     'prometnice',
     'Zatvorene prometnice',
-    freshness(panel, now) +
-      list +
-      sourceLine(panel, '/open/prometnice.geojson'),
+    freshness(panel, now) + list + sourceLine(panel, '/open/prometnice.geojson'),
+  );
+}
+
+// --- Assembly points, grouped by gradska četvrt ------------------------------
+
+/** "mjesto" after a count ending in 1 (not 11), "mjesta" otherwise. */
+function places(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? 'mjesto' : 'mjesta';
+}
+
+/** "je" or "su": the verb agrees with the paucal (2 to 4, not 12 to 14). */
+function verbFor(n: number): string {
+  const paucal = n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14);
+  return paucal ? 'su' : 'je';
+}
+
+/** A district as a key: case, diacritics and the dash between its halves do not count ("Gornji Grad-Medveščak" is "Gornji grad – Medveščak"). */
+function districtKey(value: string): string {
+  return value
+    .toLocaleLowerCase('hr')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[-\u2013\u2014]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const KNOWN_DISTRICTS = new Map<string, District>(DISTRICTS.map((d) => [districtKey(d.name), d]));
+const NO_DISTRICT = 'Četvrt nije navedena';
+
+function districtOf(p: FeedItem): string {
+  const value = p.data?.district;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+interface DistrictGroup {
+  label: string;
+  order: number;
+  points: FeedItem[];
+}
+
+/** Groups in the order of kiosk/districts.ts; a district the table does not know follows in first-seen order; points without one come last. */
+function groupByDistrict(points: readonly FeedItem[]): DistrictGroup[] {
+  const groups = new Map<string, DistrictGroup>();
+  let unknownOrder = DISTRICTS.length;
+  for (const p of points) {
+    const raw = districtOf(p);
+    const known = raw ? KNOWN_DISTRICTS.get(districtKey(raw)) : undefined;
+    const key = known ? known.slug : raw ? districtKey(raw) : '';
+    let group = groups.get(key);
+    if (!group) {
+      group = known
+        ? { label: known.name, order: DISTRICTS.indexOf(known), points: [] }
+        : raw
+          ? { label: raw, order: unknownOrder++, points: [] }
+          : { label: NO_DISTRICT, order: Number.MAX_SAFE_INTEGER, points: [] };
+      groups.set(key, group);
+    }
+    group.points.push(p);
+  }
+  return [...groups.values()].sort((a, b) => a.order - b.order);
+}
+
+function assemblyRow(p: FeedItem): string {
+  return (
+    `<li><span class="title">${escapeHtml(p.title)}</span>` +
+    metaLine([p.summary ? escapeHtml(p.summary) : '', osmLink(p)]) +
+    `</li>`
+  );
+}
+
+/** One closed `<details>` per district: its name and count on a 44 px summary, its rows inside. */
+function districtGroup(g: DistrictGroup): string {
+  return (
+    `<details class="district"><summary>${escapeHtml(g.label)} ` +
+    `<span class="count">· ${g.points.length} ${places(g.points.length)}</span></summary>` +
+    `<ul class="items">${g.points.map(assemblyRow).join('')}</ul></details>`
   );
 }
 
@@ -238,18 +294,23 @@ function assemblySection(panel: HitnoPanel, now: Date): string {
   if (panel.items.length === 0) {
     body = `<p class="empty">Popis zbornih mjesta trenutačno nije dostupan.</p>`;
   } else {
-    body =
+    // The register's true size is the assembly source's own total (the number
+    // before its cap). The module's coverage.total cannot serve here: ckan-geo
+    // serves two layers in one module, so it counts the districts too.
+    const total = panel.availability?.totalItems ?? panel.items.length;
+    const intro =
       `<p>Zborna mjesta su mjesta okupljanja građana nakon velike nesreće ili potresa. ` +
-      `Na popisu je <b>${panel.items.length}</b> mjesta u Gradu Zagrebu.</p>` +
-      `<details><summary>Prikaži sva zborna mjesta</summary><ul class="items">` +
-      panel.items
-        .map(
-          (p) =>
-            `<li><span class="title">${escapeHtml(p.title)}</span>` +
-            `<div class="meta">${p.summary ? escapeHtml(p.summary) : ''}${osmLink(p)}</div></li>`,
-        )
-        .join('') +
-      `</ul></details>`;
+      `Na popisu ${verbFor(total)} <b>${total}</b> ${places(total)} u Gradu Zagrebu.</p>`;
+    let list: string;
+    if (panel.items.some((p) => districtOf(p) !== '')) {
+      list = `<div class="districts">${groupByDistrict(panel.items).map(districtGroup).join('')}</div>`;
+    } else {
+      const rows = panel.items.map(assemblyRow);
+      list =
+        `<ul class="items">${rows.slice(0, ASSEMBLY_PAGE).join('')}</ul>` +
+        fold(`Prikaži još (${rows.length - ASSEMBLY_PAGE})`, rows.slice(ASSEMBLY_PAGE));
+    }
+    body = intro + list;
   }
   return section(
     'zborna-mjesta',
@@ -271,8 +332,8 @@ function pharmaciesSection(): string {
   return section(
     'ljekarne',
     'Dežurne ljekarne',
-    `<p class="status"><span aria-hidden="true">▣</span> Ručno održavan popis, provjeren ${escapeHtml(checkedText)} ` +
-      `prema stranici Grada Zagreba. Prije puta provjeri na izvorniku ili nazovi ljekarnu.</p>` +
+    `<p class="status"><span aria-hidden="true">▣</span> <span>Ručno održavan popis, provjeren ${escapeHtml(checkedText)} ` +
+      `prema stranici Grada Zagreba. Prije puta provjeri na izvorniku ili nazovi ljekarnu.</span></p>` +
       `<ul class="pharmacies">${rows}</ul>` +
       `<footer class="src"><p>${escapeHtml(LJEKARNE_SOURCE.text)} · ` +
       `<a class="ext" href="${escapeHtml(LJEKARNE_SOURCE.url)}" rel="noopener">izvornik</a></p></footer>`,
@@ -304,17 +365,17 @@ export function renderHitnoPage(data: HitnoData, now: Date): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>Hitno · Kaj ima?</title>
+<title>Sigurnost · Kaj ima?</title>
 <meta name="description" content="Sigurnosne informacije za Zagreb: upozorenja DHMZ-a, potresi, zatvorene prometnice, zborna mjesta civilne zaštite, dežurne ljekarne i brojevi za hitne slučajeve. Otvoreno svima, bez skeniranja.">
-<style>${STYLE}</style>
+<style>${HITNO_STYLE}</style>
 </head>
 <body>
 <a class="skip" href="#brojevi">Preskoči na brojeve za hitne slučajeve</a>
 <div class="wrap">
 <header>
-<a class="brand" href="/">Kaj ima?</a>
-<h1>Hitno</h1>
-<p class="lede">Brojevi, upozorenja i pomoć u Zagrebu. Bez skeniranja i vremenskog ograničenja.</p>
+<a class="brand" href="/">Kaj ima<span class="mark">?</span></a>
+<h1>Sigurnost</h1>
+<p class="lede">Hitni brojevi, upozorenja i pomoć u Zagrebu. Radi bez skeniranja.</p>
 <p class="stamp">Stanje <time datetime="${escapeHtml(now.toISOString())}">${escapeHtml(stamp)}</time>, vrijeme Zagreb. <a href="/hitno">Osvježi stanje</a></p>
 </header>
 <nav class="toc" aria-label="Sadržaj"><ul>
@@ -330,15 +391,15 @@ ${numbersSection()}
 ${warningsSection(data.warnings, now)}
 <div class="safety-columns"><div>
 ${closuresSection(data.closures, now)}
+${quakesSection(data.quakes, now)}
 </div><div>
 ${pharmaciesSection()}
-${quakesSection(data.quakes, now)}
 ${assemblySection(data.assembly, now)}
 </div></div>
 </main>
 <footer class="page">
 <p>Sadrži informacije tijela javne vlasti u skladu s Otvorenom dozvolom. Prikaz je prilagodba izvora; izvorni podaci i vrijeme zadnje izmjene navedeni su uz svaki panel. Ova stranica ne predstavlja službenu obavijest ni tijela koja podatke objavljuju.</p>
-<p><a href="/open/">Otvoreni podaci</a> · <a href="/izvori/">Izvori i licence</a> · <a href="/privatnost/">Privatnost</a> · <a href="/pristupacnost/">Pristupačnost</a></p>
+${pageFooter('/hitno')}
 </footer>
 </div>
 </body>
@@ -349,10 +410,9 @@ ${assemblySection(data.assembly, now)}
 /** 429 for the open tier: a person, not a client library, reads this. */
 export function renderTooManyRequests(): Response {
   const html = `<!doctype html>
-<html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Previše zahtjeva · Hitno</title>
-<style>body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 system-ui,sans-serif;background:#f6f8f7;color:#182423}
-@media (prefers-color-scheme:dark){body{background:#17201f;color:#eff6f3}}main{max-width:36rem;margin:0 auto}a{color:inherit}</style></head>
+<html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark light">
+<title>Previše zahtjeva · Sigurnost</title>
+<style>${PAGE_PALETTE}body{margin:0;padding:3rem 1.25rem;font:1.125rem/1.5 var(--font);background:var(--canvas);color:var(--ink)}main{max-width:36rem;margin:0 auto}a{color:var(--accent)}</style></head>
 <body><main><h1>Previše zahtjeva</h1><p>S ove mreže stiglo je više od 120 zahtjeva u minuti. Pokušaj ponovno za minutu.</p>
 <p>U hitnom slučaju nazovi <a href="tel:112">112</a>.</p></main></body></html>
 `;

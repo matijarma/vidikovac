@@ -44,7 +44,7 @@ describe('Area D through the Worker', () => {
     expect(response!.status).toBe(200);
     const html = await response!.text();
     expect(html).toContain('Crveno upozorenje za obilnu kišu');
-    expect(html).toContain('<span class="sev sev-extreme">izuzetno</span>');
+    expect(html).toContain('<span class="sev sev-extreme">crveno upozorenje</span>');
     expect(html).toContain('href="tel:112"');
     for (const [k, v] of Object.entries(PAGE_SECURITY_HEADERS)) expect(response!.headers.get(k)).toBe(v);
   });

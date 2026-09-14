@@ -60,7 +60,7 @@ describe('GET /hitno', () => {
     expect(response!.headers.get('content-language')).toBe('hr');
     const html = await response!.text();
     expect(html).toContain('Narančasto upozorenje za olujni vjetar');
-    expect(html).toContain('<span class="sev sev-severe">ozbiljno</span>');
+    expect(html).toContain('<span class="sev sev-severe">narančasto upozorenje</span>');
     expect(html).toContain('Izvor: DHMZ, Otvorena dozvola');
     expect(html).not.toContain('<script');
   });
