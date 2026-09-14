@@ -11,6 +11,7 @@ import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-s
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import { createMapSlots } from '../../app/src/map/map-slots';
+import { createSchematicHost } from '../../app/src/motion/schematic-host';
 import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -364,6 +365,66 @@ describe('u-pokretu', () => {
     expect(section.querySelector('[data-testid=map-fallback]')).toBeNull();
     expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
     expect(factory).not.toHaveBeenCalled();
+  });
+  // T3.6: the lightweight face reads like the map's sheet -- the same board grammar without a stage.
+  it('the lightweight face: a search field first, "Linije u pokretu" as a board of rows with small badges (eight, then "još N linija" through the page filter), the host’s list, closures four then more, three notices, no map, no canvas, the honesty note once', () => {
+    const i18n = createDefaultI18n('hr');
+    const pins = Array.from({ length: 10 }, (_, i) => ({
+      id: `vehicle:l${i}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'session' as const, title: String(i + 1),
+      geo: { type: 'Point' as const, coordinates: [15.97 + i / 1000, 45.81] as [number, number] }, data: { routeId: String(i + 1), routeType: 0 },
+    }));
+    const zet: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, items: [...pins, { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 90, vehicles: 1 } }] };
+    const notices = Array.from({ length: 5 }, (_, i) => ({
+      id: `zet-promet:${i}`, module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: `Obavijest ${i}`, at: '2026-09-11T08:00:00Z', link: 'https://zet.hr/promet', data: { source: 'zet-promet' },
+    }));
+    const snapshots = { ...SNAPSHOTS, 'zet-rt': zet, prometnice: MANY_CLOSURES, dogadanja: { ...SNAPSHOTS.dogadanja!, items: notices } };
+    const schematic = createSchematicHost({ i18n, scope: { kind: 'network' }, lightweight: true, now: () => NOW });
+    const face = (filters: Record<string, string>, host = true): HTMLElement =>
+      renderLayer('u-pokretu', ctx({ i18n, snapshots, lightweight: true, view: { layer: 'u-pokretu', selection: null, filters }, ...(host ? { schematic } : {}) })).querySelector<HTMLElement>('[data-testid=transport-light]')!;
+    const light = face({});
+    // No stage, no map, no canvas, no workspace.
+    expect(light.querySelector('#u-pokretu-map')).toBeNull();
+    expect(light.querySelector('canvas')).toBeNull();
+    expect(light.querySelector('[data-testid=transport-workspace]')).toBeNull();
+    // The search field comes first and is the page's own filter (dashboard.ts's input delegation), 44 px by base.css.
+    const input = light.firstElementChild!.querySelector<HTMLInputElement>('input[type=search]')!;
+    expect(input.dataset.filterKey).toBe('q');
+    // The board: static signage rows with small badges, eight of ten shown, the fold as a filter action.
+    const rows = [...light.querySelectorAll<HTMLElement>('[data-testid=running-routes] .row')];
+    expect(rows).toHaveLength(10);
+    expect(rows.filter((r) => !r.hidden)).toHaveLength(8);
+    expect(rows.every((r) => r.querySelector('.line[data-size="s"]') !== null)).toBe(true);
+    expect(light.querySelector('[data-testid=running-routes] button')).toBeNull(); // nothing here opens a detail: there is no handler on this path
+    const more = light.querySelector<HTMLButtonElement>('[data-action=filter][data-filter-key=routes]')!;
+    expect(text(more)).toBe('još 2 linije');
+    expect(more.dataset.filterValue).toBe('all');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    const six = rows.find((r) => text(r.querySelector('.line')) === '6')!;
+    expect(text(six.querySelector('.row-sub'))).toBe('1 vozilo u pokretu');
+    expect(text(six.querySelector('.route-delay'))).toBe('kasni 2 min');
+    expect(six.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
+    expect(rows.filter((r) => r !== six).every((r) => r.querySelector('.route-delay') === null)).toBe(true); // no median, no word
+    // The host's list face under its own head; the closures four of twenty, then "sve zatvaranja (20)"; three notices.
+    expect(light.querySelector('[data-testid=schematic-host] [data-testid=schematic-list]')).not.toBeNull();
+    const closures = [...light.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')];
+    expect(closures).toHaveLength(20);
+    expect(closures.filter((r) => !r.hidden)).toHaveLength(4);
+    expect(closures.every((r) => r.querySelector('.mark-closure') !== null && r.querySelector('button') === null)).toBe(true);
+    expect(text(light.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('sve zatvaranja (20)');
+    expect(light.querySelectorAll('[data-testid=transport-notices] .row')).toHaveLength(3);
+    // The honesty sentence exactly once on the face: the host carries it under its list.
+    expect(text(light).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
+    // The folds open and the query narrows through the page's own filters; the field keeps its text.
+    const open = face({ routes: 'all', closures: 'all', q: '6' });
+    expect(open.querySelector<HTMLInputElement>('input[type=search]')!.value).toBe('6');
+    expect([...open.querySelectorAll('[data-testid=running-routes] .row')].map((r) => text(r.querySelector('.line')))).toEqual(['6']);
+    expect([...open.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')].filter((r) => !r.hidden)).toHaveLength(20);
+    expect(text(open.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('Skupi');
+    expect(text(face({ q: 'zzz' }).querySelector('[data-testid=transport-no-results]'))).toContain('zzz');
+    // Without a host (a unit context) the face still says the sentence, once.
+    const bare = face({}, false);
+    expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
+    expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
   });
   it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));

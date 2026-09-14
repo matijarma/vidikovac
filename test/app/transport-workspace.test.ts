@@ -133,8 +133,10 @@ describe('the transport workspace', () => {
     render(context);
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
     expect(text(q('[data-testid=transport-total]'))).toBe('4 vozila u pokretu');
-    expect(all('[data-testid=running-routes] .t-badge').map(text)).toEqual(['6', '11', '109']);
+    expect(all('[data-testid=running-routes] .line').map(text)).toEqual(['6', '11', '109']);
     expect(all('[data-testid=running-routes] .line[data-size="m"]').map((b) => b.getAttribute('data-kind'))).toEqual(['tram', 'tram', 'bus']);
+    // Every row is the signage row (signage.css .row) and the whole row is one button: the badge, the destination, the state word.
+    expect(all<HTMLElement>('[data-testid=running-routes] li').every((li) => li.classList.contains('row') && li.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
     expect(all<HTMLElement>('[data-testid=running-routes] button').map((b) => b.id)).toEqual(['t-row-route-6', 't-row-route-11', 't-row-route-109']);
     expect(text(q('[data-testid=running-routes]'))).toContain('kasni 2 min');
     expect(text(q('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
@@ -149,7 +151,7 @@ describe('the transport workspace', () => {
     q<HTMLButtonElement>('[data-action=toggle-mode][data-mode="3"]').click();
     expect(last().setModes).toHaveBeenLastCalledWith(new Set([0]));
     expect(text(q('[data-testid=transport-total]'))).toBe('3 vozila u pokretu');
-    expect(all('[data-testid=running-routes] .t-badge').map(text)).toEqual(['6', '11']);
+    expect(all('[data-testid=running-routes] .line').map(text)).toEqual(['6', '11']);
     render(context);
     expect(q('[data-testid=transport-workspace]')).toBe(ws);
     expect(pressed('[data-action=toggle-mode][data-mode="3"]')).toBe('false');
@@ -170,11 +172,20 @@ describe('the sheet', () => {
     expect(text(peek.querySelector('.t-peek-more'))).toBe('+6');
     expect(text(peek.querySelector('.t-peek-count'))).toBe('4 vozila u pokretu · 1 zatvaranje');
     expect(peek.querySelector('button')).toBeNull();
-    const rows = all('[data-testid=running-routes] .t-row').map(text);
+    // A row of the board: the destination at body, the count as the second line, the delay word in its tone at the end (the same
+    // .route-delay Sada's board paints), and no word at all for a route without its own median -- never "on time" by default.
+    const rows = all<HTMLElement>('[data-testid=running-routes] .row');
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain('2 vozila u pokretu · kasni 2 min');
-    expect(rows[1]).toContain('1 vozilo u pokretu · rani 1 min');
-    expect(rows[2]).toContain('109');
+    const cell = (row: HTMLElement, selector: string): string => text(row.querySelector(selector));
+    expect(cell(rows[0]!, '.row-sub')).toBe('2 vozila u pokretu');
+    expect(cell(rows[0]!, '.route-delay')).toBe('kasni 2 min');
+    expect(rows[0]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
+    expect(cell(rows[1]!, '.row-sub')).toBe('1 vozilo u pokretu');
+    expect(cell(rows[1]!, '.route-delay')).toBe('rani 1 min');
+    expect(rows[1]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('early');
+    expect(text(rows[2])).toContain('109');
+    expect(rows[2]!.querySelector('.route-delay')).toBeNull();
+    expect(document.querySelector('.t-row-main, .t-row-title, .t-row-sub')).toBeNull();
     q<HTMLButtonElement>('[data-action=toggle-mode][data-mode="3"]').click();
     expect(text(q('[data-testid=transport-total]'))).toBe('3 vozila u pokretu');
     expect(all('[data-testid=running-routes] .t-row')).toHaveLength(2);
@@ -183,7 +194,11 @@ describe('the sheet', () => {
     expect(text(q('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
     expect(text(q('[data-testid=transport-closures]'))).toContain('radovi · jedan smjer');
     expect(q<HTMLElement>('[data-testid=transport-closures] button').id).toBe('t-row-closure-c1');
+    expect(q('[data-testid=transport-closures] .row .t-row .mark-closure')).not.toBeNull(); // the closure mark leads the row
+    expect(document.querySelector('.t-mark-closure')).toBeNull();
     expect(text(q('[data-testid=transport-notices]'))).toContain('Izmjena trase linije 6');
+    expect(q('[data-testid=transport-notices] .row .row-main .row-title')).not.toBeNull();
+    expect(text(q('[data-testid=transport-notices] .row .t-link'))).toBe('Otvori obavijest');
     expect(document.querySelectorAll('[data-testid=transport-note]')).toHaveLength(1);
     expect(q('[data-testid=transport-detail] [data-testid=transport-note]')).not.toBeNull(); // at the body's foot, not beside the map
     // Section heads in sentence case at head size; the uppercase kicker is gone from the sheet.
@@ -214,14 +229,19 @@ describe('the sheet', () => {
     expect(visible('[data-testid=running-routes] li')).toHaveLength(8);
     const moreRoutes = q<HTMLButtonElement>('[data-action=toggle-fold][data-fold=routes]');
     expect(text(moreRoutes)).toBe('još 3 linije');
+    // A fold is a disclosure: it says whether the list under it is open, and which list.
+    expect(moreRoutes.getAttribute('aria-expanded')).toBe('false');
+    expect(moreRoutes.getAttribute('aria-controls')).toBe(q('[data-testid=running-routes]').id);
     moreRoutes.focus();
     moreRoutes.click();
     expect(visible('[data-testid=running-routes] li')).toHaveLength(11);
     expect(text(q('[data-action=toggle-fold][data-fold=routes]'))).toBe('Skupi');
+    expect(q('[data-action=toggle-fold][data-fold=routes]').getAttribute('aria-expanded')).toBe('true');
     expect(document.activeElement).toBe(q('[data-action=toggle-fold][data-fold=routes]'));
     expect(visible('[data-testid=transport-closures] li')).toHaveLength(4);
     const moreClosures = q<HTMLButtonElement>('[data-action=toggle-fold][data-fold=closures]');
     expect(text(moreClosures)).toBe('sve zatvaranja (6)');
+    expect(moreClosures.getAttribute('aria-controls')).toBe(q('[data-testid=transport-closures]').id);
     moreClosures.click();
     expect(visible('[data-testid=transport-closures] li')).toHaveLength(6);
     expect(all('[data-testid=transport-notices] li')).toHaveLength(3);
@@ -248,19 +268,32 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('half');
     expect(text(q('[data-testid=route-title]'))).toContain('6');
     expect(q('[data-testid=route-title] .line[data-size="l"][data-kind="tram"]')).not.toBeNull();
-    expect(document.querySelectorAll('[data-testid=route-vehicles] li')).toHaveLength(2);
+    // The detail head: "Natrag" first as a 44 px ghost, the title, the kind and the delay at body, the arrivals sentence once.
+    const back = q<HTMLButtonElement>('#t-clear-selection');
+    expect(text(back)).toBe('Natrag');
+    expect(back.classList.contains('btn-ghost')).toBe(true);
+    expect(back.compareDocumentPosition(q('[data-testid=route-title]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(text(q('[data-testid=route-meta]'))).toBe('tramvaj · kasni 2 min');
+    expect(text(q('[data-testid=transport-detail]')).split('ZET ne objavljuje dolaske').length - 1).toBe(1);
+    const vehicleRows = all<HTMLElement>('[data-testid=route-vehicles] .row');
+    expect(vehicleRows).toHaveLength(2);
     expect(q<HTMLElement>('[data-testid=route-vehicles] button').id).toBe('t-row-vehicle-vehicle_1');
-    expect(text(q('[data-testid=route-vehicles]'))).toContain('smjer istok');
-    expect(text(q('[data-testid=route-vehicles]'))).toContain('smjer nepoznat');
+    expect(vehicleRows.every((row) => row.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
+    expect(vehicleRows.map((row) => text(row.querySelector('.row-title')))).toEqual(['Smjer istok', 'Smjer nepoznat']);
+    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stanici');
     const stops = all<HTMLElement>('[data-testid=route-stops] li');
     expect(stops.length).toBeGreaterThan(15);
     expect(visible('[data-testid=route-stops] li')).toHaveLength(12);
     expect(text(q('[data-testid=route-stops] li'))).toBe('Črnomerec');
+    expect(stops[0]!.classList.contains('row-dense')).toBe(true); // the sequence keeps its counter, in a dense row
     expect(q<HTMLElement>('[data-testid=route-stops] button').id).toMatch(/^t-row-stop-/);
-    const allStops = q<HTMLButtonElement>('[data-action=toggle-fold][data-fold=stops]');
+    const allStops = q<HTMLButtonElement>('[data-testid=toggle-stops]');
+    expect(allStops).toMatchObject({ dataset: { action: 'toggle-fold', fold: 'stops' } }); // the workspace's one fold contract
     expect(text(allStops)).toBe(`sve stanice (${stops.length})`);
+    expect(allStops.getAttribute('aria-expanded')).toBe('false');
     allStops.click();
     expect(visible('[data-testid=route-stops] li')).toHaveLength(stops.length);
+    expect(q('[data-testid=toggle-stops]').getAttribute('aria-expanded')).toBe('true');
     // A stop by name, chosen with a tap on its row.
     input.value = 'crnomerec';
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -270,7 +303,12 @@ describe('search and selection', () => {
     expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: true });
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
+    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
     expect(text(q('[data-testid=stop-routes]'))).toContain('6');
+    const stopRoute = q<HTMLElement>('[data-testid=stop-routes] .row');
+    expect(stopRoute.querySelector('button.t-row .line[data-size="m"]')).not.toBeNull();
+    expect(text(stopRoute.querySelector('.row-sub'))).toMatch(/vozil/);
+    expect(text(q('#t-clear-selection'))).toBe('Natrag');
     // Clearing tells the map and the paired screen once, and the overview returns.
     q<HTMLButtonElement>('#t-clear-selection').click();
     expect(last().select!.mock.lastCall?.[0]).toBeNull();
@@ -291,10 +329,18 @@ describe('the map, the paired screen and the feed', () => {
     last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
     expect(ws.dataset.sheet).toBe('half');
     expect(text(q('[data-testid=vehicle-title]'))).toBe('6Tramvaj 6');
-    expect(text(q('[data-testid=vehicle-direction]'))).toBe('smjer istok');
+    expect(q('[data-testid=vehicle-title] .line[data-size="l"]')).not.toBeNull();
+    expect(text(q('[data-testid=vehicle-direction]'))).toBe('Smjer istok');
     expect(text(q('[data-testid=transport-peek]'))).toBe('Tramvaj 6 · smjer istok');
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'zet-rt' });
-    q<HTMLButtonElement>('#t-follow').click();
+    // "Prati vozilo" is the 48 px primary; the position sentence lives at the body's foot only, never repeated in the detail.
+    const follow = q<HTMLButtonElement>('#t-follow');
+    expect(text(follow)).toBe('Prati vozilo');
+    expect(follow.className).toBe('btn btn-primary');
+    expect(text(q('#t-clear-selection'))).toBe('Natrag');
+    expect(text(q('[data-testid=transport-detail] .t-sheet-content'))).not.toContain('Položaj je');
+    expect(document.querySelectorAll('[data-testid=transport-note]')).toHaveLength(1);
+    follow.click();
     expect(last().follow).toHaveBeenLastCalledWith('vehicle:1');
     expect(text(q('[data-testid=transport-peek]'))).toContain('Praćenje');
     expect(q('[data-testid=following-note]')).not.toBeNull();
@@ -316,10 +362,29 @@ describe('the map, the paired screen and the feed', () => {
     render(closure.context);
     expect(last().select).toHaveBeenLastCalledWith({ kind: 'closure', id: 'c1' }, { fit: true });
     expect(text(q('[data-testid=closure-title]'))).toContain('Grada Vukovara');
+    expect(q('[data-testid=closure-title] .mark-closure')).not.toBeNull();
     const unknown = ctx({ maps, selection: { kind: 'item', id: '0123456789abcdef', module: 'zet-rt' } });
     render(unknown.context);
     expect(last().select).toHaveBeenLastCalledWith(null, { fit: false });
     expect(q('[data-testid=transport-total]')).not.toBeNull();
+  });
+
+  it('a closure opens with the mark and the street at title size, the type words at body once, and its window as one sentence', () => {
+    // The module's summary is its own wording of the same two fields (prometnice.ts closureWords): the detail never repeats it.
+    const windowed = { ...PROMETNICE.items[0]!, id: 'c2', title: 'Ilica', at: '2026-09-08T06:00:00Z', until: '2026-09-13T04:00:00Z', summary: 'zatvoreno zbog radova, jedan smjer' };
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const snapshots = { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: [{ ...PROMETNICE.items[0]!, summary: 'zatvoreno zbog radova, jedan smjer' }, windowed] } };
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c2'), module: 'prometnice' } }).context);
+    expect(q('[data-testid=closure-title] .mark-closure')).not.toBeNull();
+    expect(text(q('[data-testid=closure-title]'))).toBe('Ilica');
+    expect(text(q('[data-testid=transport-detail] .t-lead'))).toBe('radovi · jedan smjer');
+    expect(text(q('[data-testid=closure-window]'))).toBe('od 8. 9. 08:00 do 13. 9. 06:00');
+    const detail = text(q('[data-testid=transport-detail] .t-sheet-content'));
+    expect(detail).not.toContain('zatvoreno zbog radova');
+    expect(detail.split('jedan smjer').length - 1).toBe(1);
+    expect(text(q('#t-clear-selection'))).toBe('Natrag');
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c1'), module: 'prometnice' } }).context);
+    expect(text(q('[data-testid=closure-window]'))).toBe('do 12. 9. 00:00'); // one end named: the sentence names that end only
   });
 
   it('a stale feed holds the map’s vehicles and says so; a kiosk gets a still map, bigger symbols, trams first, no controls and an open sheet', () => {
@@ -348,12 +413,15 @@ describe('the map, the paired screen and the feed', () => {
     expect(all).toHaveLength(11);
     expect(all.filter((li) => !li.hidden)).toHaveLength(8);
     expect(text(all[0]!)).toContain('kasni 7 min'); // 440 s, the worst, first
+    expect(all[0]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late'); // the word rides at the row's end, in its tone
     expect(text(block)).not.toMatch(/\d+ s\b/);
     const more = q<HTMLButtonElement>('[data-action=toggle-delays]');
     expect(text(more)).toBe('još 3 linije');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
     more.click();
     expect([...q<HTMLElement>('#u-pokretu-delays').querySelectorAll<HTMLElement>('[data-testid=delay-row]')].filter((li) => !li.hidden)).toHaveLength(11);
     expect(text(q('[data-action=toggle-delays]'))).toBe('Skupi');
+    expect(q('[data-action=toggle-delays]').getAttribute('aria-expanded')).toBe('true');
   });
 });
 

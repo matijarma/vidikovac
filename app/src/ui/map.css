@@ -142,24 +142,33 @@
 .transport[data-sheet='peek'] .transport-toolbar, .transport[data-sheet='peek'] .t-sheet-body { visibility: hidden; }
 
 /* --- Type in the sheet --------------------------------------------------- */
-.t-title { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); letter-spacing: -0.01em; line-height: 1.2; display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.t-title { margin: 0; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.01em; line-height: var(--lh-title); display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .t-head { margin: 0; display: flex; align-items: center; min-block-size: var(--target); font-size: var(--text-lg); font-weight: var(--weight-bold); line-height: 1.2; }
 .t-lead { margin: 0; font-size: var(--text-body); font-weight: var(--weight-medium); }
-.t-hint, .t-empty, .t-status, .t-note, .t-meta { margin: 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
+.t-hint, .t-empty, .t-status, .t-note { margin: 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
+/* The line under a detail title ("3 perona", the closure's window) and the count under a list: secondary, like a row's second line. */
+.t-meta { margin: 0; color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
 .t-status { color: var(--tone-state-warning); }
 .t-block { display: flex; flex-direction: column; gap: var(--sp-2); }
 .t-block + .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
 .t-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.t-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--text-md); }
 .t-fold { align-self: flex-start; }
 
 /* --- Rows and badges --------------------------------------------------- */
 .t-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.t-list > li + li { border-block-start: 1px solid var(--tone-stroke); }
+/* The row is signage.css's .row: the hairline above, the 52 px height, the auto 1fr auto grid. Where the row opens something the
+   whole row is one button (.t-row) filling it, so the row's own inset goes and the button is the 52 px target; a static row
+   (the kiosk, the lightweight face) keeps the row's own cells. */
+.t-list > .row { padding: 0; }
+.t-list > .t-group-label + .row { border-block-start: 0; }
 .t-row {
-  display: flex; align-items: center; gap: var(--sp-3); inline-size: 100%; min-block-size: 3.25rem; padding: var(--sp-1);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3);
+  inline-size: 100%; min-block-size: 3.25rem; padding: 0 var(--sp-1);
   border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--r-sm); touch-action: manipulation;
 }
+.row-dense > .t-row { min-block-size: 2.75rem; }
+/* A search result is the row itself (a listbox option, not a button): the same inset and press language as the button rows. */
+.t-list > .t-option { padding: 0 var(--sp-1); cursor: pointer; border-radius: var(--r-sm); touch-action: manipulation; }
 @media (hover: hover) {
   button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
 }
@@ -167,24 +176,17 @@
   button.t-row:active, .t-option:active, .t-toggle:active { background: var(--tone-surface-2); transition: none; }
 }
 .t-option[aria-selected='true'] { background: var(--tone-surface-2); outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
-.t-row-main { display: flex; flex-direction: column; min-width: 0; gap: 0.125rem; }
-.t-row-title { font-size: var(--text-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
-.t-row-sub { font-size: 0.8125rem; color: var(--tone-text-muted); }
 .t-group-label { padding: var(--sp-3) var(--sp-1) var(--sp-1); font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
-.t-list > li.t-group-label + li { border-block-start: 0; }
 .t-badges { display: inline-flex; flex-wrap: wrap; gap: var(--sp-1); flex: none; max-inline-size: 9rem; }
 /* The badge itself is `.line` in signage.css: shape carries the mode, colour
    repeats it, and the same component sits on the map pill, in Sada and on the
    public screen. What stays here is the room around it. */
 .t-badge-more { font-size: 0.8125rem; color: var(--tone-text-muted); align-self: center; }
-.t-mark { flex: none; inline-size: 0.75rem; block-size: 0.75rem; border-radius: 2px; }
-.t-mark-closure { background: var(--t-closure); }
-.t-notice { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1); min-block-size: 3.25rem; }
-.t-notice .t-row-main { flex: 1 1 auto; }
+/* The closure mark is signage.css's .mark-closure, in the urgency role the map's closure lines and the chip swatch share. */
 .t-link { flex: none; display: inline-flex; align-items: center; min-block-size: var(--target); font-size: var(--text-sm); }
+/* The stop sequence keeps its counter as the row's lead, in the dense 44 px row. */
 .t-stops { counter-reset: stop; }
-.t-stops .t-row::before { counter-increment: stop; content: counter(stop); flex: none; inline-size: 1.75rem; font-size: 0.8125rem; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
-.t-stops .t-row[aria-current='true'] { background: var(--tone-surface-2); }
+.t-stops .t-row::before { counter-increment: stop; content: counter(stop); inline-size: 1.75rem; font-size: var(--type-secondary); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
 
 /* --- The stage: .ki[data-stage='map'] ---------------------------------------
    dashboard.ts writes data-stage while Promet is on. The shell is the viewport
@@ -277,10 +279,14 @@
 .transport[data-kiosk='true'] { --t-gap: 1rem; }
 .transport[data-kiosk='true'] .t-map-canvas { block-size: clamp(22rem, 56vh, 40rem); border-radius: var(--r-xl); }
 .transport[data-kiosk='true'] .t-sheet-head { display: none; }
-.transport[data-kiosk='true'] .t-row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
-.transport[data-kiosk='true'] .t-row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-facts { font-size: 1.125rem; }
+.transport[data-kiosk='true'] .row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
+.transport[data-kiosk='true'] .row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta { font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-title { font-size: 1.75rem; }
 .transport[data-kiosk='true'] .t-row { cursor: default; }
 
-/* --- The lightweight face: a list, no map ---------------------------------- */
-.t-light { display: flex; flex-direction: column; gap: 0.75rem; }
+/* --- The lightweight face: a list, no map ----------------------------------
+   The search field first, the board, the schematic host's own list, the
+   closures and the notices, as blocks separated by the same hairline the
+   sheet's body draws; the page scrolls, nothing here does. Plain class
+   selectors only (R-L3, R-L5): the .row and .line rules apply as they are. */
+.t-light { display: flex; flex-direction: column; gap: var(--sp-3); }
