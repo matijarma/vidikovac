@@ -111,6 +111,7 @@
     "labelUnknown": "Datum nije naveden"
   },
   "overview": {
+    "place": "{place} · {date}",
     "weatherKicker": "Vrijeme · Maksimir",
     "observedAt": "izmjereno u {time}",
     "todayRange": "danas od {min} do {max} °C",
@@ -129,6 +130,7 @@
     "atStopHint": "Linije s ove stanice i kako voze sada",
     "delaysNow": "Linije koje sada najviše odstupaju",
     "transitEmpty": "Trenutačno nema podataka o vozilima ZET-a.",
+    "delayShort": "Kašnjenje je po liniji, nije dolazak.",
     "vehiclesNote": "Kašnjenje je medijan po liniji iz ZET-ovih podataka o vožnjama; nije vrijeme dolaska.",
     "activityKicker": "Događa se",
     "nextEvents": "Sljedeća događanja",

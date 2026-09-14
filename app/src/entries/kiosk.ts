@@ -13,6 +13,7 @@ import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import '../ui/tokens.css';
 import '../ui/base.css';
+import '../ui/signage.css';
 import '../ui/qr.css';
 import '../ui/kiosk.css';
 

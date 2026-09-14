@@ -17,6 +17,33 @@ const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const rule = (selector: string, scope: string = CSS): string =>
   new RegExp(`(?:^|\\n)\\s*${escape(selector)} \\{([^}]*)\\}`).exec(scope)?.[1] ?? '';
 const DESKTOP = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+/** Selectors of every flat rule in `css` whose declarations carry `declaration`. */
+const owners = (css: string, declaration: string): string[] =>
+  [...css.matchAll(/(?:^|\n)\s*([^{}\n]+?) \{([^}]*)\}/g)].filter(([, , body]) => body.includes(declaration)).map(([, selector]) => selector);
+/** Bodies of every top-level `prelude {…}` block in `css` (comments stripped), by brace depth: layers.css has several 60rem blocks. */
+function mediaBlocks(css: string, prelude: string): string[] {
+  const bodies: string[] = [];
+  const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  let depth = 0;
+  let buf = '';
+  let start = -1;
+  for (let i = 0; i < plain.length; i += 1) {
+    const ch = plain[i];
+    if (ch === '{') {
+      const last = buf.trim().split('\n').pop() ?? '';
+      if (depth === 0 && last.trim() === prelude) start = i + 1;
+      depth += 1;
+      buf = '';
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start !== -1) { bodies.push(plain.slice(start, i)); start = -1; }
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  return bodies;
+}
 
 /**
  * Every `:hover` in a stylesheet must sit inside a block whose enclosing
@@ -70,13 +97,18 @@ describe('dashboard.css phone shell', () => {
   it('places banners in flow between the header and main; only .ki-main takes the main area', () => {
     expect(rule('.ki-banners')).toContain('grid-area: banners');
     expect(rule('.ki-banners:empty')).toContain('display: none');
-    expect(CSS.match(/grid-area: main/g)).toHaveLength(1);
+    expect([...new Set(owners(CSS, 'grid-area: main'))]).toEqual(['.ki-main']);
     expect(rule('.ki-main')).toContain('grid-area: main');
     expect(CSS).not.toContain('.ki-banners:not(:empty) + .ki-main');
+  });
+  it('flattens the rail wrapper, so the header and the sidebar are laid out by the shell grid directly', () => {
+    expect(rule('.ki-rail')).toContain('display: contents');
   });
   it('makes the Promet stage the viewport with the dynamic-viewport unit and its fallback line', () => {
     const stage = rule(".ki[data-stage='map']");
     expect(stage).toContain('block-size: 100vh; block-size: 100dvh');
+    // R-D5: the stage is the one rule in this file that may size by the dynamic viewport.
+    expect([...new Set(owners(CSS, '100dvh'))]).toEqual([".ki[data-stage='map']"]);
     expect(stage).toContain('overflow: hidden');
     expect(rule(".ki[data-stage='map'] .ki-main")).toContain('padding: 0');
   });
@@ -125,16 +157,51 @@ describe('dashboard.css header controls', () => {
 });
 
 describe('dashboard.css desktop (60rem and up)', () => {
-  it('dissolves the header into the rail grid with the banners row beside the wordmark, and moves the hairline to .ki-top', () => {
-    expect(rule('.ki', DESKTOP)).toContain("grid-template-areas: 'top banners' 'side main' 'session main'");
+  it('pins one rail beside the banners and main: sticky, a viewport tall, a flex column on the chrome surface with a hairline at its right edge', () => {
+    const ki = rule('.ki', DESKTOP);
+    expect(ki).toContain('grid-template-columns: var(--ki-side) minmax(0, 1fr)');
+    expect(ki).toContain('grid-template-rows: auto 1fr');
+    expect(ki).toContain("grid-template-areas: 'rail banners' 'rail main'");
+    const rail = rule('.ki-rail', DESKTOP);
+    expect(rail).toContain('grid-area: rail');
+    expect(rail).toContain('display: flex');
+    expect(rail).toContain('flex-direction: column');
+    expect(rail).toContain('position: sticky');
+    expect(rail).toContain('inset-block-start: 0');
+    // R-D5: the small viewport, as the shell itself is sized; a sticky rail in dvh would resize while a
+    // tablet's browser chrome hides on scroll. dvh belongs to the Promet stage and dialogs only.
+    expect(rail).toContain('block-size: 100vh; block-size: 100svh');
+    expect(rail).not.toContain('dvh');
+    expect(rail).toContain('background: var(--tone-surface-1)');
+    expect(rail).toContain('border-inline-end: 1px solid var(--tone-stroke)');
+    expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
+    expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
+    // A quarter-screen window on a 1080p display is about 960×430: the rail's content is taller than
+    // that, and a sticky rail never scrolls with the page, so it must scroll on its own or lose its foot.
+    expect(rail).toContain('overflow-y: auto');
+  });
+  it('gives the banners the same wide gutter as main from 90rem, so a notice aligns with the workspace edge', () => {
+    const wide = /@media \(min-width: 90rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-12)');
+    expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-12)');
+  });
+  it('dissolves the header into the rail: the wordmark, then the seven links, then the session card pushed to the foot; the safety control and the tab bar leave', () => {
     expect(rule('.ki-head', DESKTOP)).toContain('display: contents');
     expect(rule('.ki-head::after', DESKTOP)).toContain('content: none');
-    expect(rule('.ki-top', DESKTOP)).toContain('grid-area: top');
-    expect(rule('.ki-top', DESKTOP)).toContain('position: relative');
+    const top = rule('.ki-top', DESKTOP);
+    expect(top).toContain('order: 1');
+    expect(top).toContain('position: relative');
     expect(rule('.ki-top::after', DESKTOP)).toContain('block-size: 2px');
     expect(rule(".ki[data-loading='true'] .ki-top::after", DESKTOP)).toContain('opacity: 1');
-    expect(rule('.ki-session-slot', DESKTOP)).toContain('grid-area: session');
+    const side = rule('.ki-side', DESKTOP);
+    expect(side).toContain('order: 2');
+    expect(side).toContain('display: block');
+    const slot = rule('.ki-session-slot', DESKTOP);
+    expect(slot).toContain('order: 3');
+    expect(slot).toContain('margin-block-start: auto');
     expect(rule('.ki-safety-slot, .ki-tabbar', DESKTOP)).toContain('display: none');
+    // Nothing on the desk places by the wave-1 row names any more.
+    expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session)\b/);
   });
   it('keeps both sidebar clamps byte-identical (pinned by workspace-css.test.ts as well)', () => {
     expect(CSS).toContain('--ki-side: clamp(14rem, 30vw, 17rem);');
@@ -219,6 +286,10 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(layers).toContain('.row-button:active');
     expect(layers).toContain('.route-link:active');
+    // Sada's own controls: the whole weather lockup, the cross-domain rows, the safety band.
+    expect(layers).toContain('.ov-link:active');
+    expect(layers).toContain('.ov-row:active');
+    expect(layers).toContain('.ov-safety .band:active');
     expect(layers).toContain('.dir-item:active');
     expect(layers).toContain('.sf-number:active');
     expect(layers).toContain('.link-arrow:active');
@@ -291,3 +362,49 @@ describe('the tab bar is exactly the space the shell reserves for it', () => {
   });
 });
 
+
+describe('Sada reads in one order on every width', () => {
+  it('never reorders an overview block in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
+    // `order` (and a row-reversed flow) would move a block past its neighbours
+    // for the eye while leaving it where it was for a Tab key and a screen
+    // reader. The blocks are written in reading order instead; the desk groups
+    // them into column stacks, which moves no block past another.
+    const blocks = /\.ov-(?:weather|safety|transit|agenda|news|civic)\b[^{}]*\{[^}]*\}/g;
+    for (const [declaration] of LAYERS_CSS.matchAll(blocks)) {
+      expect(declaration, declaration).not.toMatch(/\border\s*:/);
+    }
+    expect(LAYERS_CSS).not.toMatch(/\.ov\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+  });
+});
+
+describe('layers.css desktop overview: three content-driven column stacks', () => {
+  const desk = mediaBlocks(LAYERS_CSS, '@media (min-width: 60rem)').find((body) => /\n\s*\.ov \{/.test(body)) ?? '';
+  it('the .ov grid is 5fr 4fr 3fr with 24 px row and 32 px column gaps, and each .ov-col is a flex column of blocks', () => {
+    const ov = rule('.ov', desk);
+    expect(ov).toContain('grid-template-columns: 5fr 4fr 3fr');
+    expect(ov).toContain('gap: var(--sp-6) var(--sp-8)');
+    expect(ov).toContain('align-items: start');
+    const col = rule('.ov-col', desk);
+    expect(col).toContain('display: flex');
+    expect(col).toContain('flex-direction: column');
+    expect(col).toContain('gap: var(--sp-6)');
+    expect(col).toContain('min-inline-size: 0');
+  });
+  it('places no block by a named area any more; the phone and the narrow container flatten the stacks into one reading order', () => {
+    expect(LAYERS_CSS).not.toContain("grid-template-areas: 'weather");
+    expect(LAYERS_CSS).not.toMatch(/grid-area: (?:weather|transit|safety|agenda|news|civic)\b/);
+    expect(rule('.ov-col', LAYERS_CSS)).toContain('display: contents');
+    const narrow = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
+    expect(rule('.ov-col', narrow)).toContain('display: contents');
+  });
+  it('in a workspace of 50rem or less (a 960 to 1130 px desk) keeps two columns, the first stack spanning both rows of the second and third, so no column drops under 184 px and breaks words', () => {
+    const middling = /@container ws \(max-width: 50rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
+    expect(rule('.ov', middling)).toContain('grid-template-columns: 5fr 4fr');
+    expect(rule('.ov > .ov-col:first-child', middling)).toContain('grid-row: 1 / span 2');
+    expect(rule('.ov > .ov-col:nth-child(n + 2)', middling)).toContain('grid-column: 2');
+    // Cascade: after the last viewport rule it overrides, before the one-column rule that overrides it.
+    const at = LAYERS_CSS.indexOf('@container ws (max-width: 50rem)');
+    expect(at).toBeGreaterThan(LAYERS_CSS.lastIndexOf('@media (min-width: 80rem)'));
+    expect(at).toBeLessThan(LAYERS_CSS.indexOf('@container ws (max-width: 36rem)'));
+  });
+});

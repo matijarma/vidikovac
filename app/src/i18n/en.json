@@ -106,6 +106,7 @@
     "labelUnknown": "Date not given"
   },
   "overview": {
+    "place": "{place} · {date}",
     "weatherKicker": "Weather · Maksimir",
     "observedAt": "measured at {time}",
     "todayRange": "today {min} to {max} °C",
@@ -123,6 +124,7 @@
     "atStopHint": "Lines from this stop and how they are running now",
     "delaysNow": "Lines deviating most right now",
     "transitEmpty": "No ZET vehicle data right now.",
+    "delayShort": "Delay is per line, not an arrival.",
     "vehiclesNote": "Delay is the median per line from ZET trip data; it is not an arrival time.",
     "activityKicker": "Happening",
     "nextEvents": "Coming up",

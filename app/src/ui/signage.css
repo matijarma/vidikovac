@@ -1,0 +1,82 @@
+/* Kaj ima? signage: the line badge, the row, the tile, the band and the skeleton.
+   One component vocabulary for phone, desk and kiosk. Tokens only.
+
+   A departure board for the whole city: a line badge, a destination, a number,
+   a word for the state. Shape carries the mode (tram a rounded rectangle, bus
+   a capsule) and colour repeats it, so the board reads in daylight and for a
+   person who does not separate the two blues. Sizes are fixed rather than
+   fluid because a badge is signage, not text: s in dense rows and the peek,
+   m on boards, l on a detail head, k on a public screen.
+
+   Loaded directly after base.css on every page, so these rules win at equal
+   specificity over the badge rules they replace and lose to the workspace
+   sheets that scope theirs. Nothing here is interactive: press and hover
+   states live with the controls that own them (base.css, layers.css). */
+.line { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 0.45rem; border-radius: 0.25rem; background: var(--tone-text-muted); color: var(--tone-action-brand-fg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; line-height: 1; }
+.line[data-kind='tram'] { background: var(--tone-action-brand); }
+.line[data-kind='bus'] { background: var(--tone-transit); border-radius: var(--r-pill); }
+.line[data-size='s'] { block-size: 1.5rem; min-inline-size: 2rem; font-size: var(--type-control); }
+.line[data-size='m'] { block-size: 2rem; min-inline-size: 2.75rem; font-size: var(--type-head); }
+.line[data-size='l'] { block-size: 2.5rem; min-inline-size: 3.5rem; font-size: var(--type-title); }
+.line[data-size='k'] { block-size: 2.875rem; min-inline-size: 3.75rem; font-size: 1.75rem; }
+.mark-closure { display: inline-block; inline-size: 1.5rem; block-size: 0.375rem; border-radius: var(--r-pill); background: var(--tone-urgency); vertical-align: middle; }
+
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3); min-block-size: 3.25rem; padding: var(--sp-1) 0; border-block-start: 1px solid var(--tone-stroke); }
+.row:first-child { border-block-start: 0; }
+/* A row with nothing beside its main part takes the whole width: the lists
+   that still render one button inside the row (blocks.ts itemRow) keep the
+   geometry they had, and a row built without a lead or a trail reads the same. */
+.row > :only-child { grid-column: 1 / -1; }
+/* The middle cell is placed by name, not by source order: a row with an
+   empty lead has two children, and auto-placement would put the title in the
+   lead track (sized to its own text) and the trail in the flexible one. When
+   the main part really is first it takes the empty lead track with it, so the
+   title starts at the row's edge and the trail still ends at it. */
+.row-main { grid-column: 2; }
+.row > .row-main:first-child:not(:only-child) { grid-column: 1 / 3; }
+.row-dense { min-block-size: 2.75rem; }
+.row-title { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
+.row-sub { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); }
+
+.tile { display: grid; gap: 0.15rem; min-block-size: 5.5rem; padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-primary); text-decoration: none; }
+.tile-value { font-size: 2rem; font-weight: var(--weight-bold); line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+.tile-label { font-size: var(--type-control); color: var(--tone-text-muted); line-height: var(--lh-body); }
+.tile-primary { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
+.tile-primary .tile-label { color: inherit; opacity: 0.85; }
+.tile-primary .tile-value { font-size: var(--type-numeral); }
+
+.band { display: flex; align-items: center; gap: var(--sp-3); min-block-size: 3.5rem; padding: 0 var(--sp-4); border-radius: var(--r-md); color: var(--tone-text-primary); text-decoration: none; }
+.band[data-level='calm'] { border-block: 1px solid var(--tone-stroke); border-radius: 0; }
+.band[data-level='unknown'] { background: var(--tone-tint-weather); }
+.band[data-level='urgent'] { background: var(--tone-tint-urgency); }
+.band-title { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.band-meta { margin-inline-start: auto; font-size: var(--type-secondary); color: var(--tone-text-muted); white-space: nowrap; }
+
+.sk { display: block; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--tone-surface-2), var(--tone-surface-3), var(--tone-surface-2)); background-size: 200% 100%; animation: sk-shimmer 1.6s ease-in-out infinite; }
+.sk-numeral { inline-size: 5ch; block-size: 2.5rem; }
+.sk-line { inline-size: 60%; block-size: 1rem; }
+.sk-line-short { inline-size: 35%; block-size: 0.8125rem; }
+.sk-row { block-size: 3.25rem; }
+.sk-band { block-size: 3.5rem; }
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; background: var(--tone-surface-2); } }
+:root[data-lagano='1'] .sk { animation: none; background: var(--tone-surface-2); }
+
+/* Motion that reports a fact. A workspace switch is a 140 ms fade on the
+   incoming layer, set by dashboard.ts's render() only when the layer (or the
+   open directory) actually differs from the one on screen -- never on a poll
+   that repaints the same place. A figure's own crossfade (graphics.ts's
+   data-replace wrap) runs at 180 ms on every real value change, because a
+   fresh node enters the tree then; reconcile.ts leaves the node alone on a
+   poll that keeps the same signature, so nothing replays. */
+.ki-main[data-enter='1'] > .layer { animation: ki-enter var(--dur-fast) var(--ease-enter) both; }
+@keyframes ki-enter { from { opacity: 0; } to { opacity: 1; } }
+.g-wrap { animation: ki-fade var(--dur-base) var(--ease) both; }
+@keyframes ki-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Press release: base.css's and layers.css's own :active rules answer at
+   once (transition: none); this eases the surface back open afterwards. */
+.btn, .btn-ghost, .btn-quiet, .chip, .ki-tab, .row-button, .route-link, .dir-item { transition: background-color var(--dur-fast) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) { .ki-main[data-enter='1'] > .layer, .g-wrap { animation: none; } }
+:root[data-lagano='1'] .ki-main > .layer, :root[data-lagano='1'] .g-wrap { animation: none; }

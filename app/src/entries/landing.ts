@@ -11,6 +11,10 @@ import { conditionText } from '../experience/text';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { createThemeController } from '../ui/theme';
+// app/index.html links tokens.css, base.css and landing.css itself; the entry
+// carries the signage sheet, which loads after them and gives the live strip
+// the same badges, rows and bands as every other surface.
+import '../ui/signage.css';
 
 export interface StripLine { text: string; state: 'live' | 'unknown' | 'urgent' }
 export interface StripTexts { weather: StripLine; safety: StripLine; transit: StripLine }
