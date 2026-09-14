@@ -72,3 +72,19 @@ describe('signRow', () => {
     expect(row.startsWith('<li class="row" data-key="q&quot;1" data-testid="transit-row">')).toBe(true);
   });
 });
+
+describe('a caller class joins the component instead of writing a second attribute', () => {
+  it('lineBadge merges class into its own list and keeps every other attribute verbatim', () => {
+    const html = lineBadge('6', 'tram', 's', { class: 't-badge', 'data-testid': 'peek-line' });
+    expect(html.match(/class=/g)).toHaveLength(1);
+    expect(html).toContain('class="line t-badge"');
+    expect(html).toContain('data-testid="peek-line"');
+    expect(html).toContain('data-kind="tram"');
+  });
+  it('signRow merges class the same way, so .row-dense is reachable through the builder', () => {
+    const html = signRow({ key: 'r1', lead: '', title: 'Ilica', attrs: { class: 'row-dense', 'data-testid': 'stop-row' } });
+    expect(html.match(/class="row[^"]*"/)?.[0]).toBe('class="row row-dense"');
+    expect(html).toContain('data-testid="stop-row"');
+  });
+});
+

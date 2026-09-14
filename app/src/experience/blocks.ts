@@ -131,8 +131,12 @@ export function findSelected(snapshot: ModuleSnapshot | undefined, selection: Pu
  * further attributes on the badge, written as they are named.
  */
 export function lineBadge(label: string, kind: 'tram' | 'bus' | 'other', size: 's' | 'm' | 'l' | 'k' = 'm', extra: Record<string, string> = {}): string {
-  const rest = attrs(extra);
-  return `<span class="line" data-kind="${kind}" data-size="${size}"${rest ? ` ${rest}` : ''}>${escapeHtml(label)}</span>`;
+  // A `class` among the extras joins the component's own class list; writing it
+  // as a second class attribute would make the parser drop one of the two.
+  const { class: extraClass, ...others } = extra;
+  const rest = attrs(others);
+  const cls = extraClass ? `line ${extraClass}` : 'line';
+  return `<span class="${escapeAttribute(cls)}" data-kind="${kind}" data-size="${size}"${rest ? ` ${rest}` : ''}>${escapeHtml(label)}</span>`;
 }
 
 export interface SignRowParts {
@@ -154,9 +158,11 @@ export interface SignRowParts {
  * builders produced.
  */
 export function signRow(parts: SignRowParts): string {
-  const rest = attrs(parts.attrs ?? {});
+  const { class: extraClass, ...others } = parts.attrs ?? {};
+  const rest = attrs(others);
+  const cls = extraClass ? `row ${extraClass}` : 'row';
   const sub = parts.sub ? `<span class="row-sub">${escapeHtml(parts.sub)}</span>` : '';
-  return `<li class="row" data-key="${escapeAttribute(parts.key)}"${rest ? ` ${rest}` : ''}>${parts.lead}<span class="row-main"><span class="row-title">${escapeHtml(parts.title)}</span>${sub}</span>${parts.trail ?? ''}</li>`;
+  return `<li class="${escapeAttribute(cls)}" data-key="${escapeAttribute(parts.key)}"${rest ? ` ${rest}` : ''}>${parts.lead}<span class="row-main"><span class="row-title">${escapeHtml(parts.title)}</span>${sub}</span>${parts.trail ?? ''}</li>`;
 }
 
 export interface ItemRowOptions {

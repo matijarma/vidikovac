@@ -117,14 +117,12 @@ describe('the same-origin Protomaps v4 basemap', () => {
   // One peacock and one blue on the map. A route line has no shape to help it
   // the way a badge does, so the two fills have to stay apart in the space a
   // person perceives (OKLab distance, the same maths the contrast test uses).
-  // The plan asks for 0.10 in both faces: light clears it; dark measures 0.081
-  // with --palette-dark-transit as tokens.css carries it (#8fd0ec), and wave 2
-  // may not edit a palette token, so the dark pair is pinned at what it really
-  // measures until the controller decides whether the token moves.
+  // The plan asks for 0.10 in both faces (R-D6: the dark bus carries the blue
+  // the dark map already drew, #9fb4ff, so badge, pill and route line agree).
   it('keeps the tram and bus route fills apart in OKLab, so a glance tells the mode', () => {
     const apart = (p: { routeTram: string; routeBus: string }): number => deltaE(hexToLinear(p.routeTram), hexToLinear(p.routeBus));
     expect(apart(OVERLAY_LIGHT)).toBeGreaterThanOrEqual(0.1);
-    expect(apart(OVERLAY_DARK)).toBeCloseTo(0.081, 3);
+    expect(apart(OVERLAY_DARK)).toBeGreaterThanOrEqual(0.1);
   });
 
   it('asks the sprite only for icons it carries: the pois layer names a kind as its icon only when SPRITE_V4_ICONS has it, and the one kind upstream admits without an image (townhall) keeps its label alone', () => {

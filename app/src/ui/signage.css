@@ -32,7 +32,7 @@
    lead track (sized to its own text) and the trail in the flexible one. When
    the main part really is first it takes the empty lead track with it, so the
    title starts at the row's edge and the trail still ends at it. */
-.row-main { grid-column: 2; }
+.row-main { grid-column: 2; display: grid; gap: 0.15rem; min-inline-size: 0; }
 .row > .row-main:first-child:not(:only-child) { grid-column: 1 / 3; }
 .row-dense { min-block-size: 2.75rem; }
 .row-title { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
