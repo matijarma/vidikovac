@@ -11,6 +11,7 @@ import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-s
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import { createMapSlots } from '../../app/src/map/map-slots';
+import { createSchematicHost } from '../../app/src/motion/schematic-host';
 import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -365,6 +366,66 @@ describe('u-pokretu', () => {
     expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
     expect(factory).not.toHaveBeenCalled();
   });
+  // T3.6: the lightweight face reads like the map's sheet -- the same board grammar without a stage.
+  it('the lightweight face: a search field first, "Linije u pokretu" as a board of rows with small badges (eight, then "još N linija" through the page filter), the host’s list, closures four then more, three notices, no map, no canvas, the honesty note once', () => {
+    const i18n = createDefaultI18n('hr');
+    const pins = Array.from({ length: 10 }, (_, i) => ({
+      id: `vehicle:l${i}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'session' as const, title: String(i + 1),
+      geo: { type: 'Point' as const, coordinates: [15.97 + i / 1000, 45.81] as [number, number] }, data: { routeId: String(i + 1), routeType: 0 },
+    }));
+    const zet: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, items: [...pins, { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 90, vehicles: 1 } }] };
+    const notices = Array.from({ length: 5 }, (_, i) => ({
+      id: `zet-promet:${i}`, module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: `Obavijest ${i}`, at: '2026-09-11T08:00:00Z', link: 'https://zet.hr/promet', data: { source: 'zet-promet' },
+    }));
+    const snapshots = { ...SNAPSHOTS, 'zet-rt': zet, prometnice: MANY_CLOSURES, dogadanja: { ...SNAPSHOTS.dogadanja!, items: notices } };
+    const schematic = createSchematicHost({ i18n, scope: { kind: 'network' }, lightweight: true, now: () => NOW });
+    const face = (filters: Record<string, string>, host = true): HTMLElement =>
+      renderLayer('u-pokretu', ctx({ i18n, snapshots, lightweight: true, view: { layer: 'u-pokretu', selection: null, filters }, ...(host ? { schematic } : {}) })).querySelector<HTMLElement>('[data-testid=transport-light]')!;
+    const light = face({});
+    // No stage, no map, no canvas, no workspace.
+    expect(light.querySelector('#u-pokretu-map')).toBeNull();
+    expect(light.querySelector('canvas')).toBeNull();
+    expect(light.querySelector('[data-testid=transport-workspace]')).toBeNull();
+    // The search field comes first and is the page's own filter (dashboard.ts's input delegation), 44 px by base.css.
+    const input = light.firstElementChild!.querySelector<HTMLInputElement>('input[type=search]')!;
+    expect(input.dataset.filterKey).toBe('q');
+    // The board: static signage rows with small badges, eight of ten shown, the fold as a filter action.
+    const rows = [...light.querySelectorAll<HTMLElement>('[data-testid=running-routes] .row')];
+    expect(rows).toHaveLength(10);
+    expect(rows.filter((r) => !r.hidden)).toHaveLength(8);
+    expect(rows.every((r) => r.querySelector('.line[data-size="s"]') !== null)).toBe(true);
+    expect(light.querySelector('[data-testid=running-routes] button')).toBeNull(); // nothing here opens a detail: there is no handler on this path
+    const more = light.querySelector<HTMLButtonElement>('[data-action=filter][data-filter-key=routes]')!;
+    expect(text(more)).toBe('još 2 linije');
+    expect(more.dataset.filterValue).toBe('all');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    const six = rows.find((r) => text(r.querySelector('.line')) === '6')!;
+    expect(text(six.querySelector('.row-sub'))).toBe('1 vozilo u pokretu');
+    expect(text(six.querySelector('.route-delay'))).toBe('kasni 2 min');
+    expect(six.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
+    expect(rows.filter((r) => r !== six).every((r) => r.querySelector('.route-delay') === null)).toBe(true); // no median, no word
+    // The host's list face under its own head; the closures four of twenty, then "sve zatvaranja (20)"; three notices.
+    expect(light.querySelector('[data-testid=schematic-host] [data-testid=schematic-list]')).not.toBeNull();
+    const closures = [...light.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')];
+    expect(closures).toHaveLength(20);
+    expect(closures.filter((r) => !r.hidden)).toHaveLength(4);
+    expect(closures.every((r) => r.querySelector('.mark-closure') !== null && r.querySelector('button') === null)).toBe(true);
+    expect(text(light.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('sve zatvaranja (20)');
+    expect(light.querySelectorAll('[data-testid=transport-notices] .row')).toHaveLength(3);
+    // The honesty sentence exactly once on the face: the host carries it under its list.
+    expect(text(light).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
+    // The folds open and the query narrows through the page's own filters; the field keeps its text.
+    const open = face({ routes: 'all', closures: 'all', q: '6' });
+    expect(open.querySelector<HTMLInputElement>('input[type=search]')!.value).toBe('6');
+    expect([...open.querySelectorAll('[data-testid=running-routes] .row')].map((r) => text(r.querySelector('.line')))).toEqual(['6']);
+    expect([...open.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')].filter((r) => !r.hidden)).toHaveLength(20);
+    expect(text(open.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('Skupi');
+    expect(text(face({ q: 'zzz' }).querySelector('[data-testid=transport-no-results]'))).toContain('zzz');
+    // Without a host (a unit context) the face still says the sentence, once.
+    const bare = face({}, false);
+    expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
+    expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
+  });
   it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
@@ -662,16 +723,97 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
   });
   it('vijesti separates the two HRT sources, shows real publication times, and the open story links to the original', () => {
     const section = renderLayer('vijesti', ctx());
-    const row = section.querySelector('[data-testid=news-row]')!;
-    expect(text(row)).toContain('Naslov vijesti');
-    expect(text(row)).toContain('prije 1 sat'); // 11:00Z is 13:00 in Zagreb, an hour and a half before NOW
     expect(section.querySelector('#nw-hrt')).not.toBeNull();
     expect(section.querySelector('#nw-sljeme')).not.toBeNull();
+    const lead = section.querySelector('#nw-hrt .nw-lead')!;
+    expect(lead.tagName).toBe('ARTICLE'); // a plain article, never a card
+    expect(text(lead)).toContain('Naslov vijesti');
+    expect(text(lead)).toContain('prije 1 sat'); // 11:00Z is 13:00 in Zagreb, an hour and a half before NOW
     const open = renderLayer('vijesti', ctx({ view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' }, filters: {} } }));
     const detail = open.querySelector('[data-testid=news-detail]')!;
     expect(detail.querySelector('a[href="https://vijesti.hrt.hr/clanak"]')).not.toBeNull();
     expect(text(detail)).toContain('Sažetak');
     expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain('Izvor: hrt-news');
+  });
+  it('the lead is a plain article with no background box, and its class list never grows a card class', () => {
+    const section = renderLayer('vijesti', ctx());
+    const lead = section.querySelector('#nw-hrt .nw-lead')!;
+    expect(lead.classList.contains('nw-lead-box')).toBe(false);
+    expect(lead.classList.contains('sec')).toBe(false);
+    expect(lead.classList.contains('tile')).toBe(false);
+  });
+  it('heads each source with its own build time, "objavljeno" when the feed states one and "dohvaćeno" when only the fetch time is known, and shows a status badge only when a source is not live', () => {
+    const mixed: ModuleSnapshot = {
+      ...base('hrt-news', [
+        { id: 'h1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', summary: 'Sažetak', link: 'https://vijesti.hrt.hr/clanak', at: '2026-09-11T11:00:00Z', data: { source: 'HRT vijesti' } },
+      ] as ModuleSnapshot['items']),
+      sources: {
+        'HRT vijesti': { status: 'live', itemCount: 1, fetchedAt: new Date(NOW - 60_000).toISOString(), sourceUpdatedAt: '2026-09-11T11:40:00Z' },
+        'Radio Sljeme': { status: 'down', itemCount: 0 },
+      },
+    };
+    const section = renderLayer('vijesti', ctx({ snapshots: { ...SNAPSHOTS, 'hrt-news': mixed } }));
+    expect(text(section.querySelector('#nw-hrt header'))).toContain('objavljeno 13:40');
+    expect(section.querySelector('#nw-hrt [data-testid=news-source-status]')).toBeNull(); // a live source needs no pill
+    expect(text(section.querySelector('#nw-sljeme [data-testid=news-source-status]'))).toContain('nedostupan');
+    expect(text(section.querySelector('#nw-sljeme'))).toContain('Radio Sljeme trenutačno ne odgovara');
+  });
+  it('shows a lead and six rows by default, pages the rest ten at a time under its own filter key, and keeps every source independent', () => {
+    const hrtItems = Array.from({ length: 20 }, (_, i) => ({
+      id: `hrt${i + 1}`, module: 'hrt-news' as const, kind: 'news' as const, tier: 'open' as const,
+      title: `Naslov ${i + 1}`,
+      summary: i === 0 ? 'Uvodni odlomak prve vijesti, dovoljno dug da pokaže prozu bez skraćivanja na tri retka.' : `Sažetak ${i + 1}`,
+      link: `https://vijesti.hrt.hr/clanak-${i + 1}`, at: new Date(NOW - (i + 1) * 5 * 60_000).toISOString(), data: { source: 'HRT vijesti' },
+    }));
+    const sljemeItems = Array.from({ length: 3 }, (_, i) => ({
+      id: `sljeme${i + 1}`, module: 'hrt-news' as const, kind: 'news' as const, tier: 'open' as const,
+      title: `Sljeme naslov ${i + 1}`, summary: `Sljeme sažetak ${i + 1}`,
+      link: `https://sljeme.hrt.hr/clanak-${i + 1}`, at: new Date(NOW - (i + 1) * 7 * 60_000).toISOString(), data: { source: 'Radio Sljeme' },
+    }));
+    const manyNews: ModuleSnapshot = {
+      ...base('hrt-news', [...hrtItems, ...sljemeItems] as ModuleSnapshot['items']),
+      sources: {
+        'HRT vijesti': { status: 'live', itemCount: 20, fetchedAt: new Date(NOW - 60_000).toISOString(), sourceUpdatedAt: '2026-09-11T11:40:00Z' },
+        'Radio Sljeme': { status: 'live', itemCount: 3, fetchedAt: '2026-09-11T11:45:00Z' },
+      },
+    };
+    const snapshots = { ...SNAPSHOTS, 'hrt-news': manyNews };
+    const section = renderLayer('vijesti', ctx({ snapshots }));
+    const hrt = section.querySelector('#nw-hrt')!;
+    const sljeme = section.querySelector('#nw-sljeme')!;
+    expect(text(hrt.querySelector('header'))).toContain('objavljeno 13:40');
+    expect(text(sljeme.querySelector('header'))).toContain('dohvaćeno 13:45');
+    expect(text(hrt.querySelector('.nw-lead'))).toContain('Naslov 1');
+    expect(hrt.querySelectorAll('[data-testid=news-row]')).toHaveLength(6); // the lead is not one of the six
+    expect(text(hrt.querySelector('[data-testid=news-row]'))).toContain('Naslov 2'); // the first row after the lead
+    const more = hrt.querySelector('[data-action=filter][data-filter-key=hrt]')!;
+    expect(text(more)).toBe('Prikaži još 10');
+    expect(more.getAttribute('data-filter-value')).toBe('16');
+    const expanded = renderLayer('vijesti', ctx({ snapshots, view: { layer: 'vijesti', selection: null, filters: { hrt: '16' } } }));
+    expect(expanded.querySelector('#nw-hrt')!.querySelectorAll('[data-testid=news-row]')).toHaveLength(16);
+    // Radio Sljeme has only three items: a lead and two rows, and no filter of its own is exhausted.
+    expect(sljeme.querySelectorAll('[data-testid=news-row]')).toHaveLength(2);
+    expect(sljeme.querySelector('[data-action=filter]')).toBeNull();
+    // Selecting a Radio Sljeme story opens a link labelled for that source.
+    const sljemeOpen = renderLayer('vijesti', ctx({ snapshots, view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'sljeme1'), module: 'hrt-news' }, filters: {} } }));
+    expect(text(sljemeOpen.querySelector('[data-testid=news-detail] a.btn-primary'))).toBe('Otvori na Radio Sljemenu');
+  });
+  it('opens a story to a labelled 48 px primary link, copy and share, and no kicker line', () => {
+    const open = renderLayer('vijesti', ctx({ view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=news-detail]')!;
+    expect(detail.querySelector('.kicker')).toBeNull(); // kickers are retired
+    const primary = detail.querySelector('a.btn-primary')!;
+    expect(primary.getAttribute('href')).toBe('https://vijesti.hrt.hr/clanak');
+    expect(text(primary)).toBe('Otvori na HRT-u');
+    expect(detail.querySelector('[data-action=copy-item][data-module=hrt-news][data-item-id=n1]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=share-item][data-module=hrt-news][data-item-id=n1]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=ics-item]')).toBeNull(); // never an unverified date on a calendar
+  });
+  it('moves the RSS disclaimer into the attribution foot and drops the line that used to sit under the page title', () => {
+    const section = renderLayer('vijesti', ctx());
+    const disclaimer = 'Sažetak je uvodni odlomak iz HRT-ova RSS-a; cijeli članak je na izvorniku.';
+    expect(text(section.querySelector('.ws-head'))).not.toContain(disclaimer);
+    expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain(disclaimer);
   });
 });
 

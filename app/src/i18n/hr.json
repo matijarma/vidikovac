@@ -310,22 +310,15 @@
     "worksCount_other": "{count} stavki"
   },
   "news": {
-    "lead": "Glavna vijest",
-    "more": "Ostale vijesti",
     "published": "objavljeno {time}",
     "publishedUnknown": "vrijeme objave nije navedeno",
     "sourceDown": "{source} trenutačno ne odgovara.",
     "sourceEmpty": "{source} trenutačno nema vijesti.",
-    "readOriginal": "Pročitaj na izvorniku",
+    "openHrt": "Otvori na HRT-u",
+    "openSljeme": "Otvori na Radio Sljemenu",
     "summaryNote": "Sažetak je uvodni odlomak iz HRT-ova RSS-a; cijeli članak je na izvorniku.",
     "empty": "Nema vijesti iz dostupnih izvora.",
-    "national": "HRT vijesti",
-    "local": "Radio Sljeme",
-    "count_one": "{count} vijest",
-    "count_few": "{count} vijesti",
-    "count_other": "{count} vijesti",
-    "detailTitle": "Vijest",
-    "showAll": "Prikaži sve iz izvora {source}"
+    "detailTitle": "Vijest"
   },
   "transit": {
     "fromStop": "Sa stanice {stop}",

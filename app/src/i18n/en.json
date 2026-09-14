@@ -297,21 +297,15 @@
     "worksCount_other": "{count} items"
   },
   "news": {
-    "lead": "Lead story",
-    "more": "More news",
     "published": "published {time}",
     "publishedUnknown": "publication time not given",
     "sourceDown": "{source} is not responding right now.",
     "sourceEmpty": "{source} has no news right now.",
-    "readOriginal": "Read at the original",
+    "openHrt": "Read at HRT",
+    "openSljeme": "Read at Radio Sljeme",
     "summaryNote": "The summary is the lede from HRT's RSS; the full article is at the original.",
     "empty": "No news from the available sources.",
-    "national": "HRT news",
-    "local": "Radio Sljeme",
-    "count_one": "{count} story",
-    "count_other": "{count} stories",
-    "detailTitle": "Story",
-    "showAll": "Show all from {source}"
+    "detailTitle": "Story"
   },
   "transit": {
     "fromStop": "From {stop}",
