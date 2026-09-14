@@ -745,3 +745,47 @@ describe('the desktop rail', () => {
     expect(order).toEqual(['ki-rail', 'ki-banners', 'ki-main', 'ki-tabbar']);
   });
 });
+
+// T2.7: motion that reports a fact. A workspace switch fades the incoming
+// layer in (signage.css's ki-enter); a poll that repaints the same place, or
+// a reduced-motion/lightweight session, never sees it move at all.
+describe('motion: the workspace fades in on a switch, never on a redraw', () => {
+  const main = (root: Root): HTMLElement => root.querySelector<HTMLElement>('[data-testid=dash-view]')!;
+
+  it('marks main with data-enter on a layer switch and clears it once the fallback timer fires', () => {
+    const { root, tick } = mount();
+    expect(main(root).dataset.enter).toBeUndefined();
+    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    expect(main(root).dataset.enter).toBe('1');
+    tick();
+    expect(main(root).dataset.enter).toBeUndefined();
+  });
+
+  it('marks main again when the directory opens, and again when it closes back to a domain', () => {
+    const { root } = mount();
+    click(root, '[data-testid=tab-more]');
+    expect(main(root).dataset.enter).toBe('1');
+    click(root, '[data-testid=dir-zrak-i-nebo]');
+    expect(main(root).dataset.enter).toBe('1');
+  });
+
+  it('never sets it under reducedMotion, even across a real layer switch', () => {
+    const { root } = mount({ deps: { reducedMotion: true } });
+    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    expect(main(root).dataset.enter).toBeUndefined();
+  });
+
+  it('never sets it on the lightweight path', () => {
+    const { root } = mount({ lightweight: true });
+    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    expect(main(root).dataset.enter).toBeUndefined();
+  });
+
+  it('does not mark main on the initial paint, nor on a poll re-render that keeps the same layer', async () => {
+    const { root, session } = mount();
+    expect(main(root).dataset.enter).toBeUndefined();
+    session.join();
+    await flush();
+    expect(main(root).dataset.enter).toBeUndefined();
+  });
+});

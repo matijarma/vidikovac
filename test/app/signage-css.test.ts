@@ -27,17 +27,27 @@ function decls(selector: string, css: string): Record<string, string> {
       .map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]),
   );
 }
-/** The body of an at-rule, brace-matched, so a one-line block reads like a formatted one. */
-function atRule(prelude: string, css: string): string {
-  const start = css.indexOf(prelude);
-  if (start < 0) throw new Error(`no ${prelude}`);
-  const open = css.indexOf('{', start);
-  let depth = 0;
-  for (let i = open; i < css.length; i += 1) {
-    if (css[i] === '{') depth += 1;
-    else if (css[i] === '}' && (depth -= 1) === 0) return css.slice(open + 1, i);
+/** The body of an at-rule, brace-matched, so a one-line block reads like a formatted one.
+ *  A page can hold more than one block sharing the same prelude (two separate
+ *  `@media (prefers-reduced-motion: reduce)` rules, say); `mustContain`, when given,
+ *  skips a block whose body lacks it instead of settling for the first match. */
+function atRule(prelude: string, css: string, mustContain?: string): string {
+  let from = 0;
+  for (;;) {
+    const start = css.indexOf(prelude, from);
+    if (start < 0) throw new Error(`no ${prelude}${mustContain ? ` containing ${mustContain}` : ''}`);
+    const open = css.indexOf('{', start);
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < css.length; i += 1) {
+      if (css[i] === '{') depth += 1;
+      else if (css[i] === '}' && (depth -= 1) === 0) { end = i; break; }
+    }
+    if (end < 0) throw new Error(`unbalanced ${prelude}`);
+    const body = css.slice(open + 1, end);
+    if (!mustContain || body.includes(mustContain)) return body;
+    from = end + 1;
   }
-  throw new Error(`unbalanced ${prelude}`);
 }
 const withoutComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -127,6 +137,32 @@ describe('every page that shows a badge loads the sheet', () => {
     for (const name of ['dashboard.ts', 'kiosk.ts', 'scan.ts']) {
       expect(entry(name), name).toContain("import '../ui/base.css';\nimport '../ui/signage.css';");
     }
+  });
+});
+
+describe('motion that reports a fact: a workspace fade and a figure crossfade, with designed twins', () => {
+  it('fades the incoming workspace in on a switch, via a keyframe rather than a transition', () => {
+    expect(CSS).toContain('@keyframes ki-enter');
+    const enter = decls(".ki-main[data-enter='1'] > .layer", CSS);
+    expect(enter.animation).toBe('ki-enter var(--dur-fast) var(--ease-enter) both');
+  });
+  it('crossfades a figure on a real change, at the base duration', () => {
+    expect(CSS).toContain('@keyframes ki-fade');
+    expect(decls('.g-wrap', CSS).animation).toBe('ki-fade var(--dur-base) var(--ease) both');
+  });
+  it('eases a press back open on every control that already answers instantly on :active', () => {
+    const release = decls('.btn, .btn-ghost, .btn-quiet, .chip, .ki-tab, .row-button, .route-link, .dir-item', CSS);
+    expect(release.transition).toBe('background-color var(--dur-fast) var(--ease)');
+  });
+  it('gives the workspace fade and the figure crossfade a reduced-motion twin, naming both selectors', () => {
+    const reduced = atRule('@media (prefers-reduced-motion: reduce)', CSS, '.ki-main');
+    expect(reduced).toContain(".ki-main[data-enter='1'] > .layer");
+    expect(reduced).toContain('.g-wrap');
+    expect(reduced).toContain('animation: none');
+  });
+  it('gives them the same twin on the lightweight path', () => {
+    const lagano = decls(":root[data-lagano='1'] .ki-main > .layer, :root[data-lagano='1'] .g-wrap", CSS);
+    expect(lagano.animation).toBe('none');
   });
 });
 

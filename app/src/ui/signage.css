@@ -61,3 +61,22 @@
 @keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; background: var(--tone-surface-2); } }
 :root[data-lagano='1'] .sk { animation: none; background: var(--tone-surface-2); }
+
+/* Motion that reports a fact. A workspace switch is a 140 ms fade on the
+   incoming layer, set by dashboard.ts's render() only when the layer (or the
+   open directory) actually differs from the one on screen -- never on a poll
+   that repaints the same place. A figure's own crossfade (graphics.ts's
+   data-replace wrap) runs at 180 ms on every real value change, because a
+   fresh node enters the tree then; reconcile.ts leaves the node alone on a
+   poll that keeps the same signature, so nothing replays. */
+.ki-main[data-enter='1'] > .layer { animation: ki-enter var(--dur-fast) var(--ease-enter) both; }
+@keyframes ki-enter { from { opacity: 0; } to { opacity: 1; } }
+.g-wrap { animation: ki-fade var(--dur-base) var(--ease) both; }
+@keyframes ki-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Press release: base.css's and layers.css's own :active rules answer at
+   once (transition: none); this eases the surface back open afterwards. */
+.btn, .btn-ghost, .btn-quiet, .chip, .ki-tab, .row-button, .route-link, .dir-item { transition: background-color var(--dur-fast) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) { .ki-main[data-enter='1'] > .layer, .g-wrap { animation: none; } }
+:root[data-lagano='1'] .ki-main > .layer, :root[data-lagano='1'] .g-wrap { animation: none; }

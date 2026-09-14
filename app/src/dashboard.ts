@@ -157,6 +157,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let joinedOnce = false;
   /** The one in-flow notice; the hidden live regions announce, this one shows. */
   let notice: ShellNotice | null = null;
+  /** The workspace last painted (a layer id, or 'directory'): render() fades the
+   *  incoming one in only when this changes, never on a poll that repaints the
+   *  same place. Seeded from the initial view so the first paint never fades. */
+  let lastWorkspaceKey: string = view.snapshot().layer;
+  /** The 200 ms fallback that clears data-enter for an engine that never fires animationend. */
+  let enterTimer: unknown = null;
 
   // --- stable shell --------------------------------------------------------
   // The two live regions are visually hidden, never display: none, so readers hear them.
@@ -287,6 +293,31 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       reconcile(main, wrapper);
     } else {
       main.replaceChildren(next);
+    }
+    // Motion that reports a fact: a genuine workspace switch (never a poll that
+    // redraws the same place) fades `next` in -- it is the live node exactly
+    // when the key actually changed, since reconcile.ts only morphs onto (and
+    // discards `next` in favour of) a pre-existing node of the same key.
+    const workspaceKey = directory ? 'directory' : layer;
+    if (workspaceKey !== lastWorkspaceKey) {
+      lastWorkspaceKey = workspaceKey;
+      if (!deps.reducedMotion && !lightweight) {
+        if (enterTimer !== null) { clearTimer(enterTimer); enterTimer = null; }
+        main.dataset.enter = '1';
+        const layerEl = next;
+        // The 200 ms fallback is the primary path (happy-dom never fires
+        // animationend); a real engine's animationend clears it early, and
+        // calls `clearTimer` on itself either way (`armPoll`'s own idiom),
+        // so a harness that tracks live timers by their own clearInterval
+        // sees this one settled once either path has run.
+        const clear = (): void => {
+          if (enterTimer !== null) { clearTimer(enterTimer); enterTimer = null; }
+          delete main.dataset.enter;
+        };
+        const onAnimationEnd = (event: AnimationEvent): void => { if (event.target === layerEl) clear(); };
+        layerEl.addEventListener('animationend', onAnimationEnd, { once: true });
+        enterTimer = setTimer(clear, 200);
+      }
     }
     const target = focused?.isConnected ? focused : focusedId ? doc.getElementById(focusedId) : null;
     if (target && doc.activeElement !== target) {
