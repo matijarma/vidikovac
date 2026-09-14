@@ -128,7 +128,11 @@ zadatkom naslovnice, još nije isporučen).
 
 ## Isporuka i prijava
 
-Repozitorij ostaje privatan, evaluacijsko okruženje zaštićeno Accessom.
+Repozitorij ostaje privatan. Evaluacijsko okruženje bilo je do 14. rujna 2026.
+zaštićeno Cloudflare Accessom; od tada je javno, a samoposluga zaslona
+(`POST /api/screens`) drži quotu po mreži umjesto po Access identitetu. Operaterske
+rute `/api/admin/*` i `/stats` i dalje traže valjan Access JWT i bez njega
+odgovaraju 404.
 Isporuka ide kroz `git push` i postojeći Cloudflare Build, uz naknadnu
 autentificiranu provjeru stranica, karte i stvaranja zaslona.
 

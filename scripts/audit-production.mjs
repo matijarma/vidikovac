@@ -1,8 +1,11 @@
 // Read-only production audit of the Kaj ima? prototype on emulated phones, a desktop and a kiosk.
 //
-// Usage, from the repo root, with the Access service token in the environment (never in a file):
+// Usage, from the repo root:
 //
-//   CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=… node scripts/audit-production.mjs
+//   node scripts/audit-production.mjs
+//
+// A deployment behind Cloudflare Access also needs its service token in the environment
+// (never in a file): CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=…
 //
 // Optional environment:
 //   AUDIT_APP_URL   the deployment to audit; default https://zagreb.aningfilm.hr
@@ -47,13 +50,11 @@ const ACTION_TIMEOUT_MS = 20_000;
 const SHELL_ROOT = '.ki';
 
 // --- environment -------------------------------------------------------------------------
+// A deployment behind Cloudflare Access takes the service token from the environment;
+// a public one needs nothing, and the run says which it found.
 const clientId = process.env.CF_ACCESS_CLIENT_ID;
 const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
-if (!clientId || !clientSecret) {
-  console.error('audit-production: CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must be set in the environment (see the header comment).');
-  process.exit(2);
-}
-const HEADERS = { 'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret };
+const HEADERS = clientId && clientSecret ? { 'CF-Access-Client-Id': clientId, 'CF-Access-Client-Secret': clientSecret } : {};
 const ORIGIN = new URL(process.env.AUDIT_APP_URL ?? DEFAULT_APP_URL).origin;
 /** A screen that already exists: its provisioning URL, so the journey needs no screen creation. */
 const KIOSK_URL = process.env.AUDIT_KIOSK_URL ? new URL(process.env.AUDIT_KIOSK_URL, ORIGIN).toString() : null;

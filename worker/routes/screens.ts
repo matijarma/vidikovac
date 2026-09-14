@@ -3,6 +3,9 @@ import { json } from '../http';
 import { indexStub } from '../do/index-do';
 import { accessPrincipal } from '../pairing/access';
 import { isTestEnvironment } from '../config';
+import type { Env } from '../env';
+import { clientIp } from '../http';
+import { addressPrefix } from '../pairing/netkey';
 import { hexEncode, hmacSha256, requireSecret } from '../pairing/tokens';
 import { provisionScreen } from '../pairing/provision';
 import { DEFAULT_STOP_ID, screenStop } from '../pairing/stops';
@@ -11,6 +14,19 @@ import { isSameOrigin, readCappedBody } from './pairing';
 import { logError } from '../log';
 
 export const TEMPORARY_SCREEN_MS = 24 * 60 * 60_000;
+
+/**
+ * The quota key for a caller without an Access identity: the network the request
+ * comes from, at the same width the same-WiFi check uses (an IPv4 address, or the
+ * first four hextets of an IPv6 one), keyed through the session secret so the
+ * rolling-hour quota rows carry no address. Null only when Cloudflare reported no
+ * client address, which a request through the edge never lacks.
+ */
+export async function networkPrincipal(env: Env, request: Request): Promise<string | null> {
+  const prefix = addressPrefix(clientIp(request));
+  if (!prefix) return null;
+  return hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), `screen-network:${prefix}`));
+}
 
 export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
   if (url.pathname !== '/api/screens') return null;
@@ -24,6 +40,8 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     if (!principal && isTestEnvironment(env)) {
       principal = hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), 'local-screen-evaluator'));
     }
+    // A public deployment has no Access identity: the quota is then per network.
+    if (!principal) principal = await networkPrincipal(env, request);
     if (!principal) return json({ error: 'evaluation-access-required' }, 403);
     const raw = await readCappedBody(request, 512);
     let body: Record<string, unknown>;

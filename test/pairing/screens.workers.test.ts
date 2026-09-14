@@ -6,6 +6,7 @@ import { indexStub } from '../../worker/do/index-do';
 import type { CodeSlot, CreateBeaconResponse } from '../../worker/protocol';
 import { connectWs, authKiosk, connectRoom } from './helpers';
 import { cityRows } from '../../worker/stats/export';
+import { handleScreens, networkPrincipal } from '../../worker/routes/screens';
 
 const testEnv = env as unknown as Env;
 
@@ -95,3 +96,39 @@ describe('real temporary screens', () => {
     expect(cityRows([{ day: '2026-09-12', hour: 12, event: 'scan_fail', dim1: 'code-unknown', dim2: 'unattributed', count: 100 }])).toEqual([]);
   });
 });
+
+// A public deployment (no Cloudflare Access in front of the site) still lets a
+// person set up a screen: the quota key is then the caller's network, never an
+// address in the clear.
+describe('self-service screens on a public deployment', () => {
+  const publicEnv = { ...testEnv, APP_ENV: 'production' } as Env;
+  const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
+  const post = (headers: Record<string, string>) => {
+    const request = new Request('https://vidikovac.test/api/screens', {
+      method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ area: 'donji-grad', stopId: '106_1' }),
+    });
+    return handleScreens(request, publicEnv, ctx, new URL(request.url));
+  };
+
+  it('creates a screen for a caller Cloudflare identifies only by address, and refuses one it cannot identify at all', async () => {
+    const created = await post({ 'CF-Connecting-IP': '203.0.113.7' });
+    expect(created?.status).toBe(201);
+    const refused = await post({});
+    expect(refused?.status).toBe(403);
+    expect(await refused?.json()).toEqual({ error: 'evaluation-access-required' });
+  });
+
+  it('keys the quota by network: one address maps to one stable key, a different address to another, and no key carries the address', async () => {
+    const a1 = await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens', { headers: { 'CF-Connecting-IP': '203.0.113.7' } }));
+    const a2 = await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens', { headers: { 'CF-Connecting-IP': '203.0.113.7' } }));
+    const b = await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens', { headers: { 'CF-Connecting-IP': '198.51.100.9' } }));
+    const v6a = await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens', { headers: { 'CF-Connecting-IP': '2001:db8:1:2:aaaa::1' } }));
+    const v6b = await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens', { headers: { 'CF-Connecting-IP': '2001:db8:1:2:bbbb::9' } }));
+    expect(a1).toBe(a2);
+    expect(a1).not.toBe(b);
+    expect(v6a).toBe(v6b); // the same /64 is one network
+    for (const key of [a1, b, v6a]) { expect(key).toMatch(/^[0-9a-f]{64}$/); expect(key).not.toContain('203'); }
+    expect(await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens'))).toBeNull();
+  });
+});
+

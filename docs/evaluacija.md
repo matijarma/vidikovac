@@ -1,8 +1,8 @@
 # Kaj ima? · vodič za evaluaciju
 
-Prototip i dokumenti dio su prijave Gradu Zagrebu. Evaluacijska adresa ostaje
-iza Cloudflare Accessa; razvoj građanske usluge i pilot slijede samo uz
-financiranje. Nema zasebnog javnog lansiranja.
+Prototip i dokumenti dio su prijave Gradu Zagrebu. Evaluacijska adresa je od
+14. rujna 2026. javno dostupna, bez prijave; razvoj građanske usluge i pilot
+slijede samo uz financiranje. Nema zasebnog javnog lansiranja.
 
 ## Stvarni scenarij na dva uređaja
 
