@@ -86,7 +86,7 @@ main{display:block}
 footer.page{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--stroke);color:var(--muted);font-size:.8125rem;line-height:1.5}
 footer.page p{max-width:68ch;margin:0 0 .5rem}
 .foot-links{display:flex;flex-wrap:wrap;gap:0 .5rem;list-style:none;margin:0;padding:0}
-.foot-links a{display:inline-flex;align-items:center;min-height:var(--target);padding:0 .25rem;border-radius:.25rem;font-weight:600}
+.foot-links a{display:inline-flex;align-items:center;justify-content:center;min-height:var(--target);min-width:var(--target);padding:0 .25rem;border-radius:.25rem;font-weight:600}
 `;
 
 // /hitno: a 64rem measure, the sticky one-row table of contents at 48 px,

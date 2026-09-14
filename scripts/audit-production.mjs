@@ -495,7 +495,7 @@ try {
     await shot(phone, 'iphone-session-sheet', true);
     await metrics(phone, 'iphone-session-sheet');
     const share = phone.getByTestId('share-city');
-    if (await share.count()) { await share.click(); await phone.getByTestId('share-code').waitFor({ timeout: 10_000 }); await phone.waitForTimeout(600); await shot(phone, 'iphone-share', true); await metrics(phone, 'iphone-share'); }
+    if (await share.count()) { await share.click(); await phone.getByTestId('share-code').waitFor({ timeout: 20_000 }).catch(async (e) => { log(`share: no code after 20 s; dialog=${await phone.getByTestId('share-dialog').count()} status=${JSON.stringify(await phone.getByTestId('share-status').textContent().catch(() => null))}`); throw e; }); await phone.waitForTimeout(600); await shot(phone, 'iphone-share', true); await metrics(phone, 'iphone-share'); }
     await phone.keyboard.press('Escape');
     await phone.waitForTimeout(600);
   } catch (e) { fail('iphone session sheet', e); }
@@ -512,7 +512,8 @@ try {
     await openDomain(phone, 'grad-sada');
   } catch (e) { fail('iphone dark', e); }
   try {
-    // The language control lives in the session sheet since T4.2: open the sheet, press the segment.
+    // The language control lives in the session sheet since T4.2: close any dialog a previous step left, open the sheet, press the segment.
+    await phone.keyboard.press('Escape').catch(() => {}); await phone.waitForTimeout(300);
     if (!(await phone.locator('[data-sheet-action=lang]').first().isVisible().catch(() => false))) await phone.getByTestId('session-label').click().catch(() => {});
     const toggle = phone.locator('[data-sheet-action=lang][data-value=en], [data-lang-toggle] button, [data-action=locale], [data-testid=lang-toggle], button:has-text("EN")').filter({ visible: true }).first();
     if (await toggle.count()) { await toggle.click(); await phone.waitForTimeout(900); await shot(phone, 'iphone-en-overview', true); await metrics(phone, 'iphone-en-overview'); await toggle.click(); await phone.waitForTimeout(500); }

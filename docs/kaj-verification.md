@@ -113,13 +113,29 @@ Dvije provjere iz plana još nisu provedene i ovaj ih dokument ne tvrdi:
 - provjera na fizičkom iPhoneu i Androidu (težina Manropea, povlačenje plahte,
   istek sesije, čitanje tramvaja i autobusa na karti); u emuliranom WebKitu s
   opisom iPhonea `document.fonts` javlja učitane Manrope 400, 500 i 700;
-- obilazak stvarne instalacije skriptom `scripts/audit-production.mjs`.
-  Skripta je 13. 9. dosegla adresu, ali samoposluga zaslona odgovara 403
-  `evaluation-access-required` pristupnom tokenu servisa, iako je isti Worker
-  istog popodneva stvarao zaslone tim tokenom. Skripta zato prima
-  `AUDIT_KIOSK_URL`, adresu zaslona stvorenog u pregledniku, i tada ne stvara
-  ništa. Obilazak s tom adresom i njegov `result.json` bilježe se ovdje kad se
-  provedu.
+- obilazak stvarne instalacije skriptom `scripts/audit-production.mjs` na
+  fizičkim uređajima; emulirani obilazak je proveden, vidi dolje.
+
+Obilazak stvarne instalacije (`scripts/audit-production.mjs`, WebKit s opisom
+iPhonea 13, Chromium kao Pixel 7 i stolno računalo 1440 px, kiosk 1366 i 1920):
+13. 9. skripta je dosegla adresu, ali samoposluga zaslona odgovarala je 403
+`evaluation-access-required` jer je Access prestao davati identitet servisnom
+tokenu; 14. 9. adresa je javna i quota zaslona vezana je za mrežu, pa obilazak
+radi bez tokena (skripta prima i `AUDIT_KIOSK_URL`, adresu postojećeg zaslona,
+i tada ne stvara novi). Tri obilaska istog dana, svaki nad ispravkama prethodnog:
+
+| Obilazak | Isporuka | Snimke | Kršenja pravila | Što je ostalo |
+|---|---|---|---|---|
+| 12:35 UTC | `82a9655` | 54 | 91 (cilj 78, veličina teksta 10, zaglavlje 3) | poveznica za preskakanje 40 px na svakoj stranici, poveznice kartografske atribucije mjerene kao gumbi, retci atribucije na `/hitno` mjereni kao sadržaj, dva pravila kriva (strop zaglavlja pri 200 %, preklapanje čitano u koordinatama prozora) |
+| 12:57 UTC | `41689d4` | 52 | 2 (cilj) | "Izvori" u podnožju `/hitno` 40 px široko, "City" na engleskom pregledu 42 px |
+| 13:30 UTC | `94c87e0` | 58 | 1 (cilj) | "Izvori" u podnožju `/hitno` 40 px široko (ispravak u sljedećoj isporuci) |
+
+Mjerena vremena u trećem obilasku: otključavanje 3,2 s na iPhoneu, 3,0 s na
+Androidu, 2,4 s na stolnom računalu; pri 4× usporenju procesora i 1,6 Mbit/s
+karta je spremna nakon 10,8 s (plan bilježi 14 s prije preinake). Manrope 400,
+500 i 700 učitani su u sva tri stroja. Svaka stranica i dalje pokušava učitati
+Cloudflare Web Analytics skriptu koju CSP odbija; to je postavka zone u
+Cloudflare nadzornoj ploči, ne kod.
 
 Dva testa u mobilnom projektu bila su namjerno označena kao očekivano crvena
 dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti (rješena s
