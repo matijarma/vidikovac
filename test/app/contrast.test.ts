@@ -246,3 +246,62 @@ describe.each(['dark', 'light'] as const)('%s generated /hitno and /open/ palett
     for (const [name, token] of roles) expect(generated(theme, name), name).toBe(palette(theme, token));
   });
 });
+
+// The public screen (ui/kiosk.css) paints from the same tokens through `--k-*`
+// aliases, and kiosk-css.test.ts forbids a hex there. These resolve each alias
+// through tokens.css to the colour a theme renders and hold the pairs the
+// kiosk draws to AA: the source lines and kickers (`--k-ink-3`, which the
+// private palette rendered at about 4.0:1 in light) and the second ink on
+// every surface, the on-tint brand tone on the action tint (the session pill,
+// a checked choice), the state words on their tints and on the surface, the
+// button ink on the action fill, and the two inverted pills.
+const KIOSK_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+
+/** The `--tone-<role>` a kiosk alias `--k-<name>` points at. */
+function kioskAlias(name: string): string {
+  const m = new RegExp(`--k-${name}:[ ]*var[(]--tone-([a-z0-9-]+)[)]`).exec(KIOSK_CSS);
+  if (!m) throw new Error(`kiosk.css does not alias --k-${name} to a --tone-* token`);
+  return m[1]!;
+}
+
+/** The layer behind a tone: a `--color-<role>` the themes assign, or a `--tint-<name>` they mix. */
+function toneTarget(role: string): { layer: 'color' | 'tint'; name: string } {
+  const m = new RegExp(`--tone-${role}:[ ]*var[(]--(color|tint)-([a-z0-9-]+)[)]`).exec(TOKENS);
+  if (!m) throw new Error(`tokens.css maps --tone-${role} to no --color-* or --tint-*`);
+  return { layer: m[1] as 'color' | 'tint', name: m[2]! };
+}
+
+/** The 8-bit pixel a theme paints for a kiosk alias, as rendered (the OKLCH twin, or the oklab tint over surface-1). */
+function kioskColour(theme: 'dark' | 'light', name: string): string {
+  const target = toneTarget(kioskAlias(name));
+  if (target.layer === 'tint') {
+    const tint = tints().find((t) => t.name === target.name);
+    if (!tint) throw new Error(`tokens.css mixes no --tint-${target.name}`);
+    return tintHex(theme, tint);
+  }
+  return toHex(rendered(theme, assigned(theme, target.name)));
+}
+
+describe.each(['dark', 'light'] as const)('%s kiosk aliases meet WCAG AA 4.5:1 as rendered', (theme) => {
+  const pairs: [text: string, surface: string][] = [
+    ['ink-3', 'surface'], ['ink-3', 'canvas'], ['ink-3', 'surface-2'],
+    ['ink-2', 'surface'], ['ink-2', 'canvas'], ['ink-2', 'surface-2'],
+    ['ink', 'surface'], ['ink', 'canvas'], ['ink', 'surface-2'],
+    ['action', 'surface'], ['action', 'canvas'],
+    ['amber', 'surface'], ['rose', 'surface'], ['violet', 'surface'],
+    ['action-on-soft', 'action-soft'],
+    ['amber', 'amber-soft'], ['rose', 'rose-soft'], ['violet', 'violet-soft'],
+    ['ink', 'action-soft'], ['ink-2', 'action-soft'], ['ink-2', 'violet-soft'],
+    ['action-ink', 'action'],
+    // The strip's safety pill is ink inverted; the bus badge is the second ink inverted.
+    ['canvas', 'ink'], ['canvas', 'ink-2'],
+  ];
+  it.each(pairs)('--k-%s on --k-%s', (text, surface) => {
+    const ratio = contrastRatio(kioskColour(theme, text), kioskColour(theme, surface));
+    expect(Number(ratio.toFixed(2)), `${theme} --k-${text} on --k-${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+  it('resolves the source-line ink to the muted text role and the on-tint ink to the on-tint brand tone', () => {
+    expect(kioskAlias('ink-3')).toBe('text-muted');
+    expect(kioskAlias('action-on-soft')).toBe('text-brand-on-tint');
+  });
+});
