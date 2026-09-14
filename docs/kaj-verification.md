@@ -1,6 +1,6 @@
 # Kaj ima? · provjera prototipa
 
-Datum provjere: 13. rujna 2026. Dokument prati integrirani prototip,
+Datum provjere: 13. rujna 2026., dopunjen 14. rujna 2026. Dokument prati integrirani prototip,
 ne obećava provjere na fizičkim uređajima koje nisu provedene.
 
 ## Integrirani rezultati
@@ -91,6 +91,40 @@ lagani Promet), a `scripts/audit-production.mjs` obilazi stvarnu instalaciju s
 pristupnim tokenom iz okoline i vraća izlazni kod 1 kad zakaže bilo koje pravilo
 geometrije, veličine teksta, cilja ili prelijevanja. Ovaj odlomak opisuje metodu;
 rezultati se bilježe tek nakon pokretanja na spojenoj grani.
+
+## Preinaka za telefon, 13. i 14. rujna 2026.
+
+Preinaka je isporučena u tri koraka, svaki nakon zelenog prolaza cijelog
+lanca (TypeScript oba projekta, Vitest, gradnja, Playwright u oba projekta,
+vizualna matrica, Lighthouse) na spojenoj grani `main`. Brojke su iz zapisa tih
+prolaza; nijedan korak nije objavljen s crvenim testom.
+
+| Korak | Isporučeno | Vitest | Playwright | Matrica | Lighthouse |
+|---|---|---|---|---|---|
+| `d839978`, 13. 9. 21:17 UTC | ljuska s ljepljivim zaglavljem, obavijesti u toku, Promet kao karta s plahtom, ciljevi 44 px, donja granica 13 px, ograničeni popisi, mobilni Playwright projekt | 1.615 + 136 (Worker) | 69 | 89 prikaza, 0 nalaza | 100 na svih pet stranica |
+| `6eb07a9`, 14. 9. 03:28 UTC | sustav oznaka linije, komponirana Sada, stolna traka, imenik Još, gibanje, svih šest područja | 1.838 | 69 | 89 / 0 | 100 × 5 |
+| `f9dcaef`, 14. 9. 11:39 UTC | trenuci sesije (kartica završetka, datirani zamrznuti prikaz), plahta sesije s dijeljenjem naglas, stranica za skeniranje s poljem na prvom mjestu, `/hitno` kao Sigurnost i `/open/` u generiranoj paleti | 1.956 | 69 | 89 / 0 | 100 × 5 |
+
+Nakon svakog koraka provjereno je da paket `/d/` koji poslužuje evaluacijska
+adresa ima isti otisak kao paket koji je prošao lanac.
+
+Dvije provjere iz plana još nisu provedene i ovaj ih dokument ne tvrdi:
+
+- provjera na fizičkom iPhoneu i Androidu (težina Manropea, povlačenje plahte,
+  istek sesije, čitanje tramvaja i autobusa na karti); u emuliranom WebKitu s
+  opisom iPhonea `document.fonts` javlja učitane Manrope 400, 500 i 700;
+- obilazak stvarne instalacije skriptom `scripts/audit-production.mjs`.
+  Skripta je 13. 9. dosegla adresu, ali samoposluga zaslona odgovara 403
+  `evaluation-access-required` pristupnom tokenu servisa, iako je isti Worker
+  istog popodneva stvarao zaslone tim tokenom. Skripta zato prima
+  `AUDIT_KIOSK_URL`, adresu zaslona stvorenog u pregledniku, i tada ne stvara
+  ništa. Obilazak s tom adresom i njegov `result.json` bilježe se ovdje kad se
+  provedu.
+
+Dva testa u mobilnom projektu bila su namjerno označena kao očekivano crvena
+dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti (rješena s
+područjem Sigurnost 14. 9.) i redoslijed radnji na naslovnici (rješava se
+zadatkom naslovnice, još nije isporučen).
 
 ## Isporuka i prijava
 
