@@ -326,14 +326,50 @@
 .ev-undated .row-lead { color: var(--tone-text-subtle); }
 .sec-undated { background: var(--tone-surface-2); box-shadow: none; }
 
-/* Civic: phases counted, amounts listed, acts searchable. */
-.cv-phases { display: grid; gap: var(--sp-2); }
+/* Civic: three blocks on one canvas, a hairline apart, no card. The next
+   session is a calendar tile (the day numeral over the month word), the
+   gazette issue a numeral over the line that dates it, the works a list with
+   the amount tabular at the row's end. `.cv-sec` and `.cv-detail` come after
+   `.sec` and `.detail` at the same specificity, so they win on screen while
+   print.css, loaded later, still boxes both on paper. */
+.cv-grid { display: grid; }
+.cv-sec { margin-block-start: var(--sp-6); padding: var(--sp-6) 0 0; border: 0; border-block-start: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; box-shadow: none; }
+.cv-grid > .cv-sec:first-child { margin-block-start: 0; padding-block-start: 0; border-block-start: 0; }
+.cv-sec .sec-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
+.cv-detail { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+/* The detail's kind line ("Akt", "Sjednica Skupštine"): sentence case at the secondary role, no capitals, no tone. */
+.cv-kind { font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); letter-spacing: normal; text-transform: none; color: var(--tone-text-muted); }
+/* The session's date: a 3.5rem column, the day at display over the month word; the rows after the next session repeat it at head. */
+.cv-date { inline-size: 3.5rem; min-inline-size: 3.5rem; align-self: start; justify-items: start; text-align: start; gap: 0; }
+.cv-day { font-size: var(--type-display); font-weight: var(--weight-bold); line-height: var(--lh-tight); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cv-month { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.cv-date[data-size='s'] .cv-day { font-size: var(--type-head); line-height: var(--lh-title); }
+/* The next session's row stacks its button over the livestream link, which sits beside the button in the markup, never inside it. */
+.cv-next { grid-template-columns: minmax(0, 1fr); }
+.cv-next .row-title { font-weight: var(--weight-bold); }
+.cv-live { justify-self: start; margin-inline-start: calc(3.5rem + var(--sp-3)); }
+.cv-subhead { margin: 0; padding-block-start: var(--sp-3); font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); }
+/* The gazette issue: the number, then the line that dates it and names it a reference, once. */
+.cv-issue { display: grid; gap: var(--sp-1); }
+.cv-issue-no { font-size: var(--type-numeral); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+.cv-issue-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+/* Works: the planned amount tabular at the row's end, the phase word under the title. */
+.cv-amount { flex: none; font-size: var(--type-secondary); line-height: var(--lh-body); font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+/* The phase figure is a desk figure: below 60rem the chips already carry the counts. Labels sit above their bars. */
+.cv-phases { display: grid; gap: var(--sp-2); max-inline-size: 32rem; margin: 0; }
 @media (max-width: 59.99rem) { .cv-phases { display: none; } }
-.cv-amount { font-variant-numeric: tabular-nums; font-weight: var(--weight-bold); }
-.cv-issue { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3); }
-.cv-issue-no { font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.cv-grid { display: grid; gap: var(--sp-4); }
-@media (min-width: 60rem) { .cv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .cv-wide { grid-column: 1 / -1; } }
+.cv-phases figcaption { font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); }
+.cv-phases .g-bars > li { grid-template-columns: minmax(0, 1fr) auto; }
+.cv-phases .g-bar-label { grid-column: 1 / -1; text-align: start; }
+@media (min-width: 60rem) {
+  .cv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-8); align-items: start; }
+  .cv-wide { grid-column: 1 / -1; }
+  /* Side by side, the two top blocks start on one shared rule, so the columns read as one board. */
+  .cv-grid > .cv-sec:first-child { padding-block-start: var(--sp-6); border-block-start: 1px solid var(--tone-stroke); }
+  .cv-grid > .cv-sec:nth-child(2) { margin-block-start: 0; }
+}
+/* On paper print.css boxes .sec and .detail again; the civic blocks get their inner air back inside that box. */
+@media print { .cv-sec, .cv-detail { padding: var(--sp-3); } }
 
 /* News: source-separated hierarchy, lead story larger. */
 .nw-grid { display: grid; gap: var(--sp-4); }
