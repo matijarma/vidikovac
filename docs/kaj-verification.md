@@ -148,10 +148,11 @@ HTML stranicu ubacivao Cloudflare Web Analytics skriptu (postavka cijele zone
 skripte više nema ni na jednoj stranici (provjereno s korisničkim agentom
 preglednika na `/`, `/d/`, `/s/`, `/kiosk/`, `/izvori/`, `/hitno` i `/open/`).
 
-Dva testa u mobilnom projektu bila su namjerno označena kao očekivano crvena
-dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti (rješena s
-područjem Sigurnost 14. 9.) i redoslijed radnji na naslovnici (rješava se
-zadatkom naslovnice, još nije isporučen).
+Dva testa u mobilnom projektu bila su do 14. 9. namjerno označena kao očekivano
+crvena dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti
+(2.500 px pri 390 px, rješena s područjem Sigurnost) i redoslijed radnji na
+naslovnici (skeniranje prije poveznice na zaslon, traka uživo iznad preloma,
+rješeno s naslovnicom). Od isporuke `82a9655` oba se provjeravaju bez iznimke.
 
 ## Isporuka i prijava
 
