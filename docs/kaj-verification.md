@@ -139,9 +139,12 @@ telefona bez produljenja izvorne sesije (prolazi u 9,2 s).
 Mjerena vremena u trećem obilasku: otključavanje 3,2 s na iPhoneu, 3,0 s na
 Androidu, 2,4 s na stolnom računalu; pri 4× usporenju procesora i 1,6 Mbit/s
 karta je spremna nakon 10,8 s (plan bilježi 14 s prije preinake). Manrope 400,
-500 i 700 učitani su u sva tri stroja. Svaka stranica i dalje pokušava učitati
-Cloudflare Web Analytics skriptu koju CSP odbija; to je postavka zone u
-Cloudflare nadzornoj ploči, ne kod.
+500 i 700 učitani su u sva tri stroja. Do 14. 9. 15:17 UTC rub je u svaku
+HTML stranicu ubacivao Cloudflare Web Analytics skriptu (postavka cijele zone
+`aningfilm.hr`), koju CSP odbija; od te isporuke svaki HTML odgovor nosi
+`Cache-Control: no-transform`, pa rub stranicu poslužuje kako je napisana i
+skripte više nema ni na jednoj stranici (provjereno s korisničkim agentom
+preglednika na `/`, `/d/`, `/s/`, `/kiosk/`, `/izvori/`, `/hitno` i `/open/`).
 
 Dva testa u mobilnom projektu bila su namjerno označena kao očekivano crvena
 dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti (rješena s
