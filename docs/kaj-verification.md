@@ -130,6 +130,12 @@ i tada ne stvara novi). Tri obilaska istog dana, svaki nad ispravkama prethodnog
 | 12:57 UTC | `41689d4` | 52 | 2 (cilj) | "Izvori" u podnožju `/hitno` 40 px široko, "City" na engleskom pregledu 42 px |
 | 13:30 UTC | `94c87e0` | 58 | 1 (cilj) | "Izvori" u podnožju `/hitno` 40 px široko (ispravak u sljedećoj isporuci) |
 
+Isti dan u 13:55 UTC dva Playwrightova scenarija iz `e2e/pairing.spec.ts`
+provedena su nad stvarnom instalacijom s postojećim zaslonom: skeniranje koje
+otključava oba uređaja, token koji čuva `/api/data`, kod iskoristiv jednom
+(prolazi u 5,9 s) i dijeljenje u jednom skoku, vlastitih pet minuta drugog
+telefona bez produljenja izvorne sesije (prolazi u 9,2 s).
+
 Mjerena vremena u trećem obilasku: otključavanje 3,2 s na iPhoneu, 3,0 s na
 Androidu, 2,4 s na stolnom računalu; pri 4× usporenju procesora i 1,6 Mbit/s
 karta je spremna nakon 10,8 s (plan bilježi 14 s prije preinake). Manrope 400,
