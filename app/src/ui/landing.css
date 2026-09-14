@@ -1,43 +1,50 @@
 /* Kaj ima? - the landing page. Reads as a finished product before any script
-   runs: the proposition, one live strip of real data, how it works, the seven
-   domains and the open pages. No banner, no ornament. */
-.ld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); max-width: 72rem; margin: 0 auto; padding: var(--sp-4) var(--sp-4) 0; }
+   runs: the proposition, the primary action, one live strip of real data, how
+   it works and the open pages. No banner, no ornament, no card around data:
+   the strip is a departure board between two hairlines. Type comes from the
+   roles in tokens.css (display, head, body, control, secondary); every target
+   is 44 px, the primary action 48 px; hover lives under (hover: hover) and
+   press feedback under (hover: none) (R-D4). */
+.ld-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); max-width: 72rem; margin: 0 auto; padding: max(var(--sp-3), env(safe-area-inset-top, 0px)) max(var(--sp-4), env(safe-area-inset-right, 0px)) 0 max(var(--sp-4), env(safe-area-inset-left, 0px)); }
 .ld-head .ki-wordmark { display: inline-flex; align-items: center; min-height: var(--target); color: var(--tone-text-primary); text-decoration: none; }
-.ld-head .ki-wordmark-text { font-weight: var(--weight-bold); font-size: var(--text-lg); letter-spacing: -0.02em; white-space: nowrap; }
-.ld-nav { display: flex; align-items: center; gap: var(--sp-2); }
-.ld-nav a:not(.btn) { display: inline-flex; align-items: center; min-height: var(--target); padding: 0 var(--sp-3); color: var(--tone-text-primary); font-weight: var(--weight-medium); text-decoration: none; border-radius: var(--r-md); }
-.ld-nav a:not(.btn):hover { background: var(--tone-surface-2); }
-.ld-nav a[href='/s/'] { display: none; }
-.ld-nav .btn { white-space: nowrap; }
-@media (min-width: 40rem) { .ld-nav a[href='/s/'] { display: inline-flex; } }
-.ld { max-width: 72rem; margin: 0 auto; padding: var(--sp-8) var(--sp-4) var(--sp-12); display: grid; gap: var(--sp-10); }
+.ld-head .ki-wordmark-text { font-weight: var(--weight-bold); font-size: var(--type-head); letter-spacing: -0.02em; white-space: nowrap; }
+.ld-head .ki-wordmark-mark { color: var(--tone-action-brand); }
+.ld-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.ld-nav a { display: inline-flex; align-items: center; min-height: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+@media (hover: hover) { .ld-nav a:hover { background: var(--tone-surface-2); } }
+@media (hover: none) { .ld-nav a:active { background: var(--tone-surface-2); } }
+.ld-nav .lang-toggle { padding-inline: var(--sp-2); }
+
+.ld { display: grid; gap: var(--sp-8); max-width: 72rem; margin: 0 auto; padding: var(--sp-6) max(var(--sp-4), env(safe-area-inset-right, 0px)) var(--sp-12) max(var(--sp-4), env(safe-area-inset-left, 0px)); }
+
+/* The hero: the proposition at display size, the lead as prose, the three ways in stacked full width on a phone, in a row from 40rem. */
 .ld-hero { display: grid; gap: var(--sp-4); max-width: 44rem; }
-.ld-hero h1 { font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.03em; line-height: 1.05; }
-.ld-lead { font-size: var(--text-lg); line-height: var(--leading-relaxed); color: var(--tone-text-muted); max-width: 60ch; }
-.ld-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin: 0; }
-.ld-actions .btn-primary { padding-inline: var(--sp-6); }
-.ld-hero > .meta { max-width: 60ch; }
-.ld-live { display: grid; gap: var(--sp-3); padding: var(--sp-5); border: 1px solid var(--tone-stroke); border-radius: var(--r-xl); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
+.ld-hero h1 { font-size: clamp(var(--type-display), 5vw, 2.5rem); letter-spacing: -0.02em; line-height: var(--lh-title); }
+.ld-lead { max-width: 60ch; font-size: var(--type-head); line-height: var(--lh-prose); }
+.ld-actions { display: grid; gap: var(--sp-3); }
+@media (min-width: 40rem) { .ld-actions { display: flex; flex-wrap: wrap; align-items: center; } .ld-actions .btn-primary { padding-inline: var(--sp-6); } }
+
+/* The live strip: three cells, a label at secondary over a value at head 700,
+   stacked under 22rem and one row from there; the state colours never stand
+   alone, the sentence carries the fact (data-state is written by landing.ts). */
+.ld-live { display: grid; gap: var(--sp-3); padding-block: var(--sp-4); border-block: 1px solid var(--tone-stroke); }
 .ld-strip { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
-.ld-strip li { display: grid; gap: 0.15rem; }
-.ld-k { font-size: var(--text-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
-.ld-v { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-snug); font-variant-numeric: tabular-nums; }
-.ld-v[data-state='unknown'] { color: var(--tone-text-muted); font-weight: var(--weight-normal); }
+.ld-strip li { display: grid; gap: var(--sp-1); align-content: start; min-inline-size: 0; }
+.ld-k { font-size: var(--type-secondary); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.ld-v { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); font-variant-numeric: tabular-nums; hyphens: auto; overflow-wrap: anywhere; }
+.ld-v[data-state='unknown'] { color: var(--tone-text-muted); }
 .ld-v[data-state='urgent'] { color: var(--tone-urgency); }
-@media (min-width: 48rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.ld h2:not(.kicker) { font-size: var(--text-xl); letter-spacing: -0.015em; margin-block-end: var(--sp-3); }
-.ld-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-3); counter-reset: step; }
-.ld-steps li { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--sp-3); align-items: start; counter-increment: step; }
+@media (min-width: 22rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ld-strip li + li { padding-inline-start: var(--sp-3); border-inline-start: 1px solid var(--tone-stroke); } }
+
+/* How it works: three numbered sentences, one column on a phone, three from 48rem. */
+.ld h2:not(.kicker) { font-size: var(--type-title); letter-spacing: -0.015em; line-height: var(--lh-title); margin-block-end: var(--sp-3); }
+.ld-steps { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.ld-steps li { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--sp-3); align-items: start; counter-increment: step; font-size: var(--type-body); line-height: var(--lh-prose); }
 /* A brand-toned number on the action tint: the on-tint tone keeps it at AA (tokens.css). */
 .ld-steps li::before { content: counter(step); display: grid; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border-radius: 50%; background: var(--tone-tint-action); color: var(--tone-text-brand-on-tint); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
 @media (min-width: 48rem) { .ld-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.ld-domains { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
-@media (min-width: 40rem) { .ld-domains { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 64rem) { .ld-domains { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.ld-domains li { display: grid; gap: 0.2rem; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
-.ld-domains b { font-weight: var(--weight-bold); }
-.ld-domains span { font-size: var(--text-sm); color: var(--tone-text-muted); line-height: var(--leading-snug); }
+
 .ld-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .ld-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
-.ld-foot { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-5); border-block-start: 1px solid var(--tone-stroke); color: var(--tone-text-muted); font-size: var(--text-sm); }
-.ld-foot code { font-family: var(--font-mono); font-size: 0.9em; }
+.ld-foot { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-5); border-block-start: 1px solid var(--tone-stroke); color: var(--tone-text-muted); font-size: var(--type-control); line-height: var(--lh-body); }
+.ld-health { font-variant-numeric: tabular-nums; }

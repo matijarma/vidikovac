@@ -389,8 +389,6 @@ test('at 200% text the header and the tab bar have no horizontal overflow and th
 
 // --- 8. landing -----------------------------------------------------------------------------
 test('the landing at 390 px puts "Skeniraj ili upiši kod" before the kiosk link and the live strip above the fold', async ({ page }) => {
-  // Expected red until T4.4 (landing hierarchy, R-K6) reorders the actions; T4.4 removes this line, and the runner reports the test as passing unexpectedly until it does.
-  test.fail(true, 'red until T4.4 puts the scan action before the kiosk link and the live strip above the fold');
   await page.setViewportSize(PHONE);
   const response = await page.goto('/');
   expect(response?.status(), '/ must answer 200').toBe(200);

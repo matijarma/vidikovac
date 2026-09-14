@@ -9,7 +9,7 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
-import { codeUrl, formatCode, speakableCode } from './code';
+import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
@@ -19,7 +19,7 @@ import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from './motion/network';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
-import { escapeHtml } from './ui/dom/escape';
+import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { createQr } from './ui/qr';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
@@ -110,6 +110,38 @@ function shellMarkup(s: KioskStrings): string {
     <div class="k-park" hidden></div>`;
 }
 
+/** The one-time provisioning URL for a screen, minted on the same base as the
+ *  QR's scan URL (production, unless the entry says otherwise), the shape
+ *  parseProvisionHash reads back: `/kiosk/#<beaconId>.<secret>`. */
+function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): string {
+  return `${base.replace(/\/$/, '')}/kiosk/#${creds.beaconId}.${creds.secret}`;
+}
+
+/** /kiosk/ on a handheld, once a screen exists: the provisioning link to open
+ *  on a wide screen (the sentence from the shared catalogue, so the phone
+ *  speaks the page's language) and the code card the rotation paints through
+ *  the same testids the wall's invitation carries. No map, board, weather or
+ *  story: those are drawn for a wall (kiosk/invitation.ts). */
+function handheldMarkup(s: KioskStrings, i18n: I18n, url: string): string {
+  return `<div class="k-handheld-link" data-testid="handheld-link-block">
+      <h1 class="k-handheld-title" id="k-handheld-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h1>
+      <a class="k-handheld-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>
+    </div>
+    <article class="k-invite" data-testid="kiosk-invite">
+      <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
+      <div class="k-invite-text">
+        <p class="k-lead">${escapeHtml(s.invitation.lead)}</p>
+        <p class="k-support">${escapeHtml(s.invitation.support)}</p>
+      </div>
+      <div class="k-invite-code">
+        <p class="k-code" data-testid="pair-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">-</span><span data-testid="code-b">····</span></p>
+        <a class="k-visually-hidden" data-testid="pair-url" href="" hidden></a>
+        <p class="k-hint">${escapeHtml(s.invitation.typeCode)}</p>
+        <div class="k-progress" data-testid="code-progress" role="progressbar" aria-label="${escapeAttribute(s.invitation.progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="k-progress-bar"></div></div>
+      </div>
+    </article>`;
+}
+
 function noticeMarkup(kind: 'expired' | 'revoked', s: KioskStrings): string {
   const title = kind === 'expired' ? s.notice.expiredTitle : s.notice.revokedTitle;
   const body = kind === 'expired' ? s.notice.expiredBody : s.notice.revokedBody;
@@ -159,7 +191,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const strip = q('[data-testid=safety-strip]');
   const park = q('.k-park');
 
-  let layout: LayoutDecision = applyLayout(element, deps.viewport ?? measureViewport(element));
+  /** The layout decision on the root, mirrored onto the body as `data-kiosk-size`:
+   *  the body owns the page scroll (kiosk.css .kiosk-body), and a handheld must
+   *  scroll, so the body has to know without a :has() the sheet avoids. */
+  function decideLayoutNow(): LayoutDecision {
+    const decision = applyLayout(element, deps.viewport ?? measureViewport(element));
+    element.ownerDocument.body.dataset.kioskSize = decision.size;
+    return decision;
+  }
+  let layout: LayoutDecision = decideLayoutNow();
 
   let disposed = false;
   let phase: KioskPhase = 'setup';
@@ -181,6 +221,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let sessionLabel: HTMLElement | null = null;
   let setup: SetupHandle | null = null;
   let invitation: InvitationHandle | null = null;
+  let handheld: HTMLElement | null = null;
   let paired: PairedHandle | null = null;
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
@@ -348,7 +389,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4 };
   }
   function pairedContext(): PairedContext {
-    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size, stops };
+    // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops };
   }
   /** Both tiers of one module: the session copy, unless it is no longer live and the teaser holds a live one. */
   function mergedSnapshots(): Partial<Record<ModuleId, ModuleSnapshot>> {
@@ -436,6 +478,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     parkMap();
     setup?.destroy(); setup = null;
     invitation?.destroy(); invitation = null;
+    handheld?.remove(); handheld = null;
     paired?.destroy(); paired = null;
     notice?.remove(); notice = null;
   }
@@ -447,12 +490,23 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (next === 'paired') closeEssentials(false);
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
+    else if (next === 'invitation' && layout.size === 'handheld') mountHandheld();
     else if (next === 'invitation') invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight });
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
     else mountNotice(next);
     paintContext();
     paintLocal();
     paintCode();
+  }
+  /** The handheld's invitation: the link block and the code card (handheldMarkup). */
+  function mountHandheld(): void {
+    if (!credentials) return;
+    handheld = document.createElement('section');
+    handheld.className = 'k-handheld';
+    handheld.dataset.testid = 'kiosk-handheld';
+    handheld.setAttribute('aria-labelledby', 'k-handheld-title');
+    handheld.innerHTML = handheldMarkup(s, i18n, provisionUrl(credentials, deps.codeBase));
+    stage.appendChild(handheld);
   }
   function mountNotice(kind: 'expired' | 'revoked'): void {
     notice = document.createElement('section');
@@ -658,8 +712,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   // --- Wiring ---------------------------------------------------------------------
   // First tap only: a kiosk browser grants fullscreen and the wake lock on a
-  // user gesture, and never asks again.
+  // user gesture, and never asks again. A handheld is a phone in a hand, not
+  // a screen on a wall: it gets neither, and the listener stays armed until
+  // a tap lands on a screen-sized layout.
   const onFirstTap = (): void => {
+    if (layout.size === 'handheld') return;
     element.removeEventListener('pointerdown', onFirstTap);
     void (deps.requestFullscreen ?? (() => document.documentElement.requestFullscreen()))().catch(() => {});
     void (deps.requestWakeLock ?? (async () => {
@@ -689,12 +746,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
 
   // A theme flip or a resize re-decides the composition; the content repaints
-  // only when the composition actually changed.
+  // only when the composition actually changed, and crossing the handheld
+  // bound in either direction swaps the invitation's composition outright.
   const stopRepaint = deps.onRepaint?.(() => {
-    const next = applyLayout(element, deps.viewport ?? measureViewport(element));
+    const next = decideLayoutNow();
     const changed = next.size !== layout.size;
+    const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
-    if (changed) paintLocal();
+    if (!changed) return;
+    if (crossed && phase === 'invitation') setPhase('invitation');
+    else paintLocal();
   });
 
   const codeTimer = setTimer(() => { paintClock(); paintProgress(); }, CODE_TICK_MS);
@@ -728,6 +789,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       session?.close(); session = null;
       clearStage();
       maps.destroy();
+      delete element.ownerDocument.body.dataset.kioskSize;
       element.remove();
     },
   };

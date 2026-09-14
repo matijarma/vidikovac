@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LOCALE_STORAGE_KEY } from '../../app/src/i18n/create-default-i18n';
 import { stubLocalStorage } from './helpers';
 
 const read = (...parts: string[]): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', ...parts), 'utf8');
@@ -53,10 +54,10 @@ vi.mock('../../app/src/map/maplibre-entry', () => ({}));
 /** A fresh #dash and location, then a fresh copy of the entry module (it runs
  *  entirely at import time, so vi.resetModules() plus a dynamic import is how
  *  it is re-run, exactly as test/app/boot.test.ts re-runs entries/theme-init). */
-async function importDashboardEntry(search: string): Promise<void> {
+async function importDashboardEntry(search: string, hash = '#room=r1&ticket=t1'): Promise<void> {
   document.body.innerHTML = '<div id="dash"></div>';
   location.search = search;
-  location.hash = '#room=r1&ticket=t1';
+  location.hash = hash;
   vi.resetModules();
   await import('../../app/src/entries/dashboard');
 }
@@ -92,5 +93,51 @@ describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
     const scheduled = timeoutSpy.mock.calls.find(([, ms]) => ms === 2500);
     expect(scheduled).toBeDefined();
     expect(typeof scheduled?.[0]).toBe('function');
+  });
+});
+
+// T4.4 (plan "Entry"): /d/ without a room is a composed page in the shell's
+// roles, not a bare alert: wordmark, the display h1, one sentence, the primary
+// way in (48 px) and the open safety page (44 px). The kiosk is not offered
+// here; a bookmark or a stray share landed a person, not an evaluator.
+describe('the composed no-room page', () => {
+  const CSS = read('src', 'ui', 'dashboard.css');
+  afterEach(() => {
+    localStorage.removeItem(LOCALE_STORAGE_KEY);
+    vi.restoreAllMocks();
+  });
+  it('composes the wordmark with its peacock mark, the h1, the lead and exactly two actions, scan first, in the shell namespace', async () => {
+    // happy-dom reports an English browser; the stored choice is how a Croatian reader boots here.
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'hr');
+    await importDashboardEntry('?lagano=1', '');
+    const main = document.querySelector<HTMLElement>('main#ki-main.ki-empty');
+    expect(main).not.toBeNull();
+    expect(main!.tabIndex).toBe(-1);
+    expect(main!.querySelector('.ki-wordmark .ki-wordmark-mark')?.textContent).toBe('?');
+    const h1 = main!.querySelector('h1.ki-empty-title')!;
+    expect(h1.textContent).toBe('Ovdje se otključava Zagreb');
+    expect(h1.hasAttribute('role')).toBe(false);
+    expect(main!.querySelector('.ki-empty-lead')?.textContent).toBe('Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju.');
+    const links = [...main!.querySelectorAll('a')].map((a) => ({ href: a.getAttribute('href'), cls: a.className, text: a.textContent }));
+    expect(links).toEqual([
+      { href: '/', cls: 'ki-wordmark', text: 'Kaj ima?' },
+      { href: '/s/', cls: 'btn btn-primary', text: 'Skeniraj ili upiši kod' },
+      { href: '/hitno', cls: 'btn-ghost', text: 'Sigurnost, bez skeniranja' },
+    ]);
+    expect(document.querySelectorAll('h1')).toHaveLength(1);
+    expect(document.documentElement.getAttribute('data-page')).toBe('dashboard');
+  });
+  it('speaks English when the stored locale is en', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'en');
+    await importDashboardEntry('?lagano=1', '');
+    expect(document.querySelector('h1.ki-empty-title')?.textContent).toBe('This is where Zagreb unlocks');
+    expect(document.querySelector('.ki-empty-actions a.btn-primary')?.textContent).toBe('Scan or type a code');
+  });
+  it('dashboard.css sets the title at the display role and stacks the actions full width on a phone, a row from 40rem', () => {
+    expect(CSS).toMatch(/\.ki-empty-title \{[^}]*font-size: var\(--type-display\)/);
+    expect(CSS).toMatch(/\.ki-empty-lead \{[^}]*font-size: var\(--type-head\)/);
+    expect(CSS).toMatch(/\.ki-empty-actions \{ display: grid; gap: var\(--sp-3\); \}/);
+    expect(CSS).toMatch(/@media \(min-width: 40rem\) \{[^}]*\.ki-empty-actions \{[^}]*display: flex/);
+    expect(CSS).not.toContain('.ki-empty .actions');
   });
 });

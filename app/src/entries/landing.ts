@@ -1,16 +1,18 @@
 // Page entry for the landing page (app/index.html). The static markup reads
-// as a finished product on its own; this adds the one thing it cannot do:
-// the live strip from the open teaser (weather now, the safety state, ZET
-// vehicles moving) and the Worker health line. Every dependency is injected
-// so test/app/landing.test.ts drives it without a network.
+// as a finished product on its own; this adds what it cannot do: the boot
+// every surface shares (locale, theme, sprite, the language toggle in the
+// header's slot, one translatePage pass), the live strip from the open teaser
+// (weather now, the safety state, ZET vehicles moving) and the footer's source
+// line. Every dependency is injected so test/app/landing.test.ts drives it
+// without a network.
 import type { TeaserResponse } from '../api';
 import { fetchTeaser } from '../api';
+import { bootPage } from '../boot';
 import { zagrebTime } from '../format';
 import { vehicleCount } from '../layers/shared';
 import { conditionText } from '../experience/text';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { detectLagano, markLagano } from '../ui/lagano';
-import { createThemeController } from '../ui/theme';
 // app/index.html links tokens.css, base.css and landing.css itself; the entry
 // carries the signage sheet, which loads after them and gives the live strip
 // the same badges, rows and bands as every other surface.
@@ -74,23 +76,39 @@ export async function paintLiveStrip(deps: LiveStripDeps): Promise<void> {
     el.dataset.state = texts[key].state;
   }
 }
+
 export interface HealthPaintDeps {
   el: HTMLElement | null;
   fetchImpl: typeof fetch;
   now: () => number;
+  /** The teaser the strip painted from: a source marked down denies the all-clear. */
+  sources: () => Promise<readonly ModuleSnapshot[]>;
 }
 
-/** The status line in the footer: the Worker's own version and clock. */
+/** The footer's source line: "Izvori u redu · 14:42" from the Worker's clock,
+ *  said only when the Worker answers and no source in the teaser is down;
+ *  otherwise the count of sources not answering, or that the sources are
+ *  unavailable when the teaser itself failed. Never an all-clear by default. */
 export async function paintHealth(deps: HealthPaintDeps): Promise<void> {
-  const { el, fetchImpl, now } = deps;
+  const { el, fetchImpl, now, sources } = deps;
   if (!el) return;
+  let health: { ok?: boolean; time?: string };
   try {
     const r = await fetchImpl('/api/health', { cache: 'no-store' });
-    const j = (await r.json()) as { ok?: boolean; version?: string; time?: string };
-    el.textContent = j.ok ? `worker ${j.version} · ${zagrebTime(j.time ?? now())}` : 'greška';
+    health = (await r.json()) as { ok?: boolean; time?: string };
   } catch {
-    el.textContent = 'nedostupno';
+    el.textContent = 'Poslužitelj nije dostupan';
+    return;
   }
+  if (!health.ok) { el.textContent = 'Poslužitelj javlja grešku'; return; }
+  const time = zagrebTime(health.time ?? now());
+  let down: number | null;
+  try { down = (await sources()).filter((m) => m.status === 'down').length; }
+  catch { down = null; }
+  const state = down === null ? 'Izvori trenutačno nedostupni'
+    : down === 0 ? 'Izvori u redu'
+    : `${down} ${down === 1 ? 'izvor ne odgovara' : down < 5 ? 'izvora ne odgovaraju' : 'izvora ne odgovara'}`;
+  el.textContent = `${state} · ${time}`;
 }
 
 function safeLocalStorage(): Storage | undefined {
@@ -113,10 +131,16 @@ if (typeof document !== 'undefined' && document.querySelector('[data-testid=live
     canWebgl,
   });
   markLagano(document.documentElement, lightweight);
-  // The head module resolved the theme before first paint; this controller keeps `auto` and `solar` live while the page is open.
-  createThemeController();
+  // The Croatian in the HTML is the catalogue's own (test/app/landing.test.ts
+  // holds the two together), so the first translatePage pass changes nothing a
+  // Croatian reader sees; the toggle it mounts in the header's slot turns every
+  // data-i18n node English. The strip's and the footer's sentences are painted
+  // below in Croatian, as the teaser's words are.
+  bootPage({ page: 'landing' });
   // The one Manrope family stays off the lightweight graph (R-F3).
   if (!lightweight) void import('../ui/fonts.css');
-  void paintLiveStrip({ root: document, fetchTeaser: () => fetchTeaser(), now: () => Date.now() });
-  void paintHealth({ el: document.getElementById('health'), fetchImpl: fetch, now: () => Date.now() });
+  // One teaser fetch feeds both the strip and the footer's verdict on the sources.
+  const teaser = fetchTeaser();
+  void paintLiveStrip({ root: document, fetchTeaser: () => teaser, now: () => Date.now() });
+  void paintHealth({ el: document.getElementById('health'), fetchImpl: fetch, now: () => Date.now(), sources: () => teaser.then((t) => t.modules) });
 }

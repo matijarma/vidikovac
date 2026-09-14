@@ -80,7 +80,9 @@
     "wordmarkLabel": "Kaj ima?, home page",
     "skip": "Skip to content",
     "detailBack": "Back to the list",
-    "detailClose": "Close details"
+    "detailClose": "Close details",
+    "emptyTitle": "This is where Zagreb unlocks",
+    "emptyLead": "Scan the code from a screen in the venue or type the eight letters; ten minutes of the city are on your device."
   },
   "time": {
     "justNow": "just now",
@@ -482,6 +484,26 @@
     "until": "until {time}",
     "from": "from {time}"
   },
+  "landing": {
+    "quickNav": "Quick access",
+    "title": "Ten minutes of the city on your device.",
+    "lead": "Traffic, weather, events, City decisions, safety and news from open data, with a source beside every view. No account, no install, no tracking.",
+    "actions": { "scan": "Scan or type a code", "safety": "Safety, no scan needed", "kiosk": "Open the city screen" },
+    "liveTitle": "Zagreb now",
+    "liveWeather": "Weather · Maksimir",
+    "liveSources": "Open data from DHMZ, ZET, the City of Zagreb and EMSC; the same data in a session, with the source named beside every view.",
+    "howTitle": "How it works",
+    "steps": {
+      "find": "A screen shows a code that changes every thirty seconds: walk up to it, scan the code with your camera or type the eight letters.",
+      "unlock": "Ten minutes of the city open on your device; the person beside you can get their own five minutes, once. Nobody pays anything, in money or in attention: the time limit is the point, not the price.",
+      "end": "The session ends on its own and the view keeps the last data.",
+      "endLink": "Safety is open to everyone",
+      "endTail": ", with no scan and no time limit."
+    },
+    "pagesNav": "Pages",
+    "pages": { "hitno": "Safety, open to everyone", "scan": "Type the code from a screen", "izvori": "Data sources and licences", "open": "Open data to download" },
+    "footerLicence": "Source code under the AGPL-3.0-or-later licence. An application to the City of Zagreb's 2026 public call for open-data projects."
+  },
   "scan": {
     "title": "Unlock a view of Zagreb",
     "intro": "Scan the QR code on the screen or type the code below. Ten minutes from a screen, five from another person's phone.",
@@ -580,7 +602,8 @@
     "essentialsTitle": "Essentials, no scan needed",
     "essentialsHint": "This screen answers even without a phone. Scanning unlocks the whole city on your own device.",
     "essentialsClose": "Back",
-    "essentialsEmpty": "The source isn't answering right now. The safety layer runs at /hitno."
+    "essentialsEmpty": "The source isn't answering right now. The safety layer runs at /hitno.",
+    "setup": { "handheld": "Open this address on a screen wider than 900 px." }
   },
   "motion": {
     "note": "Each position is computed from that vehicle’s own reports and the line’s geometry; ZET publishes neither heading nor speed.",

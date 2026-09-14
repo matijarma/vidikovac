@@ -422,3 +422,74 @@
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
+
+/* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
+   Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
+   data-size='handheld' on the root and kiosk.ts mirrors it onto the body as
+   data-kiosk-size). Not a composition for a wall but the hand that sets one
+   up: the page scrolls instead of cropping, the wizard's grids fall into as
+   many columns as fit, and after creation the stage carries the provisioning
+   link block and the code card alone (kiosk.ts mountHandheld). Tokens at
+   phone sizes; zoom is 1 here. */
+.kiosk-body[data-kiosk-size='handheld'] { overflow: visible; }
+.kiosk[data-size='handheld'] {
+  --k-head-h: auto;
+  --k-strip-h: auto;
+  --k-pad: 16px;
+  --k-gap: 12px;
+  --k-side-w: 100%;
+  --k-qr: 240px;
+  --k-main: 24px;
+  --k-main-2: 20px;
+  --k-sup: 18px;
+  --k-sup-2: 16px;
+  --k-meta-size: 13px;
+  --k-hero: 56px;
+  --k-temp: 40px;
+  --k-code-size: 40px;
+  --k-badge: 36px;
+  --k-radius: 16px;
+  --k-radius-s: 10px;
+  --k-control: 48px;
+  --k-block-min: 160px;
+  --k-arc-w: 280px;
+  --k-arc-h: 157px;
+  block-size: auto;
+  overflow: visible;
+}
+.kiosk[data-size='handheld'] .k-head { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.5); padding-block: calc(var(--k-gap) * 0.75); }
+.kiosk[data-size='handheld'] .k-head-brand { flex: 1 1 100%; flex-wrap: wrap; }
+/* The stop context wraps on its own line under the brand rather than being clipped beside it. */
+.kiosk[data-size='handheld'] .k-context { flex-basis: 100%; margin: calc(var(--k-gap) * 0.25) 0 0; padding-left: 0; border-left: 0; white-space: normal; overflow: visible; }
+.kiosk[data-size='handheld'] .k-head-mid { flex-basis: 100%; justify-content: flex-start; padding: 0; }
+.kiosk[data-size='handheld'] .k-head-mid:empty { display: none; }
+.kiosk[data-size='handheld'] .k-alert { position: static; margin: var(--k-gap) var(--k-pad) 0; }
+.kiosk[data-size='handheld'] .k-stage > section { height: auto; }
+.kiosk[data-size='handheld'] .k-strip { flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-strip-basics, .kiosk[data-size='handheld'] .k-strip-label { margin-right: 0; }
+.kiosk[data-size='handheld'] .k-strip-items { flex-basis: 100%; overflow: visible; }
+.kiosk[data-size='handheld'] .k-strip-item { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; }
+.kiosk[data-size='handheld'] .k-strip-hitno { margin-left: 0; }
+.kiosk[data-size='handheld'] .k-basics { position: static; }
+.kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
+
+/* The wizard: one card that grows with its content, grids at auto-fit, the stop list unclipped. */
+.kiosk[data-size='handheld'] .k-setup { height: auto; overflow: visible; }
+.kiosk[data-size='handheld'] .k-setup-step-box { overflow: visible; }
+.kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }
+.kiosk[data-size='handheld'] .k-stop-list { padding-right: 0; overflow-y: visible; }
+.kiosk[data-size='handheld'] .k-search { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.5); }
+.kiosk[data-size='handheld'] .k-search-label { flex-basis: 100%; margin-right: 0; }
+.kiosk[data-size='handheld'] .k-search-input { flex-basis: 100%; }
+.kiosk[data-size='handheld'] .k-setup-actions { flex-wrap: wrap; gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-setup-actions > * + * { margin-left: 0; }
+.kiosk[data-size='handheld'] .k-btn { max-width: 100%; }
+
+/* After creation: the link block, then the code card in one column. */
+.kiosk[data-size='handheld'] .k-handheld { display: grid; gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-handheld-link { padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.kiosk[data-size='handheld'] .k-handheld-title { font-size: var(--k-main); font-weight: 800; line-height: 1.15; letter-spacing: -0.015em; }
+.kiosk[data-size='handheld'] .k-handheld-url { display: inline-block; min-height: 44px; margin-top: var(--k-gap); font-size: var(--k-sup-2); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
+.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'text' 'code'; row-gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
+.kiosk[data-size='handheld'] .k-invite-code { grid-template-columns: minmax(0, 1fr); margin-top: 0; }

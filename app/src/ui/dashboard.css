@@ -201,8 +201,15 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
 
 /* Lightweight and reduced motion: flat surfaces, no transitions. */
 
-/* /d/ opened without a room: a small composed page, not a bare alert. */
-.ki-empty { display: grid; gap: var(--sp-4); max-width: 34rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-10); }
-.ki-empty-title { font-size: var(--text-xl); letter-spacing: -0.015em; line-height: var(--leading-snug); }
-.ki-empty .actions { gap: var(--sp-3); }
+/* /d/ opened without a room: a small composed page in the shell's roles, not
+   a bare alert (entries/dashboard.ts). The wordmark, the title at display
+   size, one sentence at head, then the two actions stacked full width on a
+   phone and in a row from 40rem; safe-area insets on the inline padding as
+   on .ki-main. */
+.ki-empty { display: grid; gap: var(--sp-4); max-width: 34rem; margin: 0 auto; padding: max(var(--sp-4), env(safe-area-inset-top, 0px)) max(var(--sp-4), env(safe-area-inset-right, 0px)) var(--sp-10) max(var(--sp-4), env(safe-area-inset-left, 0px)); }
+.ki-empty .ki-wordmark { justify-self: start; }
+.ki-empty-title { font-size: var(--type-display); letter-spacing: -0.02em; line-height: var(--lh-title); }
+.ki-empty-lead { font-size: var(--type-head); line-height: var(--lh-prose); }
+.ki-empty-actions { display: grid; gap: var(--sp-3); }
+@media (min-width: 40rem) { .ki-empty-actions { display: flex; flex-wrap: wrap; align-items: center; } }
 :root[data-lagano='1'] .sec, :root[data-lagano='1'] .ki-session, :root[data-lagano='1'] .banner { box-shadow: none; }

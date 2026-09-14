@@ -83,7 +83,9 @@
     "wordmarkLabel": "Kaj ima?, početna stranica",
     "skip": "Prijeđi na sadržaj",
     "detailBack": "Natrag na popis",
-    "detailClose": "Zatvori detalje"
+    "detailClose": "Zatvori detalje",
+    "emptyTitle": "Ovdje se otključava Zagreb",
+    "emptyLead": "Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju."
   },
   "time": {
     "justNow": "upravo sada",
@@ -500,6 +502,26 @@
     "until": "do {time}",
     "from": "od {time}"
   },
+  "landing": {
+    "quickNav": "Brzi pristup",
+    "title": "Deset minuta grada na tvom uređaju.",
+    "lead": "Promet, vrijeme, događanja, odluke Grada, sigurnost i vijesti iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.",
+    "actions": { "scan": "Skeniraj ili upiši kod", "safety": "Sigurnost, bez skeniranja", "kiosk": "Otvori gradski zaslon" },
+    "liveTitle": "Sada u Zagrebu",
+    "liveWeather": "Vrijeme · Maksimir",
+    "liveSources": "Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.",
+    "howTitle": "Kako radi",
+    "steps": {
+      "find": "Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.",
+      "unlock": "Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.",
+      "end": "Sesija sama završi, a prikaz ostaje na posljednjim podacima.",
+      "endLink": "Sigurnost je otvorena svima",
+      "endTail": ", bez skeniranja i bez ograničenja trajanja."
+    },
+    "pagesNav": "Stranice",
+    "pages": { "hitno": "Sigurnost, otvoreno svima", "scan": "Upiši kod sa zaslona", "izvori": "Izvori podataka i licence", "open": "Otvoreni podaci za preuzimanje" },
+    "footerLicence": "Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026."
+  },
   "scan": {
     "title": "Otključaj pogled na Zagreb",
     "intro": "Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.",
@@ -598,7 +620,8 @@
     "essentialsTitle": "Osnovno, bez skeniranja",
     "essentialsHint": "Ovaj zaslon odgovara i bez telefona. Skeniranje otključava cijeli grad na tvom uređaju.",
     "essentialsClose": "Natrag",
-    "essentialsEmpty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno."
+    "essentialsEmpty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno.",
+    "setup": { "handheld": "Otvori ovu adresu na zaslonu širem od 900 px." }
   },
   "motion": {
     "note": "Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.",
