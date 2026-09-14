@@ -275,3 +275,51 @@ describe('T5.3: the theme button is a literal 44 px target beside the clock', ()
     expect(row['align-items']).toBe('center');
   });
 });
+
+// T5.4: the portrait totem (1080 x 1920; kiosk/layout.ts gives it the compact
+// tokens at zoom 1). One column: the map on top at 55% of the stage with the
+// board over its foot, the invitation card across the width, the weather and
+// the story side by side under it; the paired compositions stack the same
+// way. Compact tiers and the compact 240 px QR, nothing re-sized: the
+// portrait rules place blocks and set no token.
+describe('T5.4: the portrait composition', () => {
+  const P = ".kiosk[data-portrait='1']";
+  it('stacks the stage: the map (or the paired main region) on top at 55% of the stage, the side column with the rest', () => {
+    const stage = decls(`${P} .k-invitation, ${P} .k-paired`);
+    expect(stage['grid-template-columns']).toBe('minmax(0, 1fr)');
+    expect(stage['grid-template-rows']).toBe('55% minmax(0, 1fr)');
+  });
+  it('lays the invitation side column out as two columns: the card across both, the weather and the story side by side under it', () => {
+    const side = decls(`${P} .k-invitation .k-side`);
+    expect(side['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    expect(side['grid-template-rows']).toBe('auto minmax(0, 1fr)');
+    expect(side['column-gap']).toBe('var(--k-gap)');
+    const card = decls(`${P} .k-invitation .k-invite`);
+    expect(card['grid-column']).toBe('1 / -1');
+    expect(card['grid-row']).toBe('1');
+    const weather = decls(`${P} .k-invitation .k-weather`);
+    expect(weather['grid-column']).toBe('1');
+    expect(weather['grid-row']).toBe('2');
+    const story = decls(`${P} .k-invitation .k-story`);
+    expect(story['grid-column']).toBe('2');
+    expect(story['grid-row']).toBe('2');
+  });
+  it('lets the map take the room on a paired map layer: the side column at its content height, never more than the room, the map the rest and 55% at least', () => {
+    expect(decls(`${P} .k-paired:has(> .k-map)`)['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
+  });
+  it('centres the content of the two tiles in the room the last row has, the leaving story copy with it', () => {
+    expect(decls(`${P} .k-invitation .k-weather`)['justify-content']).toBe('center');
+    expect(decls(`${P} .k-story-item`)['justify-content']).toBe('center');
+  });
+  it('keeps the compact tiers and the 240 px QR: the portrait rules place blocks and set no token, and the old content-height stack is gone', () => {
+    const start = BARE.indexOf(P);
+    const end = BARE.indexOf('@media (prefers-reduced-motion: reduce)');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const portrait = BARE.slice(start, end);
+    expect(portrait).not.toMatch(/--k-[a-z-]+:/);
+    expect(portrait).not.toContain('font-size');
+    expect(BARE).not.toContain(`${P} .k-invitation, ${P} .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }`);
+    expect(BARE).not.toContain(`${P} .k-side-blocks { flex: none; }`);
+  });
+});
