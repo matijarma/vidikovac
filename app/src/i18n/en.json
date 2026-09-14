@@ -497,8 +497,7 @@
       "find": "A screen shows a code that changes every thirty seconds: walk up to it, scan the code with your camera or type the eight letters.",
       "unlock": "Ten minutes of the city open on your device; the person beside you can get their own five minutes, once. Nobody pays anything, in money or in attention: the time limit is the point, not the price.",
       "end": "The session ends on its own and the view keeps the last data.",
-      "endLink": "Safety is open to everyone",
-      "endTail": ", with no scan and no time limit."
+      "endLink": "Safety is open to everyone, with no scan and no time limit."
     },
     "pagesNav": "Pages",
     "pages": { "hitno": "Safety, open to everyone", "scan": "Type the code from a screen", "izvori": "Data sources and licences", "open": "Open data to download" },

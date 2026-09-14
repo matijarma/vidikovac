@@ -33,11 +33,11 @@
     </div>
   </section>
   <section class="ld-live" aria-labelledby="ld-live-title">
-    <h2 id="ld-live-title" class="kicker" data-i18n="landing.liveTitle">Sada u Zagrebu</h2>
+    <h2 id="ld-live-title" class="ld-live-title" data-i18n="landing.liveTitle">Sada u Zagrebu</h2>
     <ul class="ld-strip" data-testid="live-strip">
-      <li><span class="ld-k" data-i18n="landing.liveWeather">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather">učitavanje…</span></li>
-      <li><span class="ld-k" data-i18n="nav.safety">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety">učitavanje…</span></li>
-      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit">učitavanje…</span></li>
+      <li><span class="ld-k" data-i18n="landing.liveWeather">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather" lang="hr">učitavanje…</span></li>
+      <li><span class="ld-k" data-i18n="nav.safety">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety" lang="hr">učitavanje…</span></li>
+      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit" lang="hr">učitavanje…</span></li>
     </ul>
     <p class="meta" data-i18n="landing.liveSources">Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.</p>
   </section>
@@ -46,7 +46,7 @@
     <ol class="ld-steps">
       <li><span data-i18n="landing.steps.find">Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.</span></li>
       <li><span data-i18n="landing.steps.unlock">Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.</span></li>
-      <li><span><span data-i18n="landing.steps.end">Sesija sama završi, a prikaz ostaje na posljednjim podacima.</span> <a href="/hitno" data-i18n="landing.steps.endLink">Sigurnost je otvorena svima</a><span data-i18n="landing.steps.endTail">, bez skeniranja i bez ograničenja trajanja.</span></span></li>
+      <li><span><span data-i18n="landing.steps.end">Sesija sama završi, a prikaz ostaje na posljednjim podacima.</span> <a class="ld-step-link" href="/hitno" data-i18n="landing.steps.endLink">Sigurnost je otvorena svima, bez skeniranja i bez ograničenja trajanja.</a></span></li>
     </ol>
   </section>
   <nav class="ld-pages" aria-label="Stranice" data-i18n-aria-label="landing.pagesNav">
@@ -59,7 +59,7 @@
   </nav>
   <footer class="ld-foot">
     <p data-i18n="landing.footerLicence">Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
-    <p class="ld-health" role="status" id="health">…</p>
+    <p class="ld-health" role="status" id="health" lang="hr">…</p>
   </footer>
 </main>
 <script type="module" src="/src/entries/landing.ts"></script>

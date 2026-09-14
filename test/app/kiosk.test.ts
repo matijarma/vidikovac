@@ -2,6 +2,8 @@
 // The kiosk controller with every dependency faked: the setup wizard, the
 // invitation, codes, the paired compositions, expiry and revocation, the
 // basics panel, alerts, polling and disposal.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, ScreenMetadata } from '../../worker/protocol';
@@ -679,13 +681,18 @@ describe('handheld: the kiosk on a phone', () => {
   it('lays out as handheld and never asks for fullscreen or a wake lock, however often it is tapped', () => {
     const k = mount({ stored: STORED, viewport: PHONE });
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('handheld');
-    expect(document.body.dataset.kioskSize).toBe('handheld');
     q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     q(k.root, '[data-testid=kiosk]')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(k.requestFullscreen).not.toHaveBeenCalled();
     expect(k.requestWakeLock).not.toHaveBeenCalled();
     k.handle.destroy();
-    expect(document.body.dataset.kioskSize).toBeUndefined();
+  });
+  it('kiosk.css lets a handheld scroll instead of cropping (the body through :has, no mirrored attribute) and folds the wizard grids to as many columns as fit', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \{[^}]*block-size: auto;\s*overflow: visible;/);
+    expect(css).toContain(".kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }");
+    expect(css).not.toContain('data-kiosk-size');
   });
   it('after creation shows the provisioning link block with the handheld sentence and the code card, nothing else', async () => {
     const k = mount({ viewport: PHONE });
@@ -730,7 +737,6 @@ describe('handheld: the kiosk on a phone', () => {
     viewport.width = 1366; viewport.height = 768;
     k.repaint();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(document.body.dataset.kioskSize).toBe('compact');
     expect(q(k.root, '[data-testid=kiosk-handheld]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');

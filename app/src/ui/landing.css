@@ -24,24 +24,34 @@
 .ld-actions { display: grid; gap: var(--sp-3); }
 @media (min-width: 40rem) { .ld-actions { display: flex; flex-wrap: wrap; align-items: center; } .ld-actions .btn-primary { padding-inline: var(--sp-6); } }
 
-/* The live strip: three cells, a label at secondary over a value at head 700,
-   stacked under 22rem and one row from there; the state colours never stand
-   alone, the sentence carries the fact (data-state is written by landing.ts). */
+/* The live strip: a sentence-case head at secondary 700 (kickers are retired),
+   then three cells, a label at secondary over a value at head 700, stacked
+   under 22rem and one row from there; the state colours never stand alone,
+   the sentence carries the fact (data-state is written by landing.ts). A cell
+   is 86 to 105 px wide on a phone and a ten-letter bold value word ("prometnica",
+   "nedostupno") is 98 to 107 px, so the values hyphenate on a phone (the spans
+   are lang="hr"; anywhere is the last resort where no dictionary exists) and
+   not from 48rem, where a cell has room for whole words; the hairline
+   separators take 8 px on a phone, 16 px from 48rem. */
 .ld-live { display: grid; gap: var(--sp-3); padding-block: var(--sp-4); border-block: 1px solid var(--tone-stroke); }
-.ld-strip { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.ld-live-title { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.ld-strip { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .ld-strip li { display: grid; gap: var(--sp-1); align-content: start; min-inline-size: 0; }
 .ld-k { font-size: var(--type-secondary); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .ld-v { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); font-variant-numeric: tabular-nums; hyphens: auto; overflow-wrap: anywhere; }
 .ld-v[data-state='unknown'] { color: var(--tone-text-muted); }
 .ld-v[data-state='urgent'] { color: var(--tone-urgency); }
-@media (min-width: 22rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ld-strip li + li { padding-inline-start: var(--sp-3); border-inline-start: 1px solid var(--tone-stroke); } }
+@media (min-width: 22rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ld-strip li + li { padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); } }
+@media (min-width: 48rem) { .ld-strip { gap: var(--sp-4); } .ld-strip li + li { padding-inline-start: var(--sp-4); } .ld-v { hyphens: manual; } }
 
-/* How it works: three numbered sentences, one column on a phone, three from 48rem. */
-.ld h2:not(.kicker) { font-size: var(--type-title); letter-spacing: -0.015em; line-height: var(--lh-title); margin-block-end: var(--sp-3); }
+/* How it works: three numbered sentences, one column on a phone, three from
+   48rem; a link inside a step is a whole sentence with a 44 px target. */
+.ld-how h2 { font-size: var(--type-title); letter-spacing: -0.015em; line-height: var(--lh-title); margin-block-end: var(--sp-3); }
 .ld-steps { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; counter-reset: step; }
 .ld-steps li { display: grid; grid-template-columns: 2.25rem 1fr; gap: var(--sp-3); align-items: start; counter-increment: step; font-size: var(--type-body); line-height: var(--lh-prose); }
 /* A brand-toned number on the action tint: the on-tint tone keeps it at AA (tokens.css). */
 .ld-steps li::before { content: counter(step); display: grid; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border-radius: 50%; background: var(--tone-tint-action); color: var(--tone-text-brand-on-tint); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.ld-steps a { display: inline-flex; align-items: center; min-height: var(--target); }
 @media (min-width: 48rem) { .ld-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 .ld-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }

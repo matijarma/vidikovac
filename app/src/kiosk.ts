@@ -191,15 +191,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const strip = q('[data-testid=safety-strip]');
   const park = q('.k-park');
 
-  /** The layout decision on the root, mirrored onto the body as `data-kiosk-size`:
-   *  the body owns the page scroll (kiosk.css .kiosk-body), and a handheld must
-   *  scroll, so the body has to know without a :has() the sheet avoids. */
-  function decideLayoutNow(): LayoutDecision {
-    const decision = applyLayout(element, deps.viewport ?? measureViewport(element));
-    element.ownerDocument.body.dataset.kioskSize = decision.size;
-    return decision;
-  }
-  let layout: LayoutDecision = decideLayoutNow();
+  let layout: LayoutDecision = applyLayout(element, deps.viewport ?? measureViewport(element));
 
   let disposed = false;
   let phase: KioskPhase = 'setup';
@@ -749,7 +741,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // only when the composition actually changed, and crossing the handheld
   // bound in either direction swaps the invitation's composition outright.
   const stopRepaint = deps.onRepaint?.(() => {
-    const next = decideLayoutNow();
+    const next = applyLayout(element, deps.viewport ?? measureViewport(element));
     const changed = next.size !== layout.size;
     const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
@@ -789,7 +781,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       session?.close(); session = null;
       clearStage();
       maps.destroy();
-      delete element.ownerDocument.body.dataset.kioskSize;
       element.remove();
     },
   };

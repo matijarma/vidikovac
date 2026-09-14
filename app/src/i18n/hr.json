@@ -515,8 +515,7 @@
       "find": "Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.",
       "unlock": "Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.",
       "end": "Sesija sama završi, a prikaz ostaje na posljednjim podacima.",
-      "endLink": "Sigurnost je otvorena svima",
-      "endTail": ", bez skeniranja i bez ograničenja trajanja."
+      "endLink": "Sigurnost je otvorena svima, bez skeniranja i bez ograničenja trajanja."
     },
     "pagesNav": "Stranice",
     "pages": { "hitno": "Sigurnost, otvoreno svima", "scan": "Upiši kod sa zaslona", "izvori": "Izvori podataka i licence", "open": "Otvoreni podaci za preuzimanje" },

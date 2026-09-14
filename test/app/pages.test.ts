@@ -95,9 +95,9 @@ describe('static pages', () => {
     expect(head).toContain('data-lang-toggle');
     expect(head).not.toContain('class="btn');
     expect(head).not.toContain('/kiosk/');
-    // The hero: no kicker above the h1; the lead verbatim; the three actions in order and role.
+    // The hero: no kicker above the h1 (kickers are retired everywhere, so none on the page); the lead verbatim; the three actions in order and role.
     const hero = section(html, '<section class="ld-hero"', '</section>');
-    expect(hero).not.toContain('kicker');
+    expect(html).not.toContain('kicker');
     expect(hero).toContain('Deset minuta grada na tvom uređaju.');
     expect(hero).toContain('Promet, vrijeme, događanja, odluke Grada, sigurnost i vijesti iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.');
     expect(hero).toMatch(/<a class="btn btn-primary" href="\/s\/" data-testid="cta-scan"[^>]*>Skeniraj ili upiši kod<\/a>/);
@@ -112,17 +112,23 @@ describe('static pages', () => {
     // "Nitko ništa ne plaća…" moved out of the lead into "Kako radi"; the kiosk explainer paragraph is gone from the hero.
     expect(hero).not.toContain('Nitko ništa ne plaća');
     expect(hero).not.toContain('Gradski zaslon je pravi zaslon');
-    expect(section(html, '<section class="ld-how"', '</section>')).toContain('Nitko ništa ne plaća, ni novcem ni pažnjom');
+    const how = section(html, '<section class="ld-how"', '</section>');
+    expect(how).toContain('Nitko ništa ne plaća, ni novcem ni pažnjom');
+    // Step 3's second sentence is the link itself (a 44 px target in landing.css), never one word inside prose.
+    expect(how).toMatch(/<a class="ld-step-link" href="\/hitno"[^>]*>Sigurnost je otvorena svima, bez skeniranja i bez ograničenja trajanja\.<\/a>/);
     // The live strip section follows the hero directly, three cells with their data-live spans intact.
     const actionsEnd = html.indexOf('</section>', html.indexOf('data-testid="landing-actions"'));
     const live = html.indexOf('<section class="ld-live"');
     expect(live).toBeGreaterThan(actionsEnd);
     expect(html.slice(actionsEnd, live).replace(/\s/g, '')).toBe('</section>');
+    // The strip's head is a sentence-case secondary head, not an uppercase kicker.
+    expect(html).toMatch(/<h2 id="ld-live-title" class="ld-live-title"[^>]*>Sada u Zagrebu<\/h2>/);
     const strip = section(html, '<ul class="ld-strip"', '</ul>');
     expect(strip.match(/<li>/g)).toHaveLength(3);
-    for (const key of ['weather', 'safety', 'transit']) expect(strip).toContain(`data-live="${key}"`);
+    // The values stay Croatian under the English toggle (liveStripTexts is pinned), so they say so: lang="hr" keeps hyphenation and speech right.
+    for (const key of ['weather', 'safety', 'transit']) expect(strip).toMatch(new RegExp(`<span class="ld-v" data-live="${key}"[^>]*lang="hr"`));
     // The footer's health line is the status region itself, a sentence painted by paintHealth.
-    expect(html).toMatch(/<p class="ld-health" role="status" id="health">/);
+    expect(html).toMatch(/<p class="ld-health" role="status" id="health" lang="hr">/);
     expect(html).not.toContain('Stanje poslužitelja');
     expect(html).not.toContain('<code id="health"');
   });
@@ -135,7 +141,15 @@ describe('static pages', () => {
     expect(css).toMatch(/@media \(min-width: 40rem\) \{[^}]*\.ld-actions \{[^}]*display: flex/);
     expect(css).toMatch(/@media \(min-width: 22rem\) \{[^}]*\.ld-strip \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
     expect(css).toMatch(/\.ld-v \{[^}]*font-size: var\(--type-head\);[^}]*font-weight: var\(--weight-bold\)/);
+    // A ten-letter bold value word is wider than a cell on a 360 px phone: the values hyphenate on a phone and not from 48rem, where the cells have room; the separators are 8 px on a phone and 16 px from 48rem.
+    expect(css).toMatch(/\.ld-v \{[^}]*hyphens: auto;/);
+    expect(css).toMatch(/\.ld-strip \{ display: grid; gap: var\(--sp-2\);/);
+    expect(css).toContain("@media (min-width: 22rem) { .ld-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ld-strip li + li { padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); } }");
+    expect(css).toContain('@media (min-width: 48rem) { .ld-strip { gap: var(--sp-4); } .ld-strip li + li { padding-inline-start: var(--sp-4); } .ld-v { hyphens: manual; } }');
     expect(css).toMatch(/\.ld-k \{[^}]*font-size: var\(--type-secondary\)/);
+    expect(css).toMatch(/\.ld-live-title \{[^}]*font-size: var\(--type-secondary\);[^}]*font-weight: var\(--weight-bold\)/);
+    expect(css).toMatch(/\.ld-steps a \{ display: inline-flex; align-items: center; min-height: var\(--target\); \}/);
+    expect(css).not.toContain('.kicker');
     // Every hover rule sits under (hover: hover); press feedback under (hover: none) (R-D4).
     const hovers = css.split('\n').filter((line) => line.includes(':hover'));
     expect(hovers.length).toBeGreaterThan(0);

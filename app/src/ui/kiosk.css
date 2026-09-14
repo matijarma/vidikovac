@@ -425,13 +425,14 @@
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
-   data-size='handheld' on the root and kiosk.ts mirrors it onto the body as
-   data-kiosk-size). Not a composition for a wall but the hand that sets one
-   up: the page scrolls instead of cropping, the wizard's grids fall into as
-   many columns as fit, and after creation the stage carries the provisioning
-   link block and the code card alone (kiosk.ts mountHandheld). Tokens at
-   phone sizes; zoom is 1 here. */
-.kiosk-body[data-kiosk-size='handheld'] { overflow: visible; }
+   data-size='handheld' on the root; the body, which owns the page scroll,
+   reads it through :has, as dashboard.css's html:has(.ki) does). Not a
+   composition for a wall but the hand that sets one up: the page scrolls
+   instead of cropping, the wizard's grids fall into as many columns as fit,
+   and after creation the stage carries the provisioning link block and the
+   code card alone (kiosk.ts mountHandheld). Tokens at phone sizes; zoom is 1
+   here. */
+.kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }
 .kiosk[data-size='handheld'] {
   --k-head-h: auto;
   --k-strip-h: auto;

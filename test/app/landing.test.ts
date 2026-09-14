@@ -122,6 +122,10 @@ describe('the landing markup and the catalogue agree', () => {
       expect(typeof lookup(en, key), key).toBe('string');
     }
   });
+  it('every landing string is a whole sentence or label, never a fragment that opens with punctuation or a space', () => {
+    const leaves = (node: unknown): string[] => (typeof node === 'string' ? [node] : Object.values(node as Record<string, unknown>).flatMap(leaves));
+    for (const catalogue of [hr.landing, en.landing]) for (const s of leaves(catalogue)) expect(s, s).toMatch(/^[\p{L}\p{N}]/u);
+  });
   it('the page names the primary action, the h1 and the lead from the landing namespace, and the wordmark label from the shell', () => {
     expect(doc.querySelector('[data-testid=cta-scan]')?.getAttribute('data-i18n')).toBe('landing.actions.scan');
     expect(doc.querySelector('h1')?.getAttribute('data-i18n')).toBe('landing.title');
