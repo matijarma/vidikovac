@@ -13,13 +13,13 @@ const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
  *  assembly point (FeedItem.data.layer, the poi vocabulary of R-22). */
 export const ZBORNA_MJESTA_LAYER = 'zborna-mjesta';
 
-/** CAP severity in words. Colour never carries this alone (design section 2). */
+/** CAP severity in words: the DHMZ colour convention, always beside a shape (R-K1). Colour never carries this alone; "zeleno" is never a level. */
 export const SEVERITY_WORDS: Readonly<Record<Severity, string>> = {
   info: 'obavijest',
-  minor: 'blago',
-  moderate: 'umjereno',
-  severe: 'ozbiljno',
-  extreme: 'izuzetno',
+  minor: 'manje upozorenje',
+  moderate: 'žuto upozorenje',
+  severe: 'narančasto upozorenje',
+  extreme: 'crveno upozorenje',
 };
 
 const SEVERITY_RANK: Readonly<Record<Severity, number>> = {

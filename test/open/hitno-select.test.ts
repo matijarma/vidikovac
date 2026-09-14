@@ -33,10 +33,10 @@ describe('selectHitno', () => {
   it('maps every CAP severity to a Croatian word', () => {
     expect(SEVERITY_WORDS).toEqual({
       info: 'obavijest',
-      minor: 'blago',
-      moderate: 'umjereno',
-      severe: 'ozbiljno',
-      extreme: 'izuzetno',
+      minor: 'manje upozorenje',
+      moderate: 'žuto upozorenje',
+      severe: 'narančasto upozorenje',
+      extreme: 'crveno upozorenje',
     });
   });
 

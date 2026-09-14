@@ -204,3 +204,45 @@ describe.each(['dark', 'light'] as const)('%s badge words on their tints as rend
     expect(contrastRatio(toHex(rendered(theme, assigned(theme, 'link-on-tint'))), tintHex(theme, tint))).toBeGreaterThanOrEqual(AA_TEXT);
   });
 });
+
+// /hitno and /open/ cannot load tokens.css (default-src 'none'); their inline
+// style is generated from the same hex literals (scripts/build-hitno-style.mjs
+// -> worker/hitno/style.generated.ts). These are the pairs those pages paint:
+// ink and muted text on the canvas, muted labels on the number tiles
+// (surface-2), the accent as link colour, the three state colours as the
+// severity and freshness words. Measured on the generated copy, not on
+// tokens.css, so a stale copy fails here as well as in the parity test.
+const GENERATED_STYLE = readFileSync(join(import.meta.dirname, '..', '..', 'worker', 'hitno', 'style.generated.ts'), 'utf8');
+
+/** `--<name>:<hex>` inside the light `:root{}` or the dark `@media` block of the generated page palette. */
+function generated(theme: 'dark' | 'light', name: string): string {
+  const block = theme === 'light'
+    ? /:root\{color-scheme:light dark;([^}]*)\}/.exec(GENERATED_STYLE)
+    : /@media \(prefers-color-scheme:dark\)\{:root\{([^}]*)\}\}/.exec(GENERATED_STYLE);
+  if (!block) throw new Error(`style.generated.ts has no ${theme} palette block`);
+  const m = new RegExp(`(?:^|;)--${name}:(#[0-9a-f]{6})(?:;|$)`).exec(block[1]!);
+  if (!m) throw new Error(`style.generated.ts ${theme} block has no hex for --${name}`);
+  return m[1]!;
+}
+
+describe.each(['dark', 'light'] as const)('%s generated /hitno and /open/ palette meets WCAG AA 4.5:1', (theme) => {
+  const pairs: [text: string, surface: string][] = [
+    ['ink', 'canvas'], ['ink', 'surface-1'], ['ink', 'surface-2'],
+    ['muted', 'canvas'], ['muted', 'surface-1'], ['muted', 'surface-2'],
+    ['accent', 'canvas'], ['accent', 'surface-2'],
+    ['warning', 'canvas'], ['danger', 'canvas'], ['success', 'canvas'],
+    // The 112 tile is inverted: canvas-coloured numeral and label on ink.
+    ['canvas', 'ink'],
+  ];
+  it.each(pairs)('%s on %s', (text, surface) => {
+    const ratio = contrastRatio(generated(theme, text), generated(theme, surface));
+    expect(Number(ratio.toFixed(2)), `${theme} ${text} on ${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+  it('is the token palette, not a copy that drifted', () => {
+    const roles: [generatedName: string, token: string][] = [
+      ['canvas', 'canvas'], ['surface-1', 'surface-1'], ['surface-2', 'surface-2'], ['ink', 'text-primary'],
+      ['muted', 'text-muted'], ['accent', 'accent'], ['warning', 'warning'], ['danger', 'danger'], ['success', 'success'],
+    ];
+    for (const [name, token] of roles) expect(generated(theme, name), name).toBe(palette(theme, token));
+  });
+});

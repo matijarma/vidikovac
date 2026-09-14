@@ -58,3 +58,29 @@ describe('renderOpenIndex', () => {
     expect(html).toMatch(/(ne objavljuje|nije objavlj)/i);
   });
 });
+
+describe('renderOpenIndex composition (T6.1)', () => {
+  const html = renderOpenIndex(ORIGIN, NOW);
+
+  it('opens with a skip link to the main content', () => {
+    expect(html).toContain('<a class="skip" href="#sadrzaj">Preskoči na sadržaj</a>');
+    expect(html).toContain('<main id="sadrzaj">');
+    expect(html).toContain('<a class="brand" href="/">Kaj ima<span class="mark">?</span></a>');
+  });
+
+  it('ends with the shared footer set, the current page marked', () => {
+    const footer = html.slice(html.indexOf('<footer'));
+    expect(footer).toContain('<a href="/hitno">Sigurnost</a>');
+    expect(footer).toContain('<a href="/s/">Upiši kod</a>');
+    expect(footer).toContain('<a href="/izvori/">Izvori</a>');
+    expect(footer).toContain('<a href="/open/" aria-current="page">Otvoreni podaci</a>');
+    expect(footer).toContain('<a href="/privatnost/">Privatnost</a>');
+    expect(footer).toContain('<a href="/pristupacnost/">Pristupačnost</a>');
+    expect(footer).not.toContain('>Hitno<');
+  });
+
+  it('keeps the DCAT title and the h1 as they are (T6.3 owns the catalogue strings)', () => {
+    expect(html).toContain('<h1>Otvoreni podaci</h1>');
+    expect(html).toContain('<title>Otvoreni podaci · Kaj ima?</title>');
+  });
+});

@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "vite build && tsc --noEmit -p worker/tsconfig.json",
+    "build": "node scripts/build-hitno-style.mjs && vite build && tsc --noEmit -p worker/tsconfig.json",
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p app/tsconfig.json",
     "test": "vitest run",
