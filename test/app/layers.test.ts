@@ -660,16 +660,97 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
   });
   it('vijesti separates the two HRT sources, shows real publication times, and the open story links to the original', () => {
     const section = renderLayer('vijesti', ctx());
-    const row = section.querySelector('[data-testid=news-row]')!;
-    expect(text(row)).toContain('Naslov vijesti');
-    expect(text(row)).toContain('prije 1 sat'); // 11:00Z is 13:00 in Zagreb, an hour and a half before NOW
     expect(section.querySelector('#nw-hrt')).not.toBeNull();
     expect(section.querySelector('#nw-sljeme')).not.toBeNull();
+    const lead = section.querySelector('#nw-hrt .nw-lead')!;
+    expect(lead.tagName).toBe('ARTICLE'); // a plain article, never a card
+    expect(text(lead)).toContain('Naslov vijesti');
+    expect(text(lead)).toContain('prije 1 sat'); // 11:00Z is 13:00 in Zagreb, an hour and a half before NOW
     const open = renderLayer('vijesti', ctx({ view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' }, filters: {} } }));
     const detail = open.querySelector('[data-testid=news-detail]')!;
     expect(detail.querySelector('a[href="https://vijesti.hrt.hr/clanak"]')).not.toBeNull();
     expect(text(detail)).toContain('Sažetak');
     expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain('Izvor: hrt-news');
+  });
+  it('the lead is a plain article with no background box, and its class list never grows a card class', () => {
+    const section = renderLayer('vijesti', ctx());
+    const lead = section.querySelector('#nw-hrt .nw-lead')!;
+    expect(lead.classList.contains('nw-lead-box')).toBe(false);
+    expect(lead.classList.contains('sec')).toBe(false);
+    expect(lead.classList.contains('tile')).toBe(false);
+  });
+  it('heads each source with its own build time, "objavljeno" when the feed states one and "dohvaćeno" when only the fetch time is known, and shows a status badge only when a source is not live', () => {
+    const mixed: ModuleSnapshot = {
+      ...base('hrt-news', [
+        { id: 'h1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', summary: 'Sažetak', link: 'https://vijesti.hrt.hr/clanak', at: '2026-09-11T11:00:00Z', data: { source: 'HRT vijesti' } },
+      ] as ModuleSnapshot['items']),
+      sources: {
+        'HRT vijesti': { status: 'live', itemCount: 1, fetchedAt: new Date(NOW - 60_000).toISOString(), sourceUpdatedAt: '2026-09-11T11:40:00Z' },
+        'Radio Sljeme': { status: 'down', itemCount: 0 },
+      },
+    };
+    const section = renderLayer('vijesti', ctx({ snapshots: { ...SNAPSHOTS, 'hrt-news': mixed } }));
+    expect(text(section.querySelector('#nw-hrt header'))).toContain('objavljeno 13:40');
+    expect(section.querySelector('#nw-hrt [data-testid=news-source-status]')).toBeNull(); // a live source needs no pill
+    expect(text(section.querySelector('#nw-sljeme [data-testid=news-source-status]'))).toContain('nedostupan');
+    expect(text(section.querySelector('#nw-sljeme'))).toContain('Radio Sljeme trenutačno ne odgovara');
+  });
+  it('shows a lead and six rows by default, pages the rest ten at a time under its own filter key, and keeps every source independent', () => {
+    const hrtItems = Array.from({ length: 20 }, (_, i) => ({
+      id: `hrt${i + 1}`, module: 'hrt-news' as const, kind: 'news' as const, tier: 'open' as const,
+      title: `Naslov ${i + 1}`,
+      summary: i === 0 ? 'Uvodni odlomak prve vijesti, dovoljno dug da pokaže prozu bez skraćivanja na tri retka.' : `Sažetak ${i + 1}`,
+      link: `https://vijesti.hrt.hr/clanak-${i + 1}`, at: new Date(NOW - (i + 1) * 5 * 60_000).toISOString(), data: { source: 'HRT vijesti' },
+    }));
+    const sljemeItems = Array.from({ length: 3 }, (_, i) => ({
+      id: `sljeme${i + 1}`, module: 'hrt-news' as const, kind: 'news' as const, tier: 'open' as const,
+      title: `Sljeme naslov ${i + 1}`, summary: `Sljeme sažetak ${i + 1}`,
+      link: `https://sljeme.hrt.hr/clanak-${i + 1}`, at: new Date(NOW - (i + 1) * 7 * 60_000).toISOString(), data: { source: 'Radio Sljeme' },
+    }));
+    const manyNews: ModuleSnapshot = {
+      ...base('hrt-news', [...hrtItems, ...sljemeItems] as ModuleSnapshot['items']),
+      sources: {
+        'HRT vijesti': { status: 'live', itemCount: 20, fetchedAt: new Date(NOW - 60_000).toISOString(), sourceUpdatedAt: '2026-09-11T11:40:00Z' },
+        'Radio Sljeme': { status: 'live', itemCount: 3, fetchedAt: '2026-09-11T11:45:00Z' },
+      },
+    };
+    const snapshots = { ...SNAPSHOTS, 'hrt-news': manyNews };
+    const section = renderLayer('vijesti', ctx({ snapshots }));
+    const hrt = section.querySelector('#nw-hrt')!;
+    const sljeme = section.querySelector('#nw-sljeme')!;
+    expect(text(hrt.querySelector('header'))).toContain('objavljeno 13:40');
+    expect(text(sljeme.querySelector('header'))).toContain('dohvaćeno 13:45');
+    expect(text(hrt.querySelector('.nw-lead'))).toContain('Naslov 1');
+    expect(hrt.querySelectorAll('[data-testid=news-row]')).toHaveLength(6); // the lead is not one of the six
+    expect(text(hrt.querySelector('[data-testid=news-row]'))).toContain('Naslov 2'); // the first row after the lead
+    const more = hrt.querySelector('[data-action=filter][data-filter-key=hrt]')!;
+    expect(text(more)).toBe('Prikaži još 10');
+    expect(more.getAttribute('data-filter-value')).toBe('16');
+    const expanded = renderLayer('vijesti', ctx({ snapshots, view: { layer: 'vijesti', selection: null, filters: { hrt: '16' } } }));
+    expect(expanded.querySelector('#nw-hrt')!.querySelectorAll('[data-testid=news-row]')).toHaveLength(16);
+    // Radio Sljeme has only three items: a lead and two rows, and no filter of its own is exhausted.
+    expect(sljeme.querySelectorAll('[data-testid=news-row]')).toHaveLength(2);
+    expect(sljeme.querySelector('[data-action=filter]')).toBeNull();
+    // Selecting a Radio Sljeme story opens a link labelled for that source.
+    const sljemeOpen = renderLayer('vijesti', ctx({ snapshots, view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'sljeme1'), module: 'hrt-news' }, filters: {} } }));
+    expect(text(sljemeOpen.querySelector('[data-testid=news-detail] a.btn-primary'))).toBe('Otvori na Radio Sljemenu');
+  });
+  it('opens a story to a labelled 48 px primary link, copy and share, and no kicker line', () => {
+    const open = renderLayer('vijesti', ctx({ view: { layer: 'vijesti', selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' }, filters: {} } }));
+    const detail = open.querySelector('[data-testid=news-detail]')!;
+    expect(detail.querySelector('.kicker')).toBeNull(); // kickers are retired
+    const primary = detail.querySelector('a.btn-primary')!;
+    expect(primary.getAttribute('href')).toBe('https://vijesti.hrt.hr/clanak');
+    expect(text(primary)).toBe('Otvori na HRT-u');
+    expect(detail.querySelector('[data-action=copy-item][data-module=hrt-news][data-item-id=n1]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=share-item][data-module=hrt-news][data-item-id=n1]')).not.toBeNull();
+    expect(detail.querySelector('[data-action=ics-item]')).toBeNull(); // never an unverified date on a calendar
+  });
+  it('moves the RSS disclaimer into the attribution foot and drops the line that used to sit under the page title', () => {
+    const section = renderLayer('vijesti', ctx());
+    const disclaimer = 'Sažetak je uvodni odlomak iz HRT-ova RSS-a; cijeli članak je na izvorniku.';
+    expect(text(section.querySelector('.ws-head'))).not.toContain(disclaimer);
+    expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain(disclaimer);
   });
 });
 

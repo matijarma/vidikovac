@@ -85,7 +85,9 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(LAYERS).toMatch(/\.ev-allday \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/^\.agenda-day \{[^}]*font-size: var\(--type-secondary\);/m);
     expect(LAYERS).toMatch(/\.ov \.agenda-day \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/\.nw-summary \{[^}]*font-size: var\(--type-secondary\);/);
+    // T3.5 lifts the lead's lede to prose at the body role (68ch, no clamp);
+    // .nw-summary no longer exists, replaced by .nw-lead-lede at --type-body.
+    expect(LAYERS).toMatch(/\.nw-lead-lede \{[^}]*font-size: var\(--type-body\);/);
     expect(LAYERS).toMatch(/\.detail-facts div \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.ws-detail-hint \{[^}]*font-size: var\(--type-secondary\);/);
   });

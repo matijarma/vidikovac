@@ -335,14 +335,21 @@
 .cv-grid { display: grid; gap: var(--sp-4); }
 @media (min-width: 60rem) { .cv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .cv-wide { grid-column: 1 / -1; } }
 
-/* News: source-separated hierarchy, lead story larger. */
+/* News: source-separated hierarchy, one lead per source set apart by size and
+   space alone. A source panel is not a card: the shared .sec box is switched
+   off and a single hairline (Chrome, not Floating) separates it from its
+   neighbour, mirroring how .sec.wx-lead already flattens the weather lead. */
 .nw-grid { display: grid; gap: var(--sp-4); }
 @media (min-width: 60rem) { .nw-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }
-.nw-lead .row-title { font-size: var(--text-xl); letter-spacing: -0.01em; line-height: var(--leading-snug); }
-.nw-lead .row-meta { font-size: var(--text-sm); }
-.nw-summary { margin: 0.25rem 0 0; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: var(--lh-body); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sec.nw-source { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
 .nw-source-head { display: flex; align-items: center; gap: var(--sp-2); }
 .nw-source-head .icon { color: var(--tone-text-muted); }
+.nw-source-title { font-size: var(--type-head); font-weight: 700; line-height: var(--lh-title); }
+.nw-lead .row-button { align-items: flex-start; }
+.nw-lead .row-main { gap: var(--sp-2); }
+.nw-lead .row-title { font-size: var(--type-title); font-weight: 700; line-height: var(--lh-title); }
+.nw-lead-lede { display: block; font-size: var(--type-body); font-weight: 400; line-height: var(--lh-prose); max-inline-size: 68ch; }
+.nw-disclaimer { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
 
 /* Safety: priorities and practical actions first. */
 .sf-level { display: grid; gap: var(--sp-2); padding: var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); }
