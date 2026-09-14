@@ -320,12 +320,19 @@ describe('local content from the stop-scoped teaser', () => {
     expect(markup.main).toContain('Močvara');
     expect(markup.main).not.toMatch(/sjednica-odbora|kulturpunkt|class="k-row-sub"><\/span>/);
     expect(markup.side).toContain('k-notices');
+    // ZET's own notices (a detour, works on a line) live in this block with the neighbourhood news: Promet's column is the board alone, and the layer's one credit names ZET among the publishers.
+    const side = document.createElement('div');
+    side.innerHTML = markup.side;
+    const noticeBlock = side.querySelector('[data-testid=k-notices]')!;
+    expect(noticeBlock.textContent).toContain('Obilazak linija 6 i 11');
+    expect(noticeBlock.textContent).toContain('ZET obavijest · objavljeno 11. 9. 11:10');
+    expect(markup.main).toMatch(/k-main-source">[^<]*\bZET \(/);
     const items = MODULES.find((m) => m.module === 'dogadanja')!.items;
     const groups = eventGroups(items, NOW);
     expect(groups.today.map((e) => e.id)).toEqual(['kp:1']);
     expect(groups.tomorrow.map((e) => e.id)).toEqual(['kp:2']);
     expect(groups.later).toEqual([]); // the Assembly session belongs to Grad
-    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1']); // ZET notices belong to Promet
+    expect(groups.notices.map((e) => e.id)).toEqual(['kvartovske:1', 'zet-promet:1']); // undated notices, ZET's included
     const extra = [
       item('dogadanja', 'ex:1', 'event', 'Izložba koja traje', { at: '2026-09-01T09:00:00Z', until: '2026-09-30T18:00:00Z', dateBasis: 'event', data: { source: 'etnografski', category: 'izlozba', venue: 'Etnografski muzej, Zagreb' } }),
       item('dogadanja', 'ex:2', 'event', 'Izložba u Splitu', { at: '2026-09-11T09:00:00Z', dateBasis: 'event', data: { source: 'etnografski', venue: 'Etnografski muzej, Split' } }),
@@ -340,10 +347,11 @@ describe('local content from the stop-scoped teaser', () => {
     expect(culture.main).toContain('do sri 30. 9.');
     expect(culture.main).not.toContain('13. sjednica');
     expect(culture.main).not.toContain('Splitu');
-    // Promet's column is the departure board alone; ZET's notices stay out of culture and closures stay on Sada and Sigurnost.
+    // Promet's column is the departure board alone: ZET's notices are Događanja's undated notices (asserted above), closures stay on Sada and Sigurnost.
     const promet = pairedMarkup({ ...withOngoing, layer: 'u-pokretu' as const });
     expect(promet.side).toContain('data-testid="k-delays"');
     expect(promet.side).not.toContain('k-zet-notices');
+    expect(promet.side).not.toContain('Obilazak linija 6 i 11');
     expect(promet.side).not.toContain('data-testid="k-closures"');
     const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
     expect(grad.main).toContain('13. sjednica');
@@ -475,7 +483,8 @@ describe('credits and rows on a screen read from steps away', () => {
     expect(grad.main).toContain('Izvori: Skupština Grada Zagreba (Otvorena dozvola) · Grad Zagreb, plan komunalnih aktivnosti (Otvorena dozvola) · potpuna atribucija: /izvori');
     expect(grad.side).not.toContain('k-source');
     const kultura = ctx('kultura');
-    expect(kultura.main).toContain('Izvori: Kulturpunkt (CC BY-SA 3.0 HR) · Grad Zagreb, kvartovske novosti (Otvorena dozvola) · potpuna atribucija: /izvori');
+    // ZET's notices are on the screen (the k-notices block), so the layer's one credit names ZET as a publisher too.
+    expect(kultura.main).toContain('Izvori: Kulturpunkt (CC BY-SA 3.0 HR) · Grad Zagreb, kvartovske novosti (Otvorena dozvola) · ZET (Otvorena dozvola) · potpuna atribucija: /izvori');
     expect(kultura.main).not.toContain('Šest izvora');
     expect(kultura.side).not.toContain('k-source'); // the notices block is covered by the layer's one credit
     expect(creditText(MODULES.find((m) => m.module === 'zet-rt')!, [], hr)).toBe('Izvor: test · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');

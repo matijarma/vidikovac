@@ -377,7 +377,8 @@ function renderPromet(ctx: PairedContext): PairedMarkup {
   // The board and the join card are the composition at both sizes: five rows,
   // their coverage line and ZET's mandated three-line credit fill what the
   // column has beside the join card (measured at 1920: 500 of 640 px), so no
-  // second block fits. Closures stay on Sada and Sigurnost.
+  // second block fits. Closures stay on Sada and Sigurnost; ZET's own notices
+  // are Događanja's undated notices (`k-notices`, see NOTICE_SOURCES).
   const selected = selectionCard(ctx);
   return { lines: linesBox(ctx), main: '', side: `${selected}${delaysBoard(ctx, !selected)}` };
 }
@@ -605,11 +606,16 @@ function renderGrad(ctx: PairedContext): PairedMarkup {
 
 // --- Događanja (kultura) --------------------------------------------------------
 
+/** Sources whose rows are notices, not dated events, when they state no date basis:
+ *  the neighbourhood news and ZET's own notices (a detour, works on a line). ZET's
+ *  notices live in this layer's `k-notices` block: Promet's column is the departure
+ *  board alone (its five rows, coverage line and mandated credit fill it), and the
+ *  unpaired invitation's story rotation carries them too. */
 const NOTICE_SOURCES: ReadonlySet<string> = new Set(['kvartovske', 'zet-promet', 'zet-rss', 'zet-novosti']);
 
-/** Rows the culture layer leaves to their own domains: the Assembly and the
- *  works register to Grad, ZET's notices to Promet. */
-const CULTURE_ELSEWHERE: ReadonlySet<string> = new Set(['skupstina', 'komunalne', 'zet-promet', 'zet-rss', 'zet-novosti']);
+/** Rows the culture layer leaves to their own domain: the Assembly and the
+ *  works register to Grad. */
+const CULTURE_ELSEWHERE: ReadonlySet<string> = new Set(['skupstina', 'komunalne']);
 /** A Zagreb screen lists Zagreb events; a venue naming another town is not one. */
 const NON_ZAGREB_VENUE = /\b(Split|Hvar|Rijeka|Osijek|Zadar|Dubrovnik|Pula|Varaždin|Šibenik|Karlovac|Sisak|Vukovar|Bjelovar|Koprivnica|Čakovec|Poreč|Rovinj|Makarska|Trogir|Vinkovci|Požega|Opatija|Krk)\b/;
 

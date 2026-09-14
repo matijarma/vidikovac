@@ -462,7 +462,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous, joinCode);
     paintProgress();
   }
-  /** The outgoing digits stay 180 ms as a ghost beside the live code, fading, while the new ones fade in (data-swap); the join code fades in the same beat. */
+  /** The outgoing digits stay 180 ms as a ghost over the live code, fading, while the new ones fade in (data-swap); the join code fades in the same beat.
+   *  The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits) so both copies sit on the same pixels and the
+   *  crossfade never reads as the second half sliding sideways; it carries no testid, so `pair-code` stays one element mid-swap. */
   function swapCode(codeEl: HTMLElement, previous: string, joinCode: HTMLElement | null): void {
     const box = codeEl.parentElement;
     if (!box || !box.classList.contains('k-code-box')) return;
@@ -470,7 +472,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const ghost = document.createElement('p');
     ghost.className = 'k-code k-code-ghost';
     ghost.setAttribute('aria-hidden', 'true');
-    ghost.textContent = previous;
+    const dash = previous.indexOf('-');
+    ghost.innerHTML = dash === -1
+      ? `<span>${escapeHtml(previous)}</span>`
+      : `<span>${escapeHtml(previous.slice(0, dash))}</span><span class="k-code-dash">-</span><span>${escapeHtml(previous.slice(dash + 1))}</span>`;
     box.appendChild(ghost);
     codeEl.dataset.swap = '1';
     if (joinCode) joinCode.dataset.swap = '1';

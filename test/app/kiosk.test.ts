@@ -824,8 +824,15 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     k.tick(250); // the rotation's own tick
     expect(text(code)).toBe('ABCD-EFG1');
     expect(code.dataset.swap).toBe('1');
-    expect(text(q(k.root, '.k-code-ghost'))).toBe('ABCD-EFG0');
-    expect(q(k.root, '.k-code-ghost')!.getAttribute('aria-hidden')).toBe('true');
+    const ghost = q(k.root, '.k-code-ghost')!;
+    expect(text(ghost)).toBe('ABCD-EFG0');
+    expect(ghost.getAttribute('aria-hidden')).toBe('true');
+    // The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits), so the crossfade never reads as the second half sliding sideways; it borrows no testid, so pair-code stays one element mid-swap.
+    expect([...ghost.children].map((child) => child.textContent)).toEqual(['ABCD', '-', 'EFG0']);
+    expect([...ghost.children].map((child) => child.className)).toEqual([...code.children].map((child) => child.className));
+    expect(ghost.children[1]!.classList.contains('k-code-dash')).toBe(true);
+    expect(ghost.querySelectorAll('[data-testid]')).toHaveLength(0);
+    expect(k.root.querySelectorAll('[data-testid=pair-code]')).toHaveLength(1);
     expect(CODE_SWAP_MS).toBe(180);
     k.tick(CODE_SWAP_MS);
     expect(code.dataset.swap).toBeUndefined();
