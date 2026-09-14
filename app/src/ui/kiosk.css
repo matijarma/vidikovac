@@ -144,6 +144,9 @@
 .k-head-mid { display: flex; flex: 1; justify-content: center; min-width: 0; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
 .k-head-when { margin-left: auto; text-align: right; white-space: nowrap; }
+/* The compact header (portrait resolves to compact too) is 60 px tall: the date sits beside the clock
+   row, never above it (stacked, date plus the 44 px theme button measure 71 px and the date is clipped). */
+.kiosk[data-size='compact'] .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); }
 .k-date { font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-clock-row { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--k-gap) * 0.6); }
 .k-clock { display: block; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.1; }
@@ -436,6 +439,8 @@
 /* The join card: the small QR the next person scans, painted by the controller. */
 .k-join { display: flex; flex: none; align-items: center; box-sizing: border-box; margin-top: auto; padding: var(--k-gap) var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .k-side-blocks + .k-join { margin-top: var(--k-gap); }
+/* No side blocks (Vijesti in portrait): the join card sits at the foot of the side, not at its top. */
+.k-side-blocks:empty + .k-join { margin-top: auto; }
 .k-join-qr { flex: none; width: calc(var(--k-qr) * 0.5); height: calc(var(--k-qr) * 0.5); }
 .k-join-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.4); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-join-qr .qr svg { width: 100%; height: 100%; }
@@ -464,9 +469,11 @@
    side never exceeds the room: its blocks shrink to their floors and the
    row fitter trims). Compact tiers and the compact QR: these rules place
    blocks and set no token. */
-.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: 55% minmax(0, 1fr); }
+/* The side takes its content's height on the invitation too: the card is QR-bound and the weather and story
+   blocks are two lines each, so the map takes the rest (55% at least) instead of the blocks floating in a void. */
+.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
 .kiosk[data-portrait='1'] .k-paired:has(> .k-map) { grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
-.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); grid-column-gap: var(--k-gap); column-gap: var(--k-gap); }
+.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto; grid-column-gap: var(--k-gap); column-gap: var(--k-gap); }
 .kiosk[data-portrait='1'] .k-invitation .k-invite { grid-column: 1 / -1; grid-row: 1; }
 .kiosk[data-portrait='1'] .k-invitation .k-weather { grid-column: 1; grid-row: 2; justify-content: center; }
 .kiosk[data-portrait='1'] .k-invitation .k-story { grid-column: 2; grid-row: 2; }

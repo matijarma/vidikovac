@@ -287,12 +287,13 @@ describe('T5.4: the portrait composition', () => {
   it('stacks the stage: the map (or the paired main region) on top at 55% of the stage, the side column with the rest', () => {
     const stage = decls(`${P} .k-invitation, ${P} .k-paired`);
     expect(stage['grid-template-columns']).toBe('minmax(0, 1fr)');
-    expect(stage['grid-template-rows']).toBe('55% minmax(0, 1fr)');
+    // The map at 55% at least and the side at its content height, on the invitation as on a paired map layer.
+    expect(stage['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
   });
   it('lays the invitation side column out as two columns: the card across both, the weather and the story side by side under it', () => {
     const side = decls(`${P} .k-invitation .k-side`);
     expect(side['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
-    expect(side['grid-template-rows']).toBe('auto minmax(0, 1fr)');
+    expect(side['grid-template-rows']).toBe('auto auto');
     expect(side['column-gap']).toBe('var(--k-gap)');
     const card = decls(`${P} .k-invitation .k-invite`);
     expect(card['grid-column']).toBe('1 / -1');
@@ -323,3 +324,14 @@ describe('T5.4: the portrait composition', () => {
     expect(BARE).not.toContain(`${P} .k-side-blocks { flex: none; }`);
   });
 });
+
+describe('the compact header holds its date, and an empty side seats the join card at the foot (controller, wave 5 merge)', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+  it('lays the date beside the clock row in the compact and portrait headers, where stacking them measured 71 px in a 60 px header', () => {
+    expect(css).toContain(".kiosk[data-size='compact'] .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); }");
+  });
+  it('pushes the join card to the foot when the side has no blocks (Vijesti in portrait)', () => {
+    expect(css).toContain('.k-side-blocks:empty + .k-join { margin-top: auto; }');
+  });
+});
+
