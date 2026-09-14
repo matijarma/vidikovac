@@ -52,9 +52,13 @@ const before = (first: Element, second: Element): boolean =>
 
 // The page is styled from the first paint: the five sheets are <link>s in
 // <head>, ahead of the entry module, in cascade order (signage.css directly
-// after base.css, scan.css after both, the viewfinder last). The entry no
-// longer imports what the head already linked; the font sheet stays a dynamic
-// import so Manrope arrives after the first paint, never in front of it.
+// after base.css, scan.css after both, the viewfinder last). The entry imports
+// base.css and signage.css a second time: test/app/signage-css.test.ts (area
+// A's contract) pins that the entry of every page showing a badge imports the
+// signage sheet directly after base.css. Rollup keeps one copy of each module,
+// so the built page links every sheet once, in the head's order. The entry
+// imports none of tokens, scan or qrScanner, and the font sheet stays a
+// dynamic import so Manrope arrives after the first paint, never in front of it.
 describe('/s/ is styled from the first paint', () => {
   const HTML = read('app', 's', 'index.html');
   const ENTRY = read('app', 'src', 'entries', 'scan.ts');
@@ -68,8 +72,9 @@ describe('/s/ is styled from the first paint', () => {
     expect(HTML).not.toContain('<style>');
   });
 
-  it('the entry imports none of the linked sheets and loads the font sheet dynamically', () => {
-    for (const sheet of ['tokens', 'base', 'signage', 'scan', 'qrScanner']) {
+  it('the entry imports base.css then signage.css for the signage contract, none of the other linked sheets, and loads the font sheet dynamically', () => {
+    expect(ENTRY).toContain("import '../ui/base.css';\nimport '../ui/signage.css';");
+    for (const sheet of ['tokens', 'scan', 'qrScanner']) {
       expect(ENTRY, sheet).not.toContain(`import '../ui/${sheet}.css'`);
     }
     expect(ENTRY).toContain("import('../ui/fonts.css')");
@@ -867,5 +872,28 @@ describe('scan-input CSS specificity (regression: base.css must not win)', () =>
     expect(focusProps.length).toBeGreaterThan(0); // sanity: the extraction actually found the rule's declarations
     const overlap = focusProps.filter((p) => scanProps.has(p));
     expect(overlap, `.scan-input and the tied (0,2,1) :focus-visible rule both declare: ${overlap.join(', ')}`).toEqual([]);
+  });
+
+  // The entry imports base.css and signage.css again (the signage contract in
+  // test/app/signage-css.test.ts). In the build that is one copy of each,
+  // linked before scan.css; in Vite's dev server the imported copy paints a
+  // second time, after scan.css. So no rule in scan.css may rely on following
+  // base.css at equal specificity. Two rules contest `color` with a base hover
+  // rule of the weight their bare form would have: the wordmark's `color:
+  // inherit` against `a:hover` (0,1,1) and the footer ghost's urgency colour
+  // against `.btn-ghost:hover` (0,2,0). Both out-specify the base rule instead.
+  it("the wordmark link and the footer's urgency ghost out-specify base.css's hover rules, so their colour never depends on sheet order", () => {
+    const selectorOf = (rule: string): string => rule.slice(0, rule.indexOf('{')).trim();
+    const brandRule = ruleBody(SCAN_CSS, /^[^{}]*\.scan-brand[^{}]* a\s*\{/m);
+    const footRule = ruleBody(SCAN_CSS, /^[^{}]*\.scan-foot[^{}]*\.btn-ghost\s*\{/m);
+    // Sanity: both rules really do set color, and base.css really does carry the two hover rules that set it.
+    expect(declaredProperties(brandRule)).toContain('color');
+    expect(declaredProperties(footRule)).toContain('color');
+    expect(BASE_CSS).toMatch(/^\s*a:hover\s*\{[^}]*\bcolor:/m);
+    expect(BASE_CSS).toMatch(/^\s*\.btn-ghost:hover\s*\{[^}]*\bcolor:/m);
+    const brand = selectorOf(brandRule);
+    const foot = selectorOf(footRule);
+    expect(cmp(specificity(brand), specificity('a:hover')), `"${brand}" must out-specify "a:hover"`).toBeGreaterThan(0);
+    expect(cmp(specificity(foot), specificity('.btn-ghost:hover')), `"${foot}" must out-specify ".btn-ghost:hover"`).toBeGreaterThan(0);
   });
 });

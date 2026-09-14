@@ -1,8 +1,13 @@
 /* /s/: one column, the field first, the code the largest thing on the page.
    Linked from <head> after tokens.css, base.css and signage.css, so the page is
    styled from the first paint; .btn, .btn-ghost, .btn-primary, .card and the
-   input reset come from base.css. Each [hidden] rule is explicit because a
-   class with `display` would otherwise beat the user agent's [hidden] rule. */
+   input reset come from base.css. The entry imports base.css and signage.css
+   again (the signage contract, test/app/signage-css.test.ts): the build keeps
+   one copy, but Vite's dev server paints that copy after this sheet, so no rule
+   here may rely on following base.css at equal specificity; where a base rule
+   contests the same property, the rule here out-specifies it. Each [hidden]
+   rule is explicit because a class with `display` would otherwise beat the
+   user agent's [hidden] rule. */
 .scan-head {
   display: flex;
   align-items: center;
@@ -13,7 +18,10 @@
   padding: var(--sp-4) var(--sp-4) 0;
 }
 .scan-brand { font-family: var(--font-display); font-weight: var(--weight-semi); }
-.scan-brand a { color: inherit; text-decoration: none; }
+/* p.scan-brand a, not .scan-brand a: base.css's `a:hover` is also (0,1,1) and
+   sets color, so a tie would hand the wordmark the link colour on hover
+   whenever base.css follows this sheet. (0,1,2) keeps `inherit` in either order. */
+p.scan-brand a { color: inherit; text-decoration: none; }
 .scan-tools { display: flex; gap: var(--sp-2); align-items: center; }
 
 .scan-page {
@@ -143,7 +151,9 @@ input[type='text'].scan-input {
   font-size: var(--text-sm);
 }
 .scan-foot a { display: inline-flex; align-items: center; min-height: var(--target); }
-.scan-foot .btn-ghost { color: var(--tone-urgency); border-color: currentColor; }
+/* a.btn-ghost, not .btn-ghost: base.css's `.btn-ghost:hover` is (0,2,0) and
+   sets color; (0,2,1) keeps the urgency colour on hover in either order. */
+.scan-foot a.btn-ghost { color: var(--tone-urgency); border-color: currentColor; }
 
 @media (min-width: 40rem) {
   .scan-page { padding-top: var(--sp-10); }
