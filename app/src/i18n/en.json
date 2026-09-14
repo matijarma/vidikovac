@@ -493,9 +493,11 @@
     "unlock": "Unlock",
     "check": "Check the code",
     "checking": "Checking the code…",
+    "checkingButton": "Checking…",
     "confirmTitle": "Is the same code on the screen?",
-    "confirmScreen": "Screen: {venue}, {area}, {minutes}",
-    "confirmPhone": "Another person's phone, {minutes}",
+    "confirmPeer": "Another person's phone",
+    "confirmStop": "Stop {stop} · lines {routes}",
+    "confirmStopOnly": "Stop {stop}",
     "confirmHint": "Check that this code matches the one on the other device. Unlocking opens the view on both.",
     "cancel": "Cancel",
     "venue": { "kafic": "café", "knjiznica": "library", "cetvrt": "district office", "udruga": "association", "zet": "ZET", "ostalo": "public screen" },
@@ -511,7 +513,12 @@
       "same-network": "This screen and your phone share a network. Turn off Wi-Fi and scan on mobile data.",
       "slow-down": "Too many attempts. Wait a minute.",
       "rate-limited": "Too many attempts from this network. Wait a minute.",
-      "revoked": "This screen has been switched off."
+      "revoked": "This screen has been switched off.",
+      "actions": {
+        "retype": "Type a new code",
+        "safety": "Safety without scanning",
+        "wait": "Try again in {time}"
+      }
     },
     "scanner": {
       "hint": "Point the camera at the QR code on the screen.",
@@ -520,7 +527,9 @@
       "unavailable": "No camera is available. Type the code instead.",
       "videoLabel": "Camera viewfinder",
       "struggling": "Hold steady, or move a little closer.",
-      "torch": "Light"
+      "torch": "Light",
+      "opening": "The camera is starting…",
+      "live": "The camera is on."
     },
     "steps": {
       "find": "Find a screen in a café, a library or at a stop.",

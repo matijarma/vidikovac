@@ -511,9 +511,11 @@
     "unlock": "Otključaj",
     "check": "Provjeri kod",
     "checking": "Provjera koda…",
+    "checkingButton": "Provjera…",
     "confirmTitle": "Isti kod je na zaslonu?",
-    "confirmScreen": "Zaslon: {venue}, {area}, {minutes}",
-    "confirmPhone": "Telefon druge osobe, {minutes}",
+    "confirmPeer": "Telefon druge osobe",
+    "confirmStop": "Stanica {stop} · linije {routes}",
+    "confirmStopOnly": "Stanica {stop}",
     "confirmHint": "Provjeri da ovaj kod odgovara kodu na drugom uređaju. Otključavanje otvara pogled na oba uređaja.",
     "cancel": "Odustani",
     "venue": { "kafic": "kafić", "knjiznica": "knjižnica", "cetvrt": "gradska četvrt", "udruga": "udruga", "zet": "ZET", "ostalo": "javni zaslon" },
@@ -529,7 +531,12 @@
       "same-network": "Ovaj zaslon i tvoj telefon dijele istu mrežu. Isključi Wi-Fi i skeniraj mobilnim podacima.",
       "slow-down": "Previše pokušaja. Pričekaj minutu.",
       "rate-limited": "Previše pokušaja s ove mreže. Pričekaj minutu.",
-      "revoked": "Ovaj je zaslon isključen."
+      "revoked": "Ovaj je zaslon isključen.",
+      "actions": {
+        "retype": "Upiši novi kod",
+        "safety": "Sigurnost bez skeniranja",
+        "wait": "Pokušaj ponovno za {time}"
+      }
     },
     "scanner": {
       "hint": "Usmjeri kameru prema QR kodu na zaslonu.",
@@ -538,7 +545,9 @@
       "unavailable": "Kamera nije dostupna. Upiši kod ručno.",
       "videoLabel": "Slika s kamere",
       "struggling": "Drži mirno ili se malo približi.",
-      "torch": "Svjetlo"
+      "torch": "Svjetlo",
+      "opening": "Kamera se uključuje…",
+      "live": "Kamera je uključena."
     },
     "steps": {
       "find": "Priđi zaslonu u kafiću, knjižnici ili na stanici.",

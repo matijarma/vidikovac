@@ -1,10 +1,15 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import type { ScanOk } from '../../worker/protocol';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ScanFail, ScanOk, ScreenStop } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { codeFromHash, confirmLabel, dashboardUrl } from '../../app/src/scan';
+import { codeFromHash, confirmLabel, confirmStopLine, createScanPage, dashboardUrl } from '../../app/src/scan';
+import type { QrScannerDeps, QrScannerHandle } from '../../app/src/ui/qrScanner';
+import { flush, text } from './helpers';
+
+const REPO = join(import.meta.dirname, '..', '..');
+const read = (...parts: string[]): string => readFileSync(join(REPO, ...parts), 'utf8');
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const KIOSK: ScanOk = {
@@ -27,6 +32,51 @@ const PHONE: ScanOk = {
   participants: 1,
   screenLabel: null,
 };
+const STOP: ScreenStop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9769, lat: 45.813, routes: ['6', '11', '12', '13'] };
+const AT_STOP: ScanOk = { ...KIOSK, screen: { kind: 'venue', expiresAt: null, stop: STOP } };
+
+/** Comment-stripped CSS, so a comment's prose can never be mistaken for the rules it describes. */
+const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+/** The `{ ... }` body immediately following the given rule's selector line. */
+function ruleBody(css: string, selectorLine: RegExp): string {
+  const m = selectorLine.exec(css);
+  if (!m) throw new Error(`no rule found for ${selectorLine}`);
+  const start = m.index;
+  return css.slice(start, css.indexOf('}', start) + 1);
+}
+
+/** True when `first` precedes `second` in document order. */
+const before = (first: Element, second: Element): boolean =>
+  Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+// The page is styled from the first paint: the five sheets are <link>s in
+// <head>, ahead of the entry module, in cascade order (signage.css directly
+// after base.css, scan.css after both, the viewfinder last). The entry no
+// longer imports what the head already linked; the font sheet stays a dynamic
+// import so Manrope arrives after the first paint, never in front of it.
+describe('/s/ is styled from the first paint', () => {
+  const HTML = read('app', 's', 'index.html');
+  const ENTRY = read('app', 'src', 'entries', 'scan.ts');
+
+  it('links tokens, base, signage, scan and the viewfinder sheet in <head>, in that order, before any script', () => {
+    const head = HTML.slice(0, HTML.indexOf('</head>'));
+    const links = [...head.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map((m) => m[1]);
+    expect(links).toEqual(['/src/ui/tokens.css', '/src/ui/base.css', '/src/ui/signage.css', '/src/ui/scan.css', '/src/ui/qrScanner.css']);
+    expect(head.indexOf('<link rel="stylesheet"')).toBeLessThan(head.indexOf('<script'));
+    expect(HTML).toContain('<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">');
+    expect(HTML).not.toContain('<style>');
+  });
+
+  it('the entry imports none of the linked sheets and loads the font sheet dynamically', () => {
+    for (const sheet of ['tokens', 'base', 'signage', 'scan', 'qrScanner']) {
+      expect(ENTRY, sheet).not.toContain(`import '../ui/${sheet}.css'`);
+    }
+    expect(ENTRY).toContain("import('../ui/fonts.css')");
+    expect(ENTRY).not.toContain("import '../ui/fonts.css'");
+    expect(ENTRY).toContain("import '../ui/toast.css'");
+  });
+});
 
 describe('codeFromHash', () => {
   it('reads our own QR fragment in both forms and refuses anything else', () => {
@@ -42,21 +92,53 @@ describe('codeFromHash', () => {
   });
 });
 
+// The confirm line is assembled from parts joined by a middle dot, never by
+// interpolating a sentence and then scrubbing the holes with regexes: an
+// absent part leaves nothing behind.
 describe('confirmLabel', () => {
-  it('names the kind of screen, the district and the minutes', () => {
-    const i18n = createDefaultI18n('hr');
-    expect(confirmLabel(KIOSK, i18n, NOW)).toBe('Zaslon: kafić, Donji grad, 10 minuta');
+  const i18n = createDefaultI18n('hr');
+  it('joins the screen label, the district and the minutes', () => {
+    expect(confirmLabel(KIOSK, i18n, NOW)).toBe('Kavana Velebit · Donji grad · 10 minuta');
   });
   it('names the other person’s phone and its five minutes', () => {
-    expect(confirmLabel(PHONE, createDefaultI18n('hr'), NOW)).toBe('Telefon druge osobe, 5 minuta');
+    expect(confirmLabel(PHONE, i18n, NOW)).toBe('Telefon druge osobe · 5 minuta');
   });
-  it('drops the empty district instead of printing a dangling comma', () => {
-    const i18n = createDefaultI18n('hr');
-    expect(confirmLabel({ ...KIOSK, area: null }, i18n, NOW)).toBe('Zaslon: kafić, 10 minuta');
+  it('drops a missing district instead of leaving a hole', () => {
+    expect(confirmLabel({ ...KIOSK, area: null }, i18n, NOW)).toBe('Kavana Velebit · 10 minuta');
   });
-  it('falls back to the neutral venue word for an unknown screen', () => {
-    const i18n = createDefaultI18n('hr');
-    expect(confirmLabel({ ...KIOSK, venueType: null }, i18n, NOW)).toBe('Zaslon: javni zaslon, Donji grad, 10 minuta');
+  it('falls back to the kind of screen, in sentence case, when the operator gave it no label', () => {
+    expect(confirmLabel({ ...KIOSK, screenLabel: null }, i18n, NOW)).toBe('Kafić · Donji grad · 10 minuta');
+    expect(confirmLabel({ ...KIOSK, screenLabel: null, venueType: null }, i18n, NOW)).toBe('Javni zaslon · Donji grad · 10 minuta');
+    expect(confirmLabel({ ...KIOSK, screenLabel: null, venueType: 'zet' }, i18n, NOW)).toBe('ZET · Donji grad · 10 minuta');
+  });
+  it('never rounds below one minute (the expiry spec’s "1 minuta")', () => {
+    expect(confirmLabel({ ...PHONE, expiresAt: NOW + 12_000 }, i18n, NOW)).toBe('Telefon druge osobe · 1 minuta');
+  });
+  it('reads the same shape in English', () => {
+    const en = createDefaultI18n('en');
+    expect(confirmLabel(KIOSK, en, NOW)).toBe('Kavana Velebit · Donji grad · 10 minutes');
+    expect(confirmLabel({ ...KIOSK, screenLabel: null }, en, NOW)).toBe('Café · Donji grad · 10 minutes');
+    expect(confirmLabel(PHONE, en, NOW)).toBe("Another person's phone · 5 minutes");
+  });
+});
+
+describe('confirmStopLine', () => {
+  const i18n = createDefaultI18n('hr');
+  it('names the stop and its lines when the screen stands at one', () => {
+    expect(confirmStopLine(AT_STOP, i18n)).toBe('Stanica Trg bana J. Jelačića · linije 6, 11, 12, 13');
+  });
+  it('names at most six lines at a hub', () => {
+    const hub = { ...AT_STOP, screen: { ...AT_STOP.screen!, stop: { ...STOP, routes: ['1', '2', '3', '4', '5', '6', '7', '8'] } } };
+    expect(confirmStopLine(hub, i18n)).toBe('Stanica Trg bana J. Jelačića · linije 1, 2, 3, 4, 5, 6');
+  });
+  it('names only the stop when the data lists no lines for it', () => {
+    const bare = { ...AT_STOP, screen: { ...AT_STOP.screen!, stop: { ...STOP, routes: [] } } };
+    expect(confirmStopLine(bare, i18n)).toBe('Stanica Trg bana J. Jelačića');
+  });
+  it('is null for a screen without a stop and for a phone', () => {
+    expect(confirmStopLine(KIOSK, i18n)).toBeNull();
+    expect(confirmStopLine({ ...KIOSK, screen: { kind: 'venue', expiresAt: null, stop: null } }, i18n)).toBeNull();
+    expect(confirmStopLine(PHONE, i18n)).toBeNull();
   });
 });
 
@@ -67,11 +149,6 @@ describe('dashboardUrl', () => {
   });
 });
 
-import { beforeEach, vi } from 'vitest';
-import type { ScanFail } from '../../worker/protocol';
-import { createScanPage } from '../../app/src/scan';
-import { flush, text } from './helpers';
-
 beforeEach(() => {
   document.body.innerHTML = '';
 });
@@ -80,6 +157,7 @@ function mount(options: {
   hash?: string;
   result?: ScanOk | ScanFail;
   scan?: (code: string) => Promise<ScanOk | ScanFail>;
+  now?: () => number;
 } = {}) {
   const root = document.createElement('main');
   document.body.appendChild(root);
@@ -91,12 +169,14 @@ function mount(options: {
     hash: options.hash ?? '',
     navigate,
     replaceUrl,
-    now: () => NOW,
+    now: options.now ?? (() => NOW),
     scan,
   });
   const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
   const form = root.querySelector<HTMLFormElement>('form')!;
   const submitButton = root.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
+  const status = root.querySelector<HTMLElement>('[data-testid=scan-status]')!;
+  const errorBox = root.querySelector<HTMLElement>('.scan-error')!;
   const type = (value: string): void => {
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -104,7 +184,7 @@ function mount(options: {
   const send = (): void => {
     form.dispatchEvent(new Event('submit', { cancelable: true }));
   };
-  return { root, handle, navigate, replaceUrl, scan, input, form, submitButton, type, send };
+  return { root, handle, navigate, replaceUrl, scan, input, form, submitButton, status, errorBox, type, send };
 }
 
 const ERRORS: [ScanFail['error'], string][] = [
@@ -119,6 +199,62 @@ const ERRORS: [ScanFail['error'], string][] = [
   ['revoked', 'Ovaj je zaslon isključen.'],
 ];
 
+interface FakeScanner extends QrScannerHandle {
+  deps: QrScannerDeps;
+  started: number;
+  destroyed: number;
+}
+
+function mountWithCamera(options: {
+  result?: ScanOk | ScanFail;
+  scan?: (code: string) => Promise<ScanOk | ScanFail>;
+  failStart?: 'denied' | 'unavailable';
+} = {}) {
+  const root = document.createElement('main');
+  document.body.appendChild(root);
+  const navigate = vi.fn();
+  const scan = vi.fn(options.scan ?? (async () => options.result ?? KIOSK));
+  let scanner: FakeScanner | null = null;
+  const handle = createScanPage(root, {
+    i18n: createDefaultI18n('hr'),
+    hash: '',
+    navigate,
+    replaceUrl: vi.fn(),
+    now: () => NOW,
+    scan,
+    scannerSupported: true,
+    createScanner: (deps) => {
+      const element = document.createElement('div');
+      element.className = 'qr-scanner';
+      // The real viewfinder's Odustani, the button the page hands focus to.
+      element.innerHTML = '<button type="button" class="btn-ghost qr-scanner-cancel" data-qr-scan-cancel>Odustani</button>';
+      const fake: FakeScanner = {
+        deps,
+        started: 0,
+        destroyed: 0,
+        element,
+        start: async () => {
+          fake.started += 1;
+          // The real start() reports a failure through onError and then resolves.
+          if (options.failStart) deps.onError?.(options.failStart);
+        },
+        stop: () => {},
+        destroy: () => {
+          fake.destroyed += 1;
+          element.remove();
+        },
+      };
+      scanner = fake;
+      return fake;
+    },
+  });
+  const button = root.querySelector<HTMLButtonElement>('[data-testid=scan-camera]')!;
+  const region = root.querySelector<HTMLElement>('[data-testid=scan-camera-region]')!;
+  const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
+  const status = root.querySelector<HTMLElement>('[data-testid=scan-status]')!;
+  return { root, handle, button, region, input, status, scan, scanner: () => scanner!, navigate };
+}
+
 describe('createScanPage', () => {
   it('always offers the typed code, with the alphabet warning and no camera by default', () => {
     const { root } = mount();
@@ -126,8 +262,64 @@ describe('createScanPage', () => {
     expect(root.querySelector('[data-testid=code-input]')).not.toBeNull();
     expect(text(root.querySelector('#scan-hint'))).toBe('Osam znakova, npr. ABCD-EFGH. Slova I, L i O ne postoje: upiši 1 ili 0.');
     expect(root.querySelector('[data-testid=scan-camera]')).toBeNull();
+    expect(root.querySelector('.scan-or')).toBeNull();
     expect(root.querySelector('[data-testid=scan-error]')?.getAttribute('role')).toBe('alert');
     expect(root.querySelector('[data-testid=scan-status]')?.getAttribute('role')).toBe('status');
+  });
+
+  it('puts the field first: label, input, error line, hint, the primary check, "ili", the camera, then the intro last', () => {
+    const { root } = mountWithCamera();
+    const selectors = [
+      'h1',
+      '[data-testid=confirm-card]',
+      '[data-testid=scan-camera-region]',
+      '.scan-label',
+      '[data-testid=code-input]',
+      '.scan-error',
+      '#scan-hint',
+      '[data-testid=code-submit]',
+      '.scan-or',
+      '[data-testid=scan-camera]',
+      '[data-testid=scan-status]',
+      '.scan-intro',
+    ];
+    const nodes = selectors.map((selector) => root.querySelector(selector));
+    nodes.forEach((node, i) => expect(node, selectors[i]).not.toBeNull());
+    for (let i = 1; i < nodes.length; i += 1) {
+      expect(before(nodes[i - 1]!, nodes[i]!), `${selectors[i - 1]} must precede ${selectors[i]}`).toBe(true);
+    }
+    // The error line sits directly under the field, the intro closes the page.
+    expect(root.querySelector('.scan-error')!.previousElementSibling).toBe(root.querySelector('[data-testid=code-input]'));
+    expect(root.querySelector('.scan')!.lastElementChild).toBe(root.querySelector('.scan-intro'));
+    expect(text(root.querySelector('.scan-intro'))).toBe('Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.');
+    expect(text(root.querySelector('.scan-label'))).toBe('Kod sa zaslona');
+    expect(root.querySelector<HTMLLabelElement>('.scan-label')!.htmlFor).toBe('scan-code');
+  });
+
+  it('asks the keyboard for capitals, no suggestions and a Go key, and describes the field by its hint', () => {
+    const { input } = mount();
+    expect(input.getAttribute('type')).toBe('text');
+    expect(input.getAttribute('inputmode')).toBe('text');
+    expect(input.getAttribute('autocomplete')).toBe('off');
+    expect(input.getAttribute('autocapitalize')).toBe('characters');
+    expect(input.getAttribute('spellcheck')).toBe('false');
+    expect(input.getAttribute('enterkeyhint')).toBe('go');
+    expect(input.getAttribute('maxlength')).toBe('9');
+    expect(input.getAttribute('placeholder')).toBe('ABCD-EFGH');
+    expect(input.getAttribute('aria-describedby')).toBe('scan-hint');
+  });
+
+  it('takes focus on load only when no code came in the fragment', () => {
+    expect(mount().input.hasAttribute('autofocus')).toBe(true);
+    expect(mount({ hash: '#ABCD-EFGH' }).input.hasAttribute('autofocus')).toBe(false);
+  });
+
+  it('the check is the primary action and the camera a ghost of the same height', () => {
+    const { root } = mountWithCamera();
+    expect(root.querySelector('[data-testid=code-submit]')!.className).toBe('btn btn-primary');
+    expect(text(root.querySelector('[data-testid=code-submit]'))).toBe('Provjeri kod');
+    expect(root.querySelector('[data-testid=scan-camera]')!.classList.contains('btn-ghost')).toBe(true);
+    expect(text(root.querySelector('.scan-or'))).toBe('ili');
   });
 
   it('formats typing as ABCD-EFGH, maps I, L and O, and enables submit only when complete', () => {
@@ -149,10 +341,35 @@ describe('createScanPage', () => {
     expect(text(card.querySelector('.scan-confirm-title'))).toBe('Isti kod je na zaslonu?');
     expect(text(card.querySelector('[data-testid=confirm-code]'))).toBe('ABCD-EFGH');
     expect(card.querySelector('[data-testid=confirm-code]')?.getAttribute('aria-label')).toBe('A B C D, E F G H');
-    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Zaslon: kafić, Donji grad, 10 minuta');
-    expect(card.querySelector('[data-testid=unlock]')?.textContent).toBe('Otključaj');
+    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Kavana Velebit · Donji grad · 10 minuta');
+    expect(card.querySelector('[data-testid=confirm-stop]')).toBeNull();
+    expect(text(card.querySelector('.scan-confirm-hint'))).toBe('Provjeri da ovaj kod odgovara kodu na drugom uređaju. Otključavanje otvara pogled na oba uređaja.');
+    const unlock = card.querySelector<HTMLButtonElement>('[data-testid=unlock]')!;
+    expect(unlock.textContent).toBe('Otključaj');
+    expect(unlock.className).toBe('btn btn-primary');
+    const cancel = card.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!;
+    expect(text(cancel)).toBe('Odustani');
+    expect(cancel.className).toBe('btn-ghost');
+    expect(before(unlock, cancel)).toBe(true);
     expect(document.activeElement).toBe(card);
     expect(replaceUrl).toHaveBeenCalledWith('/s/');
+    // The card floats above the form, the field stays where it was.
+    expect(before(card, root.querySelector('form')!)).toBe(true);
+  });
+
+  it('adds the stop and its lines when the screen stands at one', async () => {
+    const { root } = mount({ hash: '#ABCD-EFGH', result: AT_STOP });
+    await flush();
+    const card = root.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
+    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Kavana Velebit · Donji grad · 10 minuta');
+    expect(text(card.querySelector('[data-testid=confirm-stop]'))).toBe('Stanica Trg bana J. Jelačića · linije 6, 11, 12, 13');
+    expect(before(card.querySelector('[data-testid=confirm-label]')!, card.querySelector('[data-testid=confirm-stop]')!)).toBe(true);
+  });
+
+  it('names a peer’s phone with its own five minutes (the pairing spec’s "5 minuta")', async () => {
+    const { root } = mount({ hash: '#ABCD-EFGH', result: PHONE });
+    await flush();
+    expect(text(root.querySelector('[data-testid=confirm-label]'))).toBe('Telefon druge osobe · 5 minuta');
   });
 
   it('Otključaj navigates to the dashboard once, however often it is pressed', async () => {
@@ -173,57 +390,72 @@ describe('createScanPage', () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it.each(ERRORS)('shows the Croatian sentence for %s and keeps the field usable', async (error, message) => {
-    const { root, input } = mount({ hash: '#ABCD-EFGH', result: { error, message: 'server text' } });
+  it.each(ERRORS)('shows the Croatian sentence for %s, drops the spent code from the address bar and keeps the field usable', async (error, message) => {
+    const { root, input, replaceUrl, errorBox } = mount({ hash: '#ABCD-EFGH', result: { error, message: 'server text' } });
     await flush();
     expect(text(root.querySelector('[role=alert]'))).toBe(message);
+    expect(errorBox.hidden).toBe(false);
+    // A pull-to-refresh after the failure must not resubmit: the fragment is empty.
+    expect(replaceUrl).toHaveBeenCalledWith('/s/');
     expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(false);
+    expect(input.hasAttribute('aria-busy')).toBe(false);
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('scan-hint scan-error');
     expect(document.activeElement).toBe(input);
     expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
   });
 
-  it('maps the client-side network failure to the network sentence', async () => {
-    const { root } = mount({ hash: '#ABCD-EFGH', result: { error: 'bad-request', message: 'network' } });
+  it('maps the client-side network failure to the network sentence, with no action', async () => {
+    const { root, errorBox } = mount({ hash: '#ABCD-EFGH', result: { error: 'bad-request', message: 'network' } });
     await flush();
     expect(text(root.querySelector('[role=alert]'))).toBe('Nema veze s poslužiteljem. Provjeri mrežu i pokušaj ponovno.');
+    expect(errorBox.querySelector('button, a')).toBeNull();
   });
 
   it('falls back to the server sentence for an error the catalog does not know', async () => {
     const unknown = { error: 'teapot', message: 'Nešto posve novo.' } as unknown as ScanFail;
-    const { root } = mount({ hash: '#ABCD-EFGH', result: unknown });
+    const { root, errorBox } = mount({ hash: '#ABCD-EFGH', result: unknown });
     await flush();
     expect(text(root.querySelector('[role=alert]'))).toBe('Nešto posve novo.');
+    expect(errorBox.querySelector('button, a')).toBeNull();
   });
 
-  it('refuses an incomplete typed code without touching the network', async () => {
-    const { root, scan, input, type, send } = mount();
+  it('refuses an incomplete typed code without touching the network or the address bar', async () => {
+    const { root, scan, input, replaceUrl, errorBox, type, send } = mount();
     type('ABC');
     send();
     await flush();
     expect(scan).not.toHaveBeenCalled();
+    expect(replaceUrl).not.toHaveBeenCalled();
     expect(text(root.querySelector('[role=alert]'))).toBe('Kod nije potpun. Upiši svih osam znakova.');
+    expect(errorBox.querySelector('button, a')).toBeNull();
     expect(document.activeElement).toBe(input);
   });
 
-  it('sends one request per submit and announces the wait while it is in flight', async () => {
+  it('keeps the keyboard during the check: the field is read-only and busy, never disabled; the check reads Provjera…', async () => {
     let release!: (value: ScanOk) => void;
     const pending = new Promise<ScanOk>((resolve) => {
       release = resolve;
     });
-    const { root, scan, input, type, send } = mount({ scan: () => pending });
+    const { root, scan, input, submitButton, type, send } = mount({ scan: () => pending });
     type('ABCD-EFGH');
     send();
     send();
     await flush();
     expect(scan).toHaveBeenCalledTimes(1);
     expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda…');
-    expect(input.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(true);
+    expect(input.getAttribute('aria-busy')).toBe('true');
+    expect(submitButton.disabled).toBe(true);
+    expect(text(submitButton)).toBe('Provjera…');
     release(KIOSK);
     await flush();
     expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('');
-    expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(false);
+    expect(input.hasAttribute('aria-busy')).toBe(false);
+    expect(text(submitButton)).toBe('Provjeri kod');
     expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(false);
   });
 
@@ -234,54 +466,90 @@ describe('createScanPage', () => {
   });
 });
 
-import type { QrScannerDeps, QrScannerHandle } from '../../app/src/ui/qrScanner';
-
-interface FakeScanner extends QrScannerHandle {
-  deps: QrScannerDeps;
-  started: number;
-  destroyed: number;
-}
-
-function mountWithCamera(options: { result?: ScanOk | ScanFail } = {}) {
-  const root = document.createElement('main');
-  document.body.appendChild(root);
-  const navigate = vi.fn();
-  const scan = vi.fn(async () => options.result ?? KIOSK);
-  let scanner: FakeScanner | null = null;
-  createScanPage(root, {
-    i18n: createDefaultI18n('hr'),
-    hash: '',
-    navigate,
-    replaceUrl: vi.fn(),
-    now: () => NOW,
-    scan,
-    scannerSupported: true,
-    createScanner: (deps) => {
-      const element = document.createElement('div');
-      element.className = 'qr-scanner';
-      const fake: FakeScanner = {
-        deps,
-        started: 0,
-        destroyed: 0,
-        element,
-        start: async () => {
-          fake.started += 1;
-        },
-        stop: () => {},
-        destroy: () => {
-          fake.destroyed += 1;
-          element.remove();
-        },
-      };
-      scanner = fake;
-      return fake;
-    },
+// After the sentence, one thing the person can do, chosen by the code: a fresh
+// code, the safety layer that needs none, or a minute's wait. Errors that
+// need nothing but the sentence get nothing else.
+describe('one recovery per error', () => {
+  it.each(['code-used', 'code-expired', 'code-unknown'] as const)('%s offers Upiši novi kod, which empties and focuses the field', async (error) => {
+    const { input, submitButton, errorBox } = mount({ hash: '#ABCD-EFGH', result: { error, message: '' } });
+    await flush();
+    const retype = errorBox.querySelector<HTMLButtonElement>('button[data-testid=scan-retype]')!;
+    expect(retype).not.toBeNull();
+    expect(text(retype)).toBe('Upiši novi kod');
+    expect(retype.classList.contains('btn-ghost')).toBe(true);
+    expect(errorBox.querySelector('a')).toBeNull();
+    expect(input.value).toBe('ABCD-EFGH');
+    input.blur();
+    retype.click();
+    expect(input.value).toBe('');
+    expect(submitButton.disabled).toBe(true);
+    expect(errorBox.hidden).toBe(true);
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(document.activeElement).toBe(input);
   });
-  const button = root.querySelector<HTMLButtonElement>('[data-testid=scan-camera]')!;
-  const region = root.querySelector<HTMLElement>('[data-testid=scan-camera-region]')!;
-  const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
-  return { root, button, region, input, scan, scanner: () => scanner!, navigate };
-}
+
+  it.each(['screen-offline', 'revoked'] as const)('%s points to Sigurnost, which needs no code', async (error) => {
+    const { errorBox } = mount({ hash: '#ABCD-EFGH', result: { error, message: '' } });
+    await flush();
+    const link = errorBox.querySelector<HTMLAnchorElement>('a[data-testid=scan-safety]')!;
+    expect(link).not.toBeNull();
+    expect(text(link)).toBe('Sigurnost bez skeniranja');
+    expect(link.getAttribute('href')).toBe('/hitno');
+    expect(link.classList.contains('btn-ghost')).toBe(true);
+    expect(errorBox.querySelector('button')).toBeNull();
+  });
+
+  it.each([
+    ['slow-down', 'Previše pokušaja. Pričekaj minutu.'],
+    ['rate-limited', 'Previše pokušaja s ove mreže. Pričekaj minutu.'],
+  ] as const)('%s counts a minute down in the status line and re-enables the check at zero', async (error, sentence) => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const { root, handle, scan, input, submitButton, status, errorBox, type, send } = mount({ result: { error, message: '' }, now: () => Date.now() });
+      type('ABCD-EFGH');
+      send();
+      await flush();
+      expect(text(root.querySelector('[role=alert]'))).toBe(sentence);
+      expect(errorBox.querySelector('button, a')).toBeNull();
+      expect(text(status)).toBe('Pokušaj ponovno za 01:00');
+      expect(submitButton.disabled).toBe(true);
+      expect(input.readOnly).toBe(false);
+      expect(document.activeElement).toBe(input);
+      vi.advanceTimersByTime(1000);
+      expect(text(status)).toBe('Pokušaj ponovno za 00:59');
+      // Neither typing nor submitting during the wait reaches the Worker.
+      type('ABCD-EFGH');
+      expect(submitButton.disabled).toBe(true);
+      send();
+      await flush();
+      expect(scan).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(58_000);
+      expect(text(status)).toBe('Pokušaj ponovno za 00:01');
+      expect(submitButton.disabled).toBe(true);
+      vi.advanceTimersByTime(1000);
+      expect(text(status)).toBe('');
+      expect(submitButton.disabled).toBe(false);
+      send();
+      await flush();
+      expect(scan).toHaveBeenCalledTimes(2);
+      // A second wait is cut short by destroy(): nothing ticks on a detached page.
+      expect(text(status)).toBe('Pokušaj ponovno za 01:00');
+      handle.destroy();
+      expect(text(status)).toBe('');
+      vi.advanceTimersByTime(60_000);
+      expect(root.querySelector('.scan')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['same-network', 'bad-request'] as const)('%s has nothing beyond the sentence', async (error) => {
+    const { status, errorBox } = mount({ hash: '#ABCD-EFGH', result: { error, message: '' } });
+    await flush();
+    expect(errorBox.querySelector('button, a')).toBeNull();
+    expect(text(status)).toBe('');
+  });
+});
 
 describe('camera region', () => {
   it('offers the camera only when the platform can decode, and starts it inside the region', () => {
@@ -297,6 +565,30 @@ describe('camera region', () => {
     expect(scanner().deps.strings.hint).toBe('Usmjeri kameru prema QR kodu na zaslonu.');
   });
 
+  it('opening the viewfinder brings it into view, hands focus to Odustani and says what the camera is doing', async () => {
+    const { root, button, region, status, scanner } = mountWithCamera();
+    const scroll = vi.fn();
+    region.scrollIntoView = scroll;
+    button.click();
+    expect(scroll).toHaveBeenCalledWith({ block: 'center' });
+    expect(before(region, root.querySelector('form')!)).toBe(true);
+    expect(text(status)).toBe('Kamera se uključuje…');
+    expect(document.activeElement).toBe(scanner().element.querySelector('[data-qr-scan-cancel]'));
+    await flush();
+    expect(text(status)).toBe('Kamera je uključena.');
+    scanner().deps.onCancel?.();
+    expect(text(status)).toBe('');
+  });
+
+  it('a camera that fails to start leaves no camera word in the status line', async () => {
+    const { root, button, status, input } = mountWithCamera({ failStart: 'denied' });
+    button.click();
+    await flush();
+    expect(text(status)).toBe('');
+    expect(text(root.querySelector('[role=alert]'))).toBe('Pristup kameri je odbijen. Upiši kod ručno.');
+    expect(document.activeElement).toBe(input);
+  });
+
   it('a decoded Vidikovac payload fills the field, closes the camera and submits', async () => {
     const { button, region, input, scan, scanner } = mountWithCamera();
     button.click();
@@ -309,13 +601,14 @@ describe('camera region', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('a foreign QR code is named as such instead of being posted', async () => {
+  it('a foreign QR code is named as such instead of being posted, with no action', async () => {
     const { root, button, scan, scanner } = mountWithCamera();
     button.click();
     scanner().deps.onResult('WIFI:S:kafic;T:WPA;P:tajna;;');
     await flush();
     expect(scan).not.toHaveBeenCalled();
     expect(text(root.querySelector('[role=alert]'))).toBe('To nije kod s našeg zaslona. Skeniraj QR kod sa zaslona ili upiši osam slova.');
+    expect(root.querySelector('.scan-error button, .scan-error a')).toBeNull();
   });
 
   it('a refused or missing camera closes the region and sends the person to the field', () => {
@@ -339,16 +632,69 @@ describe('camera region', () => {
     expect(region.hidden).toBe(true);
     expect(document.activeElement).toBe(button);
   });
+
+  it('the camera button rests while a code is being checked', async () => {
+    let release!: (value: ScanOk) => void;
+    const pending = new Promise<ScanOk>((resolve) => {
+      release = resolve;
+    });
+    const { root, button, input, handle } = mountWithCamera({ scan: () => pending });
+    input.value = 'ABCD-EFGH';
+    void handle.submit(input.value);
+    await flush();
+    expect(button.disabled).toBe(true);
+    release(KIOSK);
+    await flush();
+    expect(button.disabled).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(false);
+  });
 });
 
-// Reproduces the review finding on scan.css:39-47 vs base.css:43-47: a bare
-// `.scan-input` (specificity 0,1,0) loses every contested longhand to the
-// generic `input[type='text'], select` reset in base.css (0,1,1) — border,
-// min-height, font-family and font-size all silently fall back to the base
-// rule's values regardless of file/import order, since there is no @layer,
-// !important or :where() anywhere in the codebase. This computes real CSS
-// specificity (a, b, c) from the selector text so the check keeps holding
-// for whatever selector shape the fix takes, not just today's exact string.
+// The stylesheet composes the page in the signage roles: the h1 at display,
+// the confirm title at title, the hint at secondary, the intro at control; the
+// actions stack full width; the error box is the urgency tint at body size.
+describe('scan.css composes the page in the type roles', () => {
+  const CSS = stripComments(read('app', 'src', 'ui', 'scan.css'));
+
+  it('stacks the actions full width instead of a three-column row, both at the primary height', () => {
+    const actions = ruleBody(CSS, /^\.scan-actions\s*\{/m);
+    expect(actions).toMatch(/display:\s*grid/);
+    expect(actions).not.toMatch(/grid-template-columns/);
+    expect(CSS).not.toContain('.scan-actions--single');
+    expect(ruleBody(CSS, /^\.scan-actions \.btn-ghost\s*\{/m)).toMatch(/min-height:\s*var\(--target-primary\)/);
+  });
+
+  it('tints the error box with the urgency role at body size and hides it explicitly', () => {
+    const box = ruleBody(CSS, /^\.scan-error\s*\{/m);
+    expect(box).toMatch(/background:\s*var\(--tone-tint-urgency\)/);
+    expect(box).toMatch(/font-size:\s*var\(--type-body\)/);
+    expect(CSS).toMatch(/^\.scan-error\[hidden\]\s*\{\s*display:\s*none;?\s*\}/m);
+  });
+
+  it('sets the h1 at display, the confirm title at title, the code at 2rem mono, the hint at secondary and the intro at control', () => {
+    expect(ruleBody(CSS, /^\.scan-title\s*\{/m)).toMatch(/font-size:\s*var\(--type-display\)/);
+    expect(ruleBody(CSS, /^\.scan-confirm-title\s*\{/m)).toMatch(/font-size:\s*var\(--type-title\)/);
+    const code = ruleBody(CSS, /^\.scan-confirm-code\s*\{/m);
+    expect(code).toMatch(/font-size:\s*2rem/);
+    expect(code).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(ruleBody(CSS, /^\.scan-hint\s*\{/m)).toMatch(/font-size:\s*var\(--type-secondary\)/);
+    expect(ruleBody(CSS, /^\.scan-intro\s*\{/m)).toMatch(/font-size:\s*var\(--type-control\)/);
+  });
+
+  it('uses no viewport height units and no !important', () => {
+    expect(CSS).not.toMatch(/\d(vh|svh|dvh)\b/);
+    expect(CSS).not.toMatch(/!important/);
+  });
+});
+
+// Reproduces the review finding on scan.css vs base.css: a bare `.scan-input`
+// (specificity 0,1,0) loses every contested longhand to the generic
+// `input[type='text'], select` reset in base.css (0,1,1) — border, min-height,
+// font-family and font-size all silently fall back to the base rule's values
+// regardless of file/import order, since there is no @layer, !important or
+// :where() anywhere in the codebase. This computes real CSS specificity
+// (a, b, c) from the selector text so the check keeps holding for whatever
+// selector shape the fix takes, not just today's exact string.
 //
 // Fix round 2 reproduces a second-order finding on the round-1 fix itself:
 // raising `.scan-input` to `input[type='text'].scan-input` (0,2,1) made it
@@ -364,14 +710,8 @@ describe('camera region', () => {
 // base.css's `:focus-visible` rule declares — robust to whatever `.scan-input`
 // or the focus-visible rule declare next, not just today's property list.
 describe('scan-input CSS specificity (regression: base.css must not win)', () => {
-  const RAW_BASE_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'base.css'), 'utf8');
-  const RAW_SCAN_CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'scan.css'), 'utf8');
-  // Comment-stripped so a code comment's prose (this test's own included —
-  // it names the selectors it's checking for readability) can never be
-  // mistaken for the CSS it describes.
-  const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
-  const BASE_CSS = stripComments(RAW_BASE_CSS);
-  const SCAN_CSS = stripComments(RAW_SCAN_CSS);
+  const BASE_CSS = stripComments(read('app', 'src', 'ui', 'base.css'));
+  const SCAN_CSS = stripComments(read('app', 'src', 'ui', 'scan.css'));
 
   /** CSS specificity of one simple (combinator-free) selector, as (id, class-like, type-like). */
   function specificity(selector: string): [number, number, number] {
@@ -428,14 +768,6 @@ describe('scan-input CSS specificity (regression: base.css must not win)', () =>
     return "input[type='text']";
   }
 
-  /** The `{ ... }` body immediately following the given rule's selector line. */
-  function ruleBody(css: string, selectorLine: RegExp): string {
-    const m = selectorLine.exec(css);
-    if (!m) throw new Error(`no rule found for ${selectorLine}`);
-    const start = m.index;
-    return css.slice(start, css.indexOf('}', start) + 1);
-  }
-
   it('neither the .scan-input rule nor the base input reset is wrapped in @layer, !important or :where() — specificity math alone decides the winner', () => {
     // Scoped to the two contending rules, not the whole file: base.css does
     // use !important elsewhere (e.g. .visually-hidden), which is unrelated
@@ -461,18 +793,18 @@ describe('scan-input CSS specificity (regression: base.css must not win)', () =>
     const scanSel = scanInputSelector();
     const scanSpec = specificity(scanSel);
     const baseSpec = specificity(baseInputSelector());
-    // scan.css is imported after base.css (app/src/entries/scan.ts), so an
-    // exact tie would still win on source order — but only a strictly higher
-    // specificity is robust to that import order ever changing.
+    // scan.css is linked after base.css (app/s/index.html), so an exact tie
+    // would still win on source order — but only a strictly higher
+    // specificity is robust to that link order ever changing.
     expect(cmp(scanSpec, baseSpec), `.scan-input selector "${scanSel}" must out-specify "input[type='text']"`).toBeGreaterThan(0);
   });
 
-  it('the contested longhands are set directly on the .scan-input rule, not left to the generic reset', () => {
+  it('the contested longhands are set directly on the .scan-input rule, not left to the generic reset: a 56 px field with 28 px mono type', () => {
     const start = SCAN_CSS.indexOf(scanInputSelector());
     const body = SCAN_CSS.slice(start, SCAN_CSS.indexOf('}', start) + 1);
     expect(body).toMatch(/border-width:\s*2px/);
     expect(body).toMatch(/border-style:\s*solid/);
-    expect(body).toMatch(/min-height:\s*3\.25rem/);
+    expect(body).toMatch(/min-height:\s*3\.5rem/);
     expect(body).toMatch(/font-family:\s*var\(--font-mono\)/);
     expect(body).toMatch(/font-size:\s*1\.75rem/);
   });

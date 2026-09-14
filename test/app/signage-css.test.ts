@@ -130,13 +130,19 @@ describe('the skeleton shimmers only where motion reports a fact', () => {
 });
 
 describe('every page that shows a badge loads the sheet', () => {
-  it.each(['dashboard.ts', 'kiosk.ts', 'scan.ts', 'landing.ts'])('%s imports it statically', (name) => {
+  it.each(['dashboard.ts', 'kiosk.ts', 'landing.ts'])('%s imports it statically', (name) => {
     expect(entry(name)).toContain("import '../ui/signage.css';");
   });
   it('loads it directly after base.css, so the retargeted badge rules win at equal specificity', () => {
-    for (const name of ['dashboard.ts', 'kiosk.ts', 'scan.ts']) {
+    for (const name of ['dashboard.ts', 'kiosk.ts']) {
       expect(entry(name), name).toContain("import '../ui/base.css';\nimport '../ui/signage.css';");
     }
+  });
+  // /s/ is styled from the first paint (T4.3): its sheets are <link>s in
+  // <head>, in the same order, so the entry imports none of them.
+  it('/s/ links it from <head> directly after base.css', () => {
+    const html = readFileSync(join(import.meta.dirname, '..', '..', 'app', 's', 'index.html'), 'utf8');
+    expect(html).toContain('<link rel="stylesheet" href="/src/ui/base.css">\n<link rel="stylesheet" href="/src/ui/signage.css">');
   });
 });
 

@@ -1,7 +1,8 @@
-/* /s/ — one column, thumb-reachable, the code the largest thing on the page.
-   Layer-2 tokens only; .btn, .btn-ghost, .card and the input reset come from
-   base.css. Each [hidden] rule is explicit because a class with `display`
-   would otherwise beat the user agent's [hidden] rule. */
+/* /s/: one column, the field first, the code the largest thing on the page.
+   Linked from <head> after tokens.css, base.css and signage.css, so the page is
+   styled from the first paint; .btn, .btn-ghost, .btn-primary, .card and the
+   input reset come from base.css. Each [hidden] rule is explicit because a
+   class with `display` would otherwise beat the user agent's [hidden] rule. */
 .scan-head {
   display: flex;
   align-items: center;
@@ -20,27 +21,17 @@
   margin: 0 auto;
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
 }
-.scan { display: grid; gap: var(--sp-4); min-inline-size: 0; }
+.scan { display: grid; gap: var(--sp-5); min-inline-size: 0; }
 .scan > *, .scan-form > * { min-inline-size: 0; }
-.scan-title { font-size: 2rem; }
-.scan-intro { color: var(--tone-text-muted); }
-
-.scan-error {
-  margin: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--tone-state-danger);
-  border-radius: var(--r-md);
-  background: var(--tone-surface-2);
-  color: var(--tone-text-primary);
-}
-.scan-error[hidden] { display: none; }
+.scan-title { font-size: var(--type-display); line-height: var(--lh-title); }
+.scan-intro { color: var(--tone-text-muted); font-size: var(--type-control); line-height: var(--lh-body); }
 
 .scan-form { display: grid; gap: var(--sp-2); }
-.scan-label { font-weight: var(--weight-medium); }
+.scan-label { font-size: var(--type-body); font-weight: var(--weight-medium); }
 /* input[type='text'].scan-input, not bare .scan-input: base.css's generic
    `input[type='text'], select` reset is (0,1,1) and would otherwise beat a
    single-class selector's (0,1,0) on every contested longhand (border-width,
-   min-height, font-family, font-size) regardless of import order — there is
+   min-height, font-family, font-size) regardless of link order — there is
    no @layer/!important/:where() in this codebase to arbitrate it instead.
    `input[type='text'].scan-input` is (0,2,1), which wins unconditionally.
 
@@ -48,8 +39,8 @@
    border-color: base.css's own `input[type='text']:focus-visible` rule is
    ALSO (0,2,1) (an attribute selector plus a pseudo-class weighs the same as
    an attribute selector plus a class), an exact tie that this stylesheet,
-   loading after base.css on every built page, would win. A border-color
-   declared here would therefore silently beat the focus-visible rule's
+   linked after base.css, would win. A border-color declared here would
+   therefore silently beat the focus-visible rule's
    `border-color: var(--tone-focus-ring)` on every keyboard focus, leaving the
    border-glow the only visible focus cue. Leaving border-color unset means
    this rule never contests that property at all, so base.css's own two rules
@@ -59,61 +50,87 @@
 input[type='text'].scan-input {
   width: 100%;
   min-inline-size: 0;
-  min-height: 3.25rem;
+  min-height: 3.5rem;
   border-width: 2px;
   border-style: solid;
   background: var(--tone-surface-1);
   font-family: var(--font-mono);
   font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.scan-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
+.scan-hint { color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
 
-/* Submit and camera share one row, an "ili" hairline strip between them; with
-   no camera (platform can't decode) the row collapses to the one control. */
+/* The error: the sentence in the urgency tint directly under the field, then
+   the one thing the person can do about it. The sentence alone is the alert;
+   the action is a 44 px ghost beneath it, reached by the next Tab. */
+.scan-error {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--tone-tint-urgency);
+  color: var(--tone-text-primary);
+  font-size: var(--type-body);
+  line-height: var(--lh-body);
+}
+.scan-error[hidden] { display: none; }
+.scan-error-text { margin: 0; }
+.scan-error-action { justify-self: start; }
+
+/* The actions stack full width: the check first as the 48 px primary, "ili"
+   as a hairline strip, the camera as a ghost of the same height. With no
+   camera (the platform cannot decode) the stack is the one control. */
 .scan-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: stretch;
   gap: var(--sp-3);
   margin-top: var(--sp-2);
 }
-.scan-actions--single { grid-template-columns: minmax(0, 1fr); }
+.scan-actions .btn-ghost { min-height: var(--target-primary); font-size: var(--text-body); }
 .scan-actions .btn-ghost span { white-space: normal; }
-.scan-actions .btn, .scan-actions .btn-ghost { min-height: 3.25rem; }
 .scan-or {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  color: var(--tone-text-subtle);
-  font-size: var(--text-sm);
+  gap: var(--sp-3);
+  color: var(--tone-text-muted);
+  font-size: var(--type-secondary);
 }
 .scan-or::before, .scan-or::after {
   content: '';
-  width: 1.5rem;
+  flex: 1;
   height: 1px;
   background: var(--tone-stroke);
 }
-.scan-status { min-height: 1.5rem; color: var(--tone-text-muted); font-size: var(--text-sm); }
+.scan-status {
+  min-height: 1.5rem;
+  color: var(--tone-text-muted);
+  font-size: var(--type-control);
+  font-variant-numeric: tabular-nums;
+}
 
-.scan-camera { border-radius: var(--r-lg); overflow: hidden; }
+.scan-camera { display: grid; }
 .scan-camera[hidden] { display: none; }
 
+/* The confirm card is a ticket, one of the few objects on a surface, so the
+   plate (base.css .card) is allowed. The code is the largest thing on it. */
 .scan-confirm { display: grid; gap: var(--sp-3); }
 .scan-confirm[hidden] { display: none; }
 .scan-confirm:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 3px; }
-.scan-confirm-title { font-size: var(--text-lg); }
+.scan-confirm-title { font-size: var(--type-title); line-height: var(--lh-title); }
 .scan-confirm-code {
   font-family: var(--font-mono);
-  font-size: var(--text-3xl);
-  letter-spacing: 0.22em;
+  font-size: 2rem;
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.18em;
+  line-height: var(--lh-tight);
   color: var(--tone-text-primary);
 }
-.scan-confirm-label { font-weight: var(--weight-medium); }
-.scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--text-sm); }
-.scan-confirm-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
-.scan-confirm-actions .btn, .scan-confirm-actions .btn-ghost { flex: 1 1 12rem; }
+.scan-confirm-label { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
+.scan-confirm-stop { color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
+.scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
+.scan-confirm-actions { display: grid; gap: var(--sp-2); margin-top: var(--sp-1); }
 
 .scan-foot {
   display: flex;
