@@ -21,7 +21,7 @@
 /* p.scan-brand a, not .scan-brand a: base.css's `a:hover` is also (0,1,1) and
    sets color, so a tie would hand the wordmark the link colour on hover
    whenever base.css follows this sheet. (0,1,2) keeps `inherit` in either order. */
-p.scan-brand a { color: inherit; text-decoration: none; }
+p.scan-brand a { display: inline-flex; align-items: center; min-block-size: var(--target); color: inherit; text-decoration: none; }
 .scan-tools { display: flex; gap: var(--sp-2); align-items: center; }
 
 .scan-page {

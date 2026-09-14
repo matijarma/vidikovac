@@ -132,7 +132,7 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
 .banner-notice[data-kind='joined'] { background: var(--tone-tint-success); }
 .banner-notice[data-kind='expiring60'], .banner-notice[data-kind='refusal'] { background: var(--tone-tint-weather); }
 .banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
-.banner-dismiss { margin-inline-start: auto; }
+.banner-dismiss { margin-inline-start: auto; flex: none; min-inline-size: var(--target); }
 
 /* Desktop: one rail pinned to the viewport and a viewport tall, so a long
    workspace scrolls under it while the wordmark, the seven domains and the

@@ -84,7 +84,7 @@
 .t-map-canvas .maplibregl-ctrl-group button + button { border-top-color: var(--tone-stroke); }
 .t-map-canvas .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: var(--t-ctrl-filter, none); }
 :root[data-theme-resolved='dark'] .t-map-canvas { --t-ctrl-filter: invert(1) hue-rotate(180deg); }
-.t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: var(--text-meta); }
+.t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: var(--type-secondary); }
 /* MapLibre's zoom control starts under the chip row, its right edge on the tools' edge. */
 .t-map-canvas .maplibregl-ctrl-top-right { margin-block-start: calc(var(--target) + var(--sp-3)); }
 .t-map-canvas .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px var(--sp-2) 0 0; }

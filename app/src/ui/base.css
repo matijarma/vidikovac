@@ -24,8 +24,10 @@ a { color: var(--tone-text-brand); text-underline-offset: 0.15em; text-decoratio
   position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.skip-link { position: absolute; inset-block-start: -3rem; inset-inline-start: 0.5rem; padding: 0.5rem 0.75rem; border-radius: var(--r-sm); background: var(--tone-surface-1); color: var(--tone-text-primary); box-shadow: var(--tone-shadow-md); z-index: 60; }
+.skip-link { position: absolute; inset-block-start: -3rem; inset-inline-start: 0.5rem; display: inline-flex; align-items: center; min-block-size: var(--target); padding: 0.5rem 0.75rem; border-radius: var(--r-sm); background: var(--tone-surface-1); color: var(--tone-text-primary); box-shadow: var(--tone-shadow-md); z-index: 60; }
 .skip-link:focus { inset-block-start: 0.5rem; }
+/* The map's credit links are attribution: inline text, so height is the target dimension (the gate measures them by height). */
+.maplibregl-ctrl-attrib a { display: inline-block; min-block-size: var(--target); line-height: var(--target); }
 .tabular, time { font-variant-numeric: tabular-nums; }
 
 /* Controls: 44 px targets, 14 px labels; the primary action is 48 px. */

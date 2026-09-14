@@ -34,7 +34,8 @@ describe('the thresholds the plan fixes', () => {
   });
 
   it('exempts exactly the attribution lines from the type floor', () => {
-    expect(TYPE_FLOOR_EXEMPT.split(',').map((s) => s.trim()).sort()).toEqual(['.maplibregl-ctrl-attrib', '.panel-attr', '.provenance', '.source-line']);
+    // .src is /hitno's attribution footer; the map credit is attribution too.
+    expect(TYPE_FLOOR_EXEMPT.split(',').map((s) => s.trim()).sort()).toEqual(['.maplibregl-ctrl-attrib', '.panel-attr', '.provenance', '.source-line', '.src']);
     expect(PHONE_TYPE_FLOOR).toEqual({ floorPx: TYPE_FLOOR_PX, exempt: TYPE_FLOOR_EXEMPT });
   });
 
@@ -44,10 +45,10 @@ describe('the thresholds the plan fixes', () => {
   });
 
   it('measures a source-line link by height (inline text, plan: Spacing) and every other control in both dimensions', () => {
-    expect(SOURCE_LINK_TARGETS).toEqual({ selector: '.provenance a, .source a', minPx: TARGET_MIN_PX, axes: 'height' });
+    expect(SOURCE_LINK_TARGETS).toEqual({ selector: '.provenance a, .source a, .maplibregl-ctrl-attrib a', minPx: TARGET_MIN_PX, axes: 'height' });
     expect(CONTROL_TARGETS.axes).toBe('both');
     expect(CONTROL_TARGETS.minPx).toBe(TARGET_MIN_PX);
-    expect(CONTROL_TARGETS.selector).toContain(':not(.provenance a, .source a)');
+    expect(CONTROL_TARGETS.selector).toContain(':not(.provenance a, .source a, .maplibregl-ctrl-attrib a)');
     for (const control of ['button', 'summary', '[role=button]', '[role=tab]']) expect(CONTROL_TARGETS.selector).toContain(control);
   });
 });

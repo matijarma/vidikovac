@@ -122,7 +122,7 @@ ul.items p{margin:.35rem 0 0}
 .empty{margin:.25rem 0;color:var(--muted)}
 .src{margin-top:.75rem;padding-top:.5rem;border-top:1px solid var(--stroke);color:var(--muted);font-size:.75rem;line-height:1.5}
 .src p{margin:0;max-width:none}
-.meta a,.src a,.stamp a,.empty a{display:inline-block;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem}
+.meta a,.src a,.stamp a,.empty a{display:inline-block;min-width:2.75rem;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem;text-align:center}
 .numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(9rem,45%),1fr));gap:.75rem;list-style:none;margin:0;padding:0}
 .numbers li{display:grid}
 .numbers li:first-child{grid-column:span 2}

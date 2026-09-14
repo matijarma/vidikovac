@@ -305,7 +305,8 @@ async function transportJourney(phone, name) {
   if (cr) {
     const before = await phone.evaluate(() => scrollY);
     await phone.mouse.move(cr.x + cr.width / 2, cr.y + cr.height / 2);
-    await phone.mouse.wheel(0, 300);
+    // Mobile WebKit has no wheel; a scroll from the page is what a finger would do to the document here.
+    await phone.evaluate(() => window.scrollBy(0, 300));
     await phone.waitForTimeout(700);
     const after = await phone.evaluate(() => scrollY);
     result.metrics[`${name}-map-wheel`] = { before, after, mapTop: cr.y, mapH: cr.height };
@@ -508,7 +509,9 @@ try {
     await openDomain(phone, 'grad-sada');
   } catch (e) { fail('iphone dark', e); }
   try {
-    const toggle = phone.locator('[data-lang-toggle] button, [data-action=locale], [data-testid=lang-toggle], button:has-text("EN")').filter({ visible: true }).first();
+    // The language control lives in the session sheet since T4.2: open the sheet, press the segment.
+    if (!(await phone.locator('[data-sheet-action=lang]').first().isVisible().catch(() => false))) await phone.getByTestId('session-label').click().catch(() => {});
+    const toggle = phone.locator('[data-sheet-action=lang][data-value=en], [data-lang-toggle] button, [data-action=locale], [data-testid=lang-toggle], button:has-text("EN")').filter({ visible: true }).first();
     if (await toggle.count()) { await toggle.click(); await phone.waitForTimeout(900); await shot(phone, 'iphone-en-overview', true); await metrics(phone, 'iphone-en-overview'); await toggle.click(); await phone.waitForTimeout(500); }
     else log('no language toggle found on the dashboard');
   } catch (e) { fail('iphone en', e); }

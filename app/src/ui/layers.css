@@ -350,7 +350,7 @@
 .dir-item[data-layer='uprava-i-pravo'] .dir-icon { color: var(--tone-action-brand); }
 .dir-item[data-layer='vijesti'] .dir-icon { color: var(--tone-text-primary); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
-.dir-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
+.dir-pages a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--target); min-inline-size: var(--target); }
 /* Events: the search and one chip row first, a count line under them, then a
    dated agenda on the canvas. The blocks are flat sections a hairline apart
    (`.ev-sec` follows `.sec` at equal specificity, so it wins on screen while

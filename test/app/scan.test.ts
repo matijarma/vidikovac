@@ -897,3 +897,11 @@ describe('scan-input CSS specificity (regression: base.css must not win)', () =>
     expect(cmp(specificity(foot), specificity('.btn-ghost:hover')), `"${foot}" must out-specify ".btn-ghost:hover"`).toBeGreaterThan(0);
   });
 });
+
+describe('the brand link on /s/ is a 44 px target', () => {
+  it('p.scan-brand a is an inline-flex box at least --target tall (the production audit measured it at 22 px)', () => {
+    const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'scan.css'), 'utf8');
+    expect(css).toContain('p.scan-brand a { display: inline-flex; align-items: center; min-block-size: var(--target);');
+  });
+});
+

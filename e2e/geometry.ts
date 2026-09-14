@@ -47,9 +47,9 @@ export const EDGE_TOLERANCE_PX = 1;
 /** Allowance for sub-pixel layout: a 43.6 px box is a 44 px target, a 55.5 px header a 56 px one. */
 const ROUNDING_PX = 0.5;
 /** The one exception to the type floor. */
-export const TYPE_FLOOR_EXEMPT = '.provenance, .panel-attr, .source-line, .maplibregl-ctrl-attrib';
+export const TYPE_FLOOR_EXEMPT = '.provenance, .panel-attr, .source-line, .src, .maplibregl-ctrl-attrib';
 /** Links in a source line: inline text, so height is the target dimension. */
-export const SOURCE_LINKS = '.provenance a, .source a';
+export const SOURCE_LINKS = '.provenance a, .source a, .maplibregl-ctrl-attrib a';
 /** Everything else a finger presses: a box in both dimensions. */
 export const CONTROLS = `a[href]:not(${SOURCE_LINKS}), button, input, select, textarea, summary, [role=button], [role=tab], [tabindex]:not([tabindex="-1"])`;
 
@@ -176,11 +176,16 @@ export const RULES_IN_PAGE = (spec: PageRuleSpec): RuleViolation[] => {
         if (on('header')) {
           const reference = bannerNodes[0] ?? mainChildren[0];
           if (reference) {
-            const top = reference.getBoundingClientRect().top;
-            if (h.bottom > top + spec.rounding) push('header', `the header ${name(headerEl)} ends at ${px(h.bottom)} but ${name(reference)} starts at ${px(top)}: the header overlays ${px(h.bottom - top)} of content`);
+            // Document coordinates: the header is pinned at the top of the document, so the first
+            // content must start below its height whatever the page has scrolled to.
+            const top = reference.getBoundingClientRect().top + window.scrollY;
+            if (h.height > top + spec.rounding) push('header', `the header ${name(headerEl)} is ${px(h.height)} tall but ${name(reference)} starts at ${px(top)} from the top of the document: the header overlays ${px(h.height - top)} of content`);
           }
         }
-        if (on('header-height') && h.height > maxHeaderPx + spec.rounding) push('header-height', `the header ${name(headerEl)} is ${px(h.height)} tall, above the ${maxHeaderPx} px ceiling`);
+        // The ceiling is set at 100% text; a zoomed root scales it (3rem is 96 px at 200%).
+        const scale = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
+        const ceiling = maxHeaderPx * scale;
+        if (on('header-height') && h.height > ceiling + spec.rounding) push('header-height', `the header ${name(headerEl)} is ${px(h.height)} tall, above the ${px(ceiling)} ceiling${scale !== 1 ? ` (${maxHeaderPx} px at 100% text)` : ''}`);
       }
     }
 

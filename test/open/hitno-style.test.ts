@@ -88,7 +88,8 @@ describe('the generated /hitno and /open/ style', () => {
     expect(HITNO_STYLE).toMatch(/\.numbers\{[^}]*grid-template-columns:repeat\(auto-fit,minmax\(min\(9rem,45%\),1fr\)\)/);
     expect(HITNO_STYLE).toContain('.numbers li:first-child{grid-column:span 2}');
     expect(HITNO_STYLE).toMatch(/\.numbers span\{[^}]*font-size:\.875rem/);
-    expect(HITNO_STYLE).toContain('.meta a,.src a,.stamp a,.empty a{display:inline-block;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem}');
+    // 44 px tall through the padding and at least 44 px wide, so a short word like "karta" is a whole target.
+    expect(HITNO_STYLE).toContain('.meta a,.src a,.stamp a,.empty a{display:inline-block;min-width:2.75rem;padding:.75rem .25rem;margin:0 -.25rem;line-height:1.25rem;text-align:center}');
     expect(HITNO_STYLE).toContain('.brand .mark{color:var(--accent)}');
   });
 
