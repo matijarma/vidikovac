@@ -10,7 +10,7 @@ import { zagrebTime } from './format';
 import { parseSelection, publicItemKey, selectionParams, type PublicSelection, type ScreenContext } from './core/contracts';
 import { createFeedStore } from './core/feed-store';
 import { createViewStore } from './core/view-store';
-import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
+import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, snapshotLine, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
 import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { storeLocale } from './i18n/create-default-i18n';
@@ -25,7 +25,7 @@ import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { createDialog, type DialogHandle } from './ui/dialog';
-import { createElementFromHTML, escapeAttribute } from './ui/dom/escape';
+import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
@@ -140,6 +140,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const surface = (): ScreenContext['surface'] => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
 
   let frozen = false;
+  /** The moment freeze() ran: every workspace and time line is dated with it. */
+  let frozenAt: number | undefined;
   let paused = false;
   let countdownHidden = false;
   let directory = false;
@@ -269,6 +271,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
+      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
     };
   }
 
@@ -287,12 +290,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
     element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
     const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
+    // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
+    // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
+    const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
     if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
+      if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
       reconcile(main, wrapper);
     } else {
-      main.replaceChildren(next);
+      main.replaceChildren(...(dated ? [dated] : []), next);
     }
     // Motion that reports a fact: a genuine workspace switch (never a poll that
     // redraws the same place) fades `next` in -- it is the live node exactly
@@ -546,6 +553,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function freeze(): void {
     if (frozen) return;
     frozen = true;
+    // The session's clock, not the phone's: the natural end lands on the very minute the pill promised.
+    frozenAt = session.serverNow();
     closeShare();
     sheet.close();
     schematic.pause();
@@ -557,6 +566,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     notice = null;
     assertive.textContent = '';
     paintShell();
+    // The workspace is painted once more so it carries its date; after this only a locale or
+    // theme change repaints it (the store's subscriber stands down while frozen).
+    render();
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {
@@ -565,7 +577,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     const time = zagrebTime(snapshot.expiresAt ?? now());
     polite.textContent = i18n.t('session.unlockedAnnounce', { time });
-    setNotice('joined', deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time }), 4_000);
+    // A peer session is five minutes from a person beside you, said in its own words; a screen's names the screen.
+    const joinedText = snapshot.role === 'phone'
+      ? i18n.t('session.joinedPeer', { time })
+      : deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time });
+    setNotice('joined', joinedText, 4_000);
     render();
     if (!joinedOnce) { joinedOnce = true; titleEl.focus(); }
     continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
@@ -577,7 +593,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen || disposed) return;
     if (session.snapshot().phase === 'connecting') { reconnecting = true; paintShell(); }
   });
-  session.onError((code) => {
+  session.onError((code, reason) => {
     if (code === 'share-not-allowed' || code === 'share-unavailable') {
       if (code === 'share-not-allowed') shareDenied = true;
       const text = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
@@ -586,6 +602,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       return;
     }
     if (code === 'no-ticket') {
+      // A room closed under a live session (the screen switched off) ends this session too: the
+      // view freezes behind the revoked card. A spent ticket only needs a fresh scan.
+      if (reason === 'revoked') { error = 'revoked'; freeze(); return; }
       error = 'no-ticket';
       reconnecting = false;
       store.pause(true);

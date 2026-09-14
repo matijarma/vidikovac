@@ -23,14 +23,14 @@ function fakeSession(now: () => number = () => NOW) {
   const listeners = {
     joined: [] as ((s: SessionSnapshot) => void)[], expiring: [] as ((n: number) => void)[], expired: [] as (() => void)[],
     count: [] as ((n: number) => void)[], codes: [] as ((batch: unknown[], serverNow: number) => void)[],
-    error: [] as ((code: string) => void)[], close: [] as ((code: number) => void)[],
+    error: [] as ((code: string, reason?: 'revoked' | 'no-ticket') => void)[], close: [] as ((code: number) => void)[],
   };
   let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
   let runOut = false;
   const sent: { layer: LayerId; params?: Record<string, string> }[] = [];
   const events: { name: string; dim?: string }[] = [];
   const client: SessionClient = {
-    connect: vi.fn(), snapshot: () => snapshot, serverNow: () => NOW,
+    connect: vi.fn(), snapshot: () => snapshot, serverNow: () => now(),
     secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? now()) - now()) / 1000))),
     onJoined: (l) => { listeners.joined.push(l); return () => {}; },
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
@@ -54,7 +54,7 @@ function fakeSession(now: () => number = () => NOW) {
     drop() { snapshot = { ...snapshot, phase: 'connecting' }; listeners.close.forEach((l) => l(1006)); },
     runOut() { runOut = true; },
     codes: (batch: unknown[], serverNow: number) => listeners.codes.forEach((l) => l(batch, serverNow)),
-    error: (code: string) => listeners.error.forEach((l) => l(code)),
+    error: (code: string, reason?: 'revoked' | 'no-ticket') => listeners.error.forEach((l) => l(code, reason)),
   };
 }
 const attr = (module: string) => ({ text: `Izvor: ${module}`, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
@@ -153,14 +153,14 @@ describe('shell and navigation', () => {
     expect(root.querySelector('.ki-side-link[data-layer=kultura]')?.getAttribute('aria-current')).toBe('page');
   });
   it('Još opens the labelled directory of the four extra domains and names the open one on its tab', () => {
-    const { root } = mount();
+    const { root, session } = mount();
+    session.join();
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
     expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'vijesti']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
-    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano');
-    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
     expect(document.querySelector('[data-testid=session-sheet]')).not.toBeNull();
     click(root, '[data-testid=dir-zrak-i-nebo]');
@@ -597,9 +597,13 @@ describe('the sticky header and notices in flow', () => {
     time.set(NOW + 4_000);
     tick();
     expect(notice(root)).toBeNull();
+    // A peer session is five minutes from a person, not ten from a screen: the notice says so
+    // in its own words, while the polite announcement and the pill keep the plain expiry.
     const peer = mount({ deps: { label: null } });
     peer.session.join('phone');
-    expect(noticeText(peer.root, 'joined')).toBe('Otključano do 14:42');
+    expect(noticeText(peer.root, 'joined')).toBe('Pet minuta od osobe pokraj tebe · do 14:42');
+    expect(text(peer.root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
+    expect(peer.root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
   });
   it('shows the 60 s and 20 s warnings in flow with the approved sentences, then clears the notice and the alert on the freeze', () => {
     const time = clock();
@@ -721,6 +725,93 @@ describe('the sticky header and notices in flow', () => {
     } finally {
       win.scrollTo = original;
     }
+  });
+
+  // T4.1: the session's moments. The freeze is a designed closing card, the only banner left;
+  // a room closed under a live session gets its own card; every frozen workspace is dated.
+  it('the freeze leaves one closing card as the only banner: the approved sentence as its title, the hint, and a primary way to a new session', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    time.set(EXPIRES - 20_000);
+    tick();
+    expect(notice(root, 'expiring20')).not.toBeNull();
+    time.set(EXPIRES);
+    tick();
+    const banners = root.querySelector<HTMLElement>('[data-testid=banners]')!;
+    expect(banners.children).toHaveLength(1);
+    const card = banners.firstElementChild as HTMLElement;
+    expect(card.dataset.testid).toBe('frozen-line');
+    expect(card.dataset.key).toBe('frozen');
+    expect(card.getAttribute('role')).toBe('alert');
+    expect(card.classList.contains('closing')).toBe(true);
+    expect(text(card.querySelector('.closing-title'))).toBe(hr.session.expired);
+    expect(text(card.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    const cta = card.querySelector<HTMLAnchorElement>('a.btn-primary[href="/s/"]')!;
+    expect(text(cta)).toBe(hr.session.expiredCta);
+    expect(cta.querySelector('svg use')?.getAttribute('href')).toBe('#icon-qr-code');
+  });
+  it('after the freeze the workspace opens with the snapshot line "podaci od {time}", before the layer, once, and re-said in the other language', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    time.set(EXPIRES);
+    tick();
+    const main = root.querySelector<HTMLElement>('[data-testid=dash-view]')!;
+    const line = main.firstElementChild as HTMLElement;
+    expect(line.classList.contains('ki-snapshot')).toBe(true);
+    expect(text(line)).toBe('podaci od 14:42');
+    expect(line.nextElementSibling?.id).toBe('layer-grad-sada');
+    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+    click(root, '[data-testid=session-label]');
+    click(document, '[data-testid=session-sheet] [data-sheet-action=lang][data-value=en]');
+    expect(text(main.querySelector('.ki-snapshot'))).toBe('data from 14:42');
+    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+  });
+  it('a room closed under a live session is told apart from a spent ticket: the view freezes behind the revoked card with its own way out', async () => {
+    const { root, session, fetchData, tick } = mount();
+    session.join();
+    await flush();
+    fetchData.mockClear();
+    session.error('no-ticket', 'revoked');
+    const card = root.querySelector<HTMLElement>('[data-testid=frozen-line]');
+    expect(card).not.toBeNull();
+    expect(text(card!.querySelector('.closing-title'))).toBe(hr.session.revoked);
+    expect(text(card!.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    expect(text(card!.querySelector('a.btn-primary[href="/s/"]'))).toBe(hr.session.revokedCta);
+    expect(root.querySelector('[data-key=no-ticket]')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:32');
+    tick();
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    // A spent ticket is not a closed room: its warning banner stays and nothing freezes.
+    const spent = mount();
+    spent.session.join();
+    spent.session.error('no-ticket', 'no-ticket');
+    expect(spent.root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(spent.root.querySelector('[data-key=no-ticket]')).not.toBeNull();
+    expect(spent.root.querySelector('.ki-snapshot')).toBeNull();
+  });
+  it('the visible reconnecting banner says the countdown goes on, while the pill sentence for readers keeps the disconnected line', () => {
+    const { root, session } = mount();
+    session.join();
+    session.drop();
+    expect(text(root.querySelector('[data-testid=reconnecting] .banner-text'))).toBe('Veza se obnavlja. Odbrojavanje ide dalje.');
+    expect(text(root.querySelector('[data-testid=session-label] .ki-session-sentence'))).toBe(hr.session.disconnected);
+  });
+  it('the directory session row tells the truth: connecting before the join, the expiry while unlocked, the end once frozen, dated like every workspace', () => {
+    const { root, session } = mount();
+    click(root, '[data-testid=tab-more]');
+    const title = (): string => text(root.querySelector('[data-testid=dir-session] .row-title'));
+    expect(title()).toBe(hr.session.connecting);
+    session.join();
+    expect(title()).toBe('Otključano do 14:42');
+    session.expire();
+    expect(title()).toBe('Sesija je završila');
+    expect(root.querySelector('#layer-directory')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=dash-view] > .ki-snapshot'))).toBe('podaci od 14:32');
   });
 });
 

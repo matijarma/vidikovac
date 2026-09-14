@@ -56,6 +56,11 @@ export function remainingText(seconds: number): string {
   return countdown(seconds);
 }
 
+/** The frozen view's date, said the same way everywhere: "podaci od 13:57" (LayerContext.frozenAt). */
+export function snapshotLine(i18n: I18n, frozenAt: number): string {
+  return i18n.t('session.snapshotAt', { time: zagrebTime(frozenAt) });
+}
+
 function layerLabel(i18n: I18n, layer: LayerId): string {
   return i18n.t(`layers.${layer}`);
 }
@@ -148,13 +153,19 @@ export function safetyMarkup(i18n: I18n, s: ShellState): string {
 export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): string {
   const out: string[] = [];
   if (s.frozen) {
-    out.push(`<div class="banner banner-frozen" role="alert" data-testid="frozen-line" data-key="frozen"><p class="banner-text">${escapeHtml(i18n.t('session.expired'))}</p><p class="banner-sub">${escapeHtml(i18n.t('session.expiredHint'))}</p><a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t('session.expiredCta'))}</span></a></div>`);
+    // The closing card, the one banner left after the end. A room closed under a live session
+    // (the screen switched off, error 'revoked') is told apart from the natural expiry by its
+    // title and its way out; the hint holds for both, since the view and the exports stay.
+    const revoked = s.error === 'revoked';
+    out.push(`<div class="banner banner-frozen closing" role="alert" data-testid="frozen-line" data-key="frozen"><p class="closing-title">${escapeHtml(i18n.t(revoked ? 'session.revoked' : 'session.expired'))}</p><p class="banner-sub">${escapeHtml(i18n.t('session.expiredHint'))}</p><a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t(revoked ? 'session.revokedCta' : 'session.expiredCta'))}</span></a></div>`);
   } else if (s.error === 'no-ticket') {
     out.push(`<div class="banner banner-warn" role="alert" data-key="no-ticket"><p class="banner-text">${escapeHtml(i18n.t('session.noTicket'))}</p><a class="btn" href="${escapeAttribute(scanUrl)}">${escapeHtml(i18n.t('common.links.scan'))}</a></div>`);
   } else if (s.error === 'access') {
     out.push(`<div class="banner banner-warn" role="alert" data-key="access" data-testid="access-banner"><p class="banner-text">${escapeHtml(i18n.t('session.accessDenied'))}</p><a class="btn" href="/">${escapeHtml(i18n.t('common.links.home'))}</a></div>`);
   } else if (s.reconnecting) {
-    out.push(`<div class="banner banner-warn" role="status" data-key="reconnecting" data-testid="reconnecting">${iconMarkup('refresh-cw')}<p class="banner-text">${escapeHtml(i18n.t('session.disconnected'))}</p></div>`);
+    // The visible line says what matters to the person (the clock runs on the server offset); the
+    // hidden sentence in the pill keeps session.disconnected for readers.
+    out.push(`<div class="banner banner-warn" role="status" data-key="reconnecting" data-testid="reconnecting">${iconMarkup('refresh-cw')}<p class="banner-text">${escapeHtml(i18n.t('session.reconnectingVisible'))}</p></div>`);
   }
   if (s.notice && !s.frozen) {
     out.push(`<div class="banner banner-notice" data-key="notice" data-kind="${s.notice.kind}" data-testid="notice"><p class="banner-text">${escapeHtml(s.notice.text)}</p><button type="button" class="btn-quiet icon-btn banner-dismiss" data-action="dismiss-notice" aria-label="${escapeAttribute(i18n.t('common.dismiss'))}">${iconMarkup('x')}</button></div>`);
