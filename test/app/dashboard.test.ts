@@ -10,6 +10,7 @@ import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
 import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { stubSessionStorage } from './helpers';
 
 stubSessionStorage();
@@ -23,14 +24,14 @@ function fakeSession(now: () => number = () => NOW) {
   const listeners = {
     joined: [] as ((s: SessionSnapshot) => void)[], expiring: [] as ((n: number) => void)[], expired: [] as (() => void)[],
     count: [] as ((n: number) => void)[], codes: [] as ((batch: unknown[], serverNow: number) => void)[],
-    error: [] as ((code: string) => void)[], close: [] as ((code: number) => void)[],
+    error: [] as ((code: string, reason?: 'revoked' | 'no-ticket') => void)[], close: [] as ((code: number) => void)[],
   };
   let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
   let runOut = false;
   const sent: { layer: LayerId; params?: Record<string, string> }[] = [];
   const events: { name: string; dim?: string }[] = [];
   const client: SessionClient = {
-    connect: vi.fn(), snapshot: () => snapshot, serverNow: () => NOW,
+    connect: vi.fn(), snapshot: () => snapshot, serverNow: () => now(),
     secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? now()) - now()) / 1000))),
     onJoined: (l) => { listeners.joined.push(l); return () => {}; },
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
@@ -54,7 +55,8 @@ function fakeSession(now: () => number = () => NOW) {
     drop() { snapshot = { ...snapshot, phase: 'connecting' }; listeners.close.forEach((l) => l(1006)); },
     runOut() { runOut = true; },
     codes: (batch: unknown[], serverNow: number) => listeners.codes.forEach((l) => l(batch, serverNow)),
-    error: (code: string) => listeners.error.forEach((l) => l(code)),
+    count(n: number) { snapshot = { ...snapshot, participants: n }; listeners.count.forEach((l) => l(n)); },
+    error: (code: string, reason?: 'revoked' | 'no-ticket') => listeners.error.forEach((l) => l(code, reason)),
   };
 }
 const attr = (module: string) => ({ text: `Izvor: ${module}`, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
@@ -153,14 +155,14 @@ describe('shell and navigation', () => {
     expect(root.querySelector('.ki-side-link[data-layer=kultura]')?.getAttribute('aria-current')).toBe('page');
   });
   it('Još opens the labelled directory of the four extra domains and names the open one on its tab', () => {
-    const { root } = mount();
+    const { root, session } = mount();
+    session.join();
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
     expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'vijesti']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
-    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano');
-    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
     expect(document.querySelector('[data-testid=session-sheet]')).not.toBeNull();
     click(root, '[data-testid=dir-zrak-i-nebo]');
@@ -240,6 +242,8 @@ describe('session states', () => {
     expect(scanner.handle.element.dataset.countdown).toBe('hidden');
     expect(text(scanner.root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
     click(sheet, '[data-sheet-action=lang][data-value=en]');
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
+    expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
     expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'Events', 'More']);
     scanner.handle.destroy();
@@ -249,15 +253,146 @@ describe('session states', () => {
     click(peer.root, '[data-testid=session-label]');
     expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
   });
-  it('rotates the peer code as a QR with the letters, and withdraws sharing on the room’s refusal', () => {
-    const slot = (code: string, index: number) => ({ code, slotStart: NOW + index * 30_000, slotEnd: NOW + (index + 1) * 30_000 });
+  it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, the theme words read from the catalogue in preference order, and the four pages', () => {
+    const stop = { id: 's1', name: 'Trg bana J. Jelačića', lon: 15.98, lat: 45.81, routes: ['6', '11'] };
+    const theme = { getPreference: () => 'auto' as const, getResolvedTheme: () => 'light' as const, setPreference: vi.fn(), onChange: () => () => {}, destroy: vi.fn() };
+    const { root, session } = mount({ deps: { theme } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop });
+    click(root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    expect(sheet.classList.contains('dialog-sheet')).toBe(true);
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
+    expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
+    const body = text(sheet.querySelector('.dialog-body'));
+    expect(body).toContain('Sa zaslona Kavana Velebit, stanica Trg bana J. Jelačića.');
+    expect(body).toContain('Na ovom pogledu su 2 uređaja.');
+    expect(body).not.toMatch(/stanje sesije/i);
+    expect(body).not.toContain('skenirano sa zaslona');
+    expect(body).not.toContain('Sesija i postavke');
+    expect(body).not.toContain('Vrijedi do');
+    for (const testid of ['share-city', 'toggle-refresh', 'toggle-countdown', 'refresh-now']) {
+      expect(sheet.querySelector(`[data-testid=${testid}]`)?.classList.contains('sheet-btn'), testid).toBe(true);
+    }
+    expect(text(sheet.querySelector('[data-testid=share-city]'))).toBe('Podijeli grad Pet minuta za osobu pokraj tebe, jednom.');
+    expect(text(sheet.querySelector('[data-testid=toggle-refresh]'))).toBe('Zaustavi osvježavanje');
+    expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Sakrij odbrojavanje');
+    expect(text(sheet.querySelector('[data-testid=refresh-now]'))).toBe('Osvježi sada');
+    // The words themselves belong to `common.theme.*` (T6.3's catalogue), so the sheet is held to reading them, not to their spelling.
+    expect([...sheet.querySelectorAll('[data-sheet-action=theme]')].map((b) => text(b))).toEqual(THEME_PREFERENCES.map((pref) => hr.common.theme[pref]));
+    expect([...sheet.querySelectorAll('.sheet-links a')].map((a) => a.getAttribute('href'))).toEqual(['/hitno', '/izvori/', '/privatnost/', '/pristupacnost/']);
+    expect(text(sheet.querySelector('.sheet-links'))).not.toContain('Upiši kod');
+  });
+  it('the sheet body is reconciled: a toggle keeps the pressed button node focused and the body scroll where it was', () => {
     const { root, session } = mount();
+    session.join();
+    click(root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    const body = sheet.querySelector<HTMLElement>('.dialog-body')!;
+    body.scrollTop = 120;
+    const button = sheet.querySelector<HTMLButtonElement>('[data-testid=toggle-countdown]')!;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    expect(text(button)).toBe('Pokaži odbrojavanje');
+    expect(sheet.querySelector('[data-testid=toggle-countdown]')).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(body.scrollTop).toBe(120);
+    click(sheet, '[data-testid=toggle-refresh]');
+    expect(sheet.querySelector('[data-testid=toggle-countdown]')).toBe(button);
+    expect(text(sheet.querySelector('[data-testid=toggle-refresh]'))).toBe('Nastavi osvježavanje');
+    expect(sheet.querySelector('[data-testid=refresh-now]')).toBeNull();
+  });
+  it('a peer session says whose five minutes these are, a temporary screen says how long it stands, and the frozen sheet says the end without a countdown or toggles', () => {
+    const peer = mount();
+    peer.session.join('phone');
+    click(peer.root, '[data-testid=session-label]');
+    const peerSheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    expect(text(peerSheet.querySelector('.dialog-body'))).toContain('Pet minuta od osobe pokraj tebe.');
+    expect(text(peerSheet.querySelector('.dialog-body'))).not.toContain('Sa zaslona');
+    peer.handle.destroy();
+
+    const temp = mount();
+    temp.session.join('scanner', { kind: 'temporary', expiresAt: Date.parse('2026-09-12T11:47:00Z'), stop: null });
+    click(temp.root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    let body = text(sheet.querySelector('.dialog-body'));
+    expect(body).toContain('Sa zaslona Kavana Velebit.');
+    expect(body).toContain('Zaslon vrijedi do sutra 13:47.');
+    expect(body).not.toContain('privremeni zaslon');
+    temp.session.expire();
+    expect(sheet.hasAttribute('open')).toBe(false);
+    click(temp.root, '[data-testid=session-label]');
+    expect(sheet.hasAttribute('open')).toBe(true);
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Sesija je završila');
+    expect(sheet.querySelector('[data-testid=sheet-time]')).toBeNull();
+    expect(sheet.querySelector('[data-testid=toggle-refresh]')).toBeNull();
+    expect(sheet.querySelector('[data-testid=toggle-countdown]')).toBeNull();
+    body = text(sheet.querySelector('.dialog-body'));
+    expect(body).toContain(hr.session.expiredHint);
+    expect(body).not.toContain('Na ovom pogledu');
+    expect(sheet.querySelector('[data-sheet-action=lang][data-value=en]')).not.toBeNull();
+    temp.handle.destroy();
+  });
+  it('a reloaded view names no screen but still says where it came from; a reconnecting view keeps its end, its remaining time and its toggles', () => {
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+    click(root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    expect(text(sheet.querySelector('.dialog-body'))).toContain('Sa zaslona u blizini.');
+    expect(text(sheet.querySelector('.dialog-body'))).not.toContain('Sa zaslona zaslon');
+    session.drop();
+    click(root, '[data-testid=session-label]');
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
+    expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
+    expect(sheet.querySelector('[data-testid=toggle-countdown]')).not.toBeNull();
+    expect(text(sheet.querySelector('.dialog-body'))).not.toContain('Povezivanje');
+  });
+  it('the share dialog rotates the peer code as a QR with the letters, a rotation bar and a read-aloud line, copies the code, notes a joined device, and withdraws sharing on the room’s refusal', async () => {
+    const slot = (code: string, index: number) => ({ code, slotStart: NOW + index * 30_000, slotEnd: NOW + (index + 1) * 30_000 });
+    let at = NOW;
+    const { root, session, tick } = mount({ now: () => at });
     session.join();
     session.codes([slot('ABCDEFGH', 0), slot('JKMNPQRS', 1)], NOW);
     const dialog = document.querySelector<HTMLElement>('[data-testid=share-dialog]')!;
+    expect(dialog.classList.contains('dialog-sheet')).toBe(true);
+    const status = dialog.querySelector<HTMLElement>('[data-testid=share-status]')!;
+    expect(status.getAttribute('role'), 'the live region is in the tree, empty, before it has news').toBe('status');
+    expect(text(status)).toBe('');
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('ABCD-EFGH');
     expect(dialog.querySelector('.qr')?.getAttribute('role')).toBe('img');
     expect(text(dialog)).toContain('Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja.');
+    expect(text(dialog)).toContain(`upiše slova na ${location.host}/s.`);
+    expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: A B C D, E F G H');
+    const fill = dialog.querySelector<HTMLElement>('.share-progress-fill')!;
+    expect(fill.style.width).toBe('0%');
+    expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 30 s');
+    at = NOW + 18_000;
+    tick();
+    expect(fill.style.width).toBe('60%');
+    expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 12 s');
+    at = NOW + 30_000;
+    tick();
+    expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('JKMN-PQRS');
+    expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: J K M N, P Q R S');
+    expect(fill.style.width).toBe('0%');
+    expect(fill.style.transition, 'the reset switches the transition off only for the committed zero').toBe('');
+    at = NOW + 31_000;
+    tick();
+    expect(fill.style.width).toBe('3.3%');
+    expect(fill.style.transition).toBe('');
+    expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 29 s');
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    const copy = click(dialog, '[data-action=copy-share-code]');
+    expect(text(copy)).toBe('Kopiraj kod');
+    expect(writeText).toHaveBeenCalledWith('JKMN-PQRS');
+    await flush();
+    expect(text(status)).toBe('Kod je kopiran.');
+    click(dialog, '[data-action=copy-share-code]');
+    await flush();
+    expect(status.querySelectorAll('p'), 'a second copy re-says the line, it does not repeat it').toHaveLength(1);
+    writeText.mockRestore();
+    session.count(3);
+    expect([...status.querySelectorAll('p')].map((p) => text(p))).toEqual(['Kod je kopiran.', 'Pridružio se još jedan uređaj.']);
     session.error('share-not-allowed');
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.');
     click(root, '[data-testid=session-label]');
@@ -597,9 +732,13 @@ describe('the sticky header and notices in flow', () => {
     time.set(NOW + 4_000);
     tick();
     expect(notice(root)).toBeNull();
+    // A peer session is five minutes from a person, not ten from a screen: the notice says so
+    // in its own words, while the polite announcement and the pill keep the plain expiry.
     const peer = mount({ deps: { label: null } });
     peer.session.join('phone');
-    expect(noticeText(peer.root, 'joined')).toBe('Otključano do 14:42');
+    expect(noticeText(peer.root, 'joined')).toBe('Pet minuta od osobe pokraj tebe · do 14:42');
+    expect(text(peer.root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
+    expect(peer.root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
   });
   it('shows the 60 s and 20 s warnings in flow with the approved sentences, then clears the notice and the alert on the freeze', () => {
     const time = clock();
@@ -721,6 +860,111 @@ describe('the sticky header and notices in flow', () => {
     } finally {
       win.scrollTo = original;
     }
+  });
+
+  // T4.1: the session's moments. The freeze is a designed closing card, the only banner left;
+  // a room closed under a live session gets its own card; every frozen workspace is dated.
+  it('the freeze leaves one closing card as the only banner: the approved sentence as its title, the hint, and a primary way to a new session', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    time.set(EXPIRES - 20_000);
+    tick();
+    expect(notice(root, 'expiring20')).not.toBeNull();
+    time.set(EXPIRES);
+    tick();
+    const banners = root.querySelector<HTMLElement>('[data-testid=banners]')!;
+    expect(banners.children).toHaveLength(1);
+    const card = banners.firstElementChild as HTMLElement;
+    expect(card.dataset.testid).toBe('frozen-line');
+    expect(card.dataset.key).toBe('frozen');
+    expect(card.getAttribute('role')).toBe('alert');
+    expect(card.classList.contains('closing')).toBe(true);
+    expect(text(card.querySelector('.closing-title'))).toBe(hr.session.expired);
+    expect(text(card.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    const cta = card.querySelector<HTMLAnchorElement>('a.btn-primary[href="/s/"]')!;
+    expect(text(cta)).toBe(hr.session.expiredCta);
+    expect(cta.querySelector('svg use')?.getAttribute('href')).toBe('#icon-qr-code');
+  });
+  it('after the freeze the workspace opens with the snapshot line "podaci od {time}", before the layer, once, and re-said in the other language', () => {
+    const time = clock();
+    const { root, session, tick } = mount({ now: time.now });
+    session.join();
+    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    time.set(EXPIRES);
+    tick();
+    const main = root.querySelector<HTMLElement>('[data-testid=dash-view]')!;
+    const line = main.firstElementChild as HTMLElement;
+    expect(line.classList.contains('ki-snapshot')).toBe(true);
+    expect(text(line)).toBe('podaci od 14:42');
+    expect(line.nextElementSibling?.id).toBe('layer-grad-sada');
+    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+    click(root, '[data-testid=session-label]');
+    click(document, '[data-testid=session-sheet] [data-sheet-action=lang][data-value=en]');
+    expect(text(main.querySelector('.ki-snapshot'))).toBe('data from 14:42');
+    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+  });
+  it('a room closed under a live session is told apart from a spent ticket: the view freezes behind the revoked card with its own way out', async () => {
+    const { root, session, fetchData, tick } = mount();
+    session.join();
+    await flush();
+    fetchData.mockClear();
+    session.error('no-ticket', 'revoked');
+    const card = root.querySelector<HTMLElement>('[data-testid=frozen-line]');
+    expect(card).not.toBeNull();
+    expect(text(card!.querySelector('.closing-title'))).toBe(hr.session.revoked);
+    expect(text(card!.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    expect(text(card!.querySelector('a.btn-primary[href="/s/"]'))).toBe(hr.session.revokedCta);
+    expect(root.querySelector('[data-key=no-ticket]')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:32');
+    tick();
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    // A spent ticket is not a closed room: its warning banner stays and nothing freezes.
+    const spent = mount();
+    spent.session.join();
+    spent.session.error('no-ticket', 'no-ticket');
+    expect(spent.root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(spent.root.querySelector('[data-key=no-ticket]')).not.toBeNull();
+    expect(spent.root.querySelector('.ki-snapshot')).toBeNull();
+  });
+  it('a closed room reported before any join is a spent credential: the no-ticket banner, nothing frozen, nothing dated', () => {
+    const { root, session } = mount();
+    session.error('no-ticket', 'revoked');
+    expect(root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(root.querySelector('[data-key=no-ticket]')).not.toBeNull();
+    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).not.toBe('zamrznuto');
+  });
+  it('the snapshot line dates the data by the end of the session, not by the late moment the end was learnt', () => {
+    const time = clock();
+    const { root, session } = mount({ now: time.now });
+    session.join();
+    // A phone whose socket dropped in the background hears of the end five minutes after it.
+    time.set(EXPIRES + 5 * 60_000);
+    session.expire();
+    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:42');
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+  });
+  it('the visible reconnecting banner says the countdown goes on, while the pill sentence for readers keeps the disconnected line', () => {
+    const { root, session } = mount();
+    session.join();
+    session.drop();
+    expect(text(root.querySelector('[data-testid=reconnecting] .banner-text'))).toBe('Veza se obnavlja. Odbrojavanje ide dalje.');
+    expect(text(root.querySelector('[data-testid=session-label] .ki-session-sentence'))).toBe(hr.session.disconnected);
+  });
+  it('the directory session row tells the truth: connecting before the join, the expiry while unlocked, the end once frozen, dated like every workspace', () => {
+    const { root, session } = mount();
+    click(root, '[data-testid=tab-more]');
+    const title = (): string => text(root.querySelector('[data-testid=dir-session] .row-title'));
+    expect(title()).toBe(hr.session.connecting);
+    session.join();
+    expect(title()).toBe('Otključano do 14:42');
+    session.expire();
+    expect(title()).toBe('Sesija je završila');
+    expect(root.querySelector('#layer-directory')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=dash-view] > .ki-snapshot'))).toBe('podaci od 14:32');
   });
 });
 

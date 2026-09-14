@@ -1,15 +1,20 @@
-// The session and settings sheet: expiry, screen, share, refresh, countdown,
-// language, theme and the open pages. One dialog per dashboard, rebuilt on
-// each open; `refresh()` updates the live time while it is open.
-import type { ScreenMetadata } from '../../../worker/protocol';
+// The session sheet, in plain words: "Otključano do 13:57" as its title, the
+// remaining time at display size, one sentence for where the session came from
+// and one for how many devices share it, 48 px action rows, the language and
+// theme controls and the four pages. A bottom sheet on the phone, a centred
+// dialog on the desk (dialog.css, .dialog-sheet). One dialog per dashboard; the
+// body is reconciled on every render, never rebuilt, so a pressed toggle keeps
+// its focus and the body its scroll; `refresh()` updates the live time.
 import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from '../i18n/create-default-i18n';
 import type { SessionSnapshot } from '../session';
 import { createDialog, type DialogHandle } from '../ui/dialog';
-import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { iconMarkup } from '../ui/icons';
+import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { reconcileChildren } from '../ui/dom/reconcile';
+import { iconMarkup, type IconName } from '../ui/icons';
 import { THEME_PREFERENCES, type ThemePreference } from '../ui/theme';
+import { dayLabel } from './text';
 
 export type SheetAction = 'share-city' | 'pause' | 'resume' | 'hide-countdown' | 'show-countdown' | 'refresh' | 'lang' | 'theme';
 
@@ -21,14 +26,14 @@ export interface SheetState {
   canShare: boolean;
   label: string | null;
   themePreference: ThemePreference | null;
-  lastRefresh: number | null;
 }
 
 export interface SessionSheetDeps {
   i18n: I18n;
   state: () => SheetState;
   onAction: (action: SheetAction, value?: string) => void;
-  scanUrl?: string;
+  /** The shell's clock, so "sutra 13:47" is said against the same now as every other line. */
+  now?: () => number;
 }
 
 export interface SessionSheet {
@@ -39,73 +44,93 @@ export interface SessionSheet {
   destroy(): void;
 }
 
-function screenLine(i18n: I18n, screen: ScreenMetadata | undefined, label: string | null): string {
-  const parts: string[] = [];
-  if (label) parts.push(`<p class="sheet-row"><span class="sheet-k">${escapeHtml(i18n.t('session.screenLabel'))}</span><span class="sheet-v">${escapeHtml(label)}</span></p>`);
-  if (screen?.stop) parts.push(`<p class="sheet-row"><span class="sheet-k">${escapeHtml(i18n.t('session.stopLabel'))}</span><span class="sheet-v">${escapeHtml(screen.stop.name)}</span></p>`);
-  if (screen?.kind === 'temporary' && screen.expiresAt) parts.push(`<p class="sheet-row meta">${escapeHtml(i18n.t('session.screenTemporary'))} · ${escapeHtml(i18n.t('session.screenExpires', { time: zagrebTime(screen.expiresAt) }))}</p>`);
-  return parts.join('');
+/** Where the session came from, as one sentence; a peer session says whose five minutes these are.
+ *  The label lives in the hash /s/ hands over and a reload drops it (the entry keeps only the room),
+ *  so a view without a label still names its origin: a screen nearby. Nothing before the join. */
+function originSentence(i18n: I18n, s: SheetState): string {
+  if (!s.session.role) return '';
+  if (s.session.role === 'phone') return i18n.t('session.sheetPeer');
+  const stop = s.session.screen?.stop?.name ?? null;
+  if (s.label && stop) return i18n.t('session.sheetScreen', { label: s.label, stop });
+  if (s.label) return i18n.t('session.sheetScreenOnly', { label: s.label });
+  if (stop) return i18n.t('session.sheetStop', { stop });
+  return i18n.t('session.sheetScreenNearby');
 }
 
-function toggleRow(action: SheetAction, label: string, pressed: boolean, icon: 'pause' | 'play' | 'eye' | 'eye-off' | 'share-2' | 'refresh-cw', testid: string): string {
-  return `<button type="button" class="btn-ghost sheet-btn" data-sheet-action="${action}" data-testid="${testid}" aria-pressed="${pressed ? 'true' : 'false'}">${iconMarkup(icon)}<span>${escapeHtml(label)}</span></button>`;
+function actionRow(key: string, action: SheetAction, icon: IconName, label: string, testid: string, sub?: string): string {
+  // The space between the two spans keeps the label and its sub-line two words apart in textContent.
+  const text = `<span class="sheet-btn-label">${escapeHtml(label)}</span>${sub ? ` <span class="sheet-btn-sub">${escapeHtml(sub)}</span>` : ''}`;
+  return `<button type="button" class="sheet-btn" data-key="${key}" data-sheet-action="${action}" data-testid="${testid}">${iconMarkup(icon)}<span class="sheet-btn-text">${text}</span></button>`;
 }
 
-function segmented(name: string, options: { value: string; label: string; lang?: string }[], current: string | null, action: SheetAction): string {
-  return `<div class="segmented" role="group" aria-label="${escapeAttribute(name)}">${options
-    .map((o) => `<button type="button" class="segment" data-sheet-action="${action}" data-value="${escapeAttribute(o.value)}" aria-pressed="${o.value === current ? 'true' : 'false'}"${o.lang ? ` lang="${escapeAttribute(o.lang)}"` : ''}>${escapeHtml(o.label)}</button>`)
+function segmented(labelId: string, options: { value: string; label: string; lang?: string }[], current: string | null, action: SheetAction): string {
+  return `<div class="segmented" role="group" aria-labelledby="${labelId}">${options
+    .map((o) => `<button type="button" class="segment" data-key="${escapeAttribute(o.value)}" data-sheet-action="${action}" data-value="${escapeAttribute(o.value)}" aria-pressed="${o.value === current ? 'true' : 'false'}"${o.lang ? ` lang="${escapeAttribute(o.lang)}"` : ''}>${escapeHtml(o.label)}</button>`)
     .join('')}</div>`;
 }
+
 export function createSessionSheet(deps: SessionSheetDeps): SessionSheet {
   const { i18n } = deps;
-  const scanUrl = deps.scanUrl ?? '/s/';
+  const now = deps.now ?? (() => Date.now());
   let dialog: DialogHandle | null = null;
 
-  function timeText(s: SheetState): string {
+  // The end of the session is known from the join on and stands while the socket reconnects (the
+  // countdown goes on, the banner says so), so the title and the remaining time follow `expiresAt`,
+  // not the socket's phase; before the join there is nothing to count and the title says so once.
+  function titleText(s: SheetState): string {
     if (s.frozen) return i18n.t('session.expiredTitle');
-    if (s.session.phase !== 'live') return i18n.t('session.connecting');
+    if (s.session.expiresAt !== null) return i18n.t('session.sheetTitle', { time: zagrebTime(s.session.expiresAt) });
+    return i18n.t('session.connecting');
+  }
+
+  function timeText(s: SheetState): string {
     return i18n.t('shell.remaining', { time: `${Math.floor(s.session.secondsLeft / 60)}:${String(s.session.secondsLeft % 60).padStart(2, '0')}` });
   }
 
-  function bodyMarkup(): string {
-    const s = deps.state();
+  function bodyMarkup(s: SheetState): string {
     const live = s.session.phase === 'live' && !s.frozen;
-    const facts = [
-      s.session.expiresAt !== null ? i18n.t('session.endsAt', { time: zagrebTime(s.session.expiresAt) }) : '',
-      s.session.participants > 0 ? i18n.t('session.participants', { count: s.session.participants }) : '',
-      s.session.role ? i18n.t(`session.role.${s.session.role}`) : '',
-    ].filter(Boolean);
+    const screen = s.session.screen;
+    const temporary = !s.frozen && screen?.kind === 'temporary' && screen.expiresAt !== null
+      ? i18n.t('session.sheetTemporary', { when: `${dayLabel(i18n, screen.expiresAt, now())} ${zagrebTime(screen.expiresAt)}` })
+      : '';
+    // After the end the devices and the screen's own expiry are stale; the origin and the hint stand.
+    const lines: [string, string][] = [
+      ['origin', originSentence(i18n, s)],
+      ['devices', live && s.session.participants > 0 ? i18n.t('session.sheetDevices', { count: s.session.participants }) : ''],
+      ['temporary', temporary],
+      ['hint', s.frozen ? i18n.t('session.expiredHint') : ''],
+    ];
     const actions = [
-      s.canShare && live ? toggleRow('share-city', i18n.t('session.share'), false, 'share-2', 'share-city') : '',
-      !s.frozen ? toggleRow(s.paused ? 'resume' : 'pause', i18n.t(s.paused ? 'session.resumeRefresh' : 'session.pauseRefresh'), s.paused, s.paused ? 'play' : 'pause', 'toggle-refresh') : '',
-      !s.frozen ? toggleRow(s.countdownHidden ? 'show-countdown' : 'hide-countdown', i18n.t(s.countdownHidden ? 'session.showCountdown' : 'session.hideCountdown'), s.countdownHidden, s.countdownHidden ? 'eye' : 'eye-off', 'toggle-countdown') : '',
-      live && !s.paused ? toggleRow('refresh', i18n.t('session.refreshNow'), false, 'refresh-cw', 'refresh-now') : '',
+      s.canShare && live ? actionRow('share', 'share-city', 'share-2', i18n.t('session.share'), 'share-city', i18n.t('session.shareHint')) : '',
+      !s.frozen ? actionRow('refresh-toggle', s.paused ? 'resume' : 'pause', s.paused ? 'play' : 'pause', i18n.t(s.paused ? 'session.resumeRefresh' : 'session.pauseRefresh'), 'toggle-refresh') : '',
+      !s.frozen ? actionRow('countdown', s.countdownHidden ? 'show-countdown' : 'hide-countdown', s.countdownHidden ? 'eye' : 'eye-off', i18n.t(s.countdownHidden ? 'session.showCountdown' : 'session.hideCountdown'), 'toggle-countdown') : '',
+      live && !s.paused ? actionRow('refresh-now', 'refresh', 'refresh-cw', i18n.t('session.refreshNow'), 'refresh-now') : '',
     ].filter(Boolean);
     const langs = SUPPORTED_LOCALES.map((code) => ({ value: code, label: LOCALE_LABELS[code], lang: code }));
     const themes = THEME_PREFERENCES.map((pref) => ({ value: pref, label: i18n.t(`common.theme.${pref}`) }));
     const links: [string, string][] = [
-      ['/hitno', i18n.t('common.links.hitno')], [scanUrl, i18n.t('common.links.scan')], ['/izvori/', i18n.t('common.links.izvori')],
+      ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
       ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],
     ];
-    return `<section class="sheet-sec" aria-label="${escapeAttribute(i18n.t('session.statusLabel'))}">
-<p class="kicker">${escapeHtml(i18n.t('session.statusLabel'))}</p>
-<p class="sheet-time tabular" data-sheet-time data-testid="sheet-time">${escapeHtml(timeText(s))}</p>
-${facts.length ? `<p class="sheet-row">${facts.map(escapeHtml).join(' · ')}</p>` : ''}
-${screenLine(i18n, s.session.screen, s.label)}
-${s.frozen ? `<p class="sheet-row">${escapeHtml(i18n.t('session.expiredHint'))}</p><a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${escapeHtml(i18n.t('session.expiredCta'))}</a>` : ''}
-${s.lastRefresh !== null ? `<p class="sheet-row meta">${escapeHtml(i18n.t('session.lastRefresh', { time: zagrebTime(s.lastRefresh) }))}</p>` : ''}
-</section>
-${actions.length ? `<section class="sheet-sec sheet-actions">${actions.join('')}${s.canShare && live ? `<p class="meta">${escapeHtml(i18n.t('session.shareHint'))}</p>` : ''}</section>` : ''}
-<section class="sheet-sec"><p class="kicker" id="sheet-lang">${escapeHtml(i18n.t('common.language'))}</p>${segmented(i18n.t('common.language'), langs, i18n.getLocale(), 'lang')}</section>
-${s.themePreference ? `<section class="sheet-sec"><p class="kicker">${escapeHtml(i18n.t('common.theme.label'))}</p>${segmented(i18n.t('common.theme.label'), themes, s.themePreference, 'theme')}</section>` : ''}
-<nav class="sheet-links" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${links.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>`;
+    // No whitespace between siblings: every child is a keyed element the reconciler matches by key.
+    return [
+      `<div class="sheet-sec sheet-status" data-key="status">${!s.frozen && s.session.expiresAt !== null ? `<p class="sheet-time tabular" data-key="time" data-sheet-time data-testid="sheet-time">${escapeHtml(timeText(s))}</p>` : ''}${lines
+        .filter(([, sentence]) => sentence !== '')
+        .map(([key, sentence]) => `<p class="sheet-line" data-key="${key}">${escapeHtml(sentence)}</p>`)
+        .join('')}</div>`,
+      actions.length ? `<div class="sheet-sec sheet-actions" data-key="actions">${actions.join('')}</div>` : '',
+      `<div class="sheet-sec" data-key="lang"><p class="sheet-label" id="sheet-lang">${escapeHtml(i18n.t('common.language'))}</p>${segmented('sheet-lang', langs, i18n.getLocale(), 'lang')}</div>`,
+      s.themePreference ? `<div class="sheet-sec" data-key="theme"><p class="sheet-label" id="sheet-theme">${escapeHtml(i18n.t('common.theme.label'))}</p>${segmented('sheet-theme', themes, s.themePreference, 'theme')}</div>` : '',
+      `<nav class="sheet-links" data-key="links" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${links.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>`,
+    ].join('');
   }
 
   function render(): void {
     if (!dialog) return;
-    dialog.body.innerHTML = bodyMarkup();
+    const s = deps.state();
+    reconcileChildren(dialog.body, createElementFromHTML(`<div>${bodyMarkup(s)}</div>`));
     const title = dialog.element.querySelector('.dialog-title');
-    if (title) title.textContent = i18n.t('session.sheetTitle');
+    if (title) title.textContent = titleText(s);
   }
 
   function handleClick(event: Event): void {
@@ -118,7 +143,7 @@ ${s.themePreference ? `<section class="sheet-sec"><p class="kicker">${escapeHtml
   return {
     open() {
       if (!dialog) {
-        dialog = createDialog({ titleId: 'session-sheet-title', title: i18n.t('session.sheetTitle'), closeLabel: i18n.t('common.close'), className: 'dialog-session' });
+        dialog = createDialog({ titleId: 'session-sheet-title', title: titleText(deps.state()), closeLabel: i18n.t('common.close'), className: 'dialog-session dialog-sheet' });
         dialog.element.dataset.testid = 'session-sheet';
         dialog.body.addEventListener('click', handleClick);
       }

@@ -5,12 +5,12 @@
 // browser global is injected, so the behaviour is unit-tested under happy-dom.
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
-import { codeUrl, formatCode, speakableCode } from './code';
+import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { zagrebTime } from './format';
 import { parseSelection, publicItemKey, selectionParams, type PublicSelection, type ScreenContext } from './core/contracts';
 import { createFeedStore } from './core/feed-store';
 import { createViewStore } from './core/view-store';
-import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
+import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, snapshotLine, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
 import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { storeLocale } from './i18n/create-default-i18n';
@@ -22,11 +22,12 @@ import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from './motion/network';
 import { createSchematicHost } from './motion/schematic-host';
-import { createRotation, type Rotation } from './rotation';
+import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { createDialog, type DialogHandle } from './ui/dialog';
-import { createElementFromHTML, escapeAttribute } from './ui/dom/escape';
+import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { reconcile, reconcileChildren } from './ui/dom/reconcile';
+import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
 
@@ -140,6 +141,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const surface = (): ScreenContext['surface'] => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
 
   let frozen = false;
+  /** The moment freeze() ran: every workspace and time line is dated with it. */
+  let frozenAt: number | undefined;
   let paused = false;
   let countdownHidden = false;
   let directory = false;
@@ -269,6 +272,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
+      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
     };
   }
 
@@ -287,12 +291,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
     element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
     const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
+    // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
+    // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
+    const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
     if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
+      if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
       reconcile(main, wrapper);
     } else {
-      main.replaceChildren(next);
+      main.replaceChildren(...(dated ? [dated] : []), next);
     }
     // Motion that reports a fact: a genuine workspace switch (never a poll that
     // redraws the same place) fades `next` in -- it is the live node exactly
@@ -396,10 +404,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   const sheet = createSessionSheet({
-    i18n, scanUrl,
+    i18n, now,
     state: () => ({
       session: session.snapshot(), frozen, paused, countdownHidden, canShare: session.snapshot().role === 'scanner' && !shareDenied,
-      label: deps.label ?? null, themePreference: deps.theme?.getPreference() ?? null, lastRefresh,
+      label: deps.label ?? null, themePreference: deps.theme?.getPreference() ?? null,
     }),
     onAction: (action, value) => handleSheetAction(action, value),
   });
@@ -501,51 +509,107 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   // --- share the city: one hop, the room mints, this only rotates ----------
   let shareDialog: DialogHandle | null = null;
   let shareRotation: Rotation | null = null;
+  /** The 1 s tick that moves the rotation bar while the dialog is open. */
+  let shareTick: unknown = null;
+  let stopShareCount: (() => void) | null = null;
 
   function closeShare(): void {
     shareRotation?.stop();
     shareRotation = null;
+    if (shareTick !== null) { clearTimer(shareTick); shareTick = null; }
+    stopShareCount?.();
+    stopShareCount = null;
     shareDialog?.close();
     shareDialog?.destroy();
     shareDialog = null;
   }
 
+  /** The bare code, as it is typed; the export path's attribution block has no place after a pairing code. */
+  async function copyCode(code: string): Promise<boolean> {
+    const clipboard = globalThis.navigator?.clipboard;
+    if (!clipboard) return false;
+    try { await clipboard.writeText(code); return true; } catch { return false; }
+  }
+
   function openShare(batch: CodeSlot[], serverNow: number): void {
     closeShare();
-    const body = doc.createElement('div');
-    body.className = 'share-body';
-    const qrBox = doc.createElement('div');
-    qrBox.className = 'share-qr';
-    const codeLine = doc.createElement('p');
-    codeLine.className = 'share-code';
-    codeLine.dataset.testid = 'share-code';
-    const copy = doc.createElement('p');
-    copy.className = 'meta';
-    copy.textContent = i18n.t('session.shareBody');
-    body.appendChild(qrBox);
-    body.appendChild(codeLine);
-    body.appendChild(copy);
-    shareDialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share' });
+    // The sentence names the host this page is served from; the QR carries the canonical one.
+    const host = doc.location?.host || new URL(CODE_URL_BASE).host;
+    const body = createElementFromHTML(`<div class="share-body">
+<div class="share-qr" data-share="qr"></div>
+<p class="share-code tabular" data-testid="share-code" data-share="code"></p>
+<div class="share-progress" aria-hidden="true"><div class="share-progress-fill" data-share="fill"></div></div>
+<p class="share-rotates tabular" data-share="rotates"></p>
+<p class="share-text">${escapeHtml(i18n.t('session.shareBody', { host }))}</p>
+<p class="share-read" data-share="read"></p>
+<button type="button" class="btn-ghost share-copy" data-action="copy-share-code">${iconMarkup('copy')}<span>${escapeHtml(i18n.t('session.shareCopy'))}</span></button>
+<div class="share-status" role="status" data-testid="share-status" data-share="status"></div>
+</div>`);
+    const part = (name: string): HTMLElement => body.querySelector<HTMLElement>(`[data-share=${name}]`)!;
+    const qrBox = part('qr');
+    const codeLine = part('code');
+    const fill = part('fill');
+    const rotates = part('rotates');
+    const read = part('read');
+    const status = part('status');
+    // One live region, in the tree and empty from the start (a region that appears together with its
+    // text is not announced); each kind of news gets one line, re-said in place rather than repeated.
+    const say = (kind: 'copied' | 'joined', text: string): void => {
+      let line = status.querySelector<HTMLElement>(`[data-share-line=${kind}]`);
+      if (!line) { line = doc.createElement('p'); line.dataset.shareLine = kind; status.appendChild(line); }
+      line.textContent = text;
+    };
+    // The bar fills over the slot and the sentence counts down to the next code, on the server's clock.
+    // A new code puts the bar back to zero in one step, never as a one-second drain: the CSS transition
+    // is switched off, the zero is committed by a forced style read, and the transition returns for the
+    // next tick (two timers landing in one frame cannot undo that, unlike a flag the tick clears).
+    const paintProgress = (fresh = false): void => {
+      const slot = shareRotation?.current();
+      if (!slot || !shareRotation) return;
+      const at = shareRotation.serverNow();
+      const width = `${Math.round(slotProgress(slot, at) * 1000) / 10}%`;
+      if (fresh) { fill.style.transition = 'none'; fill.style.width = width; void fill.offsetWidth; fill.style.transition = ''; }
+      else fill.style.width = width;
+      rotates.textContent = i18n.t('session.shareRotates', { seconds: Math.max(0, Math.ceil((slot.slotEnd - at) / 1000)) });
+    };
+    // The dialog lives in the top layer outside the shell root, so its one action is handled here.
+    body.addEventListener('click', (event) => {
+      if (!(event.target as Element | null)?.closest('[data-action=copy-share-code]')) return;
+      const code = shareRotation?.current()?.code;
+      if (!code) return;
+      void copyCode(formatCode(code)).then((ok) => say('copied', i18n.t(ok ? 'session.shareCopied' : 'export.copyFailed')));
+    });
+    shareDialog = createDialog({ titleId: 'share-title', title: i18n.t('session.shareTitle'), closeLabel: i18n.t('common.close'), body, className: 'dialog-share dialog-sheet' });
     shareDialog.element.dataset.testid = 'share-dialog';
     shareDialog.open();
+    const participantsAtOpen = session.snapshot().participants;
+    stopShareCount = session.onCount((count) => { if (count > participantsAtOpen) say('joined', i18n.t('session.sharePeerJoined')); });
     shareRotation = createRotation({
       now,
       onSlot: (slot) => {
         if (!slot) { closeShare(); return; }
         codeLine.textContent = formatCode(slot.code);
+        read.textContent = i18n.t('session.shareReadAloud', { spelled: speakableCode(slot.code) });
         qrBox.replaceChildren(createQr({ payload: codeUrl(slot.code), ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }), unavailableText: formatCode(slot.code) }).element);
+        paintProgress(true);
       },
       onMore: () => {},
       setInterval: setTimer as (fn: () => void, ms: number) => unknown,
       clearInterval: clearTimer,
     });
     shareRotation.setBatch(batch, serverNow);
+    shareTick = setTimer(() => paintProgress(), 1_000);
   }
 
   /** The end of the session: the view stays, refreshing stops, exports keep working. */
   function freeze(): void {
     if (frozen) return;
     frozen = true;
+    // The session's clock, not the phone's, and never later than the session's end: a phone that
+    // hears of the end late (a socket dropped in the background, a resume after the room is gone)
+    // still dates its data by the minute the pill promised. Revoked keeps the moment itself, its
+    // expiry being in the future.
+    frozenAt = Math.min(session.serverNow(), session.snapshot().expiresAt ?? Infinity);
     closeShare();
     sheet.close();
     schematic.pause();
@@ -557,6 +621,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     notice = null;
     assertive.textContent = '';
     paintShell();
+    // The workspace is painted once more so it carries its date; after this only a locale or
+    // theme change repaints it (the store's subscriber stands down while frozen).
+    render();
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {
@@ -565,7 +632,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     const time = zagrebTime(snapshot.expiresAt ?? now());
     polite.textContent = i18n.t('session.unlockedAnnounce', { time });
-    setNotice('joined', deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time }), 4_000);
+    // A peer session is five minutes from a person beside you, said in its own words; a screen's names the screen.
+    const joinedText = snapshot.role === 'phone'
+      ? i18n.t('session.joinedPeer', { time })
+      : deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time });
+    setNotice('joined', joinedText, 4_000);
     render();
     if (!joinedOnce) { joinedOnce = true; titleEl.focus(); }
     continuePoll(refresh(), rearmPoll, 'dashboard join refresh');
@@ -577,7 +648,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen || disposed) return;
     if (session.snapshot().phase === 'connecting') { reconnecting = true; paintShell(); }
   });
-  session.onError((code) => {
+  session.onError((code, reason) => {
     if (code === 'share-not-allowed' || code === 'share-unavailable') {
       if (code === 'share-not-allowed') shareDenied = true;
       const text = i18n.t(code === 'share-not-allowed' ? 'session.shareUnavailable' : 'session.shareTooLate');
@@ -586,6 +657,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       return;
     }
     if (code === 'no-ticket') {
+      // A room closed under a live session (the screen switched off) ends this session too: the
+      // view freezes behind the revoked card. A spent ticket only needs a fresh scan; a view that
+      // never joined has nothing to freeze, whatever the reason says.
+      if (reason === 'revoked' && joinedOnce) { error = 'revoked'; freeze(); return; }
       error = 'no-ticket';
       reconnecting = false;
       store.pause(true);

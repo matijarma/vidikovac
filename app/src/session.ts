@@ -79,7 +79,12 @@ export interface SessionClient {
   onView(l: (layer: LayerId, params?: Record<string, string>) => void): () => void;
   onCodes(l: (batch: CodeSlot[], serverNow: number) => void): () => void;
   onCount(l: (participants: number) => void): () => void;
-  onError(l: (error: string) => void): () => void;
+  /**
+   * On a grant rejection the recovery event stays `no-ticket`; `reason` says
+   * whether the room was closed under a live session (`revoked`, the screen
+   * switched off) or the credential itself was refused (`no-ticket`). R-K3.
+   */
+  onError(l: (error: string, reason?: 'revoked' | 'no-ticket') => void): () => void;
   onClose(l: (code: number) => void): () => void;
   sendView(layer: LayerId, params?: Record<string, string>): void;
   share(): void;
@@ -141,7 +146,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   const view = new Set<(layer: LayerId, params?: Record<string, string>) => void>();
   const codes = new Set<(batch: CodeSlot[], serverNow: number) => void>();
   const count = new Set<(n: number) => void>();
-  const error = new Set<(e: string) => void>();
+  const error = new Set<(e: string, reason?: 'revoked' | 'no-ticket') => void>();
   const closed = new Set<(code: number) => void>();
   const sub = <T>(set: Set<T>, l: T): (() => void) => { set.add(l); return () => { set.delete(l); }; };
 
@@ -170,7 +175,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   }
 
   /** Invalid grants cannot recover by retrying the same ticket or resume token. */
-  function rejectGrant(): void {
+  function rejectGrant(reason: 'revoked' | 'no-ticket'): void {
     leaving = true;
     clearHandshake();
     if (retryHandle !== null) { cancelLater(retryHandle); retryHandle = null; }
@@ -183,7 +188,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     } else {
       phase = 'closed';
       // One failure, one recovery event. Do not count the same rejection twice.
-      error.forEach((listener) => listener('no-ticket'));
+      error.forEach((listener) => listener('no-ticket', reason));
     }
     socket?.close(1000, 'grant-invalid');
   }
@@ -212,7 +217,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
       case 'expired': fireExpired(); return;
       case 'error':
         if (message.error === 'ticket-invalid' || message.error === 'resume-invalid' || message.error === 'room-closed') {
-          rejectGrant();
+          rejectGrant(message.error === 'room-closed' && expiresAt !== null ? 'revoked' : 'no-ticket');
         } else error.forEach((l) => l(message.error));
         return;
       default: return;

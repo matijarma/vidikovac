@@ -46,6 +46,14 @@ export interface LayerContext extends ExperienceActions {
   lightweight?: boolean;
   /** Kiosk layout: bigger type, no action buttons (no touch). */
   kiosk?: boolean;
+  /**
+   * The moment the view froze (the session's end), when it has. Every time
+   * line then reads "podaci od 13:57" and every live badge "snimka 13:57"
+   * (chrome.ts's snapshotLine builds the sentence). Absent while live.
+   */
+  frozenAt?: number;
+  /** The session as the shell knows it, for the views that name it (the directory's session row). */
+  session?: { expiresAt: number | null; frozen: boolean };
 }
 
 export type LayerRenderer = (ctx: LayerContext) => HTMLElement;
