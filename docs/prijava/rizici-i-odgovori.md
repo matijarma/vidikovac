@@ -1,35 +1,35 @@
 # Rizici i odgovori na očekivane prigovore Povjerenstva
 
-Osam prigovora koje očekujemo, s odgovorom koji je već ugrađen u proizvod, a ne obećan.
+Osam prigovora koje očekujemo, s odgovorom koji je ugrađen u proizvod, ne obećan.
 
 ### 1. "Još jedna ZET aplikacija."
 
-ZET je jedan od dvadesetak panela u sedam slojeva, a mi ga ne pokušavamo zamijeniti: panel U pokretu prikazuje vozila i kašnjenja, a za planiranje putovanja upućuje na već financirane aplikacije. Vrijednost projekta Kaj ima? je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i vijest na istom mjestu, u istoj minuti, s istim standardom atribucije. Nijedan financirani projekt Programa to ne radi.
+ZET je jedan od izvora u sedam područja i ne pokušavamo ga zamijeniti: Promet prikazuje vozila i kašnjenja linija, a za planiranje putovanja upućuje na postojeće aplikacije. Vrijednost je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i vijest na istom mjestu, u istoj minuti, s istim standardom atribucije. Dosad financirani projekti Programa koje smo pregledali pokrivaju pojedina područja; Kaj ima? se razlikuje po tom spoju, po javnim zaslonima koje vodi telefon i po skupu podataka o potražnji koji se vraća Gradu.
 
 ### 2. "Ograničen pristup se ne slaže s uvjetom 'rezultati nenaplatno dostupni javnosti'."
 
-Nitko ništa ne plaća. Program pojam "nenaplatno" definira kao dostupnost bez naknade, i to je ispunjeno u cijelosti. Povrh toga: sigurnosni sloj je otvoren svima bez ikakvog uvjeta i bez ograničenja trajanja; javni zaslon je čitljiv bez telefona; kod i izvedeni podaci su otvoreni; skeniranje ograničava trajanje pogleda, ne krug ljudi, i može se ponoviti odmah. Nudimo ugovorni minimum zaslona na lokacijama koje odabere Grad, kako pristup ne bi ovisio o komercijalnim prostorima. Ograničenje trajanja je bit proizvoda: kratki pogled na grad koji se otključava prisutnošću, kao izlog, a ne pretplata.
+Nitko ništa ne plaća; nema računa, pretplate ni članstva. Sigurnosni sloj `/hitno` otvoren je svima bez uvjeta i bez ograničenja trajanja; javni zaslon je čitljiv bez telefona; kod i izvedeni podaci su otvoreni. Skeniranje ograničava trajanje pogleda na vlastitom uređaju, ne krug ljudi koji ga mogu vidjeti, i može se ponoviti odmah. Nudimo ugovorni minimum zaslona na lokacijama koje odabere Grad, kako pristup ne bi ovisio o komercijalnim prostorima. Kratki pogled otključan prisutnošću bit je proizvoda: izlog, ne pretplata.
 
 ### 3. "Jedna osoba nosi projekt."
 
-Prijavitelj ima softverske proizvode u produkciji čije adrese su u prijedlogu i mogu se otvoriti u trenutku ocjenjivanja; prototip ovog projekta je uživo prije roka; drugi razvojni inženjer, revizor pristupačnosti, dizajner, pravnik i instalater su u proračunu po satu; konačni kod predaje se i objavljuje pod otvorenom licencom u financiranom projektu, pa projekt ne ovisi o jednoj osobi ni jednoj tvrtki. Grad dobiva ponudu pod EUPL-1.2 i može ga preuzeti u cijelosti.
+Prototip je uživo prije roka i može se provjeriti u trenutku ocjenjivanja; proizvodi prijavitelja u produkciji (psh.lat, kompmajstor.eu) dokazuju iste primitive. Drugi razvojni inženjer, revizor pristupačnosti, dizajner, pravni pregled i instalater su u proračunu po satu. Kod se predaje i objavljuje pod otvorenom licencom; Grad dobiva ponudu pod EUPL-1.2 i može sustav preuzeti u cijelosti.
 
 ### 4. "Izvori su krhki: ZET feed je označen 'samo za testiranje', vrijeme.hr pada, CKAN se mijenja."
 
-Svaki izvor ima ocjenu (zeleno, žuto, crveno), rok dohvata, predmemoriju, posljednju dobru kopiju i iskren status na svakom panelu (živo, zastarjelo, nedostupno); stranica nikad nije prazna, a korisnik nikad ne vidi zastarjeli podatak kao svjež. Dostupnost svakog izvora se broji i tromjesečno izvještava Gradskom uredu, što je konkretna korist za tim otvorenih podataka: prvi sustavni zapis o tome koji gradski izvori kasne ili padaju. Pismo ZET-u o oznaci "samo za testiranje" dio je plana (M2), a do tada oznaka stoji uz panel.
+Svaki izvor ima ocjenu (zeleno, žuto, crveno), rok dohvata od 6 sekundi, predmemoriju, posljednju dobru kopiju i status na svakom panelu (živo, zastarjelo, nedostupno); stranica nikad nije prazna, a zastarjeli podatak nikad ne izgleda kao svjež. Dostupnost svakog izvora broji se i tromjesečno izvještava Gradskom uredu: prvi sustavni zapis o tome koji gradski izvori kasne ili padaju. Pismo ZET-u o oznaci "samo za testiranje" dio je plana (M2); do tada oznaka stoji uz panel.
 
 ### 5. "Kamere, praćenje, privatnost."
 
-Ne upravljamo nikakvim kamerama i ne prikazujemo tuđe kamere bez dopuštenja; jedini ugrađeni fotogram je onaj čiji vlasnik ugradnju izričito dopušta. Sustav ne pohranjuje ništa što identificira osobu ili uređaj: nema računa, kolačića, identifikatora uređaja, IP adresa ni koordinata; mreža zaslona i telefona ne uspoređuje se; brojači imaju samo dan, sat, događaj i dvije dimenzije iz zatvorenih rječnika. Nema bannera za pristanak jer nema ničega za što bi se pristanak tražio. Izjava o privatnosti prolazi pravni pregled u M1.
+Ne upravljamo kamerama i ne prikazujemo tuđe bez dopuštenja. Nema računa, trajnog identifikatora korisnika, kolačića za praćenje, otiska uređaja ni zahtjeva za geolokaciju. IP adresa se ne pohranjuje i ne koristi kao obilježje osobe: prolazi kroz ograničivače učestalosti na rubu Cloudflarea i, kao kriptografski sažetak, kroz satnu kvotu samoposlužnih zaslona. Brojači imaju samo dan, sat, događaj i dvije dimenzije iz zatvorenih rječnika; stranica `/privatnost` navodi svaki događaj. Izjava o privatnosti prolazi pravni pregled u M1.
 
 ### 6. "Održivost nakon projekta."
 
-Trošak rada sustava nakon projekta je ispod 100 EUR godišnje (jedan plaćeni Cloudflare račun). Zaslone drže prostori koji od njih imaju korist, uz upute i opoziv na daljinu. Kod je otvoren i dokumentiran na hrvatskom; Grad ima ponudu pod EUPL-1.2 i može preuzeti sustav bez ikakvog dogovora s prijaviteljem. Projekt ne stvara ovisnost ni o osobi, ni o tvrtki, ni o ugovoru.
+Trošak rada sustava nakon projekta je ispod 100 EUR godišnje (jedan plaćeni Cloudflare račun). Zaslone drže prostori koji od njih imaju korist, uz upute i opoziv na daljinu. Kod je otvoren i dokumentiran na hrvatskom; Grad ima ponudu pod EUPL-1.2. Projekt ne stvara ovisnost o osobi, tvrtki ni ugovoru.
 
 ### 7. "Stari uređaji su spori, nesigurni i past će za mjesec dana."
 
-Zaslon prikazuje javne podatke i ne drži nikakve korisničke podatke, pa stari uređaj nema što izgubiti: nema računa, kolačića ni pohrane osim tajne zaslona koju vlasnik može opozvati jednim klikom iz administracije. Tajna vrijedi za taj jedan zaslon i ništa drugo. Brzina nije stvar vjere nego mjerenja: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije, kod se prevodi i za starije preglednike, a mjerila su objavljena i provjerljiva (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad s 1 GB RAM-a). Matrica testiranih uređaja u `docs/kiosk.md` navodi i uređaje koji su pali na testu i zašto, pa Grad vidi stvarnu granicu, a ne obećanje. Dvije nove postave na Raspberry Pi 5 u proračunu su referenca i rezerva ako donirani uređaj otkaže, a prostor u svakom trenutku može zamijeniti uređaj bez ikakve migracije: novi uređaj samo otvori istu adresu.
+Zaslon prikazuje javne podatke i ne drži korisničke podatke, pa stari uređaj nema što izgubiti: jedina pohrana je tajna tog jednog zaslona, koju operater opoziva jednim klikom. Brzina je stvar mjerenja, ne vjere: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije i danas učitava zaslon sa 104 kB; mjerila za pilot su objavljena (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a, potrošnja izmjerena po uređaju), a matrica testiranih uređaja navodi i uređaje koji su pali i zašto. Dvije nove postave na Raspberry Pi 5 su referenca i rezerva; prostor može zamijeniti uređaj bez migracije, jer novi uređaj samo otvori istu adresu.
 
 ### 8. "Zašto filmska tvrtka?"
 
-Zato što je javni zaslon medij, a ne samo sučelje: tipografija čitljiva s tri metra, ritam izmjene kartica, tema koja prati dnevno svjetlo, čitljiva karta koja prati stvarna očitanja, kartica potvrde koja se čita u sekundi, sve su to zanati vizualnog pripovijedanja koje Aning Film radi. Softverska strana nije obećanje: proizvodi prijavitelja u produkciji navedeni su adresama, a prototip ovog projekta je uživo prije roka. Spoj tih dviju kompetencija je razlog zašto ovaj projekt predlaže baš ova tvrtka.
+Zato što je javni zaslon medij, a ne samo sučelje: tipografija čitljiva s tri metra, ritam izmjene kartica, tema koja prati dnevno svjetlo, karta koja prati stvarna očitanja, kartica potvrde koja se čita u sekundi. To su zanati vizualnog pripovijedanja koje Aning Film radi. Softverska strana nije obećanje: prototip je uživo prije roka, a primitivi rade u produkciji drugih proizvoda prijavitelja.

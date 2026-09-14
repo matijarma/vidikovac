@@ -21,15 +21,15 @@ describe('prijedlog-projekta.md', () => {
     ].map((h) => headingIndex(md, h));
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
-  it('has one section per Prilog 1 criterion in the 2026 order with the points stated', () => {
+  it('has one section per Prilog 1 criterion, named as in Prilog 1, in order and with the points stated', () => {
     const order = [
-      '### 6.1 Dosadašnje iskustvo prijavitelja u razvojnim ili istraživačkim programima (0–10 bodova)',
-      '### 6.2 Kapacitet prijavitelja za provedbu projekta (0–10 bodova)',
-      '### 6.3 Tehnička izvedivost (0–10 bodova)',
-      '### 6.4 Društvena korist (0–30 bodova)',
-      '### 6.5 Inovativnost (0–20 bodova)',
-      '### 6.6 Konačni proizvod pod licencom otvorenog koda ili u javnom dobru (0–10 bodova)',
-      '### 6.7 Kvaliteta financijskog plana i obrazloženje troškova (0–10 bodova)',
+      '### 6.1 Prethodno iskustvo prijavitelja u provedbi razvojnih ili istraživačkih programa (0–10 bodova)',
+      '### 6.2 Kapacitet prijavitelja da kvalitetno provede predloženi program (0–10 bodova)',
+      '### 6.3 Tehnička izvedivost predloženog programa (0–10 bodova)',
+      '### 6.4 Društvena korist predloženog programa (0–30 bodova)',
+      '### 6.5 Inovativnost predloženog programa (0–20 bodova)',
+      '### 6.6 Konačni proizvod dostupan je pod licencom otvorenog koda ili u slobodnoj domeni (0–10 bodova)',
+      '### 6.7 Kvaliteta financijskog plana i opravdanost troškova (0–10 bodova)',
     ].map((h) => headingIndex(md, h));
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });

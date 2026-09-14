@@ -4,7 +4,7 @@ Trajanje: 10 mjeseci od potpisa ugovora, u cijelosti unutar Programa (do 31. 12.
 
 ### M0 Prototip uživo (do 16. 9. 2026., prije potpisa)
 
-Isporuke: evaluacijsko okruženje https://zagreb.aningfilm.hr s brendom Kaj ima?, sigurnošću bez sesije (`/hitno`), privremenim stvarnim zaslonima sa stajališnim kontekstom i rotirajućim kodom, uparivanjem na istoj i različitim mrežama, desetominutnim sesijama i petominutnim dijeljenjem. Sedam područja čita deset postojećih modula podataka; karte koriste vlastiti regionalni vektorski izvadak. Stranice `/izvori`, `/privatnost`, `/pristupacnost`, kod za pregled Povjerenstva u privatnom repozitoriju, pregled stvarno provedenih testova i demo video dio su prijavnog paketa. Mjera: Povjerenstvo može proći stvarno uparivanje i isprobati svako implementirano područje na telefonu, radnoj površini i zaslonu. Javna pilot-usluga kreće samo uz financiranje; evaluacijski pristup nije neovisno javno lansiranje.
+Isporuke: javno dostupan prototip https://zagreb.aningfilm.hr s brendom Kaj ima?, sigurnošću bez sesije (`/hitno`), privremenim stvarnim zaslonima koje svatko postavi na `/kiosk/` sa stajališnim kontekstom i rotirajućim kodom, uparivanjem na istoj i različitim mrežama, desetominutnim sesijama i petominutnim dijeljenjem. Sedam područja čita deset postojećih modula podataka; karte koriste vlastiti regionalni vektorski izvadak. Stranice `/izvori`, `/privatnost`, `/pristupacnost` i `/open/`, kod za pregled Povjerenstva u privatnom repozitoriju, pregled stvarno provedenih testova i demo video dio su prijavnog paketa. Mjera: Povjerenstvo može proći stvarno uparivanje i isprobati svako implementirano područje na telefonu, radnoj površini i zaslonu. Javna pilot-usluga na zaslonima u prostorima kreće samo uz financiranje; javno dostupan prototip nije neovisno javno lansiranje.
 
 ### M1 Učvršćivanje protokola, izjave, prva revizija pristupačnosti (mjeseci 1 do 2)
 
@@ -12,7 +12,7 @@ Isporuke: terenska provjera uparivanja na istoj i različitim mrežama (kafić W
 
 ### M1b Lagani način rada za stare uređaje (mjesec 2)
 
-Isporuke: lagani način zaslona bez karte, WebGL-a, `canvas` animacija i upitnika o spremniku, s prijelomnom točkom rasporeda u JavaScriptu; druga inačica koda prevedena za starije preglednike (cilj ES2017) uz postojeću modernu; automatsko prepoznavanje slabog uređaja i ručni prekidač `?lagano=1`; prva matrica testiranih uređaja u `docs/kiosk.md` s nazivom preglednika, vremenom učitavanja, potrošnjom u vatima i, gdje uređaj padne, razlogom. Mjera: zaslon radi na uređaju iz 2014. ili starijem i na tabletu iz 2015., uz manje od 200 kB prijenosa po učitavanju i manje od 300 MB radne memorije, izmjereno i objavljeno.
+Isporuke: lagani način zaslona bez karte, WebGL-a i `canvas` animacija, s rasporedom koji ne ovisi o novijim CSS mogućnostima (postojeći `?lagano=1` i automatsko prepoznavanje slabog uređaja se dorađuju); druga inačica koda prevedena za starije preglednike bez podrške za ES module (cilj prijevoda ES2017) uz postojeću modernu; prva matrica testiranih uređaja u `docs/kiosk.md` s nazivom preglednika, vremenom učitavanja, potrošnjom u vatima i, gdje uređaj padne, razlogom. Mjera: zaslon radi na najmanje četiri stvarna stara ili donirana uređaja različitih klasa (prijenosnik, tablet, Android TV kutija, Raspberry Pi) uz manje od 200 kB prijenosa po učitavanju i manje od 300 MB radne memorije, izmjereno i objavljeno; uređaj koji padne ostaje u matrici s razlogom.
 
 ### M2 Svi zeleni izvori u produkciji, pisma vlasnicima podataka (mjeseci 2 do 3)
 
@@ -20,7 +20,7 @@ Isporuke: hidrološki bilten, indeks zraka (INSPIRE WFS/WMS), HŽPP polasci prem
 
 ### M3 Šest zaslona instalirano, administracija zaslona (mjeseci 3 do 4)
 
-Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na tri daljnje lokacije, od toga **četiri na doniranim uređajima** koje projekt pregleda, pripremi i ostavi prostoru; administracija zaslona (provizioniranje, opoziv, oznaka stanice, pregled dostupnosti) iza Cloudflare Accessa; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena i izmjerenom potrošnjom svakog uređaja. Mjera: šest zaslona javlja `kiosk_online` svakog dana u mjesecu 4; matrica uređaja sadrži šest stvarnih postava.
+Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na tri daljnje lokacije, od toga **četiri na doniranim uređajima** koje projekt pregleda, pripremi i ostavi prostoru; operatersko sučelje za trajne zaslone (provizioniranje bez roka, opoziv, oznaka stanice, pregled dostupnosti) zaštićeno prijavom, uz javnu samoposlugu privremenih zaslona na `/kiosk/`; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena i izmjerenom potrošnjom svakog uređaja. Mjera: šest zaslona javlja `kiosk_online` svakog dana u mjesecu 4; matrica uređaja sadrži šest stvarnih postava.
 
 ### M4 Prvi skup podataka Gradu, ZGBit, javni katalog `/open` (mjesec 5)
 
