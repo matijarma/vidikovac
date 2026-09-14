@@ -167,3 +167,35 @@
     padding-inline: var(--sp-4);
   }
 }
+
+/* The sheet variant (the session sheet, the share dialog): a bottom sheet on the
+   phone, full width, rounded at the top, the safe area under its foot and the
+   small viewport as its ceiling; from 60rem the same element is a centred 32rem
+   dialog again (the UA's inset: 0 plus margin: auto centres a modal dialog, so
+   the desk rule restores both). The scrim stays and the blur goes: the sheet
+   belongs to the content under it, and a blurred city behind a settings sheet
+   reads as a different app. */
+.dialog-sheet {
+  inset: auto 0 0 0;
+  inline-size: 100%;
+  max-inline-size: none;
+  max-block-size: 86svh;
+  margin: 0;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+.dialog-sheet::backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (min-width: 60rem) {
+  .dialog-sheet {
+    inset: 0;
+    inline-size: min(32rem, calc(100vw - 2rem));
+    max-block-size: min(86svh, 48rem);
+    margin: auto;
+    border-radius: var(--r-lg);
+  }
+}

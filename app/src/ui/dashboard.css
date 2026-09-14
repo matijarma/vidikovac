@@ -194,24 +194,52 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
 .ki[data-view='map'] .ki-main { padding: 0; }
 .ki[data-view='map'] .ki-banners { display: none; }
 
-/* The session sheet. */
-.dialog-session .dialog-body { display: grid; gap: var(--sp-5); }
+/* The session sheet (dialog.css .dialog-sheet gives it the bottom-sheet box):
+   the remaining time at display size, plain sentences at body, 48 px action
+   rows with a peacock icon and a sentence-case label, two segmented controls
+   under a quiet label, the four pages as 44 px links. Every block is keyed for
+   the reconciler, so nothing here depends on being rebuilt. */
+.dialog-session .dialog-body { display: grid; gap: var(--sp-5); touch-action: pan-y; }
 .sheet-sec { display: grid; gap: var(--sp-2); }
-.sheet-time { font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
-.sheet-row { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); font-size: var(--text-sm); color: var(--tone-text-muted); }
-.sheet-k { color: var(--tone-text-subtle); }
-.sheet-v { color: var(--tone-text-primary); font-weight: var(--weight-medium); }
-.sheet-actions { gap: var(--sp-2); }
-.sheet-btn { justify-content: flex-start; }
+.sheet-status { gap: var(--sp-3); }
+.sheet-time { margin: 0; font-size: var(--type-display); font-weight: var(--weight-bold); line-height: var(--lh-tight); letter-spacing: -0.02em; }
+.sheet-line { margin: 0; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-body); }
+.sheet-actions { gap: 0; margin-inline: calc(-1 * var(--sp-2)); }
+.sheet-btn { display: flex; align-items: center; gap: var(--sp-3); min-block-size: var(--target-primary); padding: var(--sp-2); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-primary); font: inherit; font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-title); text-align: start; cursor: pointer; touch-action: manipulation; }
+.sheet-btn .icon { color: var(--tone-action-brand); }
+.sheet-btn-text { display: grid; gap: 0.125rem; min-inline-size: 0; }
+.sheet-btn-sub { font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+@media (hover: hover) {
+  .sheet-btn:hover { background: var(--tone-surface-2); }
+}
+@media (hover: none) {
+  .sheet-btn:active { background-color: var(--tone-surface-2); transition: none; }
+}
+.sheet-label { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
 .segmented { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-md); background: var(--tone-surface-2); }
-.segment { flex: 1 1 auto; min-height: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; }
-.segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); box-shadow: var(--tone-shadow-soft); }
-.sheet-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
-.sheet-links a { display: inline-flex; align-items: center; min-height: var(--target); }
+.segment { flex: 1 1 auto; min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
+.segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
+.sheet-links { display: flex; flex-wrap: wrap; gap: 0 var(--sp-4); font-size: var(--type-control); font-weight: var(--weight-medium); }
+.sheet-links a { display: inline-flex; align-items: center; min-block-size: var(--target); }
 
-/* Share the city: one rotating peer code, the same component the screen shows. */
+/* Share the city: the QR plate is an object (R-D3), the code at numeral mono,
+   a 4 px bar that fills over the slot with the seconds to the next code, the
+   sentence with this page's host, the read-aloud line, a 44 px copy and two
+   status lines that appear only once they have something to say. */
+.dialog-share .dialog-body { touch-action: pan-y; }
 .share-body { display: grid; justify-items: center; gap: var(--sp-3); text-align: center; }
-.share-code { margin: 0; font-family: var(--font-mono); font-size: var(--text-2xl); letter-spacing: 0.12em; }
+.share-qr .qr { inline-size: 200px; max-inline-size: none; }
+.share-code { margin: 0; font-family: var(--font-mono); font-size: var(--type-numeral); font-weight: var(--weight-bold); line-height: var(--lh-tight); letter-spacing: 0.08em; }
+.share-progress { inline-size: 200px; block-size: 4px; border-radius: var(--r-pill); background: var(--tone-surface-2); overflow: hidden; }
+.share-progress-fill { inline-size: 0; block-size: 100%; border-radius: inherit; background: var(--tone-action-brand); transition: width 1s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .share-progress-fill { transition: none; }
+}
+.share-rotates { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+.share-text { margin: 0; max-inline-size: 36ch; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-body); }
+.share-read { margin: 0; font-size: var(--type-body); font-weight: var(--weight-medium); }
+.share-copy { min-block-size: var(--target); }
+.share-status { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
 
 /* Lightweight and reduced motion: flat surfaces, no transitions. */
 

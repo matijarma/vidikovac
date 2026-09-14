@@ -122,7 +122,7 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
     : s.expiresAt !== null && s.phase === 'live'
       ? i18n.t('session.pillLabel', { time: zagrebTime(s.expiresAt) })
       : i18n.t('session.connecting');
-  return `<button type="button" class="ki-session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(i18n.t('session.sheetTitle'))}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
+  return `<button type="button" class="ki-session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
 }
 
 /** The desktop sidebar: seven labelled domains and the footer note. */
