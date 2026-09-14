@@ -500,19 +500,25 @@ export class BeaconDO extends DurableObject<Env> {
     return { ok: false, error };
   }
 
-  /** Counted-session caps: 30 per rolling hour, 200 per rolling day. Overflow is a session all the same, just recorded as over_cap. */
+  /**
+   * Counted-session caps: 30 per rolling hour, 200 per rolling day. Overflow is a
+   * session all the same, just recorded as over_cap. dim1 is the venue type the
+   * screen was provisioned with (the City dataset's "vrsta prostora"); a
+   * temporary evaluation screen is counted under `evaluation` instead.
+   */
   private countSession(now: number, areaSlug: string): void {
     const sql = this.ctx.storage.sql;
+    const venueType = this.meta('venueType') ?? 'ostalo';
     sql.exec(`DELETE FROM sessions WHERE started_at <= ?`, now - DAY_MS);
     const hour = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM sessions WHERE started_at > ?`, now - HOUR_MS).one().n;
     const day = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM sessions`).one().n;
     if (hour >= CAP_PER_HOUR || day >= CAP_PER_DAY) {
       void recordMetric(this.env, this.screenMetadata().kind === 'temporary' ? 'evaluation' : 'over_cap',
-        this.screenMetadata().kind === 'temporary' ? 'over_cap' : 'kiosk', areaSlug);
+        this.screenMetadata().kind === 'temporary' ? 'over_cap' : venueType, areaSlug);
       return;
     }
     sql.exec(`INSERT INTO sessions (started_at) VALUES (?)`, now);
     void recordMetric(this.env, this.screenMetadata().kind === 'temporary' ? 'evaluation' : 'session_start',
-      this.screenMetadata().kind === 'temporary' ? 'session_start' : 'kiosk', areaSlug);
+      this.screenMetadata().kind === 'temporary' ? 'session_start' : venueType, areaSlug);
   }
 }

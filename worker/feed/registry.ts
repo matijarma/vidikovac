@@ -220,8 +220,17 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
       };
       return { ...snapshot, items: [count, ...boxed, ...delays] };
     }
-    case 'hrt-news':
-      return limitedSnapshot(snapshot, snapshot.items.slice(0, TEASER_NEWS_LIMIT));
+    case 'hrt-news': {
+      // The tokenless teaser carries headline, date and link only. HRT's terms
+      // allow carrying its news with attribution and a link to the original,
+      // and the kiosk prints headlines; the lede stays behind the scan.
+      const headlines = snapshot.items.slice(0, TEASER_NEWS_LIMIT).map((entry) => {
+        const { summary, ...headline } = entry;
+        void summary;
+        return headline;
+      });
+      return limitedSnapshot(snapshot, headlines);
+    }
     case 'dogadanja': {
       // The licence boundary (modules/dogadanja/licence.ts): Kulturpunkt
       // (CC BY-SA 3.0 HR) and Etnografski rows never leave the session tier.

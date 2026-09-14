@@ -153,7 +153,7 @@ describe('BeaconDO redeem', () => {
     expect(unlocked.ticket).not.toBe(result.scan.ticket);
     expect(unlocked.expiresAt).toBe(result.scan.expiresAt);
     const rows = await metricsStub(testEnv).query('2020-01-01');
-    expect(rows.some((r) => r.event === 'session_start' && r.dim1 === 'kiosk' && r.dim2 === 'donji-grad')).toBe(true);
+    expect(rows.some((r) => r.event === 'session_start' && r.dim1 === 'kafic' && r.dim2 === 'donji-grad')).toBe(true);
   });
 
   it('a code is single use', async () => {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { FetchContext } from '../../worker/feed/schema';
 import { fetchDogadanja } from '../../worker/feed/modules/dogadanja';
+import { ARCGIS_CETVRTI_URL, ZBORNA_MJESTA_URL, fetchCkanGeo } from '../../worker/feed/modules/ckan-geo';
 
 // The robots guarantee (R-P5, task E6's own name for it): a test that records
 // every URL the dogadanja module actually requests through an injected fetch,
@@ -31,6 +32,10 @@ const DISALLOWED_PREFIXES = [
   'http://kultura.zagreb.hr/_next/',
   'https://www.youtube.com/feeds/videos.xml',
   'https://youtube.com/feeds/videos.xml',
+  // data.zagreb.hr/robots.txt disallows /api/ (read 12 and 14 Sept 2026): the
+  // portal's datasets are read from their resource download URLs, never CKAN.
+  'https://data.zagreb.hr/api/',
+  'http://data.zagreb.hr/api/',
 ];
 
 // These two hosts are excluded entirely -- no prefix carve-out, unlike
@@ -53,6 +58,7 @@ describe('assertRobotsAllow (the guard itself)', () => {
     expect(() => assertRobotsAllow('https://www.youtube.com/feeds/videos.xml?channel_id=UCRMm4Xt9ruoQ8FG7NpIHCsA')).toThrow();
     expect(() => assertRobotsAllow('https://muzika.hr/dogadjanja')).toThrow();
     expect(() => assertRobotsAllow('https://www.infozagreb.hr/en/events')).toThrow();
+    expect(() => assertRobotsAllow('https://data.zagreb.hr/api/3/action/package_show?id=zborna-mjesta')).toThrow();
   });
 
   it('allows the real URLs the six sub-fetchers actually use today', () => {
@@ -125,5 +131,20 @@ describe('fetchDogadanja never requests a disallowed URL', () => {
       expect(hostname).not.toBe('infozagreb.hr');
       expect(url).not.toContain('/feeds/videos.xml');
     }
+  });
+});
+
+describe('fetchCkanGeo never requests data.zagreb.hr/api/', () => {
+  it('reads both spatial layers from direct download URLs that clear the guard', async () => {
+    const requested: string[] = [];
+    await fetchCkanGeo({
+      now: () => new Date('2026-09-12T00:45:30Z'),
+      fetch: async (url) => {
+        requested.push(url);
+        return new Response(JSON.stringify({ type: 'FeatureCollection', features: [] }));
+      },
+    });
+    expect(requested).toEqual([ARCGIS_CETVRTI_URL, ZBORNA_MJESTA_URL]);
+    for (const url of requested) expect(() => assertRobotsAllow(url), url).not.toThrow();
   });
 });

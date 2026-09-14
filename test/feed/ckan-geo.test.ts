@@ -4,11 +4,9 @@ import {
   ARCGIS_CETVRTI_URL,
   CETVRTI_DATASET,
   CKAN_GEO_SOURCE_LIMIT,
-  CKAN_PACKAGE_SHOW,
   POI_CATEGORIES,
-  ZBORNA_MJESTA_DATASET,
   ZBORNA_MJESTA_LAYER,
-  ckanResourceUrl,
+  ZBORNA_MJESTA_URL,
   featureCentroid,
   fetchCkanGeo,
   parseCkanRecords,
@@ -19,27 +17,17 @@ import {
 import { DATA_KEYS, type FetchContext } from '../../worker/feed/schema';
 
 const cetvrti = JSON.parse(readFileSync(new URL('../fixtures/gradske_cetvrti.geojson', import.meta.url), 'utf8'));
-const packageShow = JSON.parse(readFileSync(new URL('../fixtures/prometnice_package_show.json', import.meta.url), 'utf8'));
 const NOW = '2026-09-11T10:00:00.000Z';
-const ASSEMBLY_URL = 'https://data.zagreb.hr/zborna.json';
+const ASSEMBLY_URL = ZBORNA_MJESTA_URL;
 const emptyCollection = { type: 'FeatureCollection', features: [] };
-const goodMeta = {
-  success: true,
-  result: {
-    name: ZBORNA_MJESTA_DATASET,
-    metadata_modified: '2026-09-01T08:00:00.000000',
-    resources: [{ format: 'GeoJSON', url: ASSEMBLY_URL }],
-  },
-};
 const goodAssembly = [{ naziv: 'Zrinjevac', lat: 45.811, lon: 15.978 }];
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
-function context(overrides: { districts?: () => Response; meta?: () => Response; assembly?: () => Response } = {}): FetchContext {
+function context(overrides: { districts?: () => Response; assembly?: () => Response } = {}): FetchContext {
   return {
     now: () => new Date(NOW),
     fetch: async (url) => {
       if (url === ARCGIS_CETVRTI_URL) return overrides.districts?.() ?? response(cetvrti);
-      if (url === `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`) return overrides.meta?.() ?? response(goodMeta);
       if (url === ASSEMBLY_URL) return overrides.assembly?.() ?? response(goodAssembly);
       throw new Error(`unexpected source URL: ${url}`);
     },
@@ -129,15 +117,7 @@ describe('parseGradskeCetvrti', () => {
   });
 });
 
-describe('ckanResourceUrl and parseCkanRecords', () => {
-  it('picks the JSON distribution out of a package_show answer', () => {
-    expect(ckanResourceUrl(packageShow)).toBe(
-      'https://data.zagreb.hr/dataset/7ff5514d-0a1f-4f6c-86bd-8ed9a3c55eee/resource/e48b6992-add0-45a1-ae95-c5d97d8db259/download/data.json',
-    );
-    expect(ckanResourceUrl({ success: true, result: { resources: [] } })).toBeNull();
-    expect(ckanResourceUrl(null)).toBeNull();
-  });
-
+describe('parseCkanRecords', () => {
   it('reads either a FeatureCollection or a flat record list', () => {
     const geo = parseCkanRecords(
       {
@@ -234,56 +214,24 @@ describe('ckanResourceUrl and parseCkanRecords', () => {
     expect(items.map((item) => item.summary)).toEqual([undefined, 'Podsljeme', undefined, undefined]);
   });
 
-  it.each([
-    null,
-    { result: goodMeta.result },
-    { success: false, result: goodMeta.result },
-    { success: true, error: { message: 'failed' }, result: goodMeta.result },
-    { success: true, result: { resources: [null, { format: {}, url: ASSEMBLY_URL }] } },
-    ...['javascript:alert(1)', 'http://data.zagreb.hr/test.json', 'https://example.org/test.json', 'https://data.zagreb.hr@example.org/test.json', 'not a url']
-      .map((url) => ({ success: true, result: { resources: [{ format: 'JSON', url }] } })),
-  ])('rejects failed envelopes and unverified distribution URLs: %j', (meta) => {
-    expect(ckanResourceUrl(meta)).toBeNull();
-  });
-
-  it('prefers a valid official GeoJSON distribution over JSON', () => {
-    expect(ckanResourceUrl({ success: true, result: { resources: [
-      { format: 'JSON', url: ASSEMBLY_URL },
-      { format: 'GeoJSON', url: 'https://example.org/not-official.json' },
-      { format: ' geojson ', url: 'https://data.zagreb.hr/official.geojson' },
-    ] } })).toBe('https://data.zagreb.hr/official.geojson');
-  });
 });
 
 describe('fetchCkanGeo', () => {
-  it('resolves the assembly-point resource through CKAN and keeps the districts', async () => {
+  it('reads the assembly points straight from the portal resource, never through CKAN /api/, and keeps the districts', async () => {
     const asked: string[] = [];
     const payload = await fetchCkanGeo({
       now: () => new Date('2026-09-11T10:00:00.000Z'),
       fetch: async (url) => {
         asked.push(url);
         if (url === ARCGIS_CETVRTI_URL) return new Response(JSON.stringify(cetvrti));
-        if (url.startsWith(CKAN_PACKAGE_SHOW)) {
-          return new Response(
-            JSON.stringify({
-              success: true,
-              result: {
-                name: ZBORNA_MJESTA_DATASET,
-                metadata_modified: '2026-09-01T08:00:00.000000',
-                resources: [{ format: 'JSON', url: 'https://data.zagreb.hr/zborna.json' }],
-              },
-            }),
-          );
-        }
-        return new Response(JSON.stringify([{ naziv: 'Zrinjevac', lat: 45.811, lon: 15.978 }]));
+        return new Response(JSON.stringify([{ naziv: 'Zrinjevac', lat: 45.811, lon: 15.978 }]), {
+          headers: { 'last-modified': 'Tue, 01 Sep 2026 08:00:00 GMT' },
+        });
       },
     });
 
-    expect(asked).toEqual([
-      ARCGIS_CETVRTI_URL,
-      `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`,
-      'https://data.zagreb.hr/zborna.json',
-    ]);
+    expect(asked).toEqual([ARCGIS_CETVRTI_URL, ZBORNA_MJESTA_URL]);
+    for (const url of asked) expect(url).not.toContain('data.zagreb.hr/api/');
     expect(payload.items.filter((item) => item.data?.layer === CETVRTI_DATASET)).toHaveLength(17);
     expect(payload.items.filter((item) => item.data?.layer === ZBORNA_MJESTA_LAYER)).toHaveLength(1);
     expect(payload.sourceUpdatedAt).toBeUndefined();
@@ -296,7 +244,7 @@ describe('fetchCkanGeo', () => {
     expect(payload.coverage).toEqual({ shown: 18, total: 18, limited: false });
   });
 
-  it('keeps the districts when CKAN is unreachable, and throws only when both layers fail', async () => {
+  it('keeps the districts when the portal is unreachable, and throws only when both layers fail', async () => {
     const partial = await fetchCkanGeo({
       now: () => new Date('2026-09-11T10:00:00.000Z'),
       fetch: async (url) => {
@@ -370,30 +318,27 @@ describe('fetchCkanGeo', () => {
   });
 
   it.each([
-    () => response(goodMeta, 503),
-    () => response({ success: false, result: goodMeta.result }),
-    () => response({ result: goodMeta.result }),
-    () => response({ success: true, result: { resources: [] } }),
-    () => response({ success: true, result: { resources: 'broken' } }),
-  ])('does not equate unavailable metadata with an empty assembly layer', async (meta) => {
-    const payload = await fetchCkanGeo(context({ meta }));
+    () => response(emptyCollection, 503),
+    () => new Response('<html>portal down</html>'),
+    () => response({ success: false }),
+  ])('does not equate an unreadable assembly download with an empty assembly layer', async (assembly) => {
+    const payload = await fetchCkanGeo(context({ assembly }));
     expect(payload.sources?.['zborna-mjesta']).toEqual({ status: 'down', itemCount: 0 });
     expect(payload.coverage).toEqual({ shown: 17, limited: true });
   });
 
-  it('prefers the resource modification time, never the fetch time or a shared district timestamp', async () => {
-    const payload = await fetchCkanGeo(context({ meta: () => response({
-      ...goodMeta,
-      result: { ...goodMeta.result, resources: [{ format: 'GeoJSON', url: ASSEMBLY_URL, last_modified: '2025-01-02T12:39:07.558409' }] },
+  it('takes the assembly date from the portal Last-Modified header, never the fetch time or a shared district timestamp', async () => {
+    const payload = await fetchCkanGeo(context({ assembly: () => new Response(JSON.stringify(goodAssembly), {
+      headers: { 'last-modified': 'Thu, 02 Jan 2025 12:39:07 GMT' },
     }) }));
-    expect(payload.sources?.['zborna-mjesta']?.sourceUpdatedAt).toBe('2025-01-02T12:39:07.558Z');
+    expect(payload.sources?.['zborna-mjesta']?.sourceUpdatedAt).toBe('2025-01-02T12:39:07.000Z');
     expect(payload.sources?.['gradske-cetvrti']?.sourceUpdatedAt).toBeUndefined();
     expect(payload.sourceUpdatedAt).toBeUndefined();
   });
 
-  it('omits invalid source dates without replacing them with fetchedAt', async () => {
-    const payload = await fetchCkanGeo(context({ meta: () => response({
-      ...goodMeta, result: { ...goodMeta.result, metadata_modified: { bad: 'timestamp' } },
+  it('omits an unparsable or missing Last-Modified without replacing it with fetchedAt', async () => {
+    const payload = await fetchCkanGeo(context({ assembly: () => new Response(JSON.stringify(goodAssembly), {
+      headers: { 'last-modified': 'not a date' },
     }) }));
     expect(payload.sources?.['zborna-mjesta']?.sourceUpdatedAt).toBeUndefined();
     expect(payload.sources?.['zborna-mjesta']?.fetchedAt).toBe(NOW);
@@ -449,7 +394,8 @@ describe('spatial and gazette catalogue descriptions', () => {
       expect(description).toContain('zborna mjesta');
       expect(description).not.toMatch(/ljekarne|vatrogasci|policija|zdenci|knjižnice|muzeji|javni WC/);
     }
-    expect(row).toContain(`${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`);
+    expect(row).toContain(ZBORNA_MJESTA_URL);
+    expect(row).not.toContain('data.zagreb.hr/api/');
     expect(row).toContain(ARCGIS_CETVRTI_URL);
     expect(docs).toContain(`najviše ${CKAN_GEO_SOURCE_LIMIT} čitljivih stavki po sloju`);
   });

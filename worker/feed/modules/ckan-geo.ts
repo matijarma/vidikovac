@@ -1,15 +1,16 @@
 import type { FetchContext, SourceAvailability } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
 import { compactData, sourceCoverage } from '../payload';
-import { isoOrUndefined } from '../time';
 
-// Two spatial layers, two access paths. The seventeen city districts come from
-// the City's ArcGIS FeatureServer as polygons and are reduced to one labelled
-// centroid each; the civil-protection assembly points are found through CKAN
-// package_show, because the download URL of a resource is not stable enough to
-// pin but the package name is.
+// Two spatial layers, two direct downloads. The seventeen city districts come
+// from the City's ArcGIS FeatureServer as polygons and are reduced to one
+// labelled centroid each; the civil-protection assembly points are read
+// straight from the portal's resource download URL. data.zagreb.hr/robots.txt
+// disallows /api/, so CKAN package_show is never called (R-P5): if the portal
+// moves the resource the layer goes `down` and docs/izvori.md is updated.
 
-export const CKAN_PACKAGE_SHOW = 'https://data.zagreb.hr/api/3/action/package_show?id=';
+export const ZBORNA_MJESTA_URL =
+  'https://data.zagreb.hr/dataset/d736c146-6497-4915-894b-41bdf51267b0/resource/d30eb215-3ce2-48f8-88b2-6ffac82d46b5/download/zborna_mjesta_civilne_zatite_grada_zagreba-1.geojson';
 export const ARCGIS_CETVRTI_URL =
   'https://services8.arcgis.com/Usi0jGQwMmBUpFjr/arcgis/rest/services/Gradske_cetvrti/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson';
 export const ZBORNA_MJESTA_DATASET = 'zborna-mjesta-civilne-zastite-grada-zagreba';
@@ -128,39 +129,6 @@ export function parseGradskeCetvrti(json: unknown): ItemInput[] {
   return items;
 }
 
-interface CkanResource {
-  url: string;
-  last_modified?: unknown;
-}
-
-function ckanResource(packageShow: unknown): CkanResource | null {
-  const envelope = recordOf(packageShow);
-  if (envelope?.success !== true || envelope.error != null || envelope.errors != null) return null;
-  const resources = recordOf(envelope.result)?.resources;
-  if (!Array.isArray(resources)) return null;
-  const preferred = ['GEOJSON', 'JSON'];
-  for (const format of preferred) {
-    for (const entry of resources) {
-      const resource = recordOf(entry);
-      if (text(resource?.format)?.toUpperCase() !== format) continue;
-      const url = text(resource?.url);
-      if (!url) continue;
-      try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'https:' || parsed.hostname !== 'data.zagreb.hr' || parsed.username || parsed.password || parsed.port) continue;
-        return { url: parsed.href, last_modified: resource?.last_modified };
-      } catch {
-        // A malformed distribution is not a usable resource.
-      }
-    }
-  }
-  return null;
-}
-
-export function ckanResourceUrl(packageShow: unknown): string | null {
-  return ckanResource(packageShow)?.url ?? null;
-}
-
 // The official assembly GeoJSON uses zboriste / gradska_ce / OBJECTID.
 const NAME_KEYS = ['zboriste', 'ZBORISTE', 'naziv', 'NAZIV', 'ime', 'IME', 'name', 'NAME', 'lokacija', 'LOKACIJA'];
 const ADDRESS_KEYS = ['adresa', 'ADRESA', 'address', 'ulica', 'ULICA'];
@@ -220,20 +188,14 @@ export function parseCkanRecords(json: unknown, layer: string): ItemInput[] {
   return items;
 }
 
-/**
- * CKAN's `metadata_modified` is UTC but carries no zone suffix ("2026-09-01T08:00:00.000000"),
- * so the generic Date Time String Format parser in `isoOrUndefined` would read it as host-local
- * time. Append the missing `Z` before normalising so the result never depends on the runtime's
- * time zone (this codebase's own host is Europe/Zagreb, which silently shifts the naive parse).
- */
-function ckanTimestampIso(value: unknown): string | undefined {
-  const timestamp = text(value);
-  if (!timestamp) return undefined;
-  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(timestamp) ? timestamp : `${timestamp}Z`;
-  return isoOrUndefined(withZone);
+/** The portal's `Last-Modified` response header when it sends one; never the fetch time. */
+function headerTimestampIso(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
 }
 
-async function readJson(ctx: FetchContext, url: string): Promise<unknown> {
+async function readJsonResponse(ctx: FetchContext, url: string): Promise<{ json: unknown; response: Response }> {
   const response = await ctx.fetch(url);
   if (!response.ok) throw new Error(`ckan-geo: HTTP ${response.status}`);
   const json: unknown = await response.json();
@@ -241,7 +203,11 @@ async function readJson(ctx: FetchContext, url: string): Promise<unknown> {
   if (envelope?.success === false || envelope?.error != null || envelope?.errors != null) {
     throw new Error('ckan-geo: upstream API error');
   }
-  return json;
+  return { json, response };
+}
+
+async function readJson(ctx: FetchContext, url: string): Promise<unknown> {
+  return (await readJsonResponse(ctx, url)).json;
 }
 
 interface SpatialResult {
@@ -287,15 +253,8 @@ export async function fetchCkanGeo(ctx: FetchContext): Promise<FeedPayload> {
   const districts = readJson(ctx, ARCGIS_CETVRTI_URL)
     .then((json) => spatialResult(json, CETVRTI_DATASET, ctx));
 
-  const assembly = (async () => {
-    const meta = await readJson(ctx, `${CKAN_PACKAGE_SHOW}${ZBORNA_MJESTA_DATASET}`);
-    const resource = ckanResource(meta);
-    if (!resource) throw new Error('ckan-geo: no official JSON resource for the assembly points');
-    const records = await readJson(ctx, resource.url);
-    const modified = ckanTimestampIso(resource.last_modified)
-      ?? ckanTimestampIso(recordOf(recordOf(meta)?.result)?.metadata_modified);
-    return spatialResult(records, ZBORNA_MJESTA_LAYER, ctx, modified);
-  })();
+  const assembly = readJsonResponse(ctx, ZBORNA_MJESTA_URL)
+    .then(({ json, response }) => spatialResult(json, ZBORNA_MJESTA_LAYER, ctx, headerTimestampIso(response.headers.get('last-modified'))));
 
   const [districtResult, assemblyResult] = await Promise.allSettled([districts, assembly]);
   if (districtResult.status === 'rejected' && assemblyResult.status === 'rejected') {
@@ -312,7 +271,7 @@ export async function fetchCkanGeo(ctx: FetchContext): Promise<FeedPayload> {
     }
   }
 
-  // There is no shared source timestamp: the CKAN resource date says nothing
-  // about when the independent district geometry was last updated.
+  // There is no shared source timestamp: the portal's Last-Modified for the
+  // assembly file says nothing about when the district geometry last changed.
   return { items, sources, coverage: sourceCoverage(sources) };
 }

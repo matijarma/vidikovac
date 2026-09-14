@@ -153,10 +153,13 @@ describe('teaserSubset', () => {
 
     const news = snapshot(
       'hrt-news',
-      Array.from({ length: 8 }, (_, n) => item({ id: `n${n}`, kind: 'news', title: `Naslov ${n}`, module: 'hrt-news' })),
+      Array.from({ length: 8 }, (_, n) => item({ id: `n${n}`, kind: 'news', title: `Naslov ${n}`, summary: `Uvod ${n}`, module: 'hrt-news' })),
     );
     const cut = teaserSubset(news);
     expect(cut.items).toHaveLength(3);
+    // HRT's lede stays behind the scan: the tokenless teaser carries headlines only.
+    expect(cut.items.every((entry) => entry.summary === undefined)).toBe(true);
+    expect(cut.items[0]?.title).toBe('Naslov 0');
     expect(cut.items.map((i) => i.id)).toEqual(['n0', 'n1', 'n2']);
     expect(cut.status).toBe('live');
     expect(cut.attribution).toEqual(news.attribution);

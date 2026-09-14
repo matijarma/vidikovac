@@ -64,7 +64,7 @@ describe('renderStatsPage', () => {
   });
 
   it('breaks sessions down by screen type and district, and sources by status', () => {
-    expect(html).toMatch(/Sesije po vrsti zaslona i četvrti[\s\S]*?<th scope="row">kiosk<\/th>[\s\S]*?>28</);
+    expect(html).toMatch(/Sesije po vrsti prostora i četvrti[\s\S]*?<th scope="row">kiosk<\/th>[\s\S]*?>28</);
     expect(html).toMatch(/Izvori[\s\S]*?<th scope="row">zet-rt<\/th>[\s\S]*?>118<[\s\S]*?>2</);
     expect(html).toContain('Preko kapaciteta');
   });

@@ -24,7 +24,9 @@
 //                                WebSockets in current browsers, the explicit
 //                                entry is for older Safari.
 //   Permissions-Policy camera=(self) for the in-app QR scanner, geolocation=(self)
-//   for "departures at the nearest stop" (location stays on the phone).
+//   for a user-initiated "my location" control on the map: nothing asks for a
+//   position on its own, the browser prompts when the person taps, and the
+//   coordinates stay on the phone (never sent to the Worker).
 //
 // THE PAGE POLICY (/hitno, /open/): server-rendered, zero JS, one inline
 // <style>, no fetch of any kind, so `default-src 'none'` holds.

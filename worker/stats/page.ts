@@ -286,7 +286,7 @@ export function renderStatsPage(view: StatsView): string {
       .join('') +
     `</div>` +
     `<section><h2>Sesije</h2><p class="lede">Otključavanja i njihov kraj. Brojevi su sirovi; zaokruživanje i sažimanje primjenjuju se samo u grad.csv.</p>` +
-    matrixTable('Sesije po vrsti zaslona i četvrti', 'Vrsta zaslona', pivot(rows, 'session_start', 'dim1', 'dim2'), 'još nema sesija') +
+    matrixTable('Sesije po vrsti prostora i četvrti', 'Vrsta prostora', pivot(rows, 'session_start', 'dim1', 'dim2'), 'još nema sesija') +
     matrixTable('Kraj sesije po razlogu i trajanju', 'Razlog', pivot(rows, 'session_end', 'dim1', 'dim2'), 'još nema završenih sesija') +
     matrixTable('Neuspjeli skenovi po razlogu', 'Razlog', pivot(rows, 'scan_fail', 'dim1', null), 'nema neuspjelih skenova') +
     `<h3>Preko kapaciteta</h3><p>${fmt(overCap)} sesija iznad ograničenja po zaslonu (30 na sat, 200 na dan); isključene iz skupa za Grad.</p>` +
