@@ -49,6 +49,10 @@ const PAGES = [
 
 /** One layer of one scene: axe, the geometry facts, a screenshot, a record; a blocking violation or overflow is a finding. */
 async function captureLayer(page, sceneName, layer) {
+  // Measure the settled page: a figure crossfade or a workspace fade caught
+  // mid-flight blends the text with the canvas and fails contrast for 180 ms.
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
+  await page.waitForTimeout(60);
   const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
   const blocking = audit.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
   for (const violation of blocking) findings.push({
