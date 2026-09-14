@@ -59,9 +59,13 @@ export async function provisionKiosk(
 export async function readPairing(kiosk: Page, base: string): Promise<{ code: string; scanUrl: string }> {
   const codeEl = kiosk.getByTestId('pair-code');
   await expect(codeEl).toHaveText(CODE_RE, { timeout: 30_000 });
-  const code = ((await codeEl.textContent()) ?? '').trim();
-  const urlEl = kiosk.getByTestId('pair-url');
-  const href = ((await urlEl.getAttribute('href')) ?? (await urlEl.textContent()) ?? '').trim();
+  // The kiosk paints the code and the link in one step; read them in one step too, or a
+  // rotation between two round trips hands back the old code with the new link.
+  const { code, href } = await kiosk.evaluate(() => {
+    const c = document.querySelector('[data-testid=pair-code]');
+    const u = document.querySelector('[data-testid=pair-url]');
+    return { code: (c?.textContent ?? '').trim(), href: (u?.getAttribute('href') ?? u?.textContent ?? '').trim() };
+  });
   expect(href, 'pair-url must carry the displayed code in its fragment').toContain(`#${code}`);
   return { code, scanUrl: rebaseUrl(href, base) };
 }
