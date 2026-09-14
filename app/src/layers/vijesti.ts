@@ -105,6 +105,6 @@ export function renderVijesti(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-news" id="layer-vijesti" data-layer="vijesti" data-reconcile aria-labelledby="layer-title-vijesti">
 <header class="ws-head"><div class="sec-title-row"><h2 class="layer-title" id="layer-title-vijesti" tabindex="-1">${escapeHtml(i18n.t('layers.vijesti'))}</h2>${statusBadge(i18n, news, ctx.errors?.['hrt-news'])}</div></header>
 ${listDetail(i18n, { list, detail: selected ? storyDetail(i18n, selected, ctx) : null, detailTitle: i18n.t('news.detailTitle') })}
-${attributionFoot(i18n, news, `<p class="nw-disclaimer">${escapeHtml(i18n.t('news.summaryNote'))}</p>`)}
+${attributionFoot(i18n, news, `<p class="source-line nw-disclaimer">${escapeHtml(i18n.t('news.summaryNote'))}</p>`)}
 </section>`);
 }

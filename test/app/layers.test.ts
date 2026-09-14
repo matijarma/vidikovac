@@ -814,6 +814,8 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura, vijesti', () => {
     const disclaimer = 'Sažetak je uvodni odlomak iz HRT-ova RSS-a; cijeli članak je na izvorniku.';
     expect(text(section.querySelector('.ws-head'))).not.toContain(disclaimer);
     expect(text(section.querySelector('[data-testid=panel-attr]'))).toContain(disclaimer);
+    // An attribution line like the credit above it: the phone type floor exempts .source-line, not a class of its own.
+    expect(section.querySelector('[data-testid=panel-attr] .nw-disclaimer')?.classList.contains('source-line')).toBe(true);
   });
 });
 
