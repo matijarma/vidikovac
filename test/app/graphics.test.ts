@@ -6,7 +6,8 @@
 // outer wrapper wherever the figure gained HTML content.
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { arcGauge, bars, compass, radar, rangeBar, ring, sunPath } from '../../app/src/ui/graphics';
+import * as graphics from '../../app/src/ui/graphics';
+import { bars, radar, rangeBar, ring, sunPath } from '../../app/src/ui/graphics';
 
 /** Parses a trusted markup string into its root element, svg or html alike. */
 function el(html: string): Element {
@@ -161,21 +162,19 @@ describe('radar: ring distances and the centre name as HTML beside the dial', ()
   });
 });
 
-describe('compass and arcGauge: wrapped, geometry and its own SVG text unchanged', () => {
-  it('compass keeps its dial, arrow and value/caption as SVG text, inside a data-replace wrap', () => {
-    const wrap = el(compass({ bearing: 225, value: '2 m/s', caption: 'jugozapad', letters: ['S', 'I', 'J', 'Z'], label: 'Vjetar jugozapad 2 m/s' }));
-    expect(wrap.hasAttribute('data-replace')).toBe(true);
-    expect(wrap.classList.contains('g-wrap-compass')).toBe(true);
-    const svg = wrap.querySelector('svg.g-compass')!;
-    expect(svg.querySelector('.g-arrow')).not.toBeNull();
-    expect([...svg.querySelectorAll('text')].map((n) => n.textContent)).toEqual(expect.arrayContaining(['2 m/s', 'jugozapad']));
+describe('compass and arcGauge are gone (T3.1): no builder draws a dial or a gauge, and none emits SVG text', () => {
+  it('exports exactly the figures the workspaces compose with', () => {
+    expect(Object.keys(graphics).sort()).toEqual(['bars', 'polar', 'radar', 'rangeBar', 'ring', 'sunPath']);
   });
 
-  it('arcGauge keeps its arc and value/caption as SVG text, inside a data-replace wrap', () => {
-    const wrap = el(arcGauge({ fraction: 0.41, value: '41 %', caption: 'Vlaga' }));
-    expect(wrap.hasAttribute('data-replace')).toBe(true);
-    const svg = wrap.querySelector('svg.g-arc')!;
-    expect([...svg.querySelectorAll('text')].map((n) => n.textContent)).toEqual(['41 %', 'Vlaga']);
+  it('no figure carries a <text> element: every readable number is HTML beside the geometry', () => {
+    const outputs = [
+      rangeBar({ min: 11, max: 25, now: 24.7, minLabel: '11°', maxLabel: '25°', nowLabel: '24,7°' }),
+      sunPath({ sunrise: 0, sunset: 3_600_000, now: 1_800_000, sunriseLabel: 'izlazak', sunsetLabel: 'zalazak', noonLabel: 'podne' }),
+      radar({ points: [{ id: 'q1', distanceKm: 42, bearingDeg: 90, size: 2, title: 'M 2,1 · 42 km' }], maxKm: 150, rings: ['50 km'], centreLabel: 'Zagreb' }),
+      ring(0.5),
+    ];
+    for (const html of outputs) expect(html).not.toContain('<text');
   });
 });
 

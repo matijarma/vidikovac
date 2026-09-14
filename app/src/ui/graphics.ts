@@ -1,11 +1,11 @@
 // Inline SVG figures that encode actual data only: a measured value on a
-// forecast range, a computed sun path, wind from the station's own reading,
-// recorded magnitudes, phases counted in the shown set. Pure string
+// forecast range, a computed sun path, recorded quakes placed by their own
+// distance and bearing, phases counted in the shown set. Pure string
 // builders; every figure is marked `data-replace` with a signature so the
 // reconciler swaps it only when its data changed. Colours come from CSS
 // (currentColor and role tokens), so light, dark and solar update live.
 //
-// A figure's SVG draws geometry only (tracks, fills, markers, dials); any
+// A figure's SVG draws geometry only (tracks, fills, markers, rings); any
 // number a person actually reads (a range's min/max/now, a bar's value, a
 // sun time, a distance ring) is HTML text beside it, sized in the type
 // tokens (rem), so it grows with the reader's own text zoom the way the
@@ -55,21 +55,10 @@ function htmlLabels(spans: string): string {
   return `<div class="g-labels" aria-hidden="true">${spans}</div>`;
 }
 
-function text(x: number, y: number, value: string, className: string, anchor: 'start' | 'middle' | 'end' = 'middle'): string {
-  return `<text x="${fmt(x)}" y="${fmt(y)}" class="${className}" text-anchor="${anchor}">${escapeHtml(value)}</text>`;
-}
-
 /** A point on a circle; angleDeg is compass style, 0 at the top, clockwise. */
 export function polar(cx: number, cy: number, r: number, angleDeg: number): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-function arcPath(cx: number, cy: number, r: number, fromDeg: number, toDeg: number): string {
-  const a = polar(cx, cy, r, fromDeg);
-  const b = polar(cx, cy, r, toDeg);
-  const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
-  return `M ${fmt(a.x)} ${fmt(a.y)} A ${fmt(r)} ${fmt(r)} 0 ${large} 1 ${fmt(b.x)} ${fmt(b.y)}`;
 }
 
 export interface RangeBarOptions {
@@ -106,29 +95,6 @@ export function rangeBar(o: RangeBarOptions): string {
   const figure = figureSvg('g-range', `0 0 ${W} 60`, body, o.label);
   const labels = htmlLabels(`<span class="g-label-min">${escapeHtml(o.minLabel)}</span>${nowLabel}<span class="g-label-max">${escapeHtml(o.maxLabel)}</span>`);
   return wrap('range', `${o.min}|${o.max}|${o.now ?? ''}|${o.nowLabel ?? ''}`, figure + labels);
-}
-
-export interface ArcGaugeOptions {
-  /** 0..1 */
-  fraction: number;
-  value: string;
-  caption: string;
-  tone?: 'weather' | 'action' | 'transit';
-  label?: string;
-}
-
-/** A half-ring gauge for a bounded quantity (humidity, a share of a set). */
-export function arcGauge(o: ArcGaugeOptions): string {
-  const f = Math.min(1, Math.max(0, o.fraction));
-  const cx = 60;
-  const cy = 58;
-  const r = 44;
-  let body = `<path class="g-track-stroke" d="${arcPath(cx, cy, r, 270, 450)}"/>`;
-  if (f > 0) body += `<path class="g-fill-stroke g-fill-${o.tone ?? 'weather'}" d="${arcPath(cx, cy, r, 270, 270 + 180 * f)}"/>`;
-  body += text(cx, cy - 6, o.value, 'g-value', 'middle');
-  body += text(cx, cy + 12, o.caption, 'g-label', 'middle');
-  const figure = figureSvg('g-arc', '0 0 120 72', body, o.label);
-  return wrap('arc', `${f.toFixed(3)}|${o.value}|${o.caption}`, figure);
 }
 
 /** A thin ring showing a remaining fraction (the session chip). */
@@ -179,44 +145,6 @@ export function sunPath(o: SunPathOptions): string {
   return wrap('sun', `${Math.round(o.sunrise / 60000)}|${Math.round(o.sunset / 60000)}|${Math.round(o.now / 60000)}`, figure + labels);
 }
 
-export interface CompassOptions {
-  /** Where the wind comes from, compass degrees; null when calm or unknown. */
-  bearing: number | null;
-  value: string;
-  caption: string;
-  /** The four cardinal letters in the reader's language, N E S W order. */
-  letters: [string, string, string, string];
-  label?: string;
-}
-
-/** Wind: the reading's own direction as an arrow blowing towards the centre, speed inside. */
-export function compass(o: CompassOptions): string {
-  const c = 60;
-  const r = 46;
-  let body = `<circle class="g-track-stroke" cx="${c}" cy="${c}" r="${r}"/>`;
-  o.letters.forEach((letter, index) => {
-    const p = polar(c, c, r + 9, index * 90);
-    body += text(p.x, p.y + 3, letter, 'g-label', 'middle');
-  });
-  for (let deg = 45; deg < 360; deg += 90) {
-    const a = polar(c, c, r - 3, deg);
-    const b = polar(c, c, r + 3, deg);
-    body += `<line class="g-tick" x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}"/>`;
-  }
-  if (o.bearing !== null) {
-    const from = polar(c, c, r - 2, o.bearing);
-    const tip = polar(c, c, 22, o.bearing);
-    const left = polar(tip.x, tip.y, 7, o.bearing + 150);
-    const right = polar(tip.x, tip.y, 7, o.bearing + 210);
-    body += `<line class="g-arrow" x1="${fmt(from.x)}" y1="${fmt(from.y)}" x2="${fmt(tip.x)}" y2="${fmt(tip.y)}"/>`;
-    body += `<polygon class="g-arrow-head" points="${fmt(tip.x)},${fmt(tip.y)} ${fmt(left.x)},${fmt(left.y)} ${fmt(right.x)},${fmt(right.y)}"/>`;
-    body += `<circle class="g-dot" cx="${fmt(from.x)}" cy="${fmt(from.y)}" r="4"/>`;
-  }
-  body += text(c, c + 3, o.value, 'g-value', 'middle');
-  body += text(c, c + 17, o.caption, 'g-label', 'middle');
-  const figure = figureSvg('g-compass', '0 0 120 120', body, o.label);
-  return wrap('compass', `${o.bearing ?? 'calm'}|${o.value}|${o.caption}|${o.letters.join('')}`, figure);
-}
 export interface BarRow {
   id: string;
   label: string;

@@ -117,12 +117,11 @@ describe('the 13 px floor holds for the shared labels too (wave 1 merge gate: e2
     expect(BASE).toMatch(/\.kicker \{[^}]*font-size: var\(--type-secondary\);/);
     expect(BASE).toMatch(/\.badge \{[^}]*font-size: var\(--type-secondary\);/);
   });
-  it('emergency tile labels read at the control role, bar captions at the secondary role, SVG figure labels at 13 px', () => {
+  it('emergency tile labels read at the control role, bar captions and figure legends at the secondary role, and no SVG text rule survives (T3.1 deleted the dial and the gauge that used them)', () => {
     expect(LAYERS).toMatch(/\.sf-number-label \{[^}]*font-size: var\(--type-control\);/);
     expect(LAYERS).toMatch(/\.g-bar-caption \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/\.g-label \{[^}]*font-size: 13px;/);
-    expect(LAYERS).toMatch(/\.g-caption \{[^}]*font-size: 13px;/);
-    expect(LAYERS).not.toMatch(/\.g-label \{[^}]*font-size: 12px;/);
+    expect(LAYERS).toMatch(/\.g-labels \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(LAYERS).not.toMatch(/\.g-(label|caption|value|label-strong) \{/);
   });
   it('the workspace toolbar keeps a scrolling chip row inside its own column instead of widening the page', () => {
     expect(LAYERS).toContain('.ws-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }');
