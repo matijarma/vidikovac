@@ -718,3 +718,30 @@ describe('the sticky header and notices in flow', () => {
     }
   });
 });
+
+// T2.3: the header and the sidebar share one wrapper. The phone flattens it
+// (display: contents), so the shell grid it lays out is unchanged; the desk
+// pins it to the viewport as the rail, with the session card at its foot.
+describe('the desktop rail', () => {
+  it('wraps the header and the sidebar in one .ki-rail ahead of the banners, main and the tab bar, with every region still found by data-region', () => {
+    const { root } = mount();
+    const shell = root.querySelector<HTMLElement>('.ki')!;
+    const rail = shell.querySelector<HTMLElement>('.ki-rail');
+    expect(rail).not.toBeNull();
+    expect(rail!.parentElement).toBe(shell);
+    expect(rail!.dataset.regionGroup).toBe('rail');
+    const head = shell.querySelector<HTMLElement>('header.ki-head')!;
+    const side = shell.querySelector<HTMLElement>('nav.ki-side')!;
+    expect(head.parentElement).toBe(rail);
+    expect(side.parentElement).toBe(rail);
+    // The regions painted through the rail: the wordmark, the session card, the seven domain links.
+    expect(rail!.querySelector('.ki-top .ki-wordmark')).not.toBeNull();
+    expect(rail!.querySelector('.ki-session-slot [data-testid=session-label]')).not.toBeNull();
+    expect(rail!.querySelectorAll('.ki-side .ki-side-link')).toHaveLength(7);
+    // Document order: rail, banners, main, tab bar; the banners are beside the rail, never inside it.
+    const banners = shell.querySelector<HTMLElement>('[data-testid=banners]')!;
+    expect(rail!.contains(banners)).toBe(false);
+    const order = [...shell.children].filter((el) => el.matches('.ki-rail, .ki-banners, .ki-main, .ki-tabbar')).map((el) => el.className);
+    expect(order).toEqual(['ki-rail', 'ki-banners', 'ki-main', 'ki-tabbar']);
+  });
+});

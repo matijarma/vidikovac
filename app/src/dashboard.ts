@@ -164,12 +164,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
+<div class="ki-rail" data-region-group="rail">
 <header class="ki-head" data-region-group="head">
   <div class="ki-top" data-region="top"></div>
   <div class="ki-session-slot" data-region="session"></div>
   <div class="ki-safety-slot" data-region="safety"></div>
 </header>
 <nav class="ki-side" data-region="side" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
+</div>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
 <nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>

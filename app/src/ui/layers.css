@@ -276,19 +276,14 @@
 .provenance li { line-height: var(--leading-snug); }
 /* The one bare <a> in this block (the /izvori/ line) has no other class; it needs the target explicitly. */
 .provenance a { display: inline-flex; align-items: center; min-block-size: var(--target); }
+/* Desk: three content-driven column stacks, 5:4:3, each a flex column of its
+   own blocks, so the page is hole-free by construction and no block moves
+   past a neighbour (each stack is a contiguous slice of the reading order).
+   In a workspace of 36rem or less the container rule below flattens them. */
 @media (min-width: 60rem) {
-  .ov {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--sp-6) var(--sp-8);
-    grid-template-areas: 'weather weather safety' 'transit agenda news' 'transit agenda news' 'civic civic news';
-  }
-  .ov-weather { grid-area: weather; }
-  .ov-transit { grid-area: transit; }
-  .ov-safety { grid-area: safety; }
-  .ov-agenda { grid-area: agenda; }
-  .ov-news { grid-area: news; }
-  .ov-civic { grid-area: civic; }
-  .ov-weather-row { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-6); }
+  .ov { grid-template-columns: 5fr 4fr 3fr; gap: var(--sp-6) var(--sp-8); align-items: start; }
+  .ov-col { display: flex; flex-direction: column; gap: var(--sp-6); min-inline-size: 0; }
+  .ov-weather-row { column-gap: var(--sp-6); }
   .ov-range .g-range { max-inline-size: 32rem; }
   .ov-range .g-wrap-range { max-inline-size: 32rem; }
 }
@@ -392,6 +387,17 @@
   .row-button:active, .route-link:active, .ov-link:active, .ov-row:active, .ov-safety .band:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
 }
 
+/* Middling room (a 960 to about 1130 px desk, or a wide desk at 125% text):
+   three stacks would squeeze the third under 184 px, where a head with its
+   badge and link, or the gazette numeral, breaks letter by letter. Two
+   columns keep every word whole: the first stack takes the left column and
+   spans both rows, the second and third share the right column one under the
+   other, so the eye still reads the stacks in their written order. */
+@container ws (max-width: 50rem) {
+  .ov { grid-template-columns: 5fr 4fr; }
+  .ov > .ov-col:first-child { grid-row: 1 / span 2; }
+  .ov > .ov-col:nth-child(n + 2) { grid-column: 2; }
+}
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
    about 20rem wide and the viewport queries above no longer describe the
    space. The compositions fall back to their single-column forms and an open
@@ -401,7 +407,6 @@
 @container ws (max-width: 36rem) {
   .ov { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; gap: var(--sp-6); }
   .ov-col { display: contents; }
-  .ov-weather, .ov-transit, .ov-safety, .ov-agenda, .ov-news, .ov-civic { grid-area: auto; }
   .ov-weather-row { column-gap: var(--sp-4); }
   .ov-range .g-range { max-inline-size: 26rem; }
   .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }

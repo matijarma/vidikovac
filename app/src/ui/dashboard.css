@@ -1,8 +1,9 @@
 /* Kaj ima? - the /d/ shell. One DOM for both surfaces; the grid places the
    same regions differently. Phone: a sticky 48 px header (wordmark, session
    pill, safety control), banners in flow, the workspace, a fixed tab bar.
-   Desktop (>= 60rem): sidebar with seven domains, the session card under it,
-   one active workspace beside it. */
+   Desktop (>= 60rem): the header and the sidebar become one rail pinned to
+   the viewport (wordmark, seven domains, the session card at its foot), with
+   the banners and one active workspace scrolling beside it. */
 .ki {
   --ki-top: calc(3rem + env(safe-area-inset-top, 0px));
   --ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));
@@ -33,6 +34,8 @@
 /* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
 .ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
 .ki[data-loading='true'] .ki-head::after { opacity: 1; }
+/* The rail is a desk device; on the phone it has no box and the shell grid lays out its children directly. */
+.ki-rail { display: contents; }
 .ki-side { display: none; }
 /* Banners sit in flow between the header and the workspace; nothing overlays content. */
 .ki-banners { grid-area: banners; display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) 0; }
@@ -117,24 +120,26 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
 .banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
 .banner-dismiss { margin-inline-start: auto; }
 
-/* Desktop: sidebar with seven labelled domains, the session card at its foot.
-   The header dissolves into the grid: wordmark above the rail, banners beside it. */
+/* Desktop: one rail pinned to the viewport and a viewport tall, so a long
+   workspace scrolls under it while the wordmark, the seven domains and the
+   session card at its foot never move. The header dissolves into the rail
+   (display: contents): its regions become the rail's flex items, ordered
+   wordmark, links, session; the safety control and the tab bar leave, the
+   banners and the workspace take the column beside the rail. */
 @media (min-width: 60rem) {
   html:has(.ki) { scroll-padding-block: 0; }
-  .ki {
-    grid-template-columns: var(--ki-side) minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto;
-    grid-template-areas: 'top banners' 'side main' 'session main';
-    column-gap: 0;
-  }
+  .ki { grid-template-columns: var(--ki-side) minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: 'rail banners' 'rail main'; }
+  /* A sticky rail never scrolls with the page, so in a viewport shorter than its content (a quarter-screen
+     window is about 430 px tall) it scrolls on its own rather than losing the session card below the fold. */
+  .ki-rail { display: flex; flex-direction: column; grid-area: rail; position: sticky; inset-block-start: 0; block-size: 100vh; block-size: 100dvh; padding: var(--sp-4) var(--sp-3); background: var(--tone-surface-1); border-inline-end: 1px solid var(--tone-stroke); overflow-y: auto; }
   .ki-head { display: contents; }
   .ki-head::after { content: none; }
-  .ki-top { grid-area: top; position: relative; padding: var(--sp-4) var(--sp-5) var(--sp-2); align-items: flex-start; }
+  /* The polling hairline moves to the wordmark's bottom edge. */
+  .ki-top { order: 1; position: relative; padding: 0 var(--sp-2) var(--sp-3); }
   .ki-top::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
   .ki[data-loading='true'] .ki-top::after { opacity: 1; }
   .ki-wordmark-text { font-size: var(--text-xl); }
-  .ki-safety-slot, .ki-tabbar { display: none; }
-  .ki-side { display: block; grid-area: side; padding: var(--sp-2) var(--sp-3); }
+  .ki-side { order: 2; display: block; padding: 0; }
   .ki-side-list { display: grid; gap: 0.125rem; margin: 0; padding: 0; list-style: none; }
   .ki-side-link { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-text-muted); font-size: var(--text-md); font-weight: var(--weight-medium); text-decoration: none; touch-action: manipulation; }
   @media (hover: hover) {
@@ -146,18 +151,21 @@ html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px))
   .ki-side-link[data-layer='sigurnost'] .icon { color: var(--tone-urgency); }
   .ki-side-link[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
   .ki-side-foot { padding: var(--sp-4) var(--sp-3) 0; }
-  .ki-session-slot { grid-area: session; justify-content: stretch; padding: var(--sp-3); position: sticky; inset-block-end: 0; }
+  /* The session card takes the rail's remaining height as its top margin, so it sits at the foot whatever the workspace does. */
+  .ki-session-slot { order: 3; margin-block-start: auto; padding: 0; }
   .ki-session { inline-size: 100%; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); text-align: start; }
   .ki-session .g-ring { inline-size: 2.5rem; block-size: 2.5rem; }
   .ki-session-sentence { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; font-size: var(--text-meta); color: var(--tone-text-muted); line-height: var(--leading-snug); }
   .ki-session-time { font-size: var(--text-xl); }
   .ki-session-more { display: block; margin-inline-start: auto; color: var(--tone-text-subtle); }
-  .ki-main { padding: var(--sp-5) var(--sp-8) var(--sp-10); }
-  .ki-banners { padding-inline: var(--sp-8); padding-block-start: var(--sp-4); }
+  .ki-safety-slot, .ki-tabbar { display: none; }
+  .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-8) 0; }
+  .ki-main { grid-area: main; padding: var(--sp-5) var(--sp-8) var(--sp-10); }
 }
 @media (min-width: 90rem) {
   .ki { --ki-side: clamp(14rem, 30vw, 19rem); }
   .ki-main { padding-inline: var(--sp-12); }
+  .ki-banners { padding-inline: var(--sp-12); }
 }
 
 /* Press feedback: a touch has no hover, so :active stands in for it, instant
