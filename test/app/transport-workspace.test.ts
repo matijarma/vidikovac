@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
+import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type PublicSelection } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
@@ -369,11 +370,15 @@ describe('the map, the paired screen and the feed', () => {
     expect(q('[data-testid=transport-total]')).not.toBeNull();
   });
 
-  it('a closure opens with the mark and the street at title size, the type words at body once, and its window as one sentence', () => {
-    // The module's summary is its own wording of the same two fields (prometnice.ts closureWords): the detail never repeats it.
-    const windowed = { ...PROMETNICE.items[0]!, id: 'c2', title: 'Ilica', at: '2026-09-08T06:00:00Z', until: '2026-09-13T04:00:00Z', summary: 'zatvoreno zbog radova, jedan smjer' };
+  it('a closure opens with the mark and the street at title size, the type words at body once, its window as one sentence, and a description as prose only when the module has one', () => {
+    // The module's `summary` is, by default, its own wording of the two fields the type words already show (prometnice.ts
+    // closureWords): that paraphrase is never repeated. Anything else the module writes there is the closure's description
+    // and reads as prose after the window, with the type words still beside it.
+    const boilerplate = { ...PROMETNICE.items[0]!, summary: closureWords('ROAD_CLOSED_CONSTRUCTION', 'ONE_DIRECTION') };
+    const windowed = { ...boilerplate, id: 'c2', title: 'Ilica', at: '2026-09-08T06:00:00Z', until: '2026-09-13T04:00:00Z' };
+    const described = { ...windowed, id: 'c3', title: 'Savska cesta', summary: 'Obilazak Vodnikovom ulicom; tramvaji 4 i 17 voze skraćeno do Savskog mosta.' };
     const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
-    const snapshots = { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: [{ ...PROMETNICE.items[0]!, summary: 'zatvoreno zbog radova, jedan smjer' }, windowed] } };
+    const snapshots = { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: [boilerplate, windowed, described] } };
     render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c2'), module: 'prometnice' } }).context);
     expect(q('[data-testid=closure-title] .mark-closure')).not.toBeNull();
     expect(text(q('[data-testid=closure-title]'))).toBe('Ilica');
@@ -382,7 +387,15 @@ describe('the map, the paired screen and the feed', () => {
     const detail = text(q('[data-testid=transport-detail] .t-sheet-content'));
     expect(detail).not.toContain('zatvoreno zbog radova');
     expect(detail.split('jedan smjer').length - 1).toBe(1);
+    expect(q('[data-testid=transport-detail] .t-prose')).toBeNull(); // the worker's paraphrase is not a description: no prose line
     expect(text(q('#t-clear-selection'))).toBe('Natrag');
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c3'), module: 'prometnice' } }).context);
+    const prose = q('[data-testid=transport-detail] .t-prose');
+    expect(prose).not.toBeNull();
+    expect(text(prose)).toBe('Obilazak Vodnikovom ulicom; tramvaji 4 i 17 voze skraćeno do Savskog mosta.');
+    expect(text(q('[data-testid=transport-detail] .t-lead'))).toBe('radovi · jedan smjer'); // the type words stay: the prose adds, never replaces
+    expect(q('[data-testid=closure-window]').compareDocumentPosition(prose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // title, words, window, then the prose
+    expect(text(q('[data-testid=transport-detail] .t-sheet-content')).split('Obilazak').length - 1).toBe(1); // once
     render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c1'), module: 'prometnice' } }).context);
     expect(text(q('[data-testid=closure-window]'))).toBe('do 12. 9. 00:00'); // one end named: the sentence names that end only
   });

@@ -15,6 +15,7 @@
 // front of the vehicle. Where a row opens something, the whole row is one
 // button (`.t-row`, map.css) inside the row, so the target is the row.
 import type { FeedItem } from '../../../worker/feed/schema';
+import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
 import { lineBadge, signRow } from '../experience/blocks';
 import { delayTone, type DelayTone } from '../experience/delay';
 import { zagrebDateTime } from '../format';
@@ -446,15 +447,27 @@ function closureWindow(i18n: I18n, item: FeedItem): string {
   return '';
 }
 
-/** One closure: the mark and the street at title, the type words at body, the window as one sentence. The module's
- *  `summary` is those same two fields in its own words (worker/feed/modules/prometnice.ts, closureWords), so the detail
- *  never prints it: one concept, one line. */
+/** The closure's description, when the module has one. prometnice.ts writes `summary` for every closure; by default it
+ *  is the worker's own wording of the two fields the type words already show ("zatvoreno zbog radova, jedan smjer",
+ *  its closureWords), which is a paraphrase and not a description, so it is never repeated: one concept, one line.
+ *  Anything else the module writes there is the description and is printed as it came. The comparison uses the
+ *  worker's function itself, so a change of wording there can never turn into a repeated line here. */
+function closureDescription(item: FeedItem): string {
+  const summary = (item.summary ?? '').trim();
+  if (!summary || summary === workerClosureWords(dataText(item, 'subtype') || '', dataText(item, 'direction') || '')) return '';
+  return summary;
+}
+
+/** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the
+ *  description as prose when the module has one (closureDescription). */
 export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean): string {
   const window = closureWindow(i18n, item);
+  const description = closureDescription(item);
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(item.title)}</span></h3>`, kiosk) +
     `<p class="t-lead">${esc(closureWords(i18n, item))}</p>` +
     (window ? `<p class="t-meta" data-testid="closure-window">${esc(window)}</p>` : '') +
+    (description ? `<p class="t-prose">${esc(description)}</p>` : '') +
     (kiosk ? '' : actions([showOnMap(i18n)]))
   );
 }

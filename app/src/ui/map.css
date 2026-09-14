@@ -148,6 +148,8 @@
 .t-hint, .t-empty, .t-status, .t-note { margin: 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
 /* The line under a detail title ("3 perona", the closure's window) and the count under a list: secondary, like a row's second line. */
 .t-meta { margin: 0; color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
+/* A detail's prose (a closure's description): body, regular, at a reading measure. */
+.t-prose { margin: 0; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); max-inline-size: 68ch; }
 .t-status { color: var(--tone-state-warning); }
 .t-block { display: flex; flex-direction: column; gap: var(--sp-2); }
 .t-block + .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
@@ -280,7 +282,7 @@
 .transport[data-kiosk='true'] .t-map-canvas { block-size: clamp(22rem, 56vh, 40rem); border-radius: var(--r-xl); }
 .transport[data-kiosk='true'] .t-sheet-head { display: none; }
 .transport[data-kiosk='true'] .row-title, .transport[data-kiosk='true'] .t-lead, .transport[data-kiosk='true'] .t-peek { font-size: 1.375rem; }
-.transport[data-kiosk='true'] .row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta { font-size: 1.125rem; }
+.transport[data-kiosk='true'] .row-sub, .transport[data-kiosk='true'] .t-hint, .transport[data-kiosk='true'] .t-note, .transport[data-kiosk='true'] .t-sheet-note, .transport[data-kiosk='true'] .t-meta, .transport[data-kiosk='true'] .t-prose { font-size: 1.125rem; }
 .transport[data-kiosk='true'] .t-title { font-size: 1.75rem; }
 .transport[data-kiosk='true'] .t-row { cursor: default; }
 
