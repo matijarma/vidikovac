@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import type { Env } from '../../worker/env';
+import { codeRotateSeconds, peerMinutes, sessionMinutes } from '../../worker/config';
+import { CODE_EARLY_MS, CODE_GRACE_MS, CODE_LENGTH } from '../../worker/protocol';
+import { QUAKE_WINDOW_MS } from '../../worker/hitno/select';
+import { UPSTREAM_TIMEOUT_MS } from '../../worker/feed/http';
 
 const read = (p: string) => readFileSync(new URL(`../../docs/prijava/${p}`, import.meta.url), 'utf8');
 const headingIndex = (md: string, heading: string) => {
@@ -79,5 +84,25 @@ describe('plan-provedbe.md and rizici-i-odgovori.md', () => {
     expect(headings.map((h) => Number(h.slice(4, 5)))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     // The count in the opening line must follow the headings.
     expect(md).toContain('Osam prigovora');
+  });
+});
+
+describe('prijedlog-projekta.md quotes the code', () => {
+  const md = read('prijedlog-projekta.md');
+  const env = {} as Env;
+  it('session, share and rotation lengths come from config.ts', () => {
+    expect(sessionMinutes(env)).toBe(10);
+    expect(md).toContain('deset minuta');
+    expect(peerMinutes(env)).toBe(5);
+    expect(md).toContain('pet svježih minuta');
+    expect(md).toContain(`rotira svakih ${codeRotateSeconds(env)} sekundi`);
+  });
+  it('code window and entropy come from protocol.ts', () => {
+    expect(md).toContain(`od ${CODE_EARLY_MS / 1000} s prije do ${CODE_GRACE_MS / 1000} s nakon`);
+    expect(md).toContain(`${CODE_LENGTH * 5} bita entropije`);
+  });
+  it('quake window and upstream timeout come from the worker', () => {
+    expect(md).toContain(`posljednja ${QUAKE_WINDOW_MS / 3_600_000} sata`);
+    expect(md).toContain(`rok dohvata od ${UPSTREAM_TIMEOUT_MS / 1000} sekundi`);
   });
 });

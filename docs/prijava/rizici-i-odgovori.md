@@ -8,7 +8,7 @@ ZET je jedan od izvora u sedam područja i ne pokušavamo ga zamijeniti: Promet 
 
 ### 2. "Ograničen pristup se ne slaže s uvjetom 'rezultati nenaplatno dostupni javnosti'."
 
-Nitko ništa ne plaća; nema računa, pretplate ni članstva. Sigurnosni sloj `/hitno` otvoren je svima bez uvjeta i bez ograničenja trajanja; javni zaslon je čitljiv bez telefona; kod i izvedeni podaci su otvoreni. Skeniranje ograničava trajanje pogleda na vlastitom uređaju, ne krug ljudi koji ga mogu vidjeti, i može se ponoviti odmah. Nudimo ugovorni minimum zaslona na lokacijama koje odabere Grad, kako pristup ne bi ovisio o komercijalnim prostorima. Kratki pogled otključan prisutnošću bit je proizvoda: izlog, ne pretplata.
+Nitko ništa ne plaća; nema računa, pretplate ni članstva. Sigurnosni sloj `/hitno` otvoren je svima bez uvjeta i bez ograničenja trajanja; javni zaslon je čitljiv bez telefona; kod i izvedeni podaci su otvoreni. Skeniranje ograničava trajanje pogleda na vlastitom uređaju na deset minuta i može se ponoviti odmah; tko nema zaslon u blizini može ga bez prijave sam postaviti na `/kiosk/`. Nudimo ugovorni minimum zaslona na lokacijama koje odabere Grad, kako pristup ne bi ovisio o komercijalnim prostorima. Kratki pogled otključan prisutnošću bit je proizvoda: izlog, ne pretplata.
 
 ### 3. "Jedna osoba nosi projekt."
 
@@ -20,7 +20,7 @@ Svaki izvor ima ocjenu (zeleno, žuto, crveno), rok dohvata od 6 sekundi, predme
 
 ### 5. "Kamere, praćenje, privatnost."
 
-Ne upravljamo kamerama i ne prikazujemo tuđe bez dopuštenja. Nema računa, trajnog identifikatora korisnika, kolačića za praćenje, otiska uređaja ni zahtjeva za geolokaciju. IP adresa se ne pohranjuje i ne koristi kao obilježje osobe: prolazi kroz ograničivače učestalosti na rubu Cloudflarea i, kao kriptografski sažetak, kroz satnu kvotu samoposlužnih zaslona. Brojači imaju samo dan, sat, događaj i dvije dimenzije iz zatvorenih rječnika; stranica `/privatnost` navodi svaki događaj. Izjava o privatnosti prolazi pravni pregled u M1.
+Ne upravljamo kamerama i ne prikazujemo tuđe bez dopuštenja. Nema računa, trajnog identifikatora korisnika, kolačića za praćenje, otiska uređaja ni zahtjeva za geolokaciju. IP adresa se ne pohranjuje u izvornom obliku i ne koristi kao obilježje osobe: prolazi kroz ograničivače učestalosti na rubu Cloudflarea, a za satnu kvotu samoposlužnih zaslona čuva se pseudonimizirani sažetak (HMAC) mrežnog prefiksa najviše 60 minuta. Brojači imaju samo dan, sat, događaj i dvije dimenzije iz zatvorenih rječnika; stranica `/privatnost` navodi brojane događaje. Izjava o privatnosti prolazi pravni pregled u M1.
 
 ### 6. "Održivost nakon projekta."
 
@@ -28,7 +28,7 @@ Trošak rada sustava nakon projekta je ispod 100 EUR godišnje (jedan plaćeni C
 
 ### 7. "Stari uređaji su spori, nesigurni i past će za mjesec dana."
 
-Zaslon prikazuje javne podatke i ne drži korisničke podatke, pa stari uređaj nema što izgubiti: jedina pohrana je tajna tog jednog zaslona, koju operater opoziva jednim klikom. Brzina je stvar mjerenja, ne vjere: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije i danas učitava zaslon sa 104 kB; mjerila za pilot su objavljena (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a, potrošnja izmjerena po uređaju), a matrica testiranih uređaja navodi i uređaje koji su pali i zašto. Dvije nove postave na Raspberry Pi 5 su referenca i rezerva; prostor može zamijeniti uređaj bez migracije, jer novi uređaj samo otvori istu adresu.
+Zaslon prikazuje javne podatke i ne drži korisničke podatke, pa stari uređaj nema što izgubiti: jedina pohrana je tajna tog jednog zaslona, koju operater opoziva jednim klikom. Brzina je stvar mjerenja, ne vjere: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije i danas učitava zaslon sa 104 kB; mjerila za pilot su objavljena (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a, potrošnja izmjerena po uređaju), a matrica testiranih uređaja navodi i uređaje koji su pali i zašto. Dvije nove postave na Raspberry Pi 5 su referenca i rezerva; na lokaciji koju odabere Grad postavlja se takva nova postava s tekućim sustavom, a donirani uređaji idu u ostale prostore, na gostujuću mrežu odvojenu od poslovne. Prostor može zamijeniti uređaj bez migracije, jer novi uređaj samo otvori istu adresu.
 
 ### 8. "Zašto filmska tvrtka?"
 

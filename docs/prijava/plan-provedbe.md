@@ -16,11 +16,11 @@ Isporuke: lagani način zaslona bez karte, WebGL-a i `canvas` animacija, s raspo
 
 ### M2 Svi zeleni izvori u produkciji, pisma vlasnicima podataka (mjeseci 2 do 3)
 
-Isporuke: hidrološki bilten, indeks zraka (INSPIRE WFS/WMS), HŽPP polasci prema voznom redu, Službeni glasnik s ispisom u PDF, Narodne novine (ELI), Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi; test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje"), HRT-u (audio i video) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradu o uvjetima API-ja Službenog glasnika. Mjera: `/izvori` prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.
+Isporuke: hidrološki bilten, indeks zraka (INSPIRE WFS/WMS), HŽPP polasci prema voznom redu, Narodne novine (ELI), Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi; test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje"), HRT-u (audio i video) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradu o uvjetima API-ja Službenog glasnika. Mjera: `/izvori` prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.
 
 ### M3 Šest zaslona instalirano, administracija zaslona (mjeseci 3 do 4)
 
-Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na tri daljnje lokacije, od toga **četiri na doniranim uređajima** koje projekt pregleda, pripremi i ostavi prostoru; operatersko sučelje za trajne zaslone (provizioniranje bez roka, opoziv, oznaka stanice, pregled dostupnosti) zaštićeno prijavom, uz javnu samoposlugu privremenih zaslona na `/kiosk/`; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena i izmjerenom potrošnjom svakog uređaja. Mjera: šest zaslona javlja `kiosk_online` svakog dana u mjesecu 4; matrica uređaja sadrži šest stvarnih postava.
+Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Grad i na tri daljnje lokacije, od toga **četiri na doniranim uređajima** koje projekt pregleda, pripremi i ostavi prostoru; operatersko sučelje za trajne zaslone (provizioniranje bez roka, opoziv, oznaka stanice, pregled dostupnosti) zaštićeno prijavom, uz javnu samoposlugu privremenih zaslona na `/kiosk/`; tiskane upute za osoblje; `docs/kiosk.md` dopunjen iskustvom s terena i izmjerenom potrošnjom svakog uređaja. Grad predlaže lokaciju do kraja M2; ako izbor izostane, zaslon ide u gradsku knjižnicu ili prostor udruge uz naknadnu zamjenu. Na lokaciji koju odabere Grad postavlja se nova postava Raspberry Pi 5 s tekućim sustavom; donirani uređaji idu u ostale prostore, na gostujuću mrežu odvojenu od poslovne. Mjera: šest zaslona javlja `kiosk_online` svakog dana u mjesecu 4; matrica uređaja sadrži šest stvarnih postava.
 
 ### M4 Prvi skup podataka Gradu, ZGBit, javni katalog `/open` (mjesec 5)
 
@@ -48,4 +48,4 @@ Isporuke: inačica 1.0 označena u repozitoriju; paket za predaju Gradu: kod pod
 | UX i motion dizajner (redak 2) | | ● | ● | | ● | | | | |
 | Pravni i privacy pregled (redak 2) | | ● | | | | ● | | | |
 | Instalater zaslona (redak 2, redak 5) | | | | | ● | | | | |
-| Promidžba (redak 3) | ● | | | | ● | ● | | ● | |
+| Promidžba (redak 3) | | | | | ● | ● | | ● | |

@@ -200,9 +200,11 @@ describe('static pages', () => {
       expect(html, path).toContain('<html lang="hr">');
     }
   });
-  it('/privatnost lists the nine privacy points and no inline script', () => {
+  it('/privatnost lists the ten privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
-    for (let i = 1; i <= 9; i += 1) expect(html).toContain(`id="tocka-${i}"`);
+    for (let i = 1; i <= 10; i += 1) expect(html).toContain(`id="tocka-${i}"`);
+    expect(html).toContain('Voditelj obrade je Aning Film d.o.o.');
+    expect(html).toContain('evaluation (aktivnosti privremenih zaslona');
     expect(html).toContain('U aplikaciji ne pohranjujemo IP adresu, korisnički agent ni trajni identifikator posjetitelja.');
     expect(html).not.toContain('tile.openstreetmap.org');
     expect(html).toContain('učitavaju se s iste domene');
