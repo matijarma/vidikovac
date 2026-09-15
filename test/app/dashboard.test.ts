@@ -514,7 +514,7 @@ describe('failure and recovery', () => {
     expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
     expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
     fetchData.mockClear();
-    click(root, '#ov-news [data-action=retry]');
+    click(root, '[data-testid=tb-lane-sada] [data-action=retry][data-module=hrt-news]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
   });
