@@ -12,7 +12,9 @@ import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { KVART_STORAGE_KEY } from '../../app/src/core/kvart-store';
+import { NOTIFY_STORAGE_KEY } from '../../app/src/core/notify-store';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
+import { loadStops } from '../../app/src/core/screens';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 
 stubSessionStorage();
@@ -1373,5 +1375,62 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     const hidden = phone.root.querySelector<HTMLElement>('[data-testid=kvart-aside]')!;
     expect(hidden.hidden).toBe(true);
     expect(hidden.children).toHaveLength(0);
+  });
+});
+
+describe('the kvart panel’s saved chips and walking row (T2.7, B.3 saved-store)', () => {
+  const SCREEN = { kind: 'venue' as const, expiresAt: null, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6'] } };
+
+  it('round-trips a saved route through its own chip: the chip opens Promet with the route selection, and unsaving it removes it and persists', () => {
+    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([{ kind: 'route', id: '6' }]));
+    const { root } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    const chip = root.querySelector<HTMLButtonElement>('[data-testid=saved-route-6]')!;
+    expect(chip.querySelector('.line')?.getAttribute('data-size')).toBe('xs');
+    expect(text(chip)).toContain('Črnomerec');
+    chip.click();
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=route-title]'))).toContain('6');
+    click(root, '[data-testid=tab-kvart]'); // back to the panel to remove it
+    click(root, '.kv-chip-x[data-id="6"]');
+    expect(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) ?? 'null')).toEqual([]);
+    expect(root.querySelector('[data-testid=saved-route-6]')).toBeNull();
+    expect(text(root.querySelector('[data-testid=saved-empty]'))).toContain('Spremi liniju ili stanicu');
+  });
+
+  it('the walking row appears once the stop catalogue resolves for a saved stop, minutes from the screen’s own stop', async () => {
+    vi.mocked(loadStops).mockResolvedValueOnce([{ id: '200_1', name: 'Zapruđe', lon: 16.02, lat: 45.79, routes: [] }]);
+    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([{ kind: 'stop', id: '200_1' }]));
+    const { root, session } = mount();
+    session.join('scanner', SCREEN);
+    await flush();
+    click(root, '[data-testid=tab-kvart]');
+    const row = root.querySelector<HTMLElement>('.kv-walk li');
+    expect(row).not.toBeNull();
+    expect(text(row)).toMatch(/^\d+ minZapruđe$/);
+  });
+});
+
+describe('the notify sheet (T2.7, D7)', () => {
+  it('offers three switches without the waste flag; a toggle persists through the store and repaints the panel’s own count', () => {
+    const { root } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=kvart-notify]');
+    const dialog = document.querySelector<HTMLElement>('[data-testid=notify-sheet]')!;
+    expect(dialog.querySelectorAll('[role=switch]')).toHaveLength(3);
+    expect(dialog.querySelector('[data-testid=notify-waste]')).toBeNull();
+    expect(text(dialog.querySelector('.nt-note'))).toBe('Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.');
+    (dialog.querySelector('[data-testid=notify-delays]') as HTMLButtonElement).click();
+    expect(dialog.querySelector('[data-testid=notify-delays]')?.getAttribute('aria-checked')).toBe('true');
+    expect(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) ?? 'null')).toEqual({ delays: true, works: false, waste: false, dhmz: false });
+    expect(text(root.querySelector('[data-testid=kvart-notify] .kv-notify-count'))).toBe('1 uključena');
+  });
+  it('offers a fourth switch, waste, once FLAGS.FEED_WASTE is on', () => {
+    const { root } = mount({ deps: { flags: { waste: true } } });
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=kvart-notify]');
+    const dialog = document.querySelector<HTMLElement>('[data-testid=notify-sheet]')!;
+    expect(dialog.querySelectorAll('[role=switch]')).toHaveLength(4);
+    expect(dialog.querySelector('[data-testid=notify-waste]')).not.toBeNull();
   });
 });
