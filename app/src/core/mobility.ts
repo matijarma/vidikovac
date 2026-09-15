@@ -12,6 +12,10 @@
 // worker module's own adapter fills these shapes from real `FeedItem`s with
 // the `station`/`pickup` `DATA_KEYS` a ruling will add then (not this one).
 import type { Attribution, SnapshotStatus } from '../../../worker/feed/schema';
+import { zagrebTime } from '../format';
+import type { I18n } from '../i18n/i18n';
+import { escapeHtml } from '../ui/dom/escape';
+import { haversineKm } from './geo';
 
 /**
  * One bike-share or parking station (plan T3.2). `free`/`capacity` are the
@@ -64,15 +68,6 @@ export interface WasteSnapshot {
 
 /** Nothing nearer than this is worth calling "nearby" on foot. */
 const NEAREST_RADIUS_KM = 0.6;
-const EARTH_RADIUS_KM = 6371;
-
-function haversineKm(lon1: number, lat1: number, lon2: number, lat2: number): number {
-  const rad = (deg: number): number => (deg * Math.PI) / 180;
-  const dLat = rad(lat2 - lat1);
-  const dLon = rad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
-}
 
 /**
  * The one station a bikes or parking tile shows (plan T3.2): the nearest to
@@ -97,4 +92,21 @@ export function nearestStation(
     if (nearestInKvart) return nearestInKvart.station;
   }
   return inKvart[0] ?? null;
+}
+
+/**
+ * The stale badge a bikes/parking/waste tile shows in place of its context
+ * (fix round 1, T3.2 review): `experience/status.ts`'s `statusBadge` renders
+ * the same badge for a module-backed tile, but neither `MobilitySnapshot`
+ * nor `WasteSnapshot` is a `ModuleSnapshot` (no `tier`, `items`,
+ * `staleSince`), so `buildTimeband`'s per-module gating never sees them
+ * (Ruling 9) and each producer marks a stale tile itself instead. One
+ * function so bikes.ts, parking.ts and waste.ts render the exact same
+ * badge -- honest-data's "fetch time is not observation time" applies to a
+ * degraded fetch exactly as it does to a live one: a stale station or
+ * pickup count still shows a number, but never as if it were current.
+ */
+export function mobilityStaleBadge(i18n: I18n, fetchedAt: string): string {
+  const word = i18n.t('status.staleShort', { time: zagrebTime(fetchedAt) });
+  return `<span class="badge status-badge" data-tone="stale" data-testid="panel-status" data-status="stale">${escapeHtml(word)}</span>`;
 }

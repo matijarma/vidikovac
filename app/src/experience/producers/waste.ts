@@ -5,6 +5,7 @@
 // is left off exactly as bucketOf would place it (the sada/danas/veceras
 // lanes), never forced into a lane that misreports it as upcoming.
 import { FLAGS } from '../../core/flags';
+import { mobilityStaleBadge } from '../../core/mobility';
 import { districtLabel } from '../../kiosk/districts';
 import type { ProduceOptions, TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
@@ -23,6 +24,9 @@ export const wasteProducer: TileProducer = {
     const scoped = o.kvart ? snapshot.pickups.filter((pickup) => pickup.district === o.kvart) : snapshot.pickups;
     const label = i18n.t('tiles.waste.label');
     const contextText = o.kvart ? districtLabel(o.kvart) : i18n.t('kvart.wholeCity');
+    // A degraded fetch still shows the last known pickup days, but badged rather than
+    // read as live (global constraints §1/§8: every tile inherits the stale state too).
+    const stale = snapshot.status === 'stale' ? mobilityStaleBadge(i18n, snapshot.fetchedAt) : undefined;
     const tiles: Tile[] = [];
     for (const pickup of scoped) {
       const bucket = o.bucket(pickup.date, undefined, true);
@@ -39,6 +43,7 @@ export const wasteProducer: TileProducer = {
         bucket,
         layer: 'uprava-i-pravo',
         testid: 'tile-waste',
+        stale,
       });
     }
     return tiles;

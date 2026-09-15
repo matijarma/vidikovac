@@ -3,7 +3,7 @@
 // on data.gov.hr (docs/izvori.md "Crveni izvori", request 368). Shares its
 // station choice and tile shape with bikes.ts -- see that file's header.
 import { FLAGS } from '../../core/flags';
-import { nearestStation } from '../../core/mobility';
+import { mobilityStaleBadge, nearestStation } from '../../core/mobility';
 import type { ProduceOptions, TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
 import { stationTile } from './bikes';
@@ -20,6 +20,9 @@ export const parkingProducer: TileProducer = {
     if (!snapshot || snapshot.status === 'down') return [];
     const station = nearestStation(snapshot.stations, ctx.screen?.stop, o.kvart);
     if (!station) return [];
-    return [stationTile(ctx, `parking:${station.id}`, ctx.i18n.t('tiles.parkingFree'), station, 'tile-parking')];
+    const tile = stationTile(ctx, `parking:${station.id}`, ctx.i18n.t('tiles.parkingFree'), station, 'tile-parking');
+    // Same stale handling as bikes.ts: a degraded fetch keeps the last free count, badged.
+    if (snapshot.status === 'stale') tile.stale = mobilityStaleBadge(ctx.i18n, snapshot.fetchedAt);
+    return [tile];
   },
 };

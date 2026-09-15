@@ -111,6 +111,7 @@ describe('bikesProducer', () => {
     expect(tile.aria).toContain(minutesText);
     expect(tile.contextMarkup).not.toContain('pješice');
     expect(tile.aria).not.toContain('pješice');
+    expect(tile.stale).toBeUndefined(); // a live snapshot carries no stale badge
   });
 
   it('without a screen stop, falls back to the kvart\'s station, with no walking minutes and "nema podataka" for a station the source has no figure for', async () => {
@@ -124,6 +125,16 @@ describe('bikesProducer', () => {
   it('is empty when no station is honestly nearby (no stop within range, no kvart match)', async () => {
     await setFlags({ FEED_BIKES: true });
     expect(bikesProducer.produce(ctx({ bikes: BIKES }), options())).toEqual([]);
+  });
+
+  it('a stale snapshot still renders the last known free count, badged rather than shown as live', async () => {
+    await setFlags({ FEED_BIKES: true });
+    const tiles = bikesProducer.produce(ctx({ bikes: { ...BIKES, status: 'stale' }, screen: screenWith(STOP) }), options());
+    expect(tiles).toHaveLength(1);
+    const tile = tiles[0]!;
+    expect(tile.value).toBe('4'); // not hidden: down hides, stale does not (global constraints §1/§8)
+    expect(tile.stale).toContain('data-status="stale"');
+    expect(tile.stale).toContain('zastarjelo od 14:31'); // fetchedAt 2026-09-11T12:31Z in Zagreb time
   });
 });
 
@@ -146,6 +157,13 @@ describe('parkingProducer', () => {
     await setFlags({ FEED_PARKING: true });
     const tiles = parkingProducer.produce(ctx({ parking: PARKING }), options({ kvart: 'trnje' }));
     expect(tiles[0]).toMatchObject({ key: 'parking:garage-far', value: '0' });
+  });
+
+  it('a stale snapshot still renders the last known free count, badged rather than shown as live', async () => {
+    await setFlags({ FEED_PARKING: true });
+    const tiles = parkingProducer.produce(ctx({ parking: { ...PARKING, status: 'stale' }, screen: screenWith(STOP) }), options());
+    expect(tiles[0]).toMatchObject({ key: 'parking:garage-near', value: '23' });
+    expect(tiles[0]!.stale).toContain('data-status="stale"');
   });
 });
 
@@ -182,6 +200,15 @@ describe('wasteProducer', () => {
     const tiles = wasteProducer.produce(ctx({ waste: WASTE }), options({ kvart: null }));
     expect(tiles.map((t) => t.title)).toEqual(['Miješani otpad', 'Papir i karton', 'Plastika']);
     expect(tiles.every((t) => t.context === 'Cijeli grad')).toBe(true);
+    expect(tiles.every((t) => t.stale === undefined)).toBe(true); // live snapshot: no stale badge
+  });
+
+  it('a stale snapshot still renders the last known pickups, every tile badged rather than shown as live', async () => {
+    await setFlags({ FEED_WASTE: true });
+    const tiles = wasteProducer.produce(ctx({ waste: { ...WASTE, status: 'stale' } }), options({ kvart: 'trnje' }));
+    expect(tiles).toHaveLength(2); // same pickups as the live case: stale is not hidden
+    expect(tiles.every((t) => t.stale?.includes('data-status="stale"'))).toBe(true);
+    expect(tiles[0]!.stale).toContain('zastarjelo od 14:00'); // fetchedAt 2026-09-11T12:00Z in Zagreb time
   });
 });
 

@@ -6,7 +6,7 @@
 // file, split here only because that name was already the closures
 // producer's (see the T3.2 controller note).
 import { FLAGS } from '../../core/flags';
-import { nearestStation, type MobilityStation } from '../../core/mobility';
+import { mobilityStaleBadge, nearestStation, type MobilityStation } from '../../core/mobility';
 import type { LayerContext } from '../../layers/types';
 import { escapeHtml } from '../../ui/dom/escape';
 import { iconMarkup } from '../../ui/icons';
@@ -67,6 +67,10 @@ export const bikesProducer: TileProducer = {
     if (!snapshot || snapshot.status === 'down') return [];
     const station = nearestStation(snapshot.stations, ctx.screen?.stop, o.kvart);
     if (!station) return [];
-    return [stationTile(ctx, `bikes:${station.id}`, ctx.i18n.t('tiles.bikesFree'), station, 'tile-bikes')];
+    const tile = stationTile(ctx, `bikes:${station.id}`, ctx.i18n.t('tiles.bikesFree'), station, 'tile-bikes');
+    // A degraded fetch still shows the last free count, but never as if it were current
+    // (global constraints §1/§8: every tile inherits the loading/stale/down states).
+    if (snapshot.status === 'stale') tile.stale = mobilityStaleBadge(ctx.i18n, snapshot.fetchedAt);
+    return [tile];
   },
 };
