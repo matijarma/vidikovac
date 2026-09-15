@@ -310,7 +310,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
   it('a public screen gets no pointer handling and no zoom buttons, but keeps the credit', async () => {
     const { map } = await harness({ extra: { interactive: false } });
     expect(map.options.interactive).toBe(false);
-    expect(map.controls).toHaveLength(1); // the credit alone: a scale bar belongs to a map one can move (kajimafix 01.8); // attribution and scale
+    expect(map.controls).toHaveLength(1); // the credit alone: a scale bar belongs to a map one can move (kajimafix 01.8)
   });
 
   it('an image the style names but the sprite lacks is answered with one transparent pixel, once, so nothing is logged every frame and nothing is drawn', async () => {

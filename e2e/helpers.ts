@@ -4,7 +4,7 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
 import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protocol';
-import { CODE_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
+import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
 
 export const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
 /** Server running with SESSION_MINUTES=0.2; undefined when pointed at a hosted target without one. */

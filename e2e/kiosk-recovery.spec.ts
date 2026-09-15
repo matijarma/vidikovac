@@ -48,5 +48,7 @@ test('a failed teaser request marks the last copy stale, holds the map, and reco
   await page.clock.runFor(21_000);
   await expect.poll(() => requests).toBeGreaterThan(failedRequests);
   await expect(map).toHaveAttribute('data-feed', 'live');
-  await expect(page.getByTestId('strip-warning')).toHaveAttribute('data-state', 'none');
+  // Recovered: the calm trail names the sources (kajimafix 03.5), or, under a live DHMZ warning, the warning cell carries a live state; the stale word is gone either way.
+  await expect(page.locator('[data-testid=strip-sources], [data-testid=strip-warning][data-state=active], [data-testid=strip-warning][data-state=upcoming]').first()).toBeVisible();
+  await expect(page.locator('[data-testid=strip-warning][data-state=stale]')).toHaveCount(0);
 });
