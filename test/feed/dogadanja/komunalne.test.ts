@@ -64,6 +64,17 @@ describe('fetchKomunalne', () => {
     expect(lon).toBeLessThanOrEqual(ZAGREB_BBOX.maxLon);
   });
 
+  it('stamps data.district from the geo coordinates when it has one, and carries none when it has no geo at all', async () => {
+    const result = await fetchKomunalne(makeContext());
+    // districtOf([15.79568, 45.71967]) lands inside Brezovica's own polygon in the generated table.
+    const withGeo = byId(result.items, 'komunalne:7525EA7F67309623C1258DCC0043728F');
+    expect(withGeo.geo).toBeDefined();
+    expect(withGeo.data.district).toBe('brezovica');
+    const withoutGeo = byId(result.items, 'komunalne:A781461DDB0D1DD2C1258CF5003BBE09');
+    expect(withoutGeo.geo).toBeUndefined();
+    expect(withoutGeo.data).not.toHaveProperty('district');
+  });
+
   it('decodes a numeric-entity date format ("17.2.2026.") and a different real phase/status pair', async () => {
     const result = await fetchKomunalne(makeContext());
     const item = byId(result.items, 'komunalne:6938D3974E327241C1258CF9002508C5');

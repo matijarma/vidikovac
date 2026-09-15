@@ -1,6 +1,8 @@
 import type { FetchContext } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
+import { districtOf } from '../../geo/districts';
 import { parseHrDate, type Precision } from '../../hr-date';
+import type { AreaSlug } from '../../../pairing/areas';
 
 // data.zagreb.hr's "Plan komunalnih aktivnosti" -- the live register of
 // neighbourhood public works the City agrees with the mjesni odbori, the one
@@ -106,6 +108,8 @@ export interface KomunalneEvent {
     status: KomunalniStatus;
     amount: number;
     precision: Precision;
+    /** The gradska četvrt of `geo`, when it falls inside one; absent for a record with no coordinates or outside the city. */
+    district?: AreaSlug;
   };
 }
 
@@ -145,6 +149,7 @@ export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult
 
     const lat = parseCoord(row.X_Koordinata ?? '');
     const lon = parseCoord(row.Y_Koordinata ?? '');
+    const district = lat !== null && lon !== null ? districtOf(lon, lat) : null;
 
     items.push({
       id: `komunalne:${row.ID}`,
@@ -161,6 +166,7 @@ export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult
         status,
         amount,
         precision: 'day',
+        ...(district ? { district } : {}),
       },
     });
   }
