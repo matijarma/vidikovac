@@ -801,7 +801,7 @@
     },
     "tiles": {
       "vehicles": "Vehicles moving",
-      "closures": "Closures nearby",
+      "closures": "Closures",
       "nearest": "nearest {street} · {distance}",
       "radius": "within {radius}"
     },

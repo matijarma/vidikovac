@@ -828,7 +828,7 @@
     },
     "tiles": {
       "vehicles": "Vozila u pokretu",
-      "closures": "Zatvaranja u blizini",
+      "closures": "Zatvaranja",
       "nearest": "najbliže {street} · {distance}",
       "radius": "u krugu {radius}"
     },

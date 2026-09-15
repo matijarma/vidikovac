@@ -286,6 +286,8 @@
    k-glyph, k-line-badge) stay as written. */
 .kiosk .tl { display: grid; gap: calc(var(--k-gap) * 0.3); align-content: space-between; box-sizing: border-box; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.8) var(--k-gap); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); overflow: hidden; }
 .kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A text-only label (the two value tiles, the time tiles) is a block, so its ellipsis mark renders: a flex container's own overflowing text clips without one (T2.11 finding 2). Line tiles keep the flex row for badge + name. */
+.kiosk .k-tile .tl-label, .kiosk .tl[data-variant='time'] .tl-label { display: block; }
 .kiosk .tl-value { display: flex; align-items: center; gap: 0.3em; font-size: var(--k-tile-size); font-weight: 700; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .kiosk .tl-context { font-size: var(--k-hint-size); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kiosk .tl-title { display: -webkit-box; font-size: var(--k-main-size); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
