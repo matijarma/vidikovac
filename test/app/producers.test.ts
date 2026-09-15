@@ -67,7 +67,7 @@ describe('transitProducer', () => {
     expect(six.value).toBe('kasni 2');
     expect(six.unit).toBe('min');
     expect(six.valueTone).toBe('late');
-    expect(six.valueSize).toBe('xl');
+    expect(six.valueSize).toBe('l');
     expect(six.title).toBe('Črnomerec – Sopot');
     expect(six.contextMarkup).toContain('icon-tram-front');
     expect(six.contextMarkup).toContain('>2 · Trg bana J. Jelačića<');
@@ -394,8 +394,9 @@ describe('gazetteProducer', () => {
     ]);
     const tile = gazetteProducer.produce(ctx({ snapshots: { glasnik } }))[0]!;
     expect(tile).toMatchObject({ key: 'glasnik:issue', domain: 'civic', variant: 'value', label: 'Glasnik', value: '21/2026', valueSize: 'xl', bucket: 'sada', testid: 'tile-gazette' });
-    // The day and month alone (kajimafix 01.6): the weekday made the line ellipsise its act count.
-    expect(tile.context).toBe('objavljen 10. 9. · 2 akta');
+    // The day and month and the count alone (kajimafix 01.6): the verb and the weekday ellipsised a three-digit count; the aria keeps the sentence.
+    expect(tile.context).toBe('10. 9. · 2 akta');
+    expect(tile.aria).toBe('Glasnik, 21/2026, objavljen 10. 9., 2 akta');
   });
 
   it('shows nothing without any acts', () => {

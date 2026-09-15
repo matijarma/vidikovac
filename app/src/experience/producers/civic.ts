@@ -47,19 +47,21 @@ export const gazetteProducer: TileProducer = {
     const glasnik = ctx.snapshots.glasnik;
     const act = glasnik?.items[0];
     if (!act || !glasnik) return [];
-    const context = [
-      // The day and month alone (kajimafix 01.6): with the weekday the line ellipsised its act count.
-      act.at ? i18n.t('civic.issuePublished', { date: zagrebDayMonth(act.at) }) : '',
-      i18n.t('civic.actsCount', { count: glasnik.items.length }),
-    ].filter(Boolean).join(' · ');
+    // The context is the day and month and the act count, nothing else (kajimafix 01.6): "objavljen" and the weekday both ellipsised a three-digit count in a half-width tile; the aria keeps the whole sentence.
+    const acts = i18n.t('civic.actsCount', { count: glasnik.items.length });
+    const context = [act.at ? zagrebDayMonth(act.at) : '', acts].filter(Boolean).join(' · ');
+    const label = i18n.t('tiles.gazette');
+    const value = `${dataText(act, 'broj')}/${dataText(act, 'godina')}`;
+    const aria = [label, value, act.at ? i18n.t('civic.issuePublished', { date: zagrebDayMonth(act.at) }) : '', acts].filter(Boolean).join(', ');
     return [{
       key: 'glasnik:issue',
       domain: 'civic',
       variant: 'value',
-      label: i18n.t('tiles.gazette'),
-      value: `${dataText(act, 'broj')}/${dataText(act, 'godina')}`,
+      label,
+      value,
       valueSize: 'xl',
       context,
+      aria,
       layer: 'uprava-i-pravo',
       bucket: 'sada',
       testid: 'tile-gazette',

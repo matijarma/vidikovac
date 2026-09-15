@@ -65,8 +65,8 @@ function lineTile(i18n: I18n, id: string, byId: Map<string, RouteDelay>, stop: {
     title: ends || undefined,
     value,
     unit,
-    // A number with its unit stands at xl; "na vrijeme" at l; "nema podataka" steps down to m so it never ellipsises.
-    valueSize: unit ? 'xl' : word.length > 11 ? 'm' : 'l',
+    // The state word stands at l (the concept's own 24 px; xl ellipsised "kasni 5 min" in a half-width tile), the unit small beside it; "nema podataka" steps down to m so it never ellipsises.
+    valueSize: word.length > 11 ? 'm' : 'l',
     valueTone: delayTone(i18n, delay),
     contextMarkup: row ? `${iconMarkup(kind === 'bus' ? 'bus-front' : 'tram-front')}<span class="tl-ctx-text">${escapeHtml(context)}</span>` : undefined,
     // The notification band (T3.3) reads a saved line's delay off the tile itself, in whole

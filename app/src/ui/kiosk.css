@@ -321,7 +321,8 @@
 /* The line tile (kajimafix 03.3, the concept's Promet scene): the badge at control height, the line's two ends on their own line, the state word at main size in its tone, the vehicles glyph and count; content stacked from the top. */
 .kiosk .k-tl-line { align-content: start; gap: calc(var(--k-gap) * 0.4); }
 .kiosk .k-tl-line .k-line-badge { height: var(--k-control); min-width: calc(var(--k-control) * 1.6); font-size: var(--k-main-size); }
-.kiosk .k-tl-name { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
+/* The line's ends wrap to two lines rather than cut: on a sign a name is read whole. */
+.kiosk .k-tl-name { display: -webkit-box; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
 .kiosk .k-tl-line .tl-value { font-size: var(--k-main-size); }
 /* A line badge mentioned inside a context (an event's lines) at the kiosk's scale (kajimafix 04). */
 .kiosk .line[data-size='xs'] { block-size: calc(28px * var(--k-zoom)); min-inline-size: calc(40px * var(--k-zoom)); padding: 0 0.3em; border-radius: calc(5px * var(--k-zoom)); font-size: var(--k-hint-size); }
