@@ -6,6 +6,7 @@ import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
 import type { KvartChoice } from './kvart-store';
 import type { MobilitySnapshot, WasteSnapshot } from './mobility';
+import type { LastRunSnapshot } from './lastrun';
 import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 
@@ -76,6 +77,9 @@ export interface ExperienceActions {
   parking?: MobilitySnapshot;
   /** The kvart's waste pickups (plan T3.2, D7): undefined until FEED_WASTE turns on. */
   waste?: WasteSnapshot;
+  /** The screen stop's last scheduled departures per line (T3.1, behind FEED_LASTRUN): loaded once per
+   *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */
+  lastRun?: LastRunSnapshot | null;
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */

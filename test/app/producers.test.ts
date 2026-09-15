@@ -19,8 +19,8 @@ import {
   safetyVerdict,
   transitProducer,
   worksProducer,
-  type LastRun,
 } from '../../app/src/experience/producers';
+import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { bucketOf, columnsFor, type ProduceOptions } from '../../app/src/experience/timeband';
 import { itemSelection } from '../../app/src/experience/blocks';
 import { safetyState } from '../../app/src/experience/safety-state';
@@ -404,35 +404,88 @@ describe('newsProducer', () => {
 });
 
 // ---------------------------------------------------------------------------
-// last run (behind FEED_LASTRUN, forward of T3.1)
+// last run (behind FEED_LASTRUN, T3.1): GTFS static, never zet-rt, never an arrival
 
 describe('lastRunProducer', () => {
-  const lastRun: LastRun = {
-    validUntil: '2026-09-12T02:00:00Z',
-    departures: [
-      { routeId: '6', at: '2026-09-11T19:00:00Z' }, // 21:00 Zagreb, evening
-      { routeId: '11', at: '2026-09-11T21:00:00Z' }, // 23:00 Zagreb, evening
-      { routeId: '12', at: '2026-09-11T21:30:00Z' }, // 23:30 Zagreb, evening (kept: two latest)
-      { routeId: '13', at: '2026-09-12T05:00:00Z' }, // after validUntil: dropped
-      { routeId: '14', at: '2026-09-11T08:00:00Z' }, // already past "now": bucket is null, dropped
-    ],
+  // The fixture stop's own lines on Fri 11. 9. (service date) as ZET's GTFS writes them:
+  // 13 and 14 roll past midnight, 12 and 17 do not, 11 ends earliest; 31 is a night tram
+  // whose Friday service ends Saturday 05:38, after the band's 04:00 cut.
+  const snapshot: LastRunSnapshot = {
+    status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
+    routes: {
+      '6': { '2026-09-11': '24:27', '2026-09-12': '23:48' },
+      '11': { '2026-09-11': '24:09', '2026-09-12': '24:03' },
+      '12': { '2026-09-11': '23:45', '2026-09-12': '23:43' },
+      '13': { '2026-09-11': '24:30', '2026-09-12': '24:21' },
+      '14': { '2026-09-11': '24:31', '2026-09-12': '24:22' },
+      '17': { '2026-09-11': '24:01', '2026-09-12': '24:06' },
+      '31': { '2026-09-11': '29:38', '2026-09-12': '28:48' },
+    },
   };
-  const withLastRun = (): LayerContext => ({ ...ctx(), ...({ lastRun } as Partial<LayerContext>) });
+  const withLastRun = (over: Partial<LayerContext> = {}): LayerContext => ctx({ lastRun: snapshot, ...over });
 
-  it('emits at most the two latest departures within validUntil that still lie on the band', () => {
+  it('Fri 14:32: the two lines departing last tonight, in order, as time tiles with the xs badge, the destination and the schedule context', () => {
     const tiles = lastRunProducer.produce(withLastRun(), options());
-    expect(tiles.map((t) => t.selection)).toEqual([{ kind: 'route', id: '11' }, { kind: 'route', id: '12' }]);
-    const one = tiles[0]!;
-    expect(one).toMatchObject({ key: 'zet-rt:lastrun:11', domain: 'transit', variant: 'time', title: 'Črnomerec - Dubec', at: '2026-09-11T21:00:00Z', context: 'Prema redu vožnje' });
-    expect(one.label).toBe('Zadnji polazak');
-    expect(one.labelMarkup).toContain('data-size="xs"');
+    expect(tiles.map((t) => t.selection)).toEqual([{ kind: 'route', id: '13' }, { kind: 'route', id: '14' }]);
+    const first = tiles[0]!;
+    expect(first).toMatchObject({
+      key: 'transit:lastrun:13', domain: 'transit', variant: 'time', layer: 'u-pokretu', testid: 'tile-lastrun',
+      label: 'Zadnji polazak', title: 'Žitnjak-Kvatern. trg', at: '2026-09-11T22:30:00.000Z', context: 'po rasporedu · ZET GTFS',
+    });
+    expect(first.labelMarkup).toContain('data-size="xs"');
+    expect(first.labelMarkup).toContain('data-kind="tram"');
+    expect(first.labelMarkup).toContain('>13<');
+    expect(zagrebTime(first.at)).toBe('00:30');
+    expect(options().bucket(first.at)).toBe('veceras');
+    expect(tiles[1]!.at).toBe('2026-09-11T22:31:00.000Z');
   });
 
-  it('is empty without ctx.lastRun', () => {
+  it('never says an arrival: no tile text carries "dolazak", and the context names the schedule and its source', () => {
+    for (const tile of lastRunProducer.produce(withLastRun(), options())) {
+      const words = [tile.label, tile.title, tile.context, tile.value, tile.aria].join(' ').toLowerCase();
+      expect(words).not.toContain('dolazak');
+      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.value).toBeUndefined();
+    }
+  });
+
+  it('Sat 00:10: only departures still ahead tonight; a line whose last one has left falls to tomorrow night and is kept off the band', () => {
+    const now = Date.parse('2026-09-11T22:10:00Z'); // Sat 12. 9. 00:10 CEST: night mode
+    const tiles = lastRunProducer.produce(withLastRun({ now }), options({}, now));
+    // 11 (00:09) and 17 (00:01) have left: their next last departure is Sunday night, in sutra, never shown as tonight's.
+    // 12 ended 23:45 Friday: Saturday's 23:43 is tomorrow night too. 6 (00:27), 13 (00:30), 14 (00:31) remain; the two latest win.
+    expect(tiles.map((t) => t.selection)).toEqual([{ kind: 'route', id: '13' }, { kind: 'route', id: '14' }]);
+    expect(tiles.every((t) => options({}, now).bucket(t.at) === 'veceras')).toBe(true);
+  });
+
+  it('Sat 05:00: tonight is Saturday night, so the day lines’ Sunday 00:2x departures are the two latest; a night tram whose Friday service ends at 05:38 still counts as this service day’s and lands in the day lane', () => {
+    const now = Date.parse('2026-09-12T03:00:00Z'); // Sat 12. 9. 05:00 CEST: day mode
+    const tiles = lastRunProducer.produce(withLastRun({ now }), options({}, now));
+    expect(tiles.map((t) => t.selection)).toEqual([{ kind: 'route', id: '13' }, { kind: 'route', id: '14' }]);
+    expect(tiles.map((t) => t.at)).toEqual(['2026-09-12T22:21:00.000Z', '2026-09-12T22:22:00.000Z']);
+    const nightOnly = lastRunProducer.produce(withLastRun({ now, lastRun: { ...snapshot, routes: { '31': snapshot.routes['31']! } } }), options({}, now));
+    expect(nightOnly.map((t) => t.selection)).toEqual([{ kind: 'route', id: '31' }]);
+    expect(nightOnly[0]!.at).toBe('2026-09-12T03:38:00.000Z');
+    expect(options({}, now).bucket(nightOnly[0]!.at)).toBe('danas');
+  });
+
+  it('shows nothing after validUntil, on a down snapshot, and without ctx.lastRun', () => {
+    expect(lastRunProducer.produce(withLastRun({ lastRun: { ...snapshot, validUntil: '2026-09-11T12:00:00Z' } }), options())).toEqual([]);
+    expect(lastRunProducer.produce(withLastRun({ lastRun: { status: 'down', fetchedAt: '2026-09-11T12:00:00Z' } }), options())).toEqual([]);
+    expect(lastRunProducer.produce(withLastRun({ lastRun: null }), options())).toEqual([]);
     expect(lastRunProducer.produce(ctx(), options())).toEqual([]);
   });
 
-  it('carries the flag, so buildTimeband never asks it while FEED_LASTRUN is off', () => {
+  it('names an unknown line by its id and kind "other", so a new line never hides', () => {
+    const tiles = lastRunProducer.produce(withLastRun({ lastRun: { ...snapshot, routes: { '999': { '2026-09-11': '23:00' } } } }), options());
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0]).toMatchObject({ title: '999', selection: { kind: 'route', id: '999' } });
+    expect(tiles[0]!.labelMarkup).toContain('data-kind="other"');
+  });
+
+  it('carries the flag and no module: the band never asks it while FEED_LASTRUN is off, and never paints zet-rt’s state on a schedule', () => {
     expect(lastRunProducer.flag).toBe('FEED_LASTRUN');
+    expect(lastRunProducer.modules).toEqual([]);
+    expect(lastRunProducer.skeleton).toBeNull();
   });
 });

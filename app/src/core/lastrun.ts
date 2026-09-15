@@ -1,0 +1,154 @@
+// The last scheduled departure per line from the screen's stop (plan A.6, D7,
+// Task T3.1). The source is ZET's static GTFS, cut by scripts/gtfs-lastrun.mjs
+// into one small JSON per stop under /data/lastrun/<stopId>.json and fetched
+// once per session; nothing here reads the real-time feed, and the tile that
+// reads this says "po rasporedu · ZET GTFS", never an arrival.
+//
+// The table keeps GTFS's own clock: a service day starts at noon minus twelve
+// hours and runs past 24:00, so Friday's "24:15" is Saturday 00:15 and the
+// night trams' "29:38" is 05:38 the next morning. Keying by service date and
+// resolving the instant here (rather than normalising to the calendar date in
+// the file) is what keeps a Saturday whose own service ends at 23:48 from
+// colliding with Friday's departure that rolled into it: 968 of ZET's 5,106
+// stop/line pairs mix the two patterns across their services.
+import { zagrebDayKey, zagrebHour } from '../format';
+
+/** `routeId -> service date (YYYY-MM-DD, Zagreb) -> 'HH:MM'` in GTFS hours (24:15 is a quarter past midnight of the next day). */
+export type LastRunRoutes = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+export interface LastRunLive {
+  status: 'live';
+  /** When this loader read the file: never mistaken for the timetable's own time. */
+  fetchedAt: string;
+  /** The file's `generatedAt`: when the script cut it from the GTFS. */
+  sourceUpdatedAt: string;
+  /** The last instant the file speaks for; after it, no departure is known and nothing is shown. */
+  validUntil: string;
+  routes: LastRunRoutes;
+}
+export interface LastRunDown {
+  status: 'down';
+  fetchedAt: string;
+}
+export type LastRunSnapshot = LastRunLive | LastRunDown;
+
+/** The file as the script writes it. */
+interface LastRunFile {
+  generatedAt: string;
+  validUntil: string;
+  routes: LastRunRoutes;
+}
+
+const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** GTFS HH:MM: the hours may pass 24, so two digits carry a service day into its second morning. */
+const GTFS_TIME = /^(\d{1,2}):(\d{2})$/;
+
+/** The service date `days` days after `dayKey`, by calendar arithmetic (a 23- or 25-hour day never shifts it). */
+function shiftDayKey(dayKey: string, days: number): string {
+  const m = DAY_KEY.exec(dayKey);
+  if (!m) return '';
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * The UTC instant of Zagreb's noon on `dayKey`. A CEST guess, corrected once
+ * by the hour Zagreb's clock shows: noon never falls inside a DST cut and the
+ * guess is at most an hour off, so one correction settles it.
+ */
+function zagrebNoon(dayKey: string): number {
+  const m = DAY_KEY.exec(dayKey);
+  if (!m) return NaN;
+  const guess = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) - 2 * HOUR_MS;
+  const hour = zagrebHour(guess);
+  return hour === null ? guess : guess - (hour - 12) * HOUR_MS;
+}
+
+/**
+ * The UTC instant of a GTFS time on a service date: noon minus twelve hours
+ * plus the time, as the GTFS reference defines a service day, which is what
+ * makes "27:30" on the night the clocks fall back 02:30 CET and not 03:30.
+ * NaN when either part is not what the file promises.
+ */
+function serviceInstant(dayKey: string, time: string): number {
+  const m = GTFS_TIME.exec(time);
+  if (!m) return NaN;
+  return zagrebNoon(dayKey) - 12 * HOUR_MS + Number(m[1]) * HOUR_MS + Number(m[2]) * MINUTE_MS;
+}
+
+/**
+ * The current service day's last departure of `routeId` that still lies
+ * ahead of `now`, or null: yesterday's entry when its time rolled past
+ * midnight and has not left yet (Saturday 00:10 still belongs to Friday's
+ * service), else today's. Null once `validUntil` has passed, on a down
+ * snapshot, and for a line the stop does not know. What comes back may be
+ * tomorrow night's departure when tonight's has left (today's service date
+ * answers from 00:00); the producer's lane rule keeps that off the band.
+ */
+export function lastDeparture(snapshot: LastRunSnapshot | null | undefined, routeId: string, now: number): { at: number } | null {
+  if (!snapshot || snapshot.status !== 'live') return null;
+  if (!(now < Date.parse(snapshot.validUntil))) return null;
+  const table = snapshot.routes[routeId];
+  if (!table) return null;
+  const today = zagrebDayKey(now);
+  for (const day of [shiftDayKey(today, -1), today]) {
+    const time = table[day];
+    if (!time) continue;
+    const at = serviceInstant(day, time);
+    if (Number.isFinite(at) && at >= now) return { at };
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The file's shape, checked field by field; anything else is a down answer, never a half-read table. */
+function parseFile(body: unknown): LastRunFile | null {
+  if (!isRecord(body) || typeof body.generatedAt !== 'string' || typeof body.validUntil !== 'string' || !isRecord(body.routes)) return null;
+  const routes: Record<string, Record<string, string>> = {};
+  for (const [routeId, table] of Object.entries(body.routes)) {
+    if (!isRecord(table)) return null;
+    const days: Record<string, string> = {};
+    for (const [day, time] of Object.entries(table)) {
+      if (typeof time !== 'string') return null;
+      days[day] = time;
+    }
+    routes[routeId] = days;
+  }
+  return { generatedAt: body.generatedAt, validUntil: body.validUntil, routes };
+}
+
+async function fetchSnapshot(stopId: string, fetchImpl: typeof fetch): Promise<LastRunSnapshot | null> {
+  const fetchedAt = new Date().toISOString();
+  try {
+    const response = await fetchImpl(`/data/lastrun/${encodeURIComponent(stopId)}.json`);
+    if (response.status === 404) return null;
+    if (!response.ok) return { status: 'down', fetchedAt };
+    const file = parseFile(await response.json());
+    if (!file) return { status: 'down', fetchedAt };
+    return { status: 'live', fetchedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes };
+  } catch {
+    return { status: 'down', fetchedAt };
+  }
+}
+
+const cache = new Map<string, Promise<LastRunSnapshot | null>>();
+
+/**
+ * The stop's table, fetched once per stop and kept in memory: a live file and
+ * a missing one (null: the stop is not in the generated set) are remembered,
+ * a down answer is not, so the next caller may try again.
+ */
+export function loadLastRun(stopId: string, fetchImpl: typeof fetch = fetch): Promise<LastRunSnapshot | null> {
+  const cached = cache.get(stopId);
+  if (cached) return cached;
+  const pending = fetchSnapshot(stopId, fetchImpl).then((snapshot) => {
+    if (snapshot?.status === 'down') cache.delete(stopId);
+    return snapshot;
+  });
+  cache.set(stopId, pending);
+  return pending;
+}

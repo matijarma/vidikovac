@@ -13,6 +13,7 @@ import {
 import { weatherStatusMarkup, weatherStatus } from '../../app/src/experience/weather-status';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { LayerContext } from '../../app/src/layers/types';
+import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { createElementFromHTML } from '../../app/src/ui/dom/escape';
 import { text } from './helpers';
 
@@ -348,6 +349,24 @@ describe('buildTimeband: the model', () => {
       expect(sada.skeletons).toEqual([]);
       expect(sada.busy).toBe(false);
     }
+  });
+  it('a producer without a module has no feed to wait for: its tiles stand while its neighbours load, go stale or fail, and carry no badge', () => {
+    // The last-run producer's shape (T3.1): a schedule on disk, never zet-rt's state painted on it.
+    const schedule: TileProducer = {
+      domain: 'transit', modules: [], layer: 'u-pokretu', skeleton: null,
+      produce: () => [{ key: 'transit:lastrun:6', domain: 'transit', variant: 'time', label: 'Zadnji polazak', title: 'Črnomerec-Sopot', at: '2026-09-11T22:27:00Z', context: 'po rasporedu · ZET GTFS', layer: 'u-pokretu', testid: 'tile-lastrun' }],
+    };
+    const cases: LayerContext['snapshots'][] = [{}, { ...ALL_LIVE, 'zet-rt': stale('zet-rt') }, { ...ALL_LIVE, 'zet-rt': down('zet-rt') }];
+    for (const snapshots of cases) {
+      const model = buildTimeband(ctx({ snapshots }), [transit(SIX_LINES), schedule]);
+      const veceras = lane(model, 'veceras');
+      expect(veceras.tiles.map((t) => t.key), JSON.stringify(Object.keys(snapshots))).toEqual(['transit:lastrun:6']);
+      expect(veceras.tiles[0]!.stale).toBeUndefined();
+      expect(veceras.busy).toBe(false);
+      expect(veceras.foot).toEqual([]);
+    }
+    const stillStale = lane(buildTimeband(ctx({ snapshots: { ...ALL_LIVE, 'zet-rt': stale('zet-rt') } }), [transit(SIX_LINES), schedule]), 'sada');
+    expect(stillStale.tiles.every((t) => t.stale)).toBe(true);
   });
   it('selects the column tb-col names when it exists, else sada', () => {
     expect(buildTimeband(ctx({ view: view('tjedan') }), PRODUCERS).selected).toBe('tjedan');
@@ -728,10 +747,25 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
     expect(sutra.tiles.some((t) => t.key === 'dogadanja:kulturpunkt:1')).toBe(true);
   });
 
-  it('never asks the last-run producer while FEED_LASTRUN is off: no lastrun tile anywhere on the band', () => {
-    const model = buildTimeband(realCtx());
-    const keys = model.lanes.flatMap((l) => l.tiles.map((t) => t.key));
-    expect(keys.some((k) => k.includes('lastrun'))).toBe(false);
+  it('the last-run producer (FEED_LASTRUN on) stands on ctx.lastRun alone: no tile without it; with it, two Zadnji polazak tiles in večeras that stay unbadged while zet-rt is stale', () => {
+    const bare = buildTimeband(realCtx());
+    expect(bare.lanes.flatMap((l) => l.tiles.map((t) => t.key)).some((k) => k.includes('lastrun'))).toBe(false);
+
+    const lastRun: LastRunSnapshot = {
+      status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
+      routes: { '6': { '2026-09-11': '24:27' }, '11': { '2026-09-11': '24:09' }, '12': { '2026-09-11': '23:45' } },
+    };
+    const staleRt: ModuleSnapshot = { ...REAL_SNAPSHOTS['zet-rt']!, status: 'stale', staleSince: '2026-09-11T12:00:00Z' };
+    const model = buildTimeband({ ...realCtx(), lastRun, snapshots: { ...REAL_SNAPSHOTS, 'zet-rt': staleRt } });
+    const tiles = lane(model, 'veceras').tiles.filter((t) => t.testid === 'tile-lastrun');
+    expect(tiles.map((t) => t.key)).toEqual(['transit:lastrun:11', 'transit:lastrun:6']);
+    for (const tile of tiles) {
+      expect(tile.stale).toBeUndefined();
+      expect(tile.label).toBe('Zadnji polazak');
+      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.labelMarkup).toContain('data-size="xs"');
+    }
+    expect(lane(model, 'sada').tiles.filter((t) => t.testid === 'tile-transit').every((t) => t.stale)).toBe(true);
   });
 
   it('is the same producer list DEFAULT_PRODUCERS exports, in the sada reading order the plan names', () => {
