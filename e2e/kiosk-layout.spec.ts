@@ -187,8 +187,11 @@ for (const size of SIZES) {
         await expect(kiosk.locator('[data-testid=corner-qr] .qr')).toBeVisible();
         await expect(kiosk.getByTestId('kiosk-essentials-open')).toBeHidden();
         for (const [layer, word] of Object.entries(LAYERS)) {
-          // The phone steers through its own history: the dashboard restores the hash and relays the view to the room.
+          // The phone steers through its own history (the dashboard restores the hash), then casts explicitly (D5):
+          // the Kvart panel's primary sends the phone's current layer to the room; the screen never follows a tap by itself.
           await phone.evaluate((id) => { location.hash = `#layer=${id}`; }, layer);
+          await phone.getByTestId('tab-kvart').click();
+          await phone.getByTestId('cast-screen').click();
           await expect(kiosk.locator(`[data-testid=kiosk-layer][data-layer="${layer}"]`)).toBeVisible({ timeout: 15_000 });
           await expect(kiosk.getByTestId('session-label'), 'the header names the mirrored domain').toContainText(`· ${word}`);
           // The layer's own data has arrived and the row fitter has run on the final face.
