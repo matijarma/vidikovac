@@ -44,9 +44,11 @@ const SADA_TILES_IN_FOLD = 3;
 const LANE_SNAP_PX = 2;
 /** A lane-changing swipe travels this much of the row: past half a lane pitch (the lane plus the 1.25rem gap, 378 px at 390) once the touch slop is spent; the mandatory snap then takes the nearer lane. 200 px lands within 4 px of the midpoint. */
 const LANE_SWIPE_FRACTION = 0.6;
-/** Bounded page heights with fixtures (plan, "Test updates", new test 7). */
+/** Bounded page heights with fixtures (plan, "Test updates", new test 7): the document a reader scrolls, layer and shell together. */
 const GRAD_MAX_HEIGHT_PX = 3_000;
 const SIGURNOST_MAX_HEIGHT_PX = 2_500;
+/** The phone FAB's clearance (B.5): with data-fab main's foot is calc(var(--ki-tabs) + 5rem) against the base calc(var(--ki-tabs) + var(--sp-6)), 5rem − 1.5rem = 56 px more document under the last row, so the FAB never covers it. The bounds above predate the FAB; the allowance is granted only when the FAB is on the page. */
+const FAB_CLEARANCE_PX = 56;
 /** A long scroll, past any first viewport. */
 const SCROLL_PX = 1_500;
 /** One finger, 200 px, twelve moves 16 ms apart: the shape a real swipe has. */
@@ -414,20 +416,30 @@ test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (a
 });
 
 // --- 6. bounded heights ------------------------------------------------------------------
+/** The document height a reader scrolls, and whether the shell has the FAB on this page (a scanner with a screen, any layer but Promet). */
+async function documentHeight(page: Page): Promise<{ height: number; fab: boolean }> {
+  return page.evaluate(() => ({
+    height: document.documentElement.scrollHeight,
+    fab: document.querySelector('.ki')?.getAttribute('data-fab') === '1',
+  }));
+}
+
 test(`with fixtures at 390 px Grad stays under ${GRAD_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await openLayer(page, 'uprava-i-pravo');
   await settle(page, fixture);
-  const grad = await page.evaluate(() => document.documentElement.scrollHeight);
-  expect(grad, `Grad renders ${grad} px of document; the plan bounds it under ${GRAD_MAX_HEIGHT_PX} px (paged lists, "Prikaži još")`).toBeLessThan(GRAD_MAX_HEIGHT_PX);
+  const { height, fab } = await documentHeight(page);
+  const bound = GRAD_MAX_HEIGHT_PX + (fab ? FAB_CLEARANCE_PX : 0);
+  expect(height, `Grad renders ${height} px of document; the plan bounds it under ${GRAD_MAX_HEIGHT_PX} px (paged lists, "Prikaži još")${fab ? ` plus the FAB's ${FAB_CLEARANCE_PX} px clearance` : ''}`).toBeLessThan(bound);
 });
 
 test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} px of document height`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await openLayer(page, 'sigurnost');
   await settle(page, fixture);
-  const sigurnost = await page.evaluate(() => document.documentElement.scrollHeight);
-  expect(sigurnost, `Sigurnost renders ${sigurnost} px of document; the plan bounds it under ${SIGURNOST_MAX_HEIGHT_PX} px (assembly points paged)`).toBeLessThan(SIGURNOST_MAX_HEIGHT_PX);
+  const { height, fab } = await documentHeight(page);
+  const bound = SIGURNOST_MAX_HEIGHT_PX + (fab ? FAB_CLEARANCE_PX : 0);
+  expect(height, `Sigurnost renders ${height} px of document; the plan bounds it under ${SIGURNOST_MAX_HEIGHT_PX} px (assembly points paged)${fab ? ` plus the FAB's ${FAB_CLEARANCE_PX} px clearance` : ''}`).toBeLessThan(bound);
 });
 
 // --- 7. zoom-compact ----------------------------------------------------------------------
