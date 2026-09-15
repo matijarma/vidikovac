@@ -6,7 +6,7 @@
 // screen stops so the client never needs the polygons itself (R-DG6): the
 // table alone would cost about 25 kB gzip on a `/d/` graph budgeted at
 // 200 kB for one lookup per session.
-import table from '../../data/gradske-cetvrti.json';
+import table from '../../data/gradske-cetvrti.json' with { type: 'json' };
 import type { AreaSlug } from '../../pairing/areas';
 import type { Geo } from '../schema';
 
