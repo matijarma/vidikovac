@@ -1,8 +1,12 @@
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
+import type { AreaSlug } from '../../../worker/pairing/areas';
 import type { LayerId, ScreenStop } from '../../../worker/protocol';
 import type { PublicSelection } from '../../../worker/public-selection';
 import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
+import type { KvartChoice } from './kvart-store';
+import type { NotifyFlags } from './notify-store';
+import type { SavedStore } from './saved-store';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -28,6 +32,19 @@ export interface ScreenContext {
 export type FeedSnapshots = Partial<Record<ModuleId, ModuleSnapshot>>;
 export type FeedErrors = Partial<Record<ModuleId, string>>;
 
+/** Why the cast button is disabled, when it is (D5): no screen on the session, a one-hop
+ *  peer (never the driver), the session frozen, or the socket still connecting. */
+export type CastReason = 'no-screen' | 'peer' | 'frozen' | 'connecting';
+
+/** The cast button's state, computed once by the dashboard and read by the Kvart panel,
+ *  the FAB and the transport detail head alike (D5). */
+export interface CastState {
+  can: boolean;
+  reason: CastReason | null;
+  screenLabel: string | null;
+  stopName: string | null;
+}
+
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
   view?: ViewState;
@@ -39,6 +56,19 @@ export interface ExperienceActions {
   onItemExport?: (kind: 'ics' | 'geojson' | 'print', item: FeedItem, snapshot: ModuleSnapshot) => void;
   onItemCopy?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
   onItemShare?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
+  /** The reader's kvart (D6): the resolved district (`null` is the whole city), its
+   *  label, and the raw choice driving the select's `selected` option. */
+  kvart?: AreaSlug | null;
+  kvartLabel?: string;
+  kvartChoice?: KvartChoice;
+  /** The kvart alert switches (spec §4.9); local tile highlighting only, never a push. */
+  notify?: NotifyFlags;
+  /** Read-only: a layer only checks and lists what is saved, it never mutates the store directly. */
+  saved?: Pick<SavedStore, 'list' | 'has'>;
+  cast?: CastState;
+  /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the
+   *  kvart panel's walking row (D16) and the kvart select's district option list. */
+  stops?: readonly ScreenStop[];
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */
