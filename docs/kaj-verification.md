@@ -373,3 +373,12 @@ koda; Firefox 110 umjesto 104 zbog upita spremnika; izvještaj o pouzdanosti izv
 u fazi M5 i M7; Grad odabire lokaciju, prijavitelj predlaže; šest neotvorenih iznimaka
 među izvorima; OpenStreetMap u tablici izvora; `/privatnost` više ne kaže da je repozitorij
 privatan i navodi sve što ostaje u localStorageu.
+
+Dopuna 16. 9. 2026.: prijedlog dobiva poglavlje "Vizija: manje zaslona, više grada" odmah
+iza sažetka, sa slikom `f-vizija` (ekonomija pažnje nasuprot ekonomiji prisutnosti, krug
+mjesto, prisutnost, deset minuta, natrag u grad), otvoreni format za izdavače kao isporuku
+faze M4 (§1.7, plan, Obrazac 2.2), primjer knjižnice koja posuđuje prisutnošću i rečenicu o
+pametnim televizorima koje prostori već imaju; usporedba s ranije financiranim projektima i
+slika `f-krajolik` uklonjene su iz svih dokumenata. Provjere ponovljene s istim ishodom:
+bez pogrešaka u konzoli, bez mrežnih zahtjeva, bez prelijevanja, axe bez nalaza, jedan h1,
+`e2e/a11y.spec.ts` nad `/prijava/`, parnost teksta (dvije ćelije tablice kao pilula i napomena).

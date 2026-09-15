@@ -35,6 +35,13 @@
     "caption": "Brojači bez identifikatora: redak (dan, sat, događaj, dim1, dim2) → broj, zaokružen na 5 i sklopljen ispod 10 prije izvoza Gradu."
   },
   {
+    "id": "f-vizija",
+    "file": "figures/f-vizija.svg",
+    "title": "Vizija: ekonomija pažnje nasuprot ekonomiji prisutnosti",
+    "desc": "Dva panela. Lijevo, prigušeno, ekonomija pažnje: telefon s beskrajnim listanjem koje blijedi prema dnu, zvono s oznakom jer obavijesti te vraćaju, i strelica koja se s dna telefona vraća na njegov vrh; mjerilo je zadržavanje. Desno, u boji, ekonomija prisutnosti Kaj ima?: krug od četiri koraka, mjesto (kafić, knjižnica, ured četvrti), prisutnost (skeniraj ili dodirni), deset minuta (cijeli grad na tvom uređaju) i natrag u grad (pogled se sam zatvori), pa sljedeće mjesto i sljedeći čovjek. Uz krug: prostor dobiva goste, izdavač dobiva doseg, Grad dobiva uvid bez praćenja, osoba pokraj tebe pet minuta; mjerilo su sesije i dostupnost izvora, nikad zadržavanje. Ispod: Manje zaslona, više grada.",
+    "caption": "Ekonomija pažnje mjeri koliko te zadržala; ekonomija prisutnosti mjeri koliko je mjesta i ljudi grad povezao u deset minuta, pa te pusti natrag."
+  },
+  {
     "id": "f-sest-stupnjeva",
     "file": "figures/f-sest-stupnjeva.svg",
     "title": "Šest stupnjeva: od tebe do Senfa u tri dodira",

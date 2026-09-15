@@ -144,7 +144,9 @@ function figureMarkup(id, manifests, warnings) {
   // A mock reproduces the app's DOM, h1 included; the document has one h1, the cover's.
   if (kind === 'html') body = body.replace(/<h1(?=[\s>])/g, '<p data-mock-h="1"').replace(/<\/h1>/g, '</p>');
   const caption = meta?.caption ? `<figcaption>${esc(meta.caption)}</figcaption>` : '';
-  return `<figure class="fig" id="fig-${id}" data-kind="${kind}"><div class="fig-body">${body}</div>${caption}</figure>`;
+  // SVG bodies scroll sideways on narrow screens (prijava.css), so they take focus for keyboard scrolling.
+  const bodyAttrs = kind === 'svg' ? ` tabindex="0" role="group" aria-label="${esc(meta?.title ?? id)}"` : '';
+  return `<figure class="fig" id="fig-${id}" data-kind="${kind}"><div class="fig-body"${bodyAttrs}>${body}</div>${caption}</figure>`;
 }
 
 // ---------------------------------------------------------------------------

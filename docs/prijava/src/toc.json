@@ -1,13 +1,50 @@
 [
-  { "label": "Sažetak", "heading": "Sažetak" },
-  { "label": "Funkcionalnosti", "heading": "1. Popis funkcionalnosti" },
-  { "label": "Korisnici", "heading": "2. Potencijalni profil korisnika" },
-  { "label": "Rješenje", "heading": "3. Tip rješenja" },
-  { "label": "Grad", "heading": "4. Obrazloženje interesa projekta za Grad Zagreb" },
-  { "label": "Podaci", "heading": "5. Popis otvorenih podataka koji bi se koristili" },
-  { "label": "Kriteriji", "heading": "6. Kriteriji iz Priloga 1. Programa" },
-  { "label": "Plan", "heading": "9. Plan provedbe" },
-  { "label": "Proračun", "heading": "10. Financijski plan (Obrazac 3)" },
-  { "label": "Pitanja", "heading": "11. Pitanja koja očekujemo i odgovori ugrađeni u proizvod" },
-  { "label": "Opaska", "heading": "Opaska autora" }
+  {
+    "label": "Sažetak",
+    "heading": "Sažetak"
+  },
+  {
+    "label": "Vizija",
+    "heading": "Vizija: manje zaslona, više grada"
+  },
+  {
+    "label": "Funkcionalnosti",
+    "heading": "1. Popis funkcionalnosti"
+  },
+  {
+    "label": "Korisnici",
+    "heading": "2. Potencijalni profil korisnika"
+  },
+  {
+    "label": "Rješenje",
+    "heading": "3. Tip rješenja"
+  },
+  {
+    "label": "Grad",
+    "heading": "4. Obrazloženje interesa projekta za Grad Zagreb"
+  },
+  {
+    "label": "Podaci",
+    "heading": "5. Popis otvorenih podataka koji bi se koristili"
+  },
+  {
+    "label": "Kriteriji",
+    "heading": "6. Kriteriji iz Priloga 1. Programa"
+  },
+  {
+    "label": "Plan",
+    "heading": "9. Plan provedbe"
+  },
+  {
+    "label": "Proračun",
+    "heading": "10. Financijski plan (Obrazac 3)"
+  },
+  {
+    "label": "Pitanja",
+    "heading": "11. Pitanja koja očekujemo i odgovori ugrađeni u proizvod"
+  },
+  {
+    "label": "Opaska",
+    "heading": "Opaska autora"
+  }
 ]

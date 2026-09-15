@@ -27,7 +27,7 @@
 <polyline points="720,156 80,156" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
 <text x="400" y="150" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">{t:'codes'} + serverNow · zaslon rotira kod, novi paket kad ostanu tri</text>
 <rect x="120" y="172" width="240" height="28" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
-<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="240" y="188">skenira QR ili upiše kod ABCD·EFG0</tspan></text>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="240" y="188">skenira QR ili upiše kod ABCD-EFGH</tspan></text>
 <polyline points="240,220 400,220" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
 <text x="320" y="214" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">POST /api/scan {code}</text>
 <polyline points="400,246 560,246" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>

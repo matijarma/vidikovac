@@ -111,6 +111,11 @@ strong { font-weight: var(--weight-bold); }
 .fig-body > svg { display: block; inline-size: 100%; block-size: auto; }
 .fig figcaption { margin-block-start: var(--sp-2); max-inline-size: 72ch; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .fig[data-kind='svg'] .fig-body { padding: var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-canvas); }
+/* A diagram drawn for 960 units is unreadable squeezed into a phone: below 48rem it keeps a 44rem width and scrolls sideways inside its own box (keyboard-focusable, see build). */
+@media (max-width: 47.99rem) {
+  .fig[data-kind='svg'] .fig-body { overflow-x: auto; scrollbar-width: thin; }
+  .fig[data-kind='svg'] .fig-body > svg { min-inline-size: 44rem; }
+}
 
 #fig-m-telefon .fig-body { display: flex; justify-content: center; }
 

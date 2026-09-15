@@ -30,13 +30,5 @@
     "title": "Lagani način rada i šest pilot zaslona",
     "desc": "Četiri pločice s mjerljivim obvezama laganog načina rada, mjerač prijenosa 104 od 200 kB i šest pločica pilot zaslona: četiri donirana uređaja i dvije nove postave Raspberry Pi 5.",
     "caption": "Mjerljive obveze laganog načina rada i šest pilot zaslona, od kojih četiri na doniranim uređajima: za isti novac šest zaslona umjesto četiri."
-  },
-  {
-    "id": "f-krajolik",
-    "file": "f-krajolik.html",
-    "kind": "html",
-    "title": "Dosad financirani projekti Programa i Kaj ima?",
-    "desc": "Sedam pločica s godinom, nazivom i područjem dosad financiranih projekata Programa te šira pločica za Kaj ima? sa sedam područja u jednom pogledu.",
-    "caption": "Sedam dosad financiranih projekata Programa, svaki vrijedan za svoje područje, i Kaj ima? koji sedam područja stavlja u jedan pogled, u stvarnom vremenu i bez računa."
   }
 ]

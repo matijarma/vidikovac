@@ -24,7 +24,7 @@ Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Gra
 
 ### M4 Prvi skup podataka Gradu, ZGBit, javni katalog `/open` (mjesec 5)
 
-Isporuke: prvi mjesečni CSV i JSON `(mjesec, dan, sat, događaj, dim1, dim2, broj)` s zaokruživanjem na 5 i sažimanjem ćelija ispod 10, uz tekst licence za Grad; prezentacija na ZGBit susretu; `/open/catalog.json` (DCAT-AP) s dnevnim snimkama u R2, ispravljenom licencom skupa EMSC-a i ponudom Gradu za objavu skupova Grada i DHMZ-a na data.zagreb.hr; statička stranica "pogled izvana" s kartom javnih zaslona, na koju podijeljena poveznica vodi osobu bez sesije. Mjera: potvrda primitka Gradskog ureda; katalog validiran DCAT-AP validatorom; stranica "pogled izvana" objavljena.
+Isporuke: prvi mjesečni CSV i JSON `(mjesec, dan, sat, događaj, dim1, dim2, broj)` s zaokruživanjem na 5 i sažimanjem ćelija ispod 10, uz tekst licence za Grad; prezentacija na ZGBit susretu; `/open/catalog.json` (DCAT-AP) s dnevnim snimkama u R2, ispravljenom licencom skupa EMSC-a i ponudom Gradu za objavu skupova Grada i DHMZ-a na data.zagreb.hr; statička stranica "pogled izvana" s kartom javnih zaslona, na koju podijeljena poveznica vodi osobu bez sesije; otvoreni format za izdavače (javna JSON shema za najave događanja i obavijesti, upute i primjer, provjera sheme pri uključivanju) i prvi vanjski izdavači na zaslonima. Mjera: potvrda primitka Gradskog ureda; katalog validiran DCAT-AP validatorom; stranica "pogled izvana" objavljena; shema objavljena s najmanje jednim vanjskim izdavačem u produkciji.
 
 ### M5 Žuti izvori, sadržaj HRT-a i HAK-a ako je dopušten, izvještaj o pouzdanosti (mjeseci 6 do 8)
 
