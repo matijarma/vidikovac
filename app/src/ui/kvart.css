@@ -1,0 +1,60 @@
+/* The Kvart panel (plan B.5, B.7): the phone's Kvart tab workspace and the
+   desktop's sticky aside share this one body -- a small map (or its text
+   line under lagano and before the worker ships districts), the saved
+   chips, the walking estimate, the cast primary, the notify row and the
+   local-only note. Imported after dashboard.css: `.kv-kvart-pick` here wins
+   the full-width layout over the header's inline-flex one by source order,
+   no !important needed. */
+.kv, .ws-kvart { display: grid; gap: var(--sp-4); align-content: start; }
+.kv-sec { display: grid; gap: var(--sp-2); }
+
+.kv-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.kv-title { margin: 0; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
+.kv-maplink { display: inline-flex; align-items: center; gap: var(--sp-1); flex: none; min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-action-brand); font-size: var(--type-control); font-weight: var(--weight-bold); text-decoration: none; touch-action: manipulation; }
+
+.kv-kvart-pick { display: flex; inline-size: 100%; }
+.kv-kvart-pick .ki-kvart-face { inline-size: 100%; justify-content: space-between; }
+
+.kv-mapwrap { margin: 0; display: grid; gap: var(--sp-2); }
+.kv-map { display: block; block-size: 12.5rem; border: 1px solid var(--tone-stroke); border-radius: var(--r-md); overflow: hidden; background: var(--tone-surface-2); }
+.ki-kvart .kv-map { block-size: 10rem; }
+.kv-map-canvas { inline-size: 100%; block-size: 100%; }
+.kv-map-cap, .kv-map-text { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+
+.kv-saved { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.kv-saved > li { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.kv-chip { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
+.kv-chip-text { min-inline-size: 0; max-inline-size: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-chip-add { border-style: dashed; border-color: var(--tone-stroke-strong); background: transparent; color: var(--tone-action-brand); font-weight: var(--weight-bold); }
+.kv-saved-hint { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+
+.kv-walk { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.kv-walk li { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--type-control); color: var(--tone-text-primary); }
+.kv-walk .icon { flex: none; width: 0.875rem; height: 0.875rem; color: var(--tone-text-muted); }
+.kv-walk-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.kv-cast { inline-size: 100%; }
+.kv-cast[data-sent='1'] { background: var(--tone-live); }
+.kv-cast-why, .kv-note { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+
+.kv-notify { display: flex; align-items: center; gap: var(--sp-2); inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); cursor: pointer; touch-action: manipulation; }
+.kv-notify > .icon:first-child { flex: none; color: var(--tone-action-brand); }
+.kv-notify-text { flex: 1; min-inline-size: 0; text-align: start; }
+.kv-notify-count { flex: none; color: var(--tone-text-muted); }
+
+.nt-list { display: grid; }
+.nt-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); text-align: start; cursor: pointer; touch-action: manipulation; }
+.nt-text { min-inline-size: 0; }
+.nt-knob { position: relative; flex: none; inline-size: 2.5rem; block-size: 1.5rem; border-radius: var(--r-pill); background: var(--tone-surface-3); }
+.nt-knob::after { content: ''; position: absolute; inset-block-start: 0.1875rem; inset-inline-start: 0.1875rem; inline-size: 1.125rem; block-size: 1.125rem; border-radius: 50%; background: var(--tone-surface-canvas); box-shadow: var(--tone-shadow-soft); transition: transform var(--dur-fast) var(--ease); }
+.nt-row[aria-checked='true'] .nt-knob { background: var(--tone-action-brand); }
+.nt-row[aria-checked='true'] .nt-knob::after { transform: translateX(1rem); }
+:root[data-lagano='1'] .nt-knob::after { box-shadow: none; transition: none; }
+
+@media (hover: hover) {
+  .nt-row:hover, .kv-notify:hover { background: var(--tone-surface-2); }
+  .kv-chip:hover { border-color: var(--tone-stroke-strong); }
+}
+@media (hover: none) {
+  .nt-row:active, .kv-notify:active, .kv-chip:active { background-color: var(--tone-surface-2); transition: none; }
+}
