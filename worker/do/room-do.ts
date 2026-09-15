@@ -19,6 +19,7 @@ import type { Env } from '../env';
 import { logError } from '../log';
 import { recordMetric } from '../metrics';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
+import { withDistrict } from '../pairing/stops';
 import { randomId, signDataToken } from '../pairing/tokens';
 import { parseSelection, selectionParams } from '../public-selection';
 import {
@@ -250,7 +251,9 @@ export class RoomDO extends DurableObject<Env> {
 
   private screenMetadata(): ScreenMetadata | undefined {
     const raw = this.meta('screen');
-    return raw ? JSON.parse(raw) as ScreenMetadata : undefined;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as ScreenMetadata;
+    return parsed.stop ? { ...parsed, stop: withDistrict(parsed.stop) } : parsed;
   }
 
   isEvaluation(): boolean { return this.screenMetadata()?.kind === 'temporary'; }

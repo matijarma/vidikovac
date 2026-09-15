@@ -10,6 +10,7 @@ import { logError } from '../log';
 import { recordMetric, zagrebDayHour } from '../metrics';
 import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
+import { withDistrict } from '../pairing/stops';
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId } from '../pairing/tokens';
 import {
   CODES_PER_BATCH,
@@ -152,10 +153,11 @@ export class BeaconDO extends DurableObject<Env> {
   screenMetadata(): ScreenMetadata {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
     const raw = this.meta('stop');
+    const stop = raw ? JSON.parse(raw) as ScreenStop : null;
     return {
       kind: this.meta('kind') === 'temporary' ? 'temporary' : 'venue',
       expiresAt: expiry || null,
-      stop: raw ? JSON.parse(raw) as ScreenStop : null,
+      stop: stop ? withDistrict(stop) : null,
     };
   }
 

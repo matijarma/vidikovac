@@ -26,6 +26,8 @@ export interface ScreenStop {
   lon: number;
   lat: number;
   routes: string[];
+  /** One of the 17 gradske četvrti from the stop's coordinates; absent when the stop lies outside every polygon. */
+  district?: string;
 }
 
 export interface ScreenMetadata {
