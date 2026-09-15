@@ -193,17 +193,13 @@ for (const size of SIZES) {
           await expect(kiosk.getByTestId('session-label'), 'the header names the mirrored domain').toContainText(`· ${word}`);
           // The layer's own data has arrived and the row fitter has run on the final face.
           await kiosk.waitForTimeout(2500);
-          // Tracked, not owned here: this assertion can fail against real, unstubbed
-          // open data (a long closure street name in grad-sada, long DHMZ forecast/
-          // warning text in zrak-i-nebo) because the side column's block-body budget
-          // in paired.ts (`fitRows`'s one-row floor) and kiosk.css (`--k-block-min`)
-          // does not reserve enough height for real content lengths at every size.
-          // Reproduced deterministically at 1366x768 for grad-sada as of 2026-09-15
-          // (`k-side-blocks 341>335`, `k-block-body 90>64`); paired.ts and this section
-          // of kiosk.css are outside T2.11's file ownership (global-constraints.md
-          // "Nobody in wave 2 edits ... paired.ts"). See task-T2.11-report.md,
-          // "Findings outside scope" #1, and its fix-round addendum for the follow-up
-          // task this needs before the wave ships.
+          // Depends on fitRows's zero-row floor (kiosk/paired.ts) and the compact
+          // block floors in ui/kiosk.css (--k-block-min, the board's floor, the
+          // zrak-i-nebo pairing). Without them this is deterministically red at
+          // 1366x768: grad-sada (k-side-blocks 341>335, k-block-body 90>64), then
+          // u-pokretu (a 380 px board floor in a ~335 px column), then zrak-i-nebo
+          // (k-block-body 43>22), each masked by the one before because the loop
+          // stops at its first failing layer. Provenance: task-T2.11-report.md.
           expect(await geometryIssues(kiosk), layer).toEqual([]);
           await kiosk.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}-paired-${layer}.png`, fullPage: false });
         }
