@@ -74,7 +74,7 @@ Izvedeni podatak, mrežni artefakt za model kretanja (area T, `docs/arhitektura.
 | SkylineWebcams, Trg bana Jelačića (fotogram svakih 5 minuta) | https://www.skylinewebcams.com/ | žuto: ugradnja dopuštena uz njihov kredit | kredit prema uvjetima ugradnje | prema uvjetima SkylineWebcams |
 | Index.hr, RSS Zagreb; ZGportal | https://www.index.hr/rss/vijesti-zagreb | žuto: uvjeti nisu navedeni | naslov i poveznica samo | naslov + poveznica |
 
-Crveni izvori, ne prikazuju se dok ne dobijemo pisano odobrenje ili dok podaci ne postanu otvoreni: HRT audio i video, HAK kamere, Zračna luka Zagreb, Zagrebparking (zahtjev 368 na data.gov.hr), ELEN punionice, MUP prometni događaji, JVP intervencije, SRUUK, Čistoća rasporedi, zakon.hr. HINA se nikada ne preuzima.
+Crveni izvori, ne prikazuju se dok ne dobijemo pisano odobrenje ili dok podaci ne postanu otvoreni: HRT audio i video, HAK kamere, Zračna luka Zagreb, Zagrebparking (zahtjev 368 na data.gov.hr), ELEN punionice, MUP prometni događaji, JVP intervencije, SRUUK, Čistoća rasporedi, zakon.hr. HINA se nikada ne preuzima. Tri pločice iz ove skupine imaju gotov proizvođač i test, a čekaju samo potvrđen izvor (`app/src/core/flags.ts`): `FEED_BIKES` se uključuje kad je za Zagreb potvrđen GBFS URL `station_status` (Nextbike, Transitland `f-bajs~zagreb~croatia~grad~gbfs` ili izvor koji proizvođač modula donese sam); `FEED_PARKING` se uključuje kad Zagrebparking objavi popunjenost garaža na data.gov.hr (zahtjev 368, gore); `FEED_WASTE` se uključuje kad Čistoćin kalendar odvoza postane dostupan kao CSV ili PDF pogodan za pretvorbu u `public/data/waste/<kvart>.json`.
 
 ## Kako navodimo izvore
 

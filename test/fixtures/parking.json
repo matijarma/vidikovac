@@ -1,0 +1,15 @@
+{
+  "module": "parking",
+  "status": "live",
+  "fetchedAt": "2026-09-11T12:31:00Z",
+  "sourceUpdatedAt": "2026-09-11T12:00:00Z",
+  "attribution": {
+    "text": "Izvor: Zagrebparking, popunjenost garaža",
+    "url": "https://data.gov.hr/",
+    "licence": "Otvorena dozvola (NN 67/17)"
+  },
+  "stations": [
+    { "id": "garage-near", "name": "Importanne centar", "lon": 15.978, "lat": 45.8115, "free": 23, "capacity": 300, "district": "donji-grad" },
+    { "id": "garage-far", "name": "Importanne Trnje", "lon": 15.985, "lat": 45.796, "free": 0, "capacity": 120, "district": "trnje" }
+  ]
+}

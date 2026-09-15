@@ -1,6 +1,7 @@
 // Words for times, days, directions and distances, in the active locale.
 // Nothing here invents a value: an item without a date says so.
 import type { FeedItem } from '../../../worker/feed/schema';
+import { haversineKm, rad } from '../core/geo';
 import { parseIso, zagrebDateTime, zagrebDayKey, zagrebTime, zagrebWeekdayDate, type TimeInput } from '../format';
 import type { I18n } from '../i18n/i18n';
 
@@ -119,15 +120,11 @@ export function compassWord(i18n: I18n, bearing: number): string {
   return i18n.t(`motion.compass.${COMPASS8[index]}`);
 }
 
-const R_EARTH_KM = 6371;
-const rad = (deg: number): number => (deg * Math.PI) / 180;
-
-export function distanceKm(lon1: number, lat1: number, lon2: number, lat2: number): number {
-  const dLat = rad(lat2 - lat1);
-  const dLon = rad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R_EARTH_KM * Math.asin(Math.min(1, Math.sqrt(a)));
-}
+// The haversine formula itself lives in `core/geo.ts` (fix round 1, T3.2
+// review) so `core/mobility.ts`'s `nearestStation` can use the identical
+// distance without `core/` reaching into `experience/`; every existing
+// caller here keeps importing it from this file, under its long-standing name.
+export const distanceKm = haversineKm;
 
 /** Initial bearing from point 1 to point 2, compass degrees. */
 export function bearingDeg(lon1: number, lat1: number, lon2: number, lat2: number): number {
