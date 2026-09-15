@@ -72,6 +72,7 @@
     "vijesti": "News"
   },
   "nav": {
+    "kvart": "District",
     "label": "Domains",
     "more": "More",
     "moreTitle": "More",
@@ -87,10 +88,14 @@
     "sourcesDown_other": "{count} sources are not responding.",
     "footerNote": "The safety layer stays open to everyone at /hitno, no scan needed.",
     "wordmarkLabel": "Kaj ima?, home page",
+    "wordmarkSada": "Kaj ima?, back to Now",
     "skip": "Skip to content",
     "detailBack": "Back to the list",
     "emptyTitle": "This is where Zagreb unlocks",
-    "emptyLead": "Scan the code from a screen in the venue or type the eight letters; ten minutes of the city are on your device."
+    "emptyLead": "Scan the code from a screen in the venue or type the eight letters; ten minutes of the city are on your device.",
+    "clockLabel": "{time}, {weather}. Open Weather.",
+    "clockOnly": "{time}. Open Weather.",
+    "sunset": "sunset {time}"
   },
   "time": {
     "justNow": "just now",
@@ -449,6 +454,54 @@
     "lightSearchLabel": "Search the routes running now",
     "lightNoResults": "No route running now matches “{query}”."
   },
+  "kvart": {
+    "select": "City district",
+    "screenOption": "Screen's stop · {stop}",
+    "wholeCity": "Whole city",
+    "map": "Map",
+    "mapLabel": "Map of {kvart}",
+    "works_one": "{count} work underway",
+    "works_other": "{count} works underway",
+    "nothingNow": "No works or closures in the district right now.",
+    "nearestClosure": "nearest {street}",
+    "saved": "Saved",
+    "savedEmpty": "Save a line or a stop from Transit; they are then always at hand here.",
+    "addStop": "+ stop",
+    "removeRoute": "Remove line {id}",
+    "removeStop": "Remove stop {name}",
+    "saveRoute": "Save line {id}",
+    "saveStop": "Save stop {name}",
+    "unsave": "Remove from saved",
+    "walkTitle": "On foot from the screen's stop",
+    "walkLabel": "On foot from the screen's stop, straight-line estimate",
+    "walkMinutes": "{minutes} min",
+    "notify": "Alerts for the district",
+    "notifyOn_one": "{count} on",
+    "notifyOn_other": "{count} on",
+    "notifyOff": "off",
+    "localNote": "Saved items and alerts stay in this browser only, no account."
+  },
+  "cast": {
+    "toScreen": "Send to the screen",
+    "fab": "To the screen",
+    "fabLabel": "To the screen: send {layer} to the screen {label}",
+    "target": "Screen: {label}",
+    "targetStop": "Screen: {label} · stop {stop}",
+    "sent": "Sent to the screen: {layer}.",
+    "noScreen": "This session has no screen.",
+    "peer": "The screen follows the phone that scanned the code.",
+    "frozen": "The session has ended; the screen no longer receives the view.",
+    "connecting": "Connecting to the screen…"
+  },
+  "notify": {
+    "title": "Alerts",
+    "delays": "Delays over 5 min on saved lines",
+    "works": "Works in the district",
+    "waste": "Waste pickup tomorrow",
+    "dhmz": "DHMZ warnings",
+    "note": "Nothing is sent: a switched-on alert only highlights tiles in this browser.",
+    "bellLabel": "Alerts, {state}"
+  },
   "directory": {
     "domains": "Domains",
     "sessionSub": "Settings, language and theme",
@@ -460,6 +513,8 @@
     "safetySummaryUnknown": "Status not confirmed",
     "civicSummary": "Gazette {broj}/{godina}",
     "newsSummary": "{count} stories today",
+    "eventsSummary_one": "{count} event today",
+    "eventsSummary_other": "{count} events today",
     "noSummary": "Open for details"
   },
   "session": {

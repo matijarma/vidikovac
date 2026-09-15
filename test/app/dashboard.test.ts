@@ -11,9 +11,14 @@ import type { SessionClient, SessionSnapshot } from '../../app/src/session';
 import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES } from '../../app/src/ui/theme';
-import { stubSessionStorage } from './helpers';
+import { KVART_STORAGE_KEY } from '../../app/src/core/kvart-store';
+import { NOTIFY_STORAGE_KEY } from '../../app/src/core/notify-store';
+import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
+import { loadStops } from '../../app/src/core/screens';
+import { stubLocalStorage, stubSessionStorage } from './helpers';
 
 stubSessionStorage();
+stubLocalStorage();
 // The workspace's fallback catalogue is not an upstream call in a unit test.
 vi.mock('../../app/src/core/screens', () => ({ loadStops: vi.fn(async () => []) }));
 
@@ -111,8 +116,13 @@ function click(root: Root, selector: string): HTMLElement {
   el!.click();
   return el!;
 }
+/** Opens a domain the tab bar does not carry, the way a reader does: Još, then its directory row. */
+function openViaMore(root: Root, layer: LayerId): void {
+  click(root, '[data-testid=tab-more]');
+  click(root, `[data-testid=dir-${layer}]`);
+}
 
-beforeEach(() => { sessionStorage.clear(); });
+beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
 
 describe('parseSessionHash', () => {
   it('reads room, ticket and label from the fragment /s/ navigates to', () => {
@@ -122,13 +132,17 @@ describe('parseSessionHash', () => {
   });
 });
 describe('shell and navigation', () => {
-  it('renders the wordmark, one session element, the safety shortcut, four phone tabs and seven sidebar domains, with no canvas', () => {
+  it('renders the wordmark, one session element, the safety shortcut, the kvart select with 18 options and four phone tabs with Kvart; no sidebar, no canvas', () => {
     const { root } = mount();
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(root.querySelectorAll('[data-testid=session-label]')).toHaveLength(1);
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('data-layer')).toBe('sigurnost');
-    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Promet', 'Događanja', 'Još']);
-    expect([...root.querySelectorAll('.ki-side-link')].map((a) => a.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'vijesti', 'sigurnost']);
+    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Promet', 'Kvart', 'Još']);
+    expect(root.querySelector('.ki-tabs [data-testid=tab-kvart]')).not.toBeNull();
+    expect(root.querySelectorAll('.ki-side-link')).toHaveLength(0);
+    const options = [...root.querySelectorAll<HTMLOptionElement>('[data-testid=kvart-select] option')];
+    expect(options).toHaveLength(18);
+    expect(options[0]!.value).toBe('screen');
     expect(root.querySelector('main#ki-main')).not.toBeNull();
     expect(root.querySelectorAll('canvas')).toHaveLength(0);
     expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
@@ -139,28 +153,27 @@ describe('shell and navigation', () => {
     expect(title.tagName).toBe('H1');
     expect(title.classList.contains('visually-hidden')).toBe(true);
     expect(text(title)).toBe('Kaj ima? · Sada');
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     expect(text(title)).toBe('Kaj ima? · Događanja');
     expect(document.title).toBe('Kaj ima? · Događanja');
   });
-  it('opens a domain from the tab bar: the workspace swaps, the room is told, the heading takes focus, the tab is current', () => {
+  it('opens a domain from the tab bar: the workspace swaps, the tab is current, and the room is told nothing (D5: casting is explicit)', () => {
     const { root, session } = mount();
-    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
-    expect(root.querySelector('#layer-kultura')).not.toBeNull();
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
     expect(root.querySelector('#layer-grad-sada')).toBeNull();
-    expect(session.sent.at(-1)).toEqual({ layer: 'kultura' });
-    expect(session.events.at(-1)).toEqual({ name: 'panel_open', dim: 'kultura' });
-    expect(document.activeElement?.id).toBe('layer-title-kultura');
-    expect(root.querySelector('.ki-tabs [data-layer=kultura]')?.getAttribute('aria-current')).toBe('page');
-    expect(root.querySelector('.ki-side-link[data-layer=kultura]')?.getAttribute('aria-current')).toBe('page');
+    expect(session.sent).toEqual([]);
+    expect(session.events.at(-1)).toEqual({ name: 'panel_open', dim: 'u-pokretu' });
+    expect(root.querySelector('.ki-tabs [data-layer=u-pokretu]')?.getAttribute('aria-current')).toBe('page');
+    expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
   });
-  it('Još opens the labelled directory of the four extra domains and names the open one on its tab', () => {
+  it('Još opens the labelled directory of the five extra domains, Događanja third, and names the open one on its tab', () => {
     const { root, session } = mount();
     session.join();
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'vijesti']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
@@ -193,12 +206,10 @@ describe('session states', () => {
     const { root, session } = mount();
     session.join();
     session.expire();
-    for (const selector of ['[data-testid=safety-shortcut]', '.ki-side-link[data-layer=sigurnost]']) {
-      const link = root.querySelector<HTMLAnchorElement>(selector)!;
-      expect(link.getAttribute('href')).toBe('/hitno');
-      expect(link.hasAttribute('data-action')).toBe(false);
-      expect(link.getAttribute('aria-disabled')).not.toBe('true');
-    }
+    const link = root.querySelector<HTMLAnchorElement>('[data-testid=safety-shortcut]')!;
+    expect(link.getAttribute('href')).toBe('/hitno');
+    expect(link.hasAttribute('data-action')).toBe(false);
+    expect(link.getAttribute('aria-disabled')).not.toBe('true');
   });
   it('announces the join politely, shows the remaining time and the shared expiry, and focuses the title once', () => {
     const { root, session } = mount();
@@ -245,7 +256,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
-    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'Events', 'More']);
+    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'District', 'More']);
     scanner.handle.destroy();
 
     const peer = mount();
@@ -451,7 +462,7 @@ describe('reconciliation across polls', () => {
     const { root, session, tick } = mount();
     session.join();
     await flush();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     await flush();
     const section = root.querySelector('#layer-kultura')!;
     const input = root.querySelector<HTMLInputElement>('#events-search')!;
@@ -468,16 +479,16 @@ describe('reconciliation across polls', () => {
     expect(input.value).toBe('keramik');
     expect(rows()).not.toContain('Koncert u parku');
   });
-  it('opens an item detail in place, relays the public selection, and Back returns to the list', async () => {
+  it('opens an item detail in place and sends no view frame for it (D5), and Back returns to the list', async () => {
     const { root, session } = mount();
     session.join();
     await flush();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(root.querySelector('.ws-split')?.getAttribute('data-detail-open')).toBe('true');
     expect(text(root.querySelector('#ws-detail-title'))).toBe('Koncert u parku');
-    expect(session.sent.at(-1)?.params).toEqual({ kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' });
+    expect(session.sent).toEqual([]);
     click(root, '[data-action=back]');
     expect(root.querySelector('.ws-split')?.getAttribute('data-detail-open')).toBe('false');
   });
@@ -487,7 +498,7 @@ describe('reconciliation across polls', () => {
     const { root, session } = mount({ deps: { onItemCopy, onItemShare } });
     session.join();
     await flush();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     click(root, '[data-action=copy-item]');
@@ -551,7 +562,7 @@ describe('failure and recovery', () => {
     const { root, session, fetchData, tick, ticks } = mount({ deps: { onItemCopy } });
     session.join();
     await flush();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     fetchData.mockClear();
@@ -564,7 +575,7 @@ describe('failure and recovery', () => {
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
     expect(ticks.every((t) => t.cleared)).toBe(true);
-    click(root, '[data-action=nav][data-layer=vijesti]');
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
     expect(root.querySelector('#layer-kultura')).not.toBeNull();
     click(root, '[data-action=copy-item]');
     expect(onItemCopy).toHaveBeenCalledTimes(1);
@@ -606,7 +617,7 @@ describe('failure and recovery', () => {
 });
 
 describe('the full map view (transport)', () => {
-  it('history fetches the restored domain immediately and mirrors only its public selection', async () => {
+  it('history fetches the restored domain immediately and sends no view frame (D5)', async () => {
     const { session, handle, fetchData } = mount();
     session.join();
     await flush();
@@ -614,7 +625,7 @@ describe('the full map view (transport)', () => {
     handle.restore('#room=r1&layer=sigurnost&q=private-text');
     await flush();
     expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
-    expect(session.sent.at(-1)).toEqual({ layer: 'sigurnost' });
+    expect(session.sent).toEqual([]);
     fetchData.mockClear();
     session.expire();
     handle.restore('#room=r1&layer=vijesti');
@@ -645,7 +656,7 @@ describe('the full map view (transport)', () => {
     const { root, session, tick, handle } = mount({ deps: { location, history } });
     session.join();
     await flush();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(pushes).toHaveLength(2);
@@ -693,13 +704,16 @@ describe('the sticky header and notices in flow', () => {
     root.querySelector<HTMLElement>(kind ? `[data-testid=notice][data-kind=${kind}]` : '[data-testid=notice]');
   const noticeText = (root: Root, kind: string): string => text(notice(root, kind)?.querySelector('.banner-text'));
 
-  it('groups the wordmark, the session pill and the safety control in one header, and keeps the assertive region visually hidden', () => {
+  it('groups the wordmark, the kvart select, the session pill and the safety control in one status line (no desktop search on the phone), and keeps the assertive region visually hidden', () => {
     const { root } = mount();
     const head = root.querySelector<HTMLElement>('header.ki-head');
     expect(head).not.toBeNull();
+    expect(head!.dataset.testid).toBe('status-line');
     expect(head!.querySelector('.ki-wordmark')).not.toBeNull();
+    expect(head!.querySelector('[data-testid=kvart-select]')).not.toBeNull();
     expect(head!.querySelector('[data-testid=session-label]')).not.toBeNull();
     expect(head!.querySelector('[data-testid=safety-shortcut]')).not.toBeNull();
+    expect(head!.querySelector('[data-testid=status-search]')).toBeNull();
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(text(root.querySelector('.ki-wordmark .ki-wordmark-mark'))).toBe('?');
     const alert = root.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
@@ -789,10 +803,6 @@ describe('the sticky header and notices in flow', () => {
     const tabs = [...root.querySelectorAll<HTMLElement>('.ki-tab[aria-disabled="true"]')];
     expect(tabs).toHaveLength(4);
     for (const tab of tabs) expect(tab.getAttribute('tabindex')).toBe('-1');
-    const links = [...root.querySelectorAll<HTMLElement>('.ki-side-link[aria-disabled="true"]')];
-    expect(links).toHaveLength(6);
-    for (const link of links) expect(link.getAttribute('tabindex')).toBe('-1');
-    expect(root.querySelector('.ki-side-link[data-layer=sigurnost]')?.getAttribute('tabindex')).toBeNull();
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('tabindex')).toBeNull();
   });
   it('the session pill names the expiry and the action for readers, and turns warn at 60 s and alert at 20 s', () => {
@@ -844,9 +854,8 @@ describe('the sticky header and notices in flow', () => {
     win.scrollTo = scrollTo;
     try {
       const phone = mount();
-      click(phone.root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+      click(phone.root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
       expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
-      expect(document.activeElement?.id).toBe('layer-title-kultura');
       scrollTo.mockClear();
       click(phone.root, '[data-testid=tab-more]');
       click(phone.root, '[data-testid=dir-zrak-i-nebo]');
@@ -854,7 +863,9 @@ describe('the sticky header and notices in flow', () => {
       phone.handle.destroy();
       scrollTo.mockClear();
       const desk = mount({ wide: true });
-      click(desk.root, '.ki-side-link[data-layer=kultura]');
+      click(desk.root, '[data-testid=status-more]');
+      click(desk.root, '[data-testid=dir-kultura]');
+      expect(desk.root.querySelector('#layer-kultura')).not.toBeNull();
       expect(scrollTo).not.toHaveBeenCalled();
       desk.handle.destroy();
     } finally {
@@ -968,30 +979,26 @@ describe('the sticky header and notices in flow', () => {
   });
 });
 
-// T2.3: the header and the sidebar share one wrapper. The phone flattens it
-// (display: contents), so the shell grid it lays out is unchanged; the desk
-// pins it to the viewport as the rail, with the session card at its foot.
-describe('the desktop rail', () => {
-  it('wraps the header and the sidebar in one .ki-rail ahead of the banners, main and the tab bar, with every region still found by data-region', () => {
+// B.5: the rail is gone. One shell of six regions in reading order on both
+// surfaces; the CSS orders and sizes them but never hides a control that exists.
+describe('the shell regions', () => {
+  it('is six children in order: the status line, banners, main, the kvart aside, the FAB slot and the tab bar, with no rail and no sidebar', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;
-    const rail = shell.querySelector<HTMLElement>('.ki-rail');
-    expect(rail).not.toBeNull();
-    expect(rail!.parentElement).toBe(shell);
-    expect(rail!.dataset.regionGroup).toBe('rail');
+    const order = [...shell.children].filter((el) => !el.matches('h1, p')).map((el) => el.className);
+    expect(order).toEqual(['ki-head ki-status', 'ki-banners', 'ki-main', 'ki-kvart', 'ki-fab-slot', 'ki-tabbar']);
+    expect(shell.querySelector('.ki-rail')).toBeNull();
+    expect(shell.querySelector('nav.ki-side')).toBeNull();
     const head = shell.querySelector<HTMLElement>('header.ki-head')!;
-    const side = shell.querySelector<HTMLElement>('nav.ki-side')!;
-    expect(head.parentElement).toBe(rail);
-    expect(side.parentElement).toBe(rail);
-    // The regions painted through the rail: the wordmark, the session card, the seven domain links.
-    expect(rail!.querySelector('.ki-top .ki-wordmark')).not.toBeNull();
-    expect(rail!.querySelector('.ki-session-slot [data-testid=session-label]')).not.toBeNull();
-    expect(rail!.querySelectorAll('.ki-side .ki-side-link')).toHaveLength(7);
-    // Document order: rail, banners, main, tab bar; the banners are beside the rail, never inside it.
-    const banners = shell.querySelector<HTMLElement>('[data-testid=banners]')!;
-    expect(rail!.contains(banners)).toBe(false);
-    const order = [...shell.children].filter((el) => el.matches('.ki-rail, .ki-banners, .ki-main, .ki-tabbar')).map((el) => el.className);
-    expect(order).toEqual(['ki-rail', 'ki-banners', 'ki-main', 'ki-tabbar']);
+    expect(head.parentElement).toBe(shell);
+    expect(head.dataset.region).toBe('status');
+    const aside = shell.querySelector<HTMLElement>('aside.ki-kvart')!;
+    expect(aside.dataset.testid).toBe('kvart-aside');
+    expect(aside.getAttribute('aria-label')).toBe('Kvart');
+    expect(shell.querySelector<HTMLElement>('.ki-fab-slot')!.dataset.region).toBe('fab');
+    expect(shell.querySelector('nav.ki-tabbar')?.getAttribute('aria-label')).toBe('Domene');
+    expect(shell.dataset.panel).toBe('');
+    expect(shell.dataset.fab).toBe('0');
   });
 });
 
@@ -1004,7 +1011,7 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
   it('marks main with data-enter on a layer switch and clears it once the fallback timer fires', () => {
     const { root, tick } = mount();
     expect(main(root).dataset.enter).toBeUndefined();
-    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
     expect(main(root).dataset.enter).toBe('1');
     tick();
     expect(main(root).dataset.enter).toBeUndefined();
@@ -1018,15 +1025,24 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
     expect(main(root).dataset.enter).toBe('1');
   });
 
+  it('marks main when the Kvart tab opens its panel, and again when a domain tab closes it', () => {
+    const { root, tick } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    expect(main(root).dataset.enter).toBe('1');
+    tick();
+    click(root, '.ki-tabs [data-action=nav][data-layer=grad-sada]');
+    expect(main(root).dataset.enter).toBe('1');
+  });
+
   it('never sets it under reducedMotion, even across a real layer switch', () => {
     const { root } = mount({ deps: { reducedMotion: true } });
-    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
     expect(main(root).dataset.enter).toBeUndefined();
   });
 
   it('never sets it on the lightweight path', () => {
     const { root } = mount({ lightweight: true });
-    click(root, '.ki-tabs [data-action=nav][data-layer=kultura]');
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
     expect(main(root).dataset.enter).toBeUndefined();
   });
 
@@ -1036,5 +1052,385 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
     session.join();
     await flush();
     expect(main(root).dataset.enter).toBeUndefined();
+  });
+});
+
+// B.5 / B.8: the status line is one builder painting keyed children by surface,
+// the kvart is a native select over an ink face, casting is explicit (D5), the
+// Kvart tab is a shell surface (D9), the desktop reaches every domain through
+// Još and keeps the kvart panel as a sticky aside (D10).
+describe('the status line', () => {
+  const keys = (root: Root): string[] => [...root.querySelector('[data-testid=status-line]')!.children].map((el) => (el as HTMLElement).dataset.key ?? '');
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
+  const withDistrict = { ...STOP, district: 'donji-grad' } as typeof STOP & { district: string };
+
+  it('paints four keyed controls on the phone and eight at the desk, in the documented order, from the one builder', () => {
+    const phone = mount();
+    expect(keys(phone.root)).toEqual(['wordmark', 'kvart', 'session', 'safety']);
+    expect(phone.root.querySelector('[data-testid=tab-more]')).not.toBeNull();
+    phone.handle.destroy();
+    const desk = mount({ wide: true });
+    expect(keys(desk.root)).toEqual(['wordmark', 'kvart', 'more', 'search', 'clock', 'session', 'bell', 'safety']);
+    expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
+    expect(text(desk.root.querySelector('[data-testid=status-search]'))).toBe('Traži liniju ili stanicu');
+    const bell = desk.root.querySelector<HTMLElement>('[data-testid=status-bell]')!;
+    expect(bell.getAttribute('aria-label')).toBe('Obavijesti, isključene');
+    expect(bell.dataset.active).toBe('0');
+    expect(desk.root.querySelector('[data-testid=tab-more]'), 'the desk has no tab bar').toBeNull();
+    expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    desk.handle.destroy();
+  });
+  it('the wordmark leads back to Sada inside /d/ and, like every navigation, tells the room nothing', () => {
+    const { root, session } = mount();
+    const wordmark = root.querySelector<HTMLAnchorElement>('.ki-wordmark')!;
+    expect(wordmark.getAttribute('href')).toBe('#layer=grad-sada');
+    expect(wordmark.getAttribute('aria-label')).toBe('Kaj ima?, natrag na Sada');
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
+    click(root, '.ki-wordmark');
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    expect(session.sent).toEqual([]);
+  });
+  it('the safety control is icon-only: the shield, the word in its aria-label, a 44 px target by CSS', () => {
+    const { root } = mount();
+    const safety = root.querySelector<HTMLElement>('[data-testid=safety-shortcut]')!;
+    expect(safety.getAttribute('aria-label')).toBe('Sigurnost');
+    expect(safety.querySelector('svg use')?.getAttribute('href')).toBe('#icon-shield');
+    expect(safety.querySelector('.ki-nav-label')).toBeNull();
+    expect(text(safety)).toBe('');
+  });
+  it('the desktop clock links the time, the temperature and the sun glyph from the shared weather group into Vrijeme, and stands alone when dhmz-now is down', async () => {
+    const live = mount({ wide: true });
+    live.session.join();
+    await flush();
+    const clock = live.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
+    expect(clock.getAttribute('href')).toBe('#layer=zrak-i-nebo');
+    expect(clock.dataset.layer).toBe('zrak-i-nebo');
+    expect(text(clock.querySelector('time'))).toBe('14:32');
+    expect(text(clock.querySelector('.tb-temp'))).toBe('21 °C');
+    expect([...clock.querySelectorAll('svg use')].map((u) => u.getAttribute('href'))).toEqual(['#icon-sun', '#icon-sunset']);
+    expect(clock.getAttribute('aria-label')).toMatch(/^14:32, vedro, 21 °C, zalazak \d{2}:\d{2}\. Otvori Vrijeme\.$/);
+    live.handle.destroy();
+    const down = mount({ wide: true, snapshot: (module) => { if (module === 'dhmz-now') throw new Error('down'); return snapshotOf(module); } });
+    down.session.join();
+    await flush();
+    const lone = down.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
+    expect(lone.children).toHaveLength(1);
+    expect(lone.firstElementChild?.tagName).toBe('TIME');
+    expect(text(lone)).toBe('14:32');
+    expect(lone.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
+    expect(text(lone)).not.toContain('–');
+    down.handle.destroy();
+  });
+  it('the kvart is a native select under an ink face: a change to Trnje updates the face, persists the choice, and sends no frame', () => {
+    const { root, session } = mount();
+    const select = root.querySelector<HTMLSelectElement>('[data-testid=status-line] [data-testid=kvart-select]')!;
+    expect(root.querySelector('[data-testid=status-line] label[for=ki-kvart]')?.textContent).toBe('Gradska četvrt');
+    expect(select.id).toBe('ki-kvart');
+    expect(text(root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Cijeli grad');
+    select.value = 'trnje';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(text(root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Trnje');
+    expect(root.querySelector<HTMLSelectElement>('[data-testid=status-line] [data-testid=kvart-select]')!.value).toBe('trnje');
+    expect(localStorage.getItem(KVART_STORAGE_KEY)).toBe('trnje');
+    expect(session.sent).toEqual([]);
+  });
+  it('"Stanica zaslona" resolves to the screen stop’s district when the join carries one, and to the whole city when it does not', () => {
+    const named = mount();
+    named.session.join('scanner', { kind: 'venue', expiresAt: null, stop: withDistrict });
+    expect(text(named.root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Donji grad');
+    expect(text(named.root.querySelector('[data-testid=status-line] option[value=screen]'))).toBe('Stanica zaslona · Trg bana J. Jelačića');
+    named.handle.destroy();
+    const bare = mount();
+    bare.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    expect(text(bare.root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Cijeli grad');
+    expect(text(bare.root.querySelector('[data-testid=status-line] option[value=screen]'))).toBe('Stanica zaslona · Trg bana J. Jelačića');
+    bare.handle.destroy();
+    const none = mount();
+    none.session.join();
+    expect(text(none.root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Cijeli grad');
+    expect(text(none.root.querySelector('[data-testid=status-line] option[value=screen]'))).toBe('Cijeli grad');
+  });
+  it('the bell opens the notify sheet', () => {
+    const { root } = mount({ wide: true });
+    click(root, '[data-testid=status-bell]');
+    const sheet = document.querySelector<HTMLDialogElement>('[data-testid=notify-sheet]')!;
+    expect(sheet).not.toBeNull();
+    expect(sheet.hasAttribute('open')).toBe(true);
+    expect(text(sheet.querySelector('.dialog-title'))).toBe('Obavijesti');
+  });
+  it('the desktop search launcher opens Promet and focuses its search field on a lightweight mount', () => {
+    const { root, session } = mount({ wide: true, lightweight: true });
+    session.join();
+    click(root, '[data-testid=status-search]');
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(document.activeElement?.id).toBe('u-pokretu-light-search');
+    expect(session.sent).toEqual([]);
+  });
+});
+
+describe('explicit casting (D5)', () => {
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
+  const screen = { kind: 'venue' as const, expiresAt: null, stop: STOP };
+  const why = (root: Root): string => text(root.querySelector('[data-testid=cast-why]'));
+  const castButton = (root: Root): HTMLButtonElement => root.querySelector<HTMLButtonElement>('[data-testid=cast-screen]')!;
+
+  it('a scanner with a screen gets the FAB on Sada; a tap sends one view frame for the current layer, announces it, and marks the button sent for 1.5 s', () => {
+    const { root, session, tick } = mount();
+    session.join('scanner', screen);
+    const shell = root.querySelector<HTMLElement>('.ki')!;
+    expect(shell.dataset.fab).toBe('1');
+    const fab = root.querySelector<HTMLButtonElement>('[data-region=fab] [data-testid=cast-fab]')!;
+    expect(fab.getAttribute('aria-label')).toBe('Na zaslon: pošalji Sada na zaslon Kavana Velebit');
+    expect(text(fab)).toBe('Na zaslon');
+    expect(fab.querySelector('svg use')?.getAttribute('href')).toBe('#icon-cast');
+    fab.click();
+    expect(session.sent).toEqual([{ layer: 'grad-sada' }]);
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Poslano na zaslon: Sada.');
+    expect(root.querySelector<HTMLElement>('[data-testid=cast-fab]')!.dataset.sent).toBe('1');
+    tick();
+    expect(root.querySelector<HTMLElement>('[data-testid=cast-fab]')!.dataset.sent).toBeUndefined();
+    // The Kvart panel's primary sends the same frame again; two taps, two frames, never a mirror of navigation.
+    click(root, '[data-testid=tab-kvart]');
+    const button = castButton(root);
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    expect(why(root)).toBe('Zaslon: Kavana Velebit · stanica Trg bana J. Jelačića');
+    button.click();
+    expect(session.sent).toEqual([{ layer: 'grad-sada' }, { layer: 'grad-sada' }]);
+    expect(castButton(root).dataset.sent).toBe('1');
+  });
+  it('the desk casts the current selection: an open event detail goes to the screen as layer plus params', async () => {
+    const { root, session } = mount({ wide: true });
+    session.join('scanner', screen);
+    await flush();
+    click(root, '[data-testid=status-more]');
+    click(root, '[data-testid=dir-kultura]');
+    await flush();
+    click(root, '[data-testid=event-row] [data-action=select]');
+    expect(session.sent).toEqual([]);
+    click(root, '[data-testid=kvart-aside] [data-testid=cast-screen]');
+    expect(session.sent).toEqual([{ layer: 'kultura', params: { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' } }]);
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Poslano na zaslon: Događanja.');
+  });
+  it('without a screen the control is disabled and says so; a one-hop peer is told the screen follows the scanner; before the join it is connecting', () => {
+    const noScreen = mount();
+    noScreen.session.join();
+    expect(noScreen.root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    click(noScreen.root, '[data-testid=tab-kvart]');
+    let button = castButton(noScreen.root);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('title')).toBe('Ova sesija nema zaslon.');
+    expect(why(noScreen.root)).toBe('Ova sesija nema zaslon.');
+    button.click();
+    expect(noScreen.session.sent).toEqual([]);
+    noScreen.handle.destroy();
+
+    const peer = mount();
+    peer.session.join('phone', screen);
+    expect(peer.root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    click(peer.root, '[data-testid=tab-kvart]');
+    button = castButton(peer.root);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(why(peer.root)).toBe('Zaslon prati telefon koji je skenirao kod.');
+    button.click();
+    expect(peer.session.sent).toEqual([]);
+    peer.handle.destroy();
+
+    const connecting = mount();
+    click(connecting.root, '[data-testid=tab-kvart]');
+    expect(castButton(connecting.root).getAttribute('aria-disabled')).toBe('true');
+    expect(why(connecting.root)).toBe('Povezivanje sa zaslonom…');
+  });
+  it('after the freeze the panel stays painted with the frozen reason and the FAB is gone', () => {
+    const { root, session } = mount();
+    session.join('scanner', screen);
+    click(root, '[data-testid=tab-kvart]');
+    session.expire();
+    expect(root.querySelector('#layer-kvart')).not.toBeNull();
+    expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    expect(castButton(root).getAttribute('aria-disabled')).toBe('true');
+    expect(why(root)).toBe('Sesija je završila; zaslon više ne prima prikaz.');
+    castButton(root).click();
+    expect(session.sent).toEqual([]);
+  });
+  it('the FAB is absent at the desk, under the directory, in the Kvart tab and on Promet', () => {
+    const desk = mount({ wide: true });
+    desk.session.join('scanner', screen);
+    expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    expect(desk.handle.element.dataset.fab).toBe('0');
+    desk.handle.destroy();
+    const phone = mount();
+    phone.session.join('scanner', screen);
+    const fab = (): Element | null => phone.root.querySelector('[data-testid=cast-fab]');
+    expect(fab()).not.toBeNull();
+    click(phone.root, '[data-testid=tab-more]');
+    expect(fab()).toBeNull();
+    click(phone.root, '[data-testid=tab-kvart]');
+    expect(fab()).toBeNull();
+    click(phone.root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
+    expect(fab()).toBeNull();
+    expect(phone.handle.element.dataset.fab).toBe('0');
+    click(phone.root, '.ki-tabs [data-action=nav][data-layer=grad-sada]');
+    expect(fab()).not.toBeNull();
+    expect(phone.handle.element.dataset.fab).toBe('1');
+  });
+  it('save and unsave bubble from any workspace control into the saved store, which persists them', () => {
+    const { root } = mount();
+    // Probes on the shell root itself, which no region repaint reconciles away; the detail head's own buttons are T2.7's.
+    const shell = root.querySelector<HTMLElement>('.ki')!;
+    shell.insertAdjacentHTML('beforeend', '<button type="button" data-action="save" data-kind="route" data-id="6" data-testid="probe-save"></button><button type="button" data-action="unsave" data-kind="route" data-id="6" data-testid="probe-unsave"></button>');
+    click(root, '[data-testid=probe-save]');
+    expect(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) ?? 'null')).toEqual([{ kind: 'route', id: '6' }]);
+    click(root, '[data-testid=probe-unsave]');
+    expect(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) ?? 'null')).toEqual([]);
+  });
+});
+
+describe('the Kvart tab and the desktop aside (D9, D10)', () => {
+  it('opens the kvart panel as a shell surface: the workspace swaps, the title says Kvart, its heading takes focus, the tab is current and expanded, nothing is sent', () => {
+    const { root, session } = mount();
+    const tab = click(root, '[data-testid=tab-kvart]');
+    expect(root.querySelector('#layer-kvart[data-testid=kvart-panel]')).not.toBeNull();
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(text(root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Kvart');
+    expect(document.title).toBe('Kaj ima? · Kvart');
+    expect(document.activeElement?.id).toBe('layer-title-kvart');
+    expect(text(root.querySelector('#layer-title-kvart'))).toBe('Cijeli grad');
+    expect(tab.getAttribute('aria-current')).toBe('page');
+    expect(tab.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.panel).toBe('kvart');
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('');
+    // The panel head carries the same selector as the status line, for the compact header that drops it.
+    expect(root.querySelector('#layer-kvart select#kv-kvart[data-action=kvart-pick]')).not.toBeNull();
+    expect(root.querySelector('#layer-kvart label[for=kv-kvart]')).not.toBeNull();
+    expect(session.sent).toEqual([]);
+    click(root, '[data-testid=tab-kvart]');
+    expect(root.querySelector('#layer-kvart')).toBeNull();
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.panel).toBe('');
+    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('a district picked in the panel’s own select renames the panel head and the status line together', () => {
+    const { root } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    const select = root.querySelector<HTMLSelectElement>('#kv-kvart')!;
+    select.value = 'maksimir';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(text(root.querySelector('#layer-title-kvart'))).toBe('Maksimir');
+    expect(text(root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Maksimir');
+    expect(root.querySelector<HTMLSelectElement>('#kv-kvart')!.value).toBe('maksimir');
+  });
+  it('Još closes the panel and the panel closes Još; the frozen shell opens neither', () => {
+    const { root, session } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=tab-more]');
+    expect(root.querySelector('#layer-directory')).not.toBeNull();
+    expect(root.querySelector('#layer-kvart')).toBeNull();
+    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-current')).toBe('false');
+    click(root, '[data-testid=tab-kvart]');
+    expect(root.querySelector('#layer-kvart')).not.toBeNull();
+    expect(root.querySelector('#layer-directory')).toBeNull();
+    expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('false');
+    click(root, '.ki-tabs [data-action=nav][data-layer=grad-sada]');
+    session.join();
+    session.expire();
+    click(root, '[data-testid=tab-kvart]');
+    expect(root.querySelector('#layer-kvart')).toBeNull();
+    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-disabled')).toBe('true');
+  });
+  it('the desk lists six domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
+    const today = { id: 'kp:3', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Večer poezije', at: '2026-09-11T17:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'knjizevnost', precision: 'time' } };
+    const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today]) : snapshotOf(module) });
+    session.join();
+    await flush();
+    expect(root.querySelector('[data-testid=tab-more]')).toBeNull();
+    const more = click(root, '[data-testid=status-more]');
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(more.getAttribute('aria-current')).toBe('page');
+    expect(root.querySelector('#layer-directory')).not.toBeNull();
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti']);
+    expect(text(root.querySelector('[data-testid=dir-u-pokretu] .row-sub'))).toBe('0 vozila ZET-a u pokretu');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('1 događanje danas');
+    expect(text(root.querySelector('[data-testid=dir-zrak-i-nebo] .row-sub'))).toBe('21 °C, vedro');
+    click(root, '[data-testid=dir-u-pokretu]');
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(root.querySelector('[data-testid=status-more]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('the desk keeps the kvart panel as an aside beside the workspace, with the cast control and no second selector; the phone’s aside is hidden and empty', () => {
+    const desk = mount({ wide: true });
+    desk.session.join();
+    const aside = desk.root.querySelector<HTMLElement>('[data-testid=kvart-aside]')!;
+    expect(aside.hidden).toBe(false);
+    const panel = aside.querySelector<HTMLElement>('[data-testid=kvart-panel]')!;
+    expect(panel.tagName).toBe('SECTION');
+    expect(panel.classList.contains('kv')).toBe(true);
+    expect(panel.getAttribute('aria-labelledby')).toBe('kv-aside-title');
+    expect(text(panel.querySelector('#kv-aside-title'))).toBe('Cijeli grad');
+    expect(panel.querySelector('[data-testid=cast-screen]')).not.toBeNull();
+    expect(panel.querySelector('[data-testid=kvart-select]')).toBeNull();
+    expect(desk.root.querySelectorAll('[data-testid=kvart-select]')).toHaveLength(1);
+    desk.handle.destroy();
+    const phone = mount();
+    phone.session.join();
+    const hidden = phone.root.querySelector<HTMLElement>('[data-testid=kvart-aside]')!;
+    expect(hidden.hidden).toBe(true);
+    expect(hidden.children).toHaveLength(0);
+  });
+});
+
+describe('the kvart panel’s saved chips and walking row (T2.7, B.3 saved-store)', () => {
+  const SCREEN = { kind: 'venue' as const, expiresAt: null, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6'] } };
+
+  it('round-trips a saved route through its own chip: the chip opens Promet with the route selection, and unsaving it removes it and persists', () => {
+    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([{ kind: 'route', id: '6' }]));
+    const { root } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    const chip = root.querySelector<HTMLButtonElement>('[data-testid=saved-route-6]')!;
+    expect(chip.querySelector('.line')?.getAttribute('data-size')).toBe('xs');
+    expect(text(chip)).toContain('Črnomerec');
+    chip.click();
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=route-title]'))).toContain('6');
+    click(root, '[data-testid=tab-kvart]'); // back to the panel to remove it
+    click(root, '.kv-chip-x[data-id="6"]');
+    expect(JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) ?? 'null')).toEqual([]);
+    expect(root.querySelector('[data-testid=saved-route-6]')).toBeNull();
+    expect(text(root.querySelector('[data-testid=saved-empty]'))).toContain('Spremi liniju ili stanicu');
+  });
+
+  it('the walking row appears once the stop catalogue resolves for a saved stop, minutes from the screen’s own stop', async () => {
+    vi.mocked(loadStops).mockResolvedValueOnce([{ id: '200_1', name: 'Zapruđe', lon: 16.02, lat: 45.79, routes: [] }]);
+    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([{ kind: 'stop', id: '200_1' }]));
+    const { root, session } = mount();
+    session.join('scanner', SCREEN);
+    await flush();
+    click(root, '[data-testid=tab-kvart]');
+    const row = root.querySelector<HTMLElement>('.kv-walk li');
+    expect(row).not.toBeNull();
+    expect(text(row)).toMatch(/^\d+ minZapruđe$/);
+  });
+});
+
+describe('the notify sheet (T2.7, D7)', () => {
+  it('offers three switches without the waste flag; a toggle persists through the store and repaints the panel’s own count', () => {
+    const { root } = mount();
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=kvart-notify]');
+    const dialog = document.querySelector<HTMLElement>('[data-testid=notify-sheet]')!;
+    expect(dialog.querySelectorAll('[role=switch]')).toHaveLength(3);
+    expect(dialog.querySelector('[data-testid=notify-waste]')).toBeNull();
+    expect(text(dialog.querySelector('.nt-note'))).toBe('Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.');
+    (dialog.querySelector('[data-testid=notify-delays]') as HTMLButtonElement).click();
+    expect(dialog.querySelector('[data-testid=notify-delays]')?.getAttribute('aria-checked')).toBe('true');
+    expect(JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY) ?? 'null')).toEqual({ delays: true, works: false, waste: false, dhmz: false });
+    expect(text(root.querySelector('[data-testid=kvart-notify] .kv-notify-count'))).toBe('1 uključena');
+  });
+  it('offers a fourth switch, waste, once FLAGS.FEED_WASTE is on', () => {
+    const { root } = mount({ deps: { flags: { waste: true } } });
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=kvart-notify]');
+    const dialog = document.querySelector<HTMLElement>('[data-testid=notify-sheet]')!;
+    expect(dialog.querySelectorAll('[role=switch]')).toHaveLength(4);
+    expect(dialog.querySelector('[data-testid=notify-waste]')).not.toBeNull();
   });
 });

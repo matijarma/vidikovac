@@ -53,13 +53,14 @@ describe('links on tinted fills use the on-tint brand tone', () => {
   });
 });
 
-describe('dashboard.css sidebar under text zoom', () => {
-  it('keeps 17rem/19rem at 100% on every desktop width (30vw is wider there) and yields only when rem outgrows vw', () => {
-    expect(DASHBOARD).toContain('--ki-side: clamp(14rem, 30vw, 17rem);');
-    expect(DASHBOARD).toContain('.ki { --ki-side: clamp(14rem, 30vw, 19rem); }');
-    // 60rem is the desktop switch: 30vw there is 18rem, above the 17rem cap, so the cap wins.
-    expect(0.3 * 60).toBeGreaterThan(17);
-    expect(0.3 * 90).toBeGreaterThan(19);
+describe('dashboard.css kvart aside under text zoom', () => {
+  it('pins the aside at 18.75rem, a rem track that grows with the text it holds, beside a workspace column that can shrink to zero', () => {
+    expect(DASHBOARD).toContain('--ki-kvart: 18.75rem;');
+    expect(DASHBOARD).not.toContain('--ki-side');
+    // At the 60rem desktop switch the aside is under a third of the width; at 200% text (30rem viewport) it is 62.5%, and
+    // the minmax(0, 1fr) workspace column gives way rather than the page widening (shell-css.test.ts pins the columns).
+    expect(18.75 / 60).toBeLessThan(1 / 3);
+    expect(18.75 / 30).toBeLessThan(1);
   });
 });
 

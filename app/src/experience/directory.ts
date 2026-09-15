@@ -1,22 +1,39 @@
-// "Još" on the phone: an inline, labelled directory of the four domains the
-// tab bar does not carry, each with one line of real current data, plus the
-// session and the open pages. Not a layer: a view of the shell.
+// "Još": an inline, labelled directory of the domains the tab bar does not
+// carry (the five MORE layers on the phone; Promet ahead of them at the desk,
+// where the rail is gone, D10), each with one line of real current data, plus
+// the session and the open pages. Not a layer: a view of the shell.
 import type { ModuleId } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
-import { zagrebTime } from '../format';
+import { zagrebDayKey, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
+import { CULTURE_EVENT_SOURCES, filterBySource, isDated } from '../layers/kultura';
+import { vehicleCount } from '../layers/shared';
 import type { LayerContext } from '../layers/types';
 import { dataNumber, dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
-import { LAYER_ICONS, MORE_LAYERS } from './chrome';
+import { LAYER_ICONS, MORE_LAYERS, type Surface } from './chrome';
 import { safetyState } from './safety-state';
 import { unusable } from './status';
 import { conditionText } from './text';
 
-/** What the directory polls: the modules of the four domains it summarises. */
-export const DIRECTORY_MODULES: readonly ModuleId[] = [...new Set(MORE_LAYERS.flatMap((layer) => LAYER_MODULES[layer]))];
+/** The domains the directory lists: the MORE layers, with Promet first at the desk (its tab is a phone device). */
+export function directoryLayers(surface: Surface): readonly LayerId[] {
+  return surface === 'desktop' ? ['u-pokretu', ...MORE_LAYERS] : MORE_LAYERS;
+}
+
+/** What the directory polls: the modules of the domains it summarises, once each. */
+export function directoryModules(surface: Surface): readonly ModuleId[] {
+  return [...new Set(directoryLayers(surface).flatMap((layer) => LAYER_MODULES[layer]))];
+}
+
+function transitLine(i18n: I18n, ctx: LayerContext): string {
+  const zet = ctx.snapshots['zet-rt'];
+  if (unusable(zet)) return i18n.t('directory.noSummary');
+  const count = vehicleCount(zet);
+  return count === null ? i18n.t('directory.noSummary') : i18n.t('transit.vehiclesMoving', { count });
+}
 
 function weatherLine(i18n: I18n, ctx: LayerContext): string {
   const observation = ctx.snapshots['dhmz-now'];
@@ -34,6 +51,15 @@ function safetyLine(i18n: I18n, ctx: LayerContext): string {
   return i18n.t('directory.safetySummaryUnknown');
 }
 
+/** Today's dated culture and community events (kultura.ts's own source subset and date rule). */
+function eventsLine(i18n: I18n, ctx: LayerContext): string {
+  const snapshot = ctx.snapshots.dogadanja;
+  if (unusable(snapshot)) return i18n.t('directory.noSummary');
+  const today = zagrebDayKey(ctx.now);
+  const count = filterBySource(snapshot, CULTURE_EVENT_SOURCES).filter((item) => isDated(item) && zagrebDayKey(item.at) === today).length;
+  return count > 0 ? i18n.t('directory.eventsSummary', { count }) : i18n.t('directory.noSummary');
+}
+
 function civicLine(i18n: I18n, ctx: LayerContext): string {
   const act = ctx.snapshots.glasnik?.items[0];
   if (!act || unusable(ctx.snapshots.glasnik)) return i18n.t('directory.noSummary');
@@ -48,16 +74,19 @@ function newsLine(i18n: I18n, ctx: LayerContext): string {
 }
 
 const LINES: Record<string, (i18n: I18n, ctx: LayerContext) => string> = {
+  'u-pokretu': transitLine,
   'zrak-i-nebo': weatherLine,
   sigurnost: safetyLine,
+  kultura: eventsLine,
   'uprava-i-pravo': civicLine,
   vijesti: newsLine,
 };
 
 export function renderDirectory(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
+  const surface: Surface = ctx.screen?.surface === 'desktop' ? 'desktop' : 'phone';
   const chevron = iconMarkup('chevron-right', undefined, 'icon row-chevron');
-  const items = MORE_LAYERS.map((layer: LayerId) => {
+  const items = directoryLayers(surface).map((layer: LayerId) => {
     const line = LINES[layer]?.(i18n, ctx) ?? i18n.t('directory.noSummary');
     return `<li class="row row-dir" data-key="${layer}"><a class="dir-item" href="#layer=${layer}" data-action="nav" data-layer="${layer}" data-testid="dir-${layer}">${iconMarkup(LAYER_ICONS[layer], undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t(`layers.${layer}`))}</span><span class="row-sub">${escapeHtml(line)}</span></span>${chevron}</a></li>`;
   }).join('');

@@ -16,8 +16,11 @@
 // button (`.t-row`, map.css) inside the row, so the target is the row.
 import type { FeedItem } from '../../../worker/feed/schema';
 import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
+import type { CastState } from '../core/contracts';
+import type { SavedRef } from '../core/saved-store';
 import { lineBadge, signRow } from '../experience/blocks';
 import { delayTone, type DelayTone } from '../experience/delay';
+import { castReasonText } from '../experience/kvart';
 import { zagrebDateTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import type { RouteSummaryRow } from '../layers/route-summary';
@@ -29,6 +32,13 @@ import { iconMarkup, type IconName } from '../ui/icons';
 import type { RouteStop } from './catalogue';
 import type { RouteEntry, SearchResults, StopGroup } from './search';
 import { tr, trPlural, type TransportKey } from './strings';
+
+/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle,
+ *  every detail gets the ghost cast button ("Na zaslon", disabled with its reason when it cannot fire). */
+export interface DetailHeadExtras {
+  save?: SavedRef & { on: boolean };
+  cast?: CastState;
+}
 
 /** Route badges the rows show before "+n". */
 const ROW_BADGES = 6;
@@ -291,9 +301,32 @@ const showOnMap = (i18n: I18n): string => button({ action: 'fit-selection', labe
 /** "Natrag": the way out of every detail, a 44 px ghost, first in the head. */
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });
 
-/** Every detail opens the same way: the way back, then its title. A public screen has no finger to press it. */
-function detailHead(i18n: I18n, title: string, kiosk: boolean): string {
-  return (kiosk ? '' : actions([back(i18n)])) + title;
+/** The save toggle (route and stop details only): a filled star once saved, "Ukloni iz spremljenog" generic
+ *  once it is (the id already named it on the way in); the panel's own saved chips (kvart.ts) still say
+ *  which one by name when removing from there. */
+function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
+  const label = save.on
+    ? i18n.t('kvart.unsave')
+    : i18n.t(save.kind === 'route' ? 'kvart.saveRoute' : 'kvart.saveStop', save.kind === 'route' ? { id: save.id } : { name: save.id });
+  return `<button type="button" class="btn-quiet icon-btn t-save" data-action="${save.on ? 'unsave' : 'save'}" data-kind="${attr(save.kind)}" data-id="${attr(save.id)}" aria-pressed="${save.on ? 'true' : 'false'}" aria-label="${attr(label)}">${iconMarkup('star')}</button>`;
+}
+
+/** The ghost cast button every detail carries (D5): disabled with its reason (kvart.ts's own castReasonText,
+ *  the same sentence the Kvart panel's primary and the FAB read) when "Na zaslon" cannot fire. */
+function castButton(i18n: I18n, cast: CastState | undefined): string {
+  const can = cast?.can ?? false;
+  const disabled = can ? '' : ` aria-disabled="true" title="${attr(castReasonText(i18n, cast))}"`;
+  return `<button type="button" class="btn-ghost t-cast" data-action="cast" data-testid="detail-cast"${disabled}>${iconMarkup('cast')}<span>${esc(i18n.t('cast.fab'))}</span></button>`;
+}
+
+/** Every detail opens the same way: the way back, the save toggle (route and stop), the ghost cast button,
+ *  then the title. A public screen has no finger to press any of them. */
+function detailHead(i18n: I18n, title: string, kiosk: boolean, extras?: DetailHeadExtras): string {
+  if (kiosk) return title;
+  const buttons = [back(i18n)];
+  if (extras?.save) buttons.push(saveButton(i18n, extras.save));
+  buttons.push(castButton(i18n, extras?.cast));
+  return actions(buttons) + title;
 }
 
 /** The delay in words when the route's median is known, else the catalogue's own "unknown" sentence. */
@@ -314,6 +347,7 @@ export interface VehicleDetailData {
   delay: number | undefined;
   following: boolean;
   kiosk: boolean;
+  cast?: CastState;
 }
 
 /** One vehicle: the l badge and its name, where it faces at body, its line and the line's delay, its state; "Prati vozilo" as the 48 px primary. */
@@ -334,7 +368,7 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
       });
   const route = d.route ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk, { cast: d.cast }) +
     `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(d.direction, locale))}</p>` +
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
@@ -355,6 +389,9 @@ export interface RouteDetailData {
   kiosk: boolean;
   /** The stop-sequence fold is open: every stop shown. */
   stopsOpen: boolean;
+  /** Whether this route is in the reader's saved-store list; the head's save toggle reflects it. */
+  saved?: boolean;
+  cast?: CastState;
 }
 
 /** Vehicles listed on a route before "još n vozila". */
@@ -391,7 +428,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       ? `<ol class="t-list t-stops" id="${listId('stops')}" data-testid="route-stops">${stopRows}</ol>${stopsFold}`
       : `<p class="t-empty">${esc(i18n.t(d.hasNetwork ? 'status.empty' : 'status.loading'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(route.long || tr(i18n, 'routeTitle', { short: route.short }))}</span></h3>`, d.kiosk) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(route.long || tr(i18n, 'routeTitle', { short: route.short }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
     `<p class="t-note">${esc(tr(i18n, 'noArrivals'))}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
@@ -407,6 +444,9 @@ export interface StopDetailData {
   delays: ReadonlyMap<string, number>;
   isScreenStop: boolean;
   kiosk: boolean;
+  /** Whether this stop is in the reader's saved-store list; the head's save toggle reflects it. */
+  saved?: boolean;
+  cast?: CastState;
 }
 
 /** One stop: its name at title, "3 perona" under it, the arrivals sentence once, its lines as rows with their count and delay word. */
@@ -416,7 +456,7 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const moving = d.routes.reduce((sum, r) => sum + (d.counts.get(r.id) ?? 0), 0);
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(d.stop.name)}</h3>`, d.kiosk) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(d.stop.name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
     `<p class="t-note">${esc(tr(i18n, 'noArrivals'))}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
@@ -460,11 +500,11 @@ function closureDescription(item: FeedItem): string {
 
 /** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the
  *  description as prose when the module has one (closureDescription). */
-export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean): string {
+export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, cast?: CastState): string {
   const window = closureWindow(i18n, item);
   const description = closureDescription(item);
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(item.title)}</span></h3>`, kiosk) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(item.title)}</span></h3>`, kiosk, { cast }) +
     `<p class="t-lead">${esc(closureWords(i18n, item))}</p>` +
     (window ? `<p class="t-meta" data-testid="closure-window">${esc(window)}</p>` : '') +
     (description ? `<p class="t-prose">${esc(description)}</p>` : '') +

@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
-import { publicItemKey, type PublicSelection } from '../../app/src/core/contracts';
+import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
+import type { SavedRef } from '../../app/src/core/saved-store';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
 import type { LayerContext } from '../../app/src/layers/types';
@@ -76,11 +77,14 @@ interface CtxOptions {
   snapshots?: Partial<Record<ModuleSnapshot['module'], ModuleSnapshot>>;
   locale?: 'hr' | 'en';
   stop?: { id: string; name: string; lon: number; lat: number; routes: string[] };
+  saved?: readonly SavedRef[];
+  cast?: CastState;
 }
 
 function ctx(o: CtxOptions = {}) {
   const navigate = vi.fn();
   const toggle = vi.fn();
+  const savedList = o.saved ?? [];
   const context: LayerContext = {
     i18n: createDefaultI18n(o.locale ?? 'hr'),
     snapshots: o.snapshots ?? { 'zet-rt': ZET, prometnice: PROMETNICE, dogadanja: DOGADANJA },
@@ -92,6 +96,8 @@ function ctx(o: CtxOptions = {}) {
     navigate,
     mapView: o.kiosk ? undefined : { full: false, toggle },
     screen: { surface: 'phone', locale: o.locale ?? 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: o.stop },
+    saved: { list: () => savedList, has: (kind, id) => savedList.some((ref) => ref.kind === kind && ref.id === id) },
+    cast: o.cast,
   };
   return { context, navigate, toggle };
 }
@@ -597,5 +603,82 @@ describe('one workspace node for the page’s life', () => {
     main.replaceChildren(renderLayer('u-pokretu', context));
     expect(q('[data-testid=transport-workspace]')).toBe(root);
     expect(document.querySelector('kaj-persist')).toBeNull();
+  });
+});
+
+describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-store)', () => {
+  const CAN_CAST: CastState = { can: true, reason: null, screenLabel: 'Kavana Velebit', stopName: 'Trg bana J. Jelačića' };
+  const NO_SCREEN: CastState = { can: false, reason: 'no-screen', screenLabel: null, stopName: null };
+
+  it('a route detail carries the save toggle, unpressed and offering to save it, when it is not in the saved list', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps, selection: { kind: 'route', id: '11' }, cast: CAN_CAST }).context);
+    const save = q<HTMLButtonElement>('.t-save');
+    expect(save.dataset.action).toBe('save');
+    expect(save.dataset.kind).toBe('route');
+    expect(save.dataset.id).toBe('11');
+    expect(save.getAttribute('aria-pressed')).toBe('false');
+    expect(save.getAttribute('aria-label')).toBe('Spremi liniju 11');
+  });
+  it('a saved route’s toggle offers to remove it instead, generically (the id already named it on the way in)', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps, selection: { kind: 'route', id: '11' }, saved: [{ kind: 'route', id: '11' }] }).context);
+    const save = q<HTMLButtonElement>('.t-save');
+    expect(save.dataset.action).toBe('unsave');
+    expect(save.getAttribute('aria-pressed')).toBe('true');
+    expect(save.getAttribute('aria-label')).toBe('Ukloni iz spremljenog');
+  });
+  it('a stop detail carries the same toggle, by the stop’s own id', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.978, lat: 45.813, routes: ['6'] };
+    render(ctx({ maps, selection: { kind: 'stop', id: '106_1' }, stop, saved: [{ kind: 'stop', id: '106_1' }] }).context);
+    const save = q<HTMLButtonElement>('.t-save');
+    expect(save.dataset.kind).toBe('stop');
+    expect(save.dataset.id).toBe('106_1');
+    expect(save.dataset.action).toBe('unsave');
+  });
+  it('a vehicle and a closure detail carry no save toggle at all', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps }).context);
+    last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
+    expect(document.querySelector('.t-save')).toBeNull();
+    render(ctx({ maps, selection: { kind: 'item', id: publicItemKey('prometnice', 'c1'), module: 'prometnice' } }).context);
+    expect(document.querySelector('.t-save')).toBeNull();
+  });
+  it('every detail carries the ghost cast button, enabled when the session can cast', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps, selection: { kind: 'route', id: '11' }, cast: CAN_CAST }).context);
+    const cast = q<HTMLButtonElement>('[data-testid=detail-cast]');
+    expect(cast.classList.contains('btn-ghost')).toBe(true);
+    expect(cast.hasAttribute('aria-disabled')).toBe(false);
+    expect(text(cast)).toBe('Na zaslon');
+  });
+  it('disables the cast button with the reason when it cannot fire, the same sentence the Kvart panel reads', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps, selection: { kind: 'route', id: '11' }, cast: NO_SCREEN }).context);
+    const cast = q<HTMLButtonElement>('[data-testid=detail-cast]');
+    expect(cast.getAttribute('aria-disabled')).toBe('true');
+    expect(cast.getAttribute('title')).toBe('Ova sesija nema zaslon.');
+  });
+  it('kiosk carries neither: a public screen has no finger to press them', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps, kiosk: true, selection: { kind: 'route', id: '11' }, cast: CAN_CAST }).context);
+    expect(document.querySelector('.t-save')).toBeNull();
+    expect(document.querySelector('[data-testid=detail-cast]')).toBeNull();
+  });
+  it('save, unsave and cast bubble past the workspace to whatever wraps it (no stopPropagation on its own delegated handler)', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, selection: { kind: 'route', id: '11' }, cast: CAN_CAST });
+    const shell = document.createElement('div');
+    document.body.replaceChildren(shell);
+    shell.appendChild(renderLayer('u-pokretu', context));
+    const heard: string[] = [];
+    shell.addEventListener('click', (event) => {
+      const target = (event.target as Element).closest<HTMLElement>('[data-action]');
+      if (target) heard.push(target.dataset.action!);
+    });
+    shell.querySelector<HTMLButtonElement>('.t-save')!.click();
+    shell.querySelector<HTMLButtonElement>('[data-testid=detail-cast]')!.click();
+    expect(heard).toEqual(['save', 'cast']);
   });
 });
