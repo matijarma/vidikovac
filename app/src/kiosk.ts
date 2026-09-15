@@ -20,15 +20,15 @@ import { loadNetwork, type Network } from './motion/network';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
-import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, dayTime, weekdayDate } from './kiosk/format';
+import { countdownText, frameStrip, headerWeather, stripMarkup, weatherGroupMarkup, type RotationClock } from './kiosk/frame';
 import { codeBlockMarkup, hintMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
-import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, safetyStrip, staleCopy, sunLine, sunToday } from './kiosk/local';
+import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { createKioskMapAdapter, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
@@ -105,7 +105,7 @@ function shellMarkup(s: KioskStrings): string {
     <header class="k-head">
       <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)} <span class="k-brand-sub">${escapeHtml(s.surface)}</span></p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
-      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time></div></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time><div class="k-weather" data-testid="kiosk-weather" hidden></div></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
     <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
@@ -189,6 +189,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const dateEl = q('[data-testid=kiosk-date]');
   const themeBtn = q<HTMLButtonElement>('[data-testid=kiosk-theme]');
   const clockEl = q('[data-testid=kiosk-clock]');
+  const weatherEl = q('[data-testid=kiosk-weather]');
   const stage = q('[data-testid=kiosk-stage]');
   const basics = q('[data-testid=kiosk-essentials]');
   const basicsHeading = q('#ess-title');
@@ -208,6 +209,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let screenDead: 'expired' | 'revoked' | null = null;
   let teaser: ModuleSnapshot[] = [];
   let storyIndex = 0;
+  // The strip's rotation countdown (frameStrip's RotationClock): observes the
+  // existing rotation tick's own storyIndex advance rather than a second
+  // timer of its own. T2.10 drives this directly from sceneIndex once
+  // scenes.ts lands (C.2 edit 9); this shim needs no change to the tick itself.
+  let lastRotateAt = now();
+  let lastStoryIndexSeen = storyIndex;
   let currentSlot: CodeSlot | null = null;
   let beacon: BeaconClient | null = null;
   let beaconWasLive = false;
@@ -258,6 +265,47 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.textContent = time;
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
+    // Only strip-next's own text and hidden state: the tick must never touch
+    // the rest of the strip, or the "Osnovno" button's focus would not survive it.
+    paintCountdown();
+  }
+  /** The header's weather group (D11): a condition glyph, the reading and the
+   *  sunset-then-sunrise line, hidden while dhmz-now loads or is down -- the
+   *  clock stands alone, never a dash. Shares the strip's module choice: the
+   *  session's own copy once paired, the open teaser otherwise. */
+  function paintWeather(): void {
+    const weather = headerWeather(currentSafetyModules(), s, locale, now());
+    const markup = weatherGroupMarkup(weather, s);
+    if (weatherEl.innerHTML !== markup) weatherEl.innerHTML = markup;
+    weatherEl.hidden = weather === null;
+    if (weather) weatherEl.dataset.state = weather.state;
+    else delete weatherEl.dataset.state;
+  }
+  /** The modules the strip and the header weather group both read from: the
+   *  session's own copy once paired (fresher, when it has one), the open
+   *  teaser otherwise -- the same choice paintStrip has always made. */
+  function currentSafetyModules(): ModuleSnapshot[] {
+    return phase === 'paired' ? Object.values(mergedSnapshots()).filter((m): m is ModuleSnapshot => Boolean(m)) : teaser;
+  }
+  /** The strip's RotationClock: whether the field is rotating right now, and
+   *  when it last did. Observes the existing rotation tick's own storyIndex
+   *  advance instead of a second timer (see the note by its declaration). */
+  function rotationClock(): RotationClock {
+    if (storyIndex !== lastStoryIndexSeen) {
+      lastStoryIndexSeen = storyIndex;
+      lastRotateAt = now();
+    }
+    return { rotating: phase === 'invitation' && !reducedMotion && !lightweight, lastRotateAt, period: ROTATE_MS };
+  }
+  /** Ticks the countdown alone, once a second: the strip itself is rebuilt
+   *  only by paintStrip, on a poll or a phase change. */
+  function paintCountdown(): void {
+    const nextEl = strip.querySelector<HTMLElement>('[data-testid=strip-next]');
+    if (!nextEl) return;
+    const { nextIn } = frameStrip(currentSafetyModules(), stop, i18n, s, now(), rotationClock());
+    const text = countdownText(nextIn, s);
+    if (nextEl.textContent !== text) nextEl.textContent = text;
+    nextEl.hidden = nextIn === null;
   }
   /** "Tema: po suncu": the header button's own label, always the controller's
    *  current word -- never guessed, never stale between its own clicks and a
@@ -300,35 +348,20 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintStrip(): void {
     // A session response may still confirm a source while the preview request
     // fails (and vice versa). All visible safety copy must use the same choice.
-    const modules = phase === 'paired' ? Object.values(mergedSnapshots()).filter((m): m is ModuleSnapshot => Boolean(m)) : teaser;
-    const parts = safetyStrip(modules, stop, i18n, s, now());
     const noBasics = phase === 'paired' || phase === 'setup';
-    const w = parts.warning;
-    // R-K7: the sun line left the weather lockup; while a story is on show the strip carries it (the story's foot does otherwise).
-    const sun = phase === 'invitation' && invitation?.storyShowing() ? sunLine(sunToday(now()), s) : '';
-    strip.innerHTML = `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${noBasics ? ' hidden' : ''}>${escapeHtml(s.safety.basics)}</button>
-      <span class="k-strip-label">${iconMarkup('shield', undefined, 'icon k-icon')}<span>${escapeHtml(s.safety.label)}</span></span>
-      <div class="k-strip-items" data-testid="strip-items">
-      <span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeHtml(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>
-      <span class="k-strip-item" data-testid="strip-closures" data-state="${parts.closures.state}">${escapeHtml(parts.closures.text)}${parts.closures.nearestText ? ` <span class="k-strip-sub">${escapeHtml(parts.closures.nearestText)}</span>` : ''}</span>
-      <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(s.safety.pharmacy)}: <strong>${escapeHtml(parts.pharmacy.label)}</strong></span>
-      ${sun ? `<span class="k-strip-item k-strip-item--sun" data-testid="strip-sun">${escapeHtml(sun)}</span>` : ''}
-      </div>
-      <a class="k-strip-hitno" href="/hitno">${escapeHtml(s.safety.hitno)}</a>`;
+    const built = frameStrip(currentSafetyModules(), stop, i18n, s, now(), rotationClock());
+    strip.innerHTML = stripMarkup(built, s, { noBasics });
     fitStrip();
   }
-  /** The sentences share one wrapping box with room for two lines, so long
-   *  words (a stale, unconfirmed state) move a sentence down whole. When two
-   *  lines are not enough the sun line goes first (the least safety in it),
-   *  then the nearest-street aside. The type never steps down and nothing is
-   *  clipped mid-word. */
+  /** One fixed-height row (--k-strip-h): when the three items do not fit
+   *  beside the verdict and the countdown, the countdown -- the least
+   *  essential word on the strip -- goes first and alone; the type never
+   *  steps down and nothing is clipped mid-word. */
   function fitStrip(): void {
-    strip.classList.remove('k-strip--nosub', 'k-strip--nosun');
+    strip.classList.remove('k-strip--nonext');
     const items = strip.querySelector<HTMLElement>('.k-strip-items');
     if (!items || items.clientHeight === 0) return;
-    const over = (): boolean => items.scrollHeight > items.clientHeight + 1;
-    if (over()) strip.classList.add('k-strip--nosun');
-    if (over()) strip.classList.add('k-strip--nosub');
+    if (items.scrollHeight > items.clientHeight + 1) strip.classList.add('k-strip--nonext');
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
@@ -427,6 +460,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintLocal(): void {
     invitation?.update(invitationModel());
     paired?.update(pairedContext());
+    paintWeather();
     paintStrip();
     paintMap();
     if (!basics.hidden) paintEssentials();
