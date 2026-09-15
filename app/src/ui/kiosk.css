@@ -8,7 +8,8 @@
    slightly smaller than 1366 x 768 (down to 0.8, no further). A portrait
    screen (data-portrait='1', kiosk/layout.ts) is a third drawing on the
    compact tokens, designed for a 1080 x 1920 totem and scaled from that
-   size the same way: one column, the map on top (the portrait section).
+   size the same way: one column, the map (or the paired main region) on
+   top (the portrait section).
 
    Palette: every `--k-*` colour is an alias of a shared `--tone-*` role
    (ui/tokens.css), which already switches on data-theme-resolved and
@@ -18,27 +19,46 @@
    not a theme (test/app/kiosk-css.test.ts forbids any other literal;
    test/app/contrast.test.ts holds the pairs the kiosk draws to AA).
 
-   Type: four tiers per composition, each a token times --k-zoom. Display
-   (72/52 px) for exactly two things, the pairing code and the temperature;
-   main (40/28) for heads and lead sentences; supporting (28/22) for lines,
-   rows, the strip and story titles; credit (20/16) for attribution lines
-   alone (.k-meta). Nothing on the sheet is set below the credit tier.
+   Type: a fixed 96/72 px header and strip (auto on a handheld) and eleven
+   tiers per composition, each a token times --k-zoom -- display (84/64) for
+   exactly two things, the pairing code (capped to its column) and nothing
+   else; clock (48/36); main (40/28) for heads, scene titles and card
+   titles; supporting (28/22, unchanged) for the paired compositions'
+   own rows and the basics/setup panels, which this wave leaves untouched;
+   hint (26/20) for dates, the strip, the context chip and every `.tl-context`;
+   scene-time (56/40) for a `.tl-time` reading; label (24/18) for `.tl-label`
+   uppercase kickers; tile (32/24) for `.tl-value`/`.tl-trail`; credit (20/16)
+   for attribution lines alone (.k-meta). Nothing on the sheet is set below
+   the credit tier.
 
-   Composition of the invitation's side column (R-K7): the city first. The
-   weather lockup leads (a 48 px condition icon, the reading with its word,
-   one facts line, the credit), the QR-bound invitation card is pinned to
-   the second row (the lead and the hint beside the QR, the code under it at
-   wide where the 72 px code is wider than the column beside a 280 px QR,
-   beside it at compact), and the story takes what remains, its title given
-   two lines when they fit and one otherwise (kiosk/invitation.ts measures).
+   Frame: the header carries the brand, the accent-filled stop chip, the
+   date, the theme button, the clock and -- when `dhmz-now` answers -- the
+   weather group beside it (glyph, temperature, sunset-then-sunrise; D11:
+   weather is status, never a tile, and the clock stands alone while it
+   loads or is down). The strip is one fixed row: the basics button, the
+   shield label, the safetyState verdict pill, the three items, the
+   rotation's countdown and the /hitno link.
 
-   Icons: the Lucide sprite base.css draws as .icon; the kiosk sizes it
-   with --k-icon-size (28/22) and draws the condition at 48 px. One badge:
-   signage.css's .line paints the mode, .k-line-badge keeps the kiosk's
-   geometry over it. Motion reports a fact: the story rotation (out 180 ms,
-   in 220 ms on --ease-enter) and the code's crossfade (180 ms) stop under
-   prefers-reduced-motion and lightweight, the remaining-time bar keeps its
-   one-second linear fill and steps under both.
+   The invitation's stage (kiosk/scenes.ts, kiosk/invitation.ts) is a
+   rotating scene field beside a side column of two value tiles and the
+   QR-bound invitation card; every content tile in every scene and column
+   is one member of the shared `.tl` family (ui/signage.css's tile grammar,
+   A.4), the kiosk overriding its sizes through tokens alone -- no colour
+   outside `--k-*`, no rem size surviving from the signage sheet. The
+   paired compositions (kiosk/paired.ts) are untouched this wave and keep
+   their own block/row/story grammar and the token names that always meant
+   28/20 px (--k-sup-size, --k-credit-size) so their type is unaffected;
+   only their side width (--k-paired-side-w, its own token now) and the
+   shared colour/radius/icon tokens move with the rest of the sheet.
+
+   Icons: the Lucide sprite base.css draws as .icon; --k-icon-size (28/22)
+   sizes an inline glyph, --k-icon-lg (48/36) the header's condition icon
+   and the paired weather block's. One badge: signage.css's .line paints
+   the mode, .k-line-badge keeps the kiosk's own geometry over it, at every
+   scale a scene or a board draws it. Motion reports a fact: a scene swap
+   (out 180 ms, in 220 ms on --ease-enter) and the code's crossfade (180 ms)
+   stop under prefers-reduced-motion and lightweight, the remaining-time bar
+   keeps its one-second linear fill and steps under both.
 
    Older engines: 100vh before 100dvh, `grid-gap` before `gap`. State is
    read off data attributes the controller writes (data-mode, data-size,
@@ -68,7 +88,7 @@
   --k-rose-soft: var(--tone-tint-urgency);
   --k-green: var(--tone-live);
   --k-qr-plate: #ffffff;
-  --k-qr-ink: #182423;
+  --k-qr-ink: #0c1250;
   --k-focus: var(--tone-focus-ring);
   --k-glass: var(--tone-glass-bg);
   --k-shadow: var(--tone-shadow-soft);
@@ -87,39 +107,54 @@
   line-height: 1.25;
 }
 
-/* --- Per-composition tokens: every size is a token times --k-zoom; the four
-   type tiers are display, main, supporting and credit ---------------------- */
+/* --- Per-composition tokens: every size is a token times --k-zoom -------- */
 .kiosk[data-size='wide'] {
-  --k-head-h: calc(84px * var(--k-zoom));
-  --k-strip-h: calc(88px * var(--k-zoom));
+  --k-head-h: calc(96px * var(--k-zoom));
+  --k-strip-h: calc(96px * var(--k-zoom));
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
-  --k-side-w: calc(720px * var(--k-zoom));
-  --k-qr: calc(280px * var(--k-zoom));
-  --k-display-size: calc(72px * var(--k-zoom));
+  --k-tile-gap: calc(10px * var(--k-zoom));
+  --k-side-w: calc(600px * var(--k-zoom));
+  --k-paired-side-w: calc(720px * var(--k-zoom));
+  --k-qr: calc(240px * var(--k-zoom));
+  --k-display-size: calc(84px * var(--k-zoom));
+  --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
   --k-sup-size: calc(28px * var(--k-zoom));
+  --k-hint-size: calc(26px * var(--k-zoom));
+  --k-scene-time-size: calc(56px * var(--k-zoom));
+  --k-label-size: calc(24px * var(--k-zoom));
+  --k-tile-size: calc(32px * var(--k-zoom));
   --k-credit-size: calc(20px * var(--k-zoom));
   --k-badge: calc(60px * var(--k-zoom));
   --k-icon-size: calc(28px * var(--k-zoom));
-  --k-radius: calc(24px * var(--k-zoom));
+  --k-icon-lg: calc(48px * var(--k-zoom));
+  --k-radius: calc(20px * var(--k-zoom));
   --k-radius-s: calc(14px * var(--k-zoom));
   --k-control: calc(64px * var(--k-zoom));
 }
 .kiosk[data-size='compact'] {
-  --k-head-h: calc(60px * var(--k-zoom));
+  --k-head-h: calc(72px * var(--k-zoom));
   --k-strip-h: calc(72px * var(--k-zoom));
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
-  --k-side-w: calc(540px * var(--k-zoom));
+  --k-tile-gap: calc(8px * var(--k-zoom));
+  --k-side-w: calc(520px * var(--k-zoom));
+  --k-paired-side-w: calc(540px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-zoom));
-  --k-display-size: calc(52px * var(--k-zoom));
+  --k-display-size: calc(64px * var(--k-zoom));
+  --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
   --k-sup-size: calc(22px * var(--k-zoom));
+  --k-hint-size: calc(20px * var(--k-zoom));
+  --k-scene-time-size: calc(40px * var(--k-zoom));
+  --k-label-size: calc(18px * var(--k-zoom));
+  --k-tile-size: calc(24px * var(--k-zoom));
   --k-credit-size: calc(16px * var(--k-zoom));
   --k-badge: calc(46px * var(--k-zoom));
   --k-icon-size: calc(22px * var(--k-zoom));
-  --k-radius: calc(18px * var(--k-zoom));
+  --k-icon-lg: calc(36px * var(--k-zoom));
+  --k-radius: calc(16px * var(--k-zoom));
   --k-radius-s: calc(10px * var(--k-zoom));
   --k-control: calc(52px * var(--k-zoom));
 }
@@ -130,29 +165,35 @@
 .kiosk ul { padding: 0; list-style: none; }
 .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .k-park { display: none; }
-/* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label), 48 for the sky in the lockup. */
+/* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label, a scene's context glyph). */
 .kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
-.kiosk .k-weather-icon { width: calc(48px * var(--k-zoom)); height: calc(48px * var(--k-zoom)); flex: none; align-self: center; margin-right: calc(var(--k-gap) * 0.5); color: var(--k-amber); }
 
-.k-head { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
+.k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
 .k-head-brand { display: flex; align-items: center; min-width: 0; }
 .k-brand { font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
 .k-brand-sub { margin-left: 0.5em; font-size: var(--k-sup-size); font-weight: 500; color: var(--k-ink-3); }
-.k-context { min-width: 0; margin-left: calc(var(--k-gap) * 1.5); padding-left: calc(var(--k-gap) * 1.5); border-left: 1px solid var(--k-line); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; }
+/* The stop chip: accent-filled (paper in dark, Zagreb blue in light) because the
+   one ink tile on the screen is the Skupština's -- the civic domain, not the venue. */
+.k-context { display: inline-block; min-width: 0; max-width: 40vw; margin-left: var(--k-gap); padding: 0.25em 0.8em; border-radius: 999px; background: var(--k-action); color: var(--k-action-ink); font-size: var(--k-hint-size); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-context:empty { display: none; }
-.k-context-sub { display: block; font-size: var(--k-sup-size); font-weight: 500; color: var(--k-ink-3); }
+.k-context-sub { display: inline; font-weight: 500; }
+.k-context-sub::before { content: ' · '; }
 .k-head-mid { display: flex; flex: 1; justify-content: center; min-width: 0; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
-.k-head-when { margin-left: auto; text-align: right; white-space: nowrap; }
-/* The compact header (portrait resolves to compact too) is 60 px tall: the date sits beside the clock
-   row, never above it (stacked, date plus the 44 px theme button measure 71 px and the date is clipped). */
-.kiosk[data-size='compact'] .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); }
-.k-date { font-size: var(--k-sup-size); color: var(--k-ink-2); }
-.k-clock-row { display: flex; align-items: center; justify-content: flex-end; gap: calc(var(--k-gap) * 0.6); }
-.k-clock { display: block; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.1; }
-/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the
-   clock, never the --k-control size the primary buttons use. */
-.k-theme { display: inline-flex; align-items: center; min-height: 44px; padding: 0 calc(var(--k-gap) * 0.6); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-sup-size); font-weight: 600; cursor: pointer; }
+.k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); margin-left: auto; white-space: nowrap; }
+.k-date { font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.k-clock-row { display: flex; align-items: center; gap: calc(var(--k-gap) * 0.6); }
+.k-clock { display: block; font-size: var(--k-clock-size); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the clock. */
+.k-theme { display: inline-flex; align-items: center; min-height: 44px; padding: 0 calc(var(--k-gap) * 0.6); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); font-weight: 600; cursor: pointer; }
+/* The weather group: a condition glyph, the reading, a stale mark and the
+   sunset-until-it-passes-then-sunrise glyph + time (D11). Hidden while
+   dhmz-now loads or is down -- the clock stands alone, never a dash. */
+.k-weather { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.5); }
+.kiosk .k-weather-icon { width: var(--k-icon-lg); height: var(--k-icon-lg); flex: none; color: var(--k-amber); }
+.k-temp { font-size: var(--k-main-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.k-sun { display: inline-flex; align-items: center; gap: 0.25em; font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.k-sun .k-icon { color: var(--k-amber); }
 
 .k-alert { position: absolute; top: calc(var(--k-head-h) + var(--k-gap) * 0.5); right: var(--k-pad); z-index: 5; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-size); font-weight: 600; box-shadow: var(--k-shadow); }
 .k-alert[hidden] { display: none; }
@@ -160,22 +201,20 @@
 .k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
 
-/* --- Compositions: the map column and the side column ---------------------- */
-.k-invitation, .k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); grid-gap: var(--k-gap); gap: var(--k-gap); }
+/* --- Compositions: the scene/main column and the side column -------------- */
+.k-invitation { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); gap: var(--k-gap); }
+.k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-paired-side-w); gap: var(--k-gap); }
 .k-side { display: flex; flex-direction: column; min-height: 0; }
 .k-side > * + * { margin-top: var(--k-gap); }
-/* The invitation's column is three rows: the weather, the card pinned to the
-   second row, and the story with whatever remains (never less than a title
-   line and its credit; the title yields a line before the block overflows). */
-.k-invitation .k-side { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-row-gap: var(--k-gap); row-gap: var(--k-gap); }
-.k-invitation .k-side > * + * { margin-top: 0; }
-.k-invitation .k-weather { grid-row: 1; }
-.k-invitation .k-invite { grid-row: 2; }
-.k-invitation .k-story { grid-row: 3; }
+/* The invitation's column is two rows: the two value tiles, then the QR-bound
+   card taking whatever remains (D18, C.7: vehicles moving, closures nearby). */
+.k-invitation .k-side { display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: var(--k-gap); min-height: 0; }
+.k-side-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); }
 .k-side-blocks { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .k-side-blocks:empty { display: none; }
 .k-side-blocks > * + * { margin-top: var(--k-gap); }
 
+/* --- The map, the lagano lines board (unchanged: lagano.spec.ts, D12) ----- */
 .k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
 .k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .k-map-host[hidden] { display: none; }
@@ -189,7 +228,7 @@
 .k-line:first-child { border-top: 0; }
 /* The line badge is signage.css's .line (tram a rounded rectangle in peacock,
    bus a capsule in the transit blue, other a plain rectangle); the kiosk only
-   sizes it, so the same badge reads the same on the phone and the wall. */
+   sizes it, at the same geometry in the lagano board and in a scene's rows. */
 .kiosk .k-line-badge { min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; font-size: var(--k-sup-size); }
 .k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
 .k-line-word { flex: none; margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
@@ -208,49 +247,106 @@
 .k-chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; font-size: var(--k-sup-size); font-weight: 600; }
 .k-chip--stale { background: var(--k-amber-soft); color: var(--k-amber); }
 
-/* --- The invitation card: QR, lead, code, remaining time -------------------- */
-/* QR-bound: the lead and the hint share the QR's height beside it; at wide
-   the 72 px code (433 px for nine glyphs, 570 for the widest) is wider than
-   the 368 px beside a 280 px QR, so it spans the card under both; at compact
-   the code stays beside the QR at its column cap and the card is exactly the
-   QR plus its padding. */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: var(--k-qr) auto; grid-template-areas: 'qr text' 'code code'; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.kiosk[data-size='compact'] .k-invite { grid-template-areas: 'qr text' 'qr code'; grid-template-rows: minmax(0, 1fr) auto; }
-.k-invite .k-qr { grid-area: qr; }
+/* --- Scene field: one rotating field, its head and its grids -------------- */
+.k-scene { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: calc(var(--k-gap) * 0.6); min-width: 0; min-height: 0; }
+.k-scene-head { display: flex; align-items: baseline; gap: var(--k-gap); min-width: 0; }
+.k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
+.k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
+.k-dot { width: calc(12px * var(--k-zoom)); height: calc(12px * var(--k-zoom)); border-radius: 999px; background: var(--k-line); }
+.k-dot[data-on='1'] { background: var(--k-ink); }
+.k-scene-body { position: relative; min-height: 0; }
+.k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; animation: k-scene-in 220ms var(--ease-enter) both; }
+.k-scene-item[data-leaving] { pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
+@keyframes k-scene-in { from { opacity: 0; transform: translateY(calc(6px * var(--k-zoom))); } }
+@keyframes k-scene-out { to { opacity: 0; } }
+@keyframes k-code-in { from { opacity: 0; } }
+.k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
+.k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-tile-gap); min-height: 0; }
+.k-scene-grid[data-works='0'] { grid-template-rows: minmax(0, 1fr); }
+.k-scene-grid > .k-map { grid-column: 1; grid-row: 1 / -1; }
+.k-scene-lines { display: grid; grid-column: 2; grid-row: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
+.k-works { grid-column: 2; grid-row: 2; }
+.k-works:empty { display: none; }
+.kiosk[data-size='compact'] .k-scene-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.kiosk[data-size='compact'] .k-scene-lines { grid-template-columns: minmax(0, 1fr); }
+.k-scene-grid[data-board='1'] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.k-scene-grid[data-board='1'] > .k-map { grid-row: 1; }
+.k-scene-rows { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
+.k-scene-grad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
+.k-scene-grad > .tl[data-variant='ink'] { grid-column: 1; grid-row: 1 / -1; }
+
+/* --- The shared `.tl` family (ui/signage.css, A.4), sized by tokens alone --
+   The kiosk sets sizes only through --k-* tokens and overrides the signage
+   sheet's rem sizes; no colour outside --k-*. Draft names the plan drew this
+   from: .tl-band is .tl[data-variant='band'], .tl-row is .tl[data-variant='row'],
+   .tl-ink is .tl[data-variant='ink'], the time-tile class .tl-time (as a
+   whole) is .tl[data-variant='time'], and its own time reading is the real
+   child class .tl-time; the kiosk's extra classes (k-tl-line, k-tile,
+   k-glyph, k-line-badge) stay as written. */
+.kiosk .tl { display: grid; gap: calc(var(--k-gap) * 0.3); align-content: space-between; box-sizing: border-box; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.8) var(--k-gap); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); overflow: hidden; }
+.kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiosk .tl-value { display: flex; align-items: center; gap: 0.3em; font-size: var(--k-tile-size); font-weight: 700; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kiosk .tl-context { font-size: var(--k-hint-size); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiosk .tl-title { display: -webkit-box; font-size: var(--k-main-size); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.kiosk .tl[data-lines='1'] .tl-title, .kiosk .tl[data-variant='row'][data-lines='1'] .tl-title { -webkit-line-clamp: 1; }
+.kiosk .tl[data-variant='time'] { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--k-gap); align-items: center; }
+.kiosk .tl-time { font-size: var(--k-scene-time-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kiosk .tl[data-variant='band'], .kiosk .tl[data-variant='row'] { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--k-gap); box-sizing: border-box; min-height: calc(72px * var(--k-zoom)); padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: var(--k-radius-s); }
+.kiosk .tl[data-variant='band'][data-tone='komunalno'] { background: var(--k-amber-soft); }
+.kiosk .tl[data-variant='band'][data-level='calm'] { border: 1.5px solid var(--k-line); }
+.kiosk .tl[data-variant='band'][data-level='unknown'] { background: var(--k-amber-soft); }
+.kiosk .tl[data-variant='row'] { border: 1px solid var(--k-line); background: var(--k-surface); }
+.kiosk .tl-trail { font-size: var(--k-tile-size); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--k-ink-2); }
+.kiosk .tl[data-variant='ink'] { border-color: transparent; background: var(--k-ink); color: var(--k-canvas); }
+.kiosk .tl[data-variant='ink'] .tl-label, .kiosk .tl[data-variant='ink'] .tl-context { color: var(--k-canvas); }
+.kiosk .k-glyph { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; color: var(--k-ink-2); }
+/* The line's state word in its role colour (late rose, early amber, ontime green, unknown ink-3). */
+.kiosk .k-tl-line[data-tone='late'] .tl-value { color: var(--k-rose); }
+.kiosk .k-tl-line[data-tone='early'] .tl-value { color: var(--k-amber); }
+.kiosk .k-tl-line[data-tone='ontime'] .tl-value { color: var(--k-green); }
+.kiosk .k-tl-line[data-tone='unknown'] .tl-value { color: var(--k-ink-3); }
+.kiosk .k-tl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--k-ink); }
+.kiosk .tl[data-state='down'] .tl-value { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-3); white-space: normal; }
+
+/* --- The invitation card: QR, lead, hint, code, remaining time ------------ */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.8); box-sizing: border-box; min-height: 0; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+.k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
+.k-invite > .k-qr { grid-area: qr; align-self: start; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
-.k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface-2); text-align: center; font-size: var(--k-sup-size); color: var(--k-ink-2); }
-.k-invite-text { grid-area: text; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-/* The code and its bar in one column; the code's size follows this column (the cap below). */
-.k-invite-code { display: grid; grid-area: code; grid-template-columns: minmax(0, 1fr); margin-top: calc(var(--k-gap) * 0.8); container-type: inline-size; }
-.kiosk[data-size='compact'] .k-invite-code { margin-top: calc(var(--k-gap) * 0.6); }
-.k-lead { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
-/* The hint sits at the foot of the text column, right above the code it introduces; the address has its own line and never wraps or breaks. */
-.k-invite-text .k-hint { margin-top: auto; padding-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
-.k-hint-host { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; color: var(--k-ink); }
+.k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
+.k-invite > .k-hint { grid-area: hint; align-self: end; font-size: var(--k-hint-size); line-height: 1.3; }
+.k-hint-host { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; }
+.k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; }
 .k-code-box { position: relative; }
-.k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-story-out 180ms var(--ease-exit) both; }
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 .k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
-/* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier. */
-.k-code { display: flex; align-items: baseline; margin-top: var(--k-gap); font-size: min(var(--k-display-size), 11.5cqi); font-weight: 800; letter-spacing: 0.06em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--k-action); }
+/* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
+.k-code { display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 800; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
-.k-code-dash { margin: 0 0.15em; color: var(--k-ink-3); }
-.k-progress { height: calc(8px * var(--k-zoom)); margin-top: calc(var(--k-gap) * 0.6); overflow: hidden; border-radius: 999px; background: var(--k-surface-2); }
-.k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action); transition: width 1s linear; }
+.k-code-dash { margin: 0 0.15em; opacity: 0.7; }
+.k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--k-action-ink); background: transparent; }
+.k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
+.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: 'qr' 'text' 'code'; background: var(--k-surface); color: var(--k-ink); }
+.kiosk[data-size='handheld'] .k-invite-text { grid-area: text; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.kiosk[data-size='handheld'] .k-invite-text .k-hint { margin-top: auto; padding-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
+.kiosk[data-size='handheld'] .k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
+.kiosk[data-size='handheld'] .k-code { color: var(--k-action); }
+.kiosk[data-size='handheld'] .k-code[data-state='waiting'] { color: var(--k-ink-3); }
+.kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
+.kiosk[data-size='handheld'] .k-invite-code { margin-top: 0; }
 
-/* --- Blocks: weather, story, figures ------------------------------------------- */
-.k-block, .k-weather, .k-story { position: relative; display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
-.k-block--grow, .k-story { flex: 1; }
+/* --- Blocks: the paired compositions' own grammar (unchanged this wave) --- */
+.k-block { position: relative; display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
+.k-block--grow { flex: 1; }
 /* Blocks in a column share the height: each may shrink to its floor (a kicker,
    one row and the source line) and the row fitter trims what no longer fits. */
 .k-side-blocks > .k-block, .k-stack > .k-block { flex: none; min-height: 0; }
 .k-side-blocks > .k-block--list, .k-stack > .k-block--list { flex: 0 1 auto; min-height: var(--k-block-min, calc(240px * var(--k-zoom))); }
 .k-side-blocks > .k-block--grow, .k-stack > .k-block--grow { flex: 1 1 auto; }
 .k-side-blocks { overflow: hidden; }
-.k-invite-code .k-code { margin-top: 0; letter-spacing: 0.04em; white-space: nowrap; }
-.kiosk[data-size='compact'] .k-invite-code .k-code { letter-spacing: 0.02em; }
 .kiosk[data-size='wide'] { --k-block-min: calc(270px * var(--k-zoom)); --k-arc-w: calc(420px * var(--k-zoom)); --k-arc-h: calc(235px * var(--k-zoom)); }
 .kiosk[data-size='compact'] { --k-block-min: calc(205px * var(--k-zoom)); --k-arc-w: calc(300px * var(--k-zoom)); --k-arc-h: calc(168px * var(--k-zoom)); }
 .k-block-body { flex: 1; min-height: 0; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; }
@@ -259,7 +355,6 @@
 .k-block--rose { box-shadow: inset 0 0 0 2px var(--k-rose); }
 .k-block--select { background: var(--k-action-soft); }
 .k-weather-main { display: flex; flex-wrap: wrap; align-items: baseline; }
-.k-temp { font-size: var(--k-display-size); font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .k-temp--none { font-size: var(--k-sup-size); font-weight: 600; line-height: 1.2; letter-spacing: 0; color: var(--k-ink-2); }
 .k-condition { margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-weather-main .k-chip { margin-left: var(--k-gap); }
@@ -268,20 +363,6 @@
 .k-main .k-weather-details { white-space: normal; }
 .k-weather-note { font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-weather-note[data-state='down'] { color: var(--k-rose); }
-.k-weather > .k-meta, .k-story-item > .k-meta { margin-top: calc(var(--k-gap) * 0.5); }
-/* The story: kicker, headline, credit. The outgoing item leaves in place
-   (absolute inside the block's padding, fading) while the next enters low
-   and settles, so the block's box never moves; the title has two lines when
-   the block has room and one otherwise (data-lines, measured after paint). */
-.k-story-item { display: flex; flex: 1; flex-direction: column; min-height: 0; animation: k-story-in 220ms var(--ease-enter) both; }
-.k-story-item[data-leaving] { position: absolute; top: calc(var(--k-gap) * 1.1); right: var(--k-pad); bottom: calc(var(--k-gap) * 1.1); left: var(--k-pad); pointer-events: none; animation: k-story-out 180ms var(--ease-exit) both; }
-.k-story-item .k-story-title { display: -webkit-box; flex: none; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.k-story[data-lines='1'] .k-story-title { -webkit-line-clamp: 1; }
-.k-story-title--empty { font-weight: 500; color: var(--k-ink-2); }
-.k-story-item .k-story-sun { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); color: var(--k-ink-2); }
-@keyframes k-story-in { from { opacity: 0; transform: translateY(calc(6px * var(--k-zoom))); } }
-@keyframes k-story-out { to { opacity: 0; } }
-@keyframes k-code-in { from { opacity: 0; } }
 .k-figure { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .k-figure-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-text { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
@@ -295,7 +376,7 @@
 .k-select-main--item { display: block; font-size: var(--k-main-size); line-height: 1.12; letter-spacing: -0.01em; }
 .k-select-sub--long { margin-top: calc(var(--k-gap) * 0.6); line-height: 1.3; }
 
-/* --- Rows inside blocks ---------------------------------------------------------
+/* --- Rows inside blocks (paired only) -------------------------------------
    A row is its whole title, then one line of detail. The aside (a time, a
    distance, a count) floats at the right of the title's first line and so
    shortens that line only; no title is clamped -- the row fitter hides whole
@@ -322,25 +403,28 @@
 .k-badge { min-height: 0; padding: 0.1em 0.5em; gap: 0.35em; font-size: var(--k-sup-size); letter-spacing: 0; line-height: 1.2; vertical-align: baseline; }
 .k-badge::before { inline-size: 0.5em; block-size: 0.5em; }
 
-/* --- Safety strip: always there, never a session's ------------------------------ */
-.k-strip { display: flex; align-items: center; min-width: 0; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-sup-size); line-height: 1.2; }
+/* --- Safety strip: always there, never a session's ------------------------ */
+.k-strip { display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
 /* Both strip controls keep a 44 px touch target inside the strip's own height. */
 .k-strip-basics { flex: none; min-height: 44px; min-height: max(44px, calc(var(--k-control) * 0.72)); margin-right: var(--k-gap); padding: 0 var(--k-gap); border: 2px solid var(--k-action); border-radius: 999px; background: transparent; color: var(--k-action); font: inherit; font-weight: 700; cursor: pointer; }
 .k-strip-basics[hidden] { display: none; }
 .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
-/* The three sentences share one wrapping box with room for two lines: a long
-   sentence moves down whole, the type never steps down, nothing is clipped. */
+/* safetyState's verdict, a pill with its own colour per level. */
+.k-strip-verdict { flex: none; margin-right: var(--k-gap); padding: 0.15em 0.7em; border-radius: 999px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.k-strip-verdict[data-level='calm'] { color: var(--k-green); box-shadow: inset 0 0 0 2px var(--k-green); }
+.k-strip-verdict[data-level='urgent'] { background: var(--k-rose-soft); color: var(--k-rose); }
+.k-strip-verdict[data-level='unknown'] { background: var(--k-amber-soft); color: var(--k-amber); }
 .k-strip-items { display: flex; flex: 1; flex-wrap: wrap; align-items: center; align-content: center; align-self: stretch; min-width: 0; overflow: hidden; }
-.k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); }
+.k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-strip-item strong { color: var(--k-ink); }
 .k-strip-item[data-state='active'] { color: var(--k-rose); font-weight: 700; }
 .k-strip-item[data-state='active'][data-severity='minor'], .k-strip-item[data-state='active'][data-severity='moderate'] { color: var(--k-amber); }
 .k-strip-item[data-state='unknown'], .k-strip-item[data-state='down'] { color: var(--k-ink-3); }
 .k-strip-item[data-state='stale'] { color: var(--k-amber); }
-.k-strip-sub { color: var(--k-ink-3); }
-.k-strip--nosub .k-strip-sub { display: none; }
-.k-strip--nosun .k-strip-item--sun { display: none; }
+/* The rotation's countdown; hidden while the field is not rotating or when the strip has no room for it (fitStrip). */
+.k-strip-next { flex: none; margin-left: var(--k-gap); color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.k-strip-next[hidden], .k-strip--nonext .k-strip-next { display: none; }
 .k-strip-hitno { display: inline-flex; flex: none; align-items: center; box-sizing: border-box; min-height: 44px; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
@@ -447,47 +531,33 @@
 .k-join-qr:empty { border-radius: var(--k-radius-s); background: var(--k-surface-2); }
 .k-join-text { min-width: 0; margin-left: var(--k-gap); }
 .k-join-title { font-size: var(--k-sup-size); font-weight: 800; }
-.k-join-code { margin-top: calc(var(--k-gap) * 0.2); font-size: var(--k-display-size); font-weight: 800; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
+.k-join-code { margin-top: calc(var(--k-gap) * 0.2); font-size: min(var(--k-display-size), 15cqi); font-weight: 800; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
 .k-join-text .k-meta { margin-top: calc(var(--k-gap) * 0.2); }
 
 /* --- Lightweight: system type, no shadows, the lines board fills the map column --- */
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
 :root[data-lagano='1'] .k-map { background: var(--k-surface); }
 
-/* --- Portrait: one column, the map on top ----------------------------------------
+/* --- Portrait: one column, the scene (or the paired main region) on top ----------
    A 1080 x 1920 totem (kiosk/layout.ts: the compact tokens at zoom 1 there,
-   data-portrait='1'). The map takes 55% of the stage with the board over its
-   foot; under it the invitation card spans the width, the compact card's own
-   drawing (the 240 px QR, the lead and the hint beside it, the code under
-   them) given a wider text column; the weather and the story share the last
-   row side by side, each with its content centred, because the two have far
-   more room than their lines need and a tile half void reads as unfinished.
-   The paired compositions stack the same way, the main region on top at 55%
-   and the side column under it with the join card at its foot; on the two
-   map layers the side takes its content's height and the map the rest,
-   because a map is legible at any size and a two-row block is not (the
-   side never exceeds the room: its blocks shrink to their floors and the
-   row fitter trims). Compact tiers and the compact QR: these rules place
-   blocks and set no token. */
-/* The side takes its content's height on the invitation too: the card is QR-bound and the weather and story
-   blocks are two lines each, so the map takes the rest (55% at least) instead of the blocks floating in a void. */
+   data-portrait='1'). The scene field takes 55% of the stage at least; under
+   it the side column lays its two value tiles beside the invitation card
+   instead of above it, because the two have far more room side by side than
+   the tiles stacked over a QR-bound card would leave for either. Compact
+   tiers and the compact QR: these rules place blocks and set no token. */
 .kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
-.kiosk[data-portrait='1'] .k-paired:has(> .k-map) { grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
-.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto; grid-column-gap: var(--k-gap); column-gap: var(--k-gap); }
-.kiosk[data-portrait='1'] .k-invitation .k-invite { grid-column: 1 / -1; grid-row: 1; }
-.kiosk[data-portrait='1'] .k-invitation .k-weather { grid-column: 1; grid-row: 2; justify-content: center; }
-.kiosk[data-portrait='1'] .k-invitation .k-story { grid-column: 2; grid-row: 2; }
-.kiosk[data-portrait='1'] .k-story-item { justify-content: center; }
+.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, auto); column-gap: var(--k-gap); }
+.kiosk[data-portrait='1'] .k-side-tiles { align-content: center; }
 
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
-  .kiosk .k-story-item, .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
-  .kiosk .k-story-item[data-leaving], .kiosk .k-code-ghost { display: none; }
+  .kiosk .k-scene-item, .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
+  .kiosk .k-scene-item[data-leaving], .kiosk .k-code-ghost { display: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
-:root[data-lagano='1'] .k-story-item, :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
-:root[data-lagano='1'] .k-story-item[data-leaving], :root[data-lagano='1'] .k-code-ghost { display: none; }
+:root[data-lagano='1'] .k-scene-item, :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-scene-item[data-leaving], :root[data-lagano='1'] .k-code-ghost { display: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
@@ -496,23 +566,31 @@
    composition for a wall but the hand that sets one up: the page scrolls
    instead of cropping, the wizard's grids fall into as many columns as fit,
    and after creation the stage carries the provisioning link block and the
-   code card alone (kiosk.ts mountHandheld). Tokens at phone sizes; zoom is 1
-   here. */
+   code card alone (kiosk.ts mountHandheld, unchanged). Tokens at phone
+   sizes; zoom is 1 here. */
 .kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }
 .kiosk[data-size='handheld'] {
   --k-head-h: auto;
   --k-strip-h: auto;
   --k-pad: 16px;
   --k-gap: 12px;
+  --k-tile-gap: 8px;
   --k-side-w: 100%;
+  --k-paired-side-w: 100%;
   --k-qr: 240px;
   --k-display-size: 40px;
+  --k-clock-size: 24px;
   --k-main-size: 24px;
   --k-sup-size: 18px;
+  --k-hint-size: 18px;
+  --k-scene-time-size: 24px;
+  --k-label-size: 14px;
+  --k-tile-size: 18px;
   --k-credit-size: 13px;
   --k-badge: 36px;
   --k-icon-size: 20px;
-  --k-radius: 16px;
+  --k-icon-lg: 32px;
+  --k-radius: 14px;
   --k-radius-s: 10px;
   --k-control: 48px;
   --k-block-min: 160px;
@@ -521,18 +599,18 @@
   block-size: auto;
   overflow: visible;
 }
-.kiosk[data-size='handheld'] .k-head { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.5); padding-block: calc(var(--k-gap) * 0.75); }
+.kiosk[data-size='handheld'] .k-head { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.5); height: auto; padding-block: calc(var(--k-gap) * 0.75); }
 .kiosk[data-size='handheld'] .k-head-brand { flex: 1 1 100%; flex-wrap: wrap; }
-/* The stop context wraps on its own line under the brand rather than being clipped beside it. */
-.kiosk[data-size='handheld'] .k-context { flex-basis: 100%; margin: calc(var(--k-gap) * 0.25) 0 0; padding-left: 0; border-left: 0; white-space: normal; overflow: visible; }
+/* The stop chip wraps on its own line under the brand rather than being clipped beside it. */
+.kiosk[data-size='handheld'] .k-context { flex-basis: 100%; max-width: 100%; margin: calc(var(--k-gap) * 0.25) 0 0; white-space: normal; }
 .kiosk[data-size='handheld'] .k-head-mid { flex-basis: 100%; justify-content: flex-start; padding: 0; }
 .kiosk[data-size='handheld'] .k-head-mid:empty { display: none; }
 .kiosk[data-size='handheld'] .k-alert { position: static; margin: var(--k-gap) var(--k-pad) 0; }
 .kiosk[data-size='handheld'] .k-stage > section { height: auto; }
-.kiosk[data-size='handheld'] .k-strip { flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-strip { height: auto; flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
 .kiosk[data-size='handheld'] .k-strip-basics, .kiosk[data-size='handheld'] .k-strip-label { margin-right: 0; }
 .kiosk[data-size='handheld'] .k-strip-items { flex-basis: 100%; overflow: visible; }
-.kiosk[data-size='handheld'] .k-strip-item { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; }
+.kiosk[data-size='handheld'] .k-strip-item { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; white-space: normal; }
 .kiosk[data-size='handheld'] .k-strip-hitno { margin-left: 0; }
 .kiosk[data-size='handheld'] .k-basics { position: static; }
 .kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
@@ -549,13 +627,8 @@
 .kiosk[data-size='handheld'] .k-setup-actions > * + * { margin-left: 0; }
 .kiosk[data-size='handheld'] .k-btn { max-width: 100%; }
 
-/* After creation: the link block, then the code card in one column. */
+/* After creation: the link block, then the code card in one column (handheldMarkup, unchanged). */
 .kiosk[data-size='handheld'] .k-handheld { display: grid; gap: var(--k-gap); }
 .kiosk[data-size='handheld'] .k-handheld-link { padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .kiosk[data-size='handheld'] .k-handheld-title { font-size: var(--k-main-size); font-weight: 800; line-height: 1.15; letter-spacing: -0.015em; }
-.kiosk[data-size='handheld'] .k-handheld-url { display: inline-block; min-height: 44px; margin-top: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
-.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: 'qr' 'text' 'code'; row-gap: var(--k-gap); }
-.kiosk[data-size='handheld'] .k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
-.kiosk[data-size='handheld'] .k-invite-text .k-hint { margin-top: calc(var(--k-gap) * 0.5); padding-top: 0; }
-.kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
-.kiosk[data-size='handheld'] .k-invite-code { margin-top: 0; }
+.kiosk[data-size='handheld'] .k-handheld-url { display: inline-block; min-height: 44px; margin-top: var(--k-gap); font-size: var(--k-hint-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }

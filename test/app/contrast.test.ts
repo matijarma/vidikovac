@@ -286,7 +286,8 @@ describe.each(['dark', 'light'] as const)('%s kiosk aliases meet WCAG AA 4.5:1 a
     ['ink-2', 'surface'], ['ink-2', 'canvas'], ['ink-2', 'surface-2'],
     ['ink', 'surface'], ['ink', 'canvas'], ['ink', 'surface-2'],
     ['action', 'surface'], ['action', 'canvas'],
-    ['amber', 'surface'], ['rose', 'surface'], ['violet', 'surface'],
+    // The safety strip's calm verdict and a tile's "ontime" state word (C.4).
+    ['amber', 'surface'], ['rose', 'surface'], ['violet', 'surface'], ['green', 'surface'],
     ['action-on-soft', 'action-soft'],
     ['amber', 'amber-soft'], ['rose', 'rose-soft'], ['violet', 'violet-soft'],
     ['ink', 'action-soft'], ['ink-2', 'action-soft'], ['ink-2', 'violet-soft'],
