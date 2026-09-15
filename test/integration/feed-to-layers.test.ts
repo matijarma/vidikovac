@@ -55,10 +55,15 @@ describe('every layer renders the real feed output', () => {
     expect(section.querySelectorAll('.tl[data-skeleton], [aria-busy="true"], [data-action=retry]')).toHaveLength(0);
     expect(clean(section)).not.toContain(UNAVAILABLE);
     // A dash where a figure should stand is the placeholder this guards against; a title is the
-    // source's own words (Kulturpunkt writes "zrcala – psihoanaliza"), so titles are not read here.
+    // source's own words (Kulturpunkt writes "zrcala – psihoanaliza"), so titles are not read here,
+    // and neither is a line's course beside its badge (GTFS writes "Črnomerec – Sopot").
     const figures = section.querySelectorAll('.tb-h, .tb-more, .tb-empty, .tl-label, .tl-value, .tl-time, .tl-context, .tl-trail');
     expect(figures.length).toBeGreaterThan(0);
-    for (const figure of figures) expect(clean(figure), figure.outerHTML).not.toContain(DASH);
+    for (const figure of figures) {
+      const probe = figure.cloneNode(true) as Element;
+      for (const course of probe.querySelectorAll('.tl-label-title')) course.remove();
+      expect(clean(probe), figure.outerHTML).not.toContain(DASH);
+    }
   });
 
   it('shows today’s forecast as a real range', () => {

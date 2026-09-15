@@ -82,7 +82,7 @@ describe('transitProducer', () => {
     expect(bus.unit).toBe('min');
     expect(bus.valueTone).toBe('early');
     expect(bus.contextMarkup).toContain('icon-bus-front');
-    expect(bus.contextMarkup).toContain('>5<');
+    expect(bus.contextMarkup).toContain('>5 · Trg bana J. Jelačića<');
     expect(bus.labelMarkup).toContain('data-kind="bus"');
 
     const unmatched = tiles.find((t) => t.key === 'zet-rt:route:99')!;
@@ -319,12 +319,13 @@ describe('eventsProducer', () => {
     expect(tiles.some((t) => t.title === 'Predstava sada')).toBe(false);
   });
 
-  it('carries the venue when the source gives one, the source name only when it does not', () => {
+  it('names the venue first and the source after it; the source alone when there is no venue', () => {
     const withVenue = base('dogadanja', [
       { id: 'kulturpunkt:venue', module: 'dogadanja', kind: 'event', tier: 'session', title: 'U dvorani', at: '2026-09-12T18:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', venue: 'Lisinski', precision: 'time' } },
     ]);
     const tiles = eventsProducer.produce(ctx({ snapshots: { dogadanja: withVenue } }), options());
-    expect(tiles[0]!.context).toBe('Lisinski');
+    // Venue first, then the source, so the useful word survives an ellipsis (kajimafix, cross-cutting).
+    expect(tiles[0]!.context).toBe('Lisinski · Kulturpunkt');
     // The fixture's own kulturpunkt item carries no venue: falls back to the source name.
     const noVenue = eventsProducer.produce(ctx({ snapshots: { dogadanja: DOGADANJA } }), options()).find((t) => t.key === 'dogadanja:kulturpunkt:1')!;
     expect(noVenue.context).toBe('Kulturpunkt');

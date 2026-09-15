@@ -587,7 +587,7 @@ describe('renderTimeband: the band (A.4)', () => {
   it('renders each tile through the tile grammar in lane order, then the feet', () => {
     const tb = render(phone());
     const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'safety', 'hrt-news:n1', 'glasnik:issue', 'more-transit']);
+    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'safety', 'hrt-news:n1', 'glasnik:issue', 'next-head', 'next:dogadanja:friAllDay', 'next:dogadanja:fri17', 'more-transit']);
     expect(sada.querySelector('.tl[data-variant="value"][data-domain="transit"][data-testid="tile-transit"]')).not.toBeNull();
     expect(sada.querySelector('.tl[data-variant="band"][data-domain="safety"][data-level="calm"]')).not.toBeNull();
     expect(text(tb.querySelector('[data-testid="tb-lane-danas"] .tl-time'))).toBe('cijeli dan');

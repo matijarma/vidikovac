@@ -291,8 +291,11 @@ describe('grad-sada (Sada, the time band)', () => {
     expect(text(gazette.querySelector('.tl-label'))).toBe('Glasnik');
     expect(text(sada.querySelector('[data-testid=tile-works] .tl-trail'))).toBe('1');
     expect(text(sada.querySelector('[data-testid=tile-closures] .tl-title'))).toBe('Grada Vukovara');
-    // Sada reads in domain order: what moves first, what the city decided last.
-    expect([...sada.querySelectorAll('.tl')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic']);
+    // Sada reads in domain order: what moves first, what the city decided last; on the phone the two compact Zatim rows (the next starts) follow the lane's own tiles.
+    expect([...sada.querySelectorAll('.tl:not([data-compact])')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic']);
+    const compact = [...sada.querySelectorAll('.tl[data-compact]')];
+    expect(compact.map((tile) => tile.getAttribute('data-domain'))).toEqual(['events', 'events']);
+    expect(sada.lastElementChild?.previousElementSibling?.hasAttribute('data-compact') || sada.lastElementChild?.hasAttribute('data-compact')).toBe(true);
   });
 
   it('paints a loading source as skeleton tiles in its lane and only announces the word; a failed source offers the retry', () => {
