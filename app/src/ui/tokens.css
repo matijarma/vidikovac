@@ -100,8 +100,8 @@
   --palette-light-text-muted: #4a5178;
   --palette-light-text-subtle: #5a6187;
   --palette-light-label: #363d73;
-  --palette-light-accent: #1428d8;
-  --palette-light-accent-deep: #0e1ca6;
+  --palette-light-accent: #03409c;
+  --palette-light-accent-deep: #00327e;
   --palette-light-on-accent: #ffffff;
   --palette-light-warning: #8a5800;
   --palette-light-danger: #b3271e;
@@ -112,7 +112,7 @@
   --palette-light-border-strong: rgba(12, 18, 80, 0.34);
   --palette-light-glass: rgba(251, 250, 246, 0.9);
   --palette-light-scrim: rgba(12, 18, 80, 0.42);
-  --palette-light-glow: rgba(20, 40, 216, 0.28);
+  --palette-light-glow: rgba(3, 64, 156, 0.28);
   --palette-light-shadow-soft: 0 1px 2px rgba(12, 18, 80, 0.05), 0 6px 20px rgba(12, 18, 80, 0.07);
   --palette-light-shadow-md: 0 2px 4px rgba(12, 18, 80, 0.06), 0 12px 32px rgba(12, 18, 80, 0.12);
   --palette-light-shadow-heavy: 0 16px 48px rgba(12, 18, 80, 0.2);
@@ -157,8 +157,8 @@
     --palette-light-text-muted: oklch(44.58% 0.0647 275.7);
     --palette-light-text-subtle: oklch(50.21% 0.0612 275.9);
     --palette-light-label: oklch(38.22% 0.0917 275.6);
-    --palette-light-accent: oklch(42.94% 0.2554 266.0);
-    --palette-light-accent-deep: oklch(35.31% 0.2099 266.2);
+    --palette-light-accent: oklch(40.07% 0.1605 260.1);
+    --palette-light-accent-deep: oklch(34.21% 0.1381 259.8);
     --palette-light-on-accent: oklch(100% 0 0);
     --palette-light-warning: oklch(50.38% 0.1082 71.5);
     --palette-light-danger: oklch(50.21% 0.1776 28.9);
@@ -219,7 +219,7 @@
   --shadow-md: var(--palette-light-shadow-md);
   --shadow-heavy: var(--palette-light-shadow-heavy);
   /* Tinted fills, alpha over any surface; an OKLCH mix replaces them below. */
-  --tint-action: rgba(20, 40, 216, 0.1);
+  --tint-action: rgba(3, 64, 156, 0.1);
   --tint-weather: rgba(138, 88, 0, 0.1);
   --tint-events: rgba(107, 63, 160, 0.1);
   --tint-urgency: rgba(179, 39, 30, 0.1);

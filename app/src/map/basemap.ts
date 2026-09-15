@@ -95,8 +95,8 @@ export function spriteUrl(theme: MapTheme, origin?: string): string {
 const LIGHT_OVERRIDES: Partial<Flavor> = {
   background: '#f4f2ec',
   earth: '#f4f2ec',
-  park_a: '#dfe4cf',
-  park_b: '#d4dcc2',
+  park_a: '#e3e6d6',
+  park_b: '#dbdfcc',
   wood_a: '#cfd8bf',
   wood_b: '#c4cfb3',
   scrub_a: '#e4e6d2',
@@ -106,7 +106,7 @@ const LIGHT_OVERRIDES: Partial<Flavor> = {
   beach: '#ece7d7',
   aerodrome: '#e9e6dc',
   runway: '#dbd9ce',
-  zoo: '#dfe4cf',
+  zoo: '#e3e6d6',
   military: '#e9e6dc',
   hospital: '#f0e6e2',
   industrial: '#e9e6dc',
@@ -182,8 +182,8 @@ const LIGHT_OVERRIDES: Partial<Flavor> = {
 const DARK_OVERRIDES: Partial<Flavor> = {
   background: '#0b1150',
   earth: '#0b1150',
-  park_a: '#0f1a5a',
-  park_b: '#0d1755',
+  park_a: '#182060',
+  park_b: '#151d5c',
   wood_a: '#0f1a5a',
   wood_b: '#0d1755',
   scrub_a: '#0f1a5a',
@@ -287,7 +287,7 @@ export interface OverlayPalette {
 }
 
 /* The mode colours repeat the interface roles value for value: a tram and
- * its route line are the accent role (--tone-accent, #1428d8 light, #f4f2ec
+ * its route line are the accent role (--tone-accent, #03409c light, #f4f2ec
  * dark, paper-on-night so its text inverts to the dark ink); a bus and its
  * route line the transit role (--tone-transit, #0c1250 light, the same hex
  * as ink -- #9fb4ff dark); a closure the urgency role (#b3271e, #ff9d9d).
@@ -298,13 +298,13 @@ export interface OverlayPalette {
  * literals, so these are the token hexes written out; tokens.css stays
  * their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
-  tram: '#1428d8',
+  tram: '#03409c',
   tramText: '#ffffff',
   bus: '#0c1250',
   busText: '#ffffff',
   other: '#4a5178',
   otherText: '#fbfaf6',
-  routeTram: '#1428d8',
+  routeTram: '#03409c',
   routeBus: '#0c1250',
   stopFill: '#f4f2ec',
   stopStroke: '#4a5178',
@@ -315,7 +315,7 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   place: '#b8731a',
   selection: '#0c1250',
   selectionHalo: '#fbfaf6',
-  screenStop: '#1428d8',
+  screenStop: '#03409c',
 });
 
 export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({

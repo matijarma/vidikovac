@@ -36,8 +36,8 @@ Only `--palette-light-*` and `--palette-dark-*` change. The `--color-*` assignme
 | `--palette-light-text-muted` | #4a5178 | context lines, 12 px | 6.85 : 1 (6.26 on surface-2) |
 | `--palette-light-text-subtle` | #5a6187 | placeholders, chevrons | 5.4 : 1 |
 | `--palette-light-label` | #363d73 | uppercase 12 px labels | 9.05 : 1 |
-| `--palette-light-accent` | #1428d8 | Zagreb blue: tram badge, primary button, "?" in wordmark, ring | 8.07 : 1 · white on it 9.03 |
-| `--palette-light-accent-deep` | #0e1ca6 | hover, links on tint | 9.88 on surface-2 |
+| `--palette-light-accent` | #03409c | Zagreb blue: tram badge, primary button, "?" in wordmark, ring. A deep royal blue (oklch 40% 0.16 260), the ZET-livery family; the first value, #1428d8, sat at the hyperlink hue and chroma and read as a link in bulk (15. 9. 2026) | 8.46 : 1 · white on it 9.47 |
+| `--palette-light-accent-deep` | #00327e | hover, links on tint | 9.75 on surface-2 |
 | `--palette-light-on-accent` | #ffffff | text on accent | 9.03 : 1 |
 | `--palette-light-transit` | #0c1250 | bus / bike / parking capsule (= ink) | white on it 17.2 |
 | `--palette-light-warning` | #8a5800 | komunalno (radovi, odvoz), "rani" | 5.40 : 1 |

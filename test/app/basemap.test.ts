@@ -96,16 +96,16 @@ describe('the same-origin Protomaps v4 basemap', () => {
   // transit role, which equals ink in the light face); land moves from
   // mineral green to paper by day and ultramarine by night.
   it('paints trams in the accent blue and buses in ink, in both faces (R-D3)', () => {
-    expect(OVERLAY_LIGHT.tram).toBe('#1428d8');
+    expect(OVERLAY_LIGHT.tram).toBe('#03409c');
     expect(OVERLAY_LIGHT.bus).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.routeTram).toBe('#1428d8');
+    expect(OVERLAY_LIGHT.routeTram).toBe('#03409c');
     expect(OVERLAY_LIGHT.routeBus).toBe('#0c1250');
     expect(OVERLAY_LIGHT.closure).toBe('#b3271e');
     expect(OVERLAY_LIGHT.stopFill).toBe('#f4f2ec');
     expect(OVERLAY_LIGHT.label).toBe('#0c1250');
     expect(OVERLAY_LIGHT.halo).toBe('#fbfaf6');
     expect(OVERLAY_LIGHT.selection).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.screenStop).toBe('#1428d8');
+    expect(OVERLAY_LIGHT.screenStop).toBe('#03409c');
     expect(OVERLAY_DARK.tram).toBe('#f4f2ec');
     expect(OVERLAY_DARK.tramText).toBe('#0b1150');
     expect(OVERLAY_DARK.bus).toBe('#9fb4ff');
