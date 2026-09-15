@@ -613,14 +613,14 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(selected.side.match(/data-testid="k-delays"/)).not.toBeNull();
     expect(selected.side).not.toContain('k-block--board');
   });
-  it('a warning row carries its level as a badge word with its shape; the Sada weather block is the same lockup', () => {
+  it('a warning row carries its level as a badge word with its shape; the Sada column carries no weather block (the header is the weather)', () => {
     const cap = snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe', summary: 'Jaki udari vjetra.' })]);
     const { side } = paired('zrak-i-nebo', { snapshots: { ...all(), 'dhmz-cap': cap } });
     expect(side).toContain('<span class="badge k-badge" data-tone="severe">narančasto upozorenje</span> Grmljavina');
     expect(side).not.toContain('<strong>narančasto upozorenje</strong>');
     const sada = paired('grad-sada');
-    expect(sada.side).toContain('k-weather-icon');
-    expect(sada.side).not.toContain('k-weather-sun');
+    expect(sada.side).not.toContain('k-weather');
+    expect(sada.side).toContain('data-testid="k-closures"');
   });
   it('the strip pill and the coverage sentence exist in both catalogues; the hostname sentence carries a {host} slot', () => {
     expect(hr.safety.hitno).toBe('Sigurnost');
