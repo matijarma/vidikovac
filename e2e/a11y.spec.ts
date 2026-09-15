@@ -224,7 +224,8 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
-    await page.goto(kioskUrl);
+    // D13's pin: kiosk-map and kiosk-lines only exist while the Promet scene shows.
+    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
     await expect(page.getByTestId('kiosk-lines')).toContainText('6');
