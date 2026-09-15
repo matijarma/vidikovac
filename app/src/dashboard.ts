@@ -464,6 +464,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const stop = session.snapshot().screen?.stop;
     if (!stop || stop.id === lastRunStop) return;
     lastRunStop = stop.id;
+    // A new stop: the previous stop's schedule leaves the band at once rather than posing as this one until the fetch answers.
+    lastRun = null;
     (deps.loadLastRun ?? loadLastRun)(stop.id).then((snapshot) => {
       if (disposed || lastRunStop !== stop.id) return;
       lastRun = snapshot;
