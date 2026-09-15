@@ -443,10 +443,25 @@ test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} p
 });
 
 // --- 7. zoom-compact ----------------------------------------------------------------------
-/** The zoom-compact facts at 200% text: no overflow in the header or the tab bar, the kvart picker present but hidden in the compact header, the current tab's label whole. */
-async function zoomCompactIssues(page: Page): Promise<string[]> {
-  return page.evaluate(({ header, tabbar }) => {
+/** The five time words the segments carry (A.4): one pill each, in time order. */
+const SEGMENT_COUNT = 5;
+
+/**
+ * The zoom-compact facts at 200% text. The document keeps the viewport's width
+ * (a document wider than the viewport widens the layout viewport under mobile
+ * emulation, the fixed tab bar follows it and a tab's tap lands on a tile);
+ * no overflow in the header or the tab bar; the kvart picker present but
+ * hidden in the compact header; on Sada every time segment shows its whole
+ * word (WCAG 1.4.4: a pill that clips or ellipsises one loses content for a
+ * sighted reader while its aria-label keeps it from AT only); the current
+ * tab's label whole. `segments` says whether Sada's segments are expected on
+ * the page: the Kvart panel replaces the workspace, so they are not there.
+ */
+async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: { segments: boolean }): Promise<string[]> {
+  return page.evaluate(({ header, tabbar, width, tolerance, segments, count }) => {
     const out: string[] = [];
+    const docWidth = document.documentElement.scrollWidth;
+    if (docWidth > width + tolerance) out.push(`the document widens past the ${width} px viewport at 200%: scrollWidth ${docWidth} px, layout viewport ${window.innerWidth} px; a widened page moves the fixed tab bar out from under a finger`);
     for (const [label, sel] of [['header', header], ['tab bar', tabbar]] as const) {
       const el = document.querySelector<HTMLElement>(sel);
       if (!el || el.getBoundingClientRect().height <= 0) { out.push(`the ${label} ${sel} is missing or hidden`); continue; }
@@ -457,6 +472,30 @@ async function zoomCompactIssues(page: Page): Promise<string[]> {
     else {
       const p = pick.getBoundingClientRect();
       if (p.width > 0 && p.height > 0) out.push(`the compact header must hide the kvart picker at 200%; [data-testid=kvart-pick] measures ${Math.round(p.width)}×${Math.round(p.height)} px`);
+    }
+    if (segments) {
+      const seg = document.querySelector<HTMLElement>('[data-testid=tb-seg]');
+      const spans = seg ? [...seg.querySelectorAll<HTMLElement>('.tb-seg-btn > span')] : [];
+      if (!seg || seg.getBoundingClientRect().height <= 0) out.push('the time segments [data-testid=tb-seg] must show on the phone at 200%');
+      else if (spans.length !== count) out.push(`the segments carry ${spans.length} words; ${count} time words expected`);
+      for (const span of spans) {
+        const word = span.textContent?.trim() ?? '';
+        const pill = span.getBoundingClientRect();
+        if (pill.width < 1 || pill.height < 1) { out.push(`the segment "${word}" has no box at 200%`); continue; }
+        // The text's own laid-out extent (a Range rect: layout geometry, unchanged by clipping or by the ellipsis
+        // text-overflow paints over it) against the pill it is painted in. The pill has no border, so its rect is the
+        // padding box overflow: hidden clips at; text inside it is whole even where it eats the padding, text past
+        // it is lost. scrollWidth is not the measure here: a flex container counts its end padding as scrollable
+        // overflow, so it reports a word that merely touches the padding as overflowing.
+        const range = document.createRange();
+        range.selectNodeContents(span);
+        const text = range.getBoundingClientRect();
+        const lostStart = Math.round(pill.left - text.left);
+        const lostEnd = Math.round(text.right - pill.right);
+        if (lostStart > tolerance || lostEnd > tolerance) {
+          out.push(`the segment "${word}" is not whole at 200%: its text runs ${Math.round(text.width)} px in a ${Math.round(pill.width)} px pill, ${Math.max(0, lostStart)} px lost at the start and ${Math.max(0, lostEnd)} px at the end; the time words never clip or ellipsise`);
+        }
+      }
     }
     const tab = document.querySelector<HTMLElement>('.ki-tab[aria-current="page"]');
     const text = tab?.querySelector<HTMLElement>('.ki-nav-label');
@@ -470,20 +509,20 @@ async function zoomCompactIssues(page: Page): Promise<string[]> {
       if (r.left < t.left - 1 || r.right > t.right + 1) out.push(`the current tab's label "${text.textContent?.trim()}" spills out of its tab cell at 200%`);
     }
     return out;
-  }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar });
+  }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar, width: viewport.width, tolerance: EDGE_TOLERANCE_PX, segments, count: SEGMENT_COUNT });
 }
 
-test('at 200% text the header and the tab bar have no horizontal overflow, the compact header hides the kvart picker, and the current tab keeps a whole label, on Sada and with the Kvart tab open', async ({ page }) => {
+test('at 200% text the document keeps its width, the header and the tab bar have no horizontal overflow, the compact header hides the kvart picker, every time segment keeps a whole word and the current tab keeps a whole label, on Sada and with the Kvart tab open', async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await settle(page, fixture);
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await page.waitForTimeout(300);
-  expect(await zoomCompactIssues(page), 'zoom-compact state at 200% text on Sada').toEqual([]);
+  expect(await zoomCompactIssues(page, PHONE, { segments: true }), 'zoom-compact state at 200% text on Sada').toEqual([]);
   await page.getByTestId('tab-kvart').click();
   await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
   await expect(page.getByTestId('tab-kvart'), 'the Kvart tab is the current one, so its label is the measured one').toHaveAttribute('aria-current', 'page');
   await page.waitForTimeout(300);
-  expect(await zoomCompactIssues(page), 'zoom-compact state at 200% text with the Kvart tab open').toEqual([]);
+  expect(await zoomCompactIssues(page, PHONE, { segments: false }), 'zoom-compact state at 200% text with the Kvart tab open').toEqual([]);
 });
 
 // --- 8. landing -----------------------------------------------------------------------------
