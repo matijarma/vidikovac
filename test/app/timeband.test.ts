@@ -11,6 +11,7 @@ import {
 import { weatherStatusMarkup, weatherStatus } from '../../app/src/experience/weather-status';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { LayerContext } from '../../app/src/layers/types';
+import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { createElementFromHTML } from '../../app/src/ui/dom/escape';
 import { text } from './helpers';
 
@@ -650,10 +651,25 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
     expect(sutra.tiles.some((t) => t.key === 'dogadanja:kulturpunkt:1')).toBe(true);
   });
 
-  it('never asks the last-run producer while FEED_LASTRUN is off: no lastrun tile anywhere on the band', () => {
-    const model = buildTimeband(realCtx());
-    const keys = model.lanes.flatMap((l) => l.tiles.map((t) => t.key));
-    expect(keys.some((k) => k.includes('lastrun'))).toBe(false);
+  it('the last-run producer (FEED_LASTRUN on) stands on ctx.lastRun alone: no tile without it; with it, two Zadnji polazak tiles in večeras that stay unbadged while zet-rt is stale', () => {
+    const bare = buildTimeband(realCtx());
+    expect(bare.lanes.flatMap((l) => l.tiles.map((t) => t.key)).some((k) => k.includes('lastrun'))).toBe(false);
+
+    const lastRun: LastRunSnapshot = {
+      status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
+      routes: { '6': { '2026-09-11': '24:27' }, '11': { '2026-09-11': '24:09' }, '12': { '2026-09-11': '23:45' } },
+    };
+    const staleRt: ModuleSnapshot = { ...REAL_SNAPSHOTS['zet-rt']!, status: 'stale', staleSince: '2026-09-11T12:00:00Z' };
+    const model = buildTimeband({ ...realCtx(), lastRun, snapshots: { ...REAL_SNAPSHOTS, 'zet-rt': staleRt } });
+    const tiles = lane(model, 'veceras').tiles.filter((t) => t.testid === 'tile-lastrun');
+    expect(tiles.map((t) => t.key)).toEqual(['transit:lastrun:11', 'transit:lastrun:6']);
+    for (const tile of tiles) {
+      expect(tile.stale).toBeUndefined();
+      expect(tile.label).toBe('Zadnji polazak');
+      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.labelMarkup).toContain('data-size="xs"');
+    }
+    expect(lane(model, 'sada').tiles.filter((t) => t.testid === 'tile-transit').every((t) => t.stale)).toBe(true);
   });
 
   it('is the same producer list DEFAULT_PRODUCERS exports, in the sada reading order the plan names', () => {

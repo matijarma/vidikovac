@@ -11,8 +11,8 @@ export const FLAGS = Object.freeze({
   FEED_PARKING: false,
   /** The kvart's next waste pickup: as above. */
   FEED_WASTE: false,
-  /** The last departure from the screen's stop, from GTFS static on disk: T3.1 turns it on with the producer. */
-  FEED_LASTRUN: false,
+  /** The last departure from the screen's stop, from GTFS static on disk (scripts/gtfs-lastrun.mjs, core/lastrun.ts): on since T3.1. */
+  FEED_LASTRUN: true,
   /** Web push for the bell: off; the notify sheet offers its toggles as "istakni" highlights and says so. */
   PUSH: false,
 });

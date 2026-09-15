@@ -11,7 +11,9 @@ import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { zagrebTime } from './format';
 import { parseSelection, publicItemKey, selectionParams, type CastReason, type CastState, type PublicSelection, type ScreenContext, type ScreenStop } from './core/contracts';
 import { createFeedStore } from './core/feed-store';
+import { FLAGS } from './core/flags';
 import { createKvartStore, kvartLabel, resolveKvart, type KvartChoice } from './core/kvart-store';
+import { loadLastRun, type LastRunSnapshot } from './core/lastrun';
 import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './core/notify-store';
 import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
@@ -102,6 +104,8 @@ export interface DashboardDeps {
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   loadNetwork?: () => Promise<Network | null>;
+  /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
+  loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
   onShare?: (url: string, title: string) => void;
   onExport?: (kind: ExportKind, module: ModuleId) => void;
@@ -165,6 +169,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
   let stops: readonly ScreenStop[] | null = null;
   let stopsRequested = false;
+  /** The screen stop's last scheduled departures (T3.1, FEED_LASTRUN): fetched once per stop, null until it answers. */
+  let lastRun: LastRunSnapshot | null = null;
+  let lastRunStop: string | null = null;
   let networkPromise: Promise<Network | null> | null = null;
   const loadNetworkOnce = (): Promise<Network | null> => {
     networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
@@ -352,13 +359,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       kvart, kvartLabel: kvartLabel(i18n, kvart), kvartChoice: kvartStore.snapshot(), notify: notifyStore.snapshot(),
-      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined,
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
     };
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function render(): void {
     if (saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
+    ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
     const focused = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
@@ -447,6 +455,21 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       render();
     }, () => {
       // The walking row stays absent; nothing else depends on the catalogue.
+    });
+  }
+
+  /** The stop's last-departure file, once per stop and only behind FEED_LASTRUN; a failed answer leaves the tile absent. */
+  function ensureLastRun(): void {
+    if (!FLAGS.FEED_LASTRUN) return;
+    const stop = session.snapshot().screen?.stop;
+    if (!stop || stop.id === lastRunStop) return;
+    lastRunStop = stop.id;
+    (deps.loadLastRun ?? loadLastRun)(stop.id).then((snapshot) => {
+      if (disposed || lastRunStop !== stop.id) return;
+      lastRun = snapshot;
+      render();
+    }, () => {
+      // The loader answers down itself; a rejection here is the injected dependency's, and the tile stays absent.
     });
   }
 

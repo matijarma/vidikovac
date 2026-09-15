@@ -15,12 +15,15 @@ import { KVART_STORAGE_KEY } from '../../app/src/core/kvart-store';
 import { NOTIFY_STORAGE_KEY } from '../../app/src/core/notify-store';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
 import { loadStops } from '../../app/src/core/screens';
+import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 
 stubSessionStorage();
 stubLocalStorage();
 // The workspace's fallback catalogue is not an upstream call in a unit test.
 vi.mock('../../app/src/core/screens', () => ({ loadStops: vi.fn(async () => []) }));
+// The stop's last-departure file is a static fetch too; the resolver beside it stays real for the band's tiles.
+vi.mock('../../app/src/core/lastrun', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../app/src/core/lastrun')>()), loadLastRun: vi.fn(async () => null) }));
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const EXPIRES = NOW + 10 * 60_000; // 14:42
@@ -1432,5 +1435,53 @@ describe('the notify sheet (T2.7, D7)', () => {
     const dialog = document.querySelector<HTMLElement>('[data-testid=notify-sheet]')!;
     expect(dialog.querySelectorAll('[role=switch]')).toHaveLength(4);
     expect(dialog.querySelector('[data-testid=notify-waste]')).not.toBeNull();
+  });
+});
+
+describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
+  const SCREEN = { kind: 'venue' as const, expiresAt: null, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] } };
+  const snapshot: LastRunSnapshot = {
+    status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
+    routes: { '6': { '2026-09-11': '24:27' }, '11': { '2026-09-11': '24:09' }, '12': { '2026-09-11': '23:45' } },
+  };
+
+  it('loads the stop’s file once per session once a screen stop exists and threads it into the band: two Zadnji polazak tiles in večeras, no second load on a poll', async () => {
+    const loadLastRun = vi.fn(async () => snapshot);
+    const { root, session, tick } = mount({ deps: { loadLastRun } });
+    expect(loadLastRun).not.toHaveBeenCalled();
+    session.join('scanner', SCREEN);
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(1);
+    expect(loadLastRun).toHaveBeenCalledWith('106_1');
+    const tiles = [...root.querySelectorAll<HTMLElement>('[data-testid=tile-lastrun]')];
+    expect(tiles).toHaveLength(2);
+    expect(tiles.every((t) => t.closest('[data-testid=tb-lane-veceras]') !== null)).toBe(true);
+    expect(tiles[0]!.getAttribute('aria-label')).toBe('00:09, Zadnji polazak, Črnomerec - Dubec, po rasporedu · ZET GTFS'); // the xs badge replaces the kicker visually; the name says it
+    expect(text(tiles[0])).toContain('00:09');
+    expect(text(tiles[0])).toContain('po rasporedu · ZET GTFS');
+    expect(text(tiles[1])).toContain('00:27');
+    expect(tiles[0]!.querySelector('.line')?.getAttribute('data-size')).toBe('xs');
+    tick();
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(1);
+    expect(root.querySelectorAll('[data-testid=tile-lastrun]')).toHaveLength(2);
+  });
+
+  it('asks nothing while the session has no screen stop', async () => {
+    const loadLastRun = vi.fn(async () => snapshot);
+    const { session } = mount({ deps: { loadLastRun } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+    await flush();
+    expect(loadLastRun).not.toHaveBeenCalled();
+  });
+
+  it('a stop without a file, or a down answer, leaves the tile absent and the band whole', async () => {
+    for (const answer of [null, { status: 'down' as const, fetchedAt: '2026-09-11T12:00:00Z' }]) {
+      const { root, session } = mount({ deps: { loadLastRun: vi.fn(async () => answer) } });
+      session.join('scanner', SCREEN);
+      await flush();
+      expect(root.querySelector('[data-testid=tile-lastrun]')).toBeNull();
+      expect(root.querySelector('[data-testid=tb]')).not.toBeNull();
+    }
   });
 });

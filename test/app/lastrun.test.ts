@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { lastDeparture, loadLastRun, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
-import { zagrebTime } from '../../app/src/format';
+import { lastRunProducer } from '../../app/src/experience/producers';
+import { bucketOf, columnsFor } from '../../app/src/experience/timeband';
+import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import { zagrebDayKey, zagrebTime } from '../../app/src/format';
 
 // The last scheduled departure per line from the screen's stop (plan A.6, D7,
 // Task T3.1): one static JSON per stop, written by scripts/gtfs-lastrun.mjs
@@ -116,5 +120,35 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
     expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
     expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelačića)', () => {
+  const file = JSON.parse(readFileSync(new URL('../../app/public/data/lastrun/106_1.json', import.meta.url), 'utf8')) as { generatedAt: string; validUntil: string; source: string; routes: LastRunRoutes };
+  const snapshot: LastRunSnapshot = { status: 'live', fetchedAt: file.generatedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes };
+  // 14:32 Zagreb on the day the file was generated: inside its window whatever day the script last ran.
+  const now = Date.parse(`${zagrebDayKey(file.generatedAt)}T12:32:00Z`);
+
+  it('is the script’s shape and names its source and the fixture lines', () => {
+    expect(file.source).toBe('ZET GTFS');
+    expect(Date.parse(file.validUntil)).toBeGreaterThan(now);
+    for (const line of ['6', '11', '12', '13', '14', '17']) expect(Object.keys(file.routes), line).toContain(line);
+    for (const table of Object.values(file.routes)) for (const [day, time] of Object.entries(table)) {
+      expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(time).toMatch(/^\d{2}:\d{2}$/);
+    }
+  });
+  it('gives the Sada band two Zadnji polazak tiles in večeras with xs badges, and never the word dolazak', () => {
+    const hr = createDefaultI18n('hr');
+    const columns = columnsFor(hr, now);
+    const tiles = lastRunProducer.produce({ i18n: hr, snapshots: {}, now, lastRun: snapshot }, { columns, surface: 'desktop', kvart: null, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) });
+    expect(tiles).toHaveLength(2);
+    for (const tile of tiles) {
+      expect(tile.label).toBe('Zadnji polazak');
+      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.labelMarkup).toContain('data-size="xs"');
+      expect(bucketOf(now, columns, tile.at)).toBe('veceras');
+      expect(JSON.stringify(tile).toLowerCase()).not.toContain('dolazak');
+    }
   });
 });
