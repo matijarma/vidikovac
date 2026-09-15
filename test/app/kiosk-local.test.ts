@@ -332,6 +332,23 @@ describe('local content from the stop-scoped teaser', () => {
     expect(host.querySelectorAll('.k-row[hidden]')).toHaveLength(0);
     expect(host.querySelector('.k-row-more')).toBeNull();
   });
+  // T2.11 fix round 3: a cramped compact column (a long real street name
+  // beside another block) can leave a block too short even for one row plus
+  // its own "prikazano N od M" line; the floor is zero, not one, so the
+  // line that discloses the true count is never itself the thing clipped.
+  it('drops to zero rows, never clipping the coverage line, when even one row does not fit', () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<article class="k-block"><div class="k-block-body"><ul class="k-rows" data-total="39">${[1, 2].map((n) => `<li class="k-row">${n}</li>`).join('')}</ul></div></article>`;
+    // A 64 px body: two rows of 62 px each never fit, and neither does one row (62) plus the note (28).
+    const measure = (el: HTMLElement) => {
+      const visible = [...el.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden).length;
+      const note = el.querySelector('.k-row-more') ? 28 : 0;
+      return { client: 64, scroll: visible * 62 + note };
+    };
+    fitRows(host, hr.paired.coverage, measure);
+    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(0);
+    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 0 od 39');
+  });
   // T5.4: a block sized to its content (the portrait column under the map)
   // reads its body a rounding pixel over its box (clientHeight 159 against
   // scrollHeight 160 for a 159.4 px body, nothing cut); a row that fits by
