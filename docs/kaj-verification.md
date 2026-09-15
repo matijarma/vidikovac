@@ -330,3 +330,46 @@ dokumenta ne mijenja provjerenu implementaciju.
 
 Osobni i financijski podaci prijavitelja, video-poveznica i predaja kroz
 e-Pisarnicu nisu mijenjani niti izvršeni ovom implementacijom.
+
+## Pisani prijedlog projekta kao HTML, 15. rujna 2026.
+
+Prijedlog projekta za Javni poziv sastavlja `scripts/build-prijava.mjs` iz tekstualnih
+matica (`docs/prijava/prijedlog-projekta.md`, `plan-provedbe.md`,
+`obrazac-3-financijski-plan.md`, `rizici-i-odgovori.md`), slika pod
+`docs/prijava/figures/` (SVG dijagrami, HTML tablice i pločice, statične replike
+telefona i javnog zaslona sa stvarnim QR kodom i shemom tramvajske mreže iz ZET-ova
+GTFS-a) i okvira dokumenta pod `docs/prijava/src/`, na tokenima i gramatici pločica
+same aplikacije. Dvije inačice iz istog izvora: samostalna datoteka
+`docs/prijava/prijedlog-projekta.html` (fontovi kao data URI, skripta u dokumentu,
+484 kB) i `app/prijava/index.html` za adresu `/prijava/` pod CSP-om aplikacije (vanjska
+skripta, fontovi s iste domene, 313 kB). Tekst polja Obrasca 2.2 je
+`docs/prijava/obrazac-2-2.md`. Ponovna izgradnja: `npm run build:prijava`.
+
+Provjere samostalne datoteke (Chromium kroz Playwright, 15. 9. 2026.): bez pogrešaka u
+konzoli i bez ijednog mrežnog zahtjeva izvan datoteke; bez vodoravnog prelijevanja na
+390, 768 i 1440 px u svijetloj i tamnoj temi; radi bez JavaScripta; axe (wcag2a, wcag2aa,
+wcag22aa, best-practice) bez nalaza na 1440 px u obje teme i na 390 px; ispis u A4
+kroz Chromiumov ispis daje 39 stranica sa svakom slikom cijelom (replike se u ispisu
+skaliraju kroz `zoom`, ne kroz `transform`, jer Chromium izostavlja transformirani
+sadržaj preko prijeloma). Provjera parnosti teksta: 224 odlomaka, stavki i ćelija matica
+nalazi se u HTML-u doslovno; dvije ćelije tablice izvora slika prikazuje kao pilulu i
+napomenu. Testovi dokumenata (`test/docs`) i čuvari kopije (`test/app/copy-guards.test.ts`)
+prolaze nad novim tekstom i nad `app/prijava/index.html`; `e2e/a11y.spec.ts` obuhvaća
+`/prijava/` na 390 i 1920 px u obje teme (jedan h1: replike zaslona spuštaju svoj h1 u
+odlomak pri izgradnji). Vrijednosti u traci "Sada u Zagrebu" i u replikama su snimka
+otvorenih izvora od 15. 9. 2026. u 19:51 (275 vozila, 39 zatvaranja, 21,4 °C, tri potresa u
+72 sata, DHMZ mirno, naslov HRT-a); stanja linija, broj vozila po liniji, najbliže zatvaranje
+i radovi u replikama ilustrativni su i tako potpisani. Na adresi `/prijava/` traka se pri
+otvaranju osvježava s `/api/teaser`.
+
+Prije sastavljanja tekst su pročitali pet neovisnih čitača (član Povjerenstva prema
+Prilogu 1, tehnički provjeravatelj nad repozitorijem, čitač privatnosti i licenci, urednik
+hrvatskoga jezika, čitač dosljednosti među dokumentima) i vratili 96 nalaza; primijenjeni
+su svi osim odluka vlasnika (naziv projekta, opaska autora, rečenica o šest stupnjeva,
+popis prethodnih projekata). Ispravci koji su promijenili tvrdnje: prizor Grad javnog
+zaslona ne prikazuje akte Službenog glasnika (razina sesije); list Obavijesti ima tri
+prekidača; zadnji polazak je pločica trake Sada, ne Prometa; istodobno vrijede najviše tri
+koda; Firefox 110 umjesto 104 zbog upita spremnika; izvještaj o pouzdanosti izvora dolazi
+u fazi M5 i M7; Grad odabire lokaciju, prijavitelj predlaže; šest neotvorenih iznimaka
+među izvorima; OpenStreetMap u tablici izvora; `/privatnost` više ne kaže da je repozitorij
+privatan i navodi sve što ostaje u localStorageu.

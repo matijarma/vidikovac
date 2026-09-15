@@ -19,7 +19,7 @@
     // Access-gated operator page. The HTML pages pass through the Worker too, only
     // so their response can carry Cache-Control: no-transform (the edge would
     // otherwise inject the zone's Web Analytics beacon, which the CSP blocks).
-    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*", "/", "/d", "/d/", "/s", "/s/", "/kiosk", "/kiosk/", "/izvori", "/izvori/", "/privatnost", "/privatnost/", "/pristupacnost", "/pristupacnost/"],
+    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*", "/", "/d", "/d/", "/s", "/s/", "/kiosk", "/kiosk/", "/izvori", "/izvori/", "/privatnost", "/privatnost/", "/pristupacnost", "/pristupacnost/", "/prijava", "/prijava/"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
@@ -45,6 +45,6 @@
   "observability": { "enabled": true, "head_sampling_rate": 0.05 },
   "build": {
     "command": "npm run build",
-    "watch_dir": ["worker", "app/src", "app/index.html", "app/d", "app/s", "app/kiosk", "app/izvori", "app/privatnost", "app/pristupacnost"]
+    "watch_dir": ["worker", "app/src", "app/index.html", "app/d", "app/s", "app/kiosk", "app/izvori", "app/privatnost", "app/pristupacnost", "app/prijava"]
   }
 }

@@ -38,6 +38,7 @@ export default defineConfig({
         izvori: page('app/izvori/index.html'),
         privatnost: page('app/privatnost/index.html'),
         pristupacnost: page('app/pristupacnost/index.html'),
+        prijava: page('app/prijava/index.html'),
       },
     },
   },

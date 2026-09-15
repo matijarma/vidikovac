@@ -1,0 +1,201 @@
+<div class="fg-scroll" id="f-izvori" tabindex="0" role="region" aria-label="Registar izvora podataka; tablica se može pomicati vodoravno">
+  <table class="fg-table">
+    <caption><span>Registar izvora podataka: što je u prototipu i što donosi plan provedbe</span></caption>
+    <colgroup>
+      <col style="width: 17%">
+      <col style="width: 21%">
+      <col style="width: 32%">
+      <col style="width: 9%">
+      <col style="width: 8%">
+      <col style="width: 13%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th scope="col" class="kicker">Izvor</th>
+        <th scope="col" class="kicker">Skup</th>
+        <th scope="col" class="kicker">Licenca ili uvjet</th>
+        <th scope="col" class="kicker">Osvježavanje</th>
+        <th scope="col" class="kicker">Razina</th>
+        <th scope="col" class="kicker">Stanje</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">Grad Zagreb, data.zagreb.hr</th>
+        <td>Zatvaranje prometnica</td>
+        <td>Otvorena dozvola</td>
+        <td class="fg-when">3 min</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Grad Zagreb, prostorni slojevi (data.zagreb.hr, ArcGIS)</th>
+        <td>Gradske četvrti, zborna mjesta civilne zaštite</td>
+        <td>Otvorena dozvola prema skupovima na data.zagreb.hr; ArcGIS servis Grada sam ne navodi licencu</td>
+        <td class="fg-when">dnevno</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Grad Zagreb, prostorni slojevi</th>
+        <td>Ljekarne, vatrogasci, policija, javni zdenci, javni WC, knjižnice, muzeji, parkovi, biciklističke staze</td>
+        <td>Otvorena dozvola</td>
+        <td class="fg-when">dnevno</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Grad Zagreb</th>
+        <td>Službeni glasnik Grada Zagreba (JSON API)</td>
+        <td>službeni tekstovi akata; uvjeti API-ja nisu objavljeni, upit Gradskom uredu planiran je za fazu M2</td>
+        <td class="fg-when">1 h</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Grad Zagreb</th>
+        <td>Otvorena savjetovanja</td>
+        <td>uvjeti korištenja zagreb.hr, navođenje izvora i poveznica</td>
+        <td class="fg-when">dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Grad Zagreb, dežurne ljekarne</th>
+        <td>Ručno održavana stranica</td>
+        <td>neslužbeni prikaz</td>
+        <td class="fg-when">popis s datumom provjere</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span><span class="fg-note">kao provjereni popis; strojni dohvat plan M5</span></td>
+      </tr>
+      <tr>
+        <th scope="row">ZET</th>
+        <td>GTFS-Realtime (položaji vozila, kašnjenja) i statični GTFS</td>
+        <td>Otvorena dozvola; izvor nosi oznaku „samo za potrebe testiranja”, pismo ZET-u planirano je za fazu M2</td>
+        <td class="fg-when">30 s; dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">DHMZ</th>
+        <td>Trenutna mjerenja, prognoza, upozorenja CAP</td>
+        <td>Otvorena dozvola</td>
+        <td class="fg-when">10 min; 30 min; 5 min</td>
+        <td>sesija; upozorenja otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">DHMZ</th>
+        <td>Hidrološki bilten (vodostaj Save)</td>
+        <td>Otvorena dozvola</td>
+        <td class="fg-when">dnevno</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">EMSC</th>
+        <td>Potresi (FDSN event servis)</td>
+        <td>uvjeti EMSC-a: nekomercijalna uporaba uz navod izvora (Credit: EMSC/CSEM); prototip navodi „Izvor: EMSC, seismicportal.eu”</td>
+        <td class="fg-when">1 min</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">HRT</th>
+        <td>RSS Vijesti i Radio Sljeme (naslov, sažetak, poveznica)</td>
+        <td>uvjeti korištenja HRT-a prema našem čitanju: tekst uz navođenje HRT-a i poveznicu na izvornu vijest; audio i video se ne prikazuju; pisana potvrda HRT-a planirana je za fazu M2</td>
+        <td class="fg-when">5 min</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">OpenStreetMap (Protomaps arhiv)</th>
+        <td>Vektorske kartografske pločice regije, vlastito posluživanje iz R2</td>
+        <td>ODbL 1.0; atribucija „© OpenStreetMap contributors · Protomaps” na karti, bez izmjene baze</td>
+        <td class="fg-when">pri izgradnji arhiva</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Zagrebački događaji (šest izvora: Kulturpunkt, Skupština, kvartovske novosti, plan komunalnih aktivnosti, ZET, Etnografski muzej)</th>
+        <td>Najave, sjednice, mjesna samouprava, komunalni radovi, prometne obavijesti, izložbe</td>
+        <td>CC BY-SA 3.0 HR (Kulturpunkt); Otvorena dozvola (plan komunalnih aktivnosti, data.zagreb.hr); uvjeti korištenja zagreb.hr, ponovna uporaba uz navođenje izvora i poveznicu (Skupština, kvartovske novosti); ZET: uvjeti RSS-a nisu objavljeni, upit planiran za fazu M2; Etnografski muzej ne navodi licencu</td>
+        <td class="fg-when">15 min</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span><span class="fg-note">Kulturpunkt i Etnografski muzej samo unutar sesije</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Informacijski sustav zaštite zraka RH (iszz.azo.hr)</th>
+        <td>Indeks kvalitete zraka (INSPIRE WFS/WMS)</td>
+        <td>uz navođenje izvora</td>
+        <td class="fg-when">1 h</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">HŽ Putnički prijevoz</th>
+        <td>Statični GTFS (data.gov.hr)</td>
+        <td>licenca nije navedena, upit planiran za fazu M2</td>
+        <td class="fg-when">dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">BAJS, javni bicikli</th>
+        <td>Dostupnost bicikala i postaja (GBFS)</td>
+        <td>otvoreni GBFS izvor, ako se potvrdi</td>
+        <td class="fg-when">1 min</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Narodne novine</th>
+        <td>API s ELI identifikatorima</td>
+        <td>službeni tekstovi</td>
+        <td class="fg-when">dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">Europeana, NSK, Wikidata, Wikimedia Commons</th>
+        <td>Baština Zagreba, metapodaci</td>
+        <td>CC0 / javno vlasništvo / CC BY-SA</td>
+        <td class="fg-when">dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M2</span></td>
+      </tr>
+      <tr>
+        <th scope="row">HAK</th>
+        <td>Stanje na cestama (tekst)</td>
+        <td>uz izvor, poveznicu i izvorno vrijeme</td>
+        <td class="fg-when">10 min</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M5</span></td>
+      </tr>
+      <tr>
+        <th scope="row">HAK, kamera Trg bana Jelačića</th>
+        <td>Fotogram s izvornim vremenom</td>
+        <td>samo uz pisano odobrenje HAK-a</td>
+        <td class="fg-when">1 min</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M5</span></td>
+      </tr>
+      <tr>
+        <th scope="row">HEP ODS, HEP Toplinarstvo, VIO</th>
+        <td>Planirani prekidi (neslužbeni prikaz)</td>
+        <td>uvjeti u provjeri</td>
+        <td class="fg-when">dnevno</td>
+        <td>otvorena</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M5</span></td>
+      </tr>
+      <tr>
+        <th scope="row">NZJZ „Dr. Andrija Štampar”</th>
+        <td>Peludna prognoza</td>
+        <td>neslužbeni prikaz</td>
+        <td class="fg-when">dnevno</td>
+        <td>sesija</td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M5</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

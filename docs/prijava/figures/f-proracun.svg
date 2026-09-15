@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 406" role="img" aria-labelledby="f-proracun-t f-proracun-d" font-family="var(--font-sans)">
+<title id="f-proracun-t">Proračun 20.000,00 EUR bez PDV-a po redcima Obrasca 3 i sastav retka 2</title>
+<desc id="f-proracun-d">Vodoravni stupci pet redaka proračuna: 1. Troškovi zaposlenih 6.300,00 EUR, 31,5 %. 2. Vanjski suradnici 11.090,00 EUR, 55,5 %. 3. Promidžba 1.200,00 EUR, 6,0 %, uvjet Programa najmanje 5 %. 4. Licence 320,00 EUR, 1,6 %. 5. Oprema 1.090,00 EUR, 5,5 %. Ukupno 20.000,00 EUR bez PDV-a. Ispod, u istom mjerilu, sastav retka 2: Drugi razvojni inženjer 150 h × 40,00 = 6.000,00; Revizija pristupačnosti 50 h × 45,00 = 2.250,00; UX i motion 40 h × 40,00 = 1.600,00; Pravni i privacy 8 h × 80,00 = 640,00; Instalacija 6 × 100,00 = 600,00.</desc>
+<g id="f-proracun-redci">
+<line x1="280" x2="280" y1="20" y2="188" stroke-width="1" style="stroke:var(--tone-stroke-strong)"/>
+<text x="24" y="45" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">1. Troškovi zaposlenih</text>
+<path d="M280 31h280a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-280z" style="fill:var(--tone-action-brand)"/>
+<text x="572" y="45" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">6.300,00</tspan><tspan style="fill:var(--tone-text-muted)"> · 31,5 %</tspan></text>
+<text x="24" y="77" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">2. Vanjski suradnici</text>
+<path d="M280 63h496a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-496z" style="fill:var(--tone-action-brand)"/>
+<text x="788" y="77" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">11.090,00</tspan><tspan style="fill:var(--tone-text-muted)"> · 55,5 %</tspan></text>
+<text x="24" y="109" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">3. Promidžba</text>
+<path d="M280 95h50.1a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-50.1z" style="fill:var(--tone-action-brand)"/>
+<text x="342.1" y="109" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">1.200,00</tspan><tspan style="fill:var(--tone-text-muted)"> · 6,0 %</tspan><tspan style="fill:var(--tone-text-muted)" font-size="12"> · najmanje 5 %</tspan></text>
+<text x="24" y="141" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">4. Licence</text>
+<path d="M280 127h10.4a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-10.4z" style="fill:var(--tone-action-brand)"/>
+<text x="302.4" y="141" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">320,00</tspan><tspan style="fill:var(--tone-text-muted)"> · 1,6 %</tspan></text>
+<text x="24" y="173" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">5. Oprema</text>
+<path d="M280 159h45.1a4 4 0 0 1 4 4v10a4 4 0 0 1 -4 4h-45.1z" style="fill:var(--tone-action-brand)"/>
+<text x="337.1" y="173" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">1.090,00</tspan><tspan style="fill:var(--tone-text-muted)"> · 5,5 %</tspan></text>
+</g>
+<line x1="24" x2="936" y1="198" y2="198" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<text x="24" y="218" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Ukupno <tspan font-weight="700">20.000,00 EUR</tspan> bez PDV-a</text>
+<text x="936" y="218" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">redci Obrasca 3, iznosi u EUR</text>
+<g id="f-proracun-redak2">
+<text x="24" y="250" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">Sastav retka 2, vanjski suradnici, u istom mjerilu</text>
+<line x1="280" x2="280" y1="256" y2="394" stroke-width="1" style="stroke:var(--tone-stroke-strong)"/>
+<text x="24" y="277" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Drugi razvojni inženjer<tspan style="fill:var(--tone-text-muted)" font-size="12"> · 150 h × 40,00</tspan></text>
+<path d="M280 266h266.5a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-266.5z" style="fill:var(--tone-action-brand)"/>
+<text x="558.5" y="277" font-size="14" font-weight="700" text-anchor="start" style="fill:var(--tone-text-primary)">6.000,00</text>
+<text x="24" y="303" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Revizija pristupačnosti<tspan style="fill:var(--tone-text-muted)" font-size="12"> · 50 h × 45,00</tspan></text>
+<path d="M280 292h97.4a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-97.4z" style="fill:var(--tone-action-brand)"/>
+<text x="389.4" y="303" font-size="14" font-weight="700" text-anchor="start" style="fill:var(--tone-text-primary)">2.250,00</text>
+<text x="24" y="329" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">UX i motion<tspan style="fill:var(--tone-text-muted)" font-size="12"> · 40 h × 40,00</tspan></text>
+<path d="M280 318h68.1a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-68.1z" style="fill:var(--tone-action-brand)"/>
+<text x="360.1" y="329" font-size="14" font-weight="700" text-anchor="start" style="fill:var(--tone-text-primary)">1.600,00</text>
+<text x="24" y="355" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Pravni i privacy<tspan style="fill:var(--tone-text-muted)" font-size="12"> · 8 h × 80,00</tspan></text>
+<path d="M280 344h24.9a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-24.9z" style="fill:var(--tone-action-brand)"/>
+<text x="316.9" y="355" font-size="14" font-weight="700" text-anchor="start" style="fill:var(--tone-text-primary)">640,00</text>
+<text x="24" y="381" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Instalacija<tspan style="fill:var(--tone-text-muted)" font-size="12"> · 6 × 100,00</tspan></text>
+<path d="M280 370h23.1a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-23.1z" style="fill:var(--tone-action-brand)"/>
+<text x="315.1" y="381" font-size="14" font-weight="700" text-anchor="start" style="fill:var(--tone-text-primary)">600,00</text>
+</g>
+</svg>

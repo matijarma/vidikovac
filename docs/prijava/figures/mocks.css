@@ -1,0 +1,233 @@
+/* Kaj ima? · prijava · statične replike telefona (m-telefon.html) i kioska
+   (m-kiosk.html). Sve što je ovdje prepisano je iz app/src/ui/dashboard.css,
+   layers.css i kiosk.css, ograničeno na .mk-phone i .mk-kiosk, tako da
+   replika ovisi samo o tokens.css (boje, tipografija, razmaci) i signage.css
+   (.line, .tl). Boja postoji jedino kroz --tone-*; jedina dva literala su
+   QR pločica #ffffff i njezina tinta #0c1250, isto kao u kiosk.css (skener
+   čita pločicu, ne temu). Svaka veličina slova je uloga iz tokens.css (--type-… ili --text-…)
+   ili kiosk-ov razred (--k-*). */
+
+/* --- Zajedničko: reset, glif, kicker ------------------------------------- */
+.mk, .mk *, .mk *::before, .mk *::after { box-sizing: border-box; }
+.mk { margin: 0; font-family: var(--font-sans); color: var(--tone-text-primary); -webkit-font-smoothing: antialiased; }
+/* Element resets pinned to `figure.mk` (0,1,2): a document that embeds the replica may style `.doc p`, `.doc li` or
+   `.doc ul` at (0,1,1) after this sheet (prijava.css does), and those margins would otherwise grow every <p> tile line and
+   push the kiosk's scene column over the safety strip. */
+figure.mk p, figure.mk h1, figure.mk h2, figure.mk h3, figure.mk ul, figure.mk li, figure.mk figure { margin: 0; max-inline-size: none; }
+figure.mk ul { padding: 0; list-style: none; }
+figure.mk li { padding: 0; }
+.mk a { color: inherit; text-decoration: none; }
+.mk time { font-variant-numeric: tabular-nums; }
+.mk .icon { width: 1.25rem; height: 1.25rem; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mk .icon-sm { width: 1rem; height: 1rem; }
+.mk .kicker { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.mk .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.mk-caption { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+
+/* --- Telefon: 390 px širok okvir, visok koliko je traka Sada do kraja ("+ N linija"), pa 5rem
+   ispod nje (layers.css .tb-lanes, mjesto za gumb Na zaslon), razmak do trake kartica i traka:
+   tako gumb ni na jednoj širini ne pada na pločicu, kao u aplikaciji na kraju trake. ----
+   Zaobljenje 40 px, potez 1,5 px; sigurna zona gore 24 px i dolje 16 px
+   stoji umjesto env(safe-area-inset-*). */
+.mk-phone { --mk-safe-top: 24px; --mk-safe-bottom: 16px; --ki-tabs: calc(3.5rem + var(--mk-safe-bottom)); position: relative; inline-size: min(100%, 393px); block-size: auto; border: 1.5px solid var(--tone-stroke-strong); border-radius: 40px; overflow: hidden; background: var(--tone-surface-canvas); font-size: var(--text-body); line-height: var(--leading-normal); }
+.mk-phone .ki { display: grid; grid-template-rows: auto auto; background: var(--tone-surface-canvas); }
+
+/* Statusna linija (dashboard.css .ki-head): četiri kontrole u jednom redu od 44 px, 3,25rem plus zarez. */
+.mk-phone .ki-head { position: relative; z-index: 2; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: var(--sp-2); min-block-size: calc(3.25rem + var(--mk-safe-top)); padding-block-start: var(--mk-safe-top); padding-inline: var(--sp-3) var(--sp-2); background: var(--tone-surface-1); border-block-end: 1px solid var(--tone-stroke); }
+.mk-phone .ki-head > * { min-inline-size: 0; }
+.mk-phone .ki-wordmark { display: inline-flex; align-items: center; min-height: var(--target); color: var(--tone-text-primary); }
+.mk-phone .ki-wordmark-text { font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
+.mk-phone .ki-wordmark-mark { color: var(--tone-action-brand); }
+.mk-phone .ki-kvart-pick { position: relative; display: inline-flex; min-block-size: var(--target); min-inline-size: var(--target); max-inline-size: 100%; justify-self: start; }
+.mk-phone .ki-kvart-face { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); max-inline-size: 100%; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-md); background: var(--tone-text-primary); color: var(--tone-surface-canvas); font-size: var(--type-control); font-weight: var(--weight-bold); }
+.mk-phone .ki-kvart-face .icon { flex: none; width: 1rem; height: 1rem; color: inherit; }
+.mk-phone .ki-kvart-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-phone .ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); padding: 0 var(--sp-3) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; }
+.mk-phone .g { display: block; inline-size: 100%; block-size: auto; overflow: visible; }
+.mk-phone .g-track-stroke { fill: none; stroke: var(--tone-surface-3); stroke-width: 3; stroke-linecap: round; }
+.mk-phone .g-fill-stroke { fill: none; stroke: var(--tone-action-brand); stroke-width: 3; stroke-linecap: round; }
+.mk-phone .ki-session .g-ring { inline-size: 1.75rem; block-size: 1.75rem; flex: none; }
+.mk-phone .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
+.mk-phone .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
+.mk-phone .ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); }
+
+/* Radni prostor (dashboard.css .ki-main): 12 px gore, 16 px sa strane; dno ostavlja traku kartica i 24 px, a 5rem za gumb daje .tb-lanes. */
+.mk-phone .ki-main { min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) var(--sp-4) calc(var(--ki-tabs) + var(--sp-6)); }
+
+/* Segmenti (layers.css .tb-seg, oblik ispod 36rem): pet jednakih gumba od 44 px u traci surface-2, "on" je pilula naglaska od 34 px. */
+.mk-phone .tb-seg { display: block; min-inline-size: 0; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }
+.mk-phone .tb-seg-track { display: flex; flex-wrap: wrap; gap: 0.125rem; min-inline-size: 0; padding: 2px; border-radius: var(--r-md); background: var(--tone-surface-2); }
+.mk-phone .tb-seg-btn { flex: 1 1 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; }
+.mk-phone .tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-phone .tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
+
+/* Vremenska traka (layers.css .tb u sobi do 36rem): jedna glava (sada: kicker nad satom od 40 px, vrijeme desno), jedna traka. */
+.mk-phone .tb { display: grid; row-gap: var(--sp-3); }
+.mk-phone .tb-heads { display: block; position: relative; }
+.mk-phone .tb-head { display: grid; gap: var(--sp-1); align-content: end; min-inline-size: 0; }
+.mk-phone .tb-head[data-col='sada'] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.mk-phone .tb-head-title { display: grid; gap: var(--sp-1); font-weight: var(--weight-bold); line-height: var(--leading-tight); letter-spacing: -0.015em; }
+.mk-phone .tb-word { display: block; }
+.mk-phone .tb-h { display: block; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-phone .tb-clock { font-size: var(--type-numeral); letter-spacing: -0.03em; line-height: var(--lh-tight); }
+.mk-phone .tb-weather { display: inline-flex; align-items: center; gap: var(--sp-1) var(--sp-2); min-block-size: var(--target); inline-size: fit-content; justify-self: end; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--tone-text-primary); }
+.mk-phone .tb-weather .icon { color: var(--tone-weather); }
+.mk-phone .tb-lanes { display: flex; overflow: hidden; margin-inline: -2px; padding: 2px 2px 5rem; }
+.mk-phone .tb-lane { display: grid; flex: 0 0 100%; gap: 0.625rem; align-content: start; min-inline-size: 0; }
+.mk-phone .tb-lane[data-col='sada'] { grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr)); }
+.mk-phone .tb-lane[data-col='sada'] > .tl[data-variant='band'], .mk-phone .tb-lane[data-col='sada'] > .tl[data-variant='row'], .mk-phone .tb-lane[data-col='sada'] > .tb-more, .mk-phone .tb-lane[data-col='sada'] > .tb-next, .mk-phone .tb-lane[data-col='sada'] > .tl[data-compact='1'] { grid-column: 1 / -1; }
+/* "Zatim" (layers.css .tb-next): kicker, pa sljedeće dvije pločice kao sažeti redovi: vrijeme lijevo, natpis i naslov desno, kontekst izostavljen. */
+.mk-phone .tb-next { margin: var(--sp-2) 0 0; }
+.mk-phone .tl[data-compact='1'][data-variant='time'], .mk-phone .tl[data-compact='1'][data-variant='ink'] { grid-template-columns: 3.25rem minmax(0, 1fr); grid-template-rows: auto auto; column-gap: var(--sp-3); align-items: center; padding-block: var(--sp-2); }
+.mk-phone .tl[data-compact='1'] .tl-time { grid-row: 1 / span 2; align-self: center; font-size: var(--type-tile-m); }
+.mk-phone .tl[data-compact='1'] .tl-title { font-size: var(--type-body); -webkit-line-clamp: 1; line-clamp: 1; }
+.mk-phone .tl[data-compact='1'] .tl-context { display: none; }
+/* "+ N" (layers.css .tb-more): poveznica od 44 px u boji naglaska. */
+.mk-phone .tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); }
+
+/* Traka kartica (dashboard.css .ki-tabbar): četiri cilja od 56 px, tekuća u naglasku s crtom od 2 px. Fiksna u aplikaciji, ovdje apsolutna u okviru. */
+.mk-phone .ki-tabbar { position: absolute; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); box-shadow: inset 0 1px 0 var(--tone-stroke); padding-block-end: var(--mk-safe-bottom); }
+.mk-phone .ki-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
+.mk-phone .ki-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; inline-size: 100%; min-block-size: 3.5rem; padding: var(--sp-1) 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.mk-phone .ki-tab .icon { width: 1.5rem; height: 1.5rem; }
+.mk-phone .ki-tab[aria-current='page'] { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
+.mk-phone .ki-tab[aria-current='page']::before { content: ''; position: absolute; inset-block-start: 0; inset-inline: 0; block-size: 2px; background: var(--tone-action-brand); }
+.mk-phone .ki-nav-label { max-inline-size: 100%; line-height: var(--lh-title); white-space: nowrap; }
+/* "Na zaslon" (dashboard.css .ki-fab): pilula od 48 px u naglasku, 16 px iznad trake, desno. */
+.mk-phone .ki-fab { position: absolute; inset-inline-end: var(--sp-4); inset-block-end: calc(var(--ki-tabs) + var(--sp-4)); z-index: var(--z-sticky); display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target-primary); padding: 0 var(--sp-5); border: 0; border-radius: var(--r-pill); background: var(--tone-action-brand); color: var(--tone-action-brand-fg); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-md); }
+.mk-phone .ki-fab .icon { color: inherit; }
+
+/* --- Kiosk: 1920 × 1080 CSS px, skaliran na širinu spremnika ----------------
+   .mk-kiosk je spremnik upita; .mk-kiosk-scale drži omjer 16 : 9; okvir
+   od 1920 × 1080 unutra se množi s --mk-s. Bez upita spremnika i bez
+   tan(atan2()) ostaje 0,5, tj. točno 960 px širine. */
+.mk-kiosk { container-type: inline-size; inline-size: 100%; }
+.mk-kiosk-scale { --mk-s: 0.5; position: relative; inline-size: 100%; aspect-ratio: 16 / 9; overflow: hidden; }
+@supports (inline-size: 1cqw) and (rotate: calc(tan(atan2(1px, 2px)) * 1deg)) {
+  .mk-kiosk-scale { --mk-s: tan(atan2(100cqw, 1920px)); }
+}
+.mk-kiosk-frame { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 1920px; block-size: 1080px; transform-origin: 0 0; transform: scale(var(--mk-s)); }
+
+/* kiosk.css .kiosk pri data-size='wide' i zoomu 1: svaki --k-* alias je --tone-* uloga, osim QR para. */
+.mk-kiosk .kiosk {
+  --k-canvas: var(--tone-surface-canvas);
+  --k-surface: var(--tone-surface-1);
+  --k-surface-2: var(--tone-surface-2);
+  --k-line: var(--tone-stroke);
+  --k-ink: var(--tone-text-primary);
+  --k-ink-2: var(--tone-text-muted);
+  --k-ink-3: var(--tone-text-muted);
+  --k-action: var(--tone-action-brand);
+  --k-action-ink: var(--tone-action-brand-fg);
+  --k-amber: var(--tone-weather);
+  --k-amber-soft: var(--tone-tint-weather);
+  --k-violet: var(--tone-events);
+  --k-rose: var(--tone-urgency);
+  --k-rose-soft: var(--tone-tint-urgency);
+  --k-green: var(--tone-live);
+  --k-qr-plate: #ffffff;
+  --k-qr-ink: #0c1250;
+  --k-shadow: var(--tone-shadow-soft);
+  --k-head-h: 96px; --k-strip-h: 96px; --k-pad: 24px; --k-gap: 20px; --k-tile-gap: 10px; --k-side-w: 600px; --k-qr: 240px;
+  --k-display-size: 84px; --k-clock-size: 48px; --k-main-size: 40px; --k-sup-size: 28px; --k-hint-size: 26px; --k-scene-time-size: 56px;
+  --k-label-size: 24px; --k-tile-size: 32px; --k-credit-size: 20px; --k-badge: 60px; --k-icon-size: 28px; --k-icon-lg: 48px;
+  --k-radius: 20px; --k-radius-s: 14px; --k-control: 64px;
+  position: relative; display: grid; grid-template-rows: var(--k-head-h) minmax(0, 1fr) var(--k-strip-h); inline-size: 100%; block-size: 100%; overflow: hidden;
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums; color: var(--k-ink); background: var(--k-canvas); line-height: 1.25;
+}
+.mk-kiosk .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mk-kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
+
+/* Zaglavlje: brend, čip stanice tinta na papiru, pa datum, glif teme, sat od 48 px i skupina vremena. */
+.mk-kiosk .k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
+.mk-kiosk .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
+.mk-kiosk .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
+.mk-kiosk .k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 768px; margin-left: var(--k-gap); padding: 0.25em 0.8em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-size: var(--k-hint-size); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-kiosk .k-head-mid { display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
+.mk-kiosk .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); margin-left: auto; white-space: nowrap; }
+.mk-kiosk .k-date { font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.mk-kiosk .k-clock-row { display: flex; align-items: center; gap: calc(var(--k-gap) * 0.6); }
+.mk-kiosk .k-clock { display: block; font-size: var(--k-clock-size); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.mk-kiosk .k-theme { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); }
+.mk-kiosk .k-weather { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.5); }
+.mk-kiosk .k-weather-icon { width: var(--k-icon-lg); height: var(--k-icon-lg); flex: none; color: var(--k-amber); }
+.mk-kiosk .k-temp { font-size: var(--k-main-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.mk-kiosk .k-sun { display: inline-flex; align-items: center; gap: 0.25em; font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.mk-kiosk .k-sun .k-icon { color: var(--k-amber); }
+
+/* Pozornica: polje prizora i bočni stupac od 600 px. */
+.mk-kiosk .k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
+.mk-kiosk .k-stage > section { height: 100%; min-height: 0; }
+.mk-kiosk .k-invitation { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); gap: var(--k-gap); }
+.mk-kiosk .k-side { display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: var(--k-gap); min-height: 0; }
+.mk-kiosk .k-side-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); }
+.mk-kiosk .k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
+.mk-kiosk .k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.mk-kiosk .k-map-host > svg { display: block; width: 100%; height: 100%; }
+.mk-kiosk .k-scene { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: calc(var(--k-gap) * 0.6); min-width: 0; min-height: 0; }
+.mk-kiosk .k-scene-head { display: flex; align-items: baseline; gap: var(--k-gap); min-width: 0; }
+.mk-kiosk .k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
+.mk-kiosk .k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.mk-kiosk .k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
+.mk-kiosk .k-dot { box-sizing: border-box; width: 10px; height: 10px; border: 2px solid var(--k-line); border-radius: 999px; background: transparent; }
+.mk-kiosk .k-dot[data-on='1'] { border-color: var(--k-ink); background: var(--k-ink); }
+.mk-kiosk .k-scene-body { position: relative; min-height: 0; overflow: hidden; }
+.mk-kiosk .k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; }
+.mk-kiosk .k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: var(--k-tile-gap); min-height: 0; }
+.mk-kiosk .k-scene-grid > .k-map { grid-column: 1; grid-row: 1 / -1; }
+.mk-kiosk .k-scene-col { grid-column: 2; grid-row: 1; display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--k-tile-gap); min-width: 0; min-height: 0; }
+.mk-kiosk .k-scene-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: max-content; gap: var(--k-tile-gap); min-width: 0; }
+
+/* Obitelj .tl na kiosku (kiosk.css): veličine samo kroz --k-*, boje samo --k-*. */
+.mk-kiosk .tl { display: grid; gap: calc(var(--k-gap) * 0.3); align-content: space-between; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.8) var(--k-gap); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); overflow: hidden; }
+.mk-kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-kiosk .k-tile .tl-label, .mk-kiosk .k-tile .tl-context { display: block; }
+.mk-kiosk .tl-value { display: flex; align-items: center; gap: 0.3em; font-size: var(--k-tile-size); font-weight: 700; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.mk-kiosk .tl-context { display: flex; align-items: center; gap: 0.3rem; font-size: var(--k-hint-size); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-kiosk .tl-title { display: -webkit-box; font-size: var(--k-main-size); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.mk-kiosk .tl[data-variant='band'] { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--k-gap); min-height: 72px; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: var(--k-radius-s); }
+.mk-kiosk .tl[data-variant='band'][data-tone='komunalno'] { background: var(--k-amber-soft); border-color: transparent; }
+.mk-kiosk .tl-main { display: grid; gap: 0.15rem; min-inline-size: 0; }
+.mk-kiosk .tl-trail { font-size: var(--k-tile-size); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--k-ink-2); justify-self: end; }
+.mk-kiosk .tl .k-glyph, .mk-kiosk .k-glyph { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; color: var(--k-ink-2); }
+/* Pločica linije (kajimafix 03.3): oznaka na visini kontrole, oba kraja u dva retka, riječ stanja u boji uloge na glavnoj veličini, glif vozila i broj. */
+.mk-kiosk .k-tl-line { align-content: start; gap: calc(var(--k-gap) * 0.4); }
+.mk-kiosk .k-line-badge { min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; font-size: var(--k-sup-size); }
+.mk-kiosk .k-tl-line .k-line-badge { height: var(--k-control); min-width: calc(var(--k-control) * 1.6); font-size: var(--k-main-size); }
+.mk-kiosk .k-tl-name { display: -webkit-box; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
+.mk-kiosk .k-tl-line .tl-value { font-size: var(--k-main-size); }
+.mk-kiosk .k-tl-line[data-tone='late'] .tl-value { color: var(--k-rose); }
+.mk-kiosk .k-tl-line[data-tone='early'] .tl-value { color: var(--k-amber); }
+.mk-kiosk .k-tl-line[data-tone='ontime'] .tl-value { color: var(--k-green); }
+.mk-kiosk .k-tl-line[data-tone='unknown'] .tl-value { color: var(--k-ink-3); }
+
+/* Pozivnica (kiosk.css .k-invite): naglasak (u noći papir), vodeća rečenica na 40 px preko cijele kartice, QR od 240 px uz uputu od 26 px, kod na 84 px (ograničen na 15 cqi stupca), traka od 8 px. */
+.mk-kiosk .k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr text' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.8); min-height: 0; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+.mk-kiosk .k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
+.mk-kiosk .k-invite > .k-qr { grid-area: qr; align-self: start; }
+.mk-kiosk .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
+.mk-kiosk .k-qr .qr { display: inline-flex; align-items: center; justify-content: center; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
+.mk-kiosk .k-qr .qr svg { display: block; width: 100%; height: 100%; }
+/* Potporna rečenica (kiosk.invite.support) nad uputom u istoj ćeliji: kiosk je na širokom zaslonu nema, ovdje je na zahtjev prijave. */
+.mk-kiosk .k-invite > .k-invite-text { grid-area: text; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; min-height: 0; }
+.mk-kiosk .k-support { font-size: var(--k-hint-size); line-height: 1.3; }
+.mk-kiosk .k-hint { font-size: var(--k-hint-size); line-height: 1.3; }
+.mk-kiosk .k-hint-host { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; }
+.mk-kiosk .k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; }
+.mk-kiosk .k-code-box { position: relative; }
+.mk-kiosk .k-code { font-family: var(--font-mono); display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
+.mk-kiosk .k-code-dash { margin: 0 0.15em; opacity: 0.4; }
+.mk-kiosk .k-progress { height: 8px; overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
+.mk-kiosk .k-progress-bar { height: 100%; border-radius: 999px; background: var(--k-action-ink); }
+
+/* Sigurnosna traka (kiosk.css .k-strip): štit i natpis, presuda kao pilula, stavke, odbrojavanje, /hitno pilula tinte. */
+.mk-kiosk .k-strip { display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
+.mk-kiosk .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
+.mk-kiosk .k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
+.mk-kiosk .k-strip-verdict { display: inline-flex; flex: none; align-items: center; gap: 0.35em; min-height: 44px; margin-right: var(--k-gap); padding: 0.15em 0.7em; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.mk-kiosk .k-strip-verdict[data-level='calm'] { color: var(--k-green); box-shadow: inset 0 0 0 2px var(--k-green); }
+.mk-kiosk .k-strip-items { display: flex; flex: 1; flex-wrap: wrap; align-items: center; align-content: center; align-self: stretch; min-width: 0; overflow: hidden; }
+.mk-kiosk .k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-kiosk .k-strip-item strong { color: var(--k-ink); }
+.mk-kiosk .k-strip-next { flex: none; margin-left: var(--k-gap); margin-right: var(--k-gap); color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.mk-kiosk .k-strip-hitno { display: inline-flex; flex: none; align-items: center; min-height: 44px; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; }

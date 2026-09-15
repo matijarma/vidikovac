@@ -1,0 +1,175 @@
+<!-- Kaj ima? · prijava · slika: javni zaslon 1920 × 1080 (data-size='wide'), prizor Promet u 19:51 (15. 9. 2026.), stanica Trg bana J. Jelačića.
+     Statična replika app/src/kiosk.ts (zaglavlje), kiosk/scenes.ts (polje prizora, pločice linija, traka radova), kiosk/invitation.ts i frame.ts
+     (bočni stupac, pozivnica, sigurnosna traka). Razredi su aplikacijski, pravila u mocks.css uz tokens.css i signage.css; okvir od 1920 × 1080 CSS px
+     skalira se na širinu spremnika (--mk-s), bez upita spremnika ostaje 0,5. Shema i QR ulaze iz shema-tramvaji.svg i qr-s.svg kroz
+     scripts/build-prijava-figures.mjs (oznake mk:svg). Unutrašnjost je aria-hidden; slika govori kroz aria-label. -->
+<figure class="mk mk-kiosk" role="img" aria-label="Javni zaslon 1920 × 1080: zaglavlje s natpisom Kaj ima?, stanicom Trg bana J. Jelačića, datumom uto 15. 9., satom 19:51, vedro 21,4 °C i zalaskom 19:09; prizor Promet sa shemom tramvajske mreže i šest pločica linija: 6 Črnomerec – Sopot na vrijeme, 11 Črnomerec – Dubec kasni 3 min, 12 Ljubljanica – Dubrava na vrijeme, 13 Žitnjak – Kvaternikov trg rani 2 min, 14 Mihaljevac – Zapruđe na vrijeme, 17 Prečko – Borongaj kasni 5 min, s brojem vozila u blizini, traka Radovi u kvartu Vlaška ulica 2, još 3 linije, prvi od tri prizora; bočni stupac s pločicama Vozila u pokretu 275 (ZET, podaci od 19:51) i Zatvaranja 6 (najbliže Vlaška ulica, 400 m) te pozivnicom Skeniraj za 10 minuta grada s QR kodom, potpornom rečenicom, uputom ili upiši kod na zagreb.aningfilm.hr/s i kodom ABCD·EFG0 s trakom preostalog vremena; sigurnosna traka: Sigurnost, mirno, DHMZ · EMSC · 19:45, dežurna ljekarna Trg bana J. Jelačića 3, sljedeći prizor za 12 s, Sigurnost.">
+  <div class="mk mk-kiosk-scale">
+    <div class="mk-kiosk-frame" aria-hidden="true">
+      <div class="kiosk" data-size="wide" data-mode="invitation">
+        <header class="k-head">
+          <div class="k-head-brand"><p class="k-brand">Kaj ima?</p><p class="k-context">Trg bana J. Jelačića</p></div>
+          <div class="k-head-mid"></div>
+          <div class="k-head-when">
+            <p class="k-date">uto 15. 9.</p>
+            <div class="k-clock-row">
+              <span class="k-theme" title="Tema: automatski"><svg class="icon k-icon" viewBox="0 0 24 24"><path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/></svg></span>
+              <time class="k-clock" datetime="2026-09-15T17:51:00Z">19:51</time>
+              <div class="k-weather">
+                <svg class="icon k-weather-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                <span class="k-temp">21,4 °C</span>
+                <span class="k-sun" data-kind="sunset"><svg class="icon k-icon" viewBox="0 0 24 24"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg><time>19:09</time></span>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div class="k-stage">
+          <section class="k-invitation">
+            <section class="k-scene" data-scene="promet">
+              <header class="k-scene-head">
+                <h2 class="k-scene-title">Promet</h2>
+                <p class="k-scene-meta">još 3 linije</p>
+                <div class="k-scene-dots"><span class="k-dot" data-on="1"></span><span class="k-dot"></span><span class="k-dot"></span></div>
+              </header>
+              <div class="k-scene-body">
+                <div class="k-scene-item" data-scene="promet">
+                  <div class="k-scene-grid" data-works="1">
+                    <div class="k-map"><div class="k-map-host">
+<!-- mk:svg shema-tramvaji.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" class="shm" viewBox="340 146 340 408" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="shm-title shm-desc">
+  <title id="shm-title">Shema tramvajske mreže ZET-a oko Trga bana J. Jelačića</title>
+  <desc id="shm-desc">Pojednostavljeni oktilinearni prikaz 18 tramvajskih linija iz GTFS podataka ZET-a (inačica 000395), izrezan oko središta mreže; bez pozadine i bez oznaka stanica. Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669</desc>
+  <style>.shm path{vector-effect:non-scaling-stroke}</style>
+  <g fill="none" stroke="var(--tone-action-brand)" stroke-opacity="0.9" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <path data-linija="2" d="M366 381.3L385.2 381.3 395.1 371.4 423.3 371.4 423.3 359.5 440.3 342.5 504.8 342.5 511.3 349 524.8 335.4 586.9 335.4 592.4 340.9 624.1 309.2 630 303.3 615.7 288.9M618.8 288.3L629.9 299.3 629.9 310.6 594.1 346.4 557.9 346.4 545.3 333.7 519.2 333.7 507.9 345.1 443 345.1 425.2 362.9 425.2 374.4 393.3 374.4 363.4 374.4M390.1 318.8L418.3 318.8 445.9 346.3 504.6 346.3 512.1 346.3 523.7 334.7 581.4 334.7 587.6 341 592.7 341 624.2 309.4 624.2 296.4 616.2 288.4M617.4 323.6L596.7 344.3 558.6 344.3 547.5 333.2 519.3 333.2 507.6 345 511.8 349.2 476.4 349.2 446.1 349.2 424.9 328 372.6 328"/>
+    <path data-linija="3" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435.2 341.2 440.6 335.9 432.4 327.7 435.7 324.4 545.2 324.4 553.7 332.9 582.1 332.9 591.7 342.4 624.4 309.7 624.4 296.4 616.3 288.3M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.2 343.9 441.8 337.4 436.7 337.4 425.8 326.5 405.6 326.5 398.2 319.1 373.7 319.1"/>
+    <path data-linija="4" d="M413.3 277.1L450.3 314.1 437.4 327 451.9 341.5 447 346.4 489.9 346.4 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 676 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 488.8 378 488.8 346.5 445.9 346.5 388.2 288.8M631.6 416.4L663 447.7 729.8 447.7"/>
+    <path data-linija="5" d="M561.5 393.9L523.5 393.9 523.5 377.8 506.3 360.6 528.7 338.1 519.9 329.3 435.7 329.3 398.3 291.8 411.9 278.2 401.3 278.2 393.1 286.4 368.4 286.4 362.4 280.4 332.5 280.4 317.6 295.2 287.5 295.2 275.8 306.9 260.3 306.9M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 409.1 279.3 446.2 316.4 438.1 324.5 515.1 324.5 515.1 342.4 515.1 357.6 515.1 378.6 524.4 378.6 572.1 378.6 572.1 398.4M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8"/>
+    <path data-linija="6" d="M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.9 512.2 345.9 525.2 332.9 525.2 289.9 541.3 289.9 541.3 275.3 533.6 267.6 533.6 248.2 492.1 248.2M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 506.1 348.3 475.7 348.3 475.7 373.1 396.8 373.1 370.5 373.1 370.5 381.1 364.3 381.1M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 504.7 345.6 530.3 371.2 522.1 379.4 594.5 379.4 624.5 409.4M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 489.3 378.2 489.3 370.6 396.8 370.6 369.7 370.6 360.7 379.6M497.7 246L536.1 246 536.1 261.5 536.1 289.7 536.1 332.5 512.5 356.1 529 372.6 522.4 379.3 594.6 379.3 624.6 409.3"/>
+    <path data-linija="7" d="M624.3 414.9L588.9 414.9 568.1 394.1 523.7 394.1 523.7 380.3 504.9 361.5 530.1 336.3 530.1 291.4 541.6 291.4 541.6 275.3 533.8 267.5 533.8 247.5 412.2 247.5 412.2 278.6 412.2 272.6M413.3 277.1L409.2 277.1 409.2 245.6 535.1 245.6 535.1 280.2 542.8 287.9 509.3 321.3 509.3 356.7 527 374.4 522.1 379.3 594.6 379.3 624.6 409.3"/>
+    <path data-linija="8" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 488.9 378.2 488.9 346.7 512.1 346.7 525.7 333.2 525.7 288.3 541.5 288.3 541.5 261.1 533.1 252.7M467.2 477.2L477.9 466.5 477.9 435.6 477.9 413 477.9 396.3 493.5 380.6 493.5 346.7 511.7 346.7 511.7 357.4 527.7 373.3 527.7 381.9 594 381.9 622.8 410.7M531.8 247.8L531.8 291.5 531.8 331.1 512.7 350.2 490.7 350.2 490.7 376.3 515.3 376.3 521.8 382.8 593.5 382.8 622.1 411.4"/>
+    <path data-linija="9" d="M499.7 360.7L496.5 363.9 496.5 345.6 448 345.6 427.3 324.8 405.7 324.8 398.8 317.9 373.7 317.9"/>
+    <path data-linija="11" d="M390.1 318.8L418.3 318.8 437.6 338.1 442.6 338.1 459.5 355 459.5 374.8 454.9 374.8 489.5 374.8 489.5 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 685.4 428.5 691.9 428.5 726.6 428.5M367 380.8L386 380.8 393.6 373.2 429.1 373.2 437.9 373.2 453 373.2 489.4 373.2 489.4 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 685.4 428.5 691.9 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 489.3 378 489.3 370.6 454.1 370.6 454.1 359.4 423.9 329.1 372.3 329.1M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 489.3 378.2 489.3 370.6 396.8 370.6 369.7 370.6 360.7 379.6M367 380.8L386 380.8 393.6 373.2 423.2 373.2 423.2 359.5 441.6 341.1 426.3 325.9 373 325.9M631.6 416.4L663 447.7 729.8 447.7"/>
+    <path data-linija="12" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435 341 443 341 457.9 355.9 457.9 374.7 489.5 374.7 489.5 376.7 515.3 376.7 521.7 383.1 593.4 383.1 624.8 414.5M624.4 414.8L588.9 414.8 568.2 394 523.7 394 523.7 378.1 489.3 378.1 489.3 370.6 454.1 370.6 454.1 359.4 423.9 329.1 372.3 329.1"/>
+    <path data-linija="13" d="M617.4 323.6L596.7 344.3 435.2 344.3 450.8 359.9 452.7 361.7 452.7 374.6 474.4 374.6 474.4 345.9 504.7 345.9 510.4 351.6 510.4 357.3 526.8 373.7 526.8 381.7 594 381.7 623 410.6M521.9 379.8L504 361.9 514.4 351.5 475.4 351.5 475.4 373 454.3 373 454.3 359.4 434.8 339.9 434.8 325.2 543.9 325.2 550.6 331.8 582.3 331.8 592.2 341.7 615.3 318.7M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 529.4 337.4 581.2 337.4 586.1 342.3 589.5 342.3 604.9 326.9 619.2 326.9"/>
+    <path data-linija="14" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M531.7 247.6L412.2 247.6 412.2 277.4 476.1 341.3 454.4 363 454.4 374.4 489.6 374.4 479.7 384.3 479.7 396.7 479.7 429.5 474.3 434.9 474.3 460.8 461.8 473.4M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 492.4 380 492.4 346.7 511.7 346.7 511.7 357.4 527.6 373.3 527.6 381.9 594 381.9 622.8 410.7M533.1 247.4L533.1 261.5 547.9 276.3 529.9 294.3 529.9 330.7 511.9 348.8 490.8 348.8 490.8 376.3 515.3 376.3 521.8 382.8 593.5 382.8 622.1 411.4M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 496.3 376.1 454.8 376.1 454.8 359.4 392.3 296.9 411.5 277.8 411.5 245.5 533.1 245.5"/>
+    <path data-linija="15" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 480.9M468.4 480.8L468.4 435.1 476.5 427 476.5 396.2 492.6 380.1 492.6 346.7 511.7 346.7 511.7 357.4 527.6 373.3 527.6 381.9 594 381.9 622.8 410.7M468.5 480.4L468.5 495.7 468.5 515.1 464.5 519.1 464.5 533.3 481.2 550"/>
+    <path data-linija="17" d="M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8M499.7 360.7L489.9 370.6 454.3 370.6 454.3 359.4 392 297.1 411.4 277.7 393.5 277.7 368 277.7 363.2 282.5 332.9 282.5 319 296.5 287.7 296.5 276.5 307.7 260.3 307.7M390.1 318.8L418.3 318.8 437.6 338.1 442.6 338.1 459.5 355 459.5 375.1 489.6 375.1 502 362.7M499.7 360.7L489.9 370.6 454.6 370.6 454.6 359.3 424.1 328.9 372.4 328.9"/>
+    <path data-linija="31" d="M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 512 345.6 524.9 332.7 524.9 289.8 541 289.8 541 279.2 530.9 269.2 536.4 263.7 536.4 247.4 412.2 247.4 412.2 278.6 412.2 272.6M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 530.4 336.4 530.4 291.5 541.7 291.5 541.7 275.3 533.8 267.4 533.8 247.5 412.2 247.5 412.2 278.6 412.2 272.6M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 504.7 345.6 530.3 371.2 522.1 379.4 594.5 379.4 624.5 409.4"/>
+    <path data-linija="32" d="M578.3 379.2L558.7 379.2 536.3 379.2 522 364.9 500.8 364.9 492 373.6 454.8 373.6 454.8 359.3 392.4 296.9 411.5 277.8 393.5 277.8 368 277.8 363.2 282.6 333 282.6 319 296.6 287.7 296.6 276.5 307.8 260.3 307.8M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 475.5 341.8 454.3 362.9 454.3 374.4 489.5 374.4 501.9 362 525 362 551 388 579.1 388M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8"/>
+    <path data-linija="33" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 488.8 378.2 488.8 346.5 446.1 346.5 437.4 337.8 437.4 324.7 544 324.7 552.9 333.6 587.5 333.6 587.5 342.6 615.6 314.5 627.1 314.5 627.1 301.7 614.8 289.5M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 492.4 380 492.4 347 446.1 347 437 338 437 324.7 544 324.7 552.9 333.6 587.5 333.6 587.5 342.6 615.6 314.5 627.1 314.5 627.1 301.7 614.8 289.5M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.3 343.9 446.1 343.9 446.1 346.1 490.7 346.1 490.7 376.7 481.8 385.6 481.8 429.6 475.6 435.8 475.6 460.9 462.7 473.8M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.3 343.9 446.1 343.9 446.1 346.1 489.9 346.1 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 621.9 411.6"/>
+    <path data-linija="34" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435 341 443 341 457.9 355.9 457.9 374.5 454.9 374.5 474.5 374.5 474.5 345.7 489.9 345.7 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 676 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 488.8 378 488.8 346.5 475.8 346.5 475.8 373.1 454.3 373.1 454.3 359.4 423.9 329.1 405.1 329.1 396.8 320.7 373.4 320.7"/>
+  </g>
+</svg>
+<!-- /mk:svg -->
+                    </div></div>
+                    <div class="k-scene-col">
+                      <ul class="k-scene-lines">
+                        <li class="tl k-tl-line" data-route="6" data-kind="tram" data-tone="ontime">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span></p>
+                          <p class="k-tl-name">Črnomerec – Sopot</p>
+                          <p class="tl-value">na vrijeme</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>4</span></p>
+                        </li>
+                        <li class="tl k-tl-line" data-route="11" data-kind="tram" data-tone="late">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">11</span></p>
+                          <p class="k-tl-name">Črnomerec – Dubec</p>
+                          <p class="tl-value">kasni 3 min</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>3</span></p>
+                        </li>
+                        <li class="tl k-tl-line" data-route="12" data-kind="tram" data-tone="ontime">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">12</span></p>
+                          <p class="k-tl-name">Ljubljanica – Dubrava</p>
+                          <p class="tl-value">na vrijeme</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>5</span></p>
+                        </li>
+                        <li class="tl k-tl-line" data-route="13" data-kind="tram" data-tone="early">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">13</span></p>
+                          <p class="k-tl-name">Žitnjak – Kvatern. trg</p>
+                          <p class="tl-value">rani 2 min</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>2</span></p>
+                        </li>
+                        <li class="tl k-tl-line" data-route="14" data-kind="tram" data-tone="ontime">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">14</span></p>
+                          <p class="k-tl-name">Mihaljevac – Zapruđe</p>
+                          <p class="tl-value">na vrijeme</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>4</span></p>
+                        </li>
+                        <li class="tl k-tl-line" data-route="17" data-kind="tram" data-tone="late">
+                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">17</span></p>
+                          <p class="k-tl-name">Prečko – Borongaj</p>
+                          <p class="tl-value">kasni 5 min</p>
+                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>3</span></p>
+                        </li>
+                      </ul>
+                      <div class="k-works">
+                        <div class="tl" data-variant="band" data-tone="komunalno" data-state="live">
+                          <svg class="icon k-glyph" viewBox="0 0 24 24"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>
+                          <div class="tl-main"><p class="tl-label">Radovi u kvartu</p><p class="tl-title">Vlaška ulica</p></div>
+                          <p class="tl-trail">2</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <aside class="k-side">
+              <div class="k-side-tiles">
+                <div class="tl k-tile" data-state="live">
+                  <p class="tl-label">Vozila u pokretu</p>
+                  <p class="tl-value"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>275</span></p>
+                  <p class="tl-context">ZET · podaci od 19:51</p>
+                </div>
+                <div class="tl k-tile" data-state="live">
+                  <p class="tl-label">Zatvaranja</p>
+                  <p class="tl-value"><span>6</span></p>
+                  <p class="tl-context">najbliže Vlaška ulica · 400 m</p>
+                </div>
+              </div>
+              <article class="k-invite">
+                <h1 class="k-lead">Skeniraj za 10 minuta grada.</h1>
+                <div class="k-qr"><div class="qr">
+<!-- mk:svg qr-s.svg -->
+<svg class="qr-svg" role="img" aria-labelledby="qr-s-title" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 310"><title id="qr-s-title">QR kod: https://zagreb.aningfilm.hr/s</title><rect fill="transparent"/><path fill="currentColor" d="M10,10h10v10h-10zM20,10h10v10h-10zM30,10h10v10h-10zM40,10h10v10h-10zM50,10h10v10h-10zM60,10h10v10h-10zM70,10h10v10h-10zM90,10h10v10h-10zM140,10h10v10h-10zM150,10h10v10h-10zM160,10h10v10h-10zM190,10h10v10h-10zM230,10h10v10h-10zM240,10h10v10h-10zM250,10h10v10h-10zM260,10h10v10h-10zM270,10h10v10h-10zM280,10h10v10h-10zM290,10h10v10h-10zM10,20h10v10h-10zM70,20h10v10h-10zM90,20h10v10h-10zM100,20h10v10h-10zM130,20h10v10h-10zM140,20h10v10h-10zM150,20h10v10h-10zM160,20h10v10h-10zM200,20h10v10h-10zM230,20h10v10h-10zM290,20h10v10h-10zM10,30h10v10h-10zM30,30h10v10h-10zM40,30h10v10h-10zM50,30h10v10h-10zM70,30h10v10h-10zM90,30h10v10h-10zM100,30h10v10h-10zM130,30h10v10h-10zM140,30h10v10h-10zM150,30h10v10h-10zM190,30h10v10h-10zM200,30h10v10h-10zM230,30h10v10h-10zM250,30h10v10h-10zM260,30h10v10h-10zM270,30h10v10h-10zM290,30h10v10h-10zM10,40h10v10h-10zM30,40h10v10h-10zM40,40h10v10h-10zM50,40h10v10h-10zM70,40h10v10h-10zM110,40h10v10h-10zM150,40h10v10h-10zM160,40h10v10h-10zM180,40h10v10h-10zM200,40h10v10h-10zM210,40h10v10h-10zM230,40h10v10h-10zM250,40h10v10h-10zM260,40h10v10h-10zM270,40h10v10h-10zM290,40h10v10h-10zM10,50h10v10h-10zM30,50h10v10h-10zM40,50h10v10h-10zM50,50h10v10h-10zM70,50h10v10h-10zM90,50h10v10h-10zM110,50h10v10h-10zM120,50h10v10h-10zM130,50h10v10h-10zM140,50h10v10h-10zM160,50h10v10h-10zM190,50h10v10h-10zM200,50h10v10h-10zM230,50h10v10h-10zM250,50h10v10h-10zM260,50h10v10h-10zM270,50h10v10h-10zM290,50h10v10h-10zM10,60h10v10h-10zM70,60h10v10h-10zM110,60h10v10h-10zM120,60h10v10h-10zM130,60h10v10h-10zM140,60h10v10h-10zM150,60h10v10h-10zM180,60h10v10h-10zM230,60h10v10h-10zM290,60h10v10h-10zM10,70h10v10h-10zM20,70h10v10h-10zM30,70h10v10h-10zM40,70h10v10h-10zM50,70h10v10h-10zM60,70h10v10h-10zM70,70h10v10h-10zM90,70h10v10h-10zM110,70h10v10h-10zM130,70h10v10h-10zM150,70h10v10h-10zM170,70h10v10h-10zM190,70h10v10h-10zM210,70h10v10h-10zM230,70h10v10h-10zM240,70h10v10h-10zM250,70h10v10h-10zM260,70h10v10h-10zM270,70h10v10h-10zM280,70h10v10h-10zM290,70h10v10h-10zM100,80h10v10h-10zM130,80h10v10h-10zM150,80h10v10h-10zM10,90h10v10h-10zM40,90h10v10h-10zM50,90h10v10h-10zM60,90h10v10h-10zM70,90h10v10h-10zM80,90h10v10h-10zM90,90h10v10h-10zM100,90h10v10h-10zM110,90h10v10h-10zM120,90h10v10h-10zM140,90h10v10h-10zM150,90h10v10h-10zM160,90h10v10h-10zM170,90h10v10h-10zM180,90h10v10h-10zM190,90h10v10h-10zM200,90h10v10h-10zM220,90h10v10h-10zM250,90h10v10h-10zM270,90h10v10h-10zM280,90h10v10h-10zM290,90h10v10h-10zM10,100h10v10h-10zM20,100h10v10h-10zM30,100h10v10h-10zM80,100h10v10h-10zM90,100h10v10h-10zM100,100h10v10h-10zM110,100h10v10h-10zM120,100h10v10h-10zM130,100h10v10h-10zM150,100h10v10h-10zM180,100h10v10h-10zM190,100h10v10h-10zM200,100h10v10h-10zM240,100h10v10h-10zM250,100h10v10h-10zM270,100h10v10h-10zM280,100h10v10h-10zM20,110h10v10h-10zM40,110h10v10h-10zM50,110h10v10h-10zM70,110h10v10h-10zM80,110h10v10h-10zM90,110h10v10h-10zM100,110h10v10h-10zM110,110h10v10h-10zM120,110h10v10h-10zM150,110h10v10h-10zM240,110h10v10h-10zM270,110h10v10h-10zM40,120h10v10h-10zM90,120h10v10h-10zM100,120h10v10h-10zM110,120h10v10h-10zM120,120h10v10h-10zM150,120h10v10h-10zM160,120h10v10h-10zM180,120h10v10h-10zM190,120h10v10h-10zM200,120h10v10h-10zM210,120h10v10h-10zM220,120h10v10h-10zM230,120h10v10h-10zM240,120h10v10h-10zM250,120h10v10h-10zM260,120h10v10h-10zM290,120h10v10h-10zM10,130h10v10h-10zM40,130h10v10h-10zM50,130h10v10h-10zM70,130h10v10h-10zM90,130h10v10h-10zM100,130h10v10h-10zM110,130h10v10h-10zM120,130h10v10h-10zM140,130h10v10h-10zM150,130h10v10h-10zM200,130h10v10h-10zM210,130h10v10h-10zM230,130h10v10h-10zM290,130h10v10h-10zM10,140h10v10h-10zM50,140h10v10h-10zM60,140h10v10h-10zM80,140h10v10h-10zM110,140h10v10h-10zM120,140h10v10h-10zM130,140h10v10h-10zM180,140h10v10h-10zM190,140h10v10h-10zM230,140h10v10h-10zM240,140h10v10h-10zM250,140h10v10h-10zM260,140h10v10h-10zM270,140h10v10h-10zM280,140h10v10h-10zM290,140h10v10h-10zM60,150h10v10h-10zM70,150h10v10h-10zM80,150h10v10h-10zM90,150h10v10h-10zM100,150h10v10h-10zM120,150h10v10h-10zM150,150h10v10h-10zM160,150h10v10h-10zM190,150h10v10h-10zM200,150h10v10h-10zM220,150h10v10h-10zM230,150h10v10h-10zM240,150h10v10h-10zM270,150h10v10h-10zM290,150h10v10h-10zM10,160h10v10h-10zM40,160h10v10h-10zM50,160h10v10h-10zM60,160h10v10h-10zM80,160h10v10h-10zM90,160h10v10h-10zM100,160h10v10h-10zM120,160h10v10h-10zM140,160h10v10h-10zM150,160h10v10h-10zM170,160h10v10h-10zM190,160h10v10h-10zM200,160h10v10h-10zM240,160h10v10h-10zM250,160h10v10h-10zM270,160h10v10h-10zM290,160h10v10h-10zM10,170h10v10h-10zM20,170h10v10h-10zM30,170h10v10h-10zM40,170h10v10h-10zM70,170h10v10h-10zM90,170h10v10h-10zM110,170h10v10h-10zM130,170h10v10h-10zM160,170h10v10h-10zM200,170h10v10h-10zM210,170h10v10h-10zM220,170h10v10h-10zM240,170h10v10h-10zM260,170h10v10h-10zM10,180h10v10h-10zM20,180h10v10h-10zM40,180h10v10h-10zM50,180h10v10h-10zM80,180h10v10h-10zM110,180h10v10h-10zM120,180h10v10h-10zM180,180h10v10h-10zM200,180h10v10h-10zM210,180h10v10h-10zM250,180h10v10h-10zM270,180h10v10h-10zM280,180h10v10h-10zM10,190h10v10h-10zM20,190h10v10h-10zM60,190h10v10h-10zM70,190h10v10h-10zM80,190h10v10h-10zM90,190h10v10h-10zM120,190h10v10h-10zM140,190h10v10h-10zM150,190h10v10h-10zM170,190h10v10h-10zM190,190h10v10h-10zM200,190h10v10h-10zM250,190h10v10h-10zM260,190h10v10h-10zM290,190h10v10h-10zM10,200h10v10h-10zM20,200h10v10h-10zM30,200h10v10h-10zM40,200h10v10h-10zM50,200h10v10h-10zM140,200h10v10h-10zM160,200h10v10h-10zM170,200h10v10h-10zM190,200h10v10h-10zM200,200h10v10h-10zM210,200h10v10h-10zM230,200h10v10h-10zM250,200h10v10h-10zM260,200h10v10h-10zM270,200h10v10h-10zM10,210h10v10h-10zM20,210h10v10h-10zM50,210h10v10h-10zM70,210h10v10h-10zM80,210h10v10h-10zM110,210h10v10h-10zM140,210h10v10h-10zM180,210h10v10h-10zM190,210h10v10h-10zM210,210h10v10h-10zM220,210h10v10h-10zM230,210h10v10h-10zM240,210h10v10h-10zM250,210h10v10h-10zM260,210h10v10h-10zM270,210h10v10h-10zM280,210h10v10h-10zM90,220h10v10h-10zM100,220h10v10h-10zM120,220h10v10h-10zM130,220h10v10h-10zM140,220h10v10h-10zM170,220h10v10h-10zM180,220h10v10h-10zM190,220h10v10h-10zM210,220h10v10h-10zM250,220h10v10h-10zM260,220h10v10h-10zM10,230h10v10h-10zM20,230h10v10h-10zM30,230h10v10h-10zM40,230h10v10h-10zM50,230h10v10h-10zM60,230h10v10h-10zM70,230h10v10h-10zM90,230h10v10h-10zM120,230h10v10h-10zM130,230h10v10h-10zM140,230h10v10h-10zM160,230h10v10h-10zM170,230h10v10h-10zM200,230h10v10h-10zM210,230h10v10h-10zM230,230h10v10h-10zM250,230h10v10h-10zM260,230h10v10h-10zM10,240h10v10h-10zM70,240h10v10h-10zM90,240h10v10h-10zM100,240h10v10h-10zM110,240h10v10h-10zM130,240h10v10h-10zM140,240h10v10h-10zM170,240h10v10h-10zM180,240h10v10h-10zM200,240h10v10h-10zM210,240h10v10h-10zM250,240h10v10h-10zM280,240h10v10h-10zM290,240h10v10h-10zM10,250h10v10h-10zM30,250h10v10h-10zM40,250h10v10h-10zM50,250h10v10h-10zM70,250h10v10h-10zM90,250h10v10h-10zM110,250h10v10h-10zM130,250h10v10h-10zM140,250h10v10h-10zM160,250h10v10h-10zM170,250h10v10h-10zM200,250h10v10h-10zM210,250h10v10h-10zM220,250h10v10h-10zM230,250h10v10h-10zM240,250h10v10h-10zM250,250h10v10h-10zM260,250h10v10h-10zM10,260h10v10h-10zM30,260h10v10h-10zM40,260h10v10h-10zM50,260h10v10h-10zM70,260h10v10h-10zM90,260h10v10h-10zM110,260h10v10h-10zM120,260h10v10h-10zM140,260h10v10h-10zM150,260h10v10h-10zM170,260h10v10h-10zM200,260h10v10h-10zM220,260h10v10h-10zM280,260h10v10h-10zM10,270h10v10h-10zM30,270h10v10h-10zM40,270h10v10h-10zM50,270h10v10h-10zM70,270h10v10h-10zM100,270h10v10h-10zM110,270h10v10h-10zM130,270h10v10h-10zM150,270h10v10h-10zM170,270h10v10h-10zM180,270h10v10h-10zM190,270h10v10h-10zM210,270h10v10h-10zM220,270h10v10h-10zM240,270h10v10h-10zM250,270h10v10h-10zM270,270h10v10h-10zM280,270h10v10h-10zM290,270h10v10h-10zM10,280h10v10h-10zM70,280h10v10h-10zM130,280h10v10h-10zM160,280h10v10h-10zM230,280h10v10h-10zM260,280h10v10h-10zM270,280h10v10h-10zM290,280h10v10h-10zM10,290h10v10h-10zM20,290h10v10h-10zM30,290h10v10h-10zM40,290h10v10h-10zM50,290h10v10h-10zM60,290h10v10h-10zM70,290h10v10h-10zM90,290h10v10h-10zM110,290h10v10h-10zM120,290h10v10h-10zM140,290h10v10h-10zM180,290h10v10h-10zM190,290h10v10h-10zM200,290h10v10h-10zM210,290h10v10h-10zM240,290h10v10h-10zM260,290h10v10h-10z"/></svg>
+<!-- /mk:svg -->
+                </div></div>
+                <div class="k-invite-text">
+                  <p class="k-support">Promet, vrijeme, događanja i sigurnost na tvom telefonu. Bez računa i bez instalacije.</p>
+                  <p class="k-hint">ili upiši kod na <span class="k-hint-host">zagreb.aningfilm.hr/s</span></p>
+                </div>
+                <div class="k-invite-code">
+                  <div class="k-code-box"><p class="k-code" data-state="live"><span>ABCD</span><span class="k-code-dash">·</span><span>EFG0</span></p></div>
+                  <div class="k-progress"><div class="k-progress-bar" style="width: 60%"></div></div>
+                </div>
+              </article>
+            </aside>
+          </section>
+        </div>
+        <footer class="k-strip">
+          <span class="k-strip-label"><svg class="icon k-icon" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg><span>Sigurnost</span></span>
+          <span class="k-strip-verdict" data-level="calm"><svg class="icon k-icon" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg><span>mirno</span></span>
+          <div class="k-strip-items">
+            <span class="k-strip-item">DHMZ · EMSC · 19:45</span>
+            <span class="k-strip-item">Dežurna ljekarna: <strong>Trg bana J. Jelačića 3</strong></span>
+          </div>
+          <span class="k-strip-next">sljedeći prizor za 12 s</span>
+          <span class="k-strip-hitno">Sigurnost</span>
+        </footer>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Pričuva za preglednike bez upita spremnika ili bez tan(atan2()): --mk-s iz stvarne širine.
+    (function () {
+      var figure = document.currentScript && document.currentScript.parentNode;
+      var scale = figure && figure.querySelector('.mk-kiosk-scale');
+      if (!scale) return;
+      var css = window.CSS && CSS.supports;
+      if (css && CSS.supports('inline-size', '1cqw') && CSS.supports('rotate', 'calc(tan(atan2(1px, 2px)) * 1deg)')) return;
+      var fit = function () { scale.style.setProperty('--mk-s', String(scale.clientWidth / 1920)); };
+      fit();
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(scale); else window.addEventListener('resize', fit);
+    })();
+  </script>
+</figure>

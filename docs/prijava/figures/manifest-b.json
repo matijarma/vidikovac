@@ -1,0 +1,42 @@
+[
+  {
+    "id": "f-plan",
+    "file": "f-plan.svg",
+    "kind": "svg",
+    "title": "Plan provedbe: M0 prije potpisa, M1 do M7 kroz deset mjeseci, uloge po mjesecu",
+    "desc": "Gantt-prikaz devet ključnih točaka plana provedbe na osi od potpisa ugovora do desetog mjeseca, s M0 prije potpisa, i traka sedam uloga s točkom u svakom mjesecu sudjelovanja.",
+    "caption": "Plan provedbe: M0 je gotov prije potpisa, M1 do M7 traju deset mjeseci nakon potpisa, a točke pokazuju u kojem mjesecu koja uloga sudjeluje; krajnji rok Programa je 31. 12. 2027."
+  },
+  {
+    "id": "f-proracun",
+    "file": "f-proracun.svg",
+    "kind": "svg",
+    "title": "Proračun 20.000,00 EUR bez PDV-a po redcima Obrasca 3 i sastav retka 2",
+    "desc": "Vodoravni stupci pet redaka proračuna s iznosom i udjelom na vrhu svakog stupca, ukupno 20.000,00 EUR bez PDV-a, i ispod, u istom mjerilu, pet stavki retka 2, vanjskih suradnika.",
+    "caption": "Proračun od 20.000,00 EUR bez PDV-a po pet redaka Obrasca 3 i sastav retka 2, vanjskih suradnika, u istom mjerilu."
+  },
+  {
+    "id": "f-izvori",
+    "file": "f-izvori.html",
+    "kind": "html",
+    "title": "Registar izvora podataka",
+    "desc": "Tablica od osamnaest redaka iz prijedloga projekta, poglavlje 5: izvor, skup, licenca ili uvjet, osvježavanje, razina prikaza (otvorena ili sesija) i stanje (u prototipu, plan M2, plan M5).",
+    "caption": "Registar izvora podataka iz prijedloga projekta: licenca ili uvjet, osvježavanje, razina prikaza (otvorena: bez sesije, na /hitno i na zaslonu prije skeniranja; sesija: samo u otključanom pogledu) i stanje u prototipu ili planu provedbe."
+  },
+  {
+    "id": "f-uredaji",
+    "file": "f-uredaji.html",
+    "kind": "html",
+    "title": "Lagani način rada i šest pilot zaslona",
+    "desc": "Četiri pločice s mjerljivim obvezama laganog načina rada, mjerač prijenosa 104 od 200 kB i šest pločica pilot zaslona: četiri donirana uređaja i dvije nove postave Raspberry Pi 5.",
+    "caption": "Mjerljive obveze laganog načina rada i šest pilot zaslona, od kojih četiri na doniranim uređajima: za isti novac šest zaslona umjesto četiri."
+  },
+  {
+    "id": "f-krajolik",
+    "file": "f-krajolik.html",
+    "kind": "html",
+    "title": "Dosad financirani projekti Programa i Kaj ima?",
+    "desc": "Sedam pločica s godinom, nazivom i područjem dosad financiranih projekata Programa te šira pločica za Kaj ima? sa sedam područja u jednom pogledu.",
+    "caption": "Sedam dosad financiranih projekata Programa, svaki vrijedan za svoje područje, i Kaj ima? koji sedam područja stavlja u jedan pogled, u stvarnom vremenu i bez računa."
+  }
+]

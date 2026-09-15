@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "build:prijava": "node scripts/build-prijava-figures.mjs && node scripts/build-prijava.mjs",
     "build": "node scripts/build-hitno-style.mjs && vite build && tsc --noEmit -p worker/tsconfig.json",
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p app/tsconfig.json",

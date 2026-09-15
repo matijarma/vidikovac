@@ -1,0 +1,84 @@
+<!-- Kaj ima? · prijava · slika: telefon 390 px, traka Sada u 19:51 (15. 9. 2026., noćni raspored: sada · noćas · sutra · tjedan).
+     Statična replika app/src/experience/chrome.ts (statusna linija, kartice, gumb Na zaslon), timeband.ts (segmenti, glava, traka, Zatim) i
+     tiles.ts (pločice), sa stanice Trg bana J. Jelačića (106_1) u četvrti Gornji grad – Medveščak. Razredi su aplikacijski; pravila su u
+     mocks.css (uz tokens.css i signage.css). Glifovi su Lucide staze iz app/src/ui/icons.ts. Unutrašnjost je aria-hidden; slika govori kroz aria-label. -->
+<figure class="mk mk-phone" role="img" aria-label="Telefon: statusna linija s natpisom Kaj ima?, gumbom četvrti Gornji grad, pilulom sesije s preostalih 9:48 i štitom Sigurnosti; segmenti sada, noćas, sutra, tjedan; traka Sada u 19:51 uz vedro, 21,4 °C i zalazak 19:09: linija 6 Črnomerec – Sopot na vrijeme, linija 11 Črnomerec – Dubec kasni 3 min, zatvaranja u kvartu s Vlaškom ulicom, Sigurnost bez hitnih upozorenja potvrđeno 19:45, HRT vijest o prvom hibridnom vlaku; Zatim: 20:00 Antisezona: Antiprostorna i 09:00 sjednica Gradske skupštine, još 7 linija; gumb Na zaslon; kartice Sada, Promet, Kvart, Još.">
+  <div class="ki" data-fab="1" aria-hidden="true">
+    <header class="ki-head">
+      <span class="ki-wordmark"><span class="ki-wordmark-text">Kaj ima<span class="ki-wordmark-mark">?</span></span></span>
+      <span class="ki-kvart-pick"><span class="ki-kvart-face"><svg class="icon" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span class="ki-kvart-name">Gornji grad</span><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></span>
+      <span class="ki-session" data-state="live" data-urgency="none" title="Otključano do 20:01, otvori postavke"><svg class="g g-ring" viewBox="0 0 36 36"><circle class="g-track-stroke" cx="18" cy="18" r="15.9"/><circle class="g-fill-stroke" cx="18" cy="18" r="15.9" stroke-dasharray="98 100" transform="rotate(-90 18 18)"/></svg><span class="ki-session-text"><span class="ki-session-time">9:48</span></span></span>
+      <span class="ki-safety" title="Sigurnosne informacije, uvijek pri ruci"><svg class="icon" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span>
+    </header>
+    <div class="ki-main">
+      <div class="tb-seg" data-col="sada">
+        <div class="tb-seg-track">
+          <span class="tb-seg-btn" aria-pressed="true"><span>sada</span></span>
+          <span class="tb-seg-btn" aria-pressed="false"><span>noćas</span></span>
+          <span class="tb-seg-btn" aria-pressed="false"><span>sutra</span></span>
+          <span class="tb-seg-btn" aria-pressed="false"><span>tjedan</span></span>
+        </div>
+      </div>
+      <section class="tb" data-cols="4" data-mode="night">
+        <header class="tb-heads">
+          <div class="tb-head" data-col="sada" data-current="true">
+            <h3 class="tb-head-title"><span class="tb-word kicker">sada</span> <time class="tb-h tb-clock" datetime="2026-09-15T17:51:00Z">19:51</time></h3>
+            <span class="tb-weather" data-status="live"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span class="tb-temp">21,4 °C</span><svg class="icon icon-sm tb-sun" viewBox="0 0 24 24"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg><span>19:09</span></span>
+          </div>
+        </header>
+        <div class="tb-lanes" data-col="sada">
+          <div class="tb-lane" data-col="sada" data-current="true">
+            <span class="tl" data-variant="value" data-domain="transit" data-key="zet-rt:route:6">
+              <span class="tl-label"><span class="line" data-kind="tram" data-size="s">6</span><span class="tl-label-title">Črnomerec – Sopot</span></span>
+              <span class="tl-value" data-size="l" data-state="ontime">na vrijeme</span>
+              <span class="tl-context"><svg class="icon" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span class="tl-ctx-text">4 · Trg bana J. Jelačića</span></span>
+            </span>
+            <span class="tl" data-variant="value" data-domain="transit" data-key="zet-rt:route:11">
+              <span class="tl-label"><span class="line" data-kind="tram" data-size="s">11</span><span class="tl-label-title">Črnomerec – Dubec</span></span>
+              <span class="tl-value" data-size="l" data-state="late">kasni 3<span class="tl-unit"> min</span></span>
+              <span class="tl-context"><svg class="icon" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span class="tl-ctx-text">3 · Trg bana J. Jelačića</span></span>
+            </span>
+            <span class="tl" data-variant="band" data-domain="mobility" data-tone="komunalno" data-key="mobility:closures">
+              <svg class="icon tl-glyph" viewBox="0 0 24 24"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>
+              <span class="tl-main"><span class="tl-label kicker">Zatvaranja · 2 u kvartu</span><span class="tl-title">Vlaška ulica</span></span>
+              <span class="tl-trail">kraj nije najavljen</span>
+            </span>
+            <span class="tl" data-variant="band" data-domain="safety" data-tone="calm" data-level="calm" data-key="safety">
+              <svg class="icon tl-glyph" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+              <span class="tl-main"><span class="tl-label kicker">Sigurnost</span><span class="tl-title">Nema hitnih upozorenja</span></span>
+              <span class="tl-trail">potvrđeno 19:45</span>
+            </span>
+            <span class="tl" data-variant="row" data-domain="news" data-key="hrt-news:lead">
+              <svg class="icon tl-glyph" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
+              <span class="tl-main"><span class="tl-title">Krenuo prvi hibridni elektrodizelski vlak</span></span>
+              <span class="tl-trail">HRT vijesti · prije 2 minute</span>
+            </span>
+            <p class="tb-next kicker">Zatim</p>
+            <span class="tl" data-variant="time" data-domain="events" data-compact="1" data-key="next:dogadanja:kulturpunkt:85612">
+              <time class="tl-time" datetime="2026-09-15T18:00:00Z">20:00</time>
+              <span class="tl-label kicker">Izvedbe</span>
+              <span class="tl-title">Antisezona: Antiprostorna</span>
+              <span class="tl-context"><span class="tl-ctx-text">Pogon Jedinstvo · Kulturpunkt</span></span>
+            </span>
+            <span class="tl" data-variant="ink" data-domain="civic" data-compact="1" data-key="next:dogadanja:skupstina:sjednica">
+              <time class="tl-time" datetime="2026-09-17T07:00:00Z">09:00</time>
+              <span class="tl-label kicker">Gradska skupština</span>
+              <span class="tl-title">Sjednica Gradske skupštine Grada Zagreba</span>
+              <span class="tl-context"><span class="tl-ctx-text">Ulica sv. Ćirila i Metoda 5</span></span>
+            </span>
+            <span class="tb-more"><span>+ 7 linija</span><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></span>
+          </div>
+        </div>
+      </section>
+    </div>
+    <span class="ki-fab"><svg class="icon" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><line x1="2" x2="2.01" y1="20" y2="20"/></svg><span>Na zaslon</span></span>
+    <nav class="ki-tabbar">
+      <ul class="ki-tabs">
+        <li><span class="ki-tab" aria-current="page"><svg class="icon" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="ki-nav-label">Sada</span></span></li>
+        <li><span class="ki-tab"><svg class="icon" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span class="ki-nav-label">Promet</span></span></li>
+        <li><span class="ki-tab"><svg class="icon" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span class="ki-nav-label">Kvart</span></span></li>
+        <li><span class="ki-tab"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg><span class="ki-nav-label">Još</span></span></li>
+      </ul>
+    </nav>
+  </div>
+</figure>

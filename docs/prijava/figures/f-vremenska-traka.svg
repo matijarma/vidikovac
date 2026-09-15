@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" role="img" aria-labelledby="f-vremenska-traka-t f-vremenska-traka-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
+<title id="f-vremenska-traka-t">Vremenska traka: sada, poslijepodne, večeras, sutra, tjedan</title>
+<desc id="f-vremenska-traka-d">Pet vremenskih odsječaka kao stupci nad jednom osi s ispunjenom točkom na sada. Sada su živi podaci bez početka; poslijepodne stavke s početkom od sada do 18:00; večeras od 18:00 do 04:00; sutra sljedeći kalendarski dan; tjedan dan+2 do dan+6. Nakon 18:00 druga kolona postaje noćas, prije 12:00 poslijepodne se čita danas.</desc>
+<text x="24" y="56" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">sada</text>
+<text x="24" y="76" font-size="12" font-weight="500" style="fill:var(--tone-text-muted);font-variant-numeric:tabular-nums">17:42 · uto 15. 9.</text>
+<text x="339.2" y="56" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">poslijepodne</text>
+<text x="339.2" y="76" font-size="12" font-weight="500" style="fill:var(--tone-text-muted);font-variant-numeric:tabular-nums">do 18:00</text>
+<text x="493.4" y="56" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">večeras</text>
+<text x="493.4" y="76" font-size="12" font-weight="500" style="fill:var(--tone-text-muted);font-variant-numeric:tabular-nums">18:00 – 04:00</text>
+<text x="647.6" y="56" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">sutra</text>
+<text x="647.6" y="76" font-size="12" font-weight="500" style="fill:var(--tone-text-muted);font-variant-numeric:tabular-nums">sri 16. 9.</text>
+<text x="801.8" y="56" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">tjedan</text>
+<text x="801.8" y="76" font-size="12" font-weight="500" style="fill:var(--tone-text-muted);font-variant-numeric:tabular-nums">čet 17. – pon 21. 9.</text>
+<line x1="24" y1="96" x2="936" y2="96" style="stroke:var(--tone-text-primary);stroke-width:2;stroke-linecap:round"/>
+<circle cx="29" cy="96" r="5" style="fill:var(--tone-text-primary);stroke:none"/>
+<circle cx="344.2" cy="96" r="5" style="fill:var(--tone-surface-canvas);stroke:var(--tone-text-primary);stroke-width:1.5"/>
+<circle cx="498.4" cy="96" r="5" style="fill:var(--tone-surface-canvas);stroke:var(--tone-text-primary);stroke-width:1.5"/>
+<circle cx="652.6" cy="96" r="5" style="fill:var(--tone-surface-canvas);stroke:var(--tone-text-primary);stroke-width:1.5"/>
+<circle cx="806.8" cy="96" r="5" style="fill:var(--tone-surface-canvas);stroke:var(--tone-text-primary);stroke-width:1.5"/>
+<rect x="24" y="112" width="295.2" height="104" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="38" y="136" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pravilo</text>
+<text font-size="14" font-weight="500" style="fill:var(--tone-text-primary)"><tspan x="38" y="160">živi podaci bez početka:</tspan><tspan x="38" dy="20">promet, vrijeme, upozorenja</tspan></text>
+<rect x="339.2" y="112" width="134.2" height="104" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="353.2" y="136" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pravilo</text>
+<text font-size="14" font-weight="500" style="fill:var(--tone-text-primary)"><tspan x="353.2" y="160">početak ≥ sada</tspan><tspan x="353.2" dy="20">i prije 18:00</tspan></text>
+<rect x="493.4" y="112" width="134.2" height="104" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="507.4" y="136" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pravilo</text>
+<text font-size="14" font-weight="500" style="fill:var(--tone-text-primary)"><tspan x="507.4" y="160">početak od 18:00</tspan><tspan x="507.4" dy="20">do 04:00</tspan></text>
+<rect x="647.6" y="112" width="134.2" height="104" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="661.6" y="136" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pravilo</text>
+<text font-size="14" font-weight="500" style="fill:var(--tone-text-primary)"><tspan x="661.6" y="160">sljedeći</tspan><tspan x="661.6" dy="20">kalendarski dan</tspan></text>
+<rect x="801.8" y="112" width="134.2" height="104" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="815.8" y="136" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pravilo</text>
+<text font-size="14" font-weight="500" style="fill:var(--tone-text-primary)"><tspan x="815.8" y="160">dan+2 do dan+6</tspan></text>
+<circle cx="30" cy="258" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+<text x="42" y="262" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">Nakon 18:00 druga kolona postaje noćas i os se pomiče za jedan odsječak ulijevo.</text>
+<circle cx="30" cy="280" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+<text x="42" y="284" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">Prije 12:00 poslijepodne se čita danas.</text>
+</svg>

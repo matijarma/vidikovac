@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 532" role="img" aria-labelledby="f-plan-t f-plan-d" font-family="var(--font-sans)">
+<title id="f-plan-t">Plan provedbe: M0 prije potpisa, M1 do M7 kroz deset mjeseci, uloge po mjesecu</title>
+<desc id="f-plan-d">Gantt-prikaz devet ključnih točaka. M0 Prototip uživo prije potpisa, javno od 14. 9. 2026. M1 Protokol, izjave, prva revizija pristupačnosti u mjesecima 1 do 2. M1b Lagani način za stare uređaje u mjesecu 2. M2 Svi zeleni izvori, pisma vlasnicima podataka u mjesecima 2 do 3. M3 Šest zaslona instalirano, administracija u mjesecima 3 do 4. M4 Prvi skup podataka Gradu, ZGBit, /open katalog u mjesecu 5. M5 Žuti izvori, HRT/HAK ako je dopušteno, izvještaj o pouzdanosti u mjesecima 6 do 8. M6 Druga revizija pristupačnosti, javni izvještaj u mjesecu 9. M7 Završni izvještaj, inačica 1.0, paket za predaju u mjesecu 10. Ispod je traka sedam uloga s točkom u svakom mjesecu sudjelovanja; voditelj i glavni razvoj u svim mjesecima. Krajnji rok Programa je 31. 12. 2027.</desc>
+<g id="f-plan-axis">
+<text x="516" y="18" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">Mjeseci nakon potpisa ugovora</text>
+<text x="516" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">potpis</text>
+<text x="558" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">1</text>
+<text x="600" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">2</text>
+<text x="642" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">3</text>
+<text x="684" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">4</text>
+<text x="726" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">5</text>
+<text x="768" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">6</text>
+<text x="810" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">7</text>
+<text x="852" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">8</text>
+<text x="894" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">9</text>
+<text x="936" y="38" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-label)">10</text>
+<line x1="474" x2="474" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="516" x2="516" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke-strong)"/>
+<line x1="558" x2="558" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="600" x2="600" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="642" x2="642" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="684" x2="684" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="726" x2="726" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="768" x2="768" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="810" x2="810" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="852" x2="852" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="894" x2="894" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<line x1="936" x2="936" y1="44" y2="498" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+</g>
+<g id="f-plan-rows">
+<text x="24" y="62" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M0</tspan> Prototip uživo</text>
+<text x="24" y="75" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">prije potpisa, javno od 14. 9. 2026.</text>
+<rect x="474" y="59" width="42" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="96" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M1</tspan> Protokol, izjave, prva revizija pristupačnosti</text>
+<text x="24" y="109" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjeseci 1–2</text>
+<rect x="516" y="93" width="84" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="130" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M1b</tspan> Lagani način za stare uređaje</text>
+<text x="24" y="143" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjesec 2</text>
+<rect x="558" y="127" width="42" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="164" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M2</tspan> Svi zeleni izvori, pisma vlasnicima podataka</text>
+<text x="24" y="177" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjeseci 2–3</text>
+<rect x="558" y="161" width="84" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="198" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M3</tspan> Šest zaslona instalirano, administracija</text>
+<text x="24" y="211" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjeseci 3–4</text>
+<rect x="600" y="195" width="84" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="232" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M4</tspan> Prvi skup podataka Gradu, ZGBit, /open katalog</text>
+<text x="24" y="245" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjesec 5</text>
+<rect x="684" y="229" width="42" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="266" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M5</tspan> Žuti izvori, HRT/HAK ako je dopušteno, izvještaj o pouzdanosti</text>
+<text x="24" y="279" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjeseci 6–8</text>
+<rect x="726" y="263" width="126" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="300" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M6</tspan> Druga revizija pristupačnosti, javni izvještaj</text>
+<text x="24" y="313" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjesec 9</text>
+<rect x="852" y="297" width="42" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="334" font-size="14" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)"><tspan font-weight="700">M7</tspan> Završni izvještaj, inačica 1.0, paket za predaju</text>
+<text x="24" y="347" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">mjesec 10</text>
+<rect x="894" y="331" width="42" height="10" rx="4" style="fill:var(--tone-action-brand)"/>
+</g>
+<line x1="24" x2="936" y1="360" y2="360" stroke-width="1" style="stroke:var(--tone-stroke)"/>
+<g id="f-plan-roles">
+<text x="24" y="378" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-muted)">Tko što radi: točka označava mjesec u kojem uloga sudjeluje</text>
+<text x="24" y="398" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Voditelj projekta i glavni razvoj</text>
+<circle cx="495" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="537" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="579" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="621" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="663" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="705" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="747" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="789" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="831" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="873" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="915" cy="394" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="414" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Drugi razvojni inženjer</text>
+<circle cx="579" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="621" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="747" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="789" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="831" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="915" cy="410" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="430" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Revizor pristupačnosti</text>
+<circle cx="537" cy="426" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="579" cy="426" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="873" cy="426" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="446" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">UX i motion dizajner</text>
+<circle cx="537" cy="442" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="579" cy="442" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="621" cy="442" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="663" cy="442" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="462" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Pravni i privacy pregled</text>
+<circle cx="537" cy="458" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="579" cy="458" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="705" cy="458" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="478" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Instalater zaslona</text>
+<circle cx="621" cy="474" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="663" cy="474" r="4" style="fill:var(--tone-action-brand)"/>
+<text x="24" y="494" font-size="12" font-weight="500" text-anchor="start" style="fill:var(--tone-text-primary)">Promidžba</text>
+<circle cx="621" cy="490" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="663" cy="490" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="705" cy="490" r="4" style="fill:var(--tone-action-brand)"/>
+<circle cx="873" cy="490" r="4" style="fill:var(--tone-action-brand)"/>
+</g>
+<text x="936" y="520" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">31. 12. 2027. krajnji rok Programa</text>
+</svg>

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f-arhitektura-t f-arhitektura-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
+<title id="f-arhitektura-t">Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika</title>
+<desc id="f-arhitektura-d">Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, HRT, Službeni glasnik i šest izvora događanja.</desc>
+<defs><marker id="f-arhitektura-arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.8 L10,5 L0,9.2 Z" style="fill:var(--tone-text-muted)"/></marker></defs>
+<text x="48" y="44" font-size="12" font-weight="700" style="fill:var(--tone-label)">Uređaji</text>
+<rect x="48" y="60" width="130" height="72" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="60" y="84" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Ruka</text>
+<text x="60" y="102" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">telefon</text>
+<text x="60" y="118" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">/s → /d</text>
+<rect x="48" y="176" width="130" height="72" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="60" y="200" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Stol</text>
+<text x="60" y="218" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">radna površina</text>
+<text x="60" y="234" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">/d</text>
+<rect x="48" y="292" width="130" height="72" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="60" y="316" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Prozor</text>
+<text x="60" y="334" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">javni zaslon</text>
+<text x="60" y="350" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">/kiosk/</text>
+<rect x="326" y="40" width="360" height="168" rx="14" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="340" y="62"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Cloudflare Worker</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">  ·  zagreb.aningfilm.hr</tspan></text>
+<rect x="338" y="74" width="336" height="36" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="350" y="97"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Rute</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">   feed · uparivanje · admin · open · stats</tspan></text>
+<rect x="338" y="118" width="336" height="36" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="350" y="141"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">dataToken</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">   HMAC, bez stanja</tspan></text>
+<rect x="338" y="162" width="336" height="36" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text x="350" y="185"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Feed i cache</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">   Cache API + KV FEED</tspan></text>
+<polyline points="178,92 326,92" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="252" y="84" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">POST /api/scan {code}</text>
+<polyline points="178,126 326,126" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="252" y="141" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">GET /api/data</text>
+<text x="252" y="158" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">Bearer dataToken</text>
+<polyline points="326,190 312,190 312,422 326,422" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="304" y="300" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">iskoristi kod</text>
+<polyline points="178,328 280,328 280,462 326,462" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="272" y="404" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">wss /ws/beacon</text>
+<line x1="48" y1="96" x2="28" y2="96" style="stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linecap:round"/>
+<circle cx="28" cy="96" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+<line x1="48" y1="212" x2="28" y2="212" style="stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linecap:round"/>
+<circle cx="28" cy="212" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+<line x1="48" y1="328" x2="28" y2="328" style="stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linecap:round"/>
+<circle cx="28" cy="328" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+<polyline points="28,96 28,518 611,518 611,492" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="60" y="538" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">wss /ws/room · zaslon, telefon i radna površina ulaze u istu sobu</text>
+<polyline points="372,208 372,272" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="378" y="236" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">razriješi kod</text>
+<polyline points="660,208 660,272" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="654" y="236" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">događaji brojača</text>
+<text x="326" y="508" font-size="12" font-weight="700" style="fill:var(--tone-label)">Durable Objects · SQLite, hibernacija</text>
+<rect x="326" y="272" width="150" height="86" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="338" y="294" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">IndexDO</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="338" y="312">singleton</tspan><tspan x="338" dy="16">kod → zaslon</tspan><tspan x="338" dy="16">ili soba</tspan></text>
+<rect x="536" y="272" width="150" height="86" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="548" y="294" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">MetricsDO</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="548" y="312">singleton</tspan><tspan x="548" dy="16">brojači bez</tspan><tspan x="548" dy="16">identifikatora</tspan></text>
+<rect x="326" y="406" width="150" height="86" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="338" y="428" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">BeaconDO</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="338" y="446">1 po zaslonu</tspan><tspan x="338" dy="16">paketi od 20 kodova</tspan></text>
+<rect x="536" y="406" width="150" height="86" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="548" y="428" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">RoomDO</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="548" y="446">1 po sesiji</tspan><tspan x="548" dy="16">alarm isteka</tspan></text>
+<polyline points="440,406 440,358" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="434" y="386" font-size="12" font-weight="500" text-anchor="end" style="fill:var(--tone-text-muted)">registriraj paket</text>
+<polyline points="611,406 611,358" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="617" y="386" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">događaji sobe</text>
+<polyline points="476,449 536,449" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="506" y="440" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">otvori</text>
+<text x="506" y="466" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">sobu</text>
+<rect x="736" y="40" width="200" height="210" rx="14" style="fill:var(--tone-surface-canvas);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="748" y="64" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Otvoreni izvori</text>
+<text x="748" y="92" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">ZET GTFS-RT</text>
+<text x="748" y="116" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">data.zagreb.hr / ArcGIS</text>
+<text x="748" y="140" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">DHMZ XML + CAP</text>
+<text x="748" y="164" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">EMSC</text>
+<text x="748" y="188" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">HRT RSS</text>
+<text x="748" y="212" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">Službeni glasnik API</text>
+<text x="748" y="236" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">šest izvora događanja</text>
+<polyline points="686,180 736,180" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<text x="711" y="172" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">dohvat</text>
+<text x="736" y="284" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pohrana</text>
+<rect x="736" y="292" width="200" height="52" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="748" y="314" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">KV FEED</text>
+<text x="748" y="332" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">posljednja dobra kopija</text>
+<rect x="736" y="356" width="200" height="64" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="748" y="378" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">R2 karta</text>
+<text x="748" y="396" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">Protomaps PMTiles</text>
+<text x="748" y="412" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">/maps/zagreb-v1/…</text>
+<polyline points="686,190 712,190 712,388 736,388" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<polyline points="712,318 736,318" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
+<circle cx="712" cy="318" r="3" style="fill:var(--tone-text-muted);stroke:none"/>
+</svg>

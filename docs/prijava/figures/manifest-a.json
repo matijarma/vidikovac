@@ -1,0 +1,44 @@
+[
+  {
+    "id": "f-arhitektura",
+    "file": "figures/f-arhitektura.svg",
+    "title": "Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika",
+    "desc": "Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, HRT, Službeni glasnik i šest izvora događanja.",
+    "caption": "Jedan Worker, četiri Durable Objecta, bez baze korisnika: tri uređaja govore s jednim Workerom, a podaci dolaze iz otvorenih izvora."
+  },
+  {
+    "id": "f-uparivanje",
+    "file": "figures/f-uparivanje.svg",
+    "title": "Uparivanje zaslona i telefona: od koda do sobe",
+    "desc": "Slijed poruka između zaslona, telefona, Workera, IndexDO-a, BeaconDO-a i RoomDO-a: BeaconDO kuje paket kodova, telefon šalje kod u tijelu POST zahtjeva, Worker ga razrješava kroz IndexDO, BeaconDO provjerava prozor, jednokratnost i opoziv pa otvara RoomDO na deset minuta, oba uređaja ulaze u sobu, a Podijeli grad kuje kod za drugu osobu na pet minuta.",
+    "caption": "Uparivanje: kod sa zaslona vrijedi 30 sekundi i jednom, putuje samo u tijelu zahtjeva, a soba koju otvori traje deset minuta."
+  },
+  {
+    "id": "f-sesija",
+    "file": "figures/f-sesija.svg",
+    "title": "Sesija od deset minuta: otključano, upozorenje na minutu, na dvadeset sekundi, zatvoreno",
+    "desc": "Vremenska crta sesije: u 0:00 otključano s punim prstenom, u 9:00 upozorenje „Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.“, u 9:40 „Još dvadeset sekundi.“, u 10:00 zatvoreno: telefon zamrznut s oznakom zamrznuto i podacima od 19:10, zaslon se vraća pozivu, soba briše sve. Osvježavanje nastavlja istu sesiju; novo skeniranje daje novih deset minuta u istoj kartici.",
+    "caption": "Sesija traje deset minuta: prsten se prazni, upozorenja stižu na minutu i na dvadeset sekundi, a nakon isteka telefon zadržava zamrznuti prikaz."
+  },
+  {
+    "id": "f-vremenska-traka",
+    "file": "figures/f-vremenska-traka.svg",
+    "title": "Vremenska traka: sada, poslijepodne, večeras, sutra, tjedan",
+    "desc": "Pet vremenskih odsječaka kao stupci nad jednom osi s ispunjenom točkom na sada. Sada su živi podaci bez početka; poslijepodne stavke s početkom od sada do 18:00; večeras od 18:00 do 04:00; sutra sljedeći kalendarski dan; tjedan dan+2 do dan+6. Nakon 18:00 druga kolona postaje noćas, prije 12:00 poslijepodne se čita danas.",
+    "caption": "Vrijeme je jedina os: pet odsječaka od sada do tjedan, s pravilom za svaki i pomakom osi nakon 18:00."
+  },
+  {
+    "id": "f-brojaci",
+    "file": "figures/f-brojaci.svg",
+    "title": "Brojači: što Grad dobiva, i što nitko ne može dobiti",
+    "desc": "Redak brojača ima oblik (dan, sat, događaj, dim1, dim2) → broj u zatvorenim rječnicima: deset događaja, šest vrsta mjesta, sedamnaest gradskih četvrti. Tri primjera retka. Izvoz Gradu zaokružuje brojeve na 5, ćelije ispod 10 spaja u „ostalo“, a over_cap, source_fetch i evaluation ne izvozi. Nema IP adrese, korisničkog agenta, identifikatora uređaja, kolačića ni koordinata.",
+    "caption": "Brojači bez identifikatora: redak (dan, sat, događaj, dim1, dim2) → broj, zaokružen na 5 i sklopljen ispod 10 prije izvoza Gradu."
+  },
+  {
+    "id": "f-sest-stupnjeva",
+    "file": "figures/f-sest-stupnjeva.svg",
+    "title": "Šest stupnjeva: od tebe do Senfa u tri dodira",
+    "desc": "Mali neusmjereni graf od dvadeset osam anonimnih čvorova; brid znači da su se dva telefona dotaknula preko NFC-a. Jedan čvor je označen „ti“, drugi „Senf“, a najkraći put između njih od tri brida istaknut je i numeriran 1, 2, 3. Nema imena, nema računa.",
+    "caption": "Smjer, ne isporuka: anonimni uređaji koji su se dotaknuli čine graf u kojem je Senf tri dodira daleko, bez imena i bez računa."
+  }
+]

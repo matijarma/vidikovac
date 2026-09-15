@@ -1,0 +1,60 @@
+/* Kaj ima? prijava, figure B (f-izvori, f-uredaji, f-krajolik).
+   Loaded after tokens.css, base.css and signage.css. Colours only through
+   --tone-* roles, sizes through the type and space tokens, one Manrope family.
+   The fg- classes wrap the signage grammar (.tl and its parts, .kicker) for a
+   printed document: tiles are not controls here, and a value or a context
+   line may wrap rather than ellipsise, because a figure loses nothing to a
+   second line and everything to a cut word. */
+
+/* Source registry table */
+.fg-scroll { max-inline-size: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; container-type: inline-size; }
+.fg-table { inline-size: 100%; min-inline-size: 48rem; border-collapse: collapse; font-size: var(--type-control); line-height: var(--lh-body); color: var(--tone-text-primary); }
+.fg-table caption { caption-side: top; padding: 0 0 var(--sp-3); text-align: start; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: var(--lh-title); }
+/* The caption belongs to the table box, which may be wider than the screen: its text stays
+   within, and sticks to, the visible part of the scroller. */
+.fg-table caption > span { display: block; position: sticky; inset-inline-start: 0; max-inline-size: calc(100vw - 2rem); max-inline-size: 100cqi; }
+.fg-table th, .fg-table td { padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; vertical-align: top; text-align: start; border-block-start: 1px solid var(--tone-stroke); }
+.fg-table th:last-child, .fg-table td:last-child { padding-inline-end: 0; }
+.fg-table thead th { padding-block-start: 0; border-block-start: 0; border-block-end: 1px solid var(--tone-stroke-strong); }
+.fg-table tbody th { font-weight: var(--weight-bold); }
+/* The row's identity stays in view while a narrow screen scrolls the other columns. */
+.fg-table thead th:first-child, .fg-table tbody th { position: sticky; inset-inline-start: 0; background: var(--tone-surface-canvas); box-shadow: inset -1px 0 0 var(--tone-stroke); }
+.fg-table .fg-when { font-variant-numeric: tabular-nums; }
+.fg-table .fg-stanje { white-space: nowrap; }
+.fg-pill { display: inline-flex; align-items: center; gap: 0.35rem; min-block-size: 1.5rem; padding: 0 var(--sp-2); border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: 1; white-space: nowrap; }
+.fg-pill::before { content: ''; flex: none; box-sizing: border-box; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; }
+.fg-pill[data-state='live']::before { background: var(--tone-live); }
+.fg-pill[data-state='plan']::before { border: 1.5px solid var(--tone-text-muted); background: transparent; }
+.fg-note { display: block; margin-block-start: var(--sp-1); font-size: var(--type-meta); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-muted); white-space: normal; }
+
+/* Tile grids (newdesignsystem.md §3: tile gap 10, tile min width 168) */
+.fg-stack { display: grid; gap: var(--sp-4); }
+.fg-tiles { display: grid; gap: 0.625rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 40rem) {
+  .fg-tiles[data-cols='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fg-tiles[data-cols='4'] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.fg-tiles .tl { cursor: default; touch-action: auto; }
+.fg-tiles .tl-value, .fg-tiles .tl-context, .fg-tiles .tl-ctx-text { white-space: normal; overflow: visible; text-overflow: clip; }
+.fg-tiles .tl-title { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.fg-tiles .tl[data-variant='ink'] { grid-column: 1 / -1; }
+.fg-tiles .kicker { white-space: normal; line-height: var(--lh-body); }
+/* A unit waiting for its number (the wattage before the plug-in meter runs). */
+.fg-tiles .tl-value[data-pending] { color: var(--tone-text-muted); }
+
+/* Meter: one ratio against a limit; accent fill on a surface-3 track. */
+.fg-meter { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-1); }
+.fg-meter-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-1) var(--sp-3); font-size: var(--type-secondary); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.fg-meter-head strong { font-weight: var(--weight-bold); color: var(--tone-text-primary); font-variant-numeric: tabular-nums; }
+.fg-meter-track { block-size: 0.5rem; border-radius: var(--r-pill); background: var(--tone-surface-3); overflow: hidden; }
+.fg-meter-fill { block-size: 100%; border-radius: var(--r-pill); background: var(--tone-action-brand); }
+
+/* Sentences around the tiles */
+.fg-lead { margin: 0 0 var(--sp-3); font-size: var(--type-secondary); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.fg-caption { margin: var(--sp-3) 0 0; font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); color: var(--tone-text-primary); }
+
+@media print {
+  .fg-scroll { overflow: visible; }
+  .fg-table { min-inline-size: 0; font-size: var(--type-secondary); }
+  .fg-table .fg-stanje { white-space: normal; }
+}

@@ -1,0 +1,46 @@
+{
+  "takenAt": "2026-09-15T17:51:00Z",
+  "takenLabel": "15. 9. 2026. 19:51",
+  "weather": {
+    "station": "Zagreb-Maksimir",
+    "condition": "vedro",
+    "tempC": 21.4,
+    "humidity": 58,
+    "wind": "N 1,5 m/s",
+    "observedAt": "2026-09-15T17:00:00Z",
+    "source": "DHMZ"
+  },
+  "transit": {
+    "vehiclesMoving": 275,
+    "at": "2026-09-15T17:51:49Z",
+    "source": "ZET GTFS-Realtime"
+  },
+  "closures": {
+    "count": 39,
+    "at": "2026-09-15T17:51:49Z",
+    "source": "Grad Zagreb, data.zagreb.hr"
+  },
+  "quakes": {
+    "count72h": 3,
+    "strongest": {
+      "mag": 2.2,
+      "at": "2026-09-14T03:47:51Z",
+      "region": "Hrvatska",
+      "depthKm": 6
+    },
+    "source": "EMSC"
+  },
+  "warnings": {
+    "verdict": "mirno",
+    "count": 0,
+    "text": "Nema upozorenja DHMZ-a za Zagreb.",
+    "sourceUpdatedAt": "2026-09-15T05:56:32Z",
+    "source": "DHMZ CAP",
+    "confirmedAt": "2026-09-15T17:51:48Z"
+  },
+  "news": {
+    "title": "Krenuo prvi hibridni elektrodizelski vlak",
+    "at": "2026-09-15T17:49:13Z",
+    "source": "HRT vijesti"
+  }
+}

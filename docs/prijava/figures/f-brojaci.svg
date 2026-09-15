@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 468" role="img" aria-labelledby="f-brojaci-t f-brojaci-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
+<title id="f-brojaci-t">Brojači: što Grad dobiva, i što nitko ne može dobiti</title>
+<desc id="f-brojaci-d">Redak brojača ima oblik (dan, sat, događaj, dim1, dim2) → broj u zatvorenim rječnicima: deset događaja, šest vrsta mjesta, sedamnaest gradskih četvrti. Tri primjera retka. Izvoz Gradu zaokružuje brojeve na 5, ćelije ispod 10 spaja u „ostalo“, a over_cap, source_fetch i evaluation ne izvozi. Nema IP adrese, korisničkog agenta, identifikatora uređaja, kolačića ni koordinata.</desc>
+<defs><marker id="f-brojaci-arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.8 L10,5 L0,9.2 Z" style="fill:var(--tone-text-muted)"/></marker></defs>
+<text x="24" y="40" font-size="20" font-weight="700" style="fill:var(--tone-text-primary)">Što Grad dobiva, i što nitko ne može dobiti</text>
+<text x="24" y="74" font-size="12" font-weight="700" style="fill:var(--tone-label)">Redak brojača</text>
+<text x="24" y="96"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">(dan, sat, događaj, dim1, dim2) → broj</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">   Europe/Zagreb, zatvoreni rječnici</tspan></text>
+<rect x="24" y="110" width="560" height="24" rx="8" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="36" y="127" font-size="12" font-weight="700" style="fill:var(--tone-label)">dan</text>
+<text x="136" y="127" font-size="12" font-weight="700" style="fill:var(--tone-label)">sat</text>
+<text x="176" y="127" font-size="12" font-weight="700" style="fill:var(--tone-label)">događaj</text>
+<text x="292" y="127" font-size="12" font-weight="700" style="fill:var(--tone-label)">dim1</text>
+<text x="386" y="127" font-size="12" font-weight="700" style="fill:var(--tone-label)">dim2</text>
+<text x="566" y="127" font-size="12" font-weight="700" text-anchor="end" style="fill:var(--tone-label)">broj</text>
+<text x="36" y="158" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">2027-03-04</text>
+<text x="136" y="158" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">17</text>
+<text x="176" y="158" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">session_start</text>
+<text x="292" y="158" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">kafic</text>
+<text x="386" y="158" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">donji-grad</text>
+<text x="566" y="158" font-size="14" font-weight="700" text-anchor="end" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">23</text>
+<line x1="24" y1="167" x2="584" y2="167" style="stroke:var(--tone-stroke);stroke-width:1;stroke-linecap:round"/>
+<text x="36" y="184" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">2027-03-04</text>
+<text x="136" y="184" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">17</text>
+<text x="176" y="184" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">session_end</text>
+<text x="292" y="184" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">expired</text>
+<text x="386" y="184" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">10min</text>
+<text x="566" y="184" font-size="14" font-weight="700" text-anchor="end" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">18</text>
+<line x1="24" y1="193" x2="584" y2="193" style="stroke:var(--tone-stroke);stroke-width:1;stroke-linecap:round"/>
+<text x="36" y="210" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">2027-03-04</text>
+<text x="136" y="210" font-size="14" font-weight="500" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">18</text>
+<text x="176" y="210" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">panel_open</text>
+<text x="292" y="210" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">u-pokretu</text>
+<text x="386" y="210" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">kiosk</text>
+<text x="566" y="210" font-size="14" font-weight="700" text-anchor="end" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">7</text>
+<text x="620" y="74" font-size="12" font-weight="700" style="fill:var(--tone-label)">Zatvoreni rječnici</text>
+<text x="620" y="96" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Događaji (10)</text>
+<rect x="620" y="106" width="108" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="674" y="120" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">session_start</text>
+<rect x="736" y="106" width="94" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="783" y="120" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">session_end</text>
+<rect x="838" y="106" width="80" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="878" y="120" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">scan_fail</text>
+<rect x="620" y="132" width="101" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="670.5" y="146" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">kiosk_online</text>
+<rect x="729" y="132" width="101" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="779.5" y="146" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">source_fetch</text>
+<rect x="838" y="132" width="87" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="881.5" y="146" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">hitno_view</text>
+<rect x="620" y="158" width="73" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="656.5" y="172" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">over_cap</text>
+<rect x="701" y="158" width="87" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="744.5" y="172" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">evaluation</text>
+<rect x="796" y="158" width="87" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="839.5" y="172" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">panel_open</text>
+<rect x="620" y="184" width="59" height="20" rx="999" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="649.5" y="198" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-primary)">export</text>
+<text x="620" y="236" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Vrsta mjesta (6)</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="620" y="254">kafic (kafić) · knjiznica (knjižnica)</tspan><tspan x="620" dy="16">cetvrt (gradska četvrt) · udruga</tspan><tspan x="620" dy="16">zet (ZET) · ostalo (javni zaslon)</tspan></text>
+<text x="620" y="312" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Četvrt (17)</text>
+<text x="620" y="330" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">17 gradskih četvrti: donji-grad, trnje, maksimir, …</text>
+<text x="24" y="236" font-size="12" font-weight="700" style="fill:var(--tone-label)">Izvoz Gradu (grad.csv)</text>
+<rect x="24" y="250" width="44" height="22" rx="6" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="46" y="265.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">23</text>
+<polyline points="72,261 96,261" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-brojaci-arr)"/>
+<rect x="100" y="250" width="44" height="22" rx="6" style="fill:var(--tone-tint-success);stroke:none"/>
+<text x="122" y="265.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">25</text>
+<text x="156" y="265.5" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">zaokruženo na 5</text>
+<rect x="24" y="280" width="44" height="22" rx="6" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="46" y="295.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">18</text>
+<polyline points="72,291 96,291" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-brojaci-arr)"/>
+<rect x="100" y="280" width="44" height="22" rx="6" style="fill:var(--tone-tint-success);stroke:none"/>
+<text x="122" y="295.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">20</text>
+<text x="156" y="295.5" font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">zaokruženo na 5</text>
+<rect x="24" y="310" width="44" height="22" rx="6" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="46" y="325.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">7</text>
+<polyline points="72,321 96,321" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-brojaci-arr)"/>
+<rect x="100" y="310" width="62" height="22" rx="6" style="fill:var(--tone-tint-success);stroke:none"/>
+<text x="131" y="325.5" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);font-variant-numeric:tabular-nums">ostalo</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="174" y="325.5">ćelija ispod 10 spaja se u „ostalo“ tog sata;</tspan><tspan x="174" dy="15">ako je i tada ispod 10, u „ostalo“ toga dana</tspan></text>
+<text x="24" y="374"><tspan font-size="12" font-weight="700" style="fill:var(--tone-text-primary)">Ne izvozi se Gradu: </tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">over_cap · source_fetch · evaluation · neuspjeli skenovi bez pripisanog zaslona</tspan></text>
+<rect x="24" y="396" width="912" height="48" rx="14" style="fill:var(--tone-tint-action);stroke:none"/>
+<text x="40" y="425"><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Nema </tspan><tspan font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">IP adrese, korisničkog agenta, identifikatora uređaja, kolačića ni koordinata.</tspan><tspan font-size="12" font-weight="500" style="fill:var(--tone-text-muted)">   Redak nikad ne opisuje osobu, samo sat u gradu.</tspan></text>
+</svg>

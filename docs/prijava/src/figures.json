@@ -1,0 +1,15 @@
+[
+  { "id": "m-kiosk", "section": "1.2 Javni zaslon (Prozor), čitljiv bez telefona", "position": "end" },
+  { "id": "m-telefon", "section": "1.3 Otključani pogled (Ruka na telefonu, Stol na radnoj površini)", "position": "after-first-paragraph" },
+  { "id": "f-vremenska-traka", "section": "1.3 Otključani pogled (Ruka na telefonu, Stol na radnoj površini)", "position": "end" },
+  { "id": "f-uparivanje", "section": "1.4 Uparivanje bez računa, bez aplikacije i bez kolačića", "position": "end" },
+  { "id": "f-sesija", "section": "1.5 Istek sesije koji ništa ne gubi", "position": "end" },
+  { "id": "f-brojaci", "section": "1.8 Podaci za Grad Zagreb", "position": "end" },
+  { "id": "f-uredaji", "section": "1.10 Lagani način: stari uređaj postaje gradski zaslon", "position": "end" },
+  { "id": "f-sest-stupnjeva", "section": "Granica ove prijave i smjer razvoja", "position": "end" },
+  { "id": "f-arhitektura", "section": "3. Tip rješenja", "position": "end" },
+  { "id": "f-izvori", "section": "5. Popis otvorenih podataka koji bi se koristili", "position": "replace-first-table" },
+  { "id": "f-krajolik", "section": "6.5 Inovativnost predloženog programa (0–20 bodova)", "position": "after-first-paragraph" },
+  { "id": "f-plan", "section": "9. Plan provedbe", "position": "after-first-paragraph" },
+  { "id": "f-proracun", "section": "10. Financijski plan (Obrazac 3)", "position": "after-first-table" }
+]

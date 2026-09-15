@@ -1,6 +1,6 @@
 # Obrazac 3. Financijski plan i izračun troškova
 
-Prijavitelj: Aning Film d.o.o. · Projekt: Kaj ima? Zagreb, pri ruci. · Svi iznosi su u eurima **bez PDV-a**. Ukupno zatraženo: **20.000,00 EUR**.
+Prijavitelj: Aning Film d.o.o. · Projekt: Kaj ima? (Obrazac 2.2, točka 2.2.2) · Svi iznosi su u eurima **bez PDV-a**. Ukupno zatraženo: **20.000,00 EUR**.
 
 | Redak | Stavka | Izračun | Iznos (EUR) |
 |---|---|---|---|
@@ -21,7 +21,7 @@ Prijavitelj je društvo s ograničenom odgovornošću u kojem je direktor jedini
 
 ## Obrazloženje ostalih redaka
 
-**Redak 2.** Drugi razvojni inženjer preuzima integracije novih izvora, zelenih u M2 (indeks zraka, HŽPP, BAJS, Europeana, NSK, Wikidata) i žutih u M5 (HAK, HEP, VIO, peludna prognoza), i pisanje testova za svaki parser, čime voditelj ostaje na protokolu, zaslonima i izvještajima. Revizija pristupačnosti se provodi dvaput (mjesec 2 i mjesec 9) s korisnicima s invaliditetom i rezultira dvjema inačicama izjave o pristupačnosti. UX i motion dizajn pokriva raspored za kiosk, čitljivost QR koda, stanja skenera i prijelaz u zamrznuti prikaz. Pravni i privacy pregled potvrđuje izjavu o privatnosti, licencu skupa podataka za Grad i tekstove atribucija. Instalacija zaslona uključuje montažu, mrežu i puštanje u rad na šest lokacija, od toga četiri s doniranim uređajima koje projekt prije toga pregleda i pripremi.
+**Redak 2.** Drugi razvojni inženjer preuzima integracije novih izvora, zelenih u M2 (indeks zraka, HŽPP, BAJS, Europeana, NSK, Wikidata) i žutih u M5 (HAK, HEP, VIO, peludna prognoza), i pisanje testova za svaki parser, čime voditelj ostaje na protokolu, zaslonima i izvještajima. Revizija pristupačnosti se provodi dvaput (M1, mjeseci 1 do 2, i M6, mjesec 9) s korisnicima s invaliditetom i rezultira dvjema inačicama izjave o pristupačnosti. UX i motion dizajn pokriva raspored za kiosk, čitljivost QR koda, stanja skenera i prijelaz u zamrznuti prikaz. Pravni i privacy pregled potvrđuje izjavu o privatnosti, licencu skupa podataka za Grad i tekstove atribucija. Instalacija zaslona uključuje montažu, mrežu i puštanje u rad na šest lokacija, od toga četiri s doniranim uređajima koje projekt prije toga pregleda i pripremi.
 
 **Redak 3.** Promidžba je ono što projektu daje javnost: video o pilotu s titlovima za ZGBit, društvene mreže i stranicu projekta; tiskane upute na svakom zaslonu ("Skeniraj kod telefonom, na istoj Wi-Fi mreži ili mobilnim podacima"); jedno javno predstavljanje u pilot kafiću s pozivom Gradskom uredu i medijima. Iznos od 1.200,00 EUR je 6,0 % od 20.000,00 EUR; ako se odobri manji iznos, promidžba ostaje najmanje 5 % odobrenog iznosa.
 

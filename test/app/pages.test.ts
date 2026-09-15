@@ -19,7 +19,7 @@ function section(html: string, openMarker: string, closeTag: string): string {
 describe('vite multi-page inputs', () => {
   it('builds every page of the product', () => {
     const input = (config as { build?: { rollupOptions?: { input?: Record<string, string> } } }).build!.rollupOptions!.input!;
-    expect(Object.keys(input).sort()).toEqual(['d', 'index', 'izvori', 'kiosk', 'pristupacnost', 'privatnost', 's'].sort());
+    expect(Object.keys(input).sort()).toEqual(['d', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's'].sort());
     for (const path of Object.values(input)) expect(path.endsWith('index.html')).toBe(true);
   });
   it('injects the source list into /izvori at build time', () => {
@@ -214,10 +214,10 @@ describe('static pages', () => {
     expect(html).toContain('Stvaranje zaslona je javno, bez prijave.');
     expect(html).toContain('sažetak mrežne adrese');
     expect(html).toContain('nema prijave ni autentikacijskog kolačića');
-    expect(html).toContain('Repozitorij prototipa trenutačno je privatan');
+    expect(html).toContain('Izvorni kod prototipa javan je od 15. rujna 2026.');
     // Every browser-stored value, named (the data token is new in this wave).
     expect(html).toContain('token za nastavak sesije i token kojim ta sesija dohvaća podatke');
-    expect(html).toContain('U localStorage ostaju tema, jezik i odabir laganog prikaza');
+    expect(html).toContain('U localStorage ostaju tema, jezik, odabir laganog prikaza, odabrana četvrt, spremljene linije i stajališta te prekidači Obavijesti');
     expect(html).toContain('zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo“');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });

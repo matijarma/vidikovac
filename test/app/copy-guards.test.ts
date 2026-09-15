@@ -56,7 +56,7 @@ const VI = /(?<![\p{L}\p{N}_])(?:Vi|Vam)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])Vaš
 
 describe('punctuation: no em dash and no double hyphen in copy', () => {
   it('covers the catalogues, the two worker pages and every static HTML entry', () => {
-    expect(staticHtml()).toEqual(['app/d/index.html', 'app/index.html', 'app/izvori/index.html', 'app/kiosk/index.html', 'app/pristupacnost/index.html', 'app/privatnost/index.html', 'app/s/index.html']);
+    expect(staticHtml()).toEqual(['app/d/index.html', 'app/index.html', 'app/izvori/index.html', 'app/kiosk/index.html', 'app/prijava/index.html', 'app/pristupacnost/index.html', 'app/privatnost/index.html', 'app/s/index.html']);
   });
   it.each(PUNCTUATION_FILES)('%s carries no U+2014 and no " -- "', (file) => {
     const text = read(file);

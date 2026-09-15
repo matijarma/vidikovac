@@ -12,7 +12,7 @@ Nitko ništa ne plaća; nema računa, pretplate ni članstva. Sigurnosni sloj `/
 
 ### 3. "Jedna osoba nosi projekt."
 
-Prototip je uživo prije roka i može se provjeriti u trenutku ocjenjivanja; proizvodi prijavitelja u produkciji (psh.lat, kompmajstor.eu) dokazuju iste primitive. Drugi razvojni inženjer, revizor pristupačnosti, dizajner, pravni pregled i instalater su u proračunu po satu. Kod se predaje i objavljuje pod otvorenom licencom; Grad dobiva ponudu pod EUPL-1.2 i može sustav preuzeti u cijelosti.
+Prototip je uživo prije roka i može se provjeriti u trenutku ocjenjivanja; proizvodi prijavitelja u produkciji (psh.lat, kompmajstor.eu) dokazuju iste primitive. Drugi razvojni inženjer, revizor pristupačnosti, dizajner i pravni pregled su u proračunu po satu, instalater po zaslonu. Kod se predaje i objavljuje pod otvorenom licencom; Grad dobiva ponudu pod EUPL-1.2 i može sustav preuzeti u cijelosti.
 
 ### 4. "Izvori su krhki: ZET feed je označen 'samo za testiranje', vrijeme.hr pada, CKAN se mijenja."
 
@@ -28,7 +28,7 @@ Trošak rada sustava nakon projekta je ispod 100 EUR godišnje (jedan plaćeni C
 
 ### 7. "Stari uređaji su spori, nesigurni i past će za mjesec dana."
 
-Zaslon prikazuje javne podatke i ne drži korisničke podatke, pa stari uređaj nema što izgubiti: jedina pohrana je tajna tog jednog zaslona, koju operater opoziva jednim klikom. Brzina je stvar mjerenja, ne vjere: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije i danas učitava zaslon sa 104 kB; mjerila za pilot su objavljena (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a, potrošnja izmjerena po uređaju), a matrica testiranih uređaja navodi i uređaje koji su pali i zašto. Dvije nove postave na Raspberry Pi 5 su referenca i rezerva; na lokaciji koju odabere Grad postavlja se takva nova postava s tekućim sustavom, a donirani uređaji idu u ostale prostore, na gostujuću mrežu odvojenu od poslovne. Prostor može zamijeniti uređaj bez migracije, jer novi uređaj samo otvori istu adresu.
+Zaslon prikazuje javne podatke i ne drži korisničke podatke, pa stari uređaj nema što izgubiti: jedina pohrana je tajna tog jednog zaslona, koju operater opoziva jednim zahtjevom na daljinu. Brzina je stvar mjerenja, ne vjere: lagani način rada (prijedlog projekta, 1.10) izbacuje kartu, WebGL i animacije i danas učitava zaslon sa 104 kB; mjerila za pilot su objavljena (manje od 200 kB po učitavanju, manje od 300 MB radne memorije, rad na uređaju s 1 GB RAM-a, potrošnja izmjerena po uređaju), a matrica testiranih uređaja navodi i uređaje koji su pali i zašto. Dvije nove postave na Raspberry Pi 5 su referenca i rezerva; na lokaciji koju odabere Grad postavlja se takva nova postava s tekućim sustavom, a donirani uređaji idu u ostale prostore, na gostujuću mrežu odvojenu od poslovne. Prostor može zamijeniti uređaj bez migracije, jer novi uređaj samo otvori istu adresu.
 
 ### 8. "Zašto filmska tvrtka?"
 

@@ -21,6 +21,8 @@ const PAGES: { path: string; viewport: typeof KIOSK }[] = [
   { path: '/s/', viewport: PHONE },
   { path: '/d/', viewport: PHONE },
   { path: '/d/', viewport: KIOSK },
+  { path: '/prijava/', viewport: PHONE },
+  { path: '/prijava/', viewport: KIOSK },
 ];
 const SCHEMES = ['light', 'dark'] as const;
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];

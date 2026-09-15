@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 780" role="img" aria-labelledby="f-uparivanje-t f-uparivanje-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
+<title id="f-uparivanje-t">Uparivanje zaslona i telefona: od koda do sobe</title>
+<desc id="f-uparivanje-d">Slijed poruka između zaslona, telefona, Workera, IndexDO-a, BeaconDO-a i RoomDO-a: BeaconDO kuje paket kodova, telefon šalje kod u tijelu POST zahtjeva, Worker ga razrješava kroz IndexDO, BeaconDO provjerava prozor, jednokratnost i opoziv pa otvara RoomDO na deset minuta, oba uređaja ulaze u sobu, a Podijeli grad kuje kod za drugu osobu na pet minuta.</desc>
+<defs><marker id="f-uparivanje-arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.8 L10,5 L0,9.2 Z" style="fill:var(--tone-text-primary)"/></marker><marker id="f-uparivanje-ret" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.8 L10,5 L0,9.2 Z" style="fill:var(--tone-text-muted)"/></marker></defs>
+<line x1="80" y1="56" x2="80" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="20" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="80" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">Zaslon</text>
+<line x1="240" y1="56" x2="240" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="180" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="240" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">Telefon</text>
+<line x1="400" y1="56" x2="400" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="340" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="400" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">Worker</text>
+<line x1="560" y1="56" x2="560" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="500" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="560" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">IndexDO</text>
+<line x1="720" y1="56" x2="720" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="660" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="720" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">BeaconDO</text>
+<line x1="880" y1="56" x2="880" y2="666" style="stroke:var(--tone-stroke-strong);stroke-width:1.5;stroke-linecap:round"/>
+<rect x="820" y="20" width="120" height="36" rx="999" style="fill:var(--tone-surface-2);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<text x="880" y="44" font-size="14" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary)">RoomDO</text>
+<rect x="570" y="66" width="300" height="42" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="720" y="82">kuje paket od 20 kodova, jedan kod na 30 s</tspan><tspan x="720" dy="14">Crockford base32 · 8 znakova · 40 bita</tspan></text>
+<polyline points="720,130 560,130" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="640" y="124" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">registriraj paket</text>
+<polyline points="720,156 80,156" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="400" y="150" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">{t:'codes'} + serverNow · zaslon rotira kod, novi paket kad ostanu tri</text>
+<rect x="120" y="172" width="240" height="28" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="240" y="188">skenira QR ili upiše kod ABCD·EFG0</tspan></text>
+<polyline points="240,220 400,220" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="320" y="214" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">POST /api/scan {code}</text>
+<polyline points="400,246 560,246" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="480" y="240" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">čiji je kod?</text>
+<polyline points="560,272 400,272" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-ret)"/>
+<text x="480" y="266" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">kod pripada zaslonu</text>
+<polyline points="400,298 720,298" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="640" y="292" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">iskoristi kod</text>
+<rect x="525" y="314" width="390" height="42" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="720" y="330">prozor: 5 s prije do 30 s nakon · jednokratnost · opoziv</tspan><tspan x="720" dy="14">kod je iskorišten u tom trenutku</tspan></text>
+<polyline points="720,378 880,378" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="800" y="372" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">otvori sobu</text>
+<rect x="744" y="392" width="200" height="42" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="844" y="408">expiresAt = sada + 10 min</tspan><tspan x="844" dy="14">dvije jednokratne ulaznice</tspan></text>
+<polyline points="720,458 80,458" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="400" y="452" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">{t:'unlocked'} · zaslon prelazi u otključani prikaz</text>
+<polyline points="400,484 240,484" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-ret)"/>
+<text x="320" y="478" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">ScanOk</text>
+<rect x="90" y="496" width="300" height="42" rx="8" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke);stroke-width:1"/>
+<text font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)"><tspan x="240" y="512">kartica potvrde: zaslon, četvrt, 10 minuta</tspan><tspan x="240" dy="14">gumb Otključaj: samo navigacija na /d</tspan></text>
+<polyline points="80,564 880,564" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="480" y="558" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">oba ulaze u sobu · wss /ws/room {t:'join', ticket}</text>
+<circle cx="240" cy="564" r="4" style="fill:var(--tone-text-primary);stroke:none"/>
+<polyline points="880,590 80,590" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-ret)"/>
+<text x="480" y="584" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">{t:'joined', role, expiresAt, resumeToken, dataToken}</text>
+<circle cx="240" cy="590" r="4" style="fill:var(--tone-text-primary);stroke:none"/>
+<polyline points="240,620 880,620" style="fill:none;stroke:var(--tone-text-primary);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-arr)"/>
+<text x="560" y="614" font-size="12" font-weight="700" text-anchor="middle" style="fill:var(--tone-text-primary);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">{t:'share'} · Podijeli grad</text>
+<polyline points="880,646 240,646" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-uparivanje-ret)"/>
+<text x="560" y="640" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted);paint-order:stroke;stroke:var(--tone-surface-canvas);stroke-width:5px;stroke-linejoin:round">kod za drugu osobu: pet minuta, jedan skok</text>
+<rect x="24" y="692" width="216" height="64" rx="14" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="36" y="714" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Ograničenje</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="36" y="732">RL_SCAN: 10 pokušaja</tspan><tspan x="36" dy="15">u minuti po adresi</tspan></text>
+<rect x="256" y="692" width="216" height="64" rx="14" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="268" y="714" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Usporavanje</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="268" y="732">nakon 20 neuspjelih pokušaja</tspan><tspan x="268" dy="15">zaslon usporava 60 s</tspan></text>
+<rect x="488" y="692" width="216" height="64" rx="14" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="500" y="714" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Bez mrežne provjere</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="500" y="732">mreže zaslona i telefona</tspan><tspan x="500" dy="15">ne uspoređuju se</tspan></text>
+<rect x="720" y="692" width="216" height="64" rx="14" style="fill:var(--tone-surface-2);stroke:none"/>
+<text x="732" y="714" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Kod samo u tijelu zahtjeva</text>
+<text font-size="12" font-weight="500" style="fill:var(--tone-text-muted)"><tspan x="732" y="732">kod nikad ne putuje</tspan><tspan x="732" dy="15">u URL-u ni u zapisu</tspan></text>
+</svg>
