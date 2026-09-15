@@ -236,6 +236,14 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(more).toContain('font-size: var(--type-control)');
     expect(rule(".ki-more[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
     const search = rule('.ki-search', DESKTOP);
+    // At 200 % text the desk header is about 45rem: the search keeps its glyph and its aria-label, the words wait for room; the pill never wraps over the clock.
+    expect(rule('.ki-search > span', DESKTOP)).toContain('text-overflow: ellipsis');
+    const narrowHeader = CSS.slice(CSS.indexOf('@container header (max-width: 56rem)'));
+    expect(narrowHeader).toContain('.ki-search > span { display: none; }');
+    expect(narrowHeader).toContain('.ki-search { inline-size: var(--target); max-inline-size: var(--target); padding: 0; justify-content: center; }');
+    // On a very narrow viewport the FAB keeps its glyph and aria-label and drops the word.
+    const narrowFab = CSS.slice(CSS.indexOf('@media (max-width: 24rem)'));
+    expect(narrowFab).toContain('.ki-fab > span { display: none; }');
     expect(search).toContain('max-inline-size: 26.25rem');
     expect(search).toContain('min-block-size: var(--target)');
     expect(search).toContain('border-radius: var(--r-pill)');
@@ -469,7 +477,9 @@ describe('layers.css time band', () => {
   });
   it('the phone form (36rem): sticky segments, one head shown and the rest clipped, a snapping lane row that pans both ways with the FAB reserve', () => {
     const phone = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
-    expect(phone).toContain('.tb-seg { display: flex; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }');
+    // The five time words wrap to a second row at 200 % text on a 390 px phone instead of clipping or widening the page.
+    expect(phone).toContain('.tb-seg { display: flex; flex-wrap: wrap; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }');
+    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('flex: 1 1 auto;');
     expect(phone).toContain('.tb-heads { display: block; position: relative; }');
     expect(phone).toContain(".tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }");
     expect(phone).toContain('.tb-axis { display: none; }');

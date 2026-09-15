@@ -5,14 +5,15 @@
    local-only note. Imported after dashboard.css: `.kv-kvart-pick` here wins
    the full-width layout over the header's inline-flex one by source order,
    no !important needed. */
-.kv, .ws-kvart { display: grid; gap: var(--sp-4); align-content: start; }
+/* One column capped at its own width: a picker's nowrap district name or a long stop name never widens the page (the sf-sec rule). */
+.kv, .ws-kvart { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); align-content: start; }
 .kv-sec { display: grid; gap: var(--sp-2); }
 
 .kv-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .kv-title { margin: 0; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
 .kv-maplink { display: inline-flex; align-items: center; gap: var(--sp-1); flex: none; min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-action-brand); font-size: var(--type-control); font-weight: var(--weight-bold); text-decoration: none; touch-action: manipulation; }
 
-.kv-kvart-pick { display: flex; inline-size: 100%; }
+.kv-kvart-pick { display: flex; inline-size: 100%; min-inline-size: 0; }
 .kv-kvart-pick .ki-kvart-face { inline-size: 100%; justify-content: space-between; }
 
 .kv-mapwrap { margin: 0; display: grid; gap: var(--sp-2); }

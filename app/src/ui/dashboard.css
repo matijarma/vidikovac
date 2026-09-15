@@ -125,6 +125,11 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 /* The frame went: the pill turns the live tone for the moment the polite region says so. */
 .ki-fab[data-sent='1'] { background: var(--tone-live); }
 :root[data-lagano='1'] .ki-fab { box-shadow: none; }
+/* On a very narrow viewport (a 320 px phone, or 390 px at 200 % text) the FAB keeps its glyph and its aria-label and drops the word, so it covers no more than a tile corner. */
+@media (max-width: 24rem) {
+  .ki-fab { inline-size: var(--target-primary); padding: 0; justify-content: center; }
+  .ki-fab > span { display: none; }
+}
 
 /* Banners: the session's own states, never confused with data states. */
 .banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
@@ -164,7 +169,13 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'], .ki-search[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
   .ki-search { display: inline-flex; align-items: center; gap: var(--sp-2); inline-size: 100%; max-inline-size: 26.25rem; min-block-size: var(--target); padding: 0 var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-subtle); font: inherit; font-size: var(--type-control); text-align: start; cursor: text; touch-action: manipulation; }
-  .ki-search .icon { color: var(--tone-text-muted); }
+  .ki-search .icon { color: var(--tone-text-muted); flex: none; }
+  .ki-search > span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* A narrow header (200 % text on a 1440 desk is 45rem): the search keeps its glyph and its accessible name, the words wait for room. */
+  @container header (max-width: 56rem) {
+    .ki-search { inline-size: var(--target); max-inline-size: var(--target); padding: 0; justify-content: center; }
+    .ki-search > span { display: none; }
+  }
   .ki-clock { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
   .ki-clock .icon { width: 1rem; height: 1rem; color: var(--tone-text-muted); }
   /* The shared weather group (weather-status.ts) keeps its own classes; only the sunset glyph takes the amber tone here. */

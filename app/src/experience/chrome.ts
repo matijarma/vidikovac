@@ -159,7 +159,7 @@ export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
 
 /** Desktop: the search launcher, a pill that reads like a field and opens Promet's search. */
 export function searchLaunchMarkup(i18n: I18n, s: ShellState): string {
-  return `<button type="button" class="ki-search" data-key="search" data-action="search" data-testid="status-search"${frozenAttrs(s)}>${iconMarkup('search', undefined, 'icon icon-sm')}<span>${escapeHtml(i18n.t('transport.search'))}</span></button>`;
+  return `<button type="button" class="ki-search" data-key="search" data-action="search" data-testid="status-search" aria-label="${escapeAttribute(i18n.t('transport.search'))}"${frozenAttrs(s)}>${iconMarkup('search', undefined, 'icon icon-sm')}<span>${escapeHtml(i18n.t('transport.search'))}</span></button>`;
 }
 
 /**

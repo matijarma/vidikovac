@@ -222,7 +222,7 @@
 .tb-empty { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
 /* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span. */
 .tb-seg { display: none; gap: 0.25rem; }
-.tb-seg-btn { flex: 1 1 0; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
+.tb-seg-btn { flex: 1 1 auto; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
 .tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
 @media (hover: hover) {
@@ -531,7 +531,8 @@
    Whether the row glides or jumps is decided in JS from the reader's motion
    preference (experience/timeband-sync.ts), never declared here. */
 @container ws (max-width: 36rem) {
-  .tb-seg { display: flex; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }
+  /* The five time words never clip: when the room (200 % text on a 390 px phone) cannot hold them on one row they wrap to a second, and the control never widens the page. */
+  .tb-seg { display: flex; flex-wrap: wrap; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }
   .tb-heads { display: block; position: relative; }
   .tb[data-cols] .tb-head[data-col] { display: grid; }
   .tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }
