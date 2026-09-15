@@ -351,6 +351,9 @@
 .k-side-blocks > .k-block, .k-stack > .k-block { flex: none; min-height: 0; }
 .k-side-blocks > .k-block--list, .k-stack > .k-block--list { flex: 0 1 auto; min-height: var(--k-block-min, calc(240px * var(--k-zoom))); }
 .k-side-blocks > .k-block--grow, .k-stack > .k-block--grow { flex: 1 1 auto; }
+/* The Sada column's two lists (warnings beside closures under a warning) share the room equally: a basis of
+   zero, not their content, so the shorter list is not shrunk to its floor while the longer one keeps the rest. */
+.k-paired[data-layer='grad-sada'] .k-side-blocks > .k-block--list { flex: 1 1 0; }
 .k-side-blocks { overflow: hidden; }
 .kiosk[data-size='wide'] { --k-block-min: calc(270px * var(--k-zoom)); --k-arc-w: calc(420px * var(--k-zoom)); --k-arc-h: calc(235px * var(--k-zoom)); }
 /* 205px assumed a kicker, one row and the source line with no coverage

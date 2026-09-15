@@ -10,6 +10,7 @@ import { fillAttribution } from '../attribution';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { DOGADANJA_SOURCES, IZVORI } from '../izvori-render';
+import { safetyState } from '../experience/safety-state';
 import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -323,10 +324,16 @@ function closuresBlock(ctx: PairedContext, limit: number, grow = false): string 
 
 function renderSada(ctx: PairedContext): PairedMarkup {
   // With a selection on show, the column gives its room to the selection; the strip still carries the warning state.
-  // The weather is status in the frame's header (D11), never a block here: a weather block beside the
-  // warnings and closures lists starved both of their row floors the moment a DHMZ warning was live.
+  // The weather is status in the frame's header (D11), never a block here. The column follows the strip's
+  // verdict: on a calm day (green notices at most) the closures near the stop take the whole column; an
+  // active warning of yellow or above, or a source that is not answering, brings the warnings block in
+  // beside them at wide, and alone at compact, where two list blocks never both fit a row next to the join card.
   const selected = selectionCard(ctx);
-  return { lines: linesBox(ctx), main: '', side: `${selected}${!selected && warningsRelevant(ctx) ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}` };
+  const warnings = !selected && warningsRelevant(ctx) && safetyState(ctx.snapshots, ctx.now).level !== 'calm';
+  const side = selected ? `${selected}${closuresBlock(ctx, 2, true)}`
+    : warnings && ctx.size === 'compact' ? warningsBlock(ctx, true)
+    : `${warnings ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}`;
+  return { lines: linesBox(ctx), main: '', side };
 }
 
 /** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */

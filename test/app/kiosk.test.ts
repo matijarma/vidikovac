@@ -48,7 +48,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'pinScene'>> & { stored?: string | null; themeInitial?: ThemePreference };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'pinScene'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -81,7 +81,8 @@ function mount(opts: MountOptions = {}) {
   let sessionExpired: (() => void) | null = null;
   let sessionView: ((layer: string, params?: Record<string, string>) => void) | null = null;
   let secondsLeft = 600;
-  const fetchData = vi.fn(async (module: ModuleId) => MODULES.find((m) => m.module === module) ?? snap(module, []));
+  const modules = opts.modules ?? MODULES;
+  const fetchData = vi.fn(async (module: ModuleId) => modules.find((m) => m.module === module) ?? snap(module, []));
   const createScreen = opts.createScreen ?? vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: SCREEN }));
   const loadStops = opts.loadStops ?? vi.fn(async () => STOPS);
   const requestFullscreen = vi.fn(async () => {});
@@ -93,7 +94,7 @@ function mount(opts: MountOptions = {}) {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, pinScene: opts.pinScene,
-    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -345,6 +346,26 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(text(q(k.root, '[data-testid=k-warnings]'))).toContain('Grmljavina');
     expect(k.fetchData).toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-invitation]')).toBeNull();
+  });
+  it('on a calm day the Sada column gives the closures the whole column and shows no warnings block: green notices stay one line on the strip', async () => {
+    const calm = MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Zeleno upozorenje za vjetar', { severity: 'minor' })]) : m));
+    const k = await pairedKiosk({ modules: calm });
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe('grad-sada');
+    expect(q(k.root, '[data-testid=k-warnings]')).toBeNull();
+    expect(q(k.root, '[data-testid=k-closures]')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=strip-verdict]'))).toBe('mirno');
+  });
+  it('under a yellow warning the wide Sada column holds the warnings beside the closures', async () => {
+    const k = await pairedKiosk();
+    expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=k-closures]')).not.toBeNull();
+  });
+  it('under a yellow warning the compact Sada column shows the warnings alone; the strip still counts the closures', async () => {
+    const k = await pairedKiosk({ viewport: { width: 1366, height: 768 } });
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
+    expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
+    expect(q(k.root, '[data-testid=strip-closures]')).not.toBeNull();
   });
   it('mirrors each of the seven domains with its own blocks; the join QR survives every layer change', async () => {
     const k = await pairedKiosk();
