@@ -112,6 +112,31 @@
   "weatherStatus": {
     "sunset": "sunset {time}"
   },
+  "timeband": {
+    "sada": "now",
+    "today": "today",
+    "afternoon": "afternoon",
+    "tonight": "tonight",
+    "night": "overnight",
+    "tomorrow": "tomorrow",
+    "week": "this week",
+    "seg": {
+      "sada": "now",
+      "today": "today",
+      "afternoon": "p.m.",
+      "tonight": "tonight",
+      "night": "night",
+      "tomorrow": "tomorrow",
+      "week": "week"
+    },
+    "segLabel": "Time of day",
+    "headUntil": "until {time}",
+    "headFrom": "from {time}",
+    "headUntilDate": "until {date}",
+    "laneEmpty": "nothing announced",
+    "moreItems_one": "+ {count} item",
+    "moreItems_other": "+ {count} items"
+  },
   "overview": {
     "place": "{place} · {date}",
     "observedAt": "measured at {time}",

@@ -116,6 +116,32 @@
   "weatherStatus": {
     "sunset": "zalazak {time}"
   },
+  "timeband": {
+    "sada": "sada",
+    "today": "danas",
+    "afternoon": "poslijepodne",
+    "tonight": "večeras",
+    "night": "noćas",
+    "tomorrow": "sutra",
+    "week": "tjedan",
+    "seg": {
+      "sada": "sada",
+      "today": "danas",
+      "afternoon": "popodne",
+      "tonight": "večeras",
+      "night": "noćas",
+      "tomorrow": "sutra",
+      "week": "tjedan"
+    },
+    "segLabel": "Doba dana",
+    "headUntil": "do {time}",
+    "headFrom": "od {time}",
+    "headUntilDate": "do {date}",
+    "laneEmpty": "ništa najavljeno",
+    "moreItems_one": "+ {count} stavka",
+    "moreItems_few": "+ {count} stavke",
+    "moreItems_other": "+ {count} stavki"
+  },
   "overview": {
     "place": "{place} · {date}",
     "observedAt": "izmjereno u {time}",
