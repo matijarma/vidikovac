@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The /d/ shell's grid and header, read as text: the phone shell is a sticky
-// 48 px header, banners in flow and one workspace; the desktop dissolves the
-// header into the rail grid. Literals pinned here are the ones the geometry
-// gates and the sibling tasks (T1.2 tab bar, T1.3 Promet stage) build on.
+// The /d/ shell's grid and status line, read as text: the phone shell is a
+// sticky 52 px status line, banners in flow, one workspace and a fixed tab bar;
+// the desktop spans the same line over the workspace and the kvart aside (no
+// rail, D10). Literals pinned here are the ones the geometry gates and the
+// sibling tasks (tab bar, Promet stage, Kvart panel) build on.
 const ui = (name: string): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', name), 'utf8');
 const CSS = ui('dashboard.css');
 const BASE_CSS = ui('base.css');
@@ -74,23 +75,25 @@ function ungatedHovers(css: string): string[] {
 }
 
 describe('dashboard.css phone shell', () => {
-  it('lays the shell out as header, banners and main in flow, on a small-viewport height with the 2017 fallback line above it', () => {
+  it('lays the shell out as the status line, banners and main in flow, on a small-viewport height with the 2017 fallback line above it', () => {
     const ki = rule('.ki');
-    expect(ki).toContain("grid-template-areas: 'top' 'banners' 'main'");
+    expect(ki).toContain("grid-template-areas: 'status' 'banners' 'main'");
     expect(ki).toContain('grid-template-rows: auto auto 1fr');
     expect(ki).toMatch(/min-height: 100vh;\n\s*min-height: 100svh;/);
-    expect(ki).toContain('--ki-top: calc(3rem + env(safe-area-inset-top, 0px));');
+    expect(ki).toContain('--ki-top: calc(3.25rem + env(safe-area-inset-top, 0px));');
     expect(ki).toContain('--ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));');
   });
-  it('keeps the header sticky, 3rem plus the safe-area inset, on the chrome surface with the polling hairline along its bottom edge', () => {
+  it('keeps the status line sticky, 3.25rem plus the safe-area inset, on the chrome surface with the polling hairline along its bottom edge', () => {
     const head = rule('.ki-head');
-    expect(head).toContain('grid-area: top');
+    expect(head).toContain('grid-area: status');
     expect(head).toContain('position: sticky');
     expect(head).toContain('inset-block-start: 0');
     expect(head).toContain('z-index: var(--z-sticky)');
     expect(head).toContain('min-block-size: var(--ki-top)');
     expect(head).toContain('padding-block-start: env(safe-area-inset-top, 0px)');
     expect(head).toContain('background: var(--tone-surface-1)');
+    // Four keyed controls on the phone: wordmark, the kvart control taking the room, session, safety.
+    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     expect(rule(".ki[data-loading='true'] .ki-head::after")).toContain('opacity: 1');
   });
@@ -101,8 +104,9 @@ describe('dashboard.css phone shell', () => {
     expect(rule('.ki-main')).toContain('grid-area: main');
     expect(CSS).not.toContain('.ki-banners:not(:empty) + .ki-main');
   });
-  it('flattens the rail wrapper, so the header and the sidebar are laid out by the shell grid directly', () => {
-    expect(rule('.ki-rail')).toContain('display: contents');
+  it('has no rail and no sidebar left anywhere: the status line is the one chrome row on both surfaces (D10)', () => {
+    expect(CSS).not.toContain('.ki-rail');
+    expect(CSS).not.toContain('.ki-side');
   });
   it('makes the Promet stage the viewport with the dynamic-viewport unit and its fallback line', () => {
     const stage = rule(".ki[data-stage='map']");
@@ -122,29 +126,64 @@ describe('dashboard.css phone shell', () => {
     for (const [, property, twin] of fallbacks) expect(twin).toBe(property);
     expect(CSS).not.toContain('!important');
   });
+  it('the phone FAB reserves its room: with data-fab main pads by the tab bar plus 5rem, and the kvart aside has no box on the phone', () => {
+    expect(rule(".ki[data-fab='1'] .ki-main")).toContain('padding-block-end: calc(var(--ki-tabs) + 5rem)');
+    expect(rule('.ki-kvart')).toContain('display: none');
+  });
 });
 
 describe('dashboard.css header controls', () => {
-  it('the session pill is a 44 px surface-2 pill whose ring and tint turn amber at warn and rose at alert', () => {
+  it('the session pill is a 44 px surface-2 pill with a 28 px ring whose ring and tint turn amber at warn and rose at alert', () => {
     const pill = rule('.ki-session');
     expect(pill).toContain('min-block-size: var(--target)');
     expect(pill).toContain('border-radius: var(--r-pill)');
     expect(pill).toContain('background: var(--tone-surface-2)');
+    expect(rule('.ki-session .g-ring')).toContain('inline-size: 1.75rem; block-size: 1.75rem');
     expect(rule(".ki-session[data-urgency='warn']")).toContain('--tone-action-brand: var(--tone-weather)');
     expect(rule(".ki-session[data-urgency='alert']")).toContain('--tone-action-brand: var(--tone-urgency)');
   });
-  it('the safety control shows its word on the urgency tint and drops it only under 360 px, where the aria-label carries it', () => {
+  it('the safety control is an icon-only 44 px square on the urgency tint; its aria-label carries the word at every width', () => {
     const safety = rule('.ki-safety');
     expect(safety).toContain('background: var(--tone-tint-urgency)');
+    expect(safety).toContain('color: var(--tone-urgency)');
     expect(safety).toContain('min-block-size: var(--target)');
-    expect(rule('.ki-safety .ki-nav-label')).toContain('display: inline');
-    const narrow = /@media \(max-width: 22\.4375rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(rule('.ki-safety .ki-nav-label', narrow)).toContain('display: none');
-    expect(rule('.ki-safety', narrow)).toContain('min-inline-size: var(--target)');
+    expect(safety).toContain('min-inline-size: var(--target)');
+    expect(safety).toContain('justify-content: center');
+    expect(rule('.ki-safety .ki-nav-label')).toBe('');
+    expect(CSS).not.toContain('@media (max-width: 22.4375rem)');
+  });
+  it('the kvart control is a native select at opacity 0 over a 44 px ink face, so the picker measured is the real control (B.5)', () => {
+    const pick = rule('.ki-kvart-pick');
+    expect(pick).toContain('position: relative');
+    expect(pick).toContain('min-block-size: var(--target)');
+    expect(pick).toContain('min-inline-size: var(--target)');
+    const face = rule('.ki-kvart-face');
+    expect(face).toContain('min-block-size: var(--target)');
+    expect(face).toContain('background: var(--tone-text-primary)');
+    expect(face).toContain('color: var(--tone-surface-canvas)');
+    expect(face).toContain('font-size: var(--type-control)');
+    expect(rule('.ki-kvart-name')).toContain('text-overflow: ellipsis');
+    const select = rule('.ki-kvart-select');
+    expect(select).toContain('position: absolute; inset: 0');
+    expect(select).toContain('opacity: 0');
+    expect(select).toContain('touch-action: manipulation');
+    // Focus on the invisible select paints the 2 px accent ring on the face it covers.
+    expect(rule('.ki-kvart-pick:has(.ki-kvart-select:focus-visible) .ki-kvart-face')).toContain('outline: 2px solid var(--tone-action-brand)');
   });
   it('the wordmark keeps its size and paints only the question mark in the brand tone', () => {
     expect(rule('.ki-wordmark-text')).toContain('font-size: var(--text-lg)');
     expect(rule('.ki-wordmark-mark')).toContain('color: var(--tone-action-brand)');
+  });
+  it('the FAB is a fixed 48 px accent pill above the tab bar, flat under lagano', () => {
+    const fab = rule('.ki-fab');
+    expect(fab).toContain('position: fixed');
+    expect(fab).toContain('inset-block-end: calc(var(--ki-tabs) + var(--sp-4))');
+    expect(fab).toContain('min-block-size: var(--target-primary)');
+    expect(fab).toContain('border-radius: var(--r-pill)');
+    expect(fab).toContain('background: var(--tone-action-brand)');
+    expect(fab).toContain('color: var(--tone-action-brand-fg)');
+    expect(fab).toContain('z-index: var(--z-sticky)');
+    expect(rule(":root[data-lagano='1'] .ki-fab")).toContain('box-shadow: none');
   });
   it('notice banners take the tint of their kind and keep the dismiss control beside the text at every width', () => {
     expect(rule('.banner-notice')).toContain('flex-wrap: nowrap');
@@ -157,55 +196,61 @@ describe('dashboard.css header controls', () => {
 });
 
 describe('dashboard.css desktop (60rem and up)', () => {
-  it('pins one rail beside the banners and main: sticky, a viewport tall, a flex column on the chrome surface with a hairline at its right edge', () => {
+  it('spans the status line over a workspace column and the kvart aside, with the aside sticky under the 3.5rem line', () => {
     const ki = rule('.ki', DESKTOP);
-    expect(ki).toContain('grid-template-columns: var(--ki-side) minmax(0, 1fr)');
-    expect(ki).toContain('grid-template-rows: auto 1fr');
-    expect(ki).toContain("grid-template-areas: 'rail banners' 'rail main'");
-    const rail = rule('.ki-rail', DESKTOP);
-    expect(rail).toContain('grid-area: rail');
-    expect(rail).toContain('display: flex');
-    expect(rail).toContain('flex-direction: column');
-    expect(rail).toContain('position: sticky');
-    expect(rail).toContain('inset-block-start: 0');
-    // R-D5: the small viewport, as the shell itself is sized; a sticky rail in dvh would resize while a
-    // tablet's browser chrome hides on scroll. dvh belongs to the Promet stage and dialogs only.
-    expect(rail).toContain('block-size: 100vh; block-size: 100svh');
-    expect(rail).not.toContain('dvh');
-    expect(rail).toContain('background: var(--tone-surface-1)');
-    expect(rail).toContain('border-inline-end: 1px solid var(--tone-stroke)');
+    expect(ki).toContain('--ki-top: 3.5rem');
+    expect(ki).toContain('grid-template-columns: minmax(0, 1fr) var(--ki-kvart)');
+    expect(ki).toContain('grid-template-rows: auto auto 1fr');
+    expect(ki).toContain("grid-template-areas: 'status status' 'banners kvart' 'main kvart'");
+    const aside = rule('.ki-kvart', DESKTOP);
+    expect(aside).toContain('display: block');
+    expect(aside).toContain('grid-area: kvart');
+    expect(aside).toContain('position: sticky');
+    expect(aside).toContain('inset-block-start: var(--ki-top)');
+    // R-D5: the small viewport, as the shell itself is sized; never dvh outside the Promet stage.
+    expect(aside).toContain('max-block-size: calc(100svh - var(--ki-top))');
+    expect(aside).not.toContain('dvh');
+    expect(aside).toContain('overflow-y: auto');
+    expect(aside).toContain('background: var(--tone-surface-1)');
+    expect(aside).toContain('border-inline-start: 1px solid var(--tone-stroke)');
+    expect(rule('.ki-kvart[hidden]', DESKTOP)).toContain('display: none');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
     expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
-    // A quarter-screen window on a 1080p display is about 960×430: the rail's content is taller than
-    // that, and a sticky rail never scrolls with the page, so it must scroll on its own or lose its foot.
-    expect(rail).toContain('overflow-y: auto');
   });
   it('gives the banners the same wide gutter as main from 90rem, so a notice aligns with the workspace edge', () => {
     const wide = /@media \(min-width: 90rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-12)');
-    expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-12)');
+    expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
+    expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('dissolves the header into the rail: the wordmark, then the seven links, then the session card pushed to the foot; the safety control and the tab bar leave', () => {
-    expect(rule('.ki-head', DESKTOP)).toContain('display: contents');
-    expect(rule('.ki-head::after', DESKTOP)).toContain('content: none');
-    const top = rule('.ki-top', DESKTOP);
-    expect(top).toContain('order: 1');
-    expect(top).toContain('position: relative');
-    expect(rule('.ki-top::after', DESKTOP)).toContain('block-size: 2px');
-    expect(rule(".ki[data-loading='true'] .ki-top::after", DESKTOP)).toContain('opacity: 1');
-    const side = rule('.ki-side', DESKTOP);
-    expect(side).toContain('order: 2');
-    expect(side).toContain('display: block');
-    const slot = rule('.ki-session-slot', DESKTOP);
-    expect(slot).toContain('order: 3');
-    expect(slot).toContain('margin-block-start: auto');
-    expect(rule('.ki-safety-slot, .ki-tabbar', DESKTOP)).toContain('display: none');
-    // Nothing on the desk places by the wave-1 row names any more.
-    expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session)\b/);
+  it('keeps the status line a real box with eight columns, the search taking the room; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+    expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto');
+    expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
+    expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--text-xl)');
+    expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
+    expect(DESKTOP).not.toContain('display: contents');
   });
-  it('keeps both sidebar clamps byte-identical (pinned by workspace-css.test.ts as well)', () => {
-    expect(CSS).toContain('--ki-side: clamp(14rem, 30vw, 17rem);');
-    expect(CSS).toContain('.ki { --ki-side: clamp(14rem, 30vw, 19rem); }');
+  it('the desktop-only controls are 44 px: Još, the search launcher (a 420 px pill), the clock link and the bell with its dot', () => {
+    const more = rule('.ki-more', DESKTOP);
+    expect(more).toContain('min-block-size: var(--target)');
+    expect(more).toContain('font-size: var(--type-control)');
+    expect(rule(".ki-more[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
+    const search = rule('.ki-search', DESKTOP);
+    expect(search).toContain('max-inline-size: 26.25rem');
+    expect(search).toContain('min-block-size: var(--target)');
+    expect(search).toContain('border-radius: var(--r-pill)');
+    expect(search).toContain('cursor: text');
+    const clock = rule('.ki-clock', DESKTOP);
+    expect(clock).toContain('min-block-size: var(--target)');
+    expect(clock).toContain('font-size: var(--type-control)');
+    expect(clock).toContain('white-space: nowrap');
+    // The shared weather group's own classes (weather-status.ts): the sunset glyph is amber inside the clock link.
+    expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('color: var(--tone-weather)');
+    expect(rule(".ki-bell[data-active]:not([data-active='0'])::after", DESKTOP)).toContain('background: var(--tone-action-brand)');
+  });
+  it('pins the aside width at 18.75rem, a rem track so text zoom widens it with its rows; the workspace column shrinks to zero', () => {
+    expect(rule('.ki')).toContain('--ki-kvart: 18.75rem;');
+    expect(CSS).not.toContain('--ki-side');
   });
 });
 
@@ -241,12 +286,13 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     expect(rule('.ki-head')).toContain('container-type: inline-size; container-name: header;');
     expect(rule('.ki-tabbar')).toContain('container-type: inline-size; container-name: tabs;');
   });
-  it('under 18rem the header drops the ring and the safety label, and the tab bar hides every label but the current one', () => {
+  it('under 18rem the header drops the ring and the kvart control (the Kvart tab carries the same selector), and the tab bar hides every label but the current one', () => {
     expect(CSS).toContain('@container header (max-width: 18rem)');
     expect(CSS).toContain('@container tabs (max-width: 18rem)');
     const header = /@container header \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-session .g-ring', header)).toContain('display: none');
-    expect(rule('.ki-safety .ki-nav-label', header)).toContain('display: none');
+    expect(rule('.ki-kvart-pick', header)).toContain('display: none');
+    expect(rule('.ki-wordmark-text', header)).toContain('font-size: var(--text-body)');
     const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-tab .icon', tabs)).toContain('1.75rem');
     expect(rule(".ki-tab:not([aria-current='page']) .ki-nav-label", tabs)).toContain('clip: rect(0 0 0 0)');
@@ -279,7 +325,8 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     expect(dash).toContain('.ki-tab:active');
     expect(dash).toContain('.ki-session:active');
     expect(dash).toContain('.ki-safety:active');
-    expect(dash).toContain('.ki-side-link:active');
+    expect(dash).toContain('.ki-more:active');
+    expect(dash).toContain('.ki-fab:active');
     const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
     expect(base).toContain('.btn:active');
     expect(base).toContain('.chip:active');
@@ -302,8 +349,8 @@ describe('touch: the main scrolls vertically only; controls get the browser out 
     expect(rule('.ki-main')).toContain('touch-action: pan-y');
   });
   it('every S-owned control is touch-action: manipulation (no 300 ms tap delay)', () => {
-    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab']) expect(rule(selector)).toContain('touch-action: manipulation');
-    expect(rule('.ki-side-link', DESKTOP)).toContain('touch-action: manipulation');
+    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab', '.ki-kvart-select', '.ki-fab']) expect(rule(selector)).toContain('touch-action: manipulation');
+    for (const selector of ['.ki-more', '.ki-search']) expect(rule(selector, DESKTOP)).toContain('touch-action: manipulation');
     for (const selector of ['.btn, .btn-ghost, .btn-quiet', '.chip']) expect(rule(selector, BASE_CSS)).toContain('touch-action: manipulation');
     for (const selector of ['.row-button', '.route-link', '.dir-item', '.link-arrow, .link-ext', '.source-link']) {
       expect(rule(selector, LAYERS_CSS)).toContain('touch-action: manipulation');
@@ -340,10 +387,10 @@ describe('toasts sit above the tab bar on a phone, at body size, with a 44 px di
 });
 
 describe('scroll padding keeps focused rows clear of the fixed chrome', () => {
-  it('pads the document scrollport by the header and the tab bar on the phone, and by nothing at the desk', () => {
-    expect(CSS).toContain('html:has(.ki) { scroll-padding-block: calc(3rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }');
+  it('pads the document scrollport by the status line and the tab bar on the phone, and by the 3.5rem status line alone at the desk', () => {
+    expect(CSS).toContain('html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }');
     const desk = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 0; }');
+    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 3.5rem 0; }');
   });
 });
 
