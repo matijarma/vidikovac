@@ -140,7 +140,29 @@
     "laneEmpty": "ništa najavljeno",
     "moreItems_one": "+ {count} stavka",
     "moreItems_few": "+ {count} stavke",
-    "moreItems_other": "+ {count} stavki"
+    "moreItems_other": "+ {count} stavki",
+    "moreLines_one": "+ {count} linija",
+    "moreLines_few": "+ {count} linije",
+    "moreLines_other": "+ {count} linija",
+    "moreClosures_one": "+ {count} zatvaranje",
+    "moreClosures_few": "+ {count} zatvaranja",
+    "moreClosures_other": "+ {count} zatvaranja",
+    "moreEvents_one": "+ {count} događanje",
+    "moreEvents_few": "+ {count} događanja",
+    "moreEvents_other": "+ {count} događanja"
+  },
+  "tiles": {
+    "line": "Linija {line}",
+    "closures": "Zatvaranja",
+    "works": "Radovi",
+    "worksCity": "Radovi u gradu",
+    "worksNow_one": "{count} rad u tijeku",
+    "worksNow_few": "{count} rada u tijeku",
+    "worksNow_other": "{count} radova u tijeku",
+    "gazette": "Glasnik",
+    "event": "Događanje",
+    "lastRun": "Zadnji polazak",
+    "scheduled": "Prema redu vožnje"
   },
   "overview": {
     "place": "{place} · {date}",

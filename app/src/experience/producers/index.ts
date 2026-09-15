@@ -1,9 +1,36 @@
-// The producers of the time band (plan A.6), in the order buildTimeband asks
-// them. Task T2.3 fills this list; until then the band has no producers and
-// paints "ništa najavljeno" in every lane, which is what an empty register
-// honestly looks like. The import from timeband.ts is type-only here and stays
-// type-only in every producer, so the default-parameter import there is never
-// a runtime cycle.
+// The producers of the time band (plan A.6), in the sada reading order:
+// transit -> mobility -> komunalno -> safety -> news -> civic (DOMAIN_ORDER in
+// tiles.ts). The gazette is the least time-critical value and the only
+// half-width tile after the line tiles, so it sits under the news row;
+// assembly and events fill the time lanes; last run stays behind FEED_LASTRUN
+// until Task T3.1 ships its real source.
+export { assemblyProducer, gazetteProducer } from './civic';
+export { eventsProducer } from './events';
+export { lastRunProducer, type LastRun, type LastRunDeparture } from './last-run';
+export { closuresProducer } from './mobility';
+export { worksProducer } from './komunalno';
+export { newsProducer } from './news';
+export { safetyProducer, safetyVerdict, SAFETY_ICON } from './safety';
+export { transitProducer } from './transit';
+
+import { assemblyProducer, gazetteProducer } from './civic';
+import { eventsProducer } from './events';
+import { lastRunProducer } from './last-run';
+import { closuresProducer } from './mobility';
+import { worksProducer } from './komunalno';
+import { newsProducer } from './news';
+import { safetyProducer } from './safety';
+import { transitProducer } from './transit';
 import type { TileProducer } from '../timeband';
 
-export const DEFAULT_PRODUCERS: readonly TileProducer[] = [];
+export const DEFAULT_PRODUCERS: readonly TileProducer[] = [
+  transitProducer,
+  closuresProducer,
+  worksProducer,
+  safetyProducer,
+  newsProducer,
+  gazetteProducer,
+  assemblyProducer,
+  eventsProducer,
+  lastRunProducer,
+];

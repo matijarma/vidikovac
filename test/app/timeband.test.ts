@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import type { ScreenContext } from '../../app/src/core/contracts';
+import type { ScreenContext, ScreenStop } from '../../app/src/core/contracts';
+import { DEFAULT_PRODUCERS } from '../../app/src/experience/producers';
 import { statusBadge } from '../../app/src/experience/status';
 import type { Tile } from '../../app/src/experience/tiles';
 import {
@@ -569,5 +570,75 @@ describe('tickTimebandClock: the one clock ticks through the shell seam', () => 
     document.body.innerHTML = '<div class="tb"></div>';
     expect(() => tickTimebandClock(document.body, NOW)).not.toThrow();
     expect(document.body.innerHTML).toBe('<div class="tb"></div>');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The nine real producers (Task T2.3), through buildTimeband's own default
+// parameter: each producer's own fixtures live in producers.test.ts; this is
+// the integration proof that DEFAULT_PRODUCERS, assembled and ordered, is
+// what a caller gets from `buildTimeband(ctx)` with no second argument.
+
+describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PRODUCERS)', () => {
+  const REAL_NOW = FRI_AFTERNOON;
+  const attribution = (text: string) => ({ text, url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' });
+  const snap = (module: ModuleId, items: ModuleSnapshot['items']): ModuleSnapshot => ({
+    module, tier: 'open', status: 'live', fetchedAt: new Date(REAL_NOW - 60_000).toISOString(), attribution: attribution(`Izvor: ${module}`), items,
+  });
+  const REAL_STOP: ScreenStop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11'] };
+  const REAL_SNAPSHOTS: LayerContext['snapshots'] = {
+    'zet-rt': snap('zet-rt', [
+      { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 90, vehicles: 2 } },
+      { id: 'route:11', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '11', data: { routeId: '11', medianDelaySeconds: -20, vehicles: 1 } },
+    ]),
+    prometnice: snap('prometnice', [
+      { id: 'c1', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Grada Vukovara', at: '2026-04-18T07:00:00Z', until: '2026-09-11T22:00:00Z' },
+    ]),
+    'dhmz-cap': snap('dhmz-cap', []),
+    emsc: snap('emsc', []),
+    'hrt-news': snap('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', at: '2026-09-11T11:00:00Z' }]),
+    glasnik: snap('glasnik', [{ id: 'a1', module: 'glasnik', kind: 'act', tier: 'open', title: 'Odluka', at: '2026-09-10T00:00:00Z', data: { broj: '21', godina: '2026' } }]),
+    dogadanja: snap('dogadanja', [
+      { id: 'kulturpunkt:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert u parku', at: '2026-09-12T18:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time' } },
+      { id: 'komunalne:5', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Horvati', at: '2026-06-01T00:00:00Z', data: { source: 'komunalne', phase: 'Radovi u tijeku', status: 'U tijeku', amount: 1500, precision: 'day' } },
+      { id: 'skupstina:4', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Poziv na 13. sjednicu', at: '2026-09-14T09:00:00Z', data: { source: 'skupstina', venue: 'Stara gradska vijećnica', precision: 'time' } },
+    ]),
+  };
+  function realCtx(): LayerContext {
+    return {
+      i18n: hr,
+      snapshots: REAL_SNAPSHOTS,
+      now: REAL_NOW,
+      screen: { surface: 'desktop', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: REAL_STOP },
+    };
+  }
+
+  it('assembles every sada domain from the real producers, in DOMAIN_ORDER, using the default parameter', () => {
+    const model = buildTimeband(realCtx()); // no second argument: DEFAULT_PRODUCERS
+    const sada = model.lanes.find((l) => l.col === 'sada')!;
+    expect(sada.tiles.map((t) => t.domain)).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic']);
+    expect(sada.tiles.find((t) => t.testid === 'tile-safety')?.tone).toBe('calm');
+    expect(sada.tiles.find((t) => t.testid === 'tile-gazette')?.value).toBe('21/2026');
+    expect(sada.tiles.find((t) => t.testid === 'tile-works')?.value).toBe('1');
+    expect(sada.tiles.find((t) => t.testid === 'tile-closures')?.title).toBe('Grada Vukovara');
+    expect(sada.tiles.find((t) => t.testid === 'tile-news')?.title).toBe('Naslov vijesti');
+  });
+
+  it('lands the next Assembly session and the next culture event in their own time lanes', () => {
+    const model = buildTimeband(realCtx());
+    const tjedan = model.lanes.find((l) => l.col === 'tjedan')!;
+    expect(tjedan.tiles.some((t) => t.variant === 'ink' && t.title === 'Poziv na 13. sjednicu')).toBe(true);
+    const sutra = model.lanes.find((l) => l.col === 'sutra')!;
+    expect(sutra.tiles.some((t) => t.key === 'dogadanja:kulturpunkt:1')).toBe(true);
+  });
+
+  it('never asks the last-run producer while FEED_LASTRUN is off: no lastrun tile anywhere on the band', () => {
+    const model = buildTimeband(realCtx());
+    const keys = model.lanes.flatMap((l) => l.tiles.map((t) => t.key));
+    expect(keys.some((k) => k.includes('lastrun'))).toBe(false);
+  });
+
+  it('is the same producer list DEFAULT_PRODUCERS exports, in the sada reading order the plan names', () => {
+    expect(DEFAULT_PRODUCERS.map((p) => p.domain)).toEqual(['transit', 'mobility', 'komunalno', 'safety', 'news', 'civic', 'civic', 'events', 'transit']);
   });
 });
