@@ -54,7 +54,7 @@ describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.
   });
   // The bus: `--tone-action-brand-fg` on `--tone-transit`, the pair the line
   // badge (ui/signage.css), the map pill (map/basemap.ts) and the mode chip
-  // all carry. #f6f8f7 on #0b4f6c light, #10201d on #8fd0ec dark.
+  // all carry. #ffffff on #0c1250 light, #0b1150 on #9fb4ff dark.
   it('on-accent text is readable on the transit fill, which carries the bus badge and the bus pill', () => {
     const ratio = contrastRatio(palette(theme, 'on-accent'), palette(theme, 'transit'));
     expect(Number(ratio.toFixed(2)), `${theme} on-accent on transit = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
@@ -142,15 +142,13 @@ describe.each(['dark', 'light'] as const)('%s palette as rendered in OKLCH', (th
 });
 
 describe('why --tone-text-brand-on-tint exists', () => {
-  it('the plain light accent falls under AA on every light tint as rendered, which is what axe measured on the safety block', () => {
-    const accent = toHex(rendered('light', 'accent'));
-    const failing = tints().filter((tint) => contrastRatio(accent, tintHex('light', tint)) < AA_TEXT);
-    expect(failing.map((t) => t.name)).toContain('success');
-    expect(failing).toHaveLength(tints().length);
-  });
-  it('the dark accent already clears AA on the dark tints, so dark keeps its accent', () => {
-    const accent = toHex(rendered('dark', 'accent'));
-    for (const tint of tints()) expect(contrastRatio(accent, tintHex('dark', tint)), tint.name).toBeGreaterThanOrEqual(AA_TEXT);
+  it('the accent clears AA on every tint in both themes', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      const accent = toHex(rendered(theme, 'accent'));
+      for (const tint of tints()) {
+        expect(contrastRatio(accent, tintHex(theme, tint)), `${theme} accent on ${tint.name}`).toBeGreaterThanOrEqual(AA_TEXT);
+      }
+    }
   });
 });
 

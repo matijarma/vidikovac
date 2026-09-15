@@ -349,13 +349,16 @@ describe('the basemap and the overlays on it', () => {
     const { map, handle } = await harness();
     const layersBefore = map.layers.length;
     handle.setTheme!('dark');
-    expect(map.paint['background']?.['background-color']).toBe('#151d1c');
-    expect(map.paint['vehicles']?.['icon-halo-color']).toBe('#17201f');
+    // Read the live paint back through basemap.ts's own exports rather than a literal re-pin,
+    // so this assertion never again needs an edit when a basemap task changes the palette
+    // (fix round 1, T1.2 finding: test/motion/* must pass without edits).
+    expect(map.paint['background']?.['background-color']).toBe(basemap.flavorFor('dark').background);
+    expect(map.paint['vehicles']?.['icon-halo-color']).toBe(basemap.OVERLAY_DARK.halo);
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/dark');
     expect(map.layers).toHaveLength(layersBefore);
     document.documentElement.setAttribute('data-theme-resolved', 'light');
     await new Promise((r) => setTimeout(r, 0));
-    expect(map.paint['background']?.['background-color']).toBe('#e9eeec');
+    expect(map.paint['background']?.['background-color']).toBe(basemap.flavorFor('light').background);
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/light');
   });
 });

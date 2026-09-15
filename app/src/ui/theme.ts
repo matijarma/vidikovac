@@ -37,7 +37,7 @@ export const THEME_STORAGE_KEY = 'vidikovac-theme';
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['auto', 'light', 'dark', 'solar'];
 const ALLOWED = new Set<ThemePreference>(THEME_PREFERENCES);
 /** Matches --palette-*-canvas in tokens.css; used only when the property cannot be read. */
-const THEME_COLOR_FALLBACK: Record<ResolvedTheme, string> = { light: '#f6f8f7', dark: '#17201f' };
+const THEME_COLOR_FALLBACK: Record<ResolvedTheme, string> = { light: '#f4f2ec', dark: '#0b1150' };
 
 export function createThemeController(options: ThemeControllerOptions = {}): ThemeController {
   const root = options.root ?? document.documentElement;

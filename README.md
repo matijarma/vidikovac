@@ -58,7 +58,7 @@ test/          vitest; test/fixtures su spremljeni živi uzorci svakog izvora
 
 ## Dokumenti
 
-- Važeći produkt i dizajn: `PRODUCT.md`, `design.md`; provedba i status: `docs/implementation-kaj-ima.md`
+- Važeći produkt i dizajn: `PRODUCT.md`, `newdesignsystem.md`; provedba i status: `docs/implementation-kaj-ima.md`
 - Ranije specifikacije u `docs/superpowers/` su povijesni zapis, ne važeće vizualne upute.
 - Arhitektura: `docs/arhitektura.md` · Javni zasloni: `docs/kiosk.md` · Izvori i licence: `docs/izvori.md`
 - Prijava (hrvatski): `docs/prijava/prijedlog-projekta.md`, `obrazac-3-financijski-plan.md`, `plan-provedbe.md`, `rizici-i-odgovori.md`

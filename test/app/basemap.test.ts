@@ -85,11 +85,38 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(ops.length).toBeGreaterThan(20);
     expect(ops.every((op) => op.kind === 'paint')).toBe(true);
     expect(styleDiff(light, light)).toEqual([]);
-    // Product colours, not the upstream flavour: the dark face's ground is the deep neutral, the light face's water the soft peacock.
-    expect(flavorFor('dark').earth).toBe('#1b2523');
-    expect(flavorFor('light').water).toBe('#b9d6d9');
+    // Product colours, not the upstream flavour: the dark face's ground is ultramarine ink, the light face's water a paper-family blue.
+    expect(flavorFor('dark').earth).toBe('#0b1150');
+    expect(flavorFor('light').water).toBe('#cdd3ea');
     expect(flavorFor('light').regular).toBe(MAP_FONTS.regular);
     expect(flavorFor('dark').bold).toBe(MAP_FONTS.medium);
+  });
+
+  // R-D3: one Zagreb blue for trams (the accent role) and ink for buses (the
+  // transit role, which equals ink in the light face); land moves from
+  // mineral green to paper by day and ultramarine by night.
+  it('paints trams in the accent blue and buses in ink, in both faces (R-D3)', () => {
+    expect(OVERLAY_LIGHT.tram).toBe('#1428d8');
+    expect(OVERLAY_LIGHT.bus).toBe('#0c1250');
+    expect(OVERLAY_LIGHT.routeTram).toBe('#1428d8');
+    expect(OVERLAY_LIGHT.routeBus).toBe('#0c1250');
+    expect(OVERLAY_LIGHT.closure).toBe('#b3271e');
+    expect(OVERLAY_LIGHT.stopFill).toBe('#f4f2ec');
+    expect(OVERLAY_LIGHT.label).toBe('#0c1250');
+    expect(OVERLAY_LIGHT.halo).toBe('#fbfaf6');
+    expect(OVERLAY_LIGHT.selection).toBe('#0c1250');
+    expect(OVERLAY_LIGHT.screenStop).toBe('#1428d8');
+    expect(OVERLAY_DARK.tram).toBe('#f4f2ec');
+    expect(OVERLAY_DARK.tramText).toBe('#0b1150');
+    expect(OVERLAY_DARK.bus).toBe('#9fb4ff');
+    expect(OVERLAY_DARK.busText).toBe('#0b1150');
+    expect(OVERLAY_DARK.routeTram).toBe('#f4f2ec');
+    expect(OVERLAY_DARK.routeBus).toBe('#9fb4ff');
+    expect(OVERLAY_DARK.closure).toBe('#ff9d9d');
+    expect(OVERLAY_DARK.label).toBe('#f4f2ec');
+    expect(OVERLAY_DARK.halo).toBe('#0b1150');
+    expect(deltaE(hexToLinear(OVERLAY_LIGHT.tram), hexToLinear(OVERLAY_LIGHT.bus))).toBeGreaterThanOrEqual(0.1);
+    expect(deltaE(hexToLinear(OVERLAY_DARK.tram), hexToLinear(OVERLAY_DARK.bus))).toBeGreaterThanOrEqual(0.1);
   });
 
   it('keeps the camera inside the archive: maxBounds pads MAP_CONFIG.bounds by a hair on every side', () => {

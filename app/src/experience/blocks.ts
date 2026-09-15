@@ -126,11 +126,12 @@ export function findSelected(snapshot: ModuleSnapshot | undefined, selection: Pu
 
 /**
  * The line badge (signage.css `.line`): the number on the front of the
- * vehicle, in its mode's shape and colour. `s` in dense rows and the peek,
- * `m` on boards, `l` on a detail head, `k` on a public screen. `extra` are
- * further attributes on the badge, written as they are named.
+ * vehicle, in its mode's shape and colour. `xs` where a line is only
+ * mentioned (an event's nearest stop, the last tram), `s` in dense rows and
+ * the peek, `m` on boards, `l` on a detail head, `k` on a public screen.
+ * `extra` are further attributes on the badge, written as they are named.
  */
-export function lineBadge(label: string, kind: 'tram' | 'bus' | 'other', size: 's' | 'm' | 'l' | 'k' = 'm', extra: Record<string, string> = {}): string {
+export function lineBadge(label: string, kind: 'tram' | 'bus' | 'other', size: 'xs' | 's' | 'm' | 'l' | 'k' = 'm', extra: Record<string, string> = {}): string {
   // A `class` among the extras joins the component's own class list; writing it
   // as a second class attribute would make the parser drop one of the two.
   const { class: extraClass, ...others } = extra;

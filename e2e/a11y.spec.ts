@@ -7,7 +7,7 @@ import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
 
-// The two sizes design.md and Vidikovac.dc.html were drawn at: kiosk 1080p
+// The two sizes newdesignsystem.md and Vidikovac.dc.html were drawn at: kiosk 1080p
 // and the /d phone artboard (390×844). Every surface is swept at whichever
 // of the two (or both) it is actually laid out for.
 const KIOSK = { width: 1920, height: 1080 };

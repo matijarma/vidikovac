@@ -109,6 +109,9 @@
     "unknown": "time unknown",
     "duration": "{hours} h {minutes} min"
   },
+  "weatherStatus": {
+    "sunset": "sunset {time}"
+  },
   "overview": {
     "place": "{place} · {date}",
     "observedAt": "measured at {time}",

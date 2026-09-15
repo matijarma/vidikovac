@@ -113,6 +113,9 @@
     "unknown": "vrijeme nepoznato",
     "duration": "{hours} h {minutes} min"
   },
+  "weatherStatus": {
+    "sunset": "zalazak {time}"
+  },
   "overview": {
     "place": "{place} · {date}",
     "observedAt": "izmjereno u {time}",

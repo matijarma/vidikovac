@@ -108,3 +108,12 @@ Delivery is verified in `docs/kaj-verification.md`, including the Cloudflare
 version and the real protected smoke. Company/personal application fields,
 the video link, physical device checks and the actual funding submission are
 not represented as completed by this implementation.
+
+## Downstream plans
+
+This contract's overhaul is the baseline other plans build on. Each row below
+names a plan that starts from this contract and where its specification lives.
+
+| System | Plan |
+|---|---|
+| Dan grada | `C:/Users/MatijaRadeljak/.claude/plans/implement-vidikovac-newdesignsystem-md-agile-locket.md` |

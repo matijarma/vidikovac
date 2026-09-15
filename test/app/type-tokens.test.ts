@@ -15,12 +15,16 @@ const TYPE_ROLES: Record<string, string> = {
   '--type-numeral-xl': '3.5rem',
   '--type-numeral': '2.5rem',
   '--type-display': '1.75rem',
-  '--type-title': '1.375rem',
+  '--type-title': '1.5rem',
   '--type-head': '1.125rem',
   '--type-body': '1rem',
   '--type-control': '0.875rem',
   '--type-secondary': '0.8125rem',
   '--type-meta': '0.75rem',
+  '--type-tile-xl': '2rem',
+  '--type-tile-l': '1.5rem',
+  '--type-tile-m': '1.0625rem',
+  '--type-tile-time': '1.25rem',
 };
 const LINE_HEIGHTS: Record<string, string> = {
   '--lh-tight': '1',
