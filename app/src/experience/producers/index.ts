@@ -2,11 +2,11 @@
 // transit -> mobility -> komunalno -> safety -> news -> civic (DOMAIN_ORDER in
 // tiles.ts). The gazette is the least time-critical value and the only
 // half-width tile after the line tiles, so it sits under the news row;
-// assembly and events fill the time lanes; last run stays behind FEED_LASTRUN
-// until Task T3.1 ships its real source.
+// assembly and events fill the time lanes; last run reads the stop's GTFS
+// schedule behind FEED_LASTRUN and declares no module.
 export { assemblyProducer, gazetteProducer } from './civic';
 export { eventsProducer } from './events';
-export { lastRunProducer, type LastRun, type LastRunDeparture } from './last-run';
+export { lastRunProducer } from './last-run';
 export { closuresProducer } from './mobility';
 export { worksProducer } from './komunalno';
 export { newsProducer } from './news';

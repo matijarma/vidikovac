@@ -347,6 +347,24 @@ describe('buildTimeband: the model', () => {
       expect(sada.busy).toBe(false);
     }
   });
+  it('a producer without a module has no feed to wait for: its tiles stand while its neighbours load, go stale or fail, and carry no badge', () => {
+    // The last-run producer's shape (T3.1): a schedule on disk, never zet-rt's state painted on it.
+    const schedule: TileProducer = {
+      domain: 'transit', modules: [], layer: 'u-pokretu', skeleton: null,
+      produce: () => [{ key: 'transit:lastrun:6', domain: 'transit', variant: 'time', label: 'Zadnji polazak', title: 'Črnomerec-Sopot', at: '2026-09-11T22:27:00Z', context: 'po rasporedu · ZET GTFS', layer: 'u-pokretu', testid: 'tile-lastrun' }],
+    };
+    const cases: LayerContext['snapshots'][] = [{}, { ...ALL_LIVE, 'zet-rt': stale('zet-rt') }, { ...ALL_LIVE, 'zet-rt': down('zet-rt') }];
+    for (const snapshots of cases) {
+      const model = buildTimeband(ctx({ snapshots }), [transit(SIX_LINES), schedule]);
+      const veceras = lane(model, 'veceras');
+      expect(veceras.tiles.map((t) => t.key), JSON.stringify(Object.keys(snapshots))).toEqual(['transit:lastrun:6']);
+      expect(veceras.tiles[0]!.stale).toBeUndefined();
+      expect(veceras.busy).toBe(false);
+      expect(veceras.foot).toEqual([]);
+    }
+    const stillStale = lane(buildTimeband(ctx({ snapshots: { ...ALL_LIVE, 'zet-rt': stale('zet-rt') } }), [transit(SIX_LINES), schedule]), 'sada');
+    expect(stillStale.tiles.every((t) => t.stale)).toBe(true);
+  });
   it('selects the column tb-col names when it exists, else sada', () => {
     expect(buildTimeband(ctx({ view: view('tjedan') }), PRODUCERS).selected).toBe('tjedan');
     expect(buildTimeband(ctx({ view: view('bogus') }), PRODUCERS).selected).toBe('sada');

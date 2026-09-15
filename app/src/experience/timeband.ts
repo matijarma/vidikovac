@@ -273,8 +273,9 @@ function trimByCount(tiles: readonly Tile[], cap: number): Trim {
  * block with a retry in that lane (once per module and lane); stale marks
  * every tile with the status badge. The safety producer is the one exception
  * and always stands: its band is itself the state word (safetyState says
- * unknown when a source has not vouched). A producer behind a flag that is
- * off is never asked.
+ * unknown when a source has not vouched); a producer that names no module
+ * has no feed to wait for and stands as well. A producer behind a flag that
+ * is off is never asked.
  */
 export function buildTimeband(ctx: LayerContext, producers: readonly TileProducer[] = DEFAULT_PRODUCERS): TimebandModel {
   const { i18n, now } = ctx;
@@ -300,7 +301,8 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
     const lead = producer.modules[0];
     const snapshot: ModuleSnapshot | undefined = lead ? ctx.snapshots[lead] : undefined;
     const error = lead ? ctx.errors?.[lead] : undefined;
-    const state = snapshot ? snapshot.status : error ? 'down' : 'loading';
+    // A producer without a module (the last departure: a schedule on disk) has no feed to wait for and always stands.
+    const state = !lead ? 'live' : snapshot ? snapshot.status : error ? 'down' : 'loading';
     const gated = producer.domain !== 'safety';
     if (gated && state === 'loading') {
       if (!producer.skeleton) continue;
