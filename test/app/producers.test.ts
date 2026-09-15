@@ -153,6 +153,30 @@ describe('closuresProducer', () => {
     expect(closuresProducer.produce(ctx({ snapshots: { prometnice: base('prometnice', []) } }), options())).toEqual([]);
     expect(closuresProducer.moreLabel!(hr, 3, ctx())).toEqual({ text: '+ 3 zatvaranja' });
   });
+
+  it('falls back to the generic word and drops the context when a planned closure has no subtype/direction at all', () => {
+    const planned = base('prometnice', [
+      { id: 'c10', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Heinzelova', at: '2026-09-15T06:00:00Z', until: '2026-09-15T18:00:00Z' },
+    ]);
+    const tiles = closuresProducer.produce(ctx({ snapshots: { prometnice: planned } }), options());
+    expect(tiles).toEqual([{
+      key: 'prometnice:c10', domain: 'mobility', variant: 'time', label: 'zatvoreno', title: 'Heinzelova',
+      at: '2026-09-15T06:00:00Z', until: '2026-09-15T18:00:00Z', context: '', layer: 'u-pokretu', testid: 'tile-closure',
+    }]);
+  });
+
+  it('falls back the same way when the City publishes a subtype/direction code outside today’s vocabulary', () => {
+    const planned = base('prometnice', [
+      {
+        id: 'c11', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Slavonska avenija',
+        at: '2026-09-15T06:00:00Z', until: '2026-09-15T18:00:00Z',
+        data: { subtype: 'ROAD_CLOSED_FUTURE_CODE', direction: 'DIAGONAL' },
+      },
+    ]);
+    const tile = closuresProducer.produce(ctx({ snapshots: { prometnice: planned } }), options())[0]!;
+    expect(tile.label).toBe('zatvoreno');
+    expect(tile.context).toBe('');
+  });
 });
 
 // ---------------------------------------------------------------------------
