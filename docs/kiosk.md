@@ -30,10 +30,25 @@ pokreće izričitom radnjom, ne automatskom petljom.
 
 ## Što zaslon prikazuje
 
-Nepovezan zaslon ima lokalnu vektorsku kartu, linije odabranog stajališta,
-opažanje vremena, ograničen izbor obavijesti, stalno mjesto QR-a i sigurnosnu
-traku. Nema panorame ni meandra. Rasporedi za 1920 × 1080 i 1366 × 768
-namjerno su različiti; QR u oba mora biti najmanje 240 CSS piksela.
+Nepovezan zaslon rotira tri prizora svakih 20 sekundi: Promet (lokalna
+vektorska karta, linije odabranog stajališta i radovi u tijeku), Večeras
+(današnja događanja, dok ih otvoreni izvor ima) i Grad (najava sljedeće
+sjednice Gradske skupštine i gradske vijesti). Bočni stupac uz prizor nosi
+dvije brojčane pločice (vozila u pogonu na mreži, zatvaranja u blizini
+stajališta) i stalnu pozivnicu s QR-om i kodom. Zaglavlje nosi sat i, kad
+DHMZ odgovara, vrijeme kao stanje uz sat, nikad kao pločicu. Sigurnosna
+traka nosi presudu, tri stavke i odbrojavanje do sljedećeg prizora. Nema
+panorame ni meandra. Rasporedi za 1920 × 1080 i 1366 × 768 namjerno su
+različiti; QR u oba mora biti najmanje 240 CSS piksela.
+
+Radovi u tijeku broje se za gradsku četvrt stajališta kad je poznata i
+prizor to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
+tek uveden, broje cijeli grad i kažu to izričito („Radovi u gradu”).
+Adresa `/kiosk/` s dodatkom `?prizor=promet`, `?prizor=veceras` ili
+`?prizor=grad` prikazuje samo taj prizor i zaustavlja rotaciju; koristi se
+za testiranje, demonstraciju ili kad operater svjesno želi zadržati jedan
+prizor na zaslonu. Aplikacija poštuje i sustavnu postavku smanjenog
+pokreta preglednika: uz nju rotacija također staje, na prvome prizoru.
 
 Povezan zaslon preuzima javni izbor s telefona: područje, liniju, stajalište
 ili stavku. Sedam područja ima raspored za gledanje s udaljenosti, ne

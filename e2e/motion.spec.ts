@@ -203,7 +203,9 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     const gate = deferred();
     const teaser = await stubTeaser(page, () => zetSnapshot('e2e-kiosk-1', 0), gate.promise);
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
-    await page.goto(kioskUrl);
+    // D13's pin: kiosk-map only exists while the Promet scene shows, and this
+    // test's own waits can outlast the 20 s scene tick on a loaded CI box.
+    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
     // Load the real tiles and worker before starting the five-second ease.
     // Otherwise map startup can consume the entire interpolation window.
@@ -242,7 +244,8 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     // this must be set before the page (and its first script) ever loads.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
-    await page.goto(kioskUrl);
+    // D13's pin, alongside reduced motion's own hold on the field.
+    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
     const schematicSel = '[data-testid=kiosk-map]';

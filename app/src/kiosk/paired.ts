@@ -194,7 +194,13 @@ const ROUNDING_PX = 1;
 /** After a paint, trailing rows that do not fit their block are hidden and
  *  counted in one "prikazano N od M" line, so a block never shows half a row
  *  or runs into its own source line. A DOM without layout (tests) measures
- *  nothing and leaves every row in place; `measure` is injectable for that. */
+ *  nothing and leaves every row in place; `measure` is injectable for that.
+ *  The floor is zero, not one: a block whose own coverage line ("prikazano
+ *  N od M") does not fit beside even a single row (a long street name in a
+ *  cramped compact side column) drops the row rather than clip the line
+ *  that discloses how many exist -- a bare "prikazano 0 od M" still tells
+ *  the reader the truth, where a half-visible row or a silently cropped
+ *  line would not. */
 export function fitRows(
   root: ParentNode,
   coverage: string,
@@ -222,7 +228,7 @@ export function fitRows(
     let m = measure(body);
     if (m.client === 0 || m.scroll <= m.client + ROUNDING_PX) continue;
     let visible = rows.length;
-    while (visible > 1 && m.scroll > m.client + ROUNDING_PX) {
+    while (visible > 0 && m.scroll > m.client + ROUNDING_PX) {
       visible -= 1;
       rows[visible]!.hidden = true;
       setNote(body, visible, totalOf(body));

@@ -348,7 +348,12 @@
 .k-side-blocks > .k-block--grow, .k-stack > .k-block--grow { flex: 1 1 auto; }
 .k-side-blocks { overflow: hidden; }
 .kiosk[data-size='wide'] { --k-block-min: calc(270px * var(--k-zoom)); --k-arc-w: calc(420px * var(--k-zoom)); --k-arc-h: calc(235px * var(--k-zoom)); }
-.kiosk[data-size='compact'] { --k-block-min: calc(205px * var(--k-zoom)); --k-arc-w: calc(300px * var(--k-zoom)); --k-arc-h: calc(168px * var(--k-zoom)); }
+/* 205px assumed a kicker, one row and the source line with no coverage
+   line; a real stop's closures count (near.count) almost always exceeds
+   the compact render limit, so the "prikazano N od M" line is present from
+   the first paint, not only once trimming starts, and needs its own room
+   alongside a second block in the same column (T2.11 fix round 3, R-K8 addendum). */
+.kiosk[data-size='compact'] { --k-block-min: calc(185px * var(--k-zoom)); --k-arc-w: calc(300px * var(--k-zoom)); --k-arc-h: calc(168px * var(--k-zoom)); }
 .k-block-body { flex: 1; min-height: 0; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; }
 .k-row-more { margin-top: calc(var(--k-gap) * 0.4); }
 .k-block > .k-source { margin-top: calc(var(--k-gap) * 0.5); }
@@ -396,9 +401,32 @@
 .k-row--line .k-row-name { flex: 1; min-width: 0; margin-left: calc(var(--k-gap) * 0.7); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
 .k-row--line .k-row-word { flex: none; margin-left: calc(var(--k-gap) * 0.7); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-row--line .k-row-aside { float: none; flex: none; margin-left: calc(var(--k-gap) * 0.7); padding-top: 0; }
-/* Leading the Promet column, the board keeps five rows, their coverage line and ZET's three-line credit (measured: 500 px at wide, 380 at compact). */
+/* Leading the Promet column, the board keeps five rows, their coverage line and ZET's three-line credit (measured: 500 px at wide, fits the 720 px paired side). */
 .kiosk[data-size='wide'] .k-block--board { --k-block-min: calc(500px * var(--k-zoom)); }
-.kiosk[data-size='compact'] .k-block--board { --k-block-min: calc(380px * var(--k-zoom)); }
+/* 380px was measured before this wave's compact head/strip grew from 60 to
+   72 px (C.4), which leaves the paired side only ~335 px once the join card
+   takes its own room; the board is the column's sole block (flex-grow:1),
+   so it always fills what is actually there and the row fitter (fitRows)
+   trims from five rows to however many fit rather than the block
+   overflowing its own column. Re-measured this round: 300px is a floor
+   safely under the ~335 px available today, not a claim of a fixed row
+   count (T2.11 fix round 3, R-K8 addendum). */
+.kiosk[data-size='compact'] .k-block--board { --k-block-min: calc(300px * var(--k-zoom)); }
+/* zrak-i-nebo/compact only: an empty "no active warnings" note has no rows
+   for the row fitter to trim and, unlike a .k-block--list, no floor of its
+   own (the "unchanged this wave" grammar's plain-note blocks never needed
+   one, since nothing this small ever stood beside a block that also claims
+   a floor) -- so it can be squeezed to nothing beside the quakes list at
+   its own floor (zero rows, once fitRows has nothing left to cut). The
+   two do not both fit the ~335 px this wave's compact side actually has;
+   tightened here to the one pairing that needs it, not the shared block
+   grammar every layer inherits (T2.11 fix round 3, R-K8 addendum). */
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-side-blocks { --k-block-min: calc(158px * var(--k-zoom)); }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-side-blocks > .k-block { padding-top: calc(var(--k-gap) * 0.55); padding-bottom: calc(var(--k-gap) * 0.55); }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-side-blocks > .k-block > .k-block-body { margin-top: calc(var(--k-gap) * 0.25); }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-side-blocks > .k-block > .k-source { margin-top: calc(var(--k-gap) * 0.25); }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-side-blocks > * + * { margin-top: calc(var(--k-gap) * 0.25); }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] [data-testid='k-warnings'] { min-height: calc(140px * var(--k-zoom)); }
 /* The severity word with its shape (base.css .badge) at the supporting tier. */
 .k-badge { min-height: 0; padding: 0.1em 0.5em; gap: 0.35em; font-size: var(--k-sup-size); letter-spacing: 0; line-height: 1.2; vertical-align: baseline; }
 .k-badge::before { inline-size: 0.5em; block-size: 0.5em; }
