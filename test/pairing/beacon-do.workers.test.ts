@@ -210,7 +210,10 @@ describe('BeaconDO redeem', () => {
     expect(await stub.redeem(batch[1]!.code, OTHER_NET)).not.toEqual({ ok: false, error: 'slow-down' });
   });
 
-  it('counts at most CAP_PER_HOUR sessions and records over_cap beyond', async () => {
+  // Thirty-one sequential redeems through the Durable Object, each with a spied clock, take about five seconds
+  // inside workerd; vitest's default limit sat on that edge and tripped whenever the unit project's heavier
+  // files ran alongside. The limit below is the run's real shape; the assertions are unchanged.
+  it('counts at most CAP_PER_HOUR sessions and records over_cap beyond', { timeout: 20_000 }, async () => {
     // A distinct area, for the same reason as the kiosk_online test above:
     // METRICS_DO's storage is shared across every `it()` in this file.
     const { beaconId, batch, kiosk } = await onlineKiosk('stenjevec');
