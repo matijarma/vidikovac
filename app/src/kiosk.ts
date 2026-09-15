@@ -348,7 +348,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** "Otključano do 13:57 · Promet": the room's end and the domain the screen mirrors right now. */
   function paintSessionLabel(): void {
     if (!sessionLabel || sessionExpiresAt === null) return;
-    sessionLabel.textContent = `${fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })} · ${s.layers[activeLayer]}`;
+    // Two spans, one text: at compact and in portrait the CSS drops the layer word (the stage shows the layer) so the pill fits the header's one row.
+    const until = document.createElement('span');
+    until.className = 'k-session-until';
+    until.textContent = fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
+    const layer = document.createElement('span');
+    layer.className = 'k-session-layer';
+    layer.textContent = ` · ${s.layers[activeLayer]}`;
+    sessionLabel.replaceChildren(until, layer);
   }
   function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; sessionExpiresAt = null; }
 

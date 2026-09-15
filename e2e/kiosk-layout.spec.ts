@@ -53,6 +53,8 @@ function geometryIssues(page: Page): Promise<string[]> {
       if (el.scrollHeight > el.clientHeight + 1) out.push(`overflow-y ${tag(el)} ${el.scrollHeight}>${el.clientHeight}`);
       if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     }
+    // The header keeps one row: neither the row, its clock group nor the session pill may run wider than its box (a pill ellipsised by its slot counts).
+    for (const el of shown('.k-head, .k-head-when, .k-session')) if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     const code = shown('[data-testid=pair-code]')[0];
     if (code) {
       const c = code.getBoundingClientRect();
@@ -70,7 +72,8 @@ function geometryIssues(page: Page): Promise<string[]> {
       if (title.getBoundingClientRect().bottom > tile.getBoundingClientRect().bottom + 0.5) out.push(`${tag(tile)} title clipped`);
       if (title.textContent!.trim() !== '' && title.clientHeight === 0) out.push(`${tag(tile)} title has no height`);
     }
-    const boxes = shown('.k-stage .tl, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-block, .k-stage .k-join').map((el) => [tag(el), el.getBoundingClientRect()] as const);
+    // The header's three groups are boxes too: a session pill that paints over the chip or the date is an overlap like any other.
+    const boxes = shown('.k-stage .tl, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-block, .k-stage .k-join, .k-head-brand, .k-head-mid, .k-head-when').map((el) => [tag(el), el.getBoundingClientRect()] as const);
     for (let i = 0; i < boxes.length; i += 1) {
       for (let j = i + 1; j < boxes.length; j += 1) {
         const [ta, a] = boxes[i]!;
