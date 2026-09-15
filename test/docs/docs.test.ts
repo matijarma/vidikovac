@@ -69,4 +69,17 @@ describe('docs/arhitektura.md and README.md', () => {
     expect(readme).toContain('npm run e2e');
     expect(readme).toContain('AGPL-3.0-or-later');
   });
+  it('points "design" at newdesignsystem.md, the retired design.md is gone', () => {
+    const readme = read('README.md');
+    expect(readme).toContain('newdesignsystem.md');
+    expect(readme).not.toMatch(/\bdesign\.md\b/);
+  });
+});
+
+describe('docs/implementation-kaj-ima.md', () => {
+  it('names the Dan grada system and its plan path', () => {
+    const doc = read('docs/implementation-kaj-ima.md');
+    expect(doc).toContain('Dan grada');
+    expect(doc).toContain('implement-vidikovac-newdesignsystem-md-agile-locket.md');
+  });
 });
