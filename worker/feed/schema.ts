@@ -129,7 +129,7 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // 'routeType' is the GTFS route_type on the pin (R-P1: a locked kiosk keeps
   // to trams before, or without, the network artefact).
   vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles'],
-  closure: ['type', 'subtype', 'direction', 'street'],
+  closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],
   warning: ['event', 'certainty', 'urgency'],
@@ -138,7 +138,10 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   act: ['broj', 'godina', 'category'],
   poi: ['layer', 'category', 'district'],
   // The dogadanja module's six sub-fetchers between them use every one of
-  // these nine keys (worker/feed/modules/dogadanja/index.ts); no single
-  // source uses all nine itself, and none uses a key outside this set.
-  event: ['source', 'category', 'venue', 'organiser', 'live', 'phase', 'status', 'amount', 'precision'],
+  // these ten keys (worker/feed/modules/dogadanja/index.ts); no single
+  // source uses all ten itself, and none uses a key outside this set. The
+  // district key is the one every geocoded sub-fetcher can carry (only
+  // komunalne.ts does today, R-DG6): districtOf from the item's own
+  // coordinates, never guessed for an item without one.
+  event: ['source', 'category', 'venue', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district'],
 };

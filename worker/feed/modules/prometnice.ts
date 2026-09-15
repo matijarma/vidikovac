@@ -1,6 +1,7 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
 import { compactData } from '../payload';
+import { districtOfGeo } from '../geo/districts';
 import { isoOrUndefined } from '../time';
 
 // data.zagreb.hr publishes closures as a flat JSON array with a Waze-style
@@ -90,7 +91,12 @@ export function parsePrometnice(json: unknown): FeedPayload {
       ...(at ? { at } : {}),
       ...(until ? { until } : {}),
       geo: { type: 'LineString', coordinates },
-      data: compactData({ type: record.type, subtype: record.subtype, direction: record.direction }),
+      data: compactData({
+        type: record.type,
+        subtype: record.subtype,
+        direction: record.direction,
+        district: districtOfGeo({ type: 'LineString', coordinates }) ?? undefined,
+      }),
     });
   }
 

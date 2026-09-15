@@ -44,10 +44,13 @@ describe('parsePrometnice', () => {
     expect(first.until).toBe('2026-09-12T07:54:00.000Z');
     expect(first.summary).toBe('zatvoreno zbog radova, oba smjera');
     expect(first.id).toBe('petra-i-tome-erdodyja:2026-03-30T07:54:00.000Z');
+    // districtOf of the fixture's first vertex, [15.988335060009, 45.805906309659]: Petra i Tome Erdödyja
+    // sits inside Donji grad's own polygon in the generated worker/data/gradske-cetvrti.json table.
     expect(first.data).toEqual({
       type: 'ROAD_CLOSED',
       subtype: 'ROAD_CLOSED_CONSTRUCTION',
       direction: 'BOTH_DIRECTIONS',
+      district: 'donji-grad',
     });
     expect((first.geo?.coordinates as number[][])[0]).toEqual([15.988335060009, 45.805906309659]);
     expect(new Set(payload.items.map((item) => item.id)).size).toBe(32);
