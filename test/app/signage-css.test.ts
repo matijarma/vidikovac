@@ -223,6 +223,9 @@ describe('the time-band tile family .tl (plan A.5): one control, five variants, 
     expect(decls(".tl[data-variant='ink'] .kicker", CSS).color).toBe('var(--tone-surface-canvas)');
     expect(decls(".tl[data-variant='ink'] .tl-context", CSS).color).toBe('var(--tone-surface-3)');
   });
+  it('strokes a notification-highlighted tile at 1.5 px in the brand accent, a stroke with no fill (plan T3.3)', () => {
+    expect(decls(".tl[data-highlight='1']", CSS)).toEqual({ 'box-shadow': 'inset 0 0 0 1.5px var(--tone-action-brand)' });
+  });
   it('crossfades a replaced value at the base duration, with a reduced-motion twin and a lagano twin', () => {
     expect(decls(".tl-value[data-replace]", CSS).animation).toBe('ki-fade var(--dur-base) var(--ease) both');
     expect(atRule('@media (prefers-reduced-motion: reduce)', CSS, '.tl-value')).toContain('animation: none');

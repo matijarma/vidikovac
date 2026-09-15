@@ -2,6 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { ScreenContext, ScreenStop } from '../../app/src/core/contracts';
+import type { NotifyFlags } from '../../app/src/core/notify-store';
+import type { SavedStore } from '../../app/src/core/saved-store';
 import { DEFAULT_PRODUCERS } from '../../app/src/experience/producers';
 import { statusBadge } from '../../app/src/experience/status';
 import type { Tile } from '../../app/src/experience/tiles';
@@ -387,6 +389,82 @@ describe('buildTimeband: the model', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Notification highlights (T3.3): ctx.notify marks a matching tile
+// data-highlight="1" (signage.css strokes it, no fill); ctx.saved answers
+// which lines are the reader's own. Local highlighting only -- nothing here
+// sends a push (PUSH stays off, D7).
+
+const NOTIFY_OFF: NotifyFlags = { delays: false, works: false, waste: false, dhmz: false };
+const savedRoutes = (ids: readonly string[]): Pick<SavedStore, 'list' | 'has'> => ({
+  list: () => ids.map((id) => ({ kind: 'route' as const, id })),
+  has: (kind, id) => kind === 'route' && ids.includes(id),
+});
+/** A transit tile like the real producer's, with a delay reading (data.delay, plan T3.3) attached. */
+const delayedLine = (id: string, delaySeconds: number): TileProducer => ({
+  domain: 'transit', modules: ['zet-rt'], layer: 'u-pokretu', skeleton: null,
+  produce: () => [{ ...lineTile(id), data: { delay: String(delaySeconds) } }],
+});
+const worksBand = (count: number): TileProducer => ({
+  domain: 'komunalno', modules: ['dogadanja'], layer: 'uprava-i-pravo', skeleton: null,
+  produce: () => [{ key: 'komunalno:works', domain: 'komunalno', variant: 'band', icon: 'hard-hat', label: 'Radovi', value: String(count), layer: 'uprava-i-pravo', bucket: 'sada', testid: 'tile-works' }],
+});
+const safetyBand = (level: 'calm' | 'urgent' | 'unknown'): TileProducer => ({
+  domain: 'safety', modules: ['dhmz-cap', 'emsc', 'prometnice'], layer: 'sigurnost', skeleton: null,
+  produce: () => [{ key: 'safety', domain: 'safety', variant: 'band', icon: 'check-circle', label: 'Sigurnost', title: level, data: { level }, layer: 'sigurnost', bucket: 'sada', testid: 'tile-safety' }],
+});
+/** T3.2's shape (plan §"Task T3.2"): a komunalno .tl-time tile in sutra or tjedan, testid tile-waste. */
+const wasteTile: TileProducer = {
+  domain: 'komunalno', modules: ['dogadanja'], layer: 'uprava-i-pravo', skeleton: null,
+  produce: () => [{ key: 'komunalno:waste', domain: 'komunalno', variant: 'time', label: 'Odvoz', title: 'Papir', layer: 'uprava-i-pravo', bucket: 'sutra', testid: 'tile-waste' }],
+};
+const tileByTestid = (model: ReturnType<typeof buildTimeband>, testid: string): Tile | undefined =>
+  model.lanes.flatMap((l) => l.tiles).find((t) => t.testid === testid);
+
+describe('buildTimeband: notification highlights (T3.3, ctx.notify)', () => {
+  it('marks nothing when every switch is off, whatever the tiles read', () => {
+    const producers = [delayedLine('6', 900), worksBand(3), safetyBand('urgent'), wasteTile];
+    const model = buildTimeband(ctx({ notify: NOTIFY_OFF, saved: savedRoutes(['6']) }), producers);
+    expect(model.lanes.flatMap((l) => l.tiles).some((t) => t.data?.highlight)).toBe(false);
+  });
+
+  it('delays: a saved line past 300 s in either direction is marked; a shorter delay, an unsaved line or no saved store is not', () => {
+    const notify = { ...NOTIFY_OFF, delays: true };
+    const saved6 = savedRoutes(['6']);
+    expect(tileByTestid(buildTimeband(ctx({ notify, saved: saved6 }), [delayedLine('6', 360)]), 'tile-transit')?.data?.highlight).toBe('1');
+    expect(tileByTestid(buildTimeband(ctx({ notify, saved: saved6 }), [delayedLine('6', -360)]), 'tile-transit')?.data?.highlight).toBe('1');
+    expect(tileByTestid(buildTimeband(ctx({ notify, saved: saved6 }), [delayedLine('6', 300)]), 'tile-transit')?.data?.highlight).toBeUndefined();
+    expect(tileByTestid(buildTimeband(ctx({ notify, saved: savedRoutes(['11']) }), [delayedLine('6', 900)]), 'tile-transit')?.data?.highlight).toBeUndefined();
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [delayedLine('6', 900)]), 'tile-transit')?.data?.highlight).toBeUndefined();
+  });
+
+  it('works: the band is marked once its count clears zero, never at zero', () => {
+    const notify = { ...NOTIFY_OFF, works: true };
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [worksBand(3)]), 'tile-works')?.data?.highlight).toBe('1');
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [worksBand(0)]), 'tile-works')?.data?.highlight).toBeUndefined();
+  });
+
+  it('dhmz: the safety band is marked only once it reads urgent', () => {
+    const notify = { ...NOTIFY_OFF, dhmz: true };
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [safetyBand('urgent')]), 'tile-safety')?.data?.highlight).toBe('1');
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [safetyBand('calm')]), 'tile-safety')?.data?.highlight).toBeUndefined();
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [safetyBand('unknown')]), 'tile-safety')?.data?.highlight).toBeUndefined();
+  });
+
+  it('waste: a waste tile is marked when its switch is on, not when it is off', () => {
+    const notify = { ...NOTIFY_OFF, waste: true };
+    expect(tileByTestid(buildTimeband(ctx({ notify }), [wasteTile]), 'tile-waste')?.data?.highlight).toBe('1');
+    expect(tileByTestid(buildTimeband(ctx({ notify: NOTIFY_OFF }), [wasteTile]), 'tile-waste')?.data?.highlight).toBeUndefined();
+  });
+
+  it('renders the mark as a plain data attribute, so signage.css can stroke it', () => {
+    const notify = { ...NOTIFY_OFF, dhmz: true };
+    const model = buildTimeband(ctx({ notify }), [safetyBand('urgent')]);
+    const tb = createElementFromHTML(renderTimeband(hr, model));
+    expect(tb.querySelector('.tl[data-testid="tile-safety"][data-highlight="1"]')).not.toBeNull();
+  });
+});
+
 const SEG_BUTTON = (value: string, pressed: boolean, aria: string, word: string): string =>
   `<button type="button" class="tb-seg-btn" data-action="filter" data-filter-key="tb-col" data-filter-value="${value}" aria-pressed="${pressed}" aria-label="${aria}"><span>${word}</span></button>`;
 
@@ -622,6 +700,22 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
     expect(sada.tiles.find((t) => t.testid === 'tile-works')?.value).toBe('1');
     expect(sada.tiles.find((t) => t.testid === 'tile-closures')?.title).toBe('Grada Vukovara');
     expect(sada.tiles.find((t) => t.testid === 'tile-news')?.title).toBe('Naslov vijesti');
+  });
+
+  it('marks the saved line 6 once its own delay (read off the tile, T3.3) passes 300 s with notify.delays on; line 11 is unsaved and stays plain', () => {
+    const delayed: LayerContext['snapshots'] = {
+      ...REAL_SNAPSHOTS,
+      'zet-rt': snap('zet-rt', [
+        { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 400, vehicles: 2 } },
+        { id: 'route:11', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '11', data: { routeId: '11', medianDelaySeconds: -20, vehicles: 1 } },
+      ]),
+    };
+    const notify: NotifyFlags = { delays: true, works: false, waste: false, dhmz: false };
+    const saved: Pick<SavedStore, 'list' | 'has'> = { list: () => [{ kind: 'route', id: '6' }], has: (kind, id) => kind === 'route' && id === '6' };
+    const model = buildTimeband({ ...realCtx(), snapshots: delayed, notify, saved });
+    const sada = model.lanes.find((l) => l.col === 'sada')!;
+    expect(sada.tiles.find((t) => t.key === 'zet-rt:route:6')?.data).toMatchObject({ delay: '400', highlight: '1' });
+    expect(sada.tiles.find((t) => t.key === 'zet-rt:route:11')?.data?.highlight).toBeUndefined();
   });
 
   it('lands the next Assembly session and the next culture event in their own time lanes', () => {
