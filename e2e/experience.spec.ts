@@ -6,14 +6,28 @@ import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { DESKTOP_MIN_PX } from './lib';
 
 const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+/** Sada's promise at 390×844: the city's now is on the first screen without a scroll. */
+const SADA_FOLD_PX = 700;
+const SADA_TILES_IN_FOLD = 2;
+/** The band at FIXTURE_NOW (Friday 11 September 2026, 14:00 in Zagreb): its five columns and the h3 each head reads, time word then head text. */
+const COLUMNS_AT_FIXTURE_NOW = ['sada', 'danas', 'veceras', 'sutra', 'tjedan'];
+const HEADS_AT_FIXTURE_NOW = ['sada 14:00', 'poslijepodne do 18:00', 'večeras od 18:00', 'sutra sub 12. 9.', 'tjedan do čet 17. 9.'];
+if (FIXTURE_NOW.toISOString() !== '2026-09-11T12:00:00.000Z') throw new Error('HEADS_AT_FIXTURE_NOW pins the band at 2026-09-11T12:00Z; the fixture clock moved');
 
+/**
+ * The phone's tab when the domain has one; otherwise the directory (Još in the
+ * desk's status line, the tab bar's Još on the phone, D10), then the domain's
+ * row or any other way in. A Sada tile also carries data-action=nav with a
+ * selection, so the tab and the directory come first.
+ */
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
-  let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
-  if (!(await navigation.count())) {
-    await page.getByTestId('tab-more').click();
-    navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
+  if (await tab.count()) {
+    await tab.click();
+  } else {
+    await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
+    await page.locator(`[data-testid="dir-${layer}"], [data-action="nav"][data-layer="${layer}"]:visible`).first().click();
   }
-  await navigation.click();
   await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
 }
 
@@ -26,7 +40,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await installExperienceFixture(page, snapshots);
       await page.goto(FIXTURE_DASHBOARD);
       await expect(page.getByTestId('session-label')).toBeVisible();
-      await expect(page.locator('#ov-weather')).toBeVisible();
+      await expect(page.getByTestId('tb')).toBeVisible();
       for (const layer of LAYERS) {
         await openLayer(page, layer);
         await expect(page.locator('[data-testid="dash-view"] > .layer')).toHaveCount(1);
@@ -34,6 +48,32 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
         await expect(page.getByTestId('dash-view')).not.toContainText('[object Object]');
       }
       await expect(page.locator('canvas[data-testid="panorama"], [data-testid="meander-legend"]')).toHaveCount(0);
+    });
+
+    test('heading order: the five time words read as h3 headings at FIXTURE_NOW, the lanes follow in time order, and every lane is labelled by its head', async ({ page }) => {
+      await installExperienceFixture(page, await experienceSnapshots());
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('tb')).toBeVisible();
+      const band = await page.getByTestId('tb').evaluate((tb) => {
+        const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+        const heads = [...tb.querySelectorAll('.tb-heads .tb-head')];
+        const lanes = [...tb.querySelectorAll('.tb-lanes > .tb-lane')];
+        return {
+          heads: heads.map((head) => text(head.querySelector('h3'))),
+          headCols: heads.map((head) => head.getAttribute('data-col')),
+          lanes: lanes.map((lane) => lane.getAttribute('data-col')),
+          headings: tb.querySelectorAll('h3').length,
+          headsBeforeLanes: heads.every((head) => lanes.every((lane) => Boolean(head.compareDocumentPosition(lane) & Node.DOCUMENT_POSITION_FOLLOWING))),
+          labelledByOwnHead: lanes.every((lane) => lane.getAttribute('role') === 'group'
+            && document.getElementById(lane.getAttribute('aria-labelledby') ?? '')?.closest('.tb-head')?.getAttribute('data-col') === lane.getAttribute('data-col')),
+        };
+      });
+      expect(band.heads, 'a reader hears the five time words as headings').toEqual(HEADS_AT_FIXTURE_NOW);
+      expect(band.headCols).toEqual(COLUMNS_AT_FIXTURE_NOW);
+      expect(band.lanes, 'lanes in time order').toEqual(COLUMNS_AT_FIXTURE_NOW);
+      expect(band.headings, 'the band has no heading but the five time words').toBe(COLUMNS_AT_FIXTURE_NOW.length);
+      expect(band.headsBeforeLanes, 'heads precede lanes in DOM order').toBe(true);
+      expect(band.labelledByOwnHead, 'each lane is a group labelled by its own head').toBe(true);
     });
 
     test('source outages never claim no warnings and retain usable navigation', async ({ page }) => {
@@ -52,7 +92,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
     test('expiry freezes data but leaves safety and the renewal path available', async ({ page }) => {
       const fixture = await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
-      await expect(page.locator('#ov-weather')).toBeVisible();
+      await expect(page.getByTestId('tb')).toBeVisible();
       fixture.expire();
       await expect(page.getByTestId('frozen-line')).toBeVisible();
       const requestsAfterExpiry = fixture.requests.length;
@@ -127,12 +167,39 @@ test('phone overview gives the city the first viewport and passes accessibility 
   await page.setViewportSize({ width: 390, height: 844 });
   await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(FIXTURE_DASHBOARD);
-  await expect(page.locator('#ov-weather')).toBeVisible();
-  const boxes = await page.locator('[data-testid="dash-view"] .ov-block').evaluateAll((nodes) =>
-    nodes.map((node) => ({ id: node.id, top: node.getBoundingClientRect().top, bottom: node.getBoundingClientRect().bottom })));
-  expect(boxes.filter((box) => box.top < 700 && box.bottom > 0).length).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId('tb')).toBeVisible();
+  await expect(page.getByTestId('tb-lane-sada'), 'the sada lane must have its data before the fold is measured').not.toHaveAttribute('aria-busy', 'true');
+  const tiles = page.locator('[data-testid="tb-lane-sada"] .tl:not([data-skeleton])');
+  await expect.poll(async () => {
+    const boxes = await tiles.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { top: number; bottom: number }));
+    return boxes.filter((box) => box.top < SADA_FOLD_PX && box.bottom > 0).length;
+  }, { message: `at least ${SADA_TILES_IN_FOLD} sada tiles must reach into the first ${SADA_FOLD_PX} px` }).toBeGreaterThanOrEqual(SADA_TILES_IN_FOLD);
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([]);
+});
+
+test('text zoom collapses the band at 1440: five lanes at 100 %, three at 125 %, one lane and the segments at 200 %', async ({ page }) => {
+  const width = 1440;
+  await page.setViewportSize({ width, height: 1000 });
+  await installExperienceFixture(page, await experienceSnapshots());
+  await page.goto(FIXTURE_DASHBOARD);
+  await expect(page.getByTestId('tb')).toBeVisible();
+  /** The lanes whose box lies in the lane row's box (a lane at display: none has no box; a lane scrolled out of the row is not in view), and whether the segments (the band's sibling in the workspace) show. */
+  const band = () => page.locator('#layer-grad-sada').evaluate((ws) => {
+    const row = ws.querySelector('[data-testid="tb-lanes"]')!.getBoundingClientRect();
+    const seg = ws.querySelector('[data-testid="tb-seg"]')?.getBoundingClientRect();
+    const lanes = [...ws.querySelectorAll('.tb-lane')].filter((lane) => {
+      const r = lane.getBoundingClientRect();
+      return r.width > 0 && Math.min(r.right, row.right) - Math.max(r.left, row.left) >= 8;
+    }).map((lane) => lane.getAttribute('data-col'));
+    return { lanes, segments: Boolean(seg && seg.width > 0 && seg.height > 0) };
+  });
+  expect(await band(), 'at 100 % the desk reads all five lanes and no segments').toEqual({ lanes: COLUMNS_AT_FIXTURE_NOW, segments: false });
+  await page.addStyleTag({ content: 'html { font-size: 125% !important; }' });
+  await expect.poll(band, { message: 'at 125 % sutra and tjedan wait in Događanja: three lanes' }).toEqual({ lanes: ['sada', 'danas', 'veceras'], segments: false });
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect.poll(band, { message: 'at 200 % the band takes its phone form: one lane in view and the segments shown' }).toEqual({ lanes: ['sada'], segments: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the lane row scrolls inside itself').toBeLessThanOrEqual(width + 1);
 });
 
 test('without WebGL the transport search still opens a real stop and its routes', async ({ page }) => {
@@ -152,7 +219,8 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
   await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
   await page.getByTestId('transport-search').fill('Jela');
-  await expect(page.getByRole('option').first()).toBeVisible();
+  // The results' options, not the kvart select's: a closed <select> keeps its options hidden.
+  await expect(page.getByTestId('transport-results').getByRole('option').first()).toBeVisible();
   await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');
   await expect(page.getByTestId('stop-title')).toContainText('Jela');
