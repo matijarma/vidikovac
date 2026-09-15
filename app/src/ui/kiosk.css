@@ -328,7 +328,8 @@
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 .k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 /* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
-.k-code { display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 800; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
+/* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
+.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .k-code-dash { margin: 0 0.15em; opacity: 0.7; }
 .k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--k-action-ink); background: transparent; }
@@ -563,7 +564,7 @@
 .k-join-qr:empty { border-radius: var(--k-radius-s); background: var(--k-surface-2); }
 .k-join-text { min-width: 0; margin-left: var(--k-gap); }
 .k-join-title { font-size: var(--k-sup-size); font-weight: 800; }
-.k-join-code { margin-top: calc(var(--k-gap) * 0.2); font-size: min(var(--k-display-size), 15cqi); font-weight: 800; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
+.k-join-code { font-family: var(--font-mono); margin-top: calc(var(--k-gap) * 0.2); font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
 .k-join-text .k-meta { margin-top: calc(var(--k-gap) * 0.2); }
 
 /* --- Lightweight: system type, no shadows, the lines board fills the map column --- */
