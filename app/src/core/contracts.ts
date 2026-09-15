@@ -5,6 +5,7 @@ import type { PublicSelection } from '../../../worker/public-selection';
 import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
 import type { KvartChoice } from './kvart-store';
+import type { LastRunSnapshot } from './lastrun';
 import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 
@@ -69,6 +70,9 @@ export interface ExperienceActions {
   /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the
    *  kvart panel's walking row (D16) and the kvart select's district option list. */
   stops?: readonly ScreenStop[];
+  /** The screen stop's last scheduled departures per line (T3.1, behind FEED_LASTRUN): loaded once per
+   *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */
+  lastRun?: LastRunSnapshot | null;
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */
