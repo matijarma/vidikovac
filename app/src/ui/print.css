@@ -1,7 +1,7 @@
 /* Save as PDF: the open detail (an act, an event), or the workspace, on a
    readable page with every link spelled out and the source line kept. */
 @media print {
-  .ki-top, .ki-side, .ki-tabbar, .ki-session-slot, .ki-safety-slot, .ki-banners, .ki-alert,
+  .ki-head, .ki-kvart, .ki-fab-slot, .ki-tabbar, .ki-banners, .ki-alert,
   .ws-toolbar, .actions, .ws-back, .panel-actions, .skip-link, .lang-toggle, .toast-stack, .dialog, .ws-detail-hint,
   .page-nav { display: none !important; }
   .ki { display: block; min-height: 0; }

@@ -783,6 +783,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     store.pause(true);
     if (timer !== null) { clearTimer(timer); timer = null; }
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+    if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
     // The closing card (role=alert) takes over from the notice and the assertive region.
     notice = null;
     assertive.textContent = '';
