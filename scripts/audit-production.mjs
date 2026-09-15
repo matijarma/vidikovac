@@ -199,8 +199,14 @@ async function fontsCheck(page, name) {
 
 // --- the journey's steps -------------------------------------------------------------------------
 async function openDomain(page, layer) {
-  let nav = page.locator(`[data-action=nav][data-layer="${layer}"]:visible`).first();
-  if (!(await nav.count())) { await page.getByTestId('tab-more').click(); await page.waitForTimeout(400); nav = page.locator(`[data-action=nav][data-layer="${layer}"]:visible`).first(); }
+  // The shell's own tab first (a Sada tile also navigates, but carries a route selection); the other
+  // domains sit in the directory behind "Još" (the phone's tab bar, the desktop's status line).
+  let nav = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
+  if (!(await nav.count())) {
+    await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
+    await page.waitForTimeout(400);
+    nav = page.locator(`[data-testid="dir-${layer}"], [data-action=nav][data-layer="${layer}"]:visible`).first();
+  }
   // A pointer click can wait forever on a control the page keeps repainting or has disabled
   // (a frozen tab); the journey goes on through the same handler and says so.
   try { await nav.click({ timeout: 10_000 }); }
@@ -237,7 +243,7 @@ async function freshCode(kiosk) {
 /** Landing, the empty /s/ and /hitno on a phone, before any code is scanned. */
 async function publicPages(page, name) {
   await page.goto(`${ORIGIN}/`);
-  await page.waitForFunction(() => !/učitavanje/.test((document.querySelector('[data-testid=live-weather]') || {}).textContent || ''), null, { timeout: 15_000 }).catch(() => {});
+  await page.waitForFunction(() => !/učitavanje/.test((document.querySelector('[data-testid=live-strip]') || {}).textContent || ''), null, { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(600);
   await shot(page, `${name}-landing`, true);
   await metrics(page, `${name}-landing`);
@@ -624,7 +630,7 @@ try {
       await phone.waitForTimeout(1500);
       await shot(phone, 'iphone-frozen', true);
       await metrics(phone, 'iphone-frozen');
-      try { await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click({ timeout: 3000 }); await phone.waitForTimeout(1200); } catch { log('nav after freeze not clickable'); }
+      try { await phone.locator('.ki-tab[data-layer="u-pokretu"]:visible').first().click({ timeout: 3000 }); await phone.waitForTimeout(1200); } catch { log('nav after freeze not clickable'); }
       await shot(phone, 'iphone-frozen-after-nav', true);
       await metrics(phone, 'iphone-frozen-after-nav');
       await kiosk.waitForTimeout(3000);
