@@ -327,7 +327,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const sub = screen?.kind === 'temporary' && screen.expiresAt !== null
       ? fill(s.header.temporaryUntil, { time: dayTime(screen.expiresAt) })
       : screen ? s.header.venue : '';
-    contextEl.innerHTML = `${escapeHtml(stop?.name ?? '')}${sub ? `<span class="k-context-sub">${escapeHtml(sub)}</span>` : ''}`;
+    // Without a stop name the chip carries the sub alone; the sub's separator exists only to follow a name.
+    const name = stop?.name ?? '';
+    contextEl.innerHTML = name
+      ? `${escapeHtml(name)}${sub ? `<span class="k-context-sub">${escapeHtml(sub)}</span>` : ''}`
+      : escapeHtml(sub);
   }
   function showSessionLabel(expiresAt: number | null): void {
     if (expiresAt === null) return;

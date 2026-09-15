@@ -169,7 +169,8 @@
 .kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
 
 .k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
-.k-head-brand { display: flex; align-items: center; min-width: 0; }
+/* The brand and its chip never shrink under the clock group; the session label in the middle gives way instead. */
+.k-head-brand { display: flex; align-items: center; flex: none; min-width: 0; }
 .k-brand { font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
 .k-brand-sub { margin-left: 0.5em; font-size: var(--k-sup-size); font-weight: 500; color: var(--k-ink-3); }
 /* The stop chip: accent-filled (paper in dark, Zagreb blue in light) because the
@@ -178,7 +179,7 @@
 .k-context:empty { display: none; }
 .k-context-sub { display: inline; font-weight: 500; }
 .k-context-sub::before { content: ' · '; }
-.k-head-mid { display: flex; flex: 1; justify-content: center; min-width: 0; padding: 0 var(--k-gap); }
+.k-head-mid { display: flex; flex: 1 1 0; justify-content: center; min-width: 0; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
 .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); margin-left: auto; white-space: nowrap; }
 .k-date { font-size: var(--k-hint-size); color: var(--k-ink-2); }
@@ -288,6 +289,7 @@
 .kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A text-only label (the two value tiles, the time tiles) is a block, so its ellipsis mark renders: a flex container's own overflowing text clips without one (T2.11 finding 2). Line tiles keep the flex row for badge + name. */
 .kiosk .k-tile .tl-label, .kiosk .tl[data-variant='time'] .tl-label { display: block; }
+.kiosk .k-tile .tl-context, .kiosk .tl[data-variant='time'] .tl-context { display: block; }
 .kiosk .tl-value { display: flex; align-items: center; gap: 0.3em; font-size: var(--k-tile-size); font-weight: 700; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .kiosk .tl-context { font-size: var(--k-hint-size); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kiosk .tl-title { display: -webkit-box; font-size: var(--k-main-size); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
