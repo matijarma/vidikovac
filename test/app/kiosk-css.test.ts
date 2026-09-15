@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 // The public screen's sheet read as text. The kiosk paints from the shared
 // tokens (every `--k-*` colour is an alias of a `--tone-*` role, so the two
 // faces, the OKLCH twins and the contrast proof live in tokens.css alone) and
-// sets its type in four tiers per composition. The literals pinned here are
-// the contract the rest of wave 5 builds on (T5.2's icons and board, T5.3's
-// theme button, T5.4's portrait), so a fifth tier or a private colour has to
-// be added here on purpose.
+// sets its type in eleven tiers per composition. The literals pinned here are
+// the contract the rest of the wave builds on (T2.9's scenes, T2.10's
+// invitation, T2.11's arithmetic), so a twelfth tier or a private colour has
+// to be added here on purpose.
 const CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
 const withoutComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const BARE = withoutComments(CSS);
@@ -45,7 +45,8 @@ describe('kiosk.css paints from the shared tokens', () => {
     const rest = QR_PLATE.reduce((css, decl) => css.replace(decl, ''), BARE);
     expect(rest).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
-  it('paints both QR plates from that pair rather than repeating it', () => {
+  it('paints both QR plates from that pair rather than repeating it, with the D1(d) ink', () => {
+    expect(BARE).toMatch(/--k-qr-ink: #0c1250;/);
     for (const selector of ['.k-qr .qr', '.k-join-qr .qr']) {
       const plate = decls(selector);
       expect(plate.background, selector).toBe('var(--k-qr-plate)');
@@ -58,15 +59,11 @@ describe('kiosk.css paints from the shared tokens', () => {
     '--k-surface-2': '--tone-surface-2',
     '--k-ink': '--tone-text-primary',
     '--k-ink-2': '--tone-text-muted',
-    // The kickers and source lines: the private grey measured about 4.0:1 on
-    // the light surface; muted is the one secondary ink the design allows.
     '--k-ink-3': '--tone-text-muted',
     '--k-line': '--tone-stroke',
     '--k-action': '--tone-action-brand',
     '--k-action-ink': '--tone-action-brand-fg',
     '--k-action-soft': '--tone-tint-action',
-    // Peacock text on the peacock tint (the session pill, a checked choice)
-    // fails AA in light with the plain accent; the on-tint tone clears it.
     '--k-action-on-soft': '--tone-text-brand-on-tint',
     '--k-amber': '--tone-weather',
     '--k-amber-soft': '--tone-tint-weather',
@@ -82,12 +79,11 @@ describe('kiosk.css paints from the shared tokens', () => {
   it.each(Object.entries(ALIASES))('%s is an alias of %s', (name, tone) => {
     expect(decls('.kiosk')[name]).toBe(`var(${tone})`);
   });
-  it('declares its colours once: the tokens switch on data-theme-resolved, so the dark twin, the OKLCH twin and the dead face rules are gone', () => {
+  it('declares its colours once: the tokens switch on data-theme-resolved, so a dark twin, an OKLCH twin or a dead face rule would be a regression', () => {
     expect(BARE).not.toMatch(/\[data-theme-resolved='dark'\][^{]*\.kiosk/);
     expect(BARE).not.toContain('prefers-color-scheme');
     expect(BARE).not.toContain('oklch(');
     expect(BARE).not.toContain('data-face');
-    expect(BARE).not.toContain('.k-sunbar');
   });
   it('paints the page behind the screen from the canvas token too', () => {
     expect(decls('.kiosk-body').background).toBe('var(--tone-surface-canvas)');
@@ -98,221 +94,244 @@ describe('kiosk.css paints from the shared tokens', () => {
   });
 });
 
-describe('four type tiers per composition, each a token times --k-zoom', () => {
+describe('eleven type tiers per composition, each a token times --k-zoom', () => {
   const TIERS = {
-    wide: { display: 72, main: 40, sup: 28, credit: 20 },
-    compact: { display: 52, main: 28, sup: 22, credit: 16 },
+    wide: { display: 84, clock: 48, main: 40, sup: 28, hint: 26, sceneTime: 56, label: 24, tile: 32, credit: 20 },
+    compact: { display: 64, clock: 36, main: 28, sup: 22, hint: 20, sceneTime: 40, label: 18, tile: 24, credit: 16 },
   } as const;
-  it.each(Object.entries(TIERS))('%s: display, main, supporting and credit', (size, px) => {
+  const TOKEN: Record<keyof (typeof TIERS)['wide'], string> = {
+    display: '--k-display-size', clock: '--k-clock-size', main: '--k-main-size', sup: '--k-sup-size',
+    hint: '--k-hint-size', sceneTime: '--k-scene-time-size', label: '--k-label-size', tile: '--k-tile-size', credit: '--k-credit-size',
+  };
+  it.each(Object.entries(TIERS))('%s: every tier token', (size, px) => {
     const rule = decls(`.kiosk[data-size='${size}']`);
-    expect(rule['--k-display-size']).toBe(`calc(${px.display}px * var(--k-zoom))`);
-    expect(rule['--k-main-size']).toBe(`calc(${px.main}px * var(--k-zoom))`);
-    expect(rule['--k-sup-size']).toBe(`calc(${px.sup}px * var(--k-zoom))`);
-    expect(rule['--k-credit-size']).toBe(`calc(${px.credit}px * var(--k-zoom))`);
-  });
-  it('retired the two tiers below the brief (22/18 and 18/15 px) and the hero above it', () => {
-    expect(BARE).not.toContain('--k-sup-2');
-    expect(BARE).not.toContain('--k-meta-size');
-    expect(BARE).not.toContain('--k-hero');
-    expect(BARE).not.toContain('--k-temp:');
-    expect(BARE).not.toContain('--k-code-size');
-    expect(BARE).not.toContain('--k-main:');
-    expect(BARE).not.toContain('--k-main-2');
-    expect(BARE).not.toContain('--k-sup:');
+    for (const [key, token] of Object.entries(TOKEN) as [keyof typeof px, string][]) {
+      expect(rule[token], token).toBe(`calc(${px[key]}px * var(--k-zoom))`);
+    }
   });
   it('sets every font-size from a tier token', () => {
     const sizes = [...BARE.matchAll(/font-size: ([^;]+);/g)].map((m) => m[1]!);
     expect(sizes.length).toBeGreaterThan(40);
-    for (const size of sizes) expect(size).toMatch(/^(?:min\()?var\(--k-(?:display|main|sup|credit)-size\)/);
+    for (const size of sizes) expect(size).toMatch(/^(?:min\()?var\(--k-(?:display|clock|main|sup|hint|scene-time|label|tile|credit)-size\)/);
   });
-  it('sets exactly two things at display per composition: the pairing code, capped to its column, and the temperature', () => {
-    // A wide code (DQC2-WTMM) overflowed the 1366 card before the cap; the size follows the code column.
-    expect(decls('.k-code')['font-size']).toBe('min(var(--k-display-size), 11.5cqi)');
-    expect(decls('.k-invite-code')['container-type']).toBe('inline-size');
-    expect(decls('.k-temp')['font-size']).toBe('var(--k-display-size)');
-    expect(rulesUsing('--k-display-size').sort()).toEqual(['.k-code', '.k-join-code', '.k-temp']);
+  it('reserves display for exactly the pairing codes, capped to their column (D17)', () => {
+    expect(decls('.k-code')['font-size']).toBe('min(var(--k-display-size), 15cqi)');
+    expect(decls('.k-invite > .k-invite-code')['container-type']).toBe('inline-size');
+    expect(rulesUsing('--k-display-size').sort()).toEqual(['.k-code', '.k-join-code']);
   });
-  // Measured at 1920: a 72 px code leaves 218 px beside it, and the URL line's
-  // one unbreakable word is wider than that, so the line ran out of the card.
-  it('stacks the URL line under the code at every size, so a display-size code never pushes it out of the card', () => {
-    expect(decls('.k-invite-code')['grid-template-columns']).toBe('minmax(0, 1fr)');
-    expect(BARE).not.toContain(".kiosk[data-size='wide'] .k-invite-code .k-hint");
+  it('moves .k-temp from display to main: the header weather group and the paired weather block share the token', () => {
+    expect(decls('.k-temp')['font-size']).toBe('var(--k-main-size)');
   });
-  it('reserves the credit tier for attribution lines: .k-meta, which carries every k-source credit', () => {
+  it('reserves the credit tier for attribution lines: .k-meta alone', () => {
     expect(rulesUsing('--k-credit-size')).toEqual(['.k-meta']);
   });
-  it('gives the strip room for two supporting lines', () => {
-    expect(decls(".kiosk[data-size='wide']")['--k-strip-h']).toBe('calc(88px * var(--k-zoom))');
+  it('gives the header and the strip a fixed 96/72 px row, equal at both', () => {
+    expect(decls(".kiosk[data-size='wide']")['--k-head-h']).toBe('calc(96px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='wide']")['--k-strip-h']).toBe('calc(96px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-head-h']).toBe('calc(72px * var(--k-zoom))');
     expect(decls(".kiosk[data-size='compact']")['--k-strip-h']).toBe('calc(72px * var(--k-zoom))');
-    expect(decls('.k-strip')['font-size']).toBe('var(--k-sup-size)');
+    expect(decls('.k-head').height).toBe('var(--k-head-h)');
+    expect(decls('.k-strip').height).toBe('var(--k-strip-h)');
+    expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
   });
-  it('sets heads and lead sentences at main, lines and the story at supporting', () => {
-    for (const head of ['.k-lead', '.k-headline', '.k-basics-title', '.k-setup-title', '.k-notice-title', '.k-figure', '.k-ess-value']) {
-      expect(decls(head)['font-size'], head).toBe('var(--k-main-size)');
-    }
-    for (const line of ['.k-line-name', '.k-line-word', '.k-line-near', '.k-line-more', '.k-story-item .k-story-title', '.k-row-main', '.k-row-sub', '.k-strip']) {
-      expect(decls(line)['font-size'], line).toBe('var(--k-sup-size)');
-    }
+  it('pins the invitation and paired side widths as separate tokens', () => {
+    expect(decls(".kiosk[data-size='wide']")['--k-side-w']).toBe('calc(600px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-side-w']).toBe('calc(520px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='wide']")['--k-paired-side-w']).toBe('calc(720px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-paired-side-w']).toBe('calc(540px * var(--k-zoom))');
+    expect(decls('.k-invitation')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-side-w)');
+    expect(decls('.k-paired')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-paired-side-w)');
   });
-  it('carries the four tiers on a handheld too, at phone sizes with the credit line at the 13 px floor', () => {
+  it('keeps the QR at 240 px at every landscape size', () => {
+    expect(decls(".kiosk[data-size='wide']")['--k-qr']).toBe('calc(240px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-qr']).toBe('calc(240px * var(--k-zoom))');
+  });
+  it('roles: .k-scene-title at main, .kiosk .tl-value at tile, .kiosk .tl-time at scene-time, .kiosk .tl-label at label, .k-hint/.k-date/.k-strip at hint', () => {
+    expect(decls('.k-scene-title')['font-size']).toBe('var(--k-main-size)');
+    expect(decls('.kiosk .tl-value')['font-size']).toBe('var(--k-tile-size)');
+    expect(decls('.kiosk .tl-time')['font-size']).toBe('var(--k-scene-time-size)');
+    expect(decls('.kiosk .tl-label')['font-size']).toBe('var(--k-label-size)');
+    expect(decls('.k-invite > .k-hint')['font-size']).toBe('var(--k-hint-size)');
+    expect(decls('.k-date')['font-size']).toBe('var(--k-hint-size)');
+    expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
+  });
+  it('carries every tier on a handheld too, at phone sizes with the credit line at the 13 px floor', () => {
     const rule = decls(".kiosk[data-size='handheld']");
     expect(rule['--k-display-size']).toBe('40px');
+    expect(rule['--k-clock-size']).toBe('24px');
     expect(rule['--k-main-size']).toBe('24px');
     expect(rule['--k-sup-size']).toBe('18px');
+    expect(rule['--k-hint-size']).toBe('18px');
+    expect(rule['--k-scene-time-size']).toBe('24px');
+    expect(rule['--k-label-size']).toBe('14px');
+    expect(rule['--k-tile-size']).toBe('18px');
     expect(rule['--k-credit-size']).toBe('13px');
   });
 });
 
-describe('the header context', () => {
-  it('ends a long stop name with an ellipsis instead of a hard clip', () => {
+describe('the header context chip', () => {
+  it('is an accent-filled pill (D8-adjacent: the ink tile stays the Skupština\'s alone), ellipsised rather than hard-clipped', () => {
     const context = decls('.k-context');
+    expect(context.background).toBe('var(--k-action)');
+    expect(context.color).toBe('var(--k-action-ink)');
     expect(context.overflow).toBe('hidden');
     expect(context['text-overflow']).toBe('ellipsis');
     expect(context['white-space']).toBe('nowrap');
   });
+  it('lays the date and the clock row out in one universal row, right-aligned, the same rule at every size', () => {
+    const when = decls('.k-head-when');
+    expect(when.display).toBe('flex');
+    expect(when['justify-content']).toBe('flex-end');
+    expect(when['margin-left']).toBe('auto');
+    expect(BARE).not.toMatch(/\[data-size='compact'\] \.k-head-when \{/);
+  });
 });
 
-// T5.2: the side column composed to R-K7, one badge component, icons at the
-// kiosk's sizes, and a rotation that reports a fact and stops under reduced
-// motion or lightweight.
-describe('T5.2: the composition, the badge, the icons and the rotation', () => {
-  it('the invitation side column is a grid of three rows with the card pinned to the second', () => {
+describe('the theme button is a literal 44 px target beside the clock, then the weather group', () => {
+  it('sets a 44 px minimum height on the button itself, sized from the hint tier, not the composition scale', () => {
+    const btn = decls('.k-theme');
+    expect(btn['min-height']).toBe('44px');
+    expect(btn['font-size']).toBe('var(--k-hint-size)');
+    expect(btn.cursor).toBe('pointer');
+  });
+  it('lays the clock row out left to right so the button sits directly before the clock, then the weather group', () => {
+    const row = decls('.k-clock-row');
+    expect(row.display).toBe('flex');
+    expect(row['align-items']).toBe('center');
+  });
+  it('sizes the condition icon at the large icon token and the clock at its own token', () => {
+    expect(decls('.kiosk .k-weather-icon').width).toBe('var(--k-icon-lg)');
+    expect(decls(".kiosk[data-size='wide']")['--k-icon-lg']).toBe('calc(48px * var(--k-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-icon-lg']).toBe('calc(36px * var(--k-zoom))');
+    expect(decls('.k-clock')['font-size']).toBe('var(--k-clock-size)');
+  });
+});
+
+describe('the safety strip: the verdict pill, the countdown, no sun line', () => {
+  it('gives the verdict pill a colour per level and drops the old sun sub-line entirely', () => {
+    expect(decls(".k-strip-verdict[data-level='calm']").color).toBe('var(--k-green)');
+    expect(decls(".k-strip-verdict[data-level='urgent']").background).toBe('var(--k-rose-soft)');
+    expect(decls(".k-strip-verdict[data-level='unknown']").background).toBe('var(--k-amber-soft)');
+    expect(BARE).not.toContain('.k-strip-sub');
+    expect(BARE).not.toContain('.k-strip-item--sun');
+    expect(BARE).not.toContain('k-strip--nosun');
+    expect(BARE).not.toContain('k-strip--nosub');
+  });
+  it('hides the countdown when the field has no room, or is not rotating', () => {
+    const rule = body(".k-strip-next[hidden], .k-strip--nonext .k-strip-next");
+    expect(rule.trim()).toBe('display: none;');
+  });
+});
+
+describe('the scene field: transitions and grids', () => {
+  it('animates a scene swap on k-scene-in/out, the leaving copy positioned out of flow', () => {
+    expect(decls('.k-scene-item').animation).toBe('k-scene-in 220ms var(--ease-enter) both');
+    expect(decls('.k-scene-item[data-leaving]').animation).toBe('k-scene-out 180ms var(--ease-exit) both');
+    expect(decls('.k-scene-item[data-leaving]').position).toBeUndefined();
+    expect(decls('.k-scene-item').position).toBe('absolute');
+    expect(decls('.k-code-ghost').animation).toBe('k-scene-out 180ms var(--ease-exit) both');
+    expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
+    expect(BARE).toMatch(/@keyframes k-scene-in \{ from \{ opacity: 0; transform: translateY\(calc\(6px \* var\(--k-zoom\)\)\); \}/);
+  });
+  it('lays the Promet grid out map-then-lines-then-works, one column at compact, and collapses the works row at zero', () => {
+    const grid = decls('.k-scene-grid');
+    expect(grid['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 2fr)');
+    expect(decls(".k-scene-grid[data-works='0']")['grid-template-rows']).toBe('minmax(0, 1fr)');
+    expect(decls('.k-scene-grid > .k-map')['grid-row']).toBe('1 / -1');
+    expect(decls(".kiosk[data-size='compact'] .k-scene-grid")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+  });
+  it('gives the lagano board the whole scene (D12): data-board=1 is one column, one row', () => {
+    const board = decls(".k-scene-grid[data-board='1']");
+    expect(board['grid-template-columns']).toBe('minmax(0, 1fr)');
+    expect(board['grid-template-rows']).toBe('minmax(0, 1fr)');
+  });
+  it('spans the ink tile down the Grad grid\'s first column', () => {
+    expect(decls('.k-scene-grad')['grid-template-rows']).toBe('repeat(3, minmax(0, 1fr))');
+    expect(decls(".k-scene-grad > .tl[data-variant='ink']")['grid-row']).toBe('1 / -1');
+  });
+  it('both animations stop under reduced motion and lightweight, and the leaving copies never show', () => {
+    const reduced = BARE.slice(BARE.indexOf('@media (prefers-reduced-motion: reduce)'));
+    for (const rule of ['.kiosk .k-scene-item', ".kiosk .k-code[data-swap='1']", ".kiosk .k-join-code[data-swap='1']"]) expect(reduced).toContain(rule);
+    expect(reduced).toMatch(/\.kiosk \.k-scene-item\[data-leaving\], \.kiosk \.k-code-ghost \{ display: none; \}/);
+    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-scene-item, :root\[data-lagano='1'\] \.k-code\[data-swap='1'\], :root\[data-lagano='1'\] \.k-join-code\[data-swap='1'\] \{ animation: none; \}/);
+    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-scene-item\[data-leaving\], :root\[data-lagano='1'\] \.k-code-ghost \{ display: none; \}/);
+    expect(BARE).not.toContain('.k-story-item');
+    expect(BARE).not.toContain('k-story-in');
+    expect(BARE).not.toContain('k-story-out');
+  });
+});
+
+describe('the .tl family: sized by tokens alone, coloured by role, no rem surviving from signage.css', () => {
+  it('states, roles and the state colours', () => {
+    expect(decls('.kiosk .tl-title')['-webkit-line-clamp']).toBe('2');
+    expect(decls(".kiosk .tl[data-lines='1'] .tl-title, .kiosk .tl[data-variant='row'][data-lines='1'] .tl-title")['-webkit-line-clamp']).toBe('1');
+    expect(decls(".kiosk .k-tl-line[data-tone='late'] .tl-value").color).toBe('var(--k-rose)');
+    expect(decls(".kiosk .k-tl-line[data-tone='early'] .tl-value").color).toBe('var(--k-amber)');
+    expect(decls(".kiosk .k-tl-line[data-tone='ontime'] .tl-value").color).toBe('var(--k-green)');
+    expect(decls(".kiosk .k-tl-line[data-tone='unknown'] .tl-value").color).toBe('var(--k-ink-3)');
+    expect(decls(".kiosk .tl[data-state='down'] .tl-value")['font-size']).toBe('var(--k-hint-size)');
+  });
+  it('the ink tile is the ink fill with canvas text, the one such tile the plan allows (D8)', () => {
+    const ink = decls(".kiosk .tl[data-variant='ink']");
+    expect(ink.background).toBe('var(--k-ink)');
+    expect(ink.color).toBe('var(--k-canvas)');
+    expect(decls(".kiosk .tl[data-variant='ink'] .tl-label, .kiosk .tl[data-variant='ink'] .tl-context").color).toBe('var(--k-canvas)');
+  });
+  it('never sets a rem size: every .tl* declaration in the kiosk sheet is a --k-* token', () => {
+    const tlRules = [...BARE.matchAll(/\n(\.kiosk \.tl[^{]*)\{([^}]*)\}/g)];
+    expect(tlRules.length).toBeGreaterThan(5);
+    for (const [, selector, decl] of tlRules) expect(decl, selector).not.toMatch(/\d+rem/);
+  });
+});
+
+describe('the invitation column and card', () => {
+  it('the side column is two rows: the two value tiles, then the card taking the rest', () => {
     const side = decls('.k-invitation .k-side');
     expect(side.display).toBe('grid');
-    expect(side['grid-template-rows']).toBe('auto auto minmax(0, 1fr)');
-    expect(decls('.k-invitation .k-weather')['grid-row']).toBe('1');
-    expect(decls('.k-invitation .k-invite')['grid-row']).toBe('2');
-    expect(decls('.k-invitation .k-story')['grid-row']).toBe('3');
+    expect(side['grid-template-rows']).toBe('auto minmax(0, 1fr)');
+    const tiles = decls('.k-side-tiles');
+    expect(tiles.display).toBe('grid');
+    expect(tiles['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    expect(tiles.gap).toBe('var(--k-tile-gap)');
   });
-  it('the card is QR-bound: the text column holds the lead and the hint above the code, the host line never wraps', () => {
-    expect(decls('.k-invite')['grid-template-areas']).toBe("'qr text' 'code code'");
-    expect(decls(".kiosk[data-size='compact'] .k-invite")['grid-template-areas']).toBe("'qr text' 'qr code'");
-    const text = decls('.k-invite-text');
-    expect(text.display).toBe('flex');
-    expect(text['flex-direction']).toBe('column');
-    // Scoped under the text column: `.kiosk p { margin: 0 }` would otherwise outrank a bare class.
-    expect(decls('.k-invite-text .k-hint')['margin-top']).toBe('auto');
+  it('the card is accent-filled with a lead, a QR-hint row and a code row spanning the width', () => {
+    const card = decls('.k-invite');
+    expect(card['grid-template-areas']).toBe("'lead lead' 'qr hint' 'code code'");
+    expect(card.background).toBe('var(--k-action)');
+    expect(card.color).toBe('var(--k-action-ink)');
+    expect(decls('.k-invite > .k-hint')['align-self']).toBe('end');
     const host = decls('.k-hint-host');
     expect(host.display).toBe('block');
     expect(host['white-space']).toBe('nowrap');
     expect(host.overflow).toBe('hidden');
     expect(host['text-overflow']).toBe('ellipsis');
-    // The support sentence stays on the handheld's card alone (a phone scrolls; the wall's card has no fourth line).
-    expect(BARE.match(/\.k-support/g)).toHaveLength(1);
-    expect(BARE).toContain(".kiosk[data-size='handheld'] .k-support");
   });
-  it('the lockup: a 48 px condition icon, inline icons at 28/22, and the story title clamped by its room', () => {
-    const icon = decls('.kiosk .k-weather-icon');
-    expect(icon.width).toBe('calc(48px * var(--k-zoom))');
-    expect(icon.height).toBe('calc(48px * var(--k-zoom))');
-    expect(decls(".kiosk[data-size='wide']")['--k-icon-size']).toBe('calc(28px * var(--k-zoom))');
-    expect(decls(".kiosk[data-size='compact']")['--k-icon-size']).toBe('calc(22px * var(--k-zoom))');
-    expect(decls('.kiosk .k-icon').width).toBe('var(--k-icon-size)');
-    expect(decls('.k-story-item .k-story-title')['-webkit-line-clamp']).toBe('2');
-    // The title never shrinks in the flex column: a line without room overflows the block instead, which the fit measures.
-    expect(decls('.k-story-item .k-story-title').flex).toBe('none');
-    const facts = decls('.k-weather-details');
-    expect(facts['white-space']).toBe('nowrap');
-    expect(facts['text-overflow']).toBe('ellipsis');
-    expect(decls(".k-story[data-lines='1'] .k-story-title")['-webkit-line-clamp']).toBe('1');
-    expect(BARE).not.toContain('.k-weather-sun');
+  it('scopes .k-invite-text to the handheld card alone -- the wide/compact card has no such wrapper', () => {
+    expect(BARE).not.toMatch(/\n\.k-invite-text \{/);
+    expect(BARE).toContain(".kiosk[data-size='handheld'] .k-invite-text {");
+    expect(decls(".kiosk[data-size='handheld'] .k-invite-text").display).toBe('flex');
   });
-  it('one badge: .k-line-badge keeps the kiosk geometry and no colour of its own; .line paints the mode', () => {
-    const badge = decls('.kiosk .k-line-badge');
-    expect(badge['min-width']).toBe('var(--k-badge)');
-    expect(badge.height).toBe('calc(var(--k-badge) * 0.62)');
-    expect(badge['font-size']).toBe('var(--k-sup-size)');
-    expect(badge.background).toBeUndefined();
-    expect(badge.color).toBeUndefined();
-    expect(badge['border-radius']).toBeUndefined();
-    expect(BARE).not.toContain(".k-line[data-kind='bus'] .k-line-badge");
-    expect(BARE).not.toMatch(/\n\.k-line-badge \{/);
-  });
-  it('the severity badge is the shared .badge at the supporting tier with its shape scaled to the word', () => {
-    expect(decls('.k-badge')['font-size']).toBe('var(--k-sup-size)');
-    expect(decls('.k-badge::before')['inline-size']).toBe('0.5em');
-  });
-  it('the departure board keeps five single-line rows: --k-block-min for the board at both sizes', () => {
-    expect(decls(".kiosk[data-size='wide'] .k-block--board")['--k-block-min']).toMatch(/^calc\(\d+px \* var\(--k-zoom\)\)$/);
-    expect(decls(".kiosk[data-size='compact'] .k-block--board")['--k-block-min']).toMatch(/^calc\(\d+px \* var\(--k-zoom\)\)$/);
-    const row = decls('.k-row--line');
-    expect(row.display).toBe('flex');
-    expect(row['align-items']).toBe('center');
-    // The destination column takes what the badge, the word and the count leave; the count has no fixed width to steal from it.
-    expect(decls('.k-row--line .k-row-aside')['min-width']).toBeUndefined();
-    expect(decls('.k-main .k-weather-details')['white-space']).toBe('normal');
-  });
-  it('the rotation: the outgoing story fades 180 ms, the incoming settles 220 ms on --ease-enter, the code crossfades 180 ms, the bar keeps its linear second', () => {
-    expect(decls('.k-story-item').animation).toBe('k-story-in 220ms var(--ease-enter) both');
-    expect(decls('.k-story-item[data-leaving]').animation).toBe('k-story-out 180ms var(--ease-exit) both');
-    expect(decls('.k-story-item[data-leaving]').position).toBe('absolute');
-    expect(decls(".k-code[data-swap='1']").animation).toBe('k-code-in 180ms var(--ease-enter) both');
-    expect(decls('.k-code-ghost').animation).toBe('k-story-out 180ms var(--ease-exit) both');
-    expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
-    expect(BARE).toMatch(/@keyframes k-story-in \{ from \{ opacity: 0; transform: translateY\(calc\(6px \* var\(--k-zoom\)\)\); \}/);
-  });
-  it('both animations stop under reduced motion and lightweight, and the leaving copies never show', () => {
-    const reduced = BARE.slice(BARE.indexOf('@media (prefers-reduced-motion: reduce)'));
-    for (const rule of ['.kiosk .k-story-item', ".kiosk .k-code[data-swap='1']", ".kiosk .k-join-code[data-swap='1']"]) expect(reduced).toContain(rule);
-    expect(reduced).toMatch(/\.kiosk \.k-story-item\[data-leaving\], \.kiosk \.k-code-ghost \{ display: none; \}/);
-    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-story-item, :root\[data-lagano='1'\] \.k-code\[data-swap='1'\], :root\[data-lagano='1'\] \.k-join-code\[data-swap='1'\] \{ animation: none; \}/);
-    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-story-item\[data-leaving\], :root\[data-lagano='1'\] \.k-code-ghost \{ display: none; \}/);
+  it('holds the code to its column at every size (D17), letting the card colour show through it', () => {
+    expect(decls('.k-code')['font-size']).toBe('min(var(--k-display-size), 15cqi)');
+    expect(decls('.k-code').color).toBe('inherit');
+    expect(decls(".kiosk[data-size='handheld'] .k-code").color).toBe('var(--k-action)');
   });
 });
 
-// T5.3: the theme button, literally 44 px (the WCAG floor, not a --k-control
-// scale) and left of the clock in its own row so the two share a line.
-describe('T5.3: the theme button is a literal 44 px target beside the clock', () => {
-  it('sets a 44 px minimum height on the button itself, sized from a tier token, not the composition scale', () => {
-    const btn = decls('.k-theme');
-    expect(btn['min-height']).toBe('44px');
-    expect(btn['font-size']).toBe('var(--k-sup-size)');
-    expect(btn.cursor).toBe('pointer');
-  });
-  it('lays the clock row out left to right so the button sits directly before the clock', () => {
-    const row = decls('.k-clock-row');
-    expect(row.display).toBe('flex');
-    expect(row['align-items']).toBe('center');
-  });
-});
-
-// T5.4: the portrait totem (1080 x 1920; kiosk/layout.ts gives it the compact
-// tokens at zoom 1). One column: the map on top at 55% of the stage with the
-// board over its foot, the invitation card across the width, the weather and
-// the story side by side under it; the paired compositions stack the same
-// way. Compact tiers and the compact 240 px QR, nothing re-sized: the
-// portrait rules place blocks and set no token.
-describe('T5.4: the portrait composition', () => {
+describe('the portrait composition', () => {
   const P = ".kiosk[data-portrait='1']";
-  it('stacks the stage: the map (or the paired main region) on top at 55% of the stage, the side column with the rest', () => {
+  it('stacks the stage: the scene (or the paired main region) on top at 55% of the stage, the side column with the rest', () => {
     const stage = decls(`${P} .k-invitation, ${P} .k-paired`);
     expect(stage['grid-template-columns']).toBe('minmax(0, 1fr)');
-    // The map at 55% at least and the side at its content height, on the invitation as on a paired map layer.
     expect(stage['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
   });
-  it('lays the invitation side column out as two columns: the card across both, the weather and the story side by side under it', () => {
+  it('lays the invitation side out as two columns: the tiles beside the card, both centred in the room the row has', () => {
     const side = decls(`${P} .k-invitation .k-side`);
-    expect(side['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
-    expect(side['grid-template-rows']).toBe('auto auto');
+    expect(side['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 1.1fr)');
     expect(side['column-gap']).toBe('var(--k-gap)');
-    const card = decls(`${P} .k-invitation .k-invite`);
-    expect(card['grid-column']).toBe('1 / -1');
-    expect(card['grid-row']).toBe('1');
-    const weather = decls(`${P} .k-invitation .k-weather`);
-    expect(weather['grid-column']).toBe('1');
-    expect(weather['grid-row']).toBe('2');
-    const story = decls(`${P} .k-invitation .k-story`);
-    expect(story['grid-column']).toBe('2');
-    expect(story['grid-row']).toBe('2');
+    expect(decls(`${P} .k-side-tiles`)['align-content']).toBe('center');
   });
-  it('lets the map take the room on a paired map layer: the side column at its content height, never more than the room, the map the rest and 55% at least', () => {
-    expect(decls(`${P} .k-paired:has(> .k-map)`)['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
-  });
-  it('centres the content of the two tiles in the room the last row has, the leaving story copy with it', () => {
-    expect(decls(`${P} .k-invitation .k-weather`)['justify-content']).toBe('center');
-    expect(decls(`${P} .k-story-item`)['justify-content']).toBe('center');
-  });
-  it('keeps the compact tiers and the 240 px QR: the portrait rules place blocks and set no token, and the old content-height stack is gone', () => {
+  it('keeps the compact tiers and the 240 px QR: the portrait rules place blocks and set no token and no font-size', () => {
     const start = BARE.indexOf(P);
     const end = BARE.indexOf('@media (prefers-reduced-motion: reduce)');
     expect(start).toBeGreaterThan(-1);
@@ -320,18 +339,5 @@ describe('T5.4: the portrait composition', () => {
     const portrait = BARE.slice(start, end);
     expect(portrait).not.toMatch(/--k-[a-z-]+:/);
     expect(portrait).not.toContain('font-size');
-    expect(BARE).not.toContain(`${P} .k-invitation, ${P} .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }`);
-    expect(BARE).not.toContain(`${P} .k-side-blocks { flex: none; }`);
   });
 });
-
-describe('the compact header holds its date, and an empty side seats the join card at the foot (controller, wave 5 merge)', () => {
-  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
-  it('lays the date beside the clock row in the compact and portrait headers, where stacking them measured 71 px in a 60 px header', () => {
-    expect(css).toContain(".kiosk[data-size='compact'] .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); }");
-  });
-  it('pushes the join card to the foot when the side has no blocks (Vijesti in portrait)', () => {
-    expect(css).toContain('.k-side-blocks:empty + .k-join { margin-top: auto; }');
-  });
-});
-

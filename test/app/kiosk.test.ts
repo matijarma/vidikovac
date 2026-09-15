@@ -11,7 +11,7 @@ import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, ROTATE_MS, STORY_LEAVE_MS, type KioskDeps } from '../../app/src/kiosk';
+import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, ROTATE_MS, SCENE_LEAVE_MS, type KioskDeps } from '../../app/src/kiosk';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 
@@ -48,7 +48,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase'>> & { stored?: string | null; themeInitial?: ThemePreference };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'pinScene'>> & { stored?: string | null; themeInitial?: ThemePreference };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -92,7 +92,7 @@ function mount(opts: MountOptions = {}) {
   const handle = mountKiosk(root, {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
-    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
+    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, pinScene: opts.pinScene,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules: MODULES })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -106,6 +106,8 @@ function mount(opts: MountOptions = {}) {
     clearInterval: (h: unknown) => { (h as Timer).cleared = true; },
     requestFullscreen, requestWakeLock,
   });
+  /** The timers mountKiosk arms synchronously (the 1 s and 20 s ticks); the teaser poll arms itself only after the first load settles. */
+  const armedAtMount = new Set(timers);
   return {
     root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, requestFullscreen, requestWakeLock,
     theme: themeFake.theme, themeCalls: themeFake.calls, themeListenerCount: themeFake.listenerCount,
@@ -118,6 +120,12 @@ function mount(opts: MountOptions = {}) {
     fire: (ms: number) => [...timers].reverse().find((t) => t.ms === ms && !t.cleared),
     /** Fires every armed timer registered at a delay, oldest first. */
     tick: (ms: number) => { for (const t of [...timers]) if (t.ms === ms && !t.cleared) t.fn(); },
+    /** Fires the teaser poll alone: its fallback delay equals the 20 s rotation tick, which `tick(POLL_FALLBACK_MS)` would fire as well. */
+    poll: () => {
+      const armed = [...timers].reverse().find((t) => t.ms === POLL_FALLBACK_MS && !t.cleared && !armedAtMount.has(t));
+      if (!armed) throw new Error('no teaser poll is armed');
+      armed.fn();
+    },
   };
 }
 const flush = async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
@@ -203,7 +211,7 @@ describe('setup: two real steps, one creation per press', () => {
 });
 
 describe('invitation: the screen a passer-by sees', () => {
-  it('boots the beacon from stored credentials and composes the stop context, the map column, the lines, the invitation, the weather, a story and the strip', async () => {
+  it('boots the beacon from stored credentials and composes the stop context, the Promet scene with its map and line tiles, the two value tiles, the invitation, the header weather and the strip', async () => {
     const k = mount({ stored: STORED });
     await flush();
     expect(k.handle.phase()).toBe('invitation');
@@ -214,14 +222,20 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(context).toContain('Trg bana J. Jelačića');
     expect(context).toContain('privremeni zaslon · vrijedi do');
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
-    expect(q(k.root, '[data-testid=kiosk-map-host]')).not.toBeNull();
-    const lines = text(q(k.root, '[data-testid=kiosk-lines]'));
-    expect(lines).toContain('Linije s ove stanice');
-    expect(lines).toContain('kasni 2 min');
-    expect(lines).toContain('još 4 linije');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .k-line')).toHaveLength(5);
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
+    expect(text(q(k.root, '.k-scene-title'))).toBe('Promet');
+    expect(q(k.root, '[data-testid=kiosk-scene] [data-testid=kiosk-map-host]')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('kasni 2 min');
+    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 5 linija');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(4);
+    expect(text(q(k.root, '[data-testid=tile-vehicles]'))).toContain('156');
+    const closures = text(q(k.root, '[data-testid=tile-closures]'));
+    expect(closures).toContain('1');
+    expect(closures).toContain('Ilica');
     expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
-    expect(text(q(k.root, '[data-testid=kiosk-story]'))).toContain('13. sjednica Gradske skupštine');
+    // One element per testid on the whole screen: the header's group is the only weather (D11; T2.8 report, Ruling 5).
+    expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-temp]')).toHaveLength(1);
     const strip = text(q(k.root, '[data-testid=safety-strip]'));
     expect(strip).toContain('žuto upozorenje · Grmljavina');
     expect(strip).toContain('1 zatvaranje');
@@ -254,12 +268,18 @@ describe('invitation: the screen a passer-by sees', () => {
     k.handlers.onCodes(batch(NOW - 7_000), NOW);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('0.80');
   });
-  it('rotates the story every twenty seconds; the clock tick repaints once a second', async () => {
+  it('rotates the scene every twenty seconds, Promet to Grad (the fixture’s session is next week, so Večeras is skipped), with the strip counting down; the clock tick repaints once a second', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    const first = q(k.root, '[data-testid=kiosk-story]')!.dataset.storyId;
+    const scene = q(k.root, '[data-testid=kiosk-scene]')!;
+    expect(scene.dataset.scene).toBe('promet');
+    const next = q(k.root, '[data-testid=strip-next]')!;
+    expect(next.hidden).toBe(false);
+    expect(text(next)).toMatch(/^sljedeći prizor za \d+ s$/);
     k.tick(ROTATE_MS);
-    expect(q(k.root, '[data-testid=kiosk-story]')!.dataset.storyId).not.toBe(first);
+    expect(scene.dataset.scene).toBe('grad');
+    expect(text(q(k.root, '.k-scene-title'))).toBe('Grad');
+    expect(text(q(k.root, '[data-testid=strip-next]'))).toMatch(/^sljedeći prizor za \d+ s$/);
     expect(k.timers.filter((t) => t.ms === CODE_TICK_MS && !t.cleared)).toHaveLength(1);
   });
   it('stores fresher screen metadata from the beacon beside the same secret and names the venue', () => {
@@ -270,11 +290,12 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toContain('zaslon u prostoru');
   });
-  it('draws compact at 1366 x 768 with four lines on the board', async () => {
+  it('draws compact at 1366 x 768 with three line tiles in the scene', async () => {
     const k = mount({ stored: STORED, viewport: { width: 1366, height: 768 } });
     await flush();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .k-line')).toHaveLength(4);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(3);
+    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
   });
   it('the strip keeps its three sentences in one wrapping box and never steps the type down', async () => {
     const k = mount({ stored: STORED, viewport: { width: 1366, height: 768 } });
@@ -283,7 +304,8 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(q(strip, '[data-testid=strip-items] [data-testid=strip-warning]')).not.toBeNull();
     expect(q(strip, '[data-testid=strip-items] [data-testid=strip-pharmacy]')).not.toBeNull();
     expect(strip.className).not.toContain('k-strip--tight');
-    expect(text(q(strip, '[data-testid=strip-closures]'))).toBe('1 zatvaranje najbliže Ilica');
+    // The street is said once, on the closures tile (D18); the strip keeps the count.
+    expect(text(q(strip, '[data-testid=strip-closures]'))).toBe('1 zatvaranje');
   });
   it('lightweight: the map host is hidden, nothing is a canvas, and the lines board fills the column', async () => {
     const k = mount({ stored: STORED, lightweight: true });
@@ -496,9 +518,13 @@ describe('alerts, polling, the first tap and disposal', () => {
   it('a cold screen waits for readings rather than claiming zero vehicles or no new notices', async () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
-    expect(q(k.root, '[data-testid=kiosk-lines] .k-board-note')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-lines] .sk')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=kiosk-lines]'))).not.toContain('nijedno vozilo');
-    expect(q(k.root, '[data-testid=kiosk-story] [data-state=loading]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=tile-vehicles]')!.dataset.state).toBe('loading');
+    expect(q(k.root, '[data-testid=tile-vehicles] .sk')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=tile-vehicles]'))).not.toContain('0');
+    expect(q(k.root, '[data-testid=tile-closures]')!.dataset.state).toBe('loading');
+    expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
     k.handle.destroy();
   });
   it('the paired safety strip agrees with the live session copy when the preview request fails', async () => {
@@ -528,20 +554,27 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
     await flush();
     expect(calls.at(-1)).toBe('live');
-    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('1 zatvaranje najbliže Ilica');
+    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('1 zatvaranje');
     fail = true;
-    k.tick(POLL_FALLBACK_MS);
+    k.poll();
     await flush();
     expect(calls.at(-1)).toBe('stale');
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
     expect(text(q(k.root, '[data-testid=strip-closures]'))).toContain('1 zatvaranje · zastarjelo');
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
     expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('zastarjelo');
+    // The tiles keep their last-good value, marked: the badge replaces the context.
+    expect(q(k.root, '[data-testid=tile-vehicles]')!.dataset.state).toBe('stale');
+    expect(q(k.root, '[data-testid=tile-vehicles] .badge[data-tone=stale]')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=tile-vehicles]'))).toContain('156');
+    expect(q(k.root, '[data-testid=tile-closures] .badge[data-tone=stale]')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
     fail = false;
-    k.tick(POLL_FALLBACK_MS);
+    k.poll();
     await flush();
     expect(calls.at(-1)).toBe('live');
+    expect(q(k.root, '[data-testid=tile-vehicles]')!.dataset.state).toBe('live');
     expect(text(q(k.root, '[data-testid=strip-closures]'))).not.toContain('zastarjelo');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
@@ -550,10 +583,15 @@ describe('alerts, polling, the first tap and disposal', () => {
     await flush();
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
     expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('Zatvaranja: podaci trenutačno nedostupni');
-    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('ZET trenutačno ne odgovara.');
-    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('Podaci DHMZ-a trenutačno nisu dostupni.');
-    expect(text(q(k.root, '[data-testid=kiosk-story]'))).toContain('Izvor trenutačno ne odgovara');
-    expect(q(k.root, '[data-testid=kiosk-story] [data-state=down]')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-lines] .k-board-note[data-state=down]'))).toBe('ZET trenutačno ne odgovara.');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl')).toHaveLength(0);
+    // The clock stands alone (D11): no sentence and no dash where the reading was.
+    expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
+    const closures = q(k.root, '[data-testid=tile-closures]')!;
+    expect(closures.dataset.state).toBe('down');
+    expect(text(closures)).toContain('Izvor trenutačno ne odgovara');
+    expect(text(closures)).not.toContain('0');
+    expect(q(k.root, '[data-testid=tile-vehicles]')!.dataset.state).toBe('down');
   });
   it('a failed session request leaves its copy stale and the teaser\u2019s live copy speaks; only when both fail does the map hold', async () => {
     let failZet = false;
@@ -625,9 +663,11 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(map.calls.slice(before, resize)).toEqual(['pause', 'feed:stale']); // parked, then told from the teaser on the paired paint
     expect(map.calls.slice(resize, resize + 3)).toEqual(['resize', 'resume', 'feed:stale']);
     expect(map.calls.at(-1)).toBe('feed:live'); // the session's own zet-rt answered live
+    const beforeVijesti = map.calls.length;
     k.view('vijesti');
     await flush();
-    expect(map.calls.at(-1)).toBe('pause'); // a domain without a map parks it, never destroys it
+    // A domain without a map parks it, never destroys it, and every paint since (the view's own, then the session refresh's) still tells it the feed.
+    expect(map.calls.slice(beforeVijesti)).toEqual(['pause', 'feed:live', 'feed:live']);
     expect(map.factory).toHaveBeenCalledTimes(1);
     k.view('u-pokretu');
     await flush();
@@ -681,7 +721,10 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, locale: 'en' });
     await flush();
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
-    expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('Lines from this stop');
+    // The scene's title is the shared domain word (layers.u-pokretu), the tiles their own labels.
+    expect(text(q(k.root, '.k-scene-title'))).toBe('Transit');
+    expect(text(q(k.root, '[data-testid=tile-vehicles] .tl-label'))).toBe('Vehicles moving');
+    expect(text(q(k.root, '[data-testid=strip-next]'))).toMatch(/^next scene in \d+ s$/);
   });
   it('destroy() clears every timer, closes both sockets and removes the DOM', async () => {
     const k = await pairedKiosk();
@@ -694,45 +737,58 @@ describe('alerts, polling, the first tap and disposal', () => {
 });
 
 // T5.2: the city first, icons and one badge, paired boards that name their
-// domain, a quiet rotation. R-K7 composes the side column so it fits its
-// stage: the weather lockup (two lines, a 48 px condition icon) leads, the
-// QR-bound invitation card follows, the story closes the column; the sun
-// line moves out of the lockup to the story's foot (no story) or the strip.
+// domain, a quiet rotation. The Dan grada system (C.3) composes the side
+// column as the two value tiles over the accent-filled QR card; the weather
+// is the header's status group beside the clock (D11), never a tile, and the
+// sun lives there as a glyph and a time, never a sentence on the strip.
 describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation', () => {
-  it('orders the side column weather, invitation, story; the lockup carries the 48 px condition icon and no sun line; the card has no fourth line', async () => {
+  it('orders the side column tiles, card; the header carries the weather group with the condition icon, the reading and the sun time; the card is lead, QR, hint, code', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const side = q(k.root, '[data-testid=kiosk-invitation] .k-side')!;
-    expect([...side.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-weather', 'kiosk-invite', 'kiosk-story']);
-    const weather = q(k.root, '[data-testid=kiosk-weather]')!;
+    expect([...side.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-tiles', 'kiosk-invite']);
+    expect([...q(side, '[data-testid=kiosk-tiles]')!.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['tile-vehicles', 'tile-closures']);
+    expect(q(side, '[data-testid=tile-vehicles] .k-glyph use')!.getAttribute('href')).toBe('#icon-tram-front');
+    const weather = q(k.root, '.k-head .k-clock-row [data-testid=kiosk-weather]')!;
+    expect(weather.hidden).toBe(false);
+    expect(weather.dataset.state).toBe('live');
     expect(q(weather, '.k-weather-icon use')!.getAttribute('href')).toBe('#icon-sun'); // 'vedro'
-    expect(q(weather, '.k-weather-sun')).toBeNull();
+    expect(text(q(weather, '[data-testid=kiosk-temp]'))).toBe('21 °C');
+    expect(text(q(weather, '.k-sun time'))).toMatch(/^\d\d:\d\d$/);
+    expect(q(weather, '.k-weather-details')).toBeNull();
     expect(q(weather, '.k-kicker')).toBeNull();
-    expect(text(q(weather, '.k-weather-details'))).toBe('vlaga 55 % · vjetar sjeverozapad 2,3 m/s');
-    expect(text(q(weather, '.k-meta'))).toBe('opaženo 14:00 · Zagreb-Maksimir · DHMZ');
+    expect(q(k.root, '[data-testid=strip-sun]')).toBeNull();
     const card = q(k.root, '[data-testid=kiosk-invite]')!;
     expect(q(card, '.k-support')).toBeNull();
-    expect(text(q(card, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
+    expect(q(card, '.k-invite-text')).toBeNull();
+    expect(text(q(card, 'h1.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     expect(text(q(card, '.k-hint-host'))).toBe('zagreb.aningfilm.hr/s');
     expect(text(q(card, '.k-hint'))).toBe('ili upiši kod na zagreb.aningfilm.hr/s');
-    // The card's text column: the lead, then the hint; the code column: the code and its bar.
-    expect([...q(card, '.k-invite-text')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint']);
+    // The card's four areas in order: the lead across, the QR beside the hint, the code and its bar across.
+    expect([...card.children].map((el) => el.className)).toEqual(['k-lead', 'k-qr', 'k-hint', 'k-invite-code']);
     expect(q(card, '.k-invite-code [data-testid=pair-code]')).not.toBeNull();
     expect(q(card, '.k-invite-code [data-testid=code-progress] .k-progress-bar')).not.toBeNull();
+    // One h1 on the screen (the card's lead); the scene's title is an h2 the field is labelled by.
+    expect(k.root.querySelectorAll('h1')).toHaveLength(1);
+    expect(q(k.root, '.k-scene-title')!.tagName).toBe('H2');
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.getAttribute('aria-labelledby')).toBe(q(k.root, '.k-scene-title')!.id);
   });
-  it('the sun line rides the strip while a story shows and becomes the story block\u2019s foot when none does', async () => {
-    const k = mount({ stored: STORED });
+  it('DHMZ down: the header weather group hides, the clock stands alone and no dash stands in for the reading', async () => {
+    const down = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [], 'down') : m));
+    const k = mount({ stored: STORED, fetchTeaser: async () => ({ modules: down }) });
     await flush();
-    const sun = /^izlazak \d\d:\d\d · zalazak \d\d:\d\d · dan traje \d+ h \d+ min$/;
-    k.tick(STORY_LEAVE_MS); // the loading item's fade is over
-    expect(q(k.root, '[data-testid=kiosk-story] .k-story-sun')).toBeNull();
-    expect(text(q(k.root, '[data-testid=strip-sun]'))).toMatch(sun);
-    const quiet = mount({ stored: STORED, fetchTeaser: async () => ({ modules: MODULES.filter((m) => !['dogadanja', 'hrt-news', 'emsc'].includes(m.module)).concat([snap('dogadanja', []), snap('hrt-news', []), snap('emsc', [])]) }) });
-    await flush();
-    quiet.tick(STORY_LEAVE_MS);
-    expect(text(q(quiet.root, '[data-testid=kiosk-story] .k-story-title--empty'))).toBe('Trenutačno nema novih obavijesti.');
-    expect(text(q(quiet.root, '[data-testid=kiosk-story] .k-story-sun'))).toMatch(sun);
-    expect(q(quiet.root, '[data-testid=strip-sun]')).toBeNull();
+    const weather = q(k.root, '[data-testid=kiosk-weather]')!;
+    expect(weather.hidden).toBe(true);
+    expect(text(weather)).toBe('');
+    expect(weather.dataset.state).toBeUndefined();
+    expect(text(q(k.root, '[data-testid=kiosk-clock]'))).toBe('14:32');
+    const head = text(q(k.root, '.k-head'));
+    expect(head).not.toMatch(/[\u2013\u2014]|(^|\s)-(\s|$)/);
+    expect(head).not.toContain('°C');
+    expect(head).not.toContain('DHMZ');
+    expect(q(k.root, '[data-testid=kiosk-temp]')).toBeNull();
+    // The rest of the screen is unaffected: the scene and the tiles still speak.
+    expect(text(q(k.root, '[data-testid=tile-vehicles]'))).toContain('156');
   });
   it('builds the hostname sentence from codeBase, never from a literal', async () => {
     const k = mount({ stored: STORED, codeBase: 'https://example.test' });
@@ -744,18 +800,25 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
     expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
   });
-  it('the lines board rows keep li.k-line and carry one .line badge at k size, tram and bus by kind', async () => {
+  it('the four line tiles each carry one .line badge at k size, tram and bus by kind, with the long name beside it and the state word in its tone', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    const rows = [...k.root.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-line')];
-    expect(rows.length).toBe(5);
+    const rows = [...k.root.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] .tl[data-route]')];
+    expect(rows.length).toBe(4);
     for (const row of rows) {
+      expect(row.querySelectorAll('.k-line-badge')).toHaveLength(1);
       const badge = q(row, '.k-line-badge')!;
       expect(badge.classList.contains('line')).toBe(true);
       expect(badge.dataset.size).toBe('k');
       expect(badge.dataset.kind).toBe(row.dataset.kind);
+      expect(q(row, '.tl-label .k-tl-name')).not.toBeNull();
+      expect(q(row, '.tl-value')).not.toBeNull();
     }
-    expect(rows.map((r) => r.dataset.kind)).toEqual(['tram', 'tram', 'tram', 'tram', 'tram']);
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['tram', 'tram', 'tram', 'tram']);
+    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13']);
+    expect(rows[0]!.dataset.tone).toBe('late');
+    expect(text(q(rows[0]!, '.tl-value'))).toBe('kasni 2 min');
+    expect(text(rows[0]!)).not.toContain('vozila'); // the vehicles-near count is a glyph and a number, never the word
   });
   it('the strip label carries the shield and the pill reads Sigurnost, linking the same page', async () => {
     const k = mount({ stored: STORED });
@@ -816,24 +879,24 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     expect(text(badge)).toBe('žuto upozorenje');
     expect(text(q(k.root, '[data-testid=k-warnings] .k-row-main'))).toBe('žuto upozorenje Grmljavina');
   });
-  it('rotation: the outgoing story leaves under data-leaving for 180 ms while the next enters; the block\u2019s box is one item afterwards', async () => {
+  it('rotation: the outgoing scene leaves under data-leaving for 180 ms while the next enters; the field is one item afterwards', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    const box = q(k.root, '[data-testid=kiosk-story]')!;
-    expect(box.querySelectorAll('.k-story-item')).toHaveLength(2); // the loading item is leaving, the first story has entered
-    k.tick(STORY_LEAVE_MS);
-    expect(box.querySelectorAll('.k-story-item')).toHaveLength(1);
-    const first = box.dataset.storyId;
+    const body = q(k.root, '[data-testid=kiosk-scene] .k-scene-body')!;
+    expect(body.querySelectorAll('.k-scene-item')).toHaveLength(1); // the poll that filled the loading Promet rewrote its regions, no swap
     k.tick(ROTATE_MS);
-    const items = [...box.querySelectorAll<HTMLElement>('.k-story-item')];
+    const items = [...body.querySelectorAll<HTMLElement>('.k-scene-item')];
     expect(items).toHaveLength(2);
     expect(items[0]!.dataset.leaving).toBe('1');
+    expect(items[0]!.dataset.scene).toBe('promet');
     expect(items[1]!.dataset.leaving).toBeUndefined();
-    expect(box.dataset.storyId).not.toBe(first);
-    expect(STORY_LEAVE_MS).toBe(180);
-    k.tick(STORY_LEAVE_MS);
-    expect(box.querySelectorAll('.k-story-item')).toHaveLength(1);
-    expect(q(box, '[data-leaving]')).toBeNull();
+    expect(items[1]!.dataset.scene).toBe('grad');
+    expect(SCENE_LEAVE_MS).toBe(180);
+    k.tick(SCENE_LEAVE_MS);
+    expect(body.querySelectorAll('.k-scene-item')).toHaveLength(1);
+    expect(q(body, '[data-leaving]')).toBeNull();
+    expect(q(body, '[data-testid=k-city-ink]')).not.toBeNull();
+    expect(text(q(body, '[data-testid=k-city-ink]'))).toContain('13. sjednica Gradske skup\u0161tine');
   });
   it('rotation: a slot change crossfades the code digits under data-swap for 180 ms, with the old digits as a ghost beside the live code; the first code never swaps', () => {
     let now = NOW;
@@ -860,6 +923,143 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     expect(code.dataset.swap).toBeUndefined();
     expect(q(k.root, '.k-code-ghost')).toBeNull();
     expect(text(code)).toBe('ABCD-EFG1');
+  });
+});
+
+// C.5: the scene field on the controller's clock. The 20 s tick advances the
+// scene and stamps the countdown; before a swap the map is parked so the
+// fading item never carries it away, and it keeps hearing the feed state
+// while another scene shows; reduced motion, lagano and the ?prizor= pin hold
+// one scene (D13) with the dots and the countdown hidden; a session parks the
+// field and the invitation returns on the scene the counter says.
+describe('scenes: rotation, the parked map, reduced motion, lagano and the pin', () => {
+  function spyMap() {
+    const calls: string[] = [];
+    const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
+    return { factory: vi.fn(() => handle), handle, calls };
+  }
+  it('a parked map still receives the feed state: stale after a failing poll while Grad shows; back on Promet it is re-hosted, resized and resumed', async () => {
+    let fail = false;
+    const map = spyMap();
+    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
+    await flush();
+    expect(map.calls.at(-1)).toBe('feed:live');
+    const container = q(k.root, '[data-testid=kiosk-map]')!;
+    expect(container.parentElement).toBe(q(k.root, '[data-testid=kiosk-map-host]'));
+    const before = map.calls.length;
+    k.tick(ROTATE_MS);
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
+    // Parked before the Promet item started fading, then told the feed state from the same paint.
+    expect(map.calls.slice(before)).toEqual(['pause', 'feed:live']);
+    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    k.tick(SCENE_LEAVE_MS);
+    expect(q(k.root, '[data-testid=kiosk-map-host]')).toBeNull();
+    expect(container.isConnected).toBe(true);
+    expect(map.handle.destroy).not.toHaveBeenCalled();
+    await flush(); // the poll the 20 s tick also fired settles (live), and re-arms
+    fail = true;
+    k.poll();
+    await flush();
+    expect(map.calls.at(-1)).toBe('feed:stale');
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
+    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    k.tick(ROTATE_MS);
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
+    expect(container.parentElement).toBe(q(k.root, '.k-scene-item:not([data-leaving]) [data-testid=kiosk-map-host]'));
+    expect(map.calls.slice(-3)).toEqual(['resize', 'resume', 'feed:stale']);
+    expect(map.factory).toHaveBeenCalledTimes(1);
+  });
+  it('the countdown counts the seconds to the next scene on the 1 s tick without rebuilding the strip, and restarts on the rotation', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    const open = q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement;
+    open.focus();
+    const next = q(k.root, '[data-testid=strip-next]')!;
+    expect(text(next)).toBe('sljedeći prizor za 20 s');
+    now = NOW + 5_000;
+    k.tick(CODE_TICK_MS);
+    expect(text(next)).toBe('sljedeći prizor za 15 s');
+    expect(q(k.root, '[data-testid=strip-next]')).toBe(next);
+    expect(document.activeElement).toBe(open);
+    now = NOW + ROTATE_MS;
+    k.tick(ROTATE_MS);
+    expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
+    expect(text(q(k.root, '[data-testid=strip-next]'))).toBe('sljedeći prizor za 20 s');
+  });
+  it('reduced motion holds Promet across two ticks, with no dots and the countdown hidden', async () => {
+    const k = mount({ stored: STORED, reducedMotion: true });
+    await flush();
+    const scene = q(k.root, '[data-testid=kiosk-scene]')!;
+    expect(scene.dataset.scene).toBe('promet');
+    const next = q(k.root, '[data-testid=strip-next]')!;
+    expect(next.hidden).toBe(true);
+    expect(text(next)).toBe('');
+    expect(k.root.querySelectorAll('.k-dot')).toHaveLength(0);
+    expect(q(k.root, '[data-testid=kiosk-scene-position]')).toBeNull();
+    k.tick(ROTATE_MS);
+    k.tick(ROTATE_MS);
+    expect(scene.dataset.scene).toBe('promet');
+    expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
+    k.tick(CODE_TICK_MS);
+    expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
+  });
+  it('lagano holds Promet too: the board is the whole scene and nothing counts down', async () => {
+    const k = mount({ stored: STORED, lightweight: true });
+    await flush();
+    k.tick(ROTATE_MS);
+    const scene = q(k.root, '[data-testid=kiosk-scene]')!;
+    expect(scene.dataset.scene).toBe('promet');
+    expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
+    expect(q(scene, '.k-scene-grid')!.dataset.board).toBe('1');
+    expect(k.root.querySelectorAll('.k-dot')).toHaveLength(0);
+    expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
+  });
+  it('?prizor=grad boots on Grad without rotation: no dots, no countdown, and no map is ever built for a scene without one', async () => {
+    const map = spyMap();
+    const k = mount({ stored: STORED, pinScene: 'grad', mapFactory: map.factory as never });
+    await flush();
+    const scene = q(k.root, '[data-testid=kiosk-scene]')!;
+    expect(scene.dataset.scene).toBe('grad');
+    expect(text(q(k.root, '.k-scene-title'))).toBe('Grad');
+    expect(q(scene, '[data-testid=k-city-ink]')).not.toBeNull();
+    expect(k.root.querySelectorAll('.k-dot')).toHaveLength(0);
+    expect(q(k.root, '[data-testid=kiosk-scene-position]')).toBeNull();
+    expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
+    k.tick(ROTATE_MS);
+    k.tick(ROTATE_MS);
+    expect(scene.dataset.scene).toBe('grad');
+    expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
+    expect(map.factory).not.toHaveBeenCalled();
+    expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
+    // The pin reaches the empty Večeras too (D13).
+    const pinned = mount({ stored: STORED, pinScene: 'veceras' });
+    await flush();
+    expect(q(pinned.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('veceras');
+    expect(text(q(pinned.root, '[data-testid=kiosk-tonight] .tl[data-level=calm]'))).toBe('Večeras nema najavljenih događanja u kvartu.');
+  });
+  it('a session parks the field and cancels its leave timer; no scene advances while paired; the invitation returns on the scene the counter says', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.tick(ROTATE_MS); // Grad, with the Promet item still fading
+    expect(k.timers.filter((t) => t.ms === SCENE_LEAVE_MS && !t.cleared)).toHaveLength(1);
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    expect(q(k.root, '[data-testid=kiosk-scene]')).toBeNull();
+    expect(k.timers.filter((t) => t.ms === SCENE_LEAVE_MS).every((t) => t.cleared)).toBe(true);
+    expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
+    k.tick(ROTATE_MS); // the paired refresh, never a scene advance
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    k.expire();
+    const scene = q(k.root, '[data-testid=kiosk-scene]')!;
+    expect(scene.dataset.scene).toBe('grad'); // the counter stood at 1: order[1 % 2]
+    expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
+    expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(false);
+    k.tick(ROTATE_MS);
+    expect(scene.dataset.scene).toBe('promet');
   });
 });
 
@@ -908,9 +1108,12 @@ describe('handheld: the kiosk on a phone', () => {
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
-    for (const absent of ['kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-weather', 'kiosk-story', 'kiosk-invitation']) {
+    for (const absent of ['kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-scene', 'kiosk-tiles', 'kiosk-invitation']) {
       expect(q(k.root, `[data-testid=${absent}]`), absent).toBeNull();
     }
+    // The header's weather group paints on a handheld too (C.3), the only weather there.
+    expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
+    expect(text(q(k.root, '.k-head [data-testid=kiosk-weather]'))).toContain('21 °C');
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
   });
   it('a stored screen opened on a phone rebuilds the link from its credentials on the code base', () => {

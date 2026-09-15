@@ -1,16 +1,18 @@
-// The unpaired composition: the one map (about 60% of the width, with the
-// lines board laid over its foot), and beside it the side column with the
-// city first: the weather lockup, then the fixed invitation card with the
-// rotating QR and readable code, then one bounded secondary story. Built
-// once; update() rewrites only the text blocks, so the map container the
-// page moved in is never touched by a poll.
+// The unpaired composition (C.3): the scene field on the left, which
+// kiosk/scenes.ts rotates through Promet, Večeras and Grad on the controller's
+// clock, and the side column on the right: the two value tiles (vehicles
+// moving on the network, closures within 1.5 km of the stop; frame.ts's
+// valueTiles, D18) over the fixed, accent-filled invitation card with the
+// rotating QR, the lead, the hint and the readable code. Built once; update()
+// hands the field its model and rewrites the tiles only when their markup
+// changed, so the map container the page moved in and the code the rotation
+// paints are never touched by a poll.
 //
-// R-K7 composes the column so it fits its stage at both design sizes: the
-// lockup is two lines under a 48 px condition icon (the sun line moved to
-// the story's foot when no story shows, else to the strip), the card is
-// QR-bound (lead and hint beside the QR, the code under it at wide, beside
-// it at compact, no fourth line), and the story is a clamped headline with
-// its credit, its title given as many lines as the room allows.
+// The header carries the weather (D11) and the strip the safety words, so
+// nothing here says either. This file also keeps the shared markup helpers
+// the lagano board, the scene tiles and the paired compositions draw with
+// (kBadge, kicker, linesMarkup, weatherMarkup) and the card pieces the
+// handheld reuses (codeHost, hintMarkup, codeBlockMarkup).
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { CODE_URL_BASE } from '../code';
 import type { ScreenStop } from '../core/contracts';
@@ -18,11 +20,10 @@ import { weatherIcon } from '../experience/weather-icon';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
-import { byModule, linesAtStop, nearbyCountLine, stories, sunLine, sunToday, weatherNow, type LinesBoard, type Story, type WeatherNow } from './local';
+import { tileMarkup, valueTiles } from './frame';
+import { nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
+import { mountScenes, type SceneId, type ScenesHandle } from './scenes';
 import { plural, type KioskStrings } from './strings';
-
-/** How long the outgoing story stays in the block, fading, before it is removed. */
-export const STORY_LEAVE_MS = 180;
 
 export interface InvitationDeps {
   strings: KioskStrings;
@@ -31,30 +32,34 @@ export interface InvitationDeps {
   lightweight: boolean;
   /** The origin the QR points at; the hint names its hostname. Production when absent. */
   codeBase?: string;
-  /** Runs `fn` once after `ms` and returns its cancel: the controller's clock, so the leaving story goes on the timers the tests drive and destroy() leaves nothing armed. */
+  /** Runs `fn` once after `ms` and returns its cancel: the controller's clock, so the leaving scene goes on the timers the tests drive and destroy() leaves nothing armed. */
   defer?: (fn: () => void, ms: number) => () => void;
+  /** Runs before a scene swap, so the controller parks the map before the fading item carries it away. */
+  onBeforeSwap?: (leaving: SceneId, entering: SceneId) => void;
 }
 
 export interface InvitationModel {
   modules: readonly ModuleSnapshot[];
   stop: ScreenStop | null;
   now: number;
-  /** Which of the bounded stories is up; the controller advances it on its 20 s tick. */
-  storyIndex: number;
-  /** Rows the lines board shows before "još N linija" (6 wide, 4 compact, 10 lightweight). */
+  /** The controller's rotation counter; the scene on show is `order[sceneIndex % order.length]` while rotating. */
+  sceneIndex: number;
+  /** `?prizor=` (D13): one scene, no rotation. */
+  pinned: SceneId | null;
+  /** False under reduced motion, lagano and the pin: the field holds Promet (or the pinned scene). */
+  rotate: boolean;
+  /** Line tiles the Promet scene shows before its meta says the rest (4 wide, 3 compact, 10 lightweight). */
   lineCap: number;
-  /** The composition on screen: the facts line holds three details at wide and two at compact. */
   size: 'wide' | 'compact';
 }
 
 export interface InvitationHandle {
   element: HTMLElement;
-  /** The page parks the one map container here (never in lightweight mode). */
-  mapHost: HTMLElement;
+  /** The map host of the scene on show; null while another scene shows, so the page keeps the map parked. Never used in lightweight mode. */
+  readonly mapHost: HTMLElement | null;
   update(model: InvitationModel): void;
-  /** Whether a story is on show right now (the strip carries the sun line while one is). */
-  storyShowing(): boolean;
-  /** Re-measures the story block and gives its title the lines that fit; called after fonts arrive and on the clock tick. */
+  scenes(): ScenesHandle;
+  /** Re-measures the field's titled tiles; called after every update and on the clock tick. */
   fit(): void;
   destroy(): void;
 }
@@ -88,7 +93,7 @@ export function codeBlockMarkup(strings: KioskStrings): string {
         </div>`;
 }
 
-/** The weather lockup: the condition icon, the reading with the condition word, one facts line of `facts` details (humidity, wind, pressure in that order; the compact column holds two), and the credit naming the observation time, the station and DHMZ. */
+/** The paired compositions' weather block (zrak-i-nebo, the Sada overview): the condition icon, the reading with the condition word, one facts line of `facts` details (humidity, wind, pressure in that order; the compact column holds two), and the credit naming the observation time, the station and DHMZ. */
 export function weatherMarkup(weather: WeatherNow, strings: KioskStrings, facts = 3): string {
   if (weather.state === 'loading' || (weather.state === 'down' && weather.temperature === null)) {
     const text = weather.state === 'loading' ? strings.weather.loading : strings.weather.unavailable;
@@ -116,7 +121,7 @@ function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale:
     </li>`;
 }
 
-/** The lines board: one row per route at the stop, delay in words, vehicles near. */
+/** The lines board (the lagano Promet scene, D12, and paired Promet): one row per route at the stop, delay in words, vehicles near. */
 export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings: KioskStrings, locale: string): string {
   const title = stop ? strings.lines.title : strings.lines.nearbyTitle;
   const head = kicker(title, nearbyCountLine(board, strings, locale));
@@ -128,107 +133,50 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   return `${head}<ul class="k-line-list">${board.rows.map((row) => lineRow(row, strings, locale)).join('')}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
 }
 
-/** A story: its kicker, the headline and the credit; with none, the honest sentence and the sun line as the block's foot. */
-export function storyMarkup(story: Story | null, strings: KioskStrings, sourcesDown = false, foot = ''): string {
-  // No story because the sources are not answering is said so; only an answering source with nothing new is "nothing new".
-  if (!story) {
-    const sun = foot ? `<p class="k-story-sun">${escapeHtml(foot)}</p>` : '';
-    return `${kicker(strings.story.city)}<p class="k-story-title k-story-title--empty"${sourcesDown ? ' data-state="down"' : ''}>${escapeHtml(sourcesDown ? strings.paired.sourceDown : strings.story.empty)}</p>${sun}`;
-  }
-  const meta = [story.meta, story.source].filter(Boolean).join(' · ');
-  return `${kicker(story.kicker, '', story.tone)}<p class="k-story-title" title="${escapeAttribute(story.attribution)}">${escapeHtml(story.title)}</p><p class="k-meta">${escapeHtml(meta)}</p>`;
-}
-
-function invitationMarkup(s: KioskStrings, lightweight: boolean, codeBase?: string): string {
-  return `<div class="k-map" data-testid="kiosk-live">
-      <div class="k-map-host" data-testid="kiosk-map-host"${lightweight ? ' hidden' : ''}></div>
-      <div class="k-lines ${lightweight ? 'k-lines--board' : 'k-lines--overlay'}" data-testid="kiosk-lines"></div>
-    </div>
-    <aside class="k-side">
-      <article class="k-weather" data-testid="kiosk-weather"></article>
-      <article class="k-invite" data-testid="kiosk-invite">
-        <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
-        <div class="k-invite-text"><h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>${hintMarkup(s, codeBase)}</div>
-        ${codeBlockMarkup(s)}
-      </article>
-      <article class="k-story" data-testid="kiosk-story"></article>
-    </aside>`;
+/** The side column: the two value tiles, then the card whose QR and code the rotation paints (C.3). The lead is the page's one h1. */
+function sideMarkup(s: KioskStrings, codeBase?: string): string {
+  return `<div class="k-side-tiles" data-testid="kiosk-tiles"></div>
+    <article class="k-invite" data-testid="kiosk-invite">
+      <h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>
+      <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
+      ${hintMarkup(s, codeBase)}
+      ${codeBlockMarkup(s)}
+    </article>`;
 }
 
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
-  const { strings: s, i18n, locale } = deps;
-  const defer = deps.defer ?? ((fn, ms) => { const handle = globalThis.setTimeout(fn, ms); return () => globalThis.clearTimeout(handle); });
-  /** Cancels of the leave timers still pending, keyed by the item they remove. */
-  const leaving = new Map<HTMLElement, () => void>();
+  const { strings: s, i18n, locale, lightweight } = deps;
   const element = document.createElement('section');
   element.className = 'k-invitation';
   element.dataset.testid = 'kiosk-invitation';
-  element.innerHTML = invitationMarkup(s, deps.lightweight, deps.codeBase);
   host.appendChild(element);
-  const mapHost = element.querySelector<HTMLElement>('[data-testid=kiosk-map-host]')!;
-  const linesBox = element.querySelector<HTMLElement>('[data-testid=kiosk-lines]')!;
-  const weatherBox = element.querySelector<HTMLElement>('[data-testid=kiosk-weather]')!;
-  const storyBox = element.querySelector<HTMLElement>('[data-testid=kiosk-story]')!;
-  // Each block is rewritten only when its markup changed: a poll that
-  // brought the same data repaints nothing, and a reader mid-sentence is
+  // The field takes the grid's first column, the side column the second.
+  const field = mountScenes(element, deps);
+  const side = document.createElement('aside');
+  side.className = 'k-side';
+  side.innerHTML = sideMarkup(s, deps.codeBase);
+  element.appendChild(side);
+  const tilesBox = side.querySelector<HTMLElement>('[data-testid=kiosk-tiles]')!;
+  // The tiles are rewritten only when their markup changed: a poll that
+  // brought the same numbers repaints nothing, and a reader mid-glance is
   // never interrupted by an identical re-render.
-  let lastLines = '';
-  let lastWeather = '';
-  let lastStory = '';
-  let showing = false;
-
-  /** The title gets two lines when the box has room for them, one otherwise; a DOM without layout measures nothing and changes nothing. */
-  function fit(): void {
-    if (storyBox.clientHeight === 0) return;
-    delete storyBox.dataset.lines;
-    if (storyBox.scrollHeight > storyBox.clientHeight + 1) storyBox.dataset.lines = '1';
-  }
-
-  /** The story on show leaves under data-leaving (a 180 ms fade, absolute so the box never moves) while the next one enters; the box keeps one item afterwards. */
-  function swapStory(html: string): void {
-    // A change faster than the fade: the copy already leaving goes at once, its timer with it.
-    for (const [stale, cancel] of leaving) { cancel(); stale.remove(); }
-    leaving.clear();
-    const previous = storyBox.querySelector<HTMLElement>('.k-story-item');
-    const next = document.createElement('div');
-    next.className = 'k-story-item';
-    next.innerHTML = html;
-    if (previous) {
-      previous.dataset.leaving = '1';
-      leaving.set(previous, defer(() => { leaving.delete(previous); previous.remove(); }, STORY_LEAVE_MS));
-    }
-    storyBox.appendChild(next);
-  }
+  let lastTiles = '';
 
   return {
     element,
-    mapHost,
+    get mapHost() { return field.mapHost; },
     update(model) {
-      const lines = linesMarkup(linesAtStop(model.modules, model.stop, i18n, model.lineCap), model.stop, s, locale);
-      if (lines !== lastLines) { linesBox.innerHTML = lines; lastLines = lines; }
-      const weather = weatherMarkup(weatherNow(model.modules, s, locale), s, model.size === 'wide' ? 3 : 2);
-      if (weather !== lastWeather) { weatherBox.innerHTML = weather; lastWeather = weather; }
-      const list = stories(model.modules, s, locale, model.now);
-      const story = list.length > 0 ? list[model.storyIndex % list.length]! : null;
-      showing = story !== null;
-      const sources = (['dogadanja', 'hrt-news', 'emsc'] as const).map((id) => byModule(model.modules)[id]);
-      const sun = story ? '' : sunLine(sunToday(model.now), s);
-      const html = sources.every((snapshot) => snapshot === undefined)
-        ? `${kicker(s.story.city)}<p class="k-story-title k-story-title--empty" data-state="loading">${escapeHtml(i18n.t('status.loading'))}</p><p class="k-story-sun">${escapeHtml(sun)}</p>`
-        : storyMarkup(story, s, sources.every((snapshot) => snapshot?.status === 'down'), sun);
-      if (html !== lastStory) {
-        swapStory(html);
-        storyBox.dataset.tone = story?.tone ?? 'empty';
-        storyBox.dataset.storyId = story?.id ?? '';
-        lastStory = html;
-      }
-      fit();
+      field.update({
+        modules: model.modules, stop: model.stop, now: model.now, strings: s, i18n, locale, lightweight,
+        size: model.size, lineCap: model.lineCap, index: model.sceneIndex, pinned: model.pinned, rotate: model.rotate,
+      });
+      const tiles = valueTiles(model.modules, model.stop, i18n, s, locale, model.now).map((tile) => tileMarkup(tile, s)).join('');
+      if (tiles !== lastTiles) { tilesBox.innerHTML = tiles; lastTiles = tiles; }
     },
-    storyShowing: () => showing,
-    fit,
+    scenes: () => field,
+    fit: () => field.fit(),
     destroy() {
-      for (const cancel of leaving.values()) cancel();
-      leaving.clear();
+      field.destroy();
       element.remove();
     },
   };

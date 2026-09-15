@@ -789,6 +789,22 @@
       "quakeBody": "Magnitude {mag} · {region} · depth {depth} km",
       "empty": "No new notices right now."
     },
+    "scenes": {
+      "tonight": "Tonight",
+      "position": "scene {index} of {count}",
+      "worksKvart": "Works in the district",
+      "worksCity": "Works in the city",
+      "tonightEmpty": "No events announced in the district tonight.",
+      "live": "live stream",
+      "moreEvents_one": "{count} more event",
+      "moreEvents_other": "{count} more events"
+    },
+    "tiles": {
+      "vehicles": "Vehicles moving",
+      "closures": "Closures nearby",
+      "nearest": "nearest {street} · {distance}",
+      "radius": "within {radius}"
+    },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
       "warningsStale": "DHMZ warnings: stale, unconfirmed",
@@ -798,7 +814,13 @@
       "closuresStale": "Closures: stale, unconfirmed",
       "closuresNearest": "nearest {street}",
       "pharmacy": "On-duty pharmacy",
-      "basics": "Essentials"
+      "basics": "Essentials",
+      "verdict": {
+        "urgent": "urgent",
+        "calm": "calm",
+        "unknown": "unconfirmed"
+      },
+      "nextScene": "next scene in {seconds} s"
     },
     "basics": {
       "title": "Essentials, no scan needed",
