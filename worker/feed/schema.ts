@@ -3,6 +3,8 @@
 // ModuleSnapshot so panels, the kiosk teaser and the /open exports share one
 // shape. Nothing in this file knows about any particular source.
 
+import type { VehicleMotion } from '../../shared/motion/wire';
+
 export type ModuleId =
   | 'zet-rt'
   | 'prometnice'
@@ -58,6 +60,11 @@ export interface FeedItem {
   link?: string;
   /** Flat, source-specific extras (route id, delay seconds, magnitude...). */
   data?: Record<string, string | number | boolean>;
+  /** Vehicle items only (R-TE2): the fix history the twin publishes in
+   *  phase A, the motion plan from phase B. A typed object beside `data`
+   *  because neither is a scalar; times relative to `sourceUpdatedAt`. See
+   *  shared/motion/wire.ts. */
+  motion?: VehicleMotion;
 }
 
 export type SnapshotStatus = 'live' | 'stale' | 'down';
@@ -124,11 +131,14 @@ export interface ModuleSpec {
  */
 export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // Both the per-vehicle pin and the one summary row per route (id 'route:<routeId>').
-  // No 'bearing' and no 'speed' (R-P3): ZET's feed never sends either, and the
-  // motion model derives its own speed from fix history instead of trusting one.
+  // No 'bearing' and no ZET 'speed' (R-P3, R-TE1): ZET's feed never sends
+  // either; the Worker never forwards a field the feed does not populate.
   // 'routeType' is the GTFS route_type on the pin (R-P1: a locked kiosk keeps
-  // to trams before, or without, the network artefact).
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles'],
+  // to trams before, or without, the network artefact). 'direction',
+  // 'headsign', 'shapeId', 'nextStopId' and 'delaySeconds' are the twin's
+  // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
+  // A); the twin's own 'speed', 'confidence' and 'held' arrive in B5.
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],

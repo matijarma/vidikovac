@@ -220,6 +220,11 @@ export const SERVER_EVENTS = [
   'hitno_view',
   'over_cap',
   'evaluation',
+  // R-TE3: the twin's tick outcome (dim1 ok|unchanged|error|stale_index, dim2 cold|warm)
+  // and its hindsight error histogram (dim1 horizon 10s|30s|60s, dim2 bucket
+  // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
+  'twin_tick',
+  'twin_hindsight',
 ] as const;
 export type ServerEvent = (typeof SERVER_EVENTS)[number];
 

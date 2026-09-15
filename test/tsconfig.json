@@ -5,5 +5,5 @@
     "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
     "resolveJsonModule": true
   },
-  "include": ["./**/*.ts", "../worker/**/*.ts", "../app/src/**/*.ts"]
+  "include": ["./**/*.ts", "../worker/**/*.ts", "../app/src/**/*.ts", "../shared/**/*.ts"]
 }
