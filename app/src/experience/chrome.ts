@@ -1,17 +1,27 @@
-// The shell around the workspace: phone top bar and tab bar, desktop sidebar,
-// and the banners for the session's own states. Pure markup builders over a
-// ShellState; the dashboard reconciles each region in place.
+// The shell around the workspace: one status line for both surfaces (four
+// keyed controls on the phone, eight at the desk), the phone tab bar with the
+// Kvart tab, the "Na zaslon" FAB, and the banners for the session's own
+// states. Pure markup builders over a ShellState; the dashboard reconciles
+// each region in place. The rail and the sidebar are gone (plan D4, D10).
+import { AREAS, type AreaSlug } from '../../../worker/pairing/areas';
 import type { LayerId, Role } from '../../../worker/protocol';
+import type { CastReason } from '../core/contracts';
+import type { KvartChoice } from '../core/kvart-store';
+import type { NotifyFlags, NotifyKey } from '../core/notify-store';
 import { countdown, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import type { SessionPhase } from '../session';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { ring } from '../ui/graphics';
 import { iconMarkup, type IconName } from '../ui/icons';
+import { weatherStatusMarkup, type WeatherStatus } from './weather-status';
 
-export const PHONE_TABS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'kultura'];
-export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'vijesti'];
-export const SIDEBAR_LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'vijesti', 'sigurnost'];
+export type Surface = 'phone' | 'desktop';
+/** A phone tab: a domain, or the Kvart panel, which is a shell surface and never a LayerId (D9). */
+export type PhoneTab = { kind: 'layer'; layer: LayerId } | { kind: 'kvart' };
+export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'kvart' }];
+export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti'];
+export const KVART_ICON: IconName = 'map-pin';
 
 export const LAYER_ICONS: Record<LayerId, IconName> = {
   'grad-sada': 'home',
@@ -50,7 +60,27 @@ export interface ShellState {
   notice: ShellNotice | null;
   /** Active modules whose last fetch failed or whose snapshot is down, said once in a quiet banner. */
   sourcesDown: number;
+  surface: Surface;
+  /** The open shell surface besides the directory: the Kvart panel on the phone (D9). */
+  panel: 'kvart' | null;
+  /** The reader's choice in the kvart select and what it resolves to (D6). */
+  kvartChoice: KvartChoice;
+  kvart: AreaSlug | null;
+  kvartLabel: string;
+  /** The screen stop's name, for the select's first option and the cast reason line. */
+  stopName: string | null;
+  hasScreen: boolean;
+  canCast: boolean;
+  castReason: CastReason | null;
+  /** True for the moment after a cast, while the polite region says so: the FAB carries data-sent. */
+  castSent: boolean;
+  notify: NotifyFlags;
+  notifyActive: number;
+  notifyKeys: readonly NotifyKey[];
 }
+
+/** What the kvart select needs from the shell; the Kvart panel builds the same control from its context. */
+export type KvartMenuState = Pick<ShellState, 'kvartChoice' | 'kvartLabel' | 'stopName'>;
 
 export function remainingText(seconds: number): string {
   return countdown(seconds);
@@ -70,38 +100,131 @@ function sessionRing(s: ShellState): string {
   return ring(s.frozen ? 0 : s.secondsLeft / total);
 }
 
-/** The phone top bar: wordmark, session chip, one-tap safety. At most 56 px tall (CSS). */
-export function topBarMarkup(i18n: I18n, s: ShellState): string {
-  const time = s.frozen ? i18n.t('session.frozenBadge') : s.phase === 'live' ? remainingText(s.secondsLeft) : i18n.t('shell.connecting');
-  const chipText = s.countdownHidden && !s.frozen ? i18n.t('shell.session') : time;
-  const chipLabel = s.frozen ? i18n.t('session.expiredTitle') : i18n.t('session.openSheet', { time: s.countdownHidden ? i18n.t('shell.session') : time });
-  return `<a class="ki-wordmark" href="/" aria-label="${escapeAttribute(i18n.t('shell.wordmarkLabel'))}"><span class="ki-wordmark-text">${escapeHtml(i18n.t('common.appName'))}</span></a>
-<div class="ki-top-actions">
-<button type="button" class="ki-chip" data-action="session" data-testid="session-chip" data-state="${s.frozen ? 'frozen' : s.phase}" aria-label="${escapeAttribute(chipLabel)}">${sessionRing(s)}<span class="ki-chip-time tabular" data-testid="countdown">${escapeHtml(chipText)}</span></button>
-<a class="btn-quiet icon-btn ki-safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${s.layer === 'sigurnost' && !s.directory ? 'page' : 'false'}">${iconMarkup('shield')}</a>
-</div>`;
+/** Frozen controls stay visible for orientation but leave the Tab order. */
+function frozenAttrs(s: ShellState): string {
+  return s.frozen ? ' aria-disabled="true" tabindex="-1"' : '';
 }
 
-function navItem(i18n: I18n, s: ShellState, layer: LayerId, className: string): string {
-  const current = s.layer === layer && !s.directory;
-  const openSafety = s.frozen && layer === 'sigurnost';
-  // Frozen: the links stay visible for orientation but leave the Tab order.
-  const disabled = s.frozen && !openSafety ? ' aria-disabled="true" tabindex="-1"' : '';
-  return `<li><a class="${className}" href="${openSafety ? '/hitno' : `#layer=${layer}`}"${openSafety ? '' : ' data-action="nav"'} data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${disabled}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
-}
-
-/** The phone tab bar: Sada, Promet, Događanja and Još, which names the open extra domain. */
-export function tabbarMarkup(i18n: I18n, s: ShellState): string {
-  const inMore = MORE_LAYERS.includes(s.layer);
-  const moreCurrent = s.directory || inMore;
-  const moreLabel = inMore && !s.directory ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
-  return `<ul class="ki-tabs" role="list">${PHONE_TABS.map((layer) => navItem(i18n, s, layer, 'ki-tab')).join('')}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${s.frozen ? ' aria-disabled="true" tabindex="-1"' : ''}>${iconMarkup(inMore && !s.directory ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
-}
 /**
- * The one session element, placed by the shell grid: a compact chip in the
- * phone top bar, the session card at the foot of the desktop sidebar. It
- * carries the same expiry the screen shows (data-expires-at) and opens the
- * session sheet.
+ * The status line: ONE builder paints keyed children by surface, so the DOM is
+ * honest for axe and the target rule (CSS orders and sizes, never hides a
+ * control that exists). Phone: wordmark · kvart · session · safety. Desktop:
+ * wordmark · kvart · Još · search · clock+weather · session · bell · safety.
+ */
+export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
+  // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
+  // becomes the way home instead (the session is over), as on the empty page.
+  const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' });
+  const kvart = kvartMenuMarkup(i18n, s, { id: 'ki-kvart' });
+  const session = sessionMarkup(i18n, s);
+  const safety = safetyMarkup(i18n, s);
+  if (s.surface === 'phone') return `${wordmark}${kvart}${session}${safety}`;
+  return `${wordmark}${kvart}${moreButtonMarkup(i18n, s)}${searchLaunchMarkup(i18n, s)}${clockMarkup(i18n, s, now, weather)}${session}${bellMarkup(i18n, s)}${safety}`;
+}
+
+/**
+ * The wordmark, the one brand gesture: the question mark in the brand tone.
+ * The empty page keeps `/`; inside `/d/` the status line points it at Sada
+ * (`layer`), the desk's one way home now that the rail is gone (B.10).
+ */
+export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId } = { href: '/' }): string {
+  const name = i18n.t('common.appName');
+  const mark = name.endsWith('?');
+  const stem = mark ? name.slice(0, -1) : name;
+  const label = home.layer ? i18n.t('shell.wordmarkSada') : i18n.t('shell.wordmarkLabel');
+  const nav = home.layer ? ` data-action="nav" data-layer="${home.layer}"` : '';
+  return `<a class="ki-wordmark" data-key="wordmark" href="${escapeAttribute(home.href)}"${nav} aria-label="${escapeAttribute(label)}"><span class="ki-wordmark-text">${escapeHtml(stem)}${mark ? '<span class="ki-wordmark-mark">?</span>' : ''}</span></a>`;
+}
+
+/**
+ * The kvart control (B.5): a native select under a styled ink face. Every age
+ * knows the platform picker, arrows and type-ahead come free, the accessible
+ * name is the label plus the selected option with no authored ARIA, and the
+ * reconciler syncs `selected`. The closed face shows the *resolved* name.
+ */
+export function kvartMenuMarkup(i18n: I18n, s: KvartMenuState, o: { id: string; className?: string }): string {
+  const screenOption = s.stopName ? i18n.t('kvart.screenOption', { stop: s.stopName }) : i18n.t('kvart.wholeCity');
+  const option = (value: string, label: string): string => `<option value="${value}"${s.kvartChoice === value ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  const options = [option('screen', screenOption), ...AREAS.map((area) => option(area.slug, area.name))].join('');
+  const className = o.className ? `ki-kvart-pick ${o.className}` : 'ki-kvart-pick';
+  return `<div class="${escapeAttribute(className)}" data-key="kvart" data-testid="kvart-pick"><span class="ki-kvart-face" aria-hidden="true">${iconMarkup(KVART_ICON)}<span class="ki-kvart-name">${escapeHtml(s.kvartLabel)}</span>${iconMarkup('chevron-down', undefined, 'icon icon-sm')}</span><label class="visually-hidden" for="${escapeAttribute(o.id)}">${escapeHtml(i18n.t('kvart.select'))}</label><select id="${escapeAttribute(o.id)}" class="ki-kvart-select" data-action="kvart-pick" data-testid="kvart-select">${options}</select></div>`;
+}
+
+/** Desktop: Još opens the directory of every domain but Sada (D10). Current while the directory or an extra domain is open. */
+export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
+  const inMore = MORE_LAYERS.includes(s.layer);
+  const current = s.panel === null && (s.directory || inMore);
+  return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
+}
+
+/** Desktop: the search launcher, a pill that reads like a field and opens Promet's search. */
+export function searchLaunchMarkup(i18n: I18n, s: ShellState): string {
+  return `<button type="button" class="ki-search" data-key="search" data-action="search" data-testid="status-search"${frozenAttrs(s)}>${iconMarkup('search', undefined, 'icon icon-sm')}<span>${escapeHtml(i18n.t('transport.search'))}</span></button>`;
+}
+
+/**
+ * Desktop: the clock, wrapping the shared weather group (weather-status.ts) in
+ * the link into Vrijeme. Without an observation the time stands alone: never a
+ * dash (D11). The aria says time, condition, temperature, sunset, then the way.
+ * Frozen it leaves the Tab order like the tabs and keeps its handler, so the
+ * fragment (and `room=` in it) is never replaced by a bare hash navigation.
+ */
+export function clockMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
+  const time = zagrebTime(now);
+  const label = weather ? i18n.t('shell.clockLabel', { time, weather: weather.aria }) : i18n.t('shell.clockOnly', { time });
+  return `<a class="ki-clock tabular" data-key="clock" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-clock" aria-label="${escapeAttribute(label)}"${frozenAttrs(s)}><time datetime="${new Date(now).toISOString()}">${escapeHtml(time)}</time>${weather ? weatherStatusMarkup(weather) : ''}</a>`;
+}
+
+/** Desktop: the bell opens the notify sheet; its label counts the switches that are on, the dot shows any. */
+export function bellMarkup(i18n: I18n, s: ShellState): string {
+  const state = s.notifyActive > 0 ? i18n.t('kvart.notifyOn', { count: s.notifyActive }) : i18n.t('kvart.notifyOff');
+  return `<button type="button" class="ki-bell btn-quiet icon-btn" data-key="bell" data-action="notify" data-testid="status-bell" data-active="${s.notifyActive}" aria-haspopup="dialog" aria-label="${escapeAttribute(i18n.t('notify.bellLabel', { state }))}">${iconMarkup('bell')}</button>`;
+}
+
+/** One-tap safety, icon-only on both surfaces: the word lives in the aria-label and the title. Frozen keeps /hitno open. */
+export function safetyMarkup(i18n: I18n, s: ShellState): string {
+  const current = s.layer === 'sigurnost' && !s.directory && s.panel === null;
+  return `<a class="ki-safety" data-key="safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}</a>`;
+}
+
+/** A domain tab; frozen it keeps its handler (navigate() declines) so its hash never replaces the fragment. */
+function layerTab(i18n: I18n, s: ShellState, layer: LayerId): string {
+  const current = s.layer === layer && !s.directory && s.panel === null;
+  return `<li><a class="ki-tab" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
+}
+
+function kvartTab(i18n: I18n, s: ShellState): string {
+  const open = s.panel === 'kvart';
+  return `<li><button type="button" class="ki-tab" data-action="kvart" data-testid="tab-kvart" aria-current="${open ? 'page' : 'false'}" aria-expanded="${open ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(KVART_ICON)}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.kvart'))}</span></button></li>`;
+}
+
+/** The phone tab bar: Sada, Promet, Kvart and Još, which names the open extra domain. Nothing at the desk. */
+export function tabbarMarkup(i18n: I18n, s: ShellState): string {
+  if (s.surface === 'desktop') return '';
+  const inMore = MORE_LAYERS.includes(s.layer);
+  const showsLayer = inMore && !s.directory && s.panel === null;
+  const moreCurrent = s.panel === null && (s.directory || inMore);
+  const moreLabel = showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
+  const tabs = PHONE_TABS.map((tab) => (tab.kind === 'layer' ? layerTab(i18n, s, tab.layer) : kvartTab(i18n, s))).join('');
+  return `<ul class="ki-tabs" role="list">${tabs}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(showsLayer ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
+}
+
+/**
+ * "Na zaslon" (D5): the phone's one primary touch action, for a scanner with a
+ * screen, on every place but Promet (whose detail head carries the ghost cast
+ * button), the directory and the Kvart panel (whose primary casts). '' when hidden.
+ */
+export function fabMarkup(i18n: I18n, s: ShellState): string {
+  const shown = s.surface === 'phone' && s.phase === 'live' && !s.frozen && s.role === 'scanner' && s.hasScreen && !s.directory && s.panel === null && s.layer !== 'u-pokretu';
+  if (!shown) return '';
+  const label = i18n.t('cast.fabLabel', { layer: layerLabel(i18n, s.layer), label: s.label ?? i18n.t('session.labelScreen') });
+  return `<button type="button" class="ki-fab" data-action="cast" data-testid="cast-fab" aria-label="${escapeAttribute(label)}"${s.castSent ? ' data-sent="1"' : ''}>${iconMarkup('cast')}<span>${escapeHtml(i18n.t('cast.fab'))}</span></button>`;
+}
+
+/**
+ * The one session element, keyed into the status line on both surfaces: a
+ * compact pill with the ring and the remaining time. It carries the same
+ * expiry the screen shows (data-expires-at) and opens the session sheet.
  */
 export function sessionMarkup(i18n: I18n, s: ShellState): string {
   const time = remainingText(s.secondsLeft);
@@ -122,27 +245,7 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
     : s.expiresAt !== null && s.phase === 'live'
       ? i18n.t('session.pillLabel', { time: zagrebTime(s.expiresAt) })
       : i18n.t('session.connecting');
-  return `<button type="button" class="ki-session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
-}
-
-/** The desktop sidebar: seven labelled domains and the footer note. */
-export function sidebarMarkup(i18n: I18n, s: ShellState): string {
-  const items = SIDEBAR_LAYERS.map((layer) => navItem(i18n, s, layer, 'ki-side-link')).join('');
-  return `<ul class="ki-side-list" role="list">${items}</ul><p class="ki-side-foot meta">${escapeHtml(i18n.t('shell.footerNote'))}</p>`;
-}
-
-/** The wordmark region, shown on both surfaces. The one brand gesture: the question mark in peacock. */
-export function wordmarkMarkup(i18n: I18n): string {
-  const name = i18n.t('common.appName');
-  const mark = name.endsWith('?');
-  const stem = mark ? name.slice(0, -1) : name;
-  return `<a class="ki-wordmark" href="/" aria-label="${escapeAttribute(i18n.t('shell.wordmarkLabel'))}"><span class="ki-wordmark-text">${escapeHtml(stem)}${mark ? '<span class="ki-wordmark-mark">?</span>' : ''}</span></a>`;
-}
-
-/** One-tap safety, phone only (the sidebar lists Sigurnost as a domain). */
-export function safetyMarkup(i18n: I18n, s: ShellState): string {
-  const current = s.layer === 'sigurnost' && !s.directory;
-  return `<a class="ki-safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.safety'))}</span></a>`;
+  return `<button type="button" class="ki-session" data-key="session" data-action="session" data-testid="session-label" data-state="${state}" data-urgency="${urgency}"${expires} title="${escapeAttribute(label)}" aria-label="${escapeAttribute(label)}">${sessionRing(s)}<span class="ki-session-text"><span class="ki-session-sentence">${escapeHtml(sentence)}</span><span class="ki-session-time tabular" data-testid="countdown"${timeText ? '' : ' hidden'}>${escapeHtml(timeText)}</span></span>${iconMarkup('chevron-right', undefined, 'icon ki-session-more')}</button>`;
 }
 
 /**

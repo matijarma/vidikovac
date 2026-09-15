@@ -1,18 +1,27 @@
-// The /d/ surface: one stable shell (wordmark, session, safety shortcut,
-// sidebar or tab bar, banners) around one active workspace. Real session,
-// real feeds through the core stores, keyed reconciliation of the workspace
-// so a poll never disturbs focus, typed text, scroll or a live map. Every
-// browser global is injected, so the behaviour is unit-tested under happy-dom.
+// The /d/ surface: one stable shell (the status line, banners, the kvart
+// aside, the FAB slot, the tab bar) around one active workspace. Real
+// session, real feeds through the core stores, keyed reconciliation of the
+// workspace so a poll never disturbs focus, typed text, scroll or a live map.
+// Casting is explicit (D5): navigation tells the room nothing, the cast
+// controls send one view frame. Every browser global is injected, so the
+// behaviour is unit-tested under happy-dom.
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
 import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { zagrebTime } from './format';
-import { parseSelection, publicItemKey, selectionParams, type PublicSelection, type ScreenContext } from './core/contracts';
+import { parseSelection, publicItemKey, selectionParams, type CastReason, type CastState, type PublicSelection, type ScreenContext, type ScreenStop } from './core/contracts';
 import { createFeedStore } from './core/feed-store';
+import { createKvartStore, kvartLabel, resolveKvart, type KvartChoice } from './core/kvart-store';
+import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './core/notify-store';
+import { createSavedStore, type SavedKind } from './core/saved-store';
+import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
-import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, snapshotLine, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
-import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
+import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
+import { directoryModules, renderDirectory } from './experience/directory';
+import { KVART_MODULES, renderKvart } from './experience/kvart';
+import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
+import { weatherStatus } from './experience/weather-status';
 import { storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -33,6 +42,8 @@ import type { ThemeController, ThemePreference } from './ui/theme';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
+/** How long a cast button says "sent" after its frame went out. */
+const CAST_SENT_MS = 1_500;
 
 /** The layer last opened, mirrored so the next scan reopens it (R-60). */
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
@@ -44,11 +55,24 @@ function safeSessionStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined 
   try { return globalThis.sessionStorage; } catch { return undefined; }
 }
 
+function safeLocalStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
+  try { return globalThis.localStorage; } catch { return undefined; }
+}
+
 function readStoredLayer(storage: Pick<Storage, 'getItem'> | undefined): LayerId | null {
   try {
     const stored = storage?.getItem(LAYER_STORAGE_KEY);
     return stored && (LAYERS as readonly string[]).includes(stored) ? (stored as LayerId) : null;
   } catch { return null; }
+}
+
+/** The stores call a new listener at once with the current value; the shell has painted by then, so only later changes repaint. */
+function onChange<T>(subscribe: (listener: (value: T) => void) => () => void, listener: () => void): () => void {
+  let primed = false;
+  return subscribe(() => {
+    if (primed) listener();
+    else primed = true;
+  });
 }
 
 export interface SessionHashParams { roomId: string; ticket: string | null; label: string | null }
@@ -87,6 +111,10 @@ export interface DashboardDeps {
   theme?: ThemeController;
   /** Layer memory; null disables it, omitted uses sessionStorage. */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  /** The kvart choice, the saved lines and stops and the alert switches (D15); null disables persistence, omitted uses localStorage. */
+  localStorage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  /** Static flags the shell reads (D7): `waste` shows the fourth alert switch. */
+  flags?: { waste?: boolean };
   location?: Pick<Location, 'pathname' | 'search' | 'hash'>;
   history?: Pick<History, 'pushState' | 'replaceState'>;
   matchMedia?: (query: string) => MediaLike;
@@ -110,6 +138,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
   const lightweight = Boolean(deps.lightweight);
   const storage = deps.storage === undefined ? safeSessionStorage() : deps.storage ?? undefined;
+  const local = deps.localStorage === undefined ? safeLocalStorage() : deps.localStorage ?? undefined;
   const scanUrl = deps.scanUrl ?? '/s/';
   const doc = root.ownerDocument;
 
@@ -126,6 +155,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     token: () => session.snapshot().dataToken,
     now,
   });
+  // The reader's own three stores (D6, D15): the kvart choice, the saved lines and stops, the alert switches.
+  const kvartStore = createKvartStore({ storage: local });
+  const saved = createSavedStore({ storage: local });
+  const notifyStore = createNotifyStore({ storage: local });
+  const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
+  /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
+  let stops: readonly ScreenStop[] | null = null;
+  let stopsRequested = false;
   let networkPromise: Promise<Network | null> | null = null;
   const loadNetworkOnce = (): Promise<Network | null> => {
     networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
@@ -138,7 +175,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,
   });
   const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
-  const surface = (): ScreenContext['surface'] => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
+  const surface = (): Surface => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
 
   let frozen = false;
   /** The moment freeze() ran: every workspace and time line is dated with it. */
@@ -146,6 +183,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let paused = false;
   let countdownHidden = false;
   let directory = false;
+  /** The open shell surface besides the directory: the Kvart panel (D9), never sent to the room. */
+  let panel: 'kvart' | null = null;
+  /** The moment the last cast frame went out; the cast buttons say "sent" for CAST_SENT_MS after it. */
+  let castSentAt: number | null = null;
+  let castTimer: unknown = null;
   let mapFull = false;
   let reconnecting = false;
   let error: string | null = null;
@@ -160,7 +202,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let joinedOnce = false;
   /** The one in-flow notice; the hidden live regions announce, this one shows. */
   let notice: ShellNotice | null = null;
-  /** The workspace last painted (a layer id, or 'directory'): render() fades the
+  /** The workspace last painted (a layer id, 'directory' or 'kvart'): render() fades the
    *  incoming one in only when this changes, never on a poll that repaints the
    *  same place. Seeded from the initial view so the first paint never fades. */
   let lastWorkspaceKey: string = view.snapshot().layer;
@@ -169,20 +211,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   // --- stable shell --------------------------------------------------------
   // The two live regions are visually hidden, never display: none, so readers hear them.
-  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting">
+  // Six regions in reading order on both surfaces (B.5); the CSS places them, never hides a control that exists.
+  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting" data-panel="" data-fab="0">
 <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
-<div class="ki-rail" data-region-group="rail">
-<header class="ki-head" data-region-group="head">
-  <div class="ki-top" data-region="top"></div>
-  <div class="ki-session-slot" data-region="session"></div>
-  <div class="ki-safety-slot" data-region="safety"></div>
-</header>
-<nav class="ki-side" data-region="side" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
-</div>
+<header class="ki-head ki-status" data-region="status" data-testid="status-line"></header>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
+<aside class="ki-kvart" data-region="kvart" data-testid="kvart-aside" aria-label="${escapeAttribute(i18n.t('nav.kvart'))}" hidden></aside>
+<div class="ki-fab-slot" data-region="fab"></div>
 <nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
 </div>`);
   root.appendChild(element);
@@ -191,27 +229,56 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const main = element.querySelector<HTMLElement>('main')!;
-  const regions = { top: region('top'), session: region('session'), safety: region('safety'), side: region('side'), banners: region('banners'), tabs: region('tabs') };
+  const regions = { status: region('status'), banners: region('banners'), kvart: region('kvart'), fab: region('fab'), tabs: region('tabs') };
 
   /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
   function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
     return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down').length;
   }
 
+  /**
+   * Whether "Na zaslon" can fire and why not when it cannot (D5). The client cannot
+   * know it is the room's driver; `role === 'scanner'` is the proxy (B.10).
+   */
+  function castState(): CastState {
+    const s = session.snapshot();
+    const reason: CastReason | null = frozen ? 'frozen' : s.phase !== 'live' ? 'connecting' : !s.screen ? 'no-screen' : s.role !== 'scanner' ? 'peer' : null;
+    return { can: reason === null, reason, screenLabel: deps.label ?? null, stopName: s.screen?.stop?.name ?? null };
+  }
+
   function shellState(): ShellState {
     const s = session.snapshot();
     const feed = store.snapshot();
+    const cast = castState();
+    const stop = s.screen?.stop ?? undefined;
+    const kvart = resolveKvart(kvartStore.snapshot(), stop);
+    const notify = notifyStore.snapshot();
     return {
       layer: view.snapshot().layer, directory, phase: s.phase, frozen, reconnecting,
       secondsLeft: frozen ? 0 : session.secondsLeft(), totalSeconds, expiresAt: s.expiresAt, countdownHidden, paused,
       loading: feed.loading.size > 0, canShare: s.role === 'scanner' && !frozen && s.phase === 'live' && !shareDenied,
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
       notice, sourcesDown: sourcesDown(feed),
+      surface: surface(), panel, kvartChoice: kvartStore.snapshot(), kvart, kvartLabel: kvartLabel(i18n, kvart), stopName: stop?.name ?? null,
+      hasScreen: Boolean(s.screen), canCast: cast.can, castReason: cast.reason, castSent: castSentAt !== null,
+      notify, notifyActive: activeCount(notify, notifyKeys), notifyKeys,
     };
   }
 
   function paintRegion(target: HTMLElement, markup: string): void {
     reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
+  }
+
+  /**
+   * The kvart selects (the status line's and the panel's) follow the store after every paint. The
+   * reconciler syncs the options' `selected` attribute, but a select the reader has touched is dirty
+   * and ignores that attribute from then on; the value itself never is.
+   */
+  function syncKvartSelects(): void {
+    const choice = kvartStore.snapshot();
+    for (const select of element.querySelectorAll<HTMLSelectElement>('select[data-action=kvart-pick]')) {
+      if (select.value !== choice) select.value = choice;
+    }
   }
 
   function paintShell(): void {
@@ -227,15 +294,20 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
     element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
     element.dataset.loading = String(s.loading);
-    paintRegion(regions.top, wordmarkMarkup(i18n));
-    paintRegion(regions.session, sessionMarkup(i18n, s));
-    paintRegion(regions.safety, safetyMarkup(i18n, s));
-    paintRegion(regions.side, sidebarMarkup(i18n, s));
+    element.dataset.panel = panel ?? '';
+    // The weather group is status (D11): the desk's clock wraps it; the phone's band head carries it.
+    const weather = s.surface === 'desktop' ? weatherStatus(i18n, store.snapshot().snapshots, now()) : null;
+    paintRegion(regions.status, statusLineMarkup(i18n, s, now(), weather));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
+    const fab = fabMarkup(i18n, s);
+    paintRegion(regions.fab, fab);
+    element.dataset.fab = fab ? '1' : '0';
     paintRegion(regions.tabs, tabbarMarkup(i18n, s));
-    regions.side.setAttribute('aria-label', i18n.t('nav.label'));
+    regions.kvart.setAttribute('aria-label', i18n.t('nav.kvart'));
     regions.tabs.setAttribute('aria-label', i18n.t('nav.label'));
+    syncKvartSelects();
     sheet.refresh();
+    notifySheet.refresh();
   }
 
   /** Shows one notice in flow for `ms` (null: until replaced or the freeze) and paints. */
@@ -245,7 +317,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   function updateTitle(): void {
-    const layerName = directory ? i18n.t('nav.moreTitle') : i18n.t(`layers.${view.snapshot().layer}`);
+    const layerName = directory ? i18n.t('nav.moreTitle') : panel === 'kvart' ? i18n.t('nav.kvart') : i18n.t(`layers.${view.snapshot().layer}`);
     const title = i18n.t('session.documentTitle', { app: i18n.t('common.appName'), layer: layerName });
     titleEl.textContent = title;
     doc.title = title;
@@ -266,6 +338,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function layerContext(): LayerContext {
     const feed = store.snapshot();
+    const stop = session.snapshot().screen?.stop ?? undefined;
+    const kvart = resolveKvart(kvartStore.snapshot(), stop);
+    // The cast state plus the moment of the last cast, which the panel's button shows as data-sent.
+    const cast: CastState & { sentAt: number | null } = { ...castState(), sentAt: castSentAt };
     return {
       i18n, snapshots: feed.snapshots, now: now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
@@ -273,11 +349,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
+      kvart, kvartLabel: kvartLabel(i18n, kvart), kvartChoice: kvartStore.snapshot(), notify: notifyStore.snapshot(),
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined,
     };
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function render(): void {
+    if (saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
     const focused = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
@@ -289,12 +368,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const layer = view.snapshot().layer;
     // Promet is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is the
     // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
-    element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
-    const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
+    element.dataset.stage = !lightweight && !directory && panel === null && layer === 'u-pokretu' ? 'map' : '';
+    const next = directory ? renderDirectory(ctx) : panel === 'kvart' ? renderKvart(ctx, 'workspace') : renderLayer(layer, ctx);
     // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
     // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
     const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
-    if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
+    if (directory || panel !== null || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
       if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
@@ -306,7 +385,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // redraws the same place) fades `next` in -- it is the live node exactly
     // when the key actually changed, since reconcile.ts only morphs onto (and
     // discards `next` in favour of) a pre-existing node of the same key.
-    const workspaceKey = directory ? 'directory' : layer;
+    const workspaceKey = directory ? 'directory' : panel ?? layer;
     if (workspaceKey !== lastWorkspaceKey) {
       lastWorkspaceKey = workspaceKey;
       if (!deps.reducedMotion && !lightweight) {
@@ -335,8 +414,38 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         target.setSelectionRange(caret.start, caret.end, caret.direction ?? undefined);
       }
     }
+    // The aside paints in the same render as the layer: its rows read the same snapshots, and its
+    // map slot is requested before the sweep below so maps.sweep() keeps both.
+    paintKvartAside(ctx);
+    syncKvartSelects();
     maps.sweep();
     if (frozen || error === 'no-ticket') maps.pause();
+  }
+
+  /** The desk keeps the kvart panel as a sticky aside beside the workspace; the phone reaches it through its tab. */
+  function paintKvartAside(ctx: LayerContext): void {
+    if (surface() === 'desktop') {
+      const wrapper = doc.createElement('div');
+      wrapper.appendChild(renderKvart(ctx, 'aside'));
+      reconcileChildren(regions.kvart, wrapper);
+      regions.kvart.hidden = false;
+    } else {
+      regions.kvart.hidden = true;
+      regions.kvart.replaceChildren();
+    }
+  }
+
+  /** The 245 kB stop catalogue, once per mount and only when a saved stop needs its walking row. */
+  function ensureStops(): void {
+    if (stopsRequested) return;
+    stopsRequested = true;
+    loadStops().then((list) => {
+      if (disposed) return;
+      stops = list;
+      render();
+    }, () => {
+      // The walking row stays absent; nothing else depends on the catalogue.
+    });
   }
 
   function setMapView(full: boolean): void {
@@ -356,14 +465,20 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   function activeModules(): readonly ModuleId[] {
-    return directory ? DIRECTORY_MODULES : LAYER_MODULES[view.snapshot().layer];
+    if (directory) return directoryModules(surface());
+    if (panel === 'kvart') return KVART_MODULES(saved.list());
+    const modules = LAYER_MODULES[view.snapshot().layer];
+    // The desk's aside reads the kvart counts and the saved lines' delays beside every layer.
+    return surface() === 'desktop' ? [...new Set([...modules, ...KVART_MODULES(saved.list())])] : modules;
   }
 
   function navigate(layer: LayerId, selection: PublicSelection | null, fromUser: boolean): void {
     if (frozen) return;
     const previous = view.snapshot().layer;
     const wasDirectory = directory;
+    const wasPanel = panel !== null;
     directory = false;
+    panel = null;
     if (layer !== 'u-pokretu' && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
     // One history entry per distinct place: repeating the same selection replaces instead of pushing.
     const same = layer === previous && JSON.stringify(selection) === JSON.stringify(view.snapshot().selection);
@@ -371,8 +486,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     updateTitle();
     paintShell();
     if (!fromUser) return;
-    session.sendView(layer, selectionParams(selection));
-    if (layer !== previous || wasDirectory) {
+    if (layer !== previous || wasDirectory || wasPanel) {
       session.event('panel_open', layer);
       scrollToTop();
       focusWorkspace(layer);
@@ -388,6 +502,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function toggleDirectory(open = !directory): void {
     if (frozen) return;
     directory = open;
+    if (open) panel = null;
     updateTitle();
     paintShell();
     render();
@@ -395,6 +510,49 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       focusWorkspace('directory');
       continuePoll(refresh(), rearmPoll, 'dashboard directory refresh');
     }
+  }
+
+  /** The Kvart tab (D9): a shell surface like the directory, never a layer and never sent to the room. */
+  function toggleKvart(open = panel !== 'kvart'): void {
+    if (frozen) return;
+    directory = false;
+    panel = open ? 'kvart' : null;
+    // The panel is a workspace in flow, never the Promet stage's full-map mode.
+    if (open && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
+    updateTitle();
+    paintShell();
+    render();
+    if (open) {
+      scrollToTop();
+      focusWorkspace('kvart');
+      continuePoll(refresh(), rearmPoll, 'dashboard kvart refresh');
+    }
+  }
+
+  /** Explicit casting (D5): the one place a view frame leaves this device, for the current layer and selection. */
+  function cast(): void {
+    if (!castState().can) return;
+    const v = view.snapshot();
+    session.sendView(v.layer, selectionParams(v.selection));
+    castSentAt = now();
+    polite.textContent = i18n.t('cast.sent', { layer: i18n.t(`layers.${v.layer}`) });
+    if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
+    castTimer = setTimer(() => {
+      if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
+      castSentAt = null;
+      if (disposed) return;
+      paintShell();
+      render();
+    }, CAST_SENT_MS);
+    render();
+    paintShell();
+  }
+
+  /** The status search and "+ stanica": Promet with its search field focused (the phone workspace raises its sheet on focus). */
+  function openSearch(): void {
+    navigate('u-pokretu', null, true);
+    const field = doc.getElementById('u-pokretu-light-search') ?? main.querySelector<HTMLElement>('[data-testid=transport-search]');
+    field?.focus();
   }
 
   function findItem(module: ModuleId, id: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
@@ -410,6 +568,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       label: deps.label ?? null, themePreference: deps.theme?.getPreference() ?? null,
     }),
     onAction: (action, value) => handleSheetAction(action, value),
+  });
+  const notifySheet = createNotifySheet({
+    i18n,
+    state: () => ({ flags: notifyStore.snapshot(), keys: notifyKeys }),
+    onToggle: (key) => notifyStore.toggle(key),
   });
 
   function setPaused(value: boolean): void {
@@ -612,6 +775,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     frozenAt = Math.min(session.serverNow(), session.snapshot().expiresAt ?? Infinity);
     closeShare();
     sheet.close();
+    notifySheet.close();
     schematic.pause();
     maps.pause();
     store.pause(true);
@@ -621,8 +785,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     notice = null;
     assertive.textContent = '';
     paintShell();
-    // The workspace is painted once more so it carries its date; after this only a locale or
-    // theme change repaints it (the store's subscriber stands down while frozen).
+    // The workspace is painted once more so it carries its date (the Kvart panel stays, its cast
+    // control now frozen); after this only a locale or theme change repaints it (the store's
+    // subscriber stands down while frozen).
     render();
   }
   // --- session -------------------------------------------------------------
@@ -687,6 +852,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'directory': toggleDirectory(); return;
+      case 'kvart': toggleKvart(); return;
+      case 'cast': cast(); return;
+      case 'save': case 'unsave': {
+        if (!d.kind || !d.id) return;
+        const ref = { kind: d.kind as SavedKind, id: d.id };
+        if (d.action === 'save') saved.add(ref); else saved.remove(ref);
+        return;
+      }
+      case 'notify': notifySheet.open(); return;
+      case 'search': openSearch(); return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;
@@ -713,6 +888,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.addEventListener('input', (event) => {
     const input = event.target;
     if (input instanceof HTMLInputElement && input.dataset.filterKey) view.setFilter(input.dataset.filterKey, input.value);
+  });
+  // The kvart select (the status line's and the Kvart panel's): the store validates the value.
+  element.addEventListener('change', (event) => {
+    const select = event.target;
+    if (select instanceof HTMLSelectElement && select.dataset.action === 'kvart-pick') kvartStore.set(select.value as KvartChoice);
   });
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !mapFull) return;
@@ -743,18 +923,32 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     });
   });
   const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
-  const onMedia = (): void => { paintShell(); render(); };
+  // The reader's stores: the kvart renames the face and the panel; a saved change repaints the
+  // panel and, at the desk, refreshes its modules (a first saved route adds zet-rt); a switch
+  // repaints the panel and the bell.
+  const stopKvart = onChange(kvartStore.subscribe, () => { render(); paintShell(); });
+  const stopSaved = onChange(saved.subscribe, () => {
+    render();
+    if (surface() === 'desktop') continuePoll(refresh(), rearmPoll, 'dashboard saved refresh');
+  });
+  const stopNotify = onChange(notifyStore.subscribe, () => { render(); paintShell(); });
+  const onMedia = (): void => {
+    // The desk has the aside instead of the panel.
+    if (surface() === 'desktop' && panel !== null) { panel = null; updateTitle(); }
+    paintShell();
+    render();
+  };
   media?.addEventListener?.('change', onMedia);
   function restoreView(hash: string): void {
     if (frozen || disposed) return;
     const previous = view.snapshot().layer;
     directory = false;
+    panel = null;
     view.restore(hash);
     const restored = view.snapshot();
     if (restored.layer !== 'u-pokretu' && mapFull) setMapView(false);
     updateTitle();
     paintShell();
-    session.sendView(restored.layer, selectionParams(restored.selection));
     if (restored.layer !== previous) continuePoll(refresh(), rearmPoll, 'dashboard history refresh');
   }
   const onPopState = (): void => { if (deps.location) restoreView(deps.location.hash); };
@@ -778,13 +972,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       disposed = true;
       if (timer !== null) { clearTimer(timer); timer = null; }
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+      if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
       stopView();
       stopStore();
       stopTheme?.();
+      stopKvart();
+      stopSaved();
+      stopNotify();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
       closeShare();
       sheet.destroy();
+      notifySheet.destroy();
       maps.destroy();
       schematic.destroy();
       store.destroy();
