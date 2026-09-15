@@ -31,7 +31,7 @@ describe('events without a venue show the source alone, never an unknown-locatio
     const ctx = { i18n, now, snapshots: { dogadanja: snapshot } };
     const venueLabel = i18n.t('events.venue');
     const source = i18n.t('events.sources.kulturpunkt');
-    const overview = renderGradSada(ctx).querySelector('#ov-agenda')!.textContent!;
+    const overview = renderGradSada(ctx).querySelector('.tb')!.textContent!;
     expect(overview).not.toContain(missing);
     expect(overview).toContain(source);
     const agenda = renderKultura(ctx).querySelector('[data-testid=agenda]')!.textContent!;

@@ -116,17 +116,57 @@
   "weatherStatus": {
     "sunset": "zalazak {time}"
   },
+  "timeband": {
+    "sada": "sada",
+    "today": "danas",
+    "afternoon": "poslijepodne",
+    "tonight": "večeras",
+    "night": "noćas",
+    "tomorrow": "sutra",
+    "week": "tjedan",
+    "seg": {
+      "sada": "sada",
+      "today": "danas",
+      "afternoon": "popodne",
+      "tonight": "večeras",
+      "night": "noćas",
+      "tomorrow": "sutra",
+      "week": "tjedan"
+    },
+    "segLabel": "Doba dana",
+    "headUntil": "do {time}",
+    "headFrom": "od {time}",
+    "headUntilDate": "do {date}",
+    "laneEmpty": "ništa najavljeno",
+    "moreItems_one": "+ {count} stavka",
+    "moreItems_few": "+ {count} stavke",
+    "moreItems_other": "+ {count} stavki",
+    "moreLines_one": "+ {count} linija",
+    "moreLines_few": "+ {count} linije",
+    "moreLines_other": "+ {count} linija",
+    "moreClosures_one": "+ {count} zatvaranje",
+    "moreClosures_few": "+ {count} zatvaranja",
+    "moreClosures_other": "+ {count} zatvaranja",
+    "moreEvents_one": "+ {count} događanje",
+    "moreEvents_few": "+ {count} događanja",
+    "moreEvents_other": "+ {count} događanja"
+  },
+  "tiles": {
+    "line": "Linija {line}",
+    "closures": "Zatvaranja",
+    "works": "Radovi",
+    "worksCity": "Radovi u gradu",
+    "worksNow_one": "{count} rad u tijeku",
+    "worksNow_few": "{count} rada u tijeku",
+    "worksNow_other": "{count} radova u tijeku",
+    "gazette": "Glasnik",
+    "event": "Događanje",
+    "lastRun": "Zadnji polazak",
+    "scheduled": "Prema redu vožnje"
+  },
   "overview": {
-    "place": "{place} · {date}",
-    "observedAt": "izmjereno u {time}",
-    "todayRange": "danas od {min} do {max} °C",
     "allClear": "Nema hitnih upozorenja",
-    "allClearConfirmed": "potvrđeno {time}",
-    "transitEmpty": "Trenutačno nema podataka o vozilima ZET-a.",
-    "delayShort": "Kašnjenje je po liniji, nije dolazak.",
-    "nextEvents": "Sljedeća događanja",
-    "assemblyNext": "Sjednica Gradske skupštine {when}",
-    "noEvents": "Nema najavljenih događanja iz dostupnih izvora."
+    "allClearConfirmed": "potvrđeno {time}"
   },
   "weather": {
     "now": "Trenutno",

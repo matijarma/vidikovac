@@ -286,10 +286,10 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(layers).toContain('.row-button:active');
     expect(layers).toContain('.route-link:active');
-    // Sada's own controls: the whole weather lockup, the cross-domain rows, the safety band.
-    expect(layers).toContain('.ov-link:active');
-    expect(layers).toContain('.ov-row:active');
-    expect(layers).toContain('.ov-safety .band:active');
+    // Sada's own controls: the "+ N" feet and the segments press to surface-2; a tile already
+    // stands on surface-1, so its press goes one level further, like the rows in the events well.
+    expect(layers).toContain('.tb-more:active, .tb-seg-btn:active');
+    expect(layers).toContain(".tl:not([data-tone]):not([data-variant='ink']):active { background-color: var(--tone-surface-3); transition: none; }");
     expect(layers).toContain('.dir-item:active');
     expect(layers).toContain('.sf-number:active');
     expect(layers).toContain('.link-arrow:active');
@@ -364,47 +364,76 @@ describe('the tab bar is exactly the space the shell reserves for it', () => {
 
 
 describe('Sada reads in one order on every width', () => {
-  it('never reorders an overview block in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
-    // `order` (and a row-reversed flow) would move a block past its neighbours
+  it('never reorders a head, a lane or a tile in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
+    // `order` (and a row-reversed flow) would move a lane past its neighbours
     // for the eye while leaving it where it was for a Tab key and a screen
-    // reader. The blocks are written in reading order instead; the desk groups
-    // them into column stacks, which moves no block past another.
-    const blocks = /\.ov-(?:weather|safety|transit|agenda|news|civic)\b[^{}]*\{[^}]*\}/g;
-    for (const [declaration] of LAYERS_CSS.matchAll(blocks)) {
+    // reader. Heads, lanes and tiles are written in time order instead; the
+    // desk and the phone are grid and flex changes that move nothing past
+    // anything.
+    const rules = /\.t[bl](?:-[a-z-]+)?\b[^{}]*\{[^}]*\}/g;
+    let seen = 0;
+    for (const [declaration] of LAYERS_CSS.matchAll(rules)) {
+      seen += 1;
       expect(declaration, declaration).not.toMatch(/\border\s*:/);
     }
-    expect(LAYERS_CSS).not.toMatch(/\.ov\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+    expect(seen).toBeGreaterThan(10);
+    expect(LAYERS_CSS).not.toMatch(/\.t[bl]\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+    expect(LAYERS_CSS).not.toMatch(/\.ov\b/);
   });
 });
 
-describe('layers.css desktop overview: three content-driven column stacks', () => {
-  const desk = mediaBlocks(LAYERS_CSS, '@media (min-width: 60rem)').find((body) => /\n\s*\.ov \{/.test(body)) ?? '';
-  it('the .ov grid is 5fr 4fr 3fr with 24 px row and 32 px column gaps, and each .ov-col is a flex column of blocks', () => {
-    const ov = rule('.ov', desk);
-    expect(ov).toContain('grid-template-columns: 5fr 4fr 3fr');
-    expect(ov).toContain('gap: var(--sp-6) var(--sp-8)');
-    expect(ov).toContain('align-items: start');
-    const col = rule('.ov-col', desk);
-    expect(col).toContain('display: flex');
-    expect(col).toContain('flex-direction: column');
-    expect(col).toContain('gap: var(--sp-6)');
-    expect(col).toContain('min-inline-size: 0');
+describe('layers.css time band', () => {
+  it('lays the heads, the axis and the lanes on one five-track grid with the sada track wider, 20 px apart; four tracks at night', () => {
+    const grid = rule('.tb-heads, .tb-lanes, .tb-axis', LAYERS_CSS);
+    expect(grid).toContain('display: grid');
+    expect(grid).toContain('grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr');
+    expect(grid).toContain('column-gap: 1.25rem');
+    expect(rule(".tb[data-cols='4'] .tb-heads, .tb[data-cols='4'] .tb-lanes, .tb[data-cols='4'] .tb-axis", LAYERS_CSS)).toContain('grid-template-columns: 2.2fr 1fr 1fr 1fr');
   });
-  it('places no block by a named area any more; the phone and the narrow container flatten the stacks into one reading order', () => {
-    expect(LAYERS_CSS).not.toContain("grid-template-areas: 'weather");
-    expect(LAYERS_CSS).not.toMatch(/grid-area: (?:weather|transit|safety|agenda|news|civic)\b/);
-    expect(rule('.ov-col', LAYERS_CSS)).toContain('display: contents');
-    const narrow = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
-    expect(rule('.ov-col', narrow)).toContain('display: contents');
+  it('stacks a lane’s tiles 10 px apart; the sada lane auto-fits half-width value tiles and spans its bands, rows, feet and states', () => {
+    const lane = rule('.tb-lane', LAYERS_CSS);
+    expect(lane).toContain('display: grid');
+    expect(lane).toContain('gap: 0.625rem');
+    expect(lane).toContain('min-inline-size: 0');
+    expect(rule(".tb-lane[data-col='sada']", LAYERS_CSS)).toContain('grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr))');
+    expect(LAYERS_CSS).toContain(".tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }");
   });
-  it('in a workspace of 50rem or less (a 960 to 1130 px desk) keeps two columns, the first stack spanning both rows of the second and third, so no column drops under 184 px and breaks words', () => {
-    const middling = /@container ws \(max-width: 50rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
-    expect(rule('.ov', middling)).toContain('grid-template-columns: 5fr 4fr');
-    expect(rule('.ov > .ov-col:first-child', middling)).toContain('grid-row: 1 / span 2');
-    expect(rule('.ov > .ov-col:nth-child(n + 2)', middling)).toContain('grid-column: 2');
-    // Cascade: after the last viewport rule it overrides, before the one-column rule that overrides it.
-    const at = LAYERS_CSS.indexOf('@container ws (max-width: 50rem)');
+  it('sets the segments, the feet and the weather group as 44 px controls on tokens, hover under (hover: hover) only', () => {
+    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('min-block-size: var(--target)');
+    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('touch-action: manipulation');
+    expect(rule(".tb-seg-btn[aria-pressed='true'] > span", LAYERS_CSS)).toContain('background: var(--tone-action-brand)');
+    expect(rule('.tb-more', LAYERS_CSS)).toContain('min-block-size: var(--target)');
+    expect(rule('.tb-weather', LAYERS_CSS)).toContain('min-block-size: var(--target)');
+    const hover = mediaBlocks(LAYERS_CSS, '@media (hover: hover)').find((body) => body.includes('.tl:not([data-tone])')) ?? '';
+    expect(hover).toContain(".tl:not([data-tone]):not([data-variant='ink']):hover { background-color: var(--tone-surface-2); }");
+    expect(hover).toContain(".tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }");
+    expect(hover).toContain('.tb-more:hover, .tb-weather:hover');
+  });
+  it('in a workspace of 60rem or less (a 1280 laptop beside the kvart aside, or a desk at 125 % text) keeps three lanes: sutra and tjedan wait in Događanja', () => {
+    const middling = /@container ws \(max-width: 60rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
+    expect(rule('.tb-heads, .tb-lanes, .tb-axis', middling)).toContain('grid-template-columns: 2fr 1fr 1fr');
+    expect(middling).toContain(".tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],");
+    expect(middling).toContain(".tb[data-cols='5'] .tb-head[data-col='sutra'], .tb[data-cols='5'] .tb-lane[data-col='sutra'], .tb[data-cols='5'] .tb-dot[data-col='sutra'] { display: none; }");
+    // Cascade: after the last viewport rule it overrides, before the phone form that overrides it.
+    const at = LAYERS_CSS.indexOf('@container ws (max-width: 60rem)');
     expect(at).toBeGreaterThan(LAYERS_CSS.lastIndexOf('@media (min-width: 80rem)'));
     expect(at).toBeLessThan(LAYERS_CSS.indexOf('@container ws (max-width: 36rem)'));
+    expect(LAYERS_CSS).not.toContain('@container ws (max-width: 50rem)');
+  });
+  it('the phone form (36rem): sticky segments, one head shown and the rest clipped, a snapping lane row that pans both ways with the FAB reserve', () => {
+    const phone = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
+    expect(phone).toContain('.tb-seg { display: flex; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }');
+    expect(phone).toContain('.tb-heads { display: block; position: relative; }');
+    expect(phone).toContain(".tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }");
+    expect(phone).toContain('.tb-axis { display: none; }');
+    expect(phone).toContain('.tb-lanes { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x pan-y; margin-inline: -2px; padding: 2px 2px 5rem; }');
+    expect(phone).toContain(".tb[data-cols] .tb-lane[data-col] { display: grid; flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }");
+    // The restore rules share the hiding rules' specificity and come later, so on a phone every lane and head is back.
+    expect(phone).toContain('.tb[data-cols] .tb-head[data-col] { display: grid; }');
+    expect(phone.indexOf('.tb[data-cols] .tb-head[data-col]')).toBeGreaterThan(-1);
+    // Motion is a decision made in JS from the reader's preference, never here.
+    expect(LAYERS_CSS).not.toContain('scroll-behavior');
+    // Every trace of the old overview is gone from the sheet.
+    expect(LAYERS_CSS).not.toMatch(/\.ov[-\s.{,]/);
   });
 });

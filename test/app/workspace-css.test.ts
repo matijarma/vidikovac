@@ -21,20 +21,15 @@ describe('layers.css reflows the workspace by its own room', () => {
   it('collapses every inner grid and the open detail in a narrow container, in rem so text zoom counts', () => {
     const block = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
     expect(block).toMatch(/\.wx-grid, \.cv-grid, \.nw-grid, \.sf-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
-    expect(block).toMatch(/\.ov \{ grid-template-columns: minmax\(0, 1fr\); grid-template-areas: none;/);
+    // The time band's phone form: the lane row becomes a snapping horizontal scroller.
+    expect(block).toMatch(/\.tb-lanes \{ display: flex; overflow-x: auto; scroll-snap-type: x mandatory;/);
     expect(block).toMatch(/\.ws-split\[data-detail-open='true'\] \.ws-primary \{ display: none; \}/);
     expect(block).toMatch(/\.ws-back \{ display: inline-flex; \}/);
     // The container rules come after the viewport rules they override, at equal specificity.
     expect(LAYERS.lastIndexOf('@media (min-width: 80rem)')).toBeLessThan(LAYERS.indexOf('@container ws'));
   });
-  it('caps the overview range wrap together with its svg in a narrow container, so the "now" label stays over its marker (the parked T1.5 finding)', () => {
-    const block = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
-    expect(block).toContain('.ov-range .g-range { max-inline-size: 26rem; }');
-    expect(block).toContain('.ov-range .g-wrap-range { max-inline-size: 26rem; }');
-  });
-  it('stacks the weather lead and row leads once the room is about a phone at 200% text', () => {
+  it('stacks row leads once the room is about a phone at 200% text', () => {
     const block = /@container ws \(max-width: 16rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
-    expect(block).toMatch(/\.ov-weather-row \{ grid-template-columns: minmax\(0, 1fr\); \}/);
     expect(block).toMatch(/\.row-button \{ flex-wrap: wrap; \}/);
     // A row lead can give way instead of pushing the chevron out of the row.
     expect(LAYERS).toMatch(/\.row-lead \{ flex: 0 1 auto;/);
@@ -52,9 +47,9 @@ describe('layers.css reflows the workspace by its own room', () => {
 });
 
 describe('links on tinted fills use the on-tint brand tone', () => {
-  it('scopes --tone-text-brand to the on-tint token on the overview safety block, the safety level and state notes', () => {
-    expect(LAYERS).toMatch(/\.ov-block\.ov-safety, \.sf-level, \.ws \.state \{ --tone-text-brand: var\(--tone-text-brand-on-tint\); \}/);
-    expect(LAYERS).toMatch(/\.ov-block\.ov-safety a:hover, \.sf-level a:hover \{ color: var\(--tone-text-primary\); \}/);
+  it('scopes --tone-text-brand to the on-tint token on the safety level and state notes', () => {
+    expect(LAYERS).toMatch(/\.sf-level, \.ws \.state \{ --tone-text-brand: var\(--tone-text-brand-on-tint\); \}/);
+    expect(LAYERS).toMatch(/\.sf-level a:hover \{ color: var\(--tone-text-primary\); \}/);
   });
 });
 

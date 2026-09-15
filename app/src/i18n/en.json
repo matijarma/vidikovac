@@ -112,17 +112,52 @@
   "weatherStatus": {
     "sunset": "sunset {time}"
   },
+  "timeband": {
+    "sada": "now",
+    "today": "today",
+    "afternoon": "afternoon",
+    "tonight": "tonight",
+    "night": "overnight",
+    "tomorrow": "tomorrow",
+    "week": "this week",
+    "seg": {
+      "sada": "now",
+      "today": "today",
+      "afternoon": "p.m.",
+      "tonight": "tonight",
+      "night": "night",
+      "tomorrow": "tomorrow",
+      "week": "week"
+    },
+    "segLabel": "Time of day",
+    "headUntil": "until {time}",
+    "headFrom": "from {time}",
+    "headUntilDate": "until {date}",
+    "laneEmpty": "nothing announced",
+    "moreItems_one": "+ {count} item",
+    "moreItems_other": "+ {count} items",
+    "moreLines_one": "+ {count} line",
+    "moreLines_other": "+ {count} lines",
+    "moreClosures_one": "+ {count} closure",
+    "moreClosures_other": "+ {count} closures",
+    "moreEvents_one": "+ {count} event",
+    "moreEvents_other": "+ {count} events"
+  },
+  "tiles": {
+    "line": "Line {line}",
+    "closures": "Closures",
+    "works": "Works",
+    "worksCity": "Works across the city",
+    "worksNow_one": "{count} work under way",
+    "worksNow_other": "{count} works under way",
+    "gazette": "Gazette",
+    "event": "Event",
+    "lastRun": "Last departure",
+    "scheduled": "Per schedule"
+  },
   "overview": {
-    "place": "{place} · {date}",
-    "observedAt": "measured at {time}",
-    "todayRange": "today {min} to {max} °C",
     "allClear": "No urgent warnings",
-    "allClearConfirmed": "confirmed {time}",
-    "transitEmpty": "No ZET vehicle data right now.",
-    "delayShort": "Delay is per line, not an arrival.",
-    "nextEvents": "Coming up",
-    "assemblyNext": "City Assembly session {when}",
-    "noEvents": "No announced events from the available sources."
+    "allClearConfirmed": "confirmed {time}"
   },
   "weather": {
     "now": "Right now",

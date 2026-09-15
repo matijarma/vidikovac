@@ -13,6 +13,8 @@ import { createViewStore } from './core/view-store';
 import { bannersMarkup, MORE_LAYERS, safetyMarkup, sessionMarkup, sidebarMarkup, snapshotLine, tabbarMarkup, wordmarkMarkup, type NoticeKind, type ShellNotice, type ShellState } from './experience/chrome';
 import { DIRECTORY_MODULES, renderDirectory } from './experience/directory';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
+import { tickTimebandClock } from './experience/timeband';
+import { attachTimebandSync } from './experience/timeband-sync';
 import { storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -726,6 +728,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.addEventListener('keydown', (event) => {
     if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) element.dataset.modality = 'keyboard';
   }, true);
+  // Sada's phone form: a segment tap scrolls the lane row; a settled swipe selects the column through the same filter.
+  const detachTimebandSync = attachTimebandSync(element, setFilterAction, { reducedMotion: Boolean(deps.reducedMotion), lightweight });
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });
@@ -766,6 +770,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
+    tickTimebandClock(main, now());
     paintShell();
   }, TICK_MS);
 
@@ -783,6 +788,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopTheme?.();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
+      detachTimebandSync();
       closeShare();
       sheet.destroy();
       maps.destroy();

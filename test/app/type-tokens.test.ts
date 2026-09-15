@@ -89,7 +89,6 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(LAYERS).toMatch(/\.route-name \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.ev-allday \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/^\.agenda-day \{[^}]*font-size: var\(--type-secondary\);/m);
-    expect(LAYERS).toMatch(/\.ov \.agenda-day \{[^}]*font-size: var\(--type-secondary\);/);
     // T3.5 lifts the lead's lede to prose at the body role (68ch, no clamp);
     // .nw-summary no longer exists, replaced by .nw-lead-lede at --type-body.
     //
@@ -109,7 +108,21 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
   });
 
   it('scopes .meta (base.css) to the secondary role only inside a workspace room, per the brief', () => {
-    expect(LAYERS).toContain(".ws .meta, .ov .meta { font-size: var(--type-secondary); }");
+    expect(LAYERS).toContain(".ws .meta { font-size: var(--type-secondary); }");
+  });
+
+  it('sets the time band tile family at its roles in signage.css: value tile-l, title tile-m, time tile-time, context and trail secondary, the xs badge secondary', () => {
+    expect(SIGNAGE).toMatch(/\.tl-value \{[^}]*font-size: var\(--type-tile-l\);/);
+    expect(SIGNAGE).toMatch(/\.tl-title \{[^}]*font-size: var\(--type-tile-m\);/);
+    expect(SIGNAGE).toMatch(/\.tl-time \{[^}]*font-size: var\(--type-tile-time\);/);
+    expect(SIGNAGE).toMatch(/\.tl-context, \.tl-trail \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(SIGNAGE).toMatch(/\.line\[data-size='xs'\] \{[^}]*font-size: var\(--type-secondary\);/);
+    // layers.css sizes the band's own type from the roles too: the heads at title, the clock at numeral, the labels at secondary.
+    expect(LAYERS).toMatch(/\.tb-h \{[^}]*font-size: var\(--type-title\);/);
+    expect(LAYERS).toMatch(/\.tb-clock \{[^}]*font-size: var\(--type-numeral\);/);
+    expect(LAYERS).toMatch(/\.tb-seg-btn \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(LAYERS).toMatch(/\.tb-empty \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(LAYERS).toMatch(/\.tb-more \{[^}]*font-size: var\(--type-control\);/);
   });
 
   it('leaves the changed rules at the body line height', () => {

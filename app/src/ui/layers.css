@@ -19,7 +19,7 @@
 /* The 13 px floor: a phone's second lines and timestamps read at the
    secondary role, never the old 12 px meta size. `.meta` itself is base.css's
    (attribution, licence lines), so its bump is scoped to a workspace room. */
-.ws .meta, .ov .meta { font-size: var(--type-secondary); }
+.ws .meta { font-size: var(--type-secondary); }
 .layer-title { inline-size: fit-content; }
 .layer-title:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 4px; border-radius: 2px; }
 /* Programmatic focus after a pointer tap: no ring on a non-interactive heading; keyboard keeps it. */
@@ -39,9 +39,9 @@
 .ws .btn, .ws .btn-ghost, .ws .btn-quiet { white-space: normal; text-align: start; padding-block: var(--sp-2); }
 /* Links on a tinted fill take the deeper brand tone (tokens.css) so they keep
    AA on the tint; hover reads as ink. A state note is tinted too. */
-.ov-block.ov-safety, .sf-level, .ws .state { --tone-text-brand: var(--tone-text-brand-on-tint); }
+.sf-level, .ws .state { --tone-text-brand: var(--tone-text-brand-on-tint); }
 @media (hover: hover) {
-  .ov-block.ov-safety a:hover, .sf-level a:hover { color: var(--tone-text-primary); }
+  .sf-level a:hover { color: var(--tone-text-primary); }
 }
 /* The brand-toned badge (a works phase) is brand text on the action tint too. */
 .ws .badge[data-tone='action'] { color: var(--tone-text-brand-on-tint); }
@@ -187,76 +187,48 @@
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
 .route-delay[data-state='early'] { color: var(--tone-weather); }
 .route-delay[data-state='ontime'] { color: var(--tone-live); }
-/* Overview: one composed page. A block is an area on the canvas with 24 px of
-   air around it, never a repeated card. The blocks are written in reading
-   order (weather, safety, board, agenda, news, gazette) and no rule here moves
-   one past another: the visual order is the DOM order, so a finger and a Tab
-   key travel the page the same way (WCAG 2.2 SC 2.4.3). The three column
-   stacks the desk composition needs are contiguous slices of that order and
-   are `display: contents` here, so the phone reads straight down the page and
-   the desk is a grid change and nothing else. */
-.ov { display: grid; gap: var(--sp-6); align-items: start; }
-.ov-col { display: contents; }
-/* "Trg bana J. Jelačića · ned 13. 9. 2026.": where this is, before any figure. */
-.ov-place { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-block: var(--sp-3) var(--sp-4); }
-.ov-block { display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; }
-.ov-head { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-block-size: 2.75rem; }
-.ov-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
-.ov-more { display: inline-flex; align-items: center; justify-content: center; min-height: var(--target); min-inline-size: var(--target); margin-inline-start: auto; font-size: var(--text-sm); }
-/* The way into the domain keeps its own width; a long place name wraps instead of breaking the link in half. */
-.ov-head .ov-more { flex: none; }
-.ov-foot { margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
-/* A whole block can be the control (the weather lockup); the link carries the block's own layout. */
-.ov-link { display: grid; gap: var(--sp-3); padding: var(--sp-2); margin: calc(-1 * var(--sp-2)); border-radius: var(--r-md); color: inherit; text-decoration: none; }
-/* Rows that open another domain: the button is the whole row, the list keeps the hairlines. */
-.ov-list { display: grid; margin: 0; padding: 0; list-style: none; }
-.ov-list > li { border-block-start: 1px solid var(--tone-stroke); }
-.ov-list > li:first-child, .ov-list > li.agenda-day, .ov-list > li.agenda-day + li { border-block-start: 0; }
-.ov-row { inline-size: 100%; padding-inline: var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; }
-/* Weather: the measured number and the sky beside it, the facts and today's range below. */
-.ov-weather-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-4); align-items: center; }
-.ov-temp { font-size: var(--type-numeral); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
-.ov-weather-text { display: grid; gap: 0.15rem; min-inline-size: 0; }
-.ov-cond { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
-.ov-cond .icon { width: 1.75rem; height: 1.75rem; color: var(--tone-weather); }
-.ov-obs, .ov-weather-facts { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
-.ov-weather-side { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); }
-.ov-weather-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0; padding: 0; list-style: none; }
-.ov-weather-facts li { display: inline-flex; align-items: center; gap: 0.3rem; }
-.ov-weather-facts .icon { width: 1rem; height: 1rem; color: var(--tone-weather); }
-.ov-range { display: grid; gap: var(--sp-1); }
-.ov-range .g-range { max-inline-size: 26rem; }
-/* The wrap (svg + .g-labels) shares one cap so the "now" label's percent
-   position always matches the marker under it; the .g-range cap above is
-   then redundant but harmless (its ancestor is already this width). */
-.ov-range .g-wrap-range { max-inline-size: 26rem; }
-/* A skeleton bar stands in for a line of text and is sized in that line's own
-   type role, so the block it fills has the geometry it will have with data and
-   nothing moves when the data lands. The figure keeps the range bar's own
-   aspect ratio for the same reason. */
-.ov-sk-title { block-size: calc(var(--type-body) * var(--lh-body)); }
-.ov-sk-sub { block-size: calc(var(--type-secondary) * var(--lh-body)); }
-.ov-sk-meta2 { block-size: calc(var(--type-secondary) * var(--leading-snug) * 2); }
-.ov-sk-obs { block-size: calc(var(--type-secondary) * var(--lh-body) * 2); }
-.ov-sk-cond { block-size: 1.75rem; }
-.ov-sk-numeral { inline-size: 5ch; block-size: calc(var(--type-numeral) * var(--lh-tight)); }
-.ov-sk-lead { inline-size: 2.5rem; block-size: calc(var(--type-control) * var(--lh-body)); }
-.ov-sk-badge { inline-size: 2.75rem; block-size: 2rem; border-radius: 0.25rem; }
-.ov-sk-figure { inline-size: 100%; max-inline-size: 26rem; aspect-ratio: 320 / 60; }
-.ov-weather-side .sk { flex: 1 0 100%; }
-/* The board: 52 px rows, the destination on one line, the state word at the end. */
-.ov-transit .route-link { min-block-size: 3.25rem; }
-.ov-transit .row-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Agenda: violet day heads in sentence case over a fixed 3.5 rem time column,
-   so three starts read as a column of times and not as ragged text. */
-.ov .agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); text-transform: none; letter-spacing: normal; }
-.ov-agenda .row-lead { inline-size: 3.5rem; }
-.ov-agenda .ev-allday { text-transform: none; letter-spacing: normal; }
-/* Civic: the issue number as a lockup over the line that dates it. */
-.ov-issue { display: grid; gap: 0.15rem; }
-.ov-issue-no { font-size: var(--type-numeral); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+/* Sada: the time band (newdesignsystem.md §4.2, plan A.5). Five tracks, the
+   sada track wider (its lane holds the live values two abreast); the heads,
+   the axis and the lanes share one grid, so a head stands over its lane at
+   every width; four tracks at night. A lane is a grid 10 px apart; the sada
+   lane auto-fits half-width value tiles and spans its bands, rows and feet.
+   Nothing here moves a head, a lane or a tile past its neighbour: the DOM
+   order is the reading order on every surface (WCAG 2.2 SC 2.4.3). The tile
+   family (.tl) is signage.css's; its hover and press live here with the
+   other controls. The 60rem and 36rem container blocks below reshape the
+   band by the room it really has. */
+.tb { display: grid; row-gap: var(--sp-3); }
+.tb-heads, .tb-lanes, .tb-axis { display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr; column-gap: 1.25rem; }
+.tb[data-cols='4'] .tb-heads, .tb[data-cols='4'] .tb-lanes, .tb[data-cols='4'] .tb-axis { grid-template-columns: 2.2fr 1fr 1fr 1fr; }
+/* A head: the time word (a kicker) over its line; the sada head's line is the 40 px clock, the axis origin. */
+.tb-head { display: grid; gap: var(--sp-1); align-content: end; min-inline-size: 0; }
+.tb-head-title { display: grid; gap: var(--sp-1); }
+.tb-word { display: block; }
+.tb-h { display: block; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tb-clock { font-size: var(--type-numeral); letter-spacing: -0.03em; line-height: var(--lh-tight); }
+/* The phone's weather status beside the clock (D4, D11): one link into Vrijeme, glyph · temperature · sunset. */
+.tb-weather { display: inline-flex; align-items: center; gap: var(--sp-1) var(--sp-2); min-block-size: var(--target); inline-size: fit-content; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--tone-text-primary); text-decoration: none; }
+.tb-weather .icon { color: var(--tone-weather); }
+/* The axis: a 2 px rule with one dot per column; the filled dot is sada, the origin. Decorative (aria-hidden). */
+.tb-axis { position: relative; block-size: 1.5rem; align-items: center; }
+.tb-axis::before { content: ''; position: absolute; inset-inline: 0; inset-block-start: calc(50% - 1px); block-size: 2px; background: var(--tone-text-primary); }
+.tb-dot { position: relative; inline-size: 0.625rem; block-size: 0.625rem; border-radius: 50%; border: 2px solid var(--tone-text-primary); background: var(--tone-surface-canvas); }
+.tb-dot[data-on='true'] { background: var(--tone-text-primary); }
+.tb-lane { display: grid; gap: 0.625rem; align-content: start; min-inline-size: 0; }
+.tb-lane[data-col='sada'] { grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr)); }
+.tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }
+/* The "+ N" foot: a 44 px link into the domain in the brand tone; the empty word in the muted tone. */
+.tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); text-decoration: none; }
+.tb-empty { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+/* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span. */
+.tb-seg { display: none; gap: 0.25rem; }
+.tb-seg-btn { flex: 1 1 0; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
+.tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
 @media (hover: hover) {
-  .ov-link:hover, .ov-row:hover { background-color: var(--tone-surface-2); }
+  .tl:not([data-tone]):not([data-variant='ink']):hover { background-color: var(--tone-surface-2); }
+  .tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
+  .tb-more:hover, .tb-weather:hover { background-color: var(--tone-surface-2); }
 }
 /* Provenance: one line to open; the required credits sit inside. */
 .provenance { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); font-size: var(--text-meta); color: var(--tone-text-muted); }
@@ -268,18 +240,6 @@
 .provenance li { line-height: var(--leading-snug); }
 /* The one bare <a> in this block (the /izvori/ line) has no other class; it needs the target explicitly. */
 .provenance a { display: inline-flex; align-items: center; min-block-size: var(--target); }
-/* Desk: three content-driven column stacks, 5:4:3, each a flex column of its
-   own blocks, so the page is hole-free by construction and no block moves
-   past a neighbour (each stack is a contiguous slice of the reading order).
-   In a workspace of 36rem or less the container rule below flattens them. */
-@media (min-width: 60rem) {
-  .ov { grid-template-columns: 5fr 4fr 3fr; gap: var(--sp-6) var(--sp-8); align-items: start; }
-  .ov-col { display: flex; flex-direction: column; gap: var(--sp-6); min-inline-size: 0; }
-  .ov-weather-row { column-gap: var(--sp-6); }
-  .ov-range .g-range { max-inline-size: 32rem; }
-  .ov-range .g-wrap-range { max-inline-size: 32rem; }
-}
-
 /* Weather workspace (T3.1, plan "Vrijeme"). Flat sections: a hairline and
    24 px of air between them, no card (plan, "Surfaces"). The grid names and
    the container-query lines that collapse them are pinned. */
@@ -537,39 +497,48 @@
   .source-link:hover { text-decoration: underline; }
 }
 .status-badge { flex: none; }
-.ov-sources { max-inline-size: 70ch; }
-.ov-sources a { display: inline-flex; align-items: center; min-height: var(--target); }
 
 /* Press feedback: a touch has no hover, so :active stands in for it. */
 @media (hover: none) {
-  .row-button:active, .route-link:active, .ov-link:active, .ov-row:active, .ov-safety .band:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
-  /* Rows inside the events well already sit on surface-2; their press goes one level further. */
+  .row-button:active, .route-link:active, .tb-more:active, .tb-seg-btn:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+  /* Rows inside the events well and the tiles already sit on a raised surface; their press goes one level
+     further. A tinted or ink tile has no deeper surface to go to and shows the hover's inset stroke instead. */
   .ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }
+  .tl:not([data-tone]):not([data-variant='ink']):active { background-color: var(--tone-surface-3); transition: none; }
+  .tl[data-tone]:active, .tl[data-variant='ink']:active { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
 }
 
-/* Middling room (a 960 to about 1130 px desk, or a wide desk at 125% text):
-   three stacks would squeeze the third under 184 px, where a head with its
-   badge and link, or the gazette numeral, breaks letter by letter. Two
-   columns keep every word whole: the first stack takes the left column and
-   spans both rows, the second and third share the right column one under the
-   other, so the eye still reads the stacks in their written order. */
-@container ws (max-width: 50rem) {
-  .ov { grid-template-columns: 5fr 4fr; }
-  .ov > .ov-col:first-child { grid-row: 1 / span 2; }
-  .ov > .ov-col:nth-child(n + 2) { grid-column: 2; }
+/* Middling room (a 1280 laptop beside the kvart aside, or a desk at 125 % text): three lanes; sutra and tjedan wait in Događanja. */
+@container ws (max-width: 60rem) {
+  .tb-heads, .tb-lanes, .tb-axis { grid-template-columns: 2fr 1fr 1fr; }
+  .tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],
+  .tb[data-cols='5'] .tb-head[data-col='sutra'], .tb[data-cols='5'] .tb-lane[data-col='sutra'], .tb[data-cols='5'] .tb-dot[data-col='sutra'] { display: none; }
 }
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
    about 20rem wide and the viewport queries above no longer describe the
    space. The compositions fall back to their single-column forms and an open
    detail replaces the list, as on a phone. Measured against the .ws
    container in rem, so the threshold moves with the text. Engines without
-   container queries keep the viewport forms above. */
+   container queries keep the viewport forms above.
+   The time band takes its phone form here: the segments show and stick under
+   the header; one head (the current column's) is shown and the others are
+   clipped with clip-path, so every lane keeps the heading that labels it in
+   the tree; the axis leaves; the lanes become a snapping horizontal scroller,
+   one lane per screen, that pans both ways under a finger (.ki-main is pan-y)
+   and reserves 5rem under the tiles for the FAB. The restore rules share the
+   60rem hides' specificity and come later, so on a phone every lane is back;
+   the 2 px margin and padding keep a tile's focus ring inside the scroller.
+   Whether the row glides or jumps is decided in JS from the reader's motion
+   preference (experience/timeband-sync.ts), never declared here. */
 @container ws (max-width: 36rem) {
-  .ov { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; gap: var(--sp-6); }
-  .ov-col { display: contents; }
-  .ov-weather-row { column-gap: var(--sp-4); }
-  .ov-range .g-range { max-inline-size: 26rem; }
-  .ov-range .g-wrap-range { max-inline-size: 26rem; }
+  .tb-seg { display: flex; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }
+  .tb-heads { display: block; position: relative; }
+  .tb[data-cols] .tb-head[data-col] { display: grid; }
+  .tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .tb-axis { display: none; }
+  .tb-lanes { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x pan-y; margin-inline: -2px; padding: 2px 2px 5rem; }
+  .tb-lanes::-webkit-scrollbar { display: none; }
+  .tb[data-cols] .tb-lane[data-col] { display: grid; flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
   .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
   .wx-wide, .cv-wide, .sf-wide { grid-column: auto; }
   .ws-split[data-detail-open='true'] { grid-template-columns: minmax(0, 1fr); }
@@ -577,16 +546,12 @@
   .ws-split[data-detail-open='true'] .ws-detail { position: static; }
   .ws-back { display: inline-flex; }
 }
-/* Very narrow room (a phone at 200% text is about 11rem): the measured
-   temperature and its condition stack instead of sharing one line. */
+/* Very narrow room (a phone at 200% text is about 11rem). */
 @container ws (max-width: 16rem) {
-  .ov-weather-row { grid-template-columns: minmax(0, 1fr); }
-  .ov-temp { grid-column: 1; }
-  .ov-weather-text { grid-column: 1; }
-  /* The band's confirmation time is signage and never breaks; in this much
-     room it drops under the verdict instead of widening the page. */
-  .ov-safety .band { flex-wrap: wrap; padding-block: var(--sp-2); }
-  .ov-safety .band-meta { margin-inline-start: 0; }
+  /* A band's trail (the works count, the calm verdict's time) is signage and never breaks; in this
+     much room it drops under the title instead of squeezing the words beside it letter by letter. */
+  .tl[data-variant='band'] { grid-template-columns: auto minmax(0, 1fr); }
+  .tl[data-variant='band'] .tl-trail { grid-column: 2; justify-self: start; }
   /* A row's lead (time, all-day, amount) takes its own line above the title. */
   .row-button { flex-wrap: wrap; }
   .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }
