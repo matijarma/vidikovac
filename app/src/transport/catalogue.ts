@@ -18,6 +18,16 @@ export function routeCatalogue(): RouteEntry[] {
   return routes;
 }
 
+/**
+ * The line's two ends as one readable phrase. GTFS writes them with a hyphen
+ * in three spellings ("Črnomerec-Sopot", "Ljubljanica -Savišće", "Savski
+ * most - Dubec"); every spelling becomes "Črnomerec – Sopot". No arrow: the
+ * data names no direction from a given stop, so none is claimed.
+ */
+export function routeEnds(longName: string): string {
+  return longName.split(/\s*[-\u2013]\s*/).map((part) => part.trim()).filter(Boolean).join(' \u2013 ');
+}
+
 /** One route by id; an id GTFS dropped still gets an honest entry (its own
  *  id as the number, no name, type -1 for "unknown"). */
 export function routeEntry(routeId: string): RouteEntry {

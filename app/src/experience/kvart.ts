@@ -123,7 +123,7 @@ function countsText(i18n: I18n, works: number, closures: number): string {
 }
 
 /** The screen's stop, else the kvart's own seat, else the city -- the same point centres the map and names the nearest closure (D6, D18). */
-function referencePoint(ctx: LayerContext, kvart: AreaSlug | null): { lon: number; lat: number } {
+export function referencePoint(ctx: LayerContext, kvart: AreaSlug | null): { lon: number; lat: number } {
   const stop = ctx.screen?.stop;
   if (stop) return { lon: stop.lon, lat: stop.lat };
   const seat = kvart ? districtBySlug(kvart)?.seat : null;

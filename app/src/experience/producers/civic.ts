@@ -2,7 +2,7 @@
 // carries (the next Assembly session, while it is still within the band —
 // beyond the horizon, Grad has it), and the gazette's own number, a
 // reference module that is never stale.
-import { zagrebWeekdayShort } from '../../format';
+import { zagrebDayMonth } from '../../format';
 import { dataText } from '../../panels/panel';
 import { itemSelection } from '../blocks';
 import type { ProduceOptions, TileProducer } from '../timeband';
@@ -48,7 +48,8 @@ export const gazetteProducer: TileProducer = {
     const act = glasnik?.items[0];
     if (!act || !glasnik) return [];
     const context = [
-      act.at ? i18n.t('civic.issuePublished', { date: zagrebWeekdayShort(act.at) }) : '',
+      // The day and month alone (kajimafix 01.6): with the weekday the line ellipsised its act count.
+      act.at ? i18n.t('civic.issuePublished', { date: zagrebDayMonth(act.at) }) : '',
       i18n.t('civic.actsCount', { count: glasnik.items.length }),
     ].filter(Boolean).join(' · ');
     return [{

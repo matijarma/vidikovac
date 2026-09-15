@@ -70,9 +70,13 @@
    never wraps. Hover and press live in layers.css. */
 .tl { display: grid; gap: 0.15rem; align-content: start; min-inline-size: 0; min-block-size: var(--target); padding: 0.875rem 1rem; border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-1); color: var(--tone-text-primary); font: inherit; text-align: start; text-decoration: none; cursor: pointer; touch-action: manipulation; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
 .tl-label { display: flex; align-items: center; gap: var(--sp-2); min-inline-size: 0; }
+/* A value tile's title beside its badge (the line's two ends): one 13 px bold muted line, ellipsised, never a second row. */
+.tl-label-title { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .tl-value { font-size: var(--type-tile-l); font-weight: var(--weight-bold); line-height: var(--lh-tight); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-value[data-size='xl'] { font-size: var(--type-tile-xl); }
 .tl-value[data-size='m'] { font-size: var(--type-tile-m); }
+/* The unit after a number ("min", "slobodnih"): only the number is bold and large; the unit reads at the secondary role, muted. */
+.tl-unit { font-size: var(--type-secondary); font-weight: var(--weight-medium); letter-spacing: 0; color: var(--tone-text-muted); }
 .tl-value[data-state='late'] { color: var(--tone-urgency); }
 .tl-value[data-state='early'] { color: var(--tone-weather); }
 .tl-value[data-state='ontime'] { color: var(--tone-live); }

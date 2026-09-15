@@ -246,10 +246,11 @@ describe('grad-sada (Sada, the time band)', () => {
     const first = tiles[0]!;
     expect(text(first.querySelector('.tl-value'))).toBe('kasni 2 min');
     expect(first.querySelector('.tl-value')?.getAttribute('data-state')).toBe('late');
-    // The count beside the glyph is a figure, never the word "vozila"; the destination is heard, not shown.
+    // The count beside the glyph is a figure, never the word "vozila"; the stop the count is read from follows it, and the line's two ends stand beside the badge (kajimafix 01.2).
     expect(first.querySelector('.tl-context use')?.getAttribute('href')).toBe('#icon-tram-front');
-    expect(text(first.querySelector('.tl-context'))).toBe('2');
-    expect(first.getAttribute('aria-label')).toContain('Črnomerec-Sopot');
+    expect(text(first.querySelector('.tl-context'))).toBe(`2 · ${STOP.name}`);
+    expect(text(first.querySelector('.tl-label-title'))).toBe('Črnomerec – Sopot');
+    expect(first.getAttribute('aria-label')).toContain('Črnomerec – Sopot');
     const more = section.querySelector('[data-testid=tb-more-transit]')!;
     expect(text(more)).toBe('+ 4 linije');
     expect(more.getAttribute('aria-label')).toContain(STOP.name);

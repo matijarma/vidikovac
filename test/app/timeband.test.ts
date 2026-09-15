@@ -487,6 +487,33 @@ describe('buildTimeband: notification highlights (T3.3, ctx.notify)', () => {
 const SEG_BUTTON = (value: string, pressed: boolean, aria: string, word: string): string =>
   `<button type="button" class="tb-seg-btn" data-action="filter" data-filter-key="tb-col" data-filter-value="${value}" aria-pressed="${pressed}" aria-label="${aria}"><span>${word}</span></button>`;
 
+describe('the phone’s "Zatim" foot (concept 02): now and next on one screen', () => {
+  it('the phone’s sada lane carries the first two tiles of the following lanes, in time order; the desk carries none', () => {
+    expect(lane(buildTimeband(phone(), PRODUCERS), 'sada').next?.map((t) => t.key)).toEqual(['dogadanja:friAllDay', 'dogadanja:fri17']);
+    expect(lane(buildTimeband(ctx(), PRODUCERS), 'sada').next).toBeUndefined();
+    // Fewer than two ahead: whatever there is, never a placeholder.
+    expect(lane(buildTimeband(phone(), [safety, events([{ id: 'mon11', at: '2026-09-14T09:00:00Z' }])]), 'sada').next?.map((t) => t.key)).toEqual(['dogadanja:mon11']);
+    expect(lane(buildTimeband(phone(), [safety]), 'sada').next).toEqual([]);
+  });
+  it('renders them under a "Zatim" kicker as compact rows with a next: key and no testid, so the lane they belong to keeps the one addressable copy', () => {
+    const tb = render(phone(), PRODUCERS);
+    const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
+    expect(text(sada.querySelector('.tb-next.kicker[data-key="next-head"]'))).toBe('Zatim');
+    const compact = [...sada.querySelectorAll('.tl[data-compact="1"]')];
+    expect(compact.map((el) => el.getAttribute('data-key'))).toEqual(['next:dogadanja:friAllDay', 'next:dogadanja:fri17']);
+    for (const el of compact) {
+      expect(el.hasAttribute('data-testid')).toBe(false);
+      expect(el.getAttribute('data-variant')).toBe('time');
+      expect(el.getAttribute('href')).toMatch(/^#layer=kultura/);
+    }
+    // The kicker follows the lane's own tiles and precedes its feet.
+    const keys = [...sada.children].map((el) => el.getAttribute('data-key'));
+    expect(keys.indexOf('next-head')).toBeGreaterThan(keys.indexOf('glasnik:issue'));
+    expect(tb.querySelector('[data-testid="tb-lane-danas"] .tl[data-compact]')).toBeNull();
+    expect(render(ctx(), PRODUCERS).querySelector('.tb-next')).toBeNull();
+  });
+});
+
 describe('renderTimebandSeg: the phone’s segmented control (A.4)', () => {
   it('writes a group of five pressed-state buttons whose labels read the time word and its head, the clock for sada', () => {
     expect(renderTimebandSeg(hr, buildTimeband(ctx(), PRODUCERS))).toBe(

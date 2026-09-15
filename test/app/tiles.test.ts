@@ -99,7 +99,7 @@ describe('tileMarkup: value', () => {
   it('writes the transit line tile exactly: badge for the label, the delay word as the value, glyph and count as the context', () => {
     expect(tileMarkup(hr, transit)).toBe(
       `<a class="tl" data-variant="value" data-domain="transit" data-key="zet-rt:route:6" data-testid="tile-transit" href="#layer=u-pokretu&amp;kind=route&amp;id=6" data-action="nav" data-layer="u-pokretu" ${ROUTE_6} aria-label="Linija 6, Črnomerec-Sopot, kasni 2 min, 2 vozila">`
-      + '<span class="tl-label"><span class="line" data-kind="tram" data-size="s">6</span></span>'
+      + '<span class="tl-label"><span class="line" data-kind="tram" data-size="s">6</span><span class="tl-label-title">Črnomerec-Sopot</span></span>'
       + '<span class="tl-value" data-size="l" data-state="late" data-replace data-sig="kasni 2 min">kasni 2 min</span>'
       + `<span class="tl-context">${TRAM_GLYPH}<span class="tl-ctx-text">2</span></span>`
       + '</a>',
@@ -113,6 +113,16 @@ describe('tileMarkup: value', () => {
       + '<span class="tl-context"><span class="tl-ctx-text">objavljen pet 11. 9. · 12 akata</span></span>'
       + '</a>',
     );
+  });
+  it('sets a unit small after the number, inside the value line: the span carries the space, so the text stays the whole phrase and the signature and the aria read it too', () => {
+    const html = tileMarkup(hr, { ...transit, value: 'kasni 2', unit: 'min', valueSize: 'xl', aria: undefined });
+    expect(html).toContain('<span class="tl-value" data-size="xl" data-state="late" data-replace data-sig="kasni 2 min">kasni 2<span class="tl-unit"> min</span></span>');
+    expect(html).toContain('aria-label="Linija 6, Črnomerec-Sopot, kasni 2 min"');
+    expect(tileAria(hr, { ...transit, value: 'kasni 2', unit: 'min', aria: undefined }, '')).toBe('Linija 6, Črnomerec-Sopot, kasni 2 min');
+  });
+  it('shows a value tile\'s title beside its badge and never beside a kicker (the gazette has none to show)', () => {
+    expect(tileMarkup(hr, { ...gazette, title: 'x' })).not.toContain('tl-label-title');
+    expect(tileMarkup(hr, { ...transit, title: undefined })).toContain('<span class="tl-label"><span class="line" data-kind="tram" data-size="s">6</span></span>');
   });
   it('marks the value for the reconciler: data-replace with the value text as its signature, so a poll that keeps the word keeps the node and a real change replays the crossfade', () => {
     const html = tileMarkup(hr, { ...transit, value: 'na vrijeme', valueTone: 'ontime' });

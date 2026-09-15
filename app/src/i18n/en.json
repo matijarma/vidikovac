@@ -139,6 +139,7 @@
     "headFrom": "from {time}",
     "headUntilDate": "until {date}",
     "laneEmpty": "nothing announced",
+    "next": "Next",
     "moreItems_one": "+ {count} item",
     "moreItems_other": "+ {count} items",
     "moreLines_one": "+ {count} line",
@@ -151,6 +152,8 @@
   "tiles": {
     "line": "Line {line}",
     "closures": "Closures",
+    "inKvart_one": "{count} in the district",
+    "inKvart_other": "{count} in the district",
     "works": "Works",
     "worksCity": "Works across the city",
     "worksNow_one": "{count} work under way",

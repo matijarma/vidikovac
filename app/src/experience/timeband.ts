@@ -44,6 +44,8 @@ export const HORIZON_DAYS = 7;
 export const LANE_CAP = { phone: 4, desktop: 6 } as const;
 /** Tiles per domain in the sada lane; every domain not named here shows one. */
 export const SADA_DOMAIN_CAP = { transit: { phone: 2, desktop: 4 } } as const;
+/** The phone's sada lane ends with this many tiles from the following lanes under a "Zatim" kicker (concept 02). */
+export const NEXT_CAP = 2;
 /** The view-store filter key that carries the selected column (view-store rejects dotted keys). */
 export const FILTER_KEY = 'tb-col';
 
@@ -208,6 +210,8 @@ export interface Lane {
   /** A source this lane waits for has not answered: `aria-busy` and the loading word. */
   busy: boolean;
   skeletons: LaneSkeleton[];
+  /** The phone's sada lane only: the first NEXT_CAP tiles of the lanes that follow, shown compact under "Zatim" so the first screen answers now and next without a swipe. */
+  next?: Tile[];
 }
 
 export interface TimebandModel {
@@ -387,6 +391,11 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
     lane.foot = [...more, ...(stateFeet.get(lane.col) ?? [])];
   }
 
+  if (surface === 'phone') {
+    const sada = lanes.get('sada')!;
+    sada.next = columns.slice(1).flatMap((c) => lanes.get(c.id)!.tiles).slice(0, NEXT_CAP);
+  }
+
   const wanted = ctx.view?.filters[FILTER_KEY];
   const selected: Bucket = wanted && lanes.has(wanted as Bucket) ? (wanted as Bucket) : 'sada';
   return {
@@ -467,6 +476,11 @@ function laneBody(i18n: I18n, lane: Lane): string {
     body = domains.map((d) => lane.skeletons.filter((s) => s.domain === d).map(skeleton).join('') + lane.tiles.filter((t) => t.domain === d).map(tile).join('')).join('');
   } else {
     body = lane.tiles.map(tile).join('') + lane.skeletons.map(skeleton).join('');
+  }
+  // The phone's "Zatim" foot: the next tiles keep their href and words but take a compact row form (data-compact), a new key and no testid, so the lane they belong to keeps the one addressable copy.
+  if (lane.next?.length) {
+    body += `<p class="tb-next kicker" data-key="next-head">${escapeHtml(i18n.t('timeband.next'))}</p>`
+      + lane.next.map((t) => tileMarkup(i18n, { ...t, key: `next:${t.key}`, testid: undefined, data: { ...t.data, compact: '1' } })).join('');
   }
   const feet = lane.foot.map((f) => (f.kind === 'more' ? moreMarkup(f) : f.markup)).join('');
   if (!body && !feet && !lane.busy) return `<p class="tb-empty" data-key="empty">${escapeHtml(i18n.t('timeband.laneEmpty'))}</p>`;

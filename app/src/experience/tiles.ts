@@ -39,6 +39,8 @@ export interface Tile {
   value?: string;
   valueSize?: 'xl' | 'l' | 'm';
   valueTone?: 'late' | 'early' | 'ontime' | 'none';
+  /** A unit after the value ("min"), set at the secondary role and muted; read aloud with the value. */
+  unit?: string;
   /** time/ink/band/row: the two-line clamp; a value tile carries it for the aria only (the line's destination). */
   title?: string;
   /** One line, never wraps. */
@@ -92,9 +94,15 @@ function markupText(html: string): string {
  */
 export function tileAria(i18n: I18n, tile: Tile, timeText: string): string {
   const time = timeText || (tile.allDay && (tile.variant === 'time' || tile.variant === 'ink') ? i18n.t('time.allDay') : '');
-  const base = tile.aria ?? [time, tile.label, tile.title, tile.value, tile.context].filter(Boolean).join(', ');
+  const base = tile.aria ?? [time, tile.label, tile.title, valueText(tile), tile.context].filter(Boolean).join(', ');
   const stale = tile.stale ? markupText(tile.stale) : '';
   return stale ? `${base}, ${stale}` : base;
+}
+
+/** The value with its unit, as one phrase: "kasni 2 min"; the value alone without a unit. */
+function valueText(tile: Tile): string {
+  if (!tile.value) return '';
+  return tile.unit ? `${tile.value} ${tile.unit}` : tile.value;
 }
 
 /** The visible time of a time or ink tile: the all-day word, or the Zagreb clock of `at`; '' otherwise. */
@@ -110,21 +118,28 @@ function timeMarkup(tile: Tile, text: string): string {
   return `<time class="tl-time" datetime="${escapeAttribute(tile.at)}">${escapeHtml(text)}</time>`;
 }
 
+/** The kicker, or the badge another builder wrote; a value tile with a badge shows its title beside it (the line's two ends), one line, ellipsised. */
 function labelMarkup(tile: Tile): string {
-  return tile.labelMarkup
-    ? `<span class="tl-label">${tile.labelMarkup}</span>`
-    : `<span class="tl-label kicker">${escapeHtml(tile.label)}</span>`;
+  if (!tile.labelMarkup) return `<span class="tl-label kicker">${escapeHtml(tile.label)}</span>`;
+  const title = tile.variant === 'value' && tile.title ? `<span class="tl-label-title">${escapeHtml(tile.title)}</span>` : '';
+  return `<span class="tl-label">${tile.labelMarkup}${title}</span>`;
 }
 
 function titleMarkup(tile: Tile): string {
   return tile.title ? `<span class="tl-title">${escapeHtml(tile.title)}</span>` : '';
 }
 
-/** The value line, marked for the reconciler: the node is swapped (and the crossfade replays) only when its text changes. */
+/**
+ * The value line, marked for the reconciler: the node is swapped (and the
+ * crossfade replays) only when its text changes. A unit ("min") follows the
+ * number in its own span at the secondary role, with the space inside the
+ * span, so the line's text stays the whole phrase.
+ */
 function valueMarkup(tile: Tile): string {
   if (!tile.value) return '';
   const state = tile.valueTone ? ` data-state="${tile.valueTone}"` : '';
-  return `<span class="tl-value" data-size="${tile.valueSize ?? 'l'}"${state} data-replace data-sig="${escapeAttribute(tile.value)}">${escapeHtml(tile.value)}</span>`;
+  const unit = tile.unit ? `<span class="tl-unit"> ${escapeHtml(tile.unit)}</span>` : '';
+  return `<span class="tl-value" data-size="${tile.valueSize ?? 'l'}"${state} data-replace data-sig="${escapeAttribute(valueText(tile))}">${escapeHtml(tile.value)}${unit}</span>`;
 }
 
 /** The context line of a value, time or ink tile; a stale tile shows the status badge in its place. */

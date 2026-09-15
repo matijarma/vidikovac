@@ -219,7 +219,19 @@
 .tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }
 /* The "+ N" foot: a 44 px link into the domain in the brand tone; the empty word in the muted tone. */
 .tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); text-decoration: none; }
-.tb-empty { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
+/* An empty lane says so in a tile's footprint (kajimafix 01.4): a dashed stroke, one target tall, the muted word centred, never bare text that reads as a fault. */
+.tb-empty { display: grid; place-items: center; margin: 0; min-block-size: var(--target); padding: 0 var(--sp-3); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-md); font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); text-align: center; }
+/* The phone's "Zatim" foot (concept 02): a kicker and the next two tiles of the following lanes as compact rows, time left, label and title right, the context left out. Rendered only on the phone surface, so the rules need no room query. */
+.tb-next { margin: var(--sp-2) 0 0; }
+.tb-lane[data-col='sada'] > .tb-next, .tb-lane[data-col='sada'] > .tl[data-compact='1'] { grid-column: 1 / -1; }
+.tl[data-compact='1'][data-variant='time'], .tl[data-compact='1'][data-variant='ink'] { grid-template-columns: 3.25rem minmax(0, 1fr); grid-template-rows: auto auto; column-gap: var(--sp-3); align-items: center; padding-block: var(--sp-2); }
+.tl[data-compact='1'] .tl-time { grid-row: 1 / span 2; align-self: center; font-size: var(--type-tile-m); }
+.tl[data-compact='1'] .tl-title { font-size: var(--type-body); -webkit-line-clamp: 1; line-clamp: 1; }
+.tl[data-compact='1'] .tl-context { display: none; }
+/* At the desk a title that still ellipsises at two lines may take a third (kajimafix, cross-cutting): the evening's events and the one news lead. */
+@media (min-width: 60rem) {
+  .tb-lane[data-col='veceras'] .tl[data-domain='events'] .tl-title, .tb-lane[data-col='sada'] .tl[data-domain='news'] .tl-title { -webkit-line-clamp: 3; line-clamp: 3; }
+}
 /* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span. */
 .tb-seg { display: none; gap: 0.25rem; }
 .tb-seg-btn { flex: 1 1 auto; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }

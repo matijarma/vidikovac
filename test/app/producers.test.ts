@@ -64,19 +64,22 @@ describe('transitProducer', () => {
     const six = tiles.find((t) => t.key === 'zet-rt:route:6')!;
     expect(six.label).toBe('Linija 6');
     expect(six.labelMarkup).toContain('data-kind="tram"');
-    expect(six.value).toBe('kasni 2 min');
+    expect(six.value).toBe('kasni 2');
+    expect(six.unit).toBe('min');
     expect(six.valueTone).toBe('late');
-    expect(six.valueSize).toBe('l');
+    expect(six.valueSize).toBe('xl');
+    expect(six.title).toBe('Črnomerec – Sopot');
     expect(six.contextMarkup).toContain('icon-tram-front');
-    expect(six.contextMarkup).toContain('>2<');
-    expect(six.aria).toBe('Linija 6, Črnomerec-Sopot, kasni 2 min, 2 vozila');
+    expect(six.contextMarkup).toContain('>2 · Trg bana J. Jelačića<');
+    expect(six.aria).toBe('Linija 6, Črnomerec – Sopot, kasni 2 min, 2 vozila, Trg bana J. Jelačića');
     expect(six.testid).toBe('tile-transit');
     expect(six.bucket).toBe('sada');
     expect(six.layer).toBe('u-pokretu');
     expect(six.domain).toBe('transit');
 
     const bus = tiles.find((t) => t.key === 'zet-rt:route:101')!;
-    expect(bus.value).toBe('rani 2 min');
+    expect(bus.value).toBe('rani 2');
+    expect(bus.unit).toBe('min');
     expect(bus.valueTone).toBe('early');
     expect(bus.contextMarkup).toContain('icon-bus-front');
     expect(bus.contextMarkup).toContain('>5<');
@@ -84,15 +87,22 @@ describe('transitProducer', () => {
 
     const unmatched = tiles.find((t) => t.key === 'zet-rt:route:99')!;
     expect(unmatched.value).toBe('nema podataka');
+    expect(unmatched.unit).toBeUndefined();
     expect(unmatched.valueTone).toBe('none');
     expect(unmatched.valueSize).toBe('m');
+    expect(unmatched.title).toBeUndefined();
     expect(unmatched.contextMarkup).toBeUndefined();
-    expect(unmatched.aria).toBe('Linija 99, 99, nema podataka');
+    expect(unmatched.aria).toBe('Linija 99, nema podataka');
   });
 
-  it('without a stop, ranks by delay: only a figure the helper declines to assert is left out, most-delayed first', () => {
+  it('without a stop, ranks by delay: only a figure the helper declines to assert is left out, most-delayed first; the context counts without a stop name', () => {
     const tiles = transitProducer.produce(ctx({ snapshots: { 'zet-rt': ZET } }), options());
     expect(tiles.map((t) => t.key)).toEqual(['zet-rt:route:101', 'zet-rt:route:6', 'zet-rt:route:12']);
+    expect(tiles[1]!.contextMarkup).toContain('>2<');
+    expect(tiles[1]!.aria).toBe('Linija 6, Črnomerec – Sopot, kasni 2 min, 2 vozila');
+    // On time keeps the whole phrase at l; it has no unit to split.
+    expect(tiles[2]).toMatchObject({ value: 'na vrijeme', valueSize: 'l' });
+    expect(tiles[2]!.unit).toBeUndefined();
   });
 
   it('is empty without a stop, saved lines or deviation (the no-stop branch with nothing to show)', () => {
@@ -117,8 +127,23 @@ describe('closuresProducer', () => {
     ]);
     const tiles = closuresProducer.produce(ctx({ snapshots: { prometnice } }), options());
     expect(tiles).toHaveLength(1);
-    expect(tiles[0]).toMatchObject({ key: 'mobility:closures', domain: 'mobility', variant: 'band', tone: 'mobility', icon: 'car-front', title: 'Grada Vukovara', bucket: 'sada', testid: 'tile-closures' });
+    expect(tiles[0]).toMatchObject({ key: 'mobility:closures', domain: 'mobility', variant: 'band', tone: 'komunalno', icon: 'hard-hat', label: 'Zatvaranja', title: 'Grada Vukovara', bucket: 'sada', testid: 'tile-closures' });
     expect(tiles[0]!.value).toBe(`do ${zagrebTime('2026-09-11T20:00:00Z')}`);
+  });
+
+  it('with a kvart and stamped closures, names the nearest closed street in the kvart with its end, and counts the kvart in the label', () => {
+    const prometnice = base('prometnice', [
+      { id: 'far', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Ilica 200', at: '2026-09-01T07:00:00Z', geo: { type: 'LineString', coordinates: [[15.93, 45.81], [15.94, 45.81]] }, data: { district: 'donji-grad' } },
+      { id: 'near', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Amruševa', at: '2026-09-11T07:00:00Z', until: '2026-09-11T16:00:00Z', geo: { type: 'LineString', coordinates: [[15.979, 45.812], [15.981, 45.812]] }, data: { district: 'donji-grad' } },
+      { id: 'other', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Vukovarska', at: '2026-09-01T07:00:00Z', geo: { type: 'LineString', coordinates: [[15.99, 45.80], [15.995, 45.80]] }, data: { district: 'trnje' } },
+    ]);
+    const stop = { surface: 'phone' as const, locale: 'hr' as const, theme: 'light' as const, themePreference: 'light' as const, lightweight: false, reducedMotion: false, stop: { id: 'st1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.812, routes: ['6'] } };
+    const tile = closuresProducer.produce(ctx({ snapshots: { prometnice }, screen: stop }), options({ kvart: 'donji-grad' }))[0]!;
+    expect(tile).toMatchObject({ tone: 'komunalno', icon: 'hard-hat', label: 'Zatvaranja · 2 u kvartu', title: 'Amruševa' });
+    expect(tile.value).toBe(`do ${zagrebTime('2026-09-11T16:00:00Z')}`);
+    // A kvart with no stamped closure falls back to the city: three closures, a count, no street.
+    const city = closuresProducer.produce(ctx({ snapshots: { prometnice }, screen: stop }), options({ kvart: 'sesvete' }))[0]!;
+    expect(city).toMatchObject({ label: 'Zatvaranja', title: '3 zatvaranja', value: '' });
   });
 
   it('names the end by weekday when it falls on another day, and says so plainly when there is none', () => {
@@ -368,7 +393,8 @@ describe('gazetteProducer', () => {
     ]);
     const tile = gazetteProducer.produce(ctx({ snapshots: { glasnik } }))[0]!;
     expect(tile).toMatchObject({ key: 'glasnik:issue', domain: 'civic', variant: 'value', label: 'Glasnik', value: '21/2026', valueSize: 'xl', bucket: 'sada', testid: 'tile-gazette' });
-    expect(tile.context).toBe(`objavljen ${zagrebWeekdayShort('2026-09-10T00:00:00Z')} · 2 akta`);
+    // The day and month alone (kajimafix 01.6): the weekday made the line ellipsise its act count.
+    expect(tile.context).toBe('objavljen 10. 9. · 2 akta');
   });
 
   it('shows nothing without any acts', () => {

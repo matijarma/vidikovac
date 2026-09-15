@@ -37,6 +37,14 @@ export function zagrebTime(value: TimeInput): string {
   return `${(p.hour ?? '').padStart(2, '0')}:${(p.minute ?? '').padStart(2, '0')}`;
 }
 
+/** '7. 9.': the Croatian day and month alone, for a context line where a weekday would only take the room. */
+export function zagrebDayMonth(value: TimeInput): string {
+  const date = parseIso(value);
+  if (!date) return '';
+  const p = parts(date);
+  return `${Number(p.day)}. ${Number(p.month)}.`;
+}
+
 /** The wall-clock hour in Zagreb, 0 to 23; null when there is nothing to read.
  *  The time band reads its service day (04:00) and its day or night mode from it. */
 export function zagrebHour(value: TimeInput): number | null {

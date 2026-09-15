@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdown, minutesSince, parseIso, zagrebDateTime, zagrebDayKey, zagrebHour, zagrebTime, zagrebWeekdayDate, zagrebWeekdayShort } from '../../app/src/format';
+import { countdown, minutesSince, parseIso, zagrebDateTime, zagrebDayKey, zagrebDayMonth, zagrebHour, zagrebTime, zagrebWeekdayDate, zagrebWeekdayShort } from '../../app/src/format';
 
 describe('Europe/Zagreb formatting in the browser', () => {
   it('formats HH:MM on the 24-hour clock, in summer and winter time', () => {
@@ -58,6 +58,18 @@ describe('zagrebHour', () => {
     expect(zagrebHour(undefined)).toBeNull();
     expect(zagrebHour('nije datum')).toBeNull();
     expect(zagrebHour('')).toBeNull();
+  });
+});
+
+describe('zagrebDayMonth', () => {
+  it('is the Croatian day and month alone, no weekday, no year, in Zagreb time', () => {
+    expect(zagrebDayMonth('2026-09-10T00:00:00Z')).toBe('10. 9.');
+    expect(zagrebDayMonth('2026-09-11T22:30:00Z')).toBe('12. 9.');
+    expect(zagrebDayMonth(Date.parse('2026-01-05T07:05:00Z'))).toBe('5. 1.');
+  });
+  it('returns an empty string rather than "Invalid Date"', () => {
+    expect(zagrebDayMonth(undefined)).toBe('');
+    expect(zagrebDayMonth('nije datum')).toBe('');
   });
 });
 

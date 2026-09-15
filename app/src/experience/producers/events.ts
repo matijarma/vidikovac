@@ -57,6 +57,10 @@ function nearestStopBadges(item: FeedItem, ctx: LayerContext): string | undefine
 function eventTile(i18n: I18n, item: FeedItem, ctx: LayerContext): Tile {
   const venue = dataText(item, 'venue');
   const source = dataText(item, 'source');
+  // Venue first, the source after it (kajimafix, cross-cutting): the useful word survives an ellipsis.
+  const sourceKey = `events.sources.${source}`;
+  const sourceName = i18n.t(sourceKey);
+  const context = [venue, sourceName === sourceKey ? '' : sourceName].filter(Boolean).join(' · ');
   return {
     key: `dogadanja:${item.id}`,
     domain: 'events',
@@ -66,7 +70,7 @@ function eventTile(i18n: I18n, item: FeedItem, ctx: LayerContext): Tile {
     at: item.at,
     until: item.until,
     allDay: isAllDay(item),
-    context: venue || i18n.t(`events.sources.${source}`),
+    context,
     contextMarkup: nearestStopBadges(item, ctx),
     selection: itemSelection(item),
     layer: 'kultura',

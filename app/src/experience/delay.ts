@@ -16,3 +16,14 @@ export function delayTone(i18n: I18n, seconds: number | undefined): DelayTone {
   if (word === i18n.t('panels.delayEarly', { minutes })) return 'early';
   return 'none';
 }
+
+/**
+ * A delay word split into the value and its unit, so a tile can set "min"
+ * small beside the bold number: "kasni 2 min" -> { value: 'kasni 2', unit: 'min' }.
+ * A word without a trailing "min" (na vrijeme, nema podataka, the English
+ * order "2 min late") comes back whole, with no unit.
+ */
+export function splitUnit(word: string): { value: string; unit?: string } {
+  const m = /^(.*\S)\s+(min)$/.exec(word);
+  return m ? { value: m[1]!, unit: m[2]! } : { value: word };
+}

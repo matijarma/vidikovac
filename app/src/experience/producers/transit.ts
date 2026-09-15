@@ -4,6 +4,10 @@
 // the fleet count (that word is the honest-data line, not a tile): the only
 // number on a transit tile is the delay word delayWord() already renders,
 // and the vehicle count beside it is a glyph plus a figure, not "vozila".
+// The tile says which line, between which ends, in what state, how many
+// vehicles are out and at which stop (kajimafix 01.2, 01.3): badge and the
+// line's ends on the label line, the state word large with its unit small,
+// the glyph, the count and the stop's name on the context line.
 import { ZET_ROUTES } from '../../data/routes';
 import type { I18n } from '../../i18n/i18n';
 import { dataText } from '../../panels/panel';
@@ -12,8 +16,9 @@ import { iconMarkup } from '../../ui/icons';
 import { delayWord } from '../../layers/shared';
 import { routeDelays, type RouteDelay } from '../../layers/u-pokretu';
 import type { LayerContext } from '../../layers/types';
+import { routeEnds } from '../../transport/catalogue';
 import { lineBadge } from '../blocks';
-import { delayTone } from '../delay';
+import { delayTone, splitUnit } from '../delay';
 import type { TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
 
@@ -35,28 +40,35 @@ function savedRouteIds(ctx: LayerContext): string[] {
   return (saved?.list() ?? []).filter((r) => r.kind === 'route').map((r) => r.id);
 }
 
-function lineTile(i18n: I18n, id: string, byId: Map<string, RouteDelay>): Tile {
+function lineTile(i18n: I18n, id: string, byId: Map<string, RouteDelay>, stop: { name: string } | undefined): Tile {
   const row = byId.get(id);
   const delay = row?.meanDelay;
   const route = ZET_ROUTES[id];
   const kind = lineKind(id);
   const line = route?.shortName ?? id;
+  const ends = route?.longName ? routeEnds(route.longName) : '';
   const word = delay === undefined ? i18n.t('transit.noDelayData') : delayWord(i18n, delay);
+  const { value, unit } = splitUnit(word);
   const count = row?.count;
   const label = i18n.t('tiles.line', { line });
-  const aria = [label, route?.longName ?? id, word, count ? i18n.t('panels.vehiclesCount', { count }) : '']
+  const aria = [label, ends, word, count ? i18n.t('panels.vehiclesCount', { count }) : '', row ? stop?.name ?? '' : '']
     .filter(Boolean)
     .join(', ');
+  // The context is the vehicles glyph, the count and the stop the count is read from; without a row there is nothing to count.
+  const context = row ? [String(count), stop?.name].filter(Boolean).join(' · ') : '';
   return {
     key: `zet-rt:route:${id}`,
     domain: 'transit',
     variant: 'value',
     label,
     labelMarkup: lineBadge(line, kind, 's'),
-    value: word,
-    valueSize: word.length > 11 ? 'm' : 'l',
+    title: ends || undefined,
+    value,
+    unit,
+    // A number with its unit stands at xl; "na vrijeme" at l; "nema podataka" steps down to m so it never ellipsises.
+    valueSize: unit ? 'xl' : word.length > 11 ? 'm' : 'l',
     valueTone: delayTone(i18n, delay),
-    contextMarkup: row ? `${iconMarkup(kind === 'bus' ? 'bus-front' : 'tram-front')}<span class="tl-ctx-text">${escapeHtml(String(count))}</span>` : undefined,
+    contextMarkup: row ? `${iconMarkup(kind === 'bus' ? 'bus-front' : 'tram-front')}<span class="tl-ctx-text">${escapeHtml(context)}</span>` : undefined,
     // The notification band (T3.3) reads a saved line's delay off the tile itself, in whole
     // seconds; absent without a row, exactly where the value already says "nema podataka".
     data: row ? { delay: String(delay) } : undefined,
@@ -82,7 +94,7 @@ export const transitProducer: TileProducer = {
     // and counts the rest into the "+ N" foot this producer words below.
     const deviating = delays.filter((d) => delayTone(ctx.i18n, d.meanDelay) !== 'none').map((d) => d.routeId);
     const ids = [...new Set([...savedRouteIds(ctx), ...(stop ? stop.routes : deviating)])];
-    return ids.map((id) => lineTile(ctx.i18n, id, byId));
+    return ids.map((id) => lineTile(ctx.i18n, id, byId, stop));
   },
   moreLabel(i18n, count, ctx) {
     const text = i18n.t('timeband.moreLines', { count });

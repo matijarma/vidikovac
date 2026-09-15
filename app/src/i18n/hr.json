@@ -143,6 +143,7 @@
     "headFrom": "od {time}",
     "headUntilDate": "do {date}",
     "laneEmpty": "ništa najavljeno",
+    "next": "Zatim",
     "moreItems_one": "+ {count} stavka",
     "moreItems_few": "+ {count} stavke",
     "moreItems_other": "+ {count} stavki",
@@ -159,6 +160,9 @@
   "tiles": {
     "line": "Linija {line}",
     "closures": "Zatvaranja",
+    "inKvart_one": "{count} u kvartu",
+    "inKvart_few": "{count} u kvartu",
+    "inKvart_other": "{count} u kvartu",
     "works": "Radovi",
     "worksCity": "Radovi u gradu",
     "worksNow_one": "{count} rad u tijeku",
