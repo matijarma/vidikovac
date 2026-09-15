@@ -10,6 +10,7 @@
 // strip elements the shell already carries.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
+import { SAFETY_ICON } from '../experience/producers/safety';
 import { safetyState, type SafetyLevel } from '../experience/safety-state';
 import { weatherIcon } from '../experience/weather-icon';
 import type { I18n } from '../i18n/i18n';
@@ -66,6 +67,8 @@ export interface FrameStrip {
   parts: SafetyStrip;
   /** Whole seconds to the next scene; null when the field is not rotating. */
   nextIn: number | null;
+  /** When the three safety sources last confirmed calm together (safetyState.confirmedAt); null unless every one answered. */
+  confirmedAt: string | null;
 }
 
 export interface RotationClock {
@@ -78,7 +81,7 @@ export function frameStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop 
   const parts = safetyStrip(modules, stop, i18n, strings, now);
   const state = safetyState(byModule(modules), now);
   const nextIn = rotation.rotating ? Math.max(0, Math.ceil((rotation.lastRotateAt + rotation.period - now) / 1000)) : null;
-  return { level: state.level, verdict: strings.safety.verdict[state.level], parts, nextIn };
+  return { level: state.level, verdict: strings.safety.verdict[state.level], parts, nextIn, confirmedAt: state.confirmedAt };
 }
 
 /** "sljedeći prizor za 15 s"; '' when the field is not rotating (the caller hides the element). */
@@ -86,15 +89,29 @@ export function countdownText(nextIn: number | null, strings: KioskStrings): str
   return nextIn === null ? '' : fill(strings.safety.nextScene, { seconds: nextIn });
 }
 
+/**
+ * The strip in one row (kajimafix 03.5): the shield kicker; the verdict with
+ * its glyph, which is the button that opens Osnovno while the invitation
+ * shows and a plain word while a session or the wizard owns the screen; then
+ * the level's trail (the active or announced warning in DHMZ's words, or the
+ * sources and the moment they last confirmed calm together); the on-duty
+ * pharmacy; the rotation's countdown; the /hitno pill. Closures are said
+ * once, on the right column's tile, never here.
+ */
 export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean }): string {
   const w = strip.parts.warning;
-  const c = strip.parts.closures;
-  return `<button type="button" class="k-strip-basics" data-testid="kiosk-essentials-open"${opts.noBasics ? ' hidden' : ''}>${escapeHtml(strings.safety.basics)}</button>
-    <span class="k-strip-label">${iconMarkup('shield', undefined, 'icon k-icon')}<span>${escapeHtml(strings.safety.label)}</span></span>
-    <span class="k-strip-verdict" data-testid="strip-verdict" data-level="${strip.level}">${escapeHtml(strip.verdict)}</span>
+  const word = `${iconMarkup(SAFETY_ICON[strip.level], undefined, 'icon k-icon')}<span>${escapeHtml(strip.verdict)}</span>`;
+  const verdict = opts.noBasics
+    ? `<span class="k-strip-verdict" data-testid="strip-verdict" data-level="${strip.level}">${word}</span>`
+    : `<button type="button" class="k-strip-verdict" data-testid="kiosk-essentials-open" data-level="${strip.level}" aria-label="${escapeAttribute(fill(strings.safety.openBasics, { verdict: strip.verdict }))}"><span data-testid="strip-verdict">${word}</span></button>`;
+  const sources = strip.confirmedAt ? fill(strings.safety.confirmed, { time: clock(strip.confirmedAt) }) : strings.safety.sources;
+  const trail = w.state === 'none'
+    ? `<span class="k-strip-item" data-testid="strip-sources">${escapeHtml(sources)}</span>`
+    : `<span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeAttribute(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>`;
+  return `<span class="k-strip-label">${iconMarkup('shield', undefined, 'icon k-icon')}<span>${escapeHtml(strings.safety.label)}</span></span>
+    ${verdict}
     <div class="k-strip-items" data-testid="strip-items">
-    <span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeAttribute(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>
-    <span class="k-strip-item" data-testid="strip-closures" data-state="${c.state}">${escapeHtml(c.text)}</span>
+    ${trail}
     <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(strings.safety.pharmacy)}: <strong>${escapeHtml(strip.parts.pharmacy.label)}</strong></span>
     </div>
     <span class="k-strip-next" data-testid="strip-next"${strip.nextIn === null ? ' hidden' : ''}>${escapeHtml(countdownText(strip.nextIn, strings))}</span>

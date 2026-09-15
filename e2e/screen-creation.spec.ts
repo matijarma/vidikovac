@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readPairing } from './helpers';
 
 test.describe('real self-service screen', () => {
   test.use({ viewport: { width: 1366, height: 768 }, locale: 'hr-HR' });
@@ -15,14 +16,13 @@ test.describe('real self-service screen', () => {
     else await page.locator('input[name="stop"]').first().check();
     await page.getByTestId('setup-create').click();
     await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: 30_000 });
-    const code = page.getByTestId('pair-code');
-    await expect(code).toHaveText(/[0-9A-HJKMNP-TV-Z]{4}\s*-\s*[0-9A-HJKMNP-TV-Z]{4}/, { timeout: 30_000 });
     const origin = new URL(page.url()).origin;
+    // The shown code carries a middle dot; readPairing joins its two groups the way the URL and a person type it.
+    const { scanUrl } = await readPairing(page, origin);
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'hr-HR' });
     try {
       const phone = await context.newPage();
-      const raw = ((await code.textContent()) ?? '').replace(/[^0-9A-Z-]/g, '');
-      await phone.goto(`${origin}/s/#${raw}`);
+      await phone.goto(scanUrl);
       await expect(phone.getByTestId('confirm-card')).toBeVisible();
       await phone.getByRole('button', { name: 'Otključaj', exact: true }).click();
       await expect(phone.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });

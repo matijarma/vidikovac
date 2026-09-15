@@ -126,6 +126,12 @@ export interface KioskStrings {
     pharmacy: string;
     hitno: string;
     basics: string;
+    /** "DHMZ · EMSC": the sources, the calm trail before any of them has confirmed the moment. */
+    sources: string;
+    /** "DHMZ · EMSC · {time}": the calm trail, the moment the three sources last confirmed calm together. */
+    confirmed: string;
+    /** "Sigurnost: {verdict}. Otvori Osnovno": the verdict button's name while the invitation shows. */
+    openBasics: string;
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
     /** "sljedeći prizor za {seconds} s": the strip's countdown to the next scene, hidden when the field is not rotating. */
@@ -294,7 +300,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     tiles: group('tiles', ['vehicles', 'closures', 'nearest', 'radius']),
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'nextScene']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics', 'nextScene']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),

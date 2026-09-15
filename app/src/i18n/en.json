@@ -824,8 +824,11 @@
       "closuresNearest": "nearest {street}",
       "pharmacy": "On-duty pharmacy",
       "basics": "Essentials",
+      "sources": "DHMZ · EMSC",
+      "confirmed": "DHMZ · EMSC · {time}",
+      "openBasics": "Safety: {verdict}. Open the essentials",
       "verdict": {
-        "urgent": "urgent",
+        "urgent": "warning",
         "calm": "calm",
         "unknown": "unconfirmed"
       },

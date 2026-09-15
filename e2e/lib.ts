@@ -6,8 +6,10 @@ import { CODE_ALPHABET, CODE_DISPLAY_SPLIT, CODE_LENGTH } from '../worker/protoc
 export { DESKTOP_MIN_PX, KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../app/src/core/breakpoints';
 
 const group = `[${CODE_ALPHABET}]{${CODE_DISPLAY_SPLIT}}`;
-/** ABCD-EFGH in the Crockford alphabet (0-9, A-Z without I, L, O, U). */
+/** ABCD-EFGH in the Crockford alphabet (0-9, A-Z without I, L, O, U): the code as typed and as the URL carries it. */
 export const CODE_RE = new RegExp(`^${group}-${group}$`);
+/** The code as the kiosk shows it: the two groups with a dimmed middle dot between them (kajimafix 03.4). */
+export const CODE_SHOWN_RE = new RegExp(`^${group}·${group}$`);
 if (CODE_DISPLAY_SPLIT * 2 !== CODE_LENGTH) throw new Error('CODE_RE assumes two groups of CODE_DISPLAY_SPLIT');
 
 /** Same path, query and fragment on another origin (kiosk and QR URLs are minted for production). */

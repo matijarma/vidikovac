@@ -87,7 +87,7 @@ export function hintMarkup(strings: KioskStrings, codeBase?: string): string {
 /** The code, its payload link (hidden, for the scanner-less) and the remaining-time bar; the controller paints all three. */
 export function codeBlockMarkup(strings: KioskStrings): string {
   return `<div class="k-invite-code">
-          <div class="k-code-box"><p class="k-code" data-testid="pair-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">-</span><span data-testid="code-b">····</span></p></div>
+          <div class="k-code-box"><p class="k-code" data-testid="pair-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">·</span><span data-testid="code-b">····</span></p></div>
           <a class="k-visually-hidden" data-testid="pair-url" href="" hidden></a>
           <div class="k-progress" data-testid="code-progress" role="progressbar" aria-label="${escapeAttribute(strings.invitation.progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="k-progress-bar"></div></div>
         </div>`;

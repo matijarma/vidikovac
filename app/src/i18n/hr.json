@@ -852,8 +852,11 @@
       "closuresNearest": "najbliže {street}",
       "pharmacy": "Dežurna ljekarna",
       "basics": "Osnovno",
+      "sources": "DHMZ · EMSC",
+      "confirmed": "DHMZ · EMSC · {time}",
+      "openBasics": "Sigurnost: {verdict}. Otvori Osnovno",
       "verdict": {
-        "urgent": "hitno",
+        "urgent": "upozorenje",
         "calm": "mirno",
         "unknown": "nepotvrđeno"
       },

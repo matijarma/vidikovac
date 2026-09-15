@@ -13,6 +13,7 @@ import {
   type SceneContext, type SceneModel,
 } from '../../app/src/kiosk/scenes';
 import { routeLongName } from '../../app/src/kiosk/stops';
+import { routeEnds } from '../../app/src/transport/catalogue';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -226,7 +227,10 @@ describe('sceneMarkup: Promet', () => {
     const six = tiles[0]!;
     expect(six.dataset.kind).toBe('tram');
     expect(q(six, '.k-line-badge')!.getAttribute('aria-label')).toBe('tramvaj 6');
-    expect(text(q(six, '.k-tl-name'))).toBe(routeLongName('6'));
+    // The line's two ends on their own line under the badge, one spelling whatever GTFS wrote (kajimafix 03.3).
+    expect(text(q(six, '.k-tl-name'))).toBe(routeEnds(routeLongName('6')));
+    expect(q(six, '.tl-label .k-tl-name')).toBeNull();
+    expect(q(body, '.k-scene-col > [data-testid=kiosk-lines] + [data-testid=kiosk-works]')).not.toBeNull();
     expect(text(q(six, '.tl-context > span[aria-hidden=true]'))).toBe('1');
     expect(text(q(six, '.tl-context .k-visually-hidden'))).toBe('1 vozilo u blizini');
     expect(text(q(tiles[1]!, '.tl-context .k-visually-hidden'))).toBe('nijedno vozilo u blizini');
@@ -256,6 +260,10 @@ describe('sceneMarkup: Promet', () => {
     expect(q(dom(quiet.body), '.k-scene-grid')!.dataset.works).toBe('0');
     expect(quiet.regions['kiosk-works']).toBe('');
     expect(text(q(dom(quiet.body), '[data-testid=kiosk-works]'))).toBe('');
+    // A stale zero collapses too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
+    const staleQuiet = sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'stale', items: [SESSION_NEXT_WEEK, KVARTOVSKE] }) }));
+    expect(q(dom(staleQuiet.body), '.k-scene-grid')!.dataset.works).toBe('0');
+    expect(staleQuiet.regions['kiosk-works']).toBe('');
   });
   it('keeps the works band in place with the honest word when the source is down, and as bars while it loads', () => {
     const down = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'down', items: [] }) })).body);

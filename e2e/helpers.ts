@@ -58,14 +58,16 @@ export async function provisionKiosk(
 /** Waits for the kiosk's rotating code and returns it with the QR's URL rebased onto `base`. */
 export async function readPairing(kiosk: Page, base: string): Promise<{ code: string; scanUrl: string }> {
   const codeEl = kiosk.getByTestId('pair-code');
-  await expect(codeEl).toHaveText(CODE_RE, { timeout: 30_000 });
+  await expect(codeEl).toHaveText(CODE_SHOWN_RE, { timeout: 30_000 });
   // The kiosk paints the code and the link in one step; read them in one step too, or a
-  // rotation between two round trips hands back the old code with the new link.
+  // rotation between two round trips hands back the old code with the new link. The shown
+  // code carries a middle dot; the typed and URL form joins its two groups with a hyphen.
   const { code, href } = await kiosk.evaluate(() => {
-    const c = document.querySelector('[data-testid=pair-code]');
+    const part = (id: string): string => (document.querySelector(`[data-testid=${id}]`)?.textContent ?? '').trim();
     const u = document.querySelector('[data-testid=pair-url]');
-    return { code: (c?.textContent ?? '').trim(), href: (u?.getAttribute('href') ?? u?.textContent ?? '').trim() };
+    return { code: `${part('code-a')}-${part('code-b')}`, href: (u?.getAttribute('href') ?? u?.textContent ?? '').trim() };
   });
+  expect(code).toMatch(CODE_RE);
   expect(href, 'pair-url must carry the displayed code in its fragment').toContain(`#${code}`);
   return { code, scanUrl: rebaseUrl(href, base) };
 }

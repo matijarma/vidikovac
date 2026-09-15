@@ -66,7 +66,8 @@ sesije.
 
 ### Osnovno, bez telefona
 
-„Osnovno” prikazuje dostupna upozorenja, zatvaranja, linije u blizini,
+„Osnovno”, koje se otvara riječju stanja na sigurnosnoj traci (mirno,
+upozorenje ili nepotvrđeno), prikazuje dostupna upozorenja, zatvaranja, linije u blizini,
 vrijeme i podatke o dežurnoj ljekarni, bez otvaranja sesije. Nedostupni
 podaci nisu potvrda da je sve u redu. „Natrag”, Escape ili 90 sekundi bez
 aktivnosti vraćaju poziv za skeniranje. Taj se vremenski povratak primjenjuje

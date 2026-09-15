@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { countdownText, frameStrip, headerWeather, stripMarkup, tileMarkup, valueTiles, weatherGroupMarkup } from '../../app/src/kiosk/frame';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import { clock } from '../../app/src/kiosk/format';
 import { sunToday } from '../../app/src/kiosk/local';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 
@@ -106,7 +107,7 @@ describe('frameStrip', () => {
     const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, items: [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe' })] } : m));
     const strip = frameStrip(modules, STOP, i18n, s, NOW, notRotating);
     expect(strip.level).toBe('urgent');
-    expect(strip.verdict).toBe('hitno');
+    expect(strip.verdict).toBe('upozorenje'); // a warning, not an emergency: /hitno keeps its name, the strip says what the level is
   });
   it('reads unknown when a safety source is down', () => {
     const modules = CALM_MODULES.map((m) => (m.module === 'emsc' ? { ...m, status: 'down' as const } : m));
@@ -136,20 +137,37 @@ describe('countdownText', () => {
 
 describe('stripMarkup', () => {
   const strip = frameStrip(CALM_MODULES, STOP, i18n, s, NOW, { rotating: true, lastRotateAt: NOW, period: 20_000 });
-  it('carries the three item testids, the verdict and the countdown, and drops the old sun sub-line', () => {
+  it('one row (kajimafix 03.5): the shield kicker, the verdict with its glyph as the button that opens Osnovno, the sources with the moment they confirmed calm, the pharmacy, the countdown; no closures cell, no Osnovno chip', () => {
     const markup = stripMarkup(strip, s, { noBasics: false });
-    expect(markup).toContain('data-testid="strip-warning"');
-    expect(markup).toContain('data-testid="strip-closures"');
+    expect(markup).toContain('data-testid="kiosk-essentials-open" data-level="calm"');
+    expect(markup).toContain('aria-label="Sigurnost: mirno. Otvori Osnovno"');
+    expect(markup).toContain('<span data-testid="strip-verdict">');
+    expect(markup).toContain('#icon-check-circle');
+    expect(markup).toContain('>mirno<');
+    expect(markup).toContain(`<span class="k-strip-item" data-testid="strip-sources">DHMZ · EMSC · ${clock(strip.confirmedAt!)}</span>`);
+    expect(markup).not.toContain('data-testid="strip-warning"');
+    expect(markup).not.toContain('data-testid="strip-closures"');
+    expect(markup).not.toContain('k-strip-basics');
+    expect(markup).not.toContain('Osnovno<');
     expect(markup).toContain('data-testid="strip-pharmacy"');
-    expect(markup).toContain('data-testid="strip-verdict"');
-    expect(markup).toContain("data-level=\"calm\"");
     expect(markup).toContain('data-testid="strip-next"');
     expect(markup).toContain('sljedeći prizor za 20 s');
     expect(markup).not.toContain('k-strip-sub');
     expect(markup).not.toContain('k-strip-item--sun');
   });
-  it('hides the basics button when a session or the wizard owns the screen', () => {
-    expect(stripMarkup(strip, s, { noBasics: true })).toContain('data-testid="kiosk-essentials-open" hidden');
+  it('names an active warning as the trail in DHMZ\'s words, with its glyph and the level word, instead of the sources', () => {
+    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, items: [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe' })] } : m));
+    const markup = stripMarkup(frameStrip(modules, STOP, i18n, s, NOW, { rotating: false, lastRotateAt: NOW, period: 20_000 }), s, { noBasics: false });
+    expect(markup).toContain('data-testid="strip-warning" data-state="active" data-severity="severe"');
+    expect(markup).toContain('Grmljavina');
+    expect(markup).not.toContain('data-testid="strip-sources"');
+    expect(markup).toContain('#icon-triangle-alert');
+    expect(markup).toContain('>upozorenje<');
+  });
+  it('renders the verdict as a plain word, no button, when a session or the wizard owns the screen', () => {
+    const markup = stripMarkup(strip, s, { noBasics: true });
+    expect(markup).not.toContain('kiosk-essentials-open');
+    expect(markup).toContain('<span class="k-strip-verdict" data-testid="strip-verdict" data-level="calm">');
   });
   it('hides the countdown when the field is not rotating', () => {
     const still = frameStrip(CALM_MODULES, STOP, i18n, s, NOW, { rotating: false, lastRotateAt: NOW, period: 20_000 });

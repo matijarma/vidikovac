@@ -22,6 +22,7 @@ import { delayTone } from '../experience/delay';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
 import { dataText } from '../panels/panel';
+import { routeEnds } from '../transport/catalogue';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { clock, dayTime, fmtDistance, sameZagrebDay, weekdayDayMonth } from './format';
@@ -234,8 +235,10 @@ function lineTile(row: LineRow, delay: number | undefined, state: SourceState, c
   const context = state === 'stale'
     ? staleBadge(s)
     : `<p class="tl-context">${glyph(row.kind === 'bus' ? 'bus-front' : 'tram-front')}<span aria-hidden="true">${row.nearby}</span>${hidden(near)}</p>`;
+  // Badge, then the line's two ends on their own line, the state word in its tone, the vehicles glyph and count (kajimafix 03.3).
   return `<li class="tl k-tl-line" data-route="${escapeAttribute(row.routeId)}" data-kind="${row.kind}" data-tone="${tone === 'none' ? 'unknown' : tone}">`
-    + `<p class="tl-label">${kBadge(row.label, row.kind, `${kindWord} ${row.label}`.trim())}<span class="k-tl-name">${escapeHtml(row.longName)}</span></p>`
+    + `<p class="tl-label">${kBadge(row.label, row.kind, `${kindWord} ${row.label}`.trim())}</p>`
+    + `<p class="k-tl-name">${escapeHtml(routeEnds(row.longName))}</p>`
     + `<p class="tl-value">${escapeHtml(row.word || delayWord(i18n, undefined))}</p>${context}</li>`;
 }
 
@@ -261,8 +264,8 @@ function worksBand(works: WorksInKvart, ctx: SceneContext): string {
   const label = works.scope === 'kvart' ? s.scenes.worksKvart : s.scenes.worksCity;
   if (works.state === 'loading') return `<div class="tl" data-variant="band" data-tone="komunalno" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('label')}${bar('title1')}</span></div>`;
   if (works.state === 'down') return `<div class="tl" data-variant="band" data-tone="komunalno" data-state="down">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p><p class="tl-title">${escapeHtml(s.paired.sourceDown)}</p></div></div>`;
-  // A confirmed zero collapses the row (data-works="0" on the grid); a stale zero keeps the band, marked.
-  if (works.state === 'live' && works.count === 0) return '';
+  // A zero collapses the row (data-works="0" on the grid), a stale one too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
+  if (works.count === 0) return '';
   const title = works.nearest ? [works.nearest.title, works.nearest.distanceM === null ? '' : fmtDistance(ctx.locale, works.nearest.distanceM)].filter(Boolean).join(' · ') : '';
   return `<div class="tl" data-variant="band" data-tone="komunalno" data-state="${works.state}">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p>`
     + `${title ? `<p class="tl-title">${escapeHtml(title)}</p>` : ''}${works.state === 'stale' ? staleBadge(s) : ''}</div><p class="tl-trail">${works.count}</p></div>`;
@@ -279,8 +282,9 @@ function promet(ctx: SceneContext): BuiltScene {
   }
   const lines = linesInner(board, ctx);
   const works = worksBand(worksInKvart(ctx.modules, ctx.stop, ctx.now), ctx);
+  // The lines and the works band share one column that stacks from the top at its own height (kajimafix 03.3).
   const body = `<div class="k-scene-grid" data-works="${works === '' ? '0' : '1'}"><div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host"></div></div>`
-    + `<ul class="k-scene-lines" data-testid="kiosk-lines">${lines}</ul><div class="k-works" data-testid="kiosk-works">${works}</div></div>`;
+    + `<div class="k-scene-col"><ul class="k-scene-lines" data-testid="kiosk-lines">${lines}</ul><div class="k-works" data-testid="kiosk-works">${works}</div></div></div>`;
   return { body, regions: { 'kiosk-lines': lines, 'kiosk-works': works }, meta: linesMeta(board, ctx) };
 }
 

@@ -170,10 +170,12 @@ describe('eleven type tiers per composition, each a token times --k-zoom', () =>
 });
 
 describe('the header context chip', () => {
-  it('is an accent-filled pill (D8-adjacent: the ink tile stays the Skupština\'s alone), ellipsised rather than hard-clipped', () => {
+  it('is an ink pill on paper and a paper pill on night (kajimafix 03.1; the accent stays with badges and the card), ellipsised rather than hard-clipped', () => {
     const context = decls('.k-context');
-    expect(context.background).toBe('var(--k-action)');
-    expect(context.color).toBe('var(--k-action-ink)');
+    expect(context.background).toBe('var(--k-ink)');
+    expect(context.color).toBe('var(--k-canvas)');
+    expect(BARE).not.toContain('.k-brand-sub');
+    expect(BARE).not.toContain('.k-context-sub');
     expect(context.overflow).toBe('hidden');
     expect(context['text-overflow']).toBe('ellipsis');
     expect(context['white-space']).toBe('nowrap');
@@ -188,9 +190,11 @@ describe('the header context chip', () => {
 });
 
 describe('the theme button is a literal 44 px target beside the clock, then the weather group', () => {
-  it('sets a 44 px minimum height on the button itself, sized from the hint tier, not the composition scale', () => {
+  it('sets a 44 px minimum square on the button itself, a glyph with no words, sized from the hint tier, not the composition scale', () => {
     const btn = decls('.k-theme');
     expect(btn['min-height']).toBe('44px');
+    expect(btn['min-width']).toBe('44px');
+    expect(btn.border).toBe('0');
     expect(btn['font-size']).toBe('var(--k-hint-size)');
     expect(btn.cursor).toBe('pointer');
   });
@@ -233,17 +237,49 @@ describe('the scene field: transitions and grids', () => {
     expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
     expect(BARE).toMatch(/@keyframes k-scene-in \{ from \{ opacity: 0; transform: translateY\(calc\(6px \* var\(--k-zoom\)\)\); \}/);
   });
-  it('lays the Promet grid out map-then-lines-then-works, one column at compact, and collapses the works row at zero', () => {
+  it('lays the Promet grid out as the map beside one column that stacks the lines and the works band from the top at their own height: three tiles across at wide, two at compact (kajimafix 03.3)', () => {
     const grid = decls('.k-scene-grid');
     expect(grid['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 2fr)');
-    expect(decls(".k-scene-grid[data-works='0']")['grid-template-rows']).toBe('minmax(0, 1fr)');
+    expect(grid['grid-template-rows']).toBe('minmax(0, 1fr)');
     expect(decls('.k-scene-grid > .k-map')['grid-row']).toBe('1 / -1');
-    expect(decls(".kiosk[data-size='compact'] .k-scene-grid")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    const col = decls('.k-scene-col');
+    expect(col['grid-auto-rows']).toBe('max-content');
+    expect(col['align-content']).toBe('start');
+    const lines = decls('.k-scene-lines');
+    expect(lines['grid-template-columns']).toBe('repeat(3, minmax(0, 1fr))');
+    expect(lines['grid-auto-rows']).toBe('max-content');
+    expect(decls(".kiosk[data-size='compact'] .k-scene-grid")['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 1.3fr)');
+    expect(decls(".kiosk[data-size='compact'] .k-scene-lines")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    expect(BARE).not.toContain("[data-works='0']");
+    // The line tile is its content: the badge at control height, the ends line, the state word at main size.
+    expect(decls('.kiosk .k-tl-line')['align-content']).toBe('start');
+    expect(decls('.kiosk .k-tl-line .k-line-badge').height).toBe('var(--k-control)');
+    expect(decls('.kiosk .k-tl-line .tl-value')['font-size']).toBe('var(--k-main-size)');
+    expect(decls('.kiosk .k-tl-name')['font-size']).toBe('var(--k-sup-size)');
+    // Scene dots (kajimafix 03.2): 10 px, ink when current, a stroke otherwise.
+    expect(decls('.k-dot').width).toBe('calc(10px * var(--k-zoom))');
+    expect(decls('.k-dot').background).toBe('transparent');
+    expect(decls(".k-dot[data-on='1']").background).toBe('var(--k-ink)');
+    // The evening's rows are hairline rows from the top, not boxes; an xs badge in a context scales to 28 px.
+    expect(decls('.k-scene-rows')['grid-auto-rows']).toBe('max-content');
+    expect(decls(".kiosk .k-scene-rows .tl[data-variant='time']").background).toBe('transparent');
+    expect(decls(".kiosk .k-scene-rows .tl[data-variant='time'][data-tint='events']")['border-top']).toBe('2px solid var(--k-violet)');
+    expect(decls(".kiosk .line[data-size='xs']")['block-size']).toBe('calc(28px * var(--k-zoom))');
   });
   it('gives the lagano board the whole scene (D12): data-board=1 is one column, one row', () => {
     const board = decls(".k-scene-grid[data-board='1']");
     expect(board['grid-template-columns']).toBe('minmax(0, 1fr)');
     expect(board['grid-template-rows']).toBe('minmax(0, 1fr)');
+  });
+  it('the code\'s dot is dimmed and the 8 px bar fills paper over a quarter-paper track on the accent (kajimafix 03.4)', () => {
+    expect(decls('.k-code-dash').opacity).toBe('0.4');
+    expect(decls('.k-progress').background).toBe('color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action))');
+    expect(decls('.k-progress')['box-shadow']).toBeUndefined();
+  });
+  it('the strip has no Osnovno chip: the verdict is the 44 px button', () => {
+    expect(BARE).not.toContain('.k-strip-basics');
+    expect(decls('.k-strip-verdict')['min-height']).toBe('44px');
+    expect(decls('button.k-strip-verdict').cursor).toBe('pointer');
   });
   it('spans the ink tile down the Grad grid\'s first column', () => {
     expect(decls('.k-scene-grad')['grid-template-rows']).toBe('repeat(3, minmax(0, 1fr))');

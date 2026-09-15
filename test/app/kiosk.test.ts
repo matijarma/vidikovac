@@ -144,7 +144,8 @@ describe('setup: two real steps, one creation per press', () => {
     expect(k.root.querySelectorAll('input[name=district]')).toHaveLength(17);
     expect((q(k.root, 'input[name=district][value=donji-grad]') as HTMLInputElement).checked).toBe(true);
     expect(k.beacon.connect).not.toHaveBeenCalled();
-    expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
+    expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Sigurnost');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
@@ -219,16 +220,16 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('wide');
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.mode).toBe('teaser');
-    const context = text(q(k.root, '[data-testid=kiosk-context]'));
-    expect(context).toContain('Trg bana J. Jelačića');
-    expect(context).toContain('privremeni zaslon · vrijedi do');
+    // The chip is the stop's name alone (kajimafix 03.1): a temporary screen's expiry is an operator fact.
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
+    expect(text(q(k.root, '.k-brand'))).toBe('Kaj ima?');
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
     expect(text(q(k.root, '.k-scene-title'))).toBe('Promet');
     expect(q(k.root, '[data-testid=kiosk-scene] [data-testid=kiosk-map-host]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('kasni 2 min');
-    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 5 linija');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(4);
+    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 3 linije');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(6);
     expect(text(q(k.root, '[data-testid=tile-vehicles]'))).toContain('156');
     const closures = text(q(k.root, '[data-testid=tile-closures]'));
     expect(closures).toContain('1');
@@ -239,7 +240,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(k.root.querySelectorAll('[data-testid=kiosk-temp]')).toHaveLength(1);
     const strip = text(q(k.root, '[data-testid=safety-strip]'));
     expect(strip).toContain('žuto upozorenje · Grmljavina');
-    expect(strip).toContain('1 zatvaranje');
+    expect(strip).not.toContain('zatvaranj'); // closures are the tile's (kajimafix 03.5)
     expect(strip).toContain('Trg bana J. Jelačića 3');
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
     expect(k.root.innerHTML).not.toContain('tajna');
@@ -250,7 +251,7 @@ describe('invitation: the screen a passer-by sees', () => {
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=code-a]'))).toBe('ABCD');
     expect(text(q(k.root, '[data-testid=code-b]'))).toBe('EFG0');
-    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     const qr = q(k.root, '[data-testid=kiosk-qr] .qr')!;
     expect(qr.getAttribute('role')).toBe('img');
     expect(qr.getAttribute('aria-label')).toContain('A B C D, E F G 0');
@@ -283,30 +284,31 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(text(q(k.root, '[data-testid=strip-next]'))).toMatch(/^sljedeći prizor za \d+ s$/);
     expect(k.timers.filter((t) => t.ms === CODE_TICK_MS && !t.cleared)).toHaveLength(1);
   });
-  it('stores fresher screen metadata from the beacon beside the same secret and names the venue', () => {
+  it('stores fresher screen metadata from the beacon beside the same secret and names the stop, nothing else', () => {
     const k = mount({ hash: '#BEACON01.tajna' });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna' });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toContain('zaslon u prostoru');
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe(STOP.name);
   });
-  it('draws compact at 1366 x 768 with three line tiles in the scene', async () => {
+  it('draws compact at 1366 x 768 with four line tiles in the scene (spec §4.8: 2 × 2)', async () => {
     const k = mount({ stored: STORED, viewport: { width: 1366, height: 768 } });
     await flush();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(3);
-    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(4);
+    expect(text(q(k.root, '[data-testid=kiosk-scene-meta]'))).toBe('još 5 linija');
   });
-  it('the strip keeps its three sentences in one wrapping box and never steps the type down', async () => {
+  it('the strip keeps its two cells in one wrapping box and never steps the type down; closures are the tile\'s, not the strip\'s', async () => {
     const k = mount({ stored: STORED, viewport: { width: 1366, height: 768 } });
     await flush();
     const strip = q(k.root, '[data-testid=safety-strip]')!;
     expect(q(strip, '[data-testid=strip-items] [data-testid=strip-warning]')).not.toBeNull();
     expect(q(strip, '[data-testid=strip-items] [data-testid=strip-pharmacy]')).not.toBeNull();
     expect(strip.className).not.toContain('k-strip--tight');
-    // The street is said once, on the closures tile (D18); the strip keeps the count.
-    expect(text(q(strip, '[data-testid=strip-closures]'))).toBe('1 zatvaranje');
+    // Closures are said once, on the right column's tile (kajimafix 03.5); the strip carries none.
+    expect(q(strip, '[data-testid=strip-closures]')).toBeNull();
+    expect(q(k.root, '[data-testid=tile-closures]')).not.toBeNull();
   });
   it('lightweight: the map host is hidden, nothing is a canvas, and the lines board fills the column', async () => {
     const k = mount({ stored: STORED, lightweight: true });
@@ -339,7 +341,8 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(text(label)).toBe('Otključano do 14:42 · Sada');
     expect(q(k.root, '[data-testid=corner-qr] .qr')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=join-code]'))).toBe('ABCD-EFG0');
-    expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
+    expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     // The weather is the header's status group; the Sada column holds the warnings and the closures only.
     expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=k-weather]')).toBeNull();
@@ -360,12 +363,12 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
     expect(q(k.root, '[data-testid=k-closures]')).not.toBeNull();
   });
-  it('under a yellow warning the compact Sada column shows the warnings alone; the strip still counts the closures', async () => {
+  it('under a yellow warning the compact Sada column shows the warnings alone; the strip carries no closures cell', async () => {
     const k = await pairedKiosk({ viewport: { width: 1366, height: 768 } });
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
     expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
-    expect(q(k.root, '[data-testid=strip-closures]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });
   it('mirrors each of the seven domains with its own blocks; the join QR survives every layer change', async () => {
     const k = await pairedKiosk();
@@ -422,7 +425,7 @@ describe('paired: selection and ending', () => {
     expect(k.handle.phase()).toBe('invitation');
     expect(q(k.root, '[data-testid=session-label]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-invitation]')).not.toBeNull();
-    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(k.sessions[1]!.close).toHaveBeenCalledTimes(1);
   });
   it('re-polls the layer on every tick while paired and returns on its own when the room clock ran out without an expired frame', async () => {
@@ -484,7 +487,7 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
     expect(k.handle.phase()).toBe('invitation');
     expect(k.createScreen).toHaveBeenCalledTimes(1);
     k.handlers.onCodes(batch(NOW), NOW);
-    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
   });
 });
 
@@ -516,9 +519,9 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
     k.fire(ESSENTIALS_IDLE_MS)!.fn();
     expect(panel.hidden).toBe(true);
   });
-  it('never opens over a grant, and the close button closes it', async () => {
+  it('never opens over a grant (the verdict is a plain word then, not a button), and the close button closes it', async () => {
     const k = await pairedKiosk();
-    (q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement).click();
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-essentials]')!.hidden).toBe(true);
     k.expire();
     (q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement).click();
@@ -577,14 +580,13 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
     await flush();
     expect(calls.at(-1)).toBe('live');
-    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('1 zatvaranje');
+    expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
     fail = true;
     k.poll();
     await flush();
     expect(calls.at(-1)).toBe('stale');
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
-    expect(text(q(k.root, '[data-testid=strip-closures]'))).toContain('1 zatvaranje · zastarjelo');
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
     expect(text(q(k.root, '[data-testid=kiosk-lines]'))).toContain('zastarjelo');
     // The tiles keep their last-good value, marked: the badge replaces the context.
@@ -598,14 +600,13 @@ describe('alerts, polling, the first tap and disposal', () => {
     await flush();
     expect(calls.at(-1)).toBe('live');
     expect(q(k.root, '[data-testid=tile-vehicles]')!.dataset.state).toBe('live');
-    expect(text(q(k.root, '[data-testid=strip-closures]'))).not.toContain('zastarjelo');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
-    expect(text(q(k.root, '[data-testid=strip-closures]'))).toBe('Zatvaranja: podaci trenutačno nedostupni');
+    expect(q(k.root, '[data-testid=tile-closures]')!.dataset.state).toBe('down');
     expect(text(q(k.root, '[data-testid=kiosk-lines] .k-board-note[data-state=down]'))).toBe('ZET trenutačno ne odgovara.');
     expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl')).toHaveLength(0);
     // The clock stands alone (D11): no sentence and no dash where the reading was.
@@ -823,22 +824,22 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
     expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
   });
-  it('the four line tiles each carry one .line badge at k size, tram and bus by kind, with the long name beside it and the state word in its tone', async () => {
+  it('the six line tiles each carry one .line badge at k size, tram and bus by kind, with the line’s ends under it and the state word in its tone', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const rows = [...k.root.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] .tl[data-route]')];
-    expect(rows.length).toBe(4);
+    expect(rows.length).toBe(6);
     for (const row of rows) {
       expect(row.querySelectorAll('.k-line-badge')).toHaveLength(1);
       const badge = q(row, '.k-line-badge')!;
       expect(badge.classList.contains('line')).toBe(true);
       expect(badge.dataset.size).toBe('k');
       expect(badge.dataset.kind).toBe(row.dataset.kind);
-      expect(q(row, '.tl-label .k-tl-name')).not.toBeNull();
+      expect(q(row, '.k-tl-name')).not.toBeNull();
       expect(q(row, '.tl-value')).not.toBeNull();
     }
-    expect(rows.map((r) => r.dataset.kind)).toEqual(['tram', 'tram', 'tram', 'tram']);
-    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13']);
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['tram', 'tram', 'tram', 'tram', 'tram', 'tram']);
+    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13', '14', '17']);
     expect(rows[0]!.dataset.tone).toBe('late');
     expect(text(q(rows[0]!, '.tl-value'))).toBe('kasni 2 min');
     expect(text(rows[0]!)).not.toContain('vozila'); // the vehicles-near count is a glyph and a number, never the word
@@ -930,13 +931,13 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     expect(q(k.root, '.k-code-ghost')).toBeNull();
     now = NOW + 30_000;
     k.tick(250); // the rotation's own tick
-    expect(text(code)).toBe('ABCD-EFG1');
+    expect(text(code)).toBe('ABCD·EFG1');
     expect(code.dataset.swap).toBe('1');
     const ghost = q(k.root, '.k-code-ghost')!;
-    expect(text(ghost)).toBe('ABCD-EFG0');
+    expect(text(ghost)).toBe('ABCD·EFG0');
     expect(ghost.getAttribute('aria-hidden')).toBe('true');
     // The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits), so the crossfade never reads as the second half sliding sideways; it borrows no testid, so pair-code stays one element mid-swap.
-    expect([...ghost.children].map((child) => child.textContent)).toEqual(['ABCD', '-', 'EFG0']);
+    expect([...ghost.children].map((child) => child.textContent)).toEqual(['ABCD', '·', 'EFG0']);
     expect([...ghost.children].map((child) => child.className)).toEqual([...code.children].map((child) => child.className));
     expect(ghost.children[1]!.classList.contains('k-code-dash')).toBe(true);
     expect(ghost.querySelectorAll('[data-testid]')).toHaveLength(0);
@@ -945,7 +946,7 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     k.tick(CODE_SWAP_MS);
     expect(code.dataset.swap).toBeUndefined();
     expect(q(k.root, '.k-code-ghost')).toBeNull();
-    expect(text(code)).toBe('ABCD-EFG1');
+    expect(text(code)).toBe('ABCD·EFG1');
   });
 });
 
@@ -1127,7 +1128,7 @@ describe('handheld: the kiosk on a phone', () => {
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
     // The code card is the same one the rotation paints on a wall.
     k.handlers.onCodes(batch(NOW), NOW);
-    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD-EFG0');
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
@@ -1174,30 +1175,39 @@ describe('handheld: the kiosk on a phone', () => {
 // created and resolved (default solar, or ?tema=) before this component ever
 // sees it, so the label is correct on the very first paint.
 describe('T5.3: the theme button', () => {
-  it('sits left of the clock, labelled with the current preference, and four clicks cycle auto -> light -> dark -> solar in order', () => {
+  it('sits left of the clock as a glyph named by the current preference, and four clicks cycle auto -> light -> dark -> solar in order', () => {
     const k = mount(); // themeInitial defaults to 'solar', the kiosk's own default
     const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
     expect(btn).not.toBeNull();
     expect(btn.type).toBe('button');
-    expect(text(btn)).toBe('Tema: po suncu');
+    expect(btn.getAttribute('aria-label')).toBe('Tema: po suncu');
+    expect(btn.title).toBe('Tema: po suncu');
+    expect(text(btn)).toBe('');
+    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sunset');
     // Left of the clock: its very next sibling is the clock itself.
     expect(btn.nextElementSibling?.getAttribute('data-testid')).toBe('kiosk-clock');
     btn.click();
-    expect(text(btn)).toBe('Tema: automatski');
+    expect(btn.getAttribute('aria-label')).toBe('Tema: automatski');
+    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sun-moon');
     btn.click();
-    expect(text(btn)).toBe('Tema: svijetla');
+    expect(btn.getAttribute('aria-label')).toBe('Tema: svijetla');
+    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sun');
     btn.click();
-    expect(text(btn)).toBe('Tema: tamna');
+    expect(btn.getAttribute('aria-label')).toBe('Tema: tamna');
+    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-moon');
     btn.click();
-    expect(text(btn)).toBe('Tema: po suncu');
+    expect(btn.getAttribute('aria-label')).toBe('Tema: po suncu');
+    expect(btn.title).toBe('Tema: po suncu');
+    expect(text(btn)).toBe('');
+    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sunset');
     expect(k.themeCalls).toEqual(['auto', 'light', 'dark', 'solar']);
   });
   it('reads every word straight from the theme controller, never the locale it started in', () => {
     const k = mount({ locale: 'en', themeInitial: 'light' });
     const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
-    expect(text(btn)).toBe('Theme: light');
+    expect(btn.getAttribute('aria-label')).toBe('Theme: light');
     btn.click();
-    expect(text(btn)).toBe('Theme: dark');
+    expect(btn.getAttribute('aria-label')).toBe('Theme: dark');
   });
   it('lets go of the theme controller on destroy, like every other subscription', () => {
     const k = mount();

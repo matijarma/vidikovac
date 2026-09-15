@@ -173,13 +173,9 @@
 /* The brand group is the header's yielding part: the wordmark never shrinks, the chip ellipsises; the session pill keeps its own width (a flex item's automatic minimum), so it can never be squeezed under a neighbour. */
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
-.k-brand-sub { margin-left: 0.5em; font-size: var(--k-sup-size); font-weight: 500; color: var(--k-ink-3); }
-/* The stop chip: accent-filled (paper in dark, Zagreb blue in light) because the
-   one ink tile on the screen is the Skupština's -- the civic domain, not the venue. */
-.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding: 0.25em 0.8em; border-radius: 999px; background: var(--k-action); color: var(--k-action-ink); font-size: var(--k-hint-size); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The stop chip: ink on paper, paper on night (kajimafix 03.1); the accent is kept for badges and the invitation card. */
+.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding: 0.25em 0.8em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-size: var(--k-hint-size); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-context:empty { display: none; }
-.k-context-sub { display: inline; font-weight: 500; }
-.k-context-sub::before { content: ' · '; }
 .k-head-mid { display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
 .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); margin-left: auto; white-space: nowrap; }
@@ -188,13 +184,13 @@
    pill's layer word leave (the invitation shows the date, the stage shows the layer), the chip narrows, and the
    wordmark, pill and clock group keep their widths. */
 .kiosk[data-size='compact'][data-mode='unlocked'] .k-date,
-.kiosk[data-size='compact'][data-mode='unlocked'] .k-brand-sub,
 .kiosk[data-size='compact'][data-mode='unlocked'] .k-session-layer { display: none; }
 .kiosk[data-size='compact'][data-mode='unlocked'] .k-context { max-width: 22vw; }
 .k-clock-row { display: flex; align-items: center; gap: calc(var(--k-gap) * 0.6); }
 .k-clock { display: block; font-size: var(--k-clock-size); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the clock. */
-.k-theme { display: inline-flex; align-items: center; min-height: 44px; padding: 0 calc(var(--k-gap) * 0.6); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); font-weight: 600; cursor: pointer; }
+/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the clock. A glyph alone (kajimafix 03.1); its sentence lives in the name and the tooltip. */
+.k-theme { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); cursor: pointer; }
+.k-theme .k-icon { color: inherit; }
 /* The weather group: a condition glyph, the reading, a stale mark and the
    sunset-until-it-passes-then-sunrise glyph + time (D11). Hidden while
    dhmz-now loads or is down -- the clock stands alone, never a dash. */
@@ -262,8 +258,9 @@
 .k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
 .k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
 .k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
-.k-dot { width: calc(12px * var(--k-zoom)); height: calc(12px * var(--k-zoom)); border-radius: 999px; background: var(--k-line); }
-.k-dot[data-on='1'] { background: var(--k-ink); }
+/* Scene dots (kajimafix 03.2): 10 px, the current one ink, the others a stroke. */
+.k-dot { box-sizing: border-box; width: calc(10px * var(--k-zoom)); height: calc(10px * var(--k-zoom)); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; }
+.k-dot[data-on='1'] { border-color: var(--k-ink); background: var(--k-ink); }
 .k-scene-body { position: relative; min-height: 0; }
 .k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; animation: k-scene-in 220ms var(--ease-enter) both; }
 .k-scene-item[data-leaving] { pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
@@ -271,17 +268,20 @@
 @keyframes k-scene-out { to { opacity: 0; } }
 @keyframes k-code-in { from { opacity: 0; } }
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
-.k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-tile-gap); min-height: 0; }
-.k-scene-grid[data-works='0'] { grid-template-rows: minmax(0, 1fr); }
+.k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: var(--k-tile-gap); min-height: 0; }
 .k-scene-grid > .k-map { grid-column: 1; grid-row: 1 / -1; }
-.k-scene-lines { display: grid; grid-column: 2; grid-row: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
-.k-works { grid-column: 2; grid-row: 2; }
+/* The lines and the works band stack from the top of their column at their own height (kajimafix 03.3): a tile is its content, never a box stretched to the field. Three across at wide (six lines), two at compact (four). */
+.k-scene-col { grid-column: 2; grid-row: 1; display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--k-tile-gap); min-width: 0; min-height: 0; }
+.k-scene-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: max-content; gap: var(--k-tile-gap); min-width: 0; }
 .k-works:empty { display: none; }
-.kiosk[data-size='compact'] .k-scene-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.kiosk[data-size='compact'] .k-scene-lines { grid-template-columns: minmax(0, 1fr); }
+.kiosk[data-size='compact'] .k-scene-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+.kiosk[data-size='compact'] .k-scene-lines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .k-scene-grid[data-board='1'] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .k-scene-grid[data-board='1'] > .k-map { grid-row: 1; }
-.k-scene-rows { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
+/* The evening's rows (concept 04): hairline-separated rows at their own height from the top, not boxes stretched to the field; the next event's rule takes the events tone. */
+.k-scene-rows { display: grid; grid-auto-rows: max-content; align-content: start; min-height: 0; }
+.kiosk .k-scene-rows .tl[data-variant='time'] { border: 0; border-top: 1px solid var(--k-line); border-radius: 0; background: transparent; padding-inline: 0; }
+.kiosk .k-scene-rows .tl[data-variant='time'][data-tint='events'] { border-top: 2px solid var(--k-violet); }
 .k-scene-grad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
 .k-scene-grad > .tl[data-variant='ink'] { grid-column: 1; grid-row: 1 / -1; }
 
@@ -318,7 +318,13 @@
 .kiosk .k-tl-line[data-tone='early'] .tl-value { color: var(--k-amber); }
 .kiosk .k-tl-line[data-tone='ontime'] .tl-value { color: var(--k-green); }
 .kiosk .k-tl-line[data-tone='unknown'] .tl-value { color: var(--k-ink-3); }
-.kiosk .k-tl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--k-ink); }
+/* The line tile (kajimafix 03.3, the concept's Promet scene): the badge at control height, the line's two ends on their own line, the state word at main size in its tone, the vehicles glyph and count; content stacked from the top. */
+.kiosk .k-tl-line { align-content: start; gap: calc(var(--k-gap) * 0.4); }
+.kiosk .k-tl-line .k-line-badge { height: var(--k-control); min-width: calc(var(--k-control) * 1.6); font-size: var(--k-main-size); }
+.kiosk .k-tl-name { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
+.kiosk .k-tl-line .tl-value { font-size: var(--k-main-size); }
+/* A line badge mentioned inside a context (an event's lines) at the kiosk's scale (kajimafix 04). */
+.kiosk .line[data-size='xs'] { block-size: calc(28px * var(--k-zoom)); min-inline-size: calc(40px * var(--k-zoom)); padding: 0 0.3em; border-radius: calc(5px * var(--k-zoom)); font-size: var(--k-hint-size); }
 .kiosk .tl[data-state='down'] .tl-value { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-3); white-space: normal; }
 
 /* --- The invitation card: QR, lead, hint, code, remaining time ------------ */
@@ -339,8 +345,9 @@
 /* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
 .k-code { font-family: var(--font-mono); display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
-.k-code-dash { margin: 0 0.15em; opacity: 0.7; }
-.k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--k-action-ink); background: transparent; }
+/* The code's separator is a dimmed middle dot; the 8 px bar fills paper over a quarter-paper track on the accent (kajimafix 03.4). */
+.k-code-dash { margin: 0 0.15em; opacity: 0.4; }
+.k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
 .kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: 'qr' 'text' 'code'; background: var(--k-surface); color: var(--k-ink); }
 .kiosk[data-size='handheld'] .k-invite-text { grid-area: text; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -449,13 +456,11 @@
 
 /* --- Safety strip: always there, never a session's ------------------------ */
 .k-strip { display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
-/* Both strip controls keep a 44 px touch target inside the strip's own height. */
-.k-strip-basics { flex: none; min-height: 44px; min-height: max(44px, calc(var(--k-control) * 0.72)); margin-right: var(--k-gap); padding: 0 var(--k-gap); border: 2px solid var(--k-action); border-radius: 999px; background: transparent; color: var(--k-action); font: inherit; font-weight: 700; cursor: pointer; }
-.k-strip-basics[hidden] { display: none; }
 .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
-/* safetyState's verdict, a pill with its own colour per level. */
-.k-strip-verdict { flex: none; margin-right: var(--k-gap); padding: 0.15em 0.7em; border-radius: 999px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+/* safetyState's verdict with its glyph, a pill with its own colour per level; while the invitation shows it is the 44 px button that opens Osnovno (kajimafix 03.5), otherwise a plain word. */
+.k-strip-verdict { display: inline-flex; flex: none; align-items: center; gap: 0.35em; min-height: 44px; margin-right: var(--k-gap); padding: 0.15em 0.7em; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; cursor: default; }
+button.k-strip-verdict { cursor: pointer; }
 .k-strip-verdict[data-level='calm'] { color: var(--k-green); box-shadow: inset 0 0 0 2px var(--k-green); }
 .k-strip-verdict[data-level='urgent'] { background: var(--k-rose-soft); color: var(--k-rose); }
 .k-strip-verdict[data-level='unknown'] { background: var(--k-amber-soft); color: var(--k-amber); }
@@ -596,18 +601,17 @@
 .kiosk[data-portrait='1'] .k-side-tiles { align-content: center; }
 /* The portrait header is 1044 px wide: the date and the sub-brand leave in every mode and the chip narrows, so the
    clock group keeps its sunset time on screen. */
-.kiosk[data-portrait='1'] .k-date, .kiosk[data-portrait='1'] .k-brand-sub { display: none; }
+.kiosk[data-portrait='1'] .k-date { display: none; }
 .kiosk[data-portrait='1'] .k-context { max-width: 30vw; }
 .kiosk[data-portrait='1'][data-mode='unlocked'] .k-context { max-width: 22vw; }
 /* A portrait scene field is tall and narrow (1044 by about 1300): the compact landscape grids stretched three line
    tiles to 400 px and the Grad ink tile to the whole field. Stood up, Promet stacks: the map takes the room, the
    line tiles sit in one row at their own height, the works band under them; Večeras and Grad lay their tiles from
    the top at their own height, the ink tile first. */
-.kiosk[data-portrait='1'] .k-scene-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; }
-.kiosk[data-portrait='1'] .k-scene-grid[data-works='0'] { grid-template-rows: minmax(0, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-scene-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .kiosk[data-portrait='1'] .k-scene-grid > .k-map { grid-column: 1; grid-row: 1; }
-.kiosk[data-portrait='1'] .k-scene-lines { grid-column: 1; grid-row: 2; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.kiosk[data-portrait='1'] .k-works { grid-column: 1; grid-row: 3; }
+.kiosk[data-portrait='1'] .k-scene-col { grid-column: 1; grid-row: 2; }
+.kiosk[data-portrait='1'] .k-scene-lines { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kiosk[data-portrait='1'] .k-scene-grid[data-board='1'] { grid-template-rows: minmax(0, 1fr); }
 .kiosk[data-portrait='1'] .k-scene-rows, .kiosk[data-portrait='1'] .k-scene-grad { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto; align-content: start; }
 .kiosk[data-portrait='1'] .k-scene-grad > .tl[data-variant='ink'] { grid-column: 1; grid-row: auto; }
@@ -671,7 +675,7 @@
 .kiosk[data-size='handheld'] .k-alert { position: static; margin: var(--k-gap) var(--k-pad) 0; }
 .kiosk[data-size='handheld'] .k-stage > section { height: auto; }
 .kiosk[data-size='handheld'] .k-strip { height: auto; flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
-.kiosk[data-size='handheld'] .k-strip-basics, .kiosk[data-size='handheld'] .k-strip-label { margin-right: 0; }
+.kiosk[data-size='handheld'] .k-strip-label { margin-right: 0; }
 .kiosk[data-size='handheld'] .k-strip-items { flex-basis: 100%; overflow: visible; }
 .kiosk[data-size='handheld'] .k-strip-item { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; white-space: normal; }
 .kiosk[data-size='handheld'] .k-strip-hitno { margin-left: 0; }

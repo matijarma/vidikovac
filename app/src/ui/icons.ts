@@ -10,7 +10,7 @@ export const ICON_NAMES = [
   'cloud-fog', 'cloud-lightning', 'cloud-rain', 'cloud-snow', 'cloud-sun', 'copy', 'download', 'droplets',
   'ellipsis', 'external-link', 'eye', 'eye-off', 'file-text', 'filter', 'footprints', 'gauge', 'hard-hat', 'home', 'info',
   'landmark', 'languages', 'list', 'map', 'map-pin', 'moon', 'newspaper', 'pause', 'phone', 'pill', 'play',
-  'printer', 'qr-code', 'radio', 'refresh-cw', 'search', 'share-2', 'shield', 'siren', 'star', 'sun', 'sunrise',
+  'printer', 'qr-code', 'radio', 'refresh-cw', 'search', 'share-2', 'shield', 'siren', 'star', 'sun', 'sun-moon', 'sunrise',
   'sunset', 'thermometer', 'ticket', 'sliders-horizontal', 'tram-front', 'trash-2', 'triangle-alert', 'users', 'wind', 'x', 'zap',
 ] as const;
 export type IconName = (typeof ICON_NAMES)[number];
@@ -75,6 +75,7 @@ const SYMBOLS: Record<IconName, string> = {
   siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/><path d="M21 12h1"/><path d="M18.5 4.5 18 5"/><path d="M2 12h1"/><path d="M12 2v1"/><path d="m4.929 4.929.707.707"/><path d="M12 12v6"/>',
   star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  'sun-moon': '<path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/>',
   sunrise: '<path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
   sunset: '<path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
   thermometer: '<path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/>',

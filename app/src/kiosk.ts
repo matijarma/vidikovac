@@ -20,11 +20,12 @@ import { loadNetwork, type Network } from './motion/network';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
+import { iconMarkup, type IconName } from './ui/icons';
 import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
-import { clock, dayTime, weekdayDate } from './kiosk/format';
+import { clock, weekdayDayMonth } from './kiosk/format';
 import { countdownText, frameStrip, headerWeather, stripMarkup, weatherGroupMarkup, type RotationClock } from './kiosk/frame';
 import { codeBlockMarkup, hintMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
@@ -100,13 +101,16 @@ function safeLocalStorage(): StorageLike | null {
   try { return globalThis.localStorage; } catch { return null; }
 }
 
+/** The theme button's glyph per preference (kajimafix 03.1): a public screen carries no operator words in its header. */
+const THEME_ICON: Record<ThemePreference, IconName> = { auto: 'sun-moon', light: 'sun', dark: 'moon', solar: 'sunset' };
+
 /** The shell, built once: header, the stage every phase mounts into, the
  *  basics overlay, the safety strip, and the hidden holder the one map
  *  container is parked in while a composition without a map is shown. */
 function shellMarkup(s: KioskStrings): string {
   return `<p class="k-alert" role="alert" data-testid="kiosk-alert" hidden></p>
     <header class="k-head">
-      <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)} <span class="k-brand-sub">${escapeHtml(s.surface)}</span></p><p class="k-context" data-testid="kiosk-context"></p></div>
+      <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)}</p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
       <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time><div class="k-weather" data-testid="kiosk-weather" hidden></div></div></div>
     </header>
@@ -259,7 +263,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // --- Header -----------------------------------------------------------------
   function paintClock(): void {
     const t = now();
-    const date = weekdayDate(t);
+    // Weekday, day and month; the year is not a fact a passer-by needs (kajimafix 03.1).
+    const date = weekdayDayMonth(locale, t);
     if (dateEl.textContent !== date) dateEl.textContent = date;
     const time = clock(t);
     if (clockEl.textContent !== time) {
@@ -315,23 +320,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  current word -- never guessed, never stale between its own clicks and a
    *  change made elsewhere (?tema=, another tab). */
   function paintTheme(preference: ThemePreference): void {
-    themeBtn.textContent = fill(s.header.theme, { pref: s.header.themeWord[preference] });
+    // A glyph, with the sentence in the name and the tooltip: "Tema: po suncu" is an operator's word, not a passer-by's.
+    const label = fill(s.header.theme, { pref: s.header.themeWord[preference] });
+    themeBtn.innerHTML = iconMarkup(THEME_ICON[preference], undefined, 'icon k-icon');
+    themeBtn.setAttribute('aria-label', label);
+    themeBtn.title = label;
   }
   function cycleTheme(): void {
     const i = THEME_PREFERENCES.indexOf(deps.theme.getPreference());
     deps.theme.setPreference(THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length]!);
   }
+  /** The stop chip is the stop's name alone (kajimafix 03.1): a venue's kind or a temporary screen's expiry are operator facts and belong to setup, never to a passer-by's header. */
   function paintContext(): void {
-    if (!credentials) { contextEl.textContent = ''; return; }
-    const screen = credentials.screen;
-    const sub = screen?.kind === 'temporary' && screen.expiresAt !== null
-      ? fill(s.header.temporaryUntil, { time: dayTime(screen.expiresAt) })
-      : screen ? s.header.venue : '';
-    // Without a stop name the chip carries the sub alone; the sub's separator exists only to follow a name.
-    const name = stop?.name ?? '';
-    contextEl.innerHTML = name
-      ? `${escapeHtml(name)}${sub ? `<span class="k-context-sub">${escapeHtml(sub)}</span>` : ''}`
-      : escapeHtml(sub);
+    contextEl.textContent = credentials && stop ? stop.name : '';
   }
   function showSessionLabel(expiresAt: number | null): void {
     if (expiresAt === null) return;
@@ -460,7 +461,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function invitationModel(): InvitationModel {
     return {
       modules: teaser, stop, now: now(), sceneIndex, pinned: deps.pinScene ?? null, rotate: rotationAllowed(),
-      lineCap: lightweight ? 10 : layout.size === 'wide' ? 4 : 3, size: layout.size === 'wide' ? 'wide' : 'compact',
+      // Six line tiles in the wide 3 × 2 field, four in the compact 2 × 2 (spec §4.8; kajimafix 03.3).
+      lineCap: lightweight ? 10 : layout.size === 'wide' ? 6 : 4, size: layout.size === 'wide' ? 'wide' : 'compact',
     };
   }
   function pairedContext(): PairedContext {
@@ -542,10 +544,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const ghost = document.createElement('p');
     ghost.className = 'k-code k-code-ghost';
     ghost.setAttribute('aria-hidden', 'true');
-    const dash = previous.indexOf('-');
+    const dash = previous.search(/[-·]/);
     ghost.innerHTML = dash === -1
       ? `<span>${escapeHtml(previous)}</span>`
-      : `<span>${escapeHtml(previous.slice(0, dash))}</span><span class="k-code-dash">-</span><span>${escapeHtml(previous.slice(dash + 1))}</span>`;
+      : `<span>${escapeHtml(previous.slice(0, dash))}</span><span class="k-code-dash">·</span><span>${escapeHtml(previous.slice(dash + 1))}</span>`;
     box.appendChild(ghost);
     codeEl.dataset.swap = '1';
     if (joinCode) joinCode.dataset.swap = '1';
