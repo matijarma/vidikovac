@@ -4,10 +4,17 @@
 import type { Page } from '@playwright/test';
 import type { ModuleId, ModuleSnapshot } from '../worker/feed/schema';
 import { MODULE_IDS, MODULES } from '../worker/feed/registry';
+import type { Role, RoomServerMessage, ScreenStop } from '../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../test/feed/fixture-contexts';
 
 export type FixtureState = 'ready' | 'empty' | 'down' | 'stale';
 const FIXTURE_ROOM = '0000000000000000';
+
+/** The screen's stop: Trg bana J. Jelačića lies in Gornji grad – Medveščak by the City's own boundary data (R-DG19). */
+export const FIXTURE_STOP: ScreenStop = {
+  id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286,
+  routes: ['6', '11', '12', '13', '14', '17'], district: 'gornji-grad-medvescak',
+};
 
 export async function experienceSnapshots(state: FixtureState = 'ready'): Promise<Record<ModuleId, ModuleSnapshot>> {
   const result = {} as Record<ModuleId, ModuleSnapshot>;
@@ -43,15 +50,29 @@ export interface FixtureSession {
   events: Record<string, unknown>[];
 }
 
+/** How the room answers the join: the driver with a screen by default; the two cases in which casting is disabled (D5) opt out. */
+export interface FixtureOptions {
+  /** 'scanner' (the room's driver) by default; 'phone' is the one-hop peer whose screen follows the scanning phone. */
+  role?: Role;
+  /** True by default; false joins a session that has no screen at all. */
+  screen?: boolean;
+}
+
 export async function installExperienceFixture(
   page: Page,
   snapshots: Record<ModuleId, ModuleSnapshot>,
+  options: FixtureOptions = {},
 ): Promise<FixtureSession> {
   const now = FIXTURE_NOW.getTime();
   await page.clock.install({ time: now });
   const requests: string[] = [];
   const events: Record<string, unknown>[] = [];
   const sockets: { send(message: string): void }[] = [];
+  const joined: RoomServerMessage = {
+    t: 'joined', role: options.role ?? 'scanner', expiresAt: now + 600_000, serverNow: now,
+    resumeToken: 'fixture-resume', dataToken: 'fixture-data-token', participants: 1,
+    ...(options.screen ?? true ? { screen: { kind: 'temporary', expiresAt: now + 86_400_000, stop: FIXTURE_STOP } } : {}),
+  };
   await page.route('**/api/data/**', async (route) => {
     const id = new URL(route.request().url()).pathname.split('/').at(-1) as ModuleId;
     requests.push(id);
@@ -67,12 +88,7 @@ export async function installExperienceFixture(
       if (typeof raw !== 'string') return;
       const message = JSON.parse(raw) as Record<string, unknown>;
       events.push(message);
-      if (message.t === 'join' || message.t === 'resume') socket.send(JSON.stringify({
-        t: 'joined', role: 'scanner', expiresAt: now + 600_000, serverNow: now,
-        resumeToken: 'fixture-resume', dataToken: 'fixture-data-token', participants: 1,
-        screen: { kind: 'temporary', expiresAt: now + 86_400_000,
-          stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17'] } },
-      }));
+      if (message.t === 'join' || message.t === 'resume') socket.send(JSON.stringify(joined));
       if (message.t === 'share') socket.send(JSON.stringify({
         t: 'codes', serverNow: now,
         batch: [{ code: 'ABCDEFGH', slotStart: now, slotEnd: now + 30_000 }],
