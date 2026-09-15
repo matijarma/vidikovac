@@ -143,6 +143,28 @@ describe('renderKvart, with a map', () => {
     expect(canvas).not.toBeNull();
     expect(section.querySelector('[data-testid=kvart-counts]')?.tagName).toBe('FIGCAPTION');
   });
+  it('asks for a thumbnail without place labels, and captions it with glyph counts for the eye and the whole sentence for a reader (kajimafix 01.8)', () => {
+    const { maps, factory } = fakeMaps();
+    const works = komunalne([
+      { id: 'w1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Vodovod', geo: { type: 'Point', coordinates: [15.978, 45.813] }, data: { source: 'komunalne', status: 'U tijeku', district: 'donji-grad' } },
+    ]);
+    const closures = prometnice([
+      { id: 'c1', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Savska', geo: { type: 'LineString', coordinates: [[15.978, 45.813]] }, data: { street: 'Savska cesta', district: 'donji-grad' } },
+      { id: 'c2', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Ilica', geo: { type: 'LineString', coordinates: [[15.97, 45.813]] }, data: { street: 'Ilica', district: 'donji-grad' } },
+    ]);
+    const section = renderKvart(ctx({ maps, snapshots: { dogadanja: works, prometnice: closures } }), 'workspace');
+    expect((factory.mock.calls[0]![0] as CityMapOptions).placeLabels).toBe(false);
+    const cap = section.querySelector('[data-testid=kvart-counts]')!;
+    const glyphs = cap.querySelector('.kv-map-glyphs')!;
+    expect(glyphs.getAttribute('aria-hidden')).toBe('true');
+    expect([...glyphs.querySelectorAll('use')].map((u) => u.getAttribute('href'))).toEqual(['#icon-hard-hat', '#icon-car-front']);
+    expect([...glyphs.querySelectorAll('span.tabular')].map((s) => s.textContent)).toEqual(['1', '2']);
+    expect(text(cap.querySelector('.visually-hidden'))).toBe('1 rad u tijeku · 2 zatvaranja');
+    // Nothing to count: the sentence alone, no glyph cell.
+    const quiet = renderKvart(ctx({ maps, snapshots: { dogadanja: komunalne([]), prometnice: prometnice([]) } }), 'workspace');
+    expect(quiet.querySelector('[data-testid=kvart-counts] .kv-map-glyphs')).toBeNull();
+    expect(text(quiet.querySelector('[data-testid=kvart-counts]'))).toBe('Trenutačno nema radova ni zatvaranja u kvartu.');
+  });
   it('centres on the district seat without a screen stop, and on the city without either', () => {
     const { maps, factory } = fakeMaps();
     renderKvart(ctx({ maps, screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: undefined }, snapshots: { dogadanja: komunalne([]), prometnice: prometnice([]) } }), 'workspace');

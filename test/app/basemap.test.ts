@@ -167,3 +167,15 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(SPRITE_V4_ICONS).toContain('train_station');
   });
 });
+
+describe('place labels on a thumbnail (kajimafix 01.8)', () => {
+  it('drops every places_* layer when asked, and keeps them by default; both faces drop the same layers so the theme diff stays whole', () => {
+    const all = basemapLayers('light', { origin: ORIGIN });
+    const places = all.filter((l) => l.id.startsWith('places_'));
+    expect(places.length).toBeGreaterThan(0);
+    const bare = basemapLayers('light', { origin: ORIGIN, placeLabels: false });
+    expect(bare.some((l) => l.id.startsWith('places_'))).toBe(false);
+    expect(bare).toHaveLength(all.length - places.length);
+    expect(styleDiff(bare, basemapLayers('dark', { origin: ORIGIN, placeLabels: false })).every((op) => !op.id.startsWith('places_'))).toBe(true);
+  });
+});

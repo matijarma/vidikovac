@@ -517,13 +517,13 @@ describe('the phone’s "Zatim" foot (concept 02): now and next on one screen', 
 describe('renderTimebandSeg: the phone’s segmented control (A.4)', () => {
   it('writes a group of five pressed-state buttons whose labels read the time word and its head, the clock for sada', () => {
     expect(renderTimebandSeg(hr, buildTimeband(ctx(), PRODUCERS))).toBe(
-      '<div class="tb-seg" role="group" aria-label="Doba dana" data-key="tb-seg" data-testid="tb-seg" data-col="sada">'
+      '<div class="tb-seg" role="group" aria-label="Doba dana" data-key="tb-seg" data-testid="tb-seg" data-col="sada"><div class="tb-seg-track">'
       + SEG_BUTTON('sada', true, 'sada, 14:32', 'sada')
       + SEG_BUTTON('danas', false, 'poslijepodne, do 18:00', 'popodne')
       + SEG_BUTTON('veceras', false, 'večeras, od 18:00', 'večeras')
       + SEG_BUTTON('sutra', false, 'sutra, sub 12. 9.', 'sutra')
       + SEG_BUTTON('tjedan', false, 'tjedan, do čet 17. 9.', 'tjedan')
-      + '</div>',
+      + '</div></div>',
     );
   });
   it('presses the selected column and names it on the group', () => {

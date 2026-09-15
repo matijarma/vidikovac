@@ -378,13 +378,17 @@ export interface BasemapStyleOptions {
   locale?: string;
   /** Resolves MAP_CONFIG's root-relative paths; defaults to the document's origin. */
   origin?: string;
+  /** false drops every `places_*` layer (city, region, country names): a kvart-sized thumbnail has no room for "Zagreb" over its streets. Default true. */
+  placeLabels?: boolean;
 }
 
 /** The basemap layers alone for `theme`: what a live map diffs on a theme
  *  or locale change. */
 export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}): StyleLayerLike[] {
   const layers = protomapsLayers(BASEMAP_SOURCE, flavorFor(theme), { lang: labelLanguage(options.locale) }) as unknown as StyleLayerLike[];
-  return layers.map((layer) => (layer.id === 'pois' ? boundPoiIcons(layer) : layer));
+  return layers
+    .filter((layer) => options.placeLabels !== false || !layer.id.startsWith('places_'))
+    .map((layer) => (layer.id === 'pois' ? boundPoiIcons(layer) : layer));
 }
 
 /**

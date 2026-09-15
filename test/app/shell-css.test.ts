@@ -188,7 +188,6 @@ describe('dashboard.css header controls', () => {
   it('notice banners take the tint of their kind and keep the dismiss control beside the text at every width', () => {
     expect(rule('.banner-notice')).toContain('flex-wrap: nowrap');
     expect(rule('.banner-notice .banner-text')).toContain('min-inline-size: 0');
-    expect(rule(".banner-notice[data-kind='joined']")).toContain('background: var(--tone-tint-success)');
     expect(rule(".banner-notice[data-kind='expiring60'], .banner-notice[data-kind='refusal']")).toContain('background: var(--tone-tint-weather)');
     expect(rule(".banner-notice[data-kind='expiring20']")).toContain('background: var(--tone-tint-urgency)');
     expect(rule('.banner-dismiss')).toContain('margin-inline-start: auto');
@@ -254,6 +253,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(clock).toContain('white-space: nowrap');
     // The shared weather group's own classes (weather-status.ts): the sunset glyph is amber inside the clock link.
     expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('color: var(--tone-weather)');
+    // Hairlines, not dots, separate the clock from the weather group and the temperature from the sunset (kajimafix 01.9).
+    expect(rule('.ki-weather', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
+    expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
     expect(rule(".ki-bell[data-active]:not([data-active='0'])::after", DESKTOP)).toContain('background: var(--tone-action-brand)');
   });
   it('pins the aside width at 18.75rem, a rem track so text zoom widens it with its rows; the workspace column shrinks to zero', () => {
@@ -478,8 +480,16 @@ describe('layers.css time band', () => {
   it('the phone form (36rem): sticky segments, one head shown and the rest clipped, a snapping lane row that pans both ways with the FAB reserve', () => {
     const phone = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     // The five time words wrap to a second row at 200 % text on a 390 px phone instead of clipping or widening the page.
-    expect(phone).toContain('.tb-seg { display: flex; flex-wrap: wrap; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }');
-    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('flex: 1 1 auto;');
+    expect(phone).toContain('.tb-seg { display: block; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }');
+    // The track (kajimafix 02.3): surface-2, 2 px of padding, wrapping at 200 % text; five equal buttons that never shrink under their word.
+    const track = rule('.tb-seg-track', LAYERS_CSS);
+    expect(track).toContain('background: var(--tone-surface-2)');
+    expect(track).toContain('padding: 2px');
+    expect(track).toContain('flex-wrap: wrap');
+    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('flex: 1 1 0;');
+    expect(rule('.tb-seg-btn', LAYERS_CSS)).not.toContain('min-inline-size: 0');
+    // The sada head on a phone: the kicker over the clock at the left, the weather group at the right (kajimafix 02.2).
+    expect(phone).toContain(".tb-head[data-col='sada'] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }");
     expect(phone).toContain('.tb-heads { display: block; position: relative; }');
     expect(phone).toContain(".tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }");
     expect(phone).toContain('.tb-axis { display: none; }');

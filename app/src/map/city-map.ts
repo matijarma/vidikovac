@@ -424,6 +424,8 @@ export interface CityMapOptions {
   cooperative?: boolean;
   /** A compact attribution control (the credit behind one button) for the phone stage. */
   attributionCompact?: boolean;
+  /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
+  placeLabels?: boolean;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -796,7 +798,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function buildMap(l: MaplibreModule): void {
-    const style = l.basemapStyle(theme, { locale, origin: deps.origin });
+    const style = l.basemapStyle(theme, { locale, origin: deps.origin, placeLabels: options.placeLabels });
     basemap = style.layers;
     const start = initialCamera(l);
     const created = new l.Map({
@@ -830,7 +832,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // short stage (a small phone, a landscape one) the two would collide.
     const compact = options.attributionCompact === true;
     created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), compact ? 'bottom-left' : 'bottom-right');
-    created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
+    // A scale bar belongs to a map one can move; on a thumbnail it only collided with the credit (kajimafix 01.8).
+    if (interactive) created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
     if (interactive) created.addControl(new l.NavigationControl({ showCompass: false }), 'top-right');
     created.on('error', onMapError);
     created.on('styleimagemissing', (event) => onImageMissing(created, event));
@@ -1053,7 +1056,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     theme = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(next, { locale, origin: deps.origin });
+    const nextBasemap = l.basemapLayers(next, { locale, origin: deps.origin, placeLabels: options.placeLabels });
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
     map.setSprite?.(l.spriteUrl(next, deps.origin));
@@ -1065,7 +1068,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     locale = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(theme, { locale, origin: deps.origin });
+    const nextBasemap = l.basemapLayers(theme, { locale, origin: deps.origin, placeLabels: options.placeLabels });
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
     relabelControls();

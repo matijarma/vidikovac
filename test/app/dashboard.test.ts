@@ -736,24 +736,20 @@ describe('the sticky header and notices in flow', () => {
     await flush();
     expect(landed.handle.element.dataset.loading).toBe('false');
   });
-  it('confirms the unlock as a success notice with the screen label for four seconds, without a live role', () => {
+  it('confirms the unlock in the polite region and the pill alone: no in-flow notice (kajimafix 01.1; the banners row is for the session\'s troubles and the two expiry marks)', () => {
     const time = clock();
     const { root, session, tick } = mount({ now: time.now });
     session.join();
-    expect(noticeText(root, 'joined')).toBe('Otključano do 14:42 · Kavana Velebit');
-    expect(notice(root)!.hasAttribute('role')).toBe(false);
+    expect(notice(root)).toBeNull();
     expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
-    time.set(NOW + 3_999);
-    tick();
-    expect(notice(root, 'joined')).not.toBeNull();
+    expect(root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
     time.set(NOW + 4_000);
     tick();
     expect(notice(root)).toBeNull();
-    // A peer session is five minutes from a person, not ten from a screen: the notice says so
-    // in its own words, while the polite announcement and the pill keep the plain expiry.
+    // A peer session: the same polite sentence and the same pill, and no notice either.
     const peer = mount({ deps: { label: null } });
     peer.session.join('phone');
-    expect(noticeText(peer.root, 'joined')).toBe('Pet minuta od osobe pokraj tebe · do 14:42');
+    expect(notice(peer.root)).toBeNull();
     expect(text(peer.root.querySelector('[data-testid=announce-polite]'))).toBe('Otključano do 14:42');
     expect(peer.root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
   });
@@ -793,7 +789,8 @@ describe('the sticky header and notices in flow', () => {
   it('the 44 px dismiss control removes the notice at once', () => {
     const { root, session } = mount();
     session.join();
-    expect(notice(root, 'joined')).not.toBeNull();
+    session.error('share-not-allowed');
+    expect(notice(root, 'refusal')).not.toBeNull();
     const dismiss = click(root, '[data-testid=notice] [data-action=dismiss-notice]');
     expect(dismiss.getAttribute('aria-label')).toBe(hr.common.dismiss);
     expect(dismiss.classList.contains('icon-btn')).toBe(true);
@@ -1136,6 +1133,14 @@ describe('the status line', () => {
     expect(root.querySelector<HTMLSelectElement>('[data-testid=status-line] [data-testid=kvart-select]')!.value).toBe('trnje');
     expect(localStorage.getItem(KVART_STORAGE_KEY)).toBe('trnje');
     expect(session.sent).toEqual([]);
+  });
+  it('the phone face shows a district name up to its dash ("Gornji grad"); the select and its option keep the whole name', () => {
+    const { root } = mount();
+    const select = root.querySelector<HTMLSelectElement>('[data-testid=status-line] [data-testid=kvart-select]')!;
+    select.value = 'gornji-grad-medvescak';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(text(root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Gornji grad');
+    expect(text(root.querySelector('[data-testid=status-line] option[value=gornji-grad-medvescak]'))).toBe('Gornji grad – Medveščak');
   });
   it('"Stanica zaslona" resolves to the screen stop’s district when the join carries one, and to the whole city when it does not', () => {
     const named = mount();

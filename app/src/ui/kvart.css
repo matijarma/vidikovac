@@ -21,6 +21,10 @@
 .ki-kvart .kv-map { block-size: 10rem; }
 .kv-map-canvas { inline-size: 100%; block-size: 100%; }
 .kv-map-cap, .kv-map-text { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+/* The caption's glyph cells (kajimafix 01.8): a 14 px glyph in the muted tone, the count bold in ink, a dot between cells. */
+.kv-map-glyphs { display: inline-flex; align-items: center; gap: var(--sp-1); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
+.kv-map-glyphs .icon { inline-size: 0.875rem; block-size: 0.875rem; flex: none; color: var(--tone-text-muted); }
+.kv-map-sep { margin-inline: var(--sp-1); color: var(--tone-text-muted); }
 
 .kv-saved { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .kv-saved > li { display: inline-flex; align-items: center; gap: var(--sp-1); }

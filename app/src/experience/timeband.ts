@@ -426,7 +426,8 @@ export function renderTimebandSeg(i18n: I18n, model: TimebandModel): string {
     const label = `${c.label}, ${c.head || model.clock}`;
     return `<button type="button" class="tb-seg-btn" data-action="filter" data-filter-key="${FILTER_KEY}" data-filter-value="${c.id}" aria-pressed="${pressed}" aria-label="${escapeAttribute(label)}"><span>${escapeHtml(c.seg)}</span></button>`;
   });
-  return `<div class="tb-seg" role="group" aria-label="${escapeAttribute(i18n.t('timeband.segLabel'))}" data-key="tb-seg" data-testid="tb-seg" data-col="${model.selected}">${buttons.join('')}</div>`;
+  // The buttons sit in a surface-2 track (kajimafix 02.3); the sticky wrapper keeps the canvas behind it while the lanes scroll under.
+  return `<div class="tb-seg" role="group" aria-label="${escapeAttribute(i18n.t('timeband.segLabel'))}" data-key="tb-seg" data-testid="tb-seg" data-col="${model.selected}"><div class="tb-seg-track">${buttons.join('')}</div></div>`;
 }
 
 /** The phone's weather group beside the clock, one link into Vrijeme. */

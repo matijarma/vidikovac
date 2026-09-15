@@ -33,8 +33,8 @@ export const LAYER_ICONS: Record<LayerId, IconName> = {
   vijesti: 'newspaper',
 };
 
-/** The one in-flow notice: joined (4 s), the 60 s and 20 s marks, a share refusal (8 s). */
-export type NoticeKind = 'joined' | 'expiring60' | 'expiring20' | 'refusal';
+/** The one in-flow notice: the 60 s and 20 s marks, a share refusal (8 s). The unlock itself gets none: the pill says it. */
+export type NoticeKind = 'expiring60' | 'expiring20' | 'refusal';
 export interface ShellNotice { kind: NoticeKind; text: string; until: number | null }
 
 export interface ShellState {
@@ -115,7 +115,8 @@ export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
   // becomes the way home instead (the session is over), as on the empty page.
   const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' });
-  const kvart = kvartMenuMarkup(i18n, s, { id: 'ki-kvart' });
+  // The phone's face carries the name up to its dash (the kvart is the reader's home and must not ellipsise); the desk has the room for the whole name.
+  const kvart = kvartMenuMarkup(i18n, s, { id: 'ki-kvart', short: s.surface === 'phone' });
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
   if (s.surface === 'phone') return `${wordmark}${kvart}${session}${safety}`;
@@ -142,12 +143,18 @@ export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId
  * name is the label plus the selected option with no authored ARIA, and the
  * reconciler syncs `selected`. The closed face shows the *resolved* name.
  */
-export function kvartMenuMarkup(i18n: I18n, s: KvartMenuState, o: { id: string; className?: string }): string {
+/** "Gornji grad – Medveščak" reads "Gornji grad" on a 390 px face; the select, the label and the aria keep the whole name. */
+export function shortKvartName(name: string): string {
+  return name.split(/\s[\u2013-]\s/)[0]!.trim() || name;
+}
+
+export function kvartMenuMarkup(i18n: I18n, s: KvartMenuState, o: { id: string; className?: string; short?: boolean }): string {
   const screenOption = s.stopName ? i18n.t('kvart.screenOption', { stop: s.stopName }) : i18n.t('kvart.wholeCity');
+  const face = o.short ? shortKvartName(s.kvartLabel) : s.kvartLabel;
   const option = (value: string, label: string): string => `<option value="${value}"${s.kvartChoice === value ? ' selected' : ''}>${escapeHtml(label)}</option>`;
   const options = [option('screen', screenOption), ...AREAS.map((area) => option(area.slug, area.name))].join('');
   const className = o.className ? `ki-kvart-pick ${o.className}` : 'ki-kvart-pick';
-  return `<div class="${escapeAttribute(className)}" data-key="kvart" data-testid="kvart-pick"><span class="ki-kvart-face" aria-hidden="true">${iconMarkup(KVART_ICON)}<span class="ki-kvart-name">${escapeHtml(s.kvartLabel)}</span>${iconMarkup('chevron-down', undefined, 'icon icon-sm')}</span><label class="visually-hidden" for="${escapeAttribute(o.id)}">${escapeHtml(i18n.t('kvart.select'))}</label><select id="${escapeAttribute(o.id)}" class="ki-kvart-select" data-action="kvart-pick" data-testid="kvart-select">${options}</select></div>`;
+  return `<div class="${escapeAttribute(className)}" data-key="kvart" data-testid="kvart-pick"><span class="ki-kvart-face" aria-hidden="true">${iconMarkup(KVART_ICON)}<span class="ki-kvart-name">${escapeHtml(face)}</span>${iconMarkup('chevron-down', undefined, 'icon icon-sm')}</span><label class="visually-hidden" for="${escapeAttribute(o.id)}">${escapeHtml(i18n.t('kvart.select'))}</label><select id="${escapeAttribute(o.id)}" class="ki-kvart-select" data-action="kvart-pick" data-testid="kvart-select">${options}</select></div>`;
 }
 
 /** Desktop: Još opens the directory of every domain but Sada (D10). Current while the directory or an extra domain is open. */
@@ -172,7 +179,7 @@ export function searchLaunchMarkup(i18n: I18n, s: ShellState): string {
 export function clockMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
   const time = zagrebTime(now);
   const label = weather ? i18n.t('shell.clockLabel', { time, weather: weather.aria }) : i18n.t('shell.clockOnly', { time });
-  return `<a class="ki-clock tabular" data-key="clock" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-clock" aria-label="${escapeAttribute(label)}"${frozenAttrs(s)}><time datetime="${new Date(now).toISOString()}">${escapeHtml(time)}</time>${weather ? weatherStatusMarkup(weather) : ''}</a>`;
+  return `<a class="ki-clock tabular" data-key="clock" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-clock" aria-label="${escapeAttribute(label)}"${frozenAttrs(s)}><time datetime="${new Date(now).toISOString()}">${escapeHtml(time)}</time>${weather ? `<span class="ki-weather">${weatherStatusMarkup(weather)}</span>` : ''}</a>`;
 }
 
 /** Desktop: the bell opens the notify sheet; its label counts the switches that are on, the dot shows any. */

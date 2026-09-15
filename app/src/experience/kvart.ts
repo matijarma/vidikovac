@@ -122,6 +122,16 @@ function countsText(i18n: I18n, works: number, closures: number): string {
   return parts.length > 0 ? parts.join(' · ') : i18n.t('kvart.nothingNow');
 }
 
+/** The caption under the thumbnail (kajimafix 01.8): the hard hat and the works count, the car and the closures count, glyphs for the eye and the whole sentence for a reader; the sentence alone when there is nothing to count. */
+function countsCaption(works: number, closures: number, sentence: string): string {
+  if (works === 0 && closures === 0) return escapeHtml(sentence);
+  const cells = [
+    works > 0 ? `${iconMarkup('hard-hat')}<span class="tabular">${works}</span>` : '',
+    closures > 0 ? `${iconMarkup('car-front')}<span class="tabular">${closures}</span>` : '',
+  ].filter(Boolean).join('<span class="kv-map-sep">·</span>');
+  return `<span class="kv-map-glyphs" aria-hidden="true">${cells}</span><span class="visually-hidden">${escapeHtml(sentence)}</span>`;
+}
+
 /** The screen's stop, else the kvart's own seat, else the city -- the same point centres the map and names the nearest closure (D6, D18). */
 export function referencePoint(ctx: LayerContext, kvart: AreaSlug | null): { lon: number; lat: number } {
   const stop = ctx.screen?.stop;
@@ -149,9 +159,10 @@ function buildMapSection(ctx: LayerContext, kvart: AreaSlug | null, title: strin
   const ref = referencePoint(ctx, kvart);
   const points = works.map(workPoint).filter((p): p is MapPoint => p !== null);
   const lines = closures.map(closureLine).filter((l): l is MapLine => l !== null);
+  // No city or region name on a kvart-sized thumbnail (kajimafix 01.8): at zoom 13 "Zagreb" covered the streets.
   const canvas = ctx.maps?.slot({
     id: 'kvart-map', ariaLabel, className: 'kv-map-canvas', testid: 'kvart-map-canvas',
-    points, lines, interactive: false, symbolScale: 0.85, center: [ref.lon, ref.lat], zoom: 13,
+    points, lines, interactive: false, symbolScale: 0.85, center: [ref.lon, ref.lat], zoom: 13, placeLabels: false,
   }) ?? null;
   if (!canvas) {
     const street = nearestStreet(closures, ref);
@@ -163,7 +174,7 @@ function buildMapSection(ctx: LayerContext, kvart: AreaSlug | null, title: strin
   // (ui/dom/reconcile.ts) -- the map itself is `interactive: false` so nothing inside it ever holds focus.
   canvas.dataset.persist = 'kvart-map';
   return {
-    html: `<figure class="kv-mapwrap" data-key="map"><div class="kv-map" data-testid="kvart-map" aria-label="${escapeAttribute(ariaLabel)}"></div><figcaption class="kv-map-cap" data-testid="kvart-counts">${escapeHtml(counts)}</figcaption></figure>`,
+    html: `<figure class="kv-mapwrap" data-key="map"><div class="kv-map" data-testid="kvart-map" aria-label="${escapeAttribute(ariaLabel)}"></div><figcaption class="kv-map-cap" data-testid="kvart-counts">${countsCaption(works.length, closures.length, counts)}</figcaption></figure>`,
     canvas,
   };
 }

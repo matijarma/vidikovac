@@ -825,11 +825,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
     const time = zagrebTime(snapshot.expiresAt ?? now());
     polite.textContent = i18n.t('session.unlockedAnnounce', { time });
-    // A peer session is five minutes from a person beside you, said in its own words; a screen's names the screen.
-    const joinedText = snapshot.role === 'phone'
-      ? i18n.t('session.joinedPeer', { time })
-      : deps.label ? i18n.t('session.joinedNotice', { time, label: deps.label }) : i18n.t('session.unlockedAnnounce', { time });
-    setNotice('joined', joinedText, 4_000);
+    // No in-flow notice for the unlock (kajimafix 01.1): the pill shows the expiry and the polite region has said it;
+    // the banners row is for the session's own troubles (frozen, reconnecting, sources down) and the two expiry marks.
+    paintShell();
     render();
     if (!joinedOnce) { joinedOnce = true; titleEl.focus(); }
     continuePoll(refresh(), rearmPoll, 'dashboard join refresh');

@@ -232,9 +232,10 @@
 @media (min-width: 60rem) {
   .tb-lane[data-col='veceras'] .tl[data-domain='events'] .tl-title, .tb-lane[data-col='sada'] .tl[data-domain='news'] .tl-title { -webkit-line-clamp: 3; line-clamp: 3; }
 }
-/* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span. */
-.tb-seg { display: none; gap: 0.25rem; }
-.tb-seg-btn { flex: 1 1 auto; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
+/* The phone's segmented control, hidden until the 36rem room shows it: five equal 44 px buttons in a surface-2 track, the accent "on" pill the inner 34 px span (kajimafix 02.3). A button never shrinks under its word (its minimum is its content), so at 200 % text the track wraps to a second row instead of clipping. */
+.tb-seg { display: none; }
+.tb-seg-track { display: flex; flex-wrap: wrap; gap: 0.125rem; min-inline-size: 0; padding: 2px; border-radius: var(--r-md); background: var(--tone-surface-2); }
+.tb-seg-btn { flex: 1 1 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
 .tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
 @media (hover: hover) {
@@ -543,8 +544,11 @@
    Whether the row glides or jumps is decided in JS from the reader's motion
    preference (experience/timeband-sync.ts), never declared here. */
 @container ws (max-width: 36rem) {
-  /* The five time words never clip: when the room (200 % text on a 390 px phone) cannot hold them on one row they wrap to a second, and the control never widens the page. */
-  .tb-seg { display: flex; flex-wrap: wrap; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; background: var(--tone-surface-canvas); }
+  /* The five time words never clip: when the room (200 % text on a 390 px phone) cannot hold them on one row the track wraps to a second, and the control never widens the page. */
+  .tb-seg { display: block; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }
+  /* The sada head on a phone (kajimafix 02.2): the kicker over the 40 px clock at the left, the weather group at the right, one block instead of three rows. */
+  .tb-head[data-col='sada'] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .tb-head[data-col='sada'] > .tb-weather { justify-self: end; }
   .tb-heads { display: block; position: relative; }
   .tb[data-cols] .tb-head[data-col] { display: grid; }
   .tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }

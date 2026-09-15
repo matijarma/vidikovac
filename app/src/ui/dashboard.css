@@ -146,11 +146,10 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .banner-warn { background: var(--tone-tint-weather); }
 .banner-quiet { background: var(--tone-surface-2); }
 .banner .icon { color: var(--tone-text-muted); }
-/* The one notice: success for the unlock, amber for the last minute and a refusal,
-   rose for the last twenty seconds. The dismiss stays beside the text at every width. */
+/* The one notice: amber for the last minute and a refusal, rose for the last twenty
+   seconds; the unlock itself has none (the pill says it). The dismiss stays beside the text at every width. */
 .banner-notice { flex-wrap: nowrap; }
 .banner-notice .banner-text { flex: 1 1 auto; min-inline-size: 0; }
-.banner-notice[data-kind='joined'] { background: var(--tone-tint-success); }
 .banner-notice[data-kind='expiring60'], .banner-notice[data-kind='refusal'] { background: var(--tone-tint-weather); }
 .banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
 .banner-dismiss { margin-inline-start: auto; flex: none; min-inline-size: var(--target); }
@@ -178,8 +177,9 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   }
   .ki-clock { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
   .ki-clock .icon { width: 1rem; height: 1rem; color: var(--tone-text-muted); }
-  /* The shared weather group (weather-status.ts) keeps its own classes; only the sunset glyph takes the amber tone here. */
-  .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); }
+  /* The shared weather group (weather-status.ts) keeps its own classes; a hairline separates it from the clock and another the sunset from the temperature (kajimafix 01.9); only the sunset glyph takes the amber tone here. */
+  .ki-weather { display: inline-flex; align-items: center; gap: var(--sp-1); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
+  .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
   .ki-bell { position: relative; color: var(--tone-text-muted); }
   .ki-bell[data-active]:not([data-active='0'])::after { content: ''; position: absolute; inset-block-start: 0.6rem; inset-inline-end: 0.6rem; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
   .ki-kvart { display: block; grid-area: kvart; position: sticky; inset-block-start: var(--ki-top); align-self: start; max-block-size: calc(100svh - var(--ki-top)); overflow-y: auto; padding: var(--sp-4); background: var(--tone-surface-1); border-inline-start: 1px solid var(--tone-stroke); }
