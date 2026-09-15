@@ -98,13 +98,15 @@ async function capturePage(browser, { path, slug }) {
   }
 }
 
+/** The phone's tab when the domain has one; otherwise the directory (Još in the desk's status line, the tab bar's Još on the phone, D10), then the domain's row or any other way in. A Sada tile also carries data-action=nav with a selection, so the tab and the directory come first. */
 async function openLayer(page, layer) {
-  let nav = page.locator(`[data-action=nav][data-layer="${layer}"]:visible`).first();
-  if (!(await nav.count())) {
-    await page.getByTestId('tab-more').click();
-    nav = page.locator(`[data-action=nav][data-layer="${layer}"]:visible`).first();
+  const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
+  if (await tab.count()) {
+    await tab.click();
+  } else {
+    await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
+    await page.locator(`[data-testid="dir-${layer}"], [data-action=nav][data-layer="${layer}"]:visible`).first().click();
   }
-  await nav.click();
   await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor();
 }
 
@@ -130,7 +132,7 @@ try {
     }, scene);
     const session = await installExperienceFixture(page, await experienceSnapshots());
     await page.goto(`${base}${FIXTURE_DASHBOARD}`);
-    await page.locator('#ov-weather').waitFor();
+    await page.locator('[data-testid=tb]').waitFor();
     if (scene.textZoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     for (const layer of layers) {
@@ -174,7 +176,7 @@ try {
     await page.addInitScript(() => { localStorage.setItem('vidikovac-locale', 'hr'); });
     const session = await installExperienceFixture(page, await experienceSnapshots());
     await page.goto(`${base}${FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=1')}`);
-    await page.locator('#ov-weather').waitFor();
+    await page.locator('[data-testid=tb]').waitFor();
     await openLayer(page, 'u-pokretu');
     if (await page.locator('canvas').count()) findings.push({ scene: 'phone-lagano', layer: 'u-pokretu', problem: 'canvas-on-lightweight-path' });
     await captureLayer(page, 'phone-lagano', 'u-pokretu');

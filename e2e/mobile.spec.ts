@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { LayerId } from '../worker/protocol';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type FixtureSession } from './experience-fixtures';
-import { geometryIssues, PHONE_SHELL, PHONE_TYPE_FLOOR, ruleViolations, SOURCE_LINK_TARGETS, TARGET_MIN_PX, TYPE_FLOOR_PX } from './geometry';
+import { EDGE_TOLERANCE_PX, geometryIssues, PHONE_SHELL, PHONE_TYPE_FLOOR, ruleViolations, SOURCE_LINK_TARGETS, TARGET_MIN_PX, TYPE_FLOOR_PX } from './geometry';
 
 // --- the numbers the plan fixes ------------------------------------------------
 const PHONE = { width: 390, height: 844 };
@@ -37,9 +37,13 @@ const PEEK_TOLERANCE_PX = 2;
 const HALF_TOLERANCE = 0.02;
 const OPEN_GAP_PX = 40;
 const OPEN_GAP_TOLERANCE_PX = 4;
-/** Sada's promise at 390×844: weather, safety and the board are all reachable without a scroll. */
+/** Sada's promise at 390×844: three tiles of the city's now are on the first screen without a scroll. */
 const SADA_FOLD_PX = 700;
-const SADA_BLOCKS_IN_FOLD = 3;
+const SADA_TILES_IN_FOLD = 3;
+/** A lane snapped into place starts at the row's content edge within this much (sub-pixel layout, the row's 2 px inline padding). */
+const LANE_SNAP_PX = 2;
+/** A lane-changing swipe travels this much of the row: past half a lane pitch (the lane plus the 1.25rem gap, 378 px at 390) once the touch slop is spent; the mandatory snap then takes the nearer lane. 200 px lands within 4 px of the midpoint. */
+const LANE_SWIPE_FRACTION = 0.6;
 /** Bounded page heights with fixtures (plan, "Test updates", new test 7). */
 const GRAD_MAX_HEIGHT_PX = 3_000;
 const SIGURNOST_MAX_HEIGHT_PX = 2_500;
@@ -49,6 +53,8 @@ const SCROLL_PX = 1_500;
 const SWIPE_PX = 200;
 const SWIPE_STEPS = 12;
 const SWIPE_STEP_MS = 16;
+/** How long the finger rests on a snapping row before it lifts (see touchPath). */
+const SWIPE_HOLD_MS = 200;
 /** The sheet transition is 220 ms; the map's camera ease is shorter. */
 const SETTLE_MS = 600;
 /** Session clock marks the notices hang on: 600 s session, 60 s and 20 s warnings. */
@@ -81,18 +87,25 @@ async function openDashboard(page: Page, viewport: Viewport, url = FIXTURE_DASHB
   await page.setViewportSize(viewport);
   const fixture = await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(url);
-  await expect(page.locator('#ov-weather'), 'Sada must paint from the fixture').toBeVisible();
+  await expect(page.getByTestId('tb'), 'Sada must paint from the fixture').toBeVisible();
   await expect(page.getByTestId('session-label')).toBeVisible();
   return fixture;
 }
 
+/**
+ * The phone's tab when the domain has one; otherwise the directory (Još in the
+ * desk's status line, the tab bar's Još on the phone, D10), then the domain's
+ * row or any other way in. A Sada tile also carries data-action=nav with a
+ * selection, so the tab and the directory come first.
+ */
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
-  let navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
-  if (!(await navigation.count())) {
-    await page.getByTestId('tab-more').click();
-    navigation = page.locator(`[data-action="nav"][data-layer="${layer}"]:visible`).first();
+  const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
+  if (await tab.count()) {
+    await tab.click();
+  } else {
+    await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
+    await page.locator(`[data-testid="dir-${layer}"], [data-action="nav"][data-layer="${layer}"]:visible`).first().click();
   }
-  await navigation.click();
   await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
 }
 
@@ -116,16 +129,31 @@ async function scrollDocument(page: Page, y: number): Promise<void> {
 
 const scrollY = (page: Page): Promise<number> => page.evaluate(() => window.scrollY);
 
-/** A one-finger drag through the real touch pipeline (CDP), as a person swipes. */
-async function touchDrag(cdp: CDPSession, page: Page, x: number, y0: number, y1: number): Promise<void> {
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0 }] });
+interface Point { x: number; y: number }
+
+/**
+ * A one-finger drag through the real touch pipeline (CDP), from one point to
+ * another, as a person swipes; `holdMs` keeps the finger still before it
+ * lifts. A lift straight after fast moves reads as a fling the synthetic
+ * events carry no velocity for, so a snapping scroller neither flings nor
+ * snaps; a finger that rests first makes the release a plain scroll end,
+ * which the browser snaps to the nearest lane.
+ */
+async function touchPath(cdp: CDPSession, page: Page, from: Point, to: Point, holdMs = 0): Promise<void> {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
   for (let i = 1; i <= SWIPE_STEPS; i++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * i) / SWIPE_STEPS }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x + ((to.x - from.x) * i) / SWIPE_STEPS, y: from.y + ((to.y - from.y) * i) / SWIPE_STEPS }] });
     await page.waitForTimeout(SWIPE_STEP_MS);
   }
+  if (holdMs > 0) await page.waitForTimeout(holdMs);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(SETTLE_MS);
 }
+
+/** A vertical swipe at x, from y0 to y1: a scroll or a sheet drag. */
+const touchDrag = (cdp: CDPSession, page: Page, x: number, y0: number, y1: number): Promise<void> => touchPath(cdp, page, { x, y: y0 }, { x, y: y1 });
+/** A horizontal swipe at y, from x0 to x1, the finger resting before it lifts: a pan across the snapping lane row. */
+const touchDragX = (cdp: CDPSession, page: Page, y: number, x0: number, x1: number): Promise<void> => touchPath(cdp, page, { x: x0, y }, { x: x1, y }, SWIPE_HOLD_MS);
 
 /** The map has settled into a state the stage can be measured in. */
 async function waitForMap(page: Page, states: RegExp): Promise<void> {
@@ -197,13 +225,13 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
     expect(await geometryIssues(page, PHONE_SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
 
     if (viewport === PHONE) {
-      // The composition, not the scroll: three blocks of the city are on the first screen.
-      const blocks = await page.evaluate((fold) => [...document.querySelectorAll('.ov-block')].map((el) => {
+      // The composition, not the scroll: three tiles of the city's now are on the first screen (a skeleton is not the city).
+      const tiles = await page.evaluate((fold) => [...document.querySelectorAll('[data-testid=tb-lane-sada] .tl:not([data-skeleton])')].map((el) => {
         const r = el.getBoundingClientRect();
-        return { id: el.id, top: Math.round(r.top), bottom: Math.round(r.bottom), inFold: r.top < fold && r.bottom > 0 };
+        return { id: el.getAttribute('data-key') ?? el.getAttribute('data-testid') ?? el.className, top: Math.round(r.top), bottom: Math.round(r.bottom), inFold: r.top < fold && r.bottom > 0 };
       }), SADA_FOLD_PX);
-      const inFold = blocks.filter((b) => b.inFold);
-      expect(inFold.length, `at least ${SADA_BLOCKS_IN_FOLD} .ov-block rects must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the blocks measure ${blocks.map((b) => `${b.id} ${b.top}→${b.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_BLOCKS_IN_FOLD);
+      const inFold = tiles.filter((t) => t.inFold);
+      expect(inFold.length, `at least ${SADA_TILES_IN_FOLD} sada tiles ([data-testid=tb-lane-sada] .tl, skeletons excluded) must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the tiles measure ${tiles.map((t) => `${t.id} ${t.top}→${t.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_TILES_IN_FOLD);
     }
 
     for (const layer of ['vijesti', 'sigurnost'] as const) {
@@ -320,6 +348,50 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
   expect(sadaScroll, `a swipe over Sada must scroll the document; scrollY stayed at ${sadaScroll}`).toBeGreaterThan(0);
 });
 
+// --- 4b. the time band's phone form ---------------------------------------------------------
+test('segments and swipe stay in sync: the sutra segment scrolls the lane row three lanes over and marks the sutra lane current, a swipe back one lane presses večeras, and nothing overflows', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  const segment = (col: string) => page.locator(`[data-testid=tb-seg] .tb-seg-btn[data-filter-value=${col}]`);
+  await expect(segment('sada'), 'the sada segment is pressed at first').toHaveAttribute('aria-pressed', 'true');
+  await segment('sutra').click();
+  await expect(page.getByTestId('tb-lane-sutra'), 'the sutra lane is current once its segment is pressed').toHaveAttribute('data-current', 'true');
+  await expect(segment('sutra')).toHaveAttribute('aria-pressed', 'true');
+  // Scrolled to the fourth lane: the row reads lane 3 by the sync's own arithmetic (scrollLeft ≈ 3 × clientWidth; the
+  // gap between lanes puts the snap point a little past it), and the sutra lane's start edge sits at the row's content edge.
+  const laneRow = () => page.evaluate((snap) => {
+    const el = document.querySelector<HTMLElement>('[data-testid=tb-lanes]')!;
+    const lane = el.querySelector('[data-col=sutra]')!.getBoundingClientRect();
+    const row = el.getBoundingClientRect();
+    const contentLeft = row.left + parseFloat(getComputedStyle(el).paddingInlineStart);
+    return { left: el.scrollLeft, width: el.clientWidth, index: Math.round(el.scrollLeft / el.clientWidth), sutraAtStart: Math.abs(lane.left - contentLeft) <= snap };
+  }, LANE_SNAP_PX);
+  await expect.poll(async () => {
+    const row = await laneRow();
+    return row.width > 0 && row.index === 3 && row.sutraAtStart;
+  }, { message: `the lane row must scroll to the fourth lane: round(scrollLeft / clientWidth) = 3 and the sutra lane's start at the row's content edge within ${LANE_SNAP_PX} px; it reads ${JSON.stringify(await laneRow())}` }).toBe(true);
+  // The glide the segment started has ended before a finger lands (a touch on a moving row cuts the glide short).
+  await page.waitForTimeout(SETTLE_MS);
+
+  const laneState = () => page.evaluate(() => {
+    const row = document.querySelector<HTMLElement>('[data-testid=tb-lanes]')!;
+    return {
+      left: Math.round(row.scrollLeft),
+      pressed: document.querySelector('.tb-seg-btn[aria-pressed="true"]')?.getAttribute('data-filter-value') ?? null,
+      current: row.querySelector('.tb-lane[data-current="true"]')?.getAttribute('data-col') ?? null,
+    };
+  });
+  const cdp = await page.context().newCDPSession(page);
+  const lanes = await boxOf(page, '[data-testid=tb-lanes]');
+  expect(lanes, 'the lane row [data-testid=tb-lanes] must be on the page to swipe').not.toBeNull();
+  const y = Math.min(lanes!.top + 120, PHONE.height - 120);
+  const travel = Math.round(lanes!.width * LANE_SWIPE_FRACTION);
+  await touchDragX(cdp, page, y, lanes!.cx - travel / 2, lanes!.cx + travel / 2);
+  await expect.poll(laneState, { message: `a ${travel} px swipe towards the start settles on the previous lane: the row snaps to večeras, its segment is pressed and its lane is current` }).toMatchObject({ pressed: 'veceras', current: 'veceras' });
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth, `the lane row scrolls inside itself; the document must not widen past ${PHONE.width} px (it is ${scrollWidth} px)`).toBeLessThanOrEqual(PHONE.width + EDGE_TOLERANCE_PX);
+});
+
 // --- 5. type floor ----------------------------------------------------------------------
 test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (attribution lines excepted), and every link in a source line is a ${TARGET_MIN_PX} px target`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
@@ -359,17 +431,20 @@ test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} p
 });
 
 // --- 7. zoom-compact ----------------------------------------------------------------------
-test('at 200% text the header and the tab bar have no horizontal overflow and the current tab keeps a whole label', async ({ page }) => {
-  const fixture = await openDashboard(page, PHONE);
-  await settle(page, fixture);
-  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
-  await page.waitForTimeout(300);
-  const issues = await page.evaluate(({ header, tabbar }) => {
+/** The zoom-compact facts at 200% text: no overflow in the header or the tab bar, the kvart picker present but hidden in the compact header, the current tab's label whole. */
+async function zoomCompactIssues(page: Page): Promise<string[]> {
+  return page.evaluate(({ header, tabbar }) => {
     const out: string[] = [];
     for (const [label, sel] of [['header', header], ['tab bar', tabbar]] as const) {
       const el = document.querySelector<HTMLElement>(sel);
       if (!el || el.getBoundingClientRect().height <= 0) { out.push(`the ${label} ${sel} is missing or hidden`); continue; }
       if (el.scrollWidth > el.clientWidth + 1) out.push(`the ${label} ${sel} overflows horizontally at 200%: scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}`);
+    }
+    const pick = document.querySelector<HTMLElement>(`${header} [data-testid=kvart-pick]`);
+    if (!pick) out.push(`the header ${header} must carry the kvart picker [data-testid=kvart-pick] (the DOM stays honest; the compact header hides it by CSS)`);
+    else {
+      const p = pick.getBoundingClientRect();
+      if (p.width > 0 && p.height > 0) out.push(`the compact header must hide the kvart picker at 200%; [data-testid=kvart-pick] measures ${Math.round(p.width)}×${Math.round(p.height)} px`);
     }
     const tab = document.querySelector<HTMLElement>('.ki-tab[aria-current="page"]');
     const text = tab?.querySelector<HTMLElement>('.ki-nav-label');
@@ -384,7 +459,19 @@ test('at 200% text the header and the tab bar have no horizontal overflow and th
     }
     return out;
   }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar });
-  expect(issues, 'zoom-compact state at 200% text').toEqual([]);
+}
+
+test('at 200% text the header and the tab bar have no horizontal overflow, the compact header hides the kvart picker, and the current tab keeps a whole label, on Sada and with the Kvart tab open', async ({ page }) => {
+  const fixture = await openDashboard(page, PHONE);
+  await settle(page, fixture);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await page.waitForTimeout(300);
+  expect(await zoomCompactIssues(page), 'zoom-compact state at 200% text on Sada').toEqual([]);
+  await page.getByTestId('tab-kvart').click();
+  await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
+  await expect(page.getByTestId('tab-kvart'), 'the Kvart tab is the current one, so its label is the measured one').toHaveAttribute('aria-current', 'page');
+  await page.waitForTimeout(300);
+  expect(await zoomCompactIssues(page), 'zoom-compact state at 200% text with the Kvart tab open').toEqual([]);
 });
 
 // --- 8. landing -----------------------------------------------------------------------------
@@ -439,7 +526,10 @@ test('the expiry notices sit in the banners row without covering content: expiri
 });
 
 // --- 10. desktop first paint ------------------------------------------------------------------------
-test('at 1440 the rail paints before the session joins: the sidebar is visible and the session card reads the connecting text', async ({ page }) => {
+/** The desk's directory (D10): Promet ahead of the five extra domains, in this order. */
+const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti'];
+
+test('at 1440 the desk paints before the session joins: no side rail, the session card reads the connecting text, Još opens the six-domain directory in order, and the kvart aside carries the cast control', async ({ page }) => {
   await page.setViewportSize(DESK);
   // A room that never answers: the join is swallowed, so the page stays in its first paint.
   await page.routeWebSocket('**/ws/room/**', () => {});
@@ -447,7 +537,13 @@ test('at 1440 the rail paints before the session joins: the sidebar is visible a
   const label = page.getByTestId('session-label');
   await expect(label, 'the session card must be part of the first paint').toBeVisible();
   await expect(label, `before the join the session card reads "${HR.session.connecting}"`).toContainText(HR.session.connecting);
-  const side = page.locator('nav[data-region=side]');
-  await expect(side, 'the sidebar must be visible at 1440 before any data arrives').toBeVisible();
-  await expect(side.locator('[data-action=nav]'), 'the sidebar lists the seven domains').toHaveCount(LAYERS.length);
+  await expect(page.locator('nav[data-region=side]'), 'the rail is gone at the desk (D10)').toHaveCount(0);
+  const more = page.getByTestId('status-more');
+  await expect(more, 'Još must stand in the desk status line before any data arrives').toBeVisible();
+  await more.click();
+  const rows = page.locator('[data-testid=dash-view] .dir-item[data-layer]');
+  await expect(rows, 'the directory lists Promet and the five extra domains').toHaveCount(DESK_DIRECTORY.length);
+  expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), 'the directory rows in order').toEqual(DESK_DIRECTORY);
+  for (const layer of DESK_DIRECTORY) await expect(page.getByTestId(`dir-${layer}`), `the directory row dir-${layer}`).toBeVisible();
+  await expect(page.locator('[data-testid=kvart-aside] [data-testid=cast-screen]'), 'the desk keeps the kvart panel as an aside, its cast control in place').toBeVisible();
 });
