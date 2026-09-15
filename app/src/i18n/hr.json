@@ -165,16 +165,8 @@
     "scheduled": "Prema redu vožnje"
   },
   "overview": {
-    "place": "{place} · {date}",
-    "observedAt": "izmjereno u {time}",
-    "todayRange": "danas od {min} do {max} °C",
     "allClear": "Nema hitnih upozorenja",
-    "allClearConfirmed": "potvrđeno {time}",
-    "transitEmpty": "Trenutačno nema podataka o vozilima ZET-a.",
-    "delayShort": "Kašnjenje je po liniji, nije dolazak.",
-    "nextEvents": "Sljedeća događanja",
-    "assemblyNext": "Sjednica Gradske skupštine {when}",
-    "noEvents": "Nema najavljenih događanja iz dostupnih izvora."
+    "allClearConfirmed": "potvrđeno {time}"
   },
   "weather": {
     "now": "Trenutno",

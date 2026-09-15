@@ -156,16 +156,8 @@
     "scheduled": "Per schedule"
   },
   "overview": {
-    "place": "{place} · {date}",
-    "observedAt": "measured at {time}",
-    "todayRange": "today {min} to {max} °C",
     "allClear": "No urgent warnings",
-    "allClearConfirmed": "confirmed {time}",
-    "transitEmpty": "No ZET vehicle data right now.",
-    "delayShort": "Delay is per line, not an arrival.",
-    "nextEvents": "Coming up",
-    "assemblyNext": "City Assembly session {when}",
-    "noEvents": "No announced events from the available sources."
+    "allClearConfirmed": "confirmed {time}"
   },
   "weather": {
     "now": "Right now",

@@ -13,6 +13,7 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../feed/fixture-contexts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import { delayTone } from '../../app/src/experience/delay';
 import { renderLayer } from '../../app/src/layers';
 import { dataText } from '../../app/src/panels/panel';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
@@ -40,22 +41,27 @@ const panel = (section: HTMLElement, id: string): HTMLElement => {
 };
 
 describe('every layer renders the real feed output', () => {
-  it('shows the Maksimir observation as numbers, not placeholders', () => {
-    const body = panel(renderLayer('grad-sada', ctx()), 'ov-weather');
-    expect(clean(body.querySelector('[data-testid=temp]'))).toMatch(/^-?\d+([.,]\d+)? °C$/);
-    const facts = clean(body.querySelector('.ov-weather-facts'));
-    expect(facts).toMatch(/vlaga \d+ %/);
-    expect(facts).toMatch(/\S+ \d+([.,]\d+)? m\/s/);
-    expect(clean(body)).not.toContain(UNAVAILABLE);
-    expect(clean(body)).not.toContain(DASH);
-    // The full weather workspace also carries pressure as a measured fact.
+  it('shows the Maksimir observation as numbers with pressure as a measured fact', () => {
     const weather = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-now');
     expect(clean(weather.querySelector('.wx-figures'))).toMatch(/\d+([.,]\d+)? hPa/);
+    expect(clean(weather)).not.toContain(UNAVAILABLE);
+    expect(clean(weather)).not.toContain(DASH);
   });
 
-  it('shows today’s forecast as a real range on both layers that carry it', () => {
-    const overview = panel(renderLayer('grad-sada', ctx()), 'ov-weather');
-    expect(clean(overview.querySelector('.ov-range-text'))).toMatch(/danas od -?\d+ do -?\d+ °C/);
+  it('grad-sada never renders the unavailable word or a dash: every source is live, so every lane is tiles or an honest empty word', () => {
+    const section = renderLayer('grad-sada', ctx());
+    expect(section.querySelector('[data-testid=tb]')).not.toBeNull();
+    expect(section.querySelectorAll('.tl:not([data-skeleton])').length).toBeGreaterThan(0);
+    expect(section.querySelectorAll('.tl[data-skeleton], [aria-busy="true"], [data-action=retry]')).toHaveLength(0);
+    expect(clean(section)).not.toContain(UNAVAILABLE);
+    // A dash where a figure should stand is the placeholder this guards against; a title is the
+    // source's own words (Kulturpunkt writes "zrcala – psihoanaliza"), so titles are not read here.
+    const figures = section.querySelectorAll('.tb-h, .tb-more, .tb-empty, .tl-label, .tl-value, .tl-time, .tl-context, .tl-trail');
+    expect(figures.length).toBeGreaterThan(0);
+    for (const figure of figures) expect(clean(figure), figure.outerHTML).not.toContain(DASH);
+  });
+
+  it('shows today’s forecast as a real range', () => {
     const weather = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-range');
     expect(clean(weather.querySelector('[data-testid=forecast-range]'))).toMatch(/^od -?\d+ do -?\d+ °C$/);
     expect(clean(weather)).not.toContain(DASH);
@@ -72,14 +78,18 @@ describe('every layer renders the real feed output', () => {
     }
   });
 
-  it('counts vehicles and lists a delay per route', () => {
-    const gradSada = renderLayer('grad-sada', ctx());
-    const vehicles = clean(gradSada.querySelector('[data-testid=vehicle-count]'));
-    expect(vehicles).toMatch(/^\d+ vozil/);
-    expect(vehicles).not.toMatch(/^0 /);
-
+  it('tiles the deviating lines on Sada and lists a delay per route in Promet', () => {
     const delays = routeDelays(snapshots['zet-rt']);
     expect(delays.length).toBeGreaterThan(0);
+    // Without a screen stop the sada lane boards the lines deviating most, at most four on a desk,
+    // and every value is a delay word: never an arrival, never the fleet count.
+    const deviating = delays.filter((d) => delayTone(i18n, d.meanDelay) !== 'none');
+    expect(deviating.length).toBeGreaterThan(0);
+    const gradSada = renderLayer('grad-sada', ctx());
+    const tiles = [...gradSada.querySelectorAll('.tl[data-domain=transit]:not([data-skeleton])')];
+    expect(tiles).toHaveLength(Math.min(4, deviating.length));
+    for (const tile of tiles) expect(clean(tile.querySelector('.tl-value'))).toMatch(/^(na vrijeme|kasni \d+ min|rani \d+ min)$/);
+    expect(clean(gradSada)).not.toMatch(/\d+ vozil/);
     // The per-route summary rows are the only source of a delay; the pins carry none.
     expect(delays.length).toBe(snapshots['zet-rt']!.items.filter((i) => i.id.startsWith('route:')).length);
 
