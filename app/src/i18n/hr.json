@@ -73,6 +73,7 @@
     "vijesti": "Vijesti"
   },
   "nav": {
+    "kvart": "Kvart",
     "label": "Domene",
     "more": "Još",
     "moreTitle": "Još",
@@ -89,10 +90,14 @@
     "sourcesDown_other": "{count} izvora ne odgovara.",
     "footerNote": "Sigurnosni sloj ostaje otvoren svima na /hitno, bez skeniranja.",
     "wordmarkLabel": "Kaj ima?, početna stranica",
+    "wordmarkSada": "Kaj ima?, natrag na Sada",
     "skip": "Prijeđi na sadržaj",
     "detailBack": "Natrag na popis",
     "emptyTitle": "Ovdje se otključava Zagreb",
-    "emptyLead": "Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju."
+    "emptyLead": "Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju.",
+    "clockLabel": "{time}, {weather}. Otvori Vrijeme.",
+    "clockOnly": "{time}. Otvori Vrijeme.",
+    "sunset": "zalazak {time}"
   },
   "time": {
     "justNow": "upravo sada",
@@ -425,6 +430,55 @@
     "lightSearchLabel": "Pretraga linija u pokretu",
     "lightNoResults": "Nijedna linija u pokretu ne odgovara „{query}”."
   },
+  "kvart": {
+    "select": "Gradska četvrt",
+    "screenOption": "Stanica zaslona · {stop}",
+    "wholeCity": "Cijeli grad",
+    "map": "Karta",
+    "mapLabel": "Karta kvarta {kvart}",
+    "works_one": "{count} rad u tijeku",
+    "works_few": "{count} rada u tijeku",
+    "works_other": "{count} radova u tijeku",
+    "nothingNow": "Trenutačno nema radova ni zatvaranja u kvartu.",
+    "nearestClosure": "najbliže {street}",
+    "saved": "Spremljeno",
+    "savedEmpty": "Spremi liniju ili stanicu iz Prometa; ovdje su zatim uvijek pri ruci.",
+    "addStop": "+ stanica",
+    "removeRoute": "Ukloni liniju {id}",
+    "removeStop": "Ukloni stanicu {name}",
+    "saveRoute": "Spremi liniju {id}",
+    "saveStop": "Spremi stanicu {name}",
+    "walkTitle": "Pješice od stanice zaslona",
+    "walkLabel": "Pješice od stanice zaslona, procjena ravnom linijom",
+    "walkMinutes": "{minutes} min",
+    "notify": "Obavijesti za kvart",
+    "notifyOn_one": "{count} uključena",
+    "notifyOn_few": "{count} uključene",
+    "notifyOn_other": "{count} uključenih",
+    "notifyOff": "isključene",
+    "localNote": "Spremljeno i obavijesti ostaju samo u ovom pregledniku, bez računa."
+  },
+  "cast": {
+    "toScreen": "Prebaci na zaslon",
+    "fab": "Na zaslon",
+    "fabLabel": "Na zaslon: pošalji {layer} na zaslon {label}",
+    "target": "Zaslon: {label}",
+    "targetStop": "Zaslon: {label} · stanica {stop}",
+    "sent": "Poslano na zaslon: {layer}.",
+    "noScreen": "Ova sesija nema zaslon.",
+    "peer": "Zaslon prati telefon koji je skenirao kod.",
+    "frozen": "Sesija je završila; zaslon više ne prima prikaz.",
+    "connecting": "Povezivanje sa zaslonom…"
+  },
+  "notify": {
+    "title": "Obavijesti",
+    "delays": "Kašnjenja dulja od 5 min na spremljenim linijama",
+    "works": "Radovi u kvartu",
+    "waste": "Odvoz sutra",
+    "dhmz": "Upozorenja DHMZ-a",
+    "note": "Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.",
+    "bellLabel": "Obavijesti, {state}"
+  },
   "directory": {
     "domains": "Domene",
     "sessionSub": "Postavke, jezik i tema",
@@ -436,6 +490,9 @@
     "safetySummaryUnknown": "Stanje nije potvrđeno",
     "civicSummary": "Glasnik {broj}/{godina}",
     "newsSummary": "{count} vijesti danas",
+    "eventsSummary_one": "{count} događanje danas",
+    "eventsSummary_few": "{count} događanja danas",
+    "eventsSummary_other": "{count} događanja danas",
     "noSummary": "Otvori za detalje"
   },
   "session": {
