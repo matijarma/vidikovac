@@ -506,13 +506,13 @@ describe('failure and recovery', () => {
     } });
     session.join();
     await flush();
-    expect(text(root.querySelector('[data-testid=temp]'))).toBe('21 °C');
-    expect(root.querySelector('#ov-news [data-action=retry][data-module=hrt-news]')).not.toBeNull();
+    expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
+    expect(root.querySelector('[data-testid=tb-lane-sada] [data-action=retry][data-module=hrt-news]')).not.toBeNull();
     failNow = true;
     tick();
     await flush();
-    expect(root.querySelector('#ov-weather [data-status=stale]')).not.toBeNull();
-    expect(text(root.querySelector('[data-testid=temp]'))).toBe('21 °C');
+    expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
+    expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
     fetchData.mockClear();
     click(root, '#ov-news [data-action=retry]');
     await flush();
