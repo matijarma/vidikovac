@@ -446,6 +446,8 @@ describe('layers.css time band', () => {
     expect(LAYERS_CSS).toContain(".tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }");
   });
   it('sets the segments, the feet and the weather group as 44 px controls on tokens, hover under (hover: hover) only', () => {
+    // Like the heads and lanes, the segments yield their width: five non-wrapping words must never widen the workspace at 200 % text.
+    expect(rule('.tb-seg', LAYERS_CSS)).toContain('min-inline-size: 0');
     expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('min-block-size: var(--target)');
     expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('touch-action: manipulation');
     expect(rule(".tb-seg-btn[aria-pressed='true'] > span", LAYERS_CSS)).toContain('background: var(--tone-action-brand)');
