@@ -101,6 +101,10 @@
 .tl[data-variant='ink'] .kicker { color: var(--tone-surface-canvas); }
 .tl[data-variant='ink'] .tl-context { color: var(--tone-surface-3); }
 .tl[data-skeleton] { cursor: default; }
+/* Notification highlight (plan T3.3): the reader's own alert switches (ctx.notify) surface a
+   matching tile with a stroke, never a fill, so the tone tints above still carry their own
+   meaning undisturbed. */
+.tl[data-highlight='1'] { box-shadow: inset 0 0 0 1.5px var(--tone-action-brand); }
 
 .sk { display: block; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--tone-surface-2), var(--tone-surface-3), var(--tone-surface-2)); background-size: 200% 100%; animation: sk-shimmer 1.6s ease-in-out infinite; }
 .sk-numeral { inline-size: 5ch; block-size: 2.5rem; }

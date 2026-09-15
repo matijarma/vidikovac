@@ -57,6 +57,9 @@ function lineTile(i18n: I18n, id: string, byId: Map<string, RouteDelay>): Tile {
     valueSize: word.length > 11 ? 'm' : 'l',
     valueTone: delayTone(i18n, delay),
     contextMarkup: row ? `${iconMarkup(kind === 'bus' ? 'bus-front' : 'tram-front')}<span class="tl-ctx-text">${escapeHtml(String(count))}</span>` : undefined,
+    // The notification band (T3.3) reads a saved line's delay off the tile itself, in whole
+    // seconds; absent without a row, exactly where the value already says "nema podataka".
+    data: row ? { delay: String(delay) } : undefined,
     aria,
     layer: 'u-pokretu',
     selection: { kind: 'route', id },

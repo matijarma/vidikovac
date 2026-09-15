@@ -223,6 +223,36 @@ export interface TimebandModel {
   weather: WeatherStatus | null;
 }
 
+/**
+ * The kvart alert switches (plan T3.3, ctx.notify) surface a matching tile
+ * with a stroke, never a push (PUSH stays off, D7): a delay past the
+ * threshold on a saved line, the works band once its count clears zero, the
+ * safety band gone urgent, or a waste tile (T3.2, `tile-waste`). Local
+ * highlighting only; nothing here is sent anywhere.
+ */
+const DELAY_ALERT_SECONDS = 300;
+
+/** Whether `tile` is the reader's own saved line, read from `ctx.saved` (T2.5) exactly as it reaches the context. */
+function isSavedRoute(ctx: LayerContext, tile: Tile): boolean {
+  return tile.selection?.kind === 'route' && (ctx.saved?.has('route', tile.selection.id) ?? false);
+}
+
+function highlighted(ctx: LayerContext, tile: Tile): boolean {
+  const notify = ctx.notify;
+  if (!notify) return false;
+  if (notify.delays && tile.domain === 'transit' && isSavedRoute(ctx, tile)) {
+    const delay = Number(tile.data?.delay);
+    if (Number.isFinite(delay) && Math.abs(delay) > DELAY_ALERT_SECONDS) return true;
+  }
+  if (notify.works && tile.testid === 'tile-works') {
+    const count = Number(tile.value);
+    if (Number.isFinite(count) && count > 0) return true;
+  }
+  if (notify.dhmz && tile.domain === 'safety' && tile.data?.level === 'urgent') return true;
+  if (notify.waste && tile.testid === 'tile-waste') return true;
+  return false;
+}
+
 /** DOMAIN_ORDER's place of a domain; a domain outside the order sorts last. */
 function domainRank(domain: TileDomain): number {
   const index = DOMAIN_ORDER.indexOf(domain);
@@ -328,6 +358,7 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
       const bucket = tile.bucket ?? options.bucket(tile.at, tile.until, tile.allDay);
       if (!bucket) continue;
       if (badge) tile.stale = badge;
+      if (highlighted(ctx, tile)) tile.data = { ...tile.data, highlight: '1' };
       producerOf.set(tile, producer);
       laneOf(bucket).tiles.push(tile);
     }
