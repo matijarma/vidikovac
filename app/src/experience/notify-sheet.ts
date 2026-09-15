@@ -1,12 +1,10 @@
 // The bell sheet (plan B.5, D7): the kvart alert switches as "istakni"
-// highlights, never a push. This file is the T2.6 signature stub the
-// dashboard wires to (open, close, refresh, destroy, and the toggle
-// delegation into the store); T2.7 fills the switch rows and the note, and
-// tests them in notify-sheet.test.ts.
+// highlights, never a push -- toggling one only lifts a matching tile's
+// state in this browser, said once in the note under the rows.
 import type { NotifyFlags, NotifyKey } from '../core/notify-store';
 import type { I18n } from '../i18n/i18n';
 import { createDialog, type DialogHandle } from '../ui/dialog';
-import { createElementFromHTML } from '../ui/dom/escape';
+import { createElementFromHTML, escapeHtml } from '../ui/dom/escape';
 import { reconcileChildren } from '../ui/dom/reconcile';
 
 export interface NotifySheetState {
@@ -30,8 +28,14 @@ export interface NotifySheet {
   destroy(): void;
 }
 
-function bodyMarkup(): string {
-  return `<div class="sheet-sec nt-list" role="group" data-key="list"></div>`;
+/** One 44 px switch row (`role=switch`, never a checkbox: nothing here is a form). */
+function rowMarkup(i18n: I18n, key: NotifyKey, on: boolean): string {
+  return `<button type="button" class="nt-row" role="switch" aria-checked="${on ? 'true' : 'false'}" data-key="${key}" data-sheet-action="notify-toggle" data-testid="notify-${key}"><span class="nt-text">${escapeHtml(i18n.t(`notify.${key}`))}</span><span class="nt-knob" aria-hidden="true"></span></button>`;
+}
+
+function bodyMarkup(i18n: I18n, s: NotifySheetState): string {
+  const rows = s.keys.map((key) => rowMarkup(i18n, key, s.flags[key])).join('');
+  return `<div class="sheet-sec nt-list" role="group" data-key="list">${rows}</div><p class="nt-note sheet-label" data-key="note">${escapeHtml(i18n.t('notify.note'))}</p>`;
 }
 
 export function createNotifySheet(deps: NotifySheetDeps): NotifySheet {
@@ -54,7 +58,7 @@ export function createNotifySheet(deps: NotifySheetDeps): NotifySheet {
     if (!dialog) return;
     const titleEl = dialog.element.querySelector<HTMLElement>('.dialog-title');
     if (titleEl) titleEl.textContent = i18n.t('notify.title');
-    reconcileChildren(dialog.body, createElementFromHTML(`<div>${bodyMarkup()}</div>`));
+    reconcileChildren(dialog.body, createElementFromHTML(`<div>${bodyMarkup(i18n, deps.state())}</div>`));
   };
   return {
     open() {
