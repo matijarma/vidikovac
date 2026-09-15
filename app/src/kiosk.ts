@@ -272,7 +272,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The header's weather group (D11): a condition glyph, the reading and the
    *  sunset-then-sunrise line, hidden while dhmz-now loads or is down -- the
    *  clock stands alone, never a dash. Shares the strip's module choice: the
-   *  session's own copy once paired, the open teaser otherwise. */
+   *  session's own copy once paired, the open teaser otherwise.
+   *  Known, tracked, transient collision: while `phase === 'invitation'`,
+   *  ./kiosk/invitation.ts (T2.10's file, untouched here) still renders its
+   *  own old side-column weather lockup under the same `data-testid`s
+   *  (`kiosk-weather` on its wrapper, `kiosk-temp` on its reading) -- when
+   *  dhmz-now is live or stale both copies are on screen at once. It
+   *  resolves when T2.10 removes that lockup (C.3: the right column becomes
+   *  the two value tiles plus the card). See task-T2.8-report.md, Ruling 5. */
   function paintWeather(): void {
     const weather = headerWeather(currentSafetyModules(), s, locale, now());
     const markup = weatherGroupMarkup(weather, s);
