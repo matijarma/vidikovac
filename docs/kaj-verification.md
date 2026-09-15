@@ -1,6 +1,6 @@
 # Kaj ima? · provjera prototipa
 
-Datum provjere: 13. rujna 2026., dopunjen 14. rujna 2026. Dokument prati integrirani prototip,
+Datum provjere: 13. rujna 2026., dopunjen 14. i 15. rujna 2026. Dokument prati integrirani prototip,
 ne obećava provjere na fizičkim uređajima koje nisu provedene.
 
 ## Integrirani rezultati
@@ -162,6 +162,60 @@ crvena dok zadatak koji ih rješava ne stigne: granična visina Sigurnosti
 (2.500 px pri 390 px, rješena s područjem Sigurnost) i redoslijed radnji na
 naslovnici (skeniranje prije poveznice na zaslon, traka uživo iznad preloma,
 rješeno s naslovnicom). Od isporuke `82a9655` oba se provjeravaju bez iznimke.
+
+## Sustav „Dan grada”, 15. rujna 2026.
+
+Sustav „Dan grada” (`newdesignsystem.md`: jedna vremenska os, jedna gramatika
+pločica, jedna zagrebačka plava, papir i ultramarin) isporučen je u tri vala,
+svaki nakon zelenog prolaza cijelog lanca (TypeScript oba projekta, Vitest,
+gradnja, Playwright u oba projekta, vizualna matrica, Lighthouse) na spojenoj
+grani `main`. Brojke su iz zapisa tih prolaza
+(`.superpowers/sdd/2026-09-15-dan-grada/gate-logs/`); nijedan val nije
+objavljen s crvenim testom.
+
+| Val | Isporučeno | Vitest | Playwright | Matrica | Lighthouse |
+|---|---|---|---|---|---|
+| `03ee3e3`, 15. 9. 00:40 UTC | paleta „papir i ultramarin” s OKLCH parovima u `tokens.css`, tipografski tokeni pločica, karta u papirnoj i noćnoj paleti, gramatika pločica `.tl` (vrijednost · vrijeme · traka · redak · tinta), sedam glifova, oznaka linije `xs`, statične zastavice, zajednički status vremena | 2.215 (150 datoteka) | 75 | 89 prikaza, 0 nalaza | 100 na svih pet stranica |
+| `770648b`, 15. 9. 09:45 UTC | vremenska traka sada · poslijepodne · večeras · sutra · tjedan s proizvođačima pločica po području, statusna linija od 52 px na telefonu i 56 px na stolu, Kvart kao kartica ljuske s izborom četvrti, izričito slanje na zaslon (gumb i FAB umjesto zrcaljenja), spremljene linije i stanice, obavijesti kao istaknuća, četvrti u Workeru (`data.district`, `ScreenStop.district`), kiosk s okvirom 96/96, vremenom u zaglavlju i rotirajućim prizorima Promet · Večeras · Grad, glifovi u šest radnih površina | 2.532 (161 datoteka) | 83 | 89 / 0 | 100 × 5 |
+| `43bc478`, 15. 9. 11:18 UTC | zadnji polazak po liniji sa stanice iz statičkog ZET GTFS-a (2.529 datoteka po stanici, `FEED_LASTRUN`), proizvođači pločica za bicikle, garaže i odvoz iza zastavica (isključeni dok izvori ne postoje), istaknuća s obavijesti na traci, kiosk drži okvir uz živo upozorenje DHMZ-a (stupac Sada bez bloka vremena, osnovno u tri stupca), skripta obilaska instalacije hoda novom ljuskom | 2.603 (165 datoteka); vidi napomenu | 83 | 89 / 0 | 100 × 5 |
+| `bf6ed6c`, 15. 9. 12:11 UTC | upareni stupac Sada slijedi presudu sigurnosti (samo zatvaranja dok je mirno; upozorenja uz njih na 1920, sama na 1366 kad je hitno), zaglavlje kioska u jednom retku u svakoj veličini i stanju (pločica sesije zadržava širinu, čip popušta, u portretu i upareno na 1366 odlaze datum i podnaslov), portretno polje prizora slaže kartu iznad jednog retka pločica linija a Večeras i Grad odozgo, stražar preklapanja zaglavlja u Playwrightu; pin na uklonjeni blok vremena prepisan; test ograničenja sesija dobio granicu po svom obliku (31 kruga kroz Durable Object) | 2.606 (165 datoteka) | 83 (lanac preglednika na `7074b6f`, jedan test-only zapis ispod) | 89 / 0 | 100 × 5 |
+
+Napomena o poštenju brojki: isporuka `43bc478` otišla je s jednim crvenim
+zastarjelim pinom u `test/app/kiosk-local.test.ts` (pin na blok vremena koji je
+upravo ta isporuka uklonila iz uparenog stupca Sada); cijeli Vitest skup nije
+bio ponovno pokrenut nakon tog ispravka, nego samo kiosk datoteke. Pin je
+prepisan u `99bc62a` prije sljedeće isporuke i od tada jedinični lanac
+(TypeScript, Vitest, gradnja) ide prije svakog `git push`.
+
+Nakon svakog vala provjereno je da paketi `/d/` i `/kiosk/` koje poslužuje
+javna adresa sadrže iste oznake kao paketi koji su prošli lanac (usporedba sadržaja,
+ne naziva datoteka: Cloudflareova gradnja i gradnja na Windowsu daju različite
+sažetke u nazivima, pa se uspoređuju pravila u CSS-u i razredi u skriptama).
+
+Snimke: vizualna matrica u `review.local/final/` (90 datoteka: telefon, tablet
+i stolno računalo u svijetloj i tamnoj temi za svih sedam područja, 320 px,
+pejzaž 844 × 390, 200 % teksta), kiosk u `test-results/` kao
+`kiosk-<1920|1366|1080>-<light|dark>.png` za prizor Promet i
+`-veceras.png` odnosno `-grad.png` za druga dva prizora na 1920 i 1080, te
+`-paired-<područje>.png` za uparene prikaze. Snimke prvog vala na javnoj adresi
+su u `.superpowers/sdd/2026-09-15-dan-grada/prod1-screens/`.
+
+Provjere iz plana koje ovaj dokument ne tvrdi: stvarni iPhone i Android na
+dnevnom svjetlu (čitanje trake „sada” bez listanja, povlačenje traka, dodir
+pločice u Promet, slanje na zaslon iz kartice Kvart, promjena prizora na
+kiosku) čekaju vlasnika i upisuju se ovdje s uređajem, sustavom i nazivima
+snimaka. 
+
+Obilazak stvarne instalacije skriptom `scripts/audit-production.mjs` proveden je
+15. 9. u 12:16 UTC nad isporukom `bf6ed6c` (WebKit s opisom iPhonea 13, Chromium kao
+Pixel 7 i stolno računalo 1440 px, kiosk 1366 i 1920, jedan privremeni zaslon kroz
+čarobnjak): 62 skupa mjerenja, 0 kršenja pravila (geometrija zaglavlja, donja granica
+teksta, ciljevi, prelijevanje), engleski pregled uključen. Sedam zabilježenih
+upozorenja nisu kršenja: četiri WebGL poruke o performansama karte na kiosku, dva
+zahtjeva za pločice karte prekinuta navigacijom i jedan klik skripte koji je nakon
+promjene jezika pogodio gumb za slanje na zaslon umjesto zatvorenog segmenta jezika
+(rezervni izbornik `has-text("EN")` iz starije ljuske; uklonjen). Snimke i
+`result.json` u `review.local/audit-dg-wave3/`.
 
 ## Isporuka i prijava
 

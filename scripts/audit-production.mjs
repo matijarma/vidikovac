@@ -521,9 +521,15 @@ try {
     // The language control lives in the session sheet since T4.2: close any dialog a previous step left, open the sheet, press the segment.
     await phone.keyboard.press('Escape').catch(() => {}); await phone.waitForTimeout(300);
     if (!(await phone.locator('[data-sheet-action=lang]').first().isVisible().catch(() => false))) await phone.getByTestId('session-label').click().catch(() => {});
-    const toggle = phone.locator('[data-sheet-action=lang][data-value=en], [data-lang-toggle] button, [data-action=locale], [data-testid=lang-toggle], button:has-text("EN")').filter({ visible: true }).first();
-    if (await toggle.count()) { await toggle.click(); await phone.waitForTimeout(900); await shot(phone, 'iphone-en-overview', true); await metrics(phone, 'iphone-en-overview'); await toggle.click(); await phone.waitForTimeout(500); }
-    else log('no language toggle found on the dashboard');
+    // The segment's exact attributes only: a has-text("EN") fallback once matched the cast FAB's "screen" after the sheet had closed.
+    const toggle = phone.locator('[data-sheet-action=lang][data-value=en], [data-lang-toggle] button, [data-testid=lang-toggle]').filter({ visible: true }).first();
+    if (await toggle.count()) {
+      await toggle.click(); await phone.waitForTimeout(900); await shot(phone, 'iphone-en-overview', true); await metrics(phone, 'iphone-en-overview');
+      // Switching the language closes the sheet; reopen it to switch back.
+      await phone.keyboard.press('Escape').catch(() => {}); await phone.getByTestId('session-label').click().catch(() => {});
+      await phone.locator('[data-sheet-action=lang][data-value=hr]').first().click({ timeout: 5000 }).catch(() => log('language not restored to hr'));
+      await phone.keyboard.press('Escape').catch(() => {}); await phone.waitForTimeout(500);
+    } else log('no language toggle found on the dashboard');
   } catch (e) { fail('iphone en', e); }
   try {
     await phone.setViewportSize({ width: 844, height: 390 });

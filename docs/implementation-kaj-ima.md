@@ -117,3 +117,5 @@ names a plan that starts from this contract and where its specification lives.
 | System | Plan |
 |---|---|
 | Dan grada | `C:/Users/MatijaRadeljak/.claude/plans/implement-vidikovac-newdesignsystem-md-agile-locket.md` |
+
+The Dan grada system (design document `newdesignsystem.md` at the repo root) shipped on 15 September 2026 in three waves, each pushed after the full gate: `03ee3e3` (palette, basemap, tile grammar), `770648b` (time band, status line and Kvart tab, explicit casting, districts in the Worker, kiosk frame and scenes) and the wave 3 pushes listed in `docs/kaj-verification.md` (last departure from GTFS static, flagged mobility producers, notification highlights, the kiosk holding its frame under live warnings). Its SDD ledger and rulings live in `.superpowers/sdd/2026-09-15-dan-grada/`.
