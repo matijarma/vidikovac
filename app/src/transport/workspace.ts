@@ -543,7 +543,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
         const directions = new Map(onRoute.map((v): [string, string] => [v.id, vehicleDirection(i18n, net, v)]));
-        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops') });
+        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
         return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short })];
       }
       case 'stop': {
@@ -556,7 +556,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           lat: Number.NaN,
           routes: screen?.id === sel.id ? [...screen.routes] : [],
         };
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast });
         return [html, `${tr(i18n, 'stop')} ${group.name}`];
       }
       case 'vehicle': {
@@ -570,13 +570,14 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           delay: v.routeId === undefined ? undefined : delays().get(v.routeId),
           following: following === v.id,
           kiosk: k,
+          cast: c.cast,
         });
         return [html, `${vehicleTitle(i18n, v)} · ${direction}`];
       }
       case 'closure': {
         const item = closureItems(c.snapshots.prometnice).find((x) => x.id === sel.id);
         if (!item) return null;
-        return [closureDetailMarkup(i18n, item, k), item.title];
+        return [closureDetailMarkup(i18n, item, k, c.cast), item.title];
       }
     }
   }

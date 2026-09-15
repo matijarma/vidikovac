@@ -436,6 +436,7 @@
     "removeStop": "Remove stop {name}",
     "saveRoute": "Save line {id}",
     "saveStop": "Save stop {name}",
+    "unsave": "Remove from saved",
     "walkTitle": "On foot from the screen's stop",
     "walkLabel": "On foot from the screen's stop, straight-line estimate",
     "walkMinutes": "{minutes} min",

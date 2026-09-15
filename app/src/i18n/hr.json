@@ -448,6 +448,7 @@
     "removeStop": "Ukloni stanicu {name}",
     "saveRoute": "Spremi liniju {id}",
     "saveStop": "Spremi stanicu {name}",
+    "unsave": "Ukloni iz spremljenog",
     "walkTitle": "Pješice od stanice zaslona",
     "walkLabel": "Pješice od stanice zaslona, procjena ravnom linijom",
     "walkMinutes": "{minutes} min",
