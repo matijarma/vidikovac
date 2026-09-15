@@ -29,17 +29,18 @@ import { countdownText, frameStrip, headerWeather, stripMarkup, weatherGroupMark
 import { codeBlockMarkup, hintMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { createKioskMapAdapter, requestKioskMap } from './kiosk/mapview';
+import { createKioskMapAdapter, feedStateOf, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
+import type { SceneId } from './kiosk/scenes';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
 import { DEFAULT_STOP_ID } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
-export { STORY_LEAVE_MS } from './kiosk/invitation';
+export { SCENE_ENTER_MS, SCENE_LEAVE_MS } from './kiosk/scenes';
 
-/** The story, the clock line and the paired refresh all move on this tick. */
+/** The scene, the clock line and the paired refresh all move on this tick; the strip counts down to it. */
 export const ROTATE_MS = 20_000;
 /** The previous name of the same tick, kept for its callers. */
 export const TEASER_ROTATE_MS = ROTATE_MS;
@@ -66,6 +67,8 @@ export interface KioskDeps {
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
+  /** D13: `?prizor=promet|veceras|grad` shows one scene and stops the rotation (a test, demo and operator hook); the entry parses it once and passes it down. */
+  pinScene?: SceneId | null;
   /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
@@ -129,8 +132,9 @@ function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): s
 /** /kiosk/ on a handheld, once a screen exists: the provisioning link to open
  *  on a wide screen (the sentence from the shared catalogue, so the phone
  *  speaks the page's language) and the code card the rotation paints through
- *  the same testids the wall's invitation carries. No map, board, weather or
- *  story: those are drawn for a wall (kiosk/invitation.ts). */
+ *  the same testids the wall's invitation carries. No scene field, no tiles,
+ *  no map: those are drawn for a wall (kiosk/invitation.ts); the header's
+ *  weather group paints here as everywhere. */
 function handheldMarkup(s: KioskStrings, i18n: I18n, url: string, codeBase?: string): string {
   return `<div class="k-handheld-link" data-testid="handheld-link-block">
       <h1 class="k-handheld-title" id="k-handheld-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h1>
@@ -208,13 +212,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** Set once the screen can issue no more codes; an open session runs on to its end. */
   let screenDead: 'expired' | 'revoked' | null = null;
   let teaser: ModuleSnapshot[] = [];
-  let storyIndex = 0;
-  // The strip's rotation countdown (frameStrip's RotationClock): observes the
-  // existing rotation tick's own storyIndex advance rather than a second
-  // timer of its own. T2.10 drives this directly from sceneIndex once
-  // scenes.ts lands (C.2 edit 9); this shim needs no change to the tick itself.
+  /** The scene field's rotation counter; advanced by the 20 s tick while rotation is allowed, kept across a session so the invitation returns where it left. */
+  let sceneIndex = 0;
+  /** The last 20 s tick, whatever phase it fell in: the strip counts down from it to the next scene (frameStrip's RotationClock). */
   let lastRotateAt = now();
-  let lastStoryIndexSeen = storyIndex;
   let currentSlot: CodeSlot | null = null;
   let beacon: BeaconClient | null = null;
   let beaconWasLive = false;
@@ -272,14 +273,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The header's weather group (D11): a condition glyph, the reading and the
    *  sunset-then-sunrise line, hidden while dhmz-now loads or is down -- the
    *  clock stands alone, never a dash. Shares the strip's module choice: the
-   *  session's own copy once paired, the open teaser otherwise.
-   *  Known, tracked, transient collision: while `phase === 'invitation'`,
-   *  ./kiosk/invitation.ts (T2.10's file, untouched here) still renders its
-   *  own old side-column weather lockup under the same `data-testid`s
-   *  (`kiosk-weather` on its wrapper, `kiosk-temp` on its reading) -- when
-   *  dhmz-now is live or stale both copies are on screen at once. It
-   *  resolves when T2.10 removes that lockup (C.3: the right column becomes
-   *  the two value tiles plus the card). See task-T2.8-report.md, Ruling 5. */
+   *  session's own copy once paired, the open teaser otherwise. The one
+   *  weather on the screen: the invitation's column carries the value tiles
+   *  and the card, never a weather block. */
   function paintWeather(): void {
     const weather = headerWeather(currentSafetyModules(), s, locale, now());
     const markup = weatherGroupMarkup(weather, s);
@@ -294,15 +290,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function currentSafetyModules(): ModuleSnapshot[] {
     return phase === 'paired' ? Object.values(mergedSnapshots()).filter((m): m is ModuleSnapshot => Boolean(m)) : teaser;
   }
-  /** The strip's RotationClock: whether the field is rotating right now, and
-   *  when it last did. Observes the existing rotation tick's own storyIndex
-   *  advance instead of a second timer (see the note by its declaration). */
+  /** D13: the field rotates only on a screen that may move (no reduced
+   *  motion, no lagano) and carries no `?prizor=` pin. */
+  function rotationAllowed(): boolean {
+    return !lightweight && !reducedMotion && !deps.pinScene;
+  }
+  /** The strip's RotationClock: rotating only while the invitation shows and
+   *  has more than one scene to move between, counting from the last tick. */
   function rotationClock(): RotationClock {
-    if (storyIndex !== lastStoryIndexSeen) {
-      lastStoryIndexSeen = storyIndex;
-      lastRotateAt = now();
-    }
-    return { rotating: phase === 'invitation' && !reducedMotion && !lightweight, lastRotateAt, period: ROTATE_MS };
+    const rotating = rotationAllowed() && phase === 'invitation' && (invitation?.scenes().order().length ?? 0) > 1;
+    return { rotating, lastRotateAt, period: ROTATE_MS };
   }
   /** Ticks the countdown alone, once a second: the strip itself is rebuilt
    *  only by paintStrip, on a poll or a phase change. */
@@ -423,17 +420,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     handle.resume();
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
-  /** The lines board over the map's foot, in CSS px; 0 without layout or in lightweight mode. */
-  function boardHeight(): number {
-    const box = element.querySelector<HTMLElement>('.k-lines--overlay');
-    return box ? box.getBoundingClientRect().height : 0;
-  }
+  /** The map into the composition's host, or parked while none shows it. No
+   *  board lies over the map's foot any more (the line tiles stand beside it),
+   *  so the camera keeps the stop's true centre. */
   function paintMap(): void {
     const host = currentMapHost();
-    if (!host) { parkMap(); return; }
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
+    // A scene without a map (Večeras, Grad) or a composition without one keeps
+    // the container parked, and the feed state still reaches it: a map that
+    // returns mid-outage must already be holding, never coasting on a state
+    // it heard before the outage.
+    if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
     const container = requestKioskMap(maps, {
-      stop, snapshots, now: now(), reducedMotion, locale, boardPx: boardHeight(),
+      stop, snapshots, now: now(), reducedMotion, locale,
       selection: phase === 'paired' ? selection : null,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
@@ -448,7 +447,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     element.dataset.live = '1';
   }
   function invitationModel(): InvitationModel {
-    return { modules: teaser, stop, now: now(), storyIndex, lineCap: lightweight ? 10 : layout.size === 'wide' ? 5 : 4, size: layout.size === 'wide' ? 'wide' : 'compact' };
+    return {
+      modules: teaser, stop, now: now(), sceneIndex, pinned: deps.pinScene ?? null, rotate: rotationAllowed(),
+      lineCap: lightweight ? 10 : layout.size === 'wide' ? 4 : 3, size: layout.size === 'wide' ? 'wide' : 'compact',
+    };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -473,7 +475,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (!basics.hidden) paintEssentials();
     fitAll();
   }
-  /** Rows that do not fit a paired block are hidden and counted, never half-shown; the story title gets the lines its box has; the strip drops its sun line and its street when two lines are not enough. Runs after every paint and once a second, so fonts arriving late and a resize are absorbed. */
+  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a scene tile's title gets the lines its box has; the strip drops its countdown when two lines are not enough. Runs after every paint and once a second, so fonts arriving late and a resize are absorbed. */
   function fitAll(): void {
     invitation?.fit();
     if (paired) fitRows(paired.element, s.paired.coverage);
@@ -587,7 +589,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
     else if (next === 'invitation' && layout.size === 'handheld') mountHandheld();
-    else if (next === 'invitation') invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); } });
+    else if (next === 'invitation') {
+      // The field parks the map before a scene swap, so the fading item never carries the container away; paintLocal re-hosts it after the update.
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); }, onBeforeSwap: () => parkMap() });
+    }
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
     else mountNotice(next);
     paintContext();
@@ -861,6 +866,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   const codeTimer = setTimer(() => { paintClock(); paintProgress(); fitAll(); }, CODE_TICK_MS);
   const rotateTimer = setTimer(() => {
+    // The tick is the scene clock in every phase: stamped before anything
+    // paints, so the countdown after a session or the wizard says the true
+    // seconds to the next scene rather than "0 s" until this tick comes round.
+    lastRotateAt = now();
     paintClock();
     if (phase === 'paired') {
       // The big screen is the one nobody touches: it moves itself, and if the
@@ -868,9 +877,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       const live = session;
       if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
       else void refreshSessionData();
-    } else {
-      storyIndex += 1;
-      invitation?.update(invitationModel());
+    } else if (rotationAllowed()) {
+      // The whole local paint: the field swaps (parking the map first), the
+      // strip's countdown restarts, and the map is re-hosted or held parked.
+      sceneIndex += 1;
+      paintLocal();
     }
   }, ROTATE_MS);
 
