@@ -231,7 +231,8 @@ async function freshCode(kiosk) {
     for (const tid of ['pair-code', 'join-code']) {
       const el = kiosk.getByTestId(tid);
       if ((await el.count()) && (await el.first().isVisible())) {
-        const c = norm(await el.first().textContent());
+        // The kiosk shows the two groups with a middle dot (kajimafix 03.4); the URL and a person type the hyphen.
+        const c = norm(await el.first().textContent()).replace('·', '-');
         if (c && /^[0-9A-Z]{4}-?[0-9A-Z]{4}$/.test(c) && !usedCodes.has(c)) { usedCodes.add(c); log(`fresh code from ${tid}`); return c; }
       }
     }
