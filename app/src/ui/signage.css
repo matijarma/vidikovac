@@ -14,7 +14,7 @@
    sheets that scope theirs. The badge, the row and the skeleton are not
    interactive; the time-band tile `.tl` is a control, but its hover and
    press rules live in layers.css with the band that composes it, so this
-   sheet stays free of :hover and :active like base.css's other components. */
+   sheet carries no hover or press styling, like base.css's other components. */
 .line { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 0.45rem; border-radius: 0.3125rem; background: var(--tone-text-muted); color: var(--tone-action-brand-fg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; line-height: 1; }
 .line[data-kind='tram'] { background: var(--tone-action-brand); }
 .line[data-kind='bus'] { background: var(--tone-transit); border-radius: var(--r-pill); }

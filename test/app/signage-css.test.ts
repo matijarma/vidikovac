@@ -67,7 +67,9 @@ describe('signage.css paints from tokens alone', () => {
   });
   it('uses no !important and no hover rule: a badge is not a control, and the tile family leaves hover and press to layers.css', () => {
     expect(withoutComments(CSS)).not.toContain('!important');
-    expect(withoutComments(CSS)).not.toContain(':hover');
+    // The raw sheet, comments included: the plan's acceptance gate is the literal `grep -c ":hover"`, so a
+    // comment that merely mentions the pseudo-class would fail the gate while a comment-stripped check passed.
+    expect(CSS).not.toContain(':hover');
   });
   it('sets every font-size from a --type-* role, the xs badge and the kiosk badge included (the 13 px floor applies to badges too)', () => {
     const sizes = [...withoutComments(CSS).matchAll(/font-size:\s*([^;]+);/g)].map((m) => m[1]!.trim());
