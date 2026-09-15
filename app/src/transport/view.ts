@@ -173,8 +173,21 @@ function rowButton(o: RowButtonSpec): string {
 
 /** One route as a row: badge, long name, vehicles moving now as the second line, the delay word at the end when known. */
 export function routeRowInner(i18n: I18n, route: RouteEntry, count: number | null, delay: number | undefined): string {
-  const sub = count === null ? '' : trPlural(i18n, 'vehiclesNow', count);
-  return cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), esc(sub), delayTrail(i18n, delay));
+  const sub = count === null ? '' : vehicleCountGlyph(i18n, route.type, count);
+  return cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), sub, delayTrail(i18n, delay));
+}
+
+/**
+ * "N vozila u pokretu" as the mode's glyph (tram-front or bus-front, the tile grammar's 14 px context sizing) and the
+ * bare count, with the sentence as the wrapper's own accessible name: newdesignsystem.md's "vehicles on line" rule says
+ * the sign, never the word, where a glyph is defined. A mode without a glyph keeps the sentence rather than guessing a shape.
+ */
+export function vehicleCountGlyph(i18n: I18n, type: number, count: number): string {
+  const sentence = trPlural(i18n, 'vehiclesNow', count);
+  const kind = vehicleKind(type);
+  const icon: IconName | null = kind === 'tram' ? 'tram-front' : kind === 'bus' ? 'bus-front' : null;
+  if (!icon) return esc(sentence);
+  return `<span class="tl-context" role="img" aria-label="${attr(sentence)}">${iconMarkup(icon)}<span class="tl-ctx-text" aria-hidden="true">${count}</span></span>`;
 }
 
 /** One named stop as a row: its routes as badges, its name, its platform count. */
@@ -251,7 +264,7 @@ export interface OverviewData {
 
 /** A running route on the board: m badge, the destination, the count under it, the delay word in its tone at the end. */
 function routeButton(i18n: I18n, row: RouteSummaryRow, route: RouteEntry, hidden: boolean): string {
-  const inner = cells(badge(row.label, row.type), esc(route.long || kindWord(i18n, row.type)), esc(trPlural(i18n, 'vehiclesNow', row.count)), stateWord(row.word, toneOfWord(i18n, row.word)));
+  const inner = cells(badge(row.label, row.type), esc(route.long || kindWord(i18n, row.type)), vehicleCountGlyph(i18n, row.type, row.count), stateWord(row.word, toneOfWord(i18n, row.word)));
   return rowButton({ kind: 'route', id: row.routeId, action: 'select-route', hidden, inner });
 }
 

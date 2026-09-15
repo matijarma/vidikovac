@@ -184,10 +184,12 @@ describe('the sheet', () => {
     const rows = all<HTMLElement>('[data-testid=running-routes] .row');
     expect(rows).toHaveLength(3);
     const cell = (row: HTMLElement, selector: string): string => text(row.querySelector(selector));
-    expect(cell(rows[0]!, '.row-sub')).toBe('2 vozila u pokretu');
+    expect(rows[0]!.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toBe('2 vozila u pokretu');
+    expect(cell(rows[0]!, '.row-sub .tl-ctx-text')).toBe('2');
+    expect(rows[0]!.querySelector('.row-sub use')!.getAttribute('href')).toBe('#icon-tram-front');
     expect(cell(rows[0]!, '.route-delay')).toBe('kasni 2 min');
     expect(rows[0]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
-    expect(cell(rows[1]!, '.row-sub')).toBe('1 vozilo u pokretu');
+    expect(rows[1]!.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toBe('1 vozilo u pokretu');
     expect(cell(rows[1]!, '.route-delay')).toBe('rani 1 min');
     expect(rows[1]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('early');
     expect(text(rows[2])).toContain('109');
@@ -314,7 +316,7 @@ describe('search and selection', () => {
     expect(text(q('[data-testid=stop-routes]'))).toContain('6');
     const stopRoute = q<HTMLElement>('[data-testid=stop-routes] .row');
     expect(stopRoute.querySelector('button.t-row .line[data-size="m"]')).not.toBeNull();
-    expect(text(stopRoute.querySelector('.row-sub'))).toMatch(/vozil/);
+    expect(stopRoute.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toMatch(/vozil/);
     expect(text(q('#t-clear-selection'))).toBe('Natrag');
     // Clearing tells the map and the paired screen once, and the overview returns.
     q<HTMLButtonElement>('#t-clear-selection').click();

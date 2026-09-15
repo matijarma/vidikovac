@@ -15,7 +15,7 @@ import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
 import { searchField } from '../experience/blocks';
 import type { I18n } from '../i18n/i18n';
-import { vehicleKind, type MapLine, type MapPoint } from '../map/city-map';
+import type { MapLine, MapPoint } from '../map/city-map';
 import { routeDelayMap, vehicleFixes } from '../motion/fixes';
 import type { Fix } from '../motion/model';
 import { createLayerSection, dataNumber, dataText, statusText } from '../panels/panel';
@@ -23,10 +23,9 @@ import { routeEntry } from '../transport/catalogue';
 import { closureItems, plausibleDelays, zetNotices } from '../transport/detail';
 import { searchTransport } from '../transport/search';
 import { tr, trPlural } from '../transport/strings';
-import { badge, button, closuresMarkup, delayTrail, kindWord, NOTICE_ROWS, RUNNING_ROWS } from '../transport/view';
+import { badge, button, closuresMarkup, delayTrail, kindWord, NOTICE_ROWS, RUNNING_ROWS, vehicleCountGlyph } from '../transport/view';
 import { workspaceFor } from '../transport/workspace';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { iconMarkup, type IconName } from '../ui/icons';
 import { summariseRoutes } from './route-summary';
 import { plausibleRouteDelay } from './shared';
 import type { LayerContext } from './types';
@@ -139,26 +138,6 @@ const LIGHT_FILTER = { query: 'q', routes: 'routes', closures: 'closures' } as c
 /** The fold under a lightweight list: the page's own `filter` action opens or closes it, so no handler is needed here. */
 function lightFold(i18n: I18n, key: string, open: boolean, moreLabel: string, controls: string): string {
   return button({ action: 'filter', id: `t-fold-${key}`, label: open ? tr(i18n, 'collapse') : moreLabel, className: 'btn-ghost t-action t-fold', data: { 'filter-key': key, 'filter-value': open ? '' : 'all' }, expanded: open, controls });
-}
-
-/** tram-front / bus-front, the two glyphs newdesignsystem.md defines for "vehicles on line"; a mode the model
- *  cannot place (an id no static table knows) keeps the plain word instead of guessing a shape it cannot back. */
-function vehicleGlyphIcon(type: number): IconName | null {
-  const kind = vehicleKind(type);
-  return kind === 'tram' ? 'tram-front' : kind === 'bus' ? 'bus-front' : null;
-}
-
-/**
- * The vehiclesNow sentence as the mode's glyph (14 px, the tile grammar's own `.tl-context`/`.tl-ctx-text` sizing,
- * signage.css) plus the bare count, in a board row's compact aside (T2.12, newdesignsystem.md's "vehicles on line"
- * rule). The icon is decorative and the digit is presentational; the wrapper's own `role="img"` label carries the
- * sentence a screen reader needs, so nothing here leans on the glyph's shape or the bare number alone.
- */
-function vehicleCountGlyph(i18n: I18n, type: number, count: number): string {
-  const sentence = trPlural(i18n, 'vehiclesNow', count);
-  const icon = vehicleGlyphIcon(type);
-  if (!icon) return escapeHtml(sentence);
-  return `<span class="tl-context" role="img" aria-label="${escapeAttribute(sentence)}">${iconMarkup(icon)}<span class="tl-ctx-text" aria-hidden="true">${count}</span></span>`;
 }
 
 /**
