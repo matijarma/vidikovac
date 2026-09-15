@@ -217,6 +217,85 @@ promjene jezika pogodio gumb za slanje na zaslon umjesto zatvorenog segmenta jez
 (rezervni izbornik `has-text("EN")` iz starije ljuske; uklonjen). Snimke i
 `result.json` u `review.local/audit-dg-wave3/`.
 
+## Završni prolaz „kajimafix”, 15. rujna 2026.
+
+Usporedba isporučenog sustava „Dan grada” s četiri konceptna zaslona
+(`kajimafix/README.md` i `concept-0*.html`: stolno 1440 svijetlo, telefon 390
+tamno, kiosk 1920 Promet i Večeras) dala je popis od dvadesetak dovršnih stavki,
+uz dvije vlasnikove: pločice linija na kiosku bile su prevelike kutije s malo
+sadržaja, a naglasak `#1428d8` čitao se kao boja poveznice u pregledniku.
+Isporučeno na `main` kao `09a1554` (paleta), `60b0c0d` i `ab5ef5b` (pločice
+Sada), `064b42b` (ljuska), `90fec50` (kiosk), `6a390a1` (e2e), `53bf21f` i
+`a26759d` (ispravci iz snimaka), gurnuto 15. 9. oko 15:45 i 16:20 UTC.
+
+Što se promijenilo, po zaslonu:
+
+- Paleta: svijetli naglasak je duboka kraljevska plava `#03409c`
+  (oklch 40,07 % 0,1605 260,1), hover `#00327e`; tramvajske linije i pin stanice
+  na karti slijede ga, parkovi su u papirnoj i noćnoj obitelji; tamna tema je
+  nepromijenjena (naglasak je papir). Svi parovi kontrasta ostaju iznad AA
+  (naglasak na platnu 8,46 : 1, bijelo na naglasku 9,47 : 1).
+- Sada, stol i telefon: pločica linije kaže oba kraja linije uz oznaku
+  („Črnomerec – Sopot”, bez strelice jer podatak ne zna smjer sa stanice), riječ
+  stanja s malom jedinicom („kasni 5 **min**”), glif vozila s brojem i imenom
+  stanice; traka zatvaranja je komunalna, boje jantara, imenuje najbližu zatvorenu
+  ulicu u kvartu i njezin kraj, s brojem u kvartu u natpisu, a bez kvarta broj za
+  grad; Glasnik datira „7. 9. · 118 akata”; događanja imenuju mjesto prije izvora;
+  prazna traka je iscrtkana pločica; poruka „Otključano do …” više ne stoji nad
+  trakom (pločica sesije i tihi živi okvir već je govore); u statusnoj liniji
+  tanke crte razdvajaju sat, vrijeme i zalazak; sličica kvarta nema ime grada ni
+  mjerilo, a brojevi pod njom su glifovi s cijelom rečenicom za čitač; naslovi
+  događanja večeras i vijesti smiju na tri retka na stolu.
+- Telefon: kicker, sat i vrijeme u jednom bloku; segmenti u traci `surface-2`
+  kao pet jednakih gumba (na 200 % teksta traka se lomi u drugi red, riječ se
+  nikad ne reže); ime četvrti u zaglavlju do crtice („Gornji grad”); traka Sada
+  završava kickerom „Zatim” i dvjema sažetim pločicama iz sljedećih traka
+  (koncept 02), pa prvi zaslon odgovara na sada i na sljedeće bez povlačenja.
+- Kiosk: zaglavlje bez „javni zaslon” i bez riječi „Tema”; čip stanice nosi samo
+  ime stanice, tinta na papiru i papir na noći; tema je glif od 44 px s
+  rečenicom u imenu i opisu; datum bez godine; polje Promet slaže šest pločica
+  na 1920 (3 × 2) i četiri na 1366 (2 × 2), svaka veličine svog sadržaja (oznaka
+  na visini kontrole, krajevi linije u dva retka, riječ stanja u boji uloge, glif
+  s brojem vozila), složene od vrha stupca uz kartu; traka radova s nulom nestaje
+  i kad je kopija zastarjela; Večeras su redovi s tankim crtama, sljedeći s
+  ljubičastom crtom; točke prizora 10 px; kod na kartici s prigušenom srednjom
+  točkom („ABCD·EFG0”) i trakom vremena papir na naglasku; sigurnosna traka u
+  jednom redu: štit i „Sigurnost”, presuda s glifom kao gumb koji otvara
+  „Osnovno” dok poziv stoji (obična riječ dok sesija ili čarobnjak drže zaslon),
+  „DHMZ · EMSC · vrijeme” ili aktivno upozorenje, dežurna ljekarna, odbrojavanje,
+  /hitno; zatvaranja više nisu na traci (pločica desnog stupca ih već kaže);
+  riječ presude za upozorenje je „upozorenje”, ne „hitno”.
+
+Odluke zabilježene u planu (`in-the-recent-pass-foamy-wand.md`, 1 do 9), među
+njima i što nije rađeno: rezervirano mjesto pretrage „Linija, stanica, ulica,
+događanje…” čeka pretragu događanja; zvjezdica za spremanje na pločici linije je
+faza 3; red pješačenja u kvartu čeka udaljenosti; oznake linija `xs` na kiosku
+imaju svoje pravilo od 28 px, ali se ne iscrtavaju dok katalog stanica ne stigne
+na kiosk.
+
+Prolaz: TypeScript oba projekta; Vitest 165 datoteka, 2.619 testova (jedan
+vremenski osjetljiv test BeaconDO-a pao je na „inbox timeout” dok je Playwright
+opterećivao stroj i sam prolazi, 17 od 17); gradnja; Playwright oba projekta
+84 zelena (71 + 13 ponovljenih nakon dva ispravka u testnom sloju: uvoz
+regularnog izraza prikazanog koda i traka oporavka koja sad čita ćeliju izvora),
+zatim 38 i 27 ponovljenih uz ispravke; vizualna matrica 89 površina, 0 nalaza;
+Lighthouse pristupačnost 100 na `/`, `/hitno`, `/kiosk/`, `/s/` i `/d/` nad
+javnom adresom. Isporuka provjerena sadržajem paketa na javnoj adresi (novi
+naglasak i pravila `tb-seg-track`, `tb-next`, `ki-weather`, `tl-label-title`,
+`tl-unit`, `k-tl-name`, `k-scene-col`; stari naglasak nigdje). Snimke isporuke
+uz koncepte u `review.local/kajimafix/` (stol 1440 svijetlo, telefon 390
+svijetlo i tamno s krajem trake, kiosk 1920 svijetlo i tamno za Promet i
+Večeras, kiosk 1366 svijetlo); snimke su ispravile tri stavke prije drugog
+guranja (veličina riječi stanja, kontekst Glasnika, prelamanje imena linije).
+Obilazak `scripts/audit-production.mjs` nad isporukom `a26759d`, 15. 9. oko
+16:40 UTC (WebKit kao iPhone 13, Chromium kao Pixel 7 i stol 1440, kiosk 1366 i
+1920, jedan privremeni zaslon kroz čarobnjak): 62 skupa mjerenja, 0 kršenja
+pravila; četiri zabilježena upozorenja su WebGL poruke o performansama karte na
+kiosku („GPU stall due to ReadPixels”), iste vrste kao u prethodnom obilasku.
+Prvi pokušaj stao je na čitaču koda skripte, koji je očekivao crticu gdje zaslon
+sad pokazuje srednju točku; čitač je ispravljen u `a26759d`. Snimke i
+`result.json` u `review.local/audit-kajimafix/`.
+
 ## Isporuka i prijava
 
 Repozitorij je javan od 15. rujna 2026. (https://github.com/matijarma/vidikovac);
