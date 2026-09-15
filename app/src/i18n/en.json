@@ -699,6 +699,16 @@
       "quakeBody": "Magnitude {mag} · {region} · depth {depth} km",
       "empty": "No new notices right now."
     },
+    "scenes": {
+      "tonight": "Tonight",
+      "position": "scene {index} of {count}",
+      "worksKvart": "Works in the district",
+      "worksCity": "Works in the city",
+      "tonightEmpty": "No events announced in the district tonight.",
+      "live": "live stream",
+      "moreEvents_one": "{count} more event",
+      "moreEvents_other": "{count} more events"
+    },
     "tiles": {
       "vehicles": "Vehicles moving",
       "closures": "Closures nearby",

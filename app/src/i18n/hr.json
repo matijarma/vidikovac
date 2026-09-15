@@ -717,6 +717,17 @@
       "quakeBody": "Magnituda {mag} · {region} · dubina {depth} km",
       "empty": "Trenutačno nema novih obavijesti."
     },
+    "scenes": {
+      "tonight": "Večeras",
+      "position": "prizor {index} od {count}",
+      "worksKvart": "Radovi u kvartu",
+      "worksCity": "Radovi u gradu",
+      "tonightEmpty": "Večeras nema najavljenih događanja u kvartu.",
+      "live": "prijenos uživo",
+      "moreEvents_one": "još {count} događanje",
+      "moreEvents_few": "još {count} događanja",
+      "moreEvents_other": "još {count} događanja"
+    },
     "tiles": {
       "vehicles": "Vozila u pokretu",
       "closures": "Zatvaranja u blizini",

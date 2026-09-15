@@ -87,6 +87,20 @@ export interface KioskStrings {
     quakeBody: string;
     empty: string;
   };
+  /** The scene field (scenes.ts): the Večeras title (Promet and Grad are the
+   *  domain names, layers.*), the visually hidden position sentence, the works
+   *  band's two scopes (D18), the empty evening, the live-stream word and the
+   *  rows beyond the cap. */
+  scenes: {
+    tonight: string;
+    /** "prizor {index} od {count}", the reader's copy of the dots. */
+    position: string;
+    worksKvart: string;
+    worksCity: string;
+    tonightEmpty: string;
+    live: string;
+    moreEvents: PluralForms;
+  };
   /** The right column's two value tiles (frame.ts's valueTiles): vehicles on
    *  the network, closures within the 1.5 km nearby radius. */
   tiles: {
@@ -274,6 +288,10 @@ function build(code: SupportedLocale): KioskStrings {
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'news', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    scenes: {
+      ...group('scenes', ['tonight', 'position', 'worksKvart', 'worksCity', 'tonightEmpty', 'live']),
+      moreEvents: forms('scenes', 'moreEvents'),
+    },
     tiles: group('tiles', ['vehicles', 'closures', 'nearest', 'radius']),
     safety: {
       ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'nextScene']),
