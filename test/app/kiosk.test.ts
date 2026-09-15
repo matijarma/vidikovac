@@ -339,7 +339,9 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=corner-qr] .qr')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=join-code]'))).toBe('ABCD-EFG0');
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=k-weather]'))).toContain('21 °C');
+    // The weather is the header's status group; the Sada column holds the warnings and the closures only.
+    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
+    expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=k-weather]')).toBeNull();
     expect(text(q(k.root, '[data-testid=k-warnings]'))).toContain('Grmljavina');
     expect(k.fetchData).toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-invitation]')).toBeNull();

@@ -321,15 +321,12 @@ function closuresBlock(ctx: PairedContext, limit: number, grow = false): string 
   return block(title, listBody(snap, closureRows(ctx, limit), ctx.strings.paired.closuresNone, ctx.strings, near.count), { s: ctx.strings, snapshot: snap, testid: 'k-closures', grow });
 }
 
-function weatherBlock(ctx: PairedContext): string {
-  const snap = ctx.snapshots['dhmz-now'];
-  return `<article class="k-block k-block--weather" data-testid="k-weather"${snap ? ` data-status="${snap.status}"` : ''}>${weatherMarkup(weatherNow(modulesOf(ctx), ctx.strings, ctx.locale), ctx.strings, ctx.size === 'wide' ? 3 : 2)}</article>`;
-}
-
 function renderSada(ctx: PairedContext): PairedMarkup {
   // With a selection on show, the column gives its room to the selection; the strip still carries the warning state.
+  // The weather is status in the frame's header (D11), never a block here: a weather block beside the
+  // warnings and closures lists starved both of their row floors the moment a DHMZ warning was live.
   const selected = selectionCard(ctx);
-  return { lines: linesBox(ctx), main: '', side: `${selected}${weatherBlock(ctx)}${!selected && warningsRelevant(ctx) ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}` };
+  return { lines: linesBox(ctx), main: '', side: `${selected}${!selected && warningsRelevant(ctx) ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}` };
 }
 
 /** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */
