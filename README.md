@@ -65,6 +65,8 @@ test/          vitest; test/fixtures su spremljeni živi uzorci svakog izvora
 
 ## Licenca
 
+Izvorni kod: https://github.com/matijarma/vidikovac (javan od 15. rujna 2026.).
+
 Kod: AGPL-3.0-or-later (`LICENSE`); Gradu Zagrebu nudi se isti kod i pod EUPL-1.2. Izvedeni podaci na `/open`: Otvorena dozvola. Podaci trećih strana pod uvjetima navedenima u `docs/izvori.md`; ZET: "Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669".
 
 Copyright (C) 2026 Aning Film d.o.o. / Matija Radeljak

@@ -58,3 +58,5 @@
 .ld-pages a { display: inline-flex; align-items: center; min-height: var(--target); }
 .ld-foot { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-5); border-block-start: 1px solid var(--tone-stroke); color: var(--tone-text-muted); font-size: var(--type-control); line-height: var(--lh-body); }
 .ld-health { font-variant-numeric: tabular-nums; }
+/* The repository link is a real target, not an inline word: 44 px tall, brand-coloured, underlined. */
+.ld-foot-link { display: inline-flex; align-items: center; min-block-size: var(--target); color: var(--tone-text-brand); font-weight: var(--weight-bold); text-decoration: underline; text-underline-offset: 0.15em; touch-action: manipulation; }

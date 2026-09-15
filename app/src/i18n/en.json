@@ -661,6 +661,7 @@
       "izvori": "Data sources and licences",
       "open": "Open data to download"
     },
+    "footerCode": "Source code on GitHub",
     "footerLicence": "Source code under the AGPL-3.0-or-later licence. An application to the City of Zagreb's 2026 public call for open-data projects."
   },
   "scan": {

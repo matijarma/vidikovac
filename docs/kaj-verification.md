@@ -219,7 +219,10 @@ promjene jezika pogodio gumb za slanje na zaslon umjesto zatvorenog segmenta jez
 
 ## Isporuka i prijava
 
-Repozitorij ostaje privatan. Evaluacijsko okruženje bilo je do 14. rujna 2026.
+Repozitorij je javan od 15. rujna 2026. (https://github.com/matijarma/vidikovac);
+povijest ne sadrži tajne: pregled svih ikad dodanih datoteka i sadržaja svih
+revizija našao je samo imena varijabli okoline, nikad vrijednosti. Evaluacijsko
+okruženje bilo je do 14. rujna 2026.
 zaštićeno Cloudflare Accessom; od tada je javno, a samoposluga zaslona
 (`POST /api/screens`) drži quotu po mreži umjesto po Access identitetu. Operaterske
 rute `/api/admin/*` i `/stats` i dalje traže valjan Access JWT i bez njega
@@ -242,8 +245,8 @@ Od 12:59:47 do 12:59:59 provedena je provjera na stvarnoj evaluacijskoj adresi:
 - Access pristup bez podatkovnog tokena sesije i dalje dobiva 401 na
   `/api/data/zet-rt`.
 
-Repozitorij je nakon isporuke i dalje privatan. Snimke i strojni zapis te
-provjere čuvaju se lokalno u `review.local/deployed/`. Kasnija izmjena ovog
+Snimke i strojni zapis te provjere bili su lokalni i uklonjeni su 15. rujna pri
+čišćenju radnog stabla; provjera stoji zapisana ovdje. Kasnija izmjena ovog
 dokumenta ne mijenja provjerenu implementaciju.
 
 Osobni i financijski podaci prijavitelja, video-poveznica i predaja kroz

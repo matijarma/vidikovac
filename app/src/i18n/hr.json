@@ -684,6 +684,7 @@
       "izvori": "Izvori podataka i licence",
       "open": "Otvoreni podaci za preuzimanje"
     },
+    "footerCode": "Izvorni kod na GitHubu",
     "footerLicence": "Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026."
   },
   "scan": {
