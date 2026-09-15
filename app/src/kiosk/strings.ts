@@ -87,6 +87,16 @@ export interface KioskStrings {
     quakeBody: string;
     empty: string;
   };
+  /** The right column's two value tiles (frame.ts's valueTiles): vehicles on
+   *  the network, closures within the 1.5 km nearby radius. */
+  tiles: {
+    vehicles: string;
+    closures: string;
+    /** "najbliže {street} · {distance}": the nearest closure, with a distance in hand. */
+    nearest: string;
+    /** "u krugu {radius}": no closure within the nearby radius. */
+    radius: string;
+  };
   safety: {
     label: string;
     /** The strip's cell: the shared sentence without its full stop. */
@@ -102,6 +112,10 @@ export interface KioskStrings {
     pharmacy: string;
     hitno: string;
     basics: string;
+    /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
+    verdict: Record<'urgent' | 'calm' | 'unknown', string>;
+    /** "sljedeći prizor za {seconds} s": the strip's countdown to the next scene, hidden when the field is not rotating. */
+    nextScene: string;
   };
   basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
   session: {
@@ -260,11 +274,13 @@ function build(code: SupportedLocale): KioskStrings {
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'news', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    tiles: group('tiles', ['vehicles', 'closures', 'nearest', 'radius']),
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'nextScene']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),
+      verdict: record(['urgent', 'calm', 'unknown'] as const, (level) => `kiosk.safety.verdict.${level}`),
     },
     basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'pharmacy', 'warnings', 'closures']),
     session: group('session', ['join', 'joinHint', 'selected', 'selectedRoute', 'selectedStop']),

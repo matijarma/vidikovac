@@ -699,6 +699,12 @@
       "quakeBody": "Magnitude {mag} · {region} · depth {depth} km",
       "empty": "No new notices right now."
     },
+    "tiles": {
+      "vehicles": "Vehicles moving",
+      "closures": "Closures nearby",
+      "nearest": "nearest {street} · {distance}",
+      "radius": "within {radius}"
+    },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
       "warningsStale": "DHMZ warnings: stale, unconfirmed",
@@ -708,7 +714,13 @@
       "closuresStale": "Closures: stale, unconfirmed",
       "closuresNearest": "nearest {street}",
       "pharmacy": "On-duty pharmacy",
-      "basics": "Essentials"
+      "basics": "Essentials",
+      "verdict": {
+        "urgent": "urgent",
+        "calm": "calm",
+        "unknown": "unconfirmed"
+      },
+      "nextScene": "next scene in {seconds} s"
     },
     "basics": {
       "title": "Essentials, no scan needed",
