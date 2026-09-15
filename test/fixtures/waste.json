@@ -1,0 +1,16 @@
+{
+  "module": "waste",
+  "status": "live",
+  "fetchedAt": "2026-09-11T12:00:00Z",
+  "attribution": {
+    "text": "Izvor: Čistoća, kalendar odvoza",
+    "url": "https://www.zgh.hr/",
+    "licence": "Otvorena dozvola (NN 67/17)"
+  },
+  "pickups": [
+    { "district": "trnje", "date": "2026-09-11T00:00:00Z", "kind": "Staklo" },
+    { "district": "trnje", "date": "2026-09-12T00:00:00Z", "kind": "Miješani otpad" },
+    { "district": "trnje", "date": "2026-09-15T00:00:00Z", "kind": "Papir i karton" },
+    { "district": "maksimir", "date": "2026-09-12T00:00:00Z", "kind": "Plastika" }
+  ]
+}

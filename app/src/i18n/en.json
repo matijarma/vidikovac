@@ -158,7 +158,12 @@
     "gazette": "Gazette",
     "event": "Event",
     "lastRun": "Last departure",
-    "scheduled": "Per schedule"
+    "scheduled": "Per schedule",
+    "bikesFree": "Bikes",
+    "parkingFree": "Garage",
+    "waste": {
+      "label": "Waste pickup"
+    }
   },
   "overview": {
     "allClear": "No urgent warnings",

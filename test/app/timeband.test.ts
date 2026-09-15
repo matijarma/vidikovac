@@ -574,10 +574,12 @@ describe('tickTimebandClock: the one clock ticks through the shell seam', () => 
 });
 
 // ---------------------------------------------------------------------------
-// The nine real producers (Task T2.3), through buildTimeband's own default
-// parameter: each producer's own fixtures live in producers.test.ts; this is
-// the integration proof that DEFAULT_PRODUCERS, assembled and ordered, is
-// what a caller gets from `buildTimeband(ctx)` with no second argument.
+// The real producers (Task T2.3; T3.2 appends bikes/parking/waste behind
+// their own flags), through buildTimeband's own default parameter: each
+// producer's own fixtures live in producers.test.ts and
+// producers-mobility.test.ts; this is the integration proof that
+// DEFAULT_PRODUCERS, assembled and ordered, is what a caller gets from
+// `buildTimeband(ctx)` with no second argument.
 
 describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PRODUCERS)', () => {
   const REAL_NOW = FRI_AFTERNOON;
@@ -639,6 +641,14 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
   });
 
   it('is the same producer list DEFAULT_PRODUCERS exports, in the sada reading order the plan names', () => {
-    expect(DEFAULT_PRODUCERS.map((p) => p.domain)).toEqual(['transit', 'mobility', 'komunalno', 'safety', 'news', 'civic', 'civic', 'events', 'transit']);
+    expect(DEFAULT_PRODUCERS.map((p) => p.domain)).toEqual([
+      'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic', 'civic', 'events', 'transit', 'mobility', 'mobility', 'komunalno',
+    ]);
+  });
+
+  it('never asks bikes, parking or waste while their flags are off: no such tile anywhere on the band', () => {
+    const model = buildTimeband(realCtx());
+    const keys = model.lanes.flatMap((l) => l.tiles.map((t) => t.key));
+    expect(keys.some((k) => k.startsWith('bikes:') || k.startsWith('parking:') || k.startsWith('waste:'))).toBe(false);
   });
 });

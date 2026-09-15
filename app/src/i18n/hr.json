@@ -167,7 +167,12 @@
     "gazette": "Glasnik",
     "event": "Događanje",
     "lastRun": "Zadnji polazak",
-    "scheduled": "Prema redu vožnje"
+    "scheduled": "Prema redu vožnje",
+    "bikesFree": "Bicikli",
+    "parkingFree": "Garaža",
+    "waste": {
+      "label": "Odvoz"
+    }
   },
   "overview": {
     "allClear": "Nema hitnih upozorenja",

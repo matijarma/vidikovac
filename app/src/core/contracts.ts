@@ -5,6 +5,7 @@ import type { PublicSelection } from '../../../worker/public-selection';
 import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
 import type { KvartChoice } from './kvart-store';
+import type { MobilitySnapshot, WasteSnapshot } from './mobility';
 import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 
@@ -69,6 +70,12 @@ export interface ExperienceActions {
   /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the
    *  kvart panel's walking row (D16) and the kvart select's district option list. */
   stops?: readonly ScreenStop[];
+  /** The nearest bike-share and parking stations (plan T3.2, D7): undefined until
+   *  FEED_BIKES / FEED_PARKING turn on with their worker module. */
+  bikes?: MobilitySnapshot;
+  parking?: MobilitySnapshot;
+  /** The kvart's waste pickups (plan T3.2, D7): undefined until FEED_WASTE turns on. */
+  waste?: WasteSnapshot;
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */

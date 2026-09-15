@@ -1,0 +1,100 @@
+// The bike-share, parking and waste-pickup tiles (plan T3.2, D7): three
+// producers behind FEED_BIKES, FEED_PARKING and FEED_WASTE, all off until
+// their upstream source is confirmed (docs/izvori.md "Crveni izvori").
+// Nextbike's stations and Zagrebparking's garages both answer to "how many
+// free spots, right now, at which point" -- one shape, `MobilityStation`,
+// serves both; Čistoća's calendar answers a different question ("what is
+// collected on which day"), so waste gets its own `WasteSnapshot`. Neither
+// snapshot is a `ModuleSnapshot`: no worker module fills them yet (the app
+// union `ModuleId` stays untouched by this task), so they travel as their
+// own optional fields on `ExperienceActions` (`ctx.bikes`, `ctx.parking`,
+// `ctx.waste`) rather than through `ctx.snapshots`. When a source ships, its
+// worker module's own adapter fills these shapes from real `FeedItem`s with
+// the `station`/`pickup` `DATA_KEYS` a ruling will add then (not this one).
+import type { Attribution, SnapshotStatus } from '../../../worker/feed/schema';
+
+/**
+ * One bike-share or parking station (plan T3.2). `free`/`capacity` are the
+ * source's own counts, never derived: `null` is "the source has no figure
+ * for this station right now", which honest-data keeps distinct from zero
+ * free spots. `district` is the same kvart slug `worker/pairing/areas.ts`
+ * defines, present once the worker module can resolve it geometrically.
+ */
+export interface MobilityStation {
+  id: string;
+  name: string;
+  lon: number;
+  lat: number;
+  free: number | null;
+  capacity: number | null;
+  district?: string;
+}
+
+export type MobilityModule = 'bikes' | 'parking';
+
+export interface MobilitySnapshot {
+  module: MobilityModule;
+  status: SnapshotStatus;
+  fetchedAt: string;
+  sourceUpdatedAt?: string;
+  attribution: Attribution;
+  stations: readonly MobilityStation[];
+}
+
+/**
+ * One day's collection at one address point (plan T3.2). `kind` is the
+ * source's own word for what is collected (miješani otpad, papir, ...) and
+ * is used verbatim as the waste tile's title -- never routed through a
+ * closed vocabulary the source itself does not share (unlike a closure's
+ * `subtype`, which the register does close).
+ */
+export interface WastePickup {
+  district: string;
+  date: string;
+  kind: string;
+}
+
+export interface WasteSnapshot {
+  module: 'waste';
+  status: SnapshotStatus;
+  fetchedAt: string;
+  attribution: Attribution;
+  pickups: readonly WastePickup[];
+}
+
+/** Nothing nearer than this is worth calling "nearby" on foot. */
+const NEAREST_RADIUS_KM = 0.6;
+const EARTH_RADIUS_KM = 6371;
+
+function haversineKm(lon1: number, lat1: number, lon2: number, lat2: number): number {
+  const rad = (deg: number): number => (deg * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * The one station a bikes or parking tile shows (plan T3.2): the nearest to
+ * the screen's stop when one is within 600 m of it; otherwise the nearest
+ * (by the same stop, when there is one) among the stations in the reader's
+ * kvart; otherwise, without a stop, the first station the kvart lists. None
+ * of the three found is `null` -- a producer with nothing honestly nearby
+ * renders no tile rather than a distant, misleading one.
+ */
+export function nearestStation(
+  stations: readonly MobilityStation[],
+  stop: { lon: number; lat: number } | undefined,
+  kvart: string | null,
+): MobilityStation | null {
+  const byDistance = stop
+    ? stations.map((station) => ({ station, km: haversineKm(stop.lon, stop.lat, station.lon, station.lat) })).sort((a, b) => a.km - b.km)
+    : null;
+  if (byDistance && byDistance.length > 0 && byDistance[0]!.km <= NEAREST_RADIUS_KM) return byDistance[0]!.station;
+  const inKvart = kvart ? stations.filter((station) => station.district === kvart) : [];
+  if (byDistance) {
+    const nearestInKvart = byDistance.find((d) => inKvart.includes(d.station));
+    if (nearestInKvart) return nearestInKvart.station;
+  }
+  return inKvart[0] ?? null;
+}

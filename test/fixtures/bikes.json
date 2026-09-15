@@ -1,0 +1,16 @@
+{
+  "module": "bikes",
+  "status": "live",
+  "fetchedAt": "2026-09-11T12:31:00Z",
+  "sourceUpdatedAt": "2026-09-11T12:28:00Z",
+  "attribution": {
+    "text": "Izvor: Nextbike Zagreb (GBFS station_status)",
+    "url": "https://data.zagreb.hr/",
+    "licence": "Otvorena dozvola (NN 67/17)"
+  },
+  "stations": [
+    { "id": "bike-near", "name": "Praška ulica", "lon": 15.9775, "lat": 45.8125, "free": 4, "capacity": 12, "district": "donji-grad" },
+    { "id": "bike-mid", "name": "Zrinjevac", "lon": 15.981, "lat": 45.815, "free": 9, "capacity": 16, "district": "donji-grad" },
+    { "id": "bike-far", "name": "Sajam", "lon": 15.985, "lat": 45.796, "free": null, "capacity": 10, "district": "trnje" }
+  ]
+}
