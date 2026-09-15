@@ -400,7 +400,13 @@ describe('u-pokretu', () => {
     expect(more.dataset.filterValue).toBe('all');
     expect(more.getAttribute('aria-expanded')).toBe('false');
     const six = rows.find((r) => text(r.querySelector('.line')) === '6')!;
-    expect(text(six.querySelector('.row-sub'))).toBe('1 vozilo u pokretu');
+    // T2.12: the spelled-out count gives way to the glyph in this compact row (newdesignsystem.md's "vehicles on
+    // line" rule, tram-front/bus-front + the bare count); the sentence for a screen reader lives on the glyph's own
+    // label, so nothing here leans on the bare digit or the icon's shape alone.
+    const vehicleGlyph = six.querySelector<HTMLElement>('.row-sub [role="img"]')!;
+    expect(vehicleGlyph.getAttribute('aria-label')).toBe('1 vozilo u pokretu');
+    expect(vehicleGlyph.querySelector('use')?.getAttribute('href')).toBe('#icon-tram-front');
+    expect(text(vehicleGlyph)).toBe('1');
     expect(text(six.querySelector('.route-delay'))).toBe('kasni 2 min');
     expect(six.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
     expect(rows.filter((r) => r !== six).every((r) => r.querySelector('.route-delay') === null)).toBe(true); // no median, no word

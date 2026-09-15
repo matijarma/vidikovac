@@ -13,9 +13,9 @@
 // handler exists on this path.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
-import { searchField, signRow } from '../experience/blocks';
+import { searchField } from '../experience/blocks';
 import type { I18n } from '../i18n/i18n';
-import type { MapLine, MapPoint } from '../map/city-map';
+import { vehicleKind, type MapLine, type MapPoint } from '../map/city-map';
 import { routeDelayMap, vehicleFixes } from '../motion/fixes';
 import type { Fix } from '../motion/model';
 import { createLayerSection, dataNumber, dataText, statusText } from '../panels/panel';
@@ -25,7 +25,8 @@ import { searchTransport } from '../transport/search';
 import { tr, trPlural } from '../transport/strings';
 import { badge, button, closuresMarkup, delayTrail, kindWord, NOTICE_ROWS, RUNNING_ROWS } from '../transport/view';
 import { workspaceFor } from '../transport/workspace';
-import { escapeHtml } from '../ui/dom/escape';
+import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { iconMarkup, type IconName } from '../ui/icons';
 import { summariseRoutes } from './route-summary';
 import { plausibleRouteDelay } from './shared';
 import type { LayerContext } from './types';
@@ -140,6 +141,36 @@ function lightFold(i18n: I18n, key: string, open: boolean, moreLabel: string, co
   return button({ action: 'filter', id: `t-fold-${key}`, label: open ? tr(i18n, 'collapse') : moreLabel, className: 'btn-ghost t-action t-fold', data: { 'filter-key': key, 'filter-value': open ? '' : 'all' }, expanded: open, controls });
 }
 
+/** tram-front / bus-front, the two glyphs newdesignsystem.md defines for "vehicles on line"; a mode the model
+ *  cannot place (an id no static table knows) keeps the plain word instead of guessing a shape it cannot back. */
+function vehicleGlyphIcon(type: number): IconName | null {
+  const kind = vehicleKind(type);
+  return kind === 'tram' ? 'tram-front' : kind === 'bus' ? 'bus-front' : null;
+}
+
+/**
+ * The vehiclesNow sentence as the mode's glyph (14 px, the tile grammar's own `.tl-context`/`.tl-ctx-text` sizing,
+ * signage.css) plus the bare count, in a board row's compact aside (T2.12, newdesignsystem.md's "vehicles on line"
+ * rule). The icon is decorative and the digit is presentational; the wrapper's own `role="img"` label carries the
+ * sentence a screen reader needs, so nothing here leans on the glyph's shape or the bare number alone.
+ */
+function vehicleCountGlyph(i18n: I18n, type: number, count: number): string {
+  const sentence = trPlural(i18n, 'vehiclesNow', count);
+  const icon = vehicleGlyphIcon(type);
+  if (!icon) return escapeHtml(sentence);
+  return `<span class="tl-context" role="img" aria-label="${escapeAttribute(sentence)}">${iconMarkup(icon)}<span class="tl-ctx-text" aria-hidden="true">${count}</span></span>`;
+}
+
+/**
+ * signRow (experience/blocks.ts) escapes its `sub` column by design -- a row's second line is plain text there --
+ * but this row's sub carries the vehicle glyph's markup, so the row is built here directly, in the exact shape
+ * signRow produces (`.row` > lead, `.row-main` > `.row-title`/`.row-sub`, trail), rather than changing a component
+ * this task does not own.
+ */
+function lightRouteRow(lead: string, title: string, sub: string, trail: string, key: string, hidden: boolean): string {
+  return `<li class="row"${hidden ? ' hidden' : ''} data-key="${escapeAttribute(key)}">${lead}<span class="row-main"><span class="row-title">${escapeHtml(title)}</span>${sub ? `<span class="row-sub">${sub}</span>` : ''}</span>${trail}</li>`;
+}
+
 /**
  * "Linije u pokretu" as a board: one static row per route with a vehicle moving now (summariseRoutes, the helper the
  * kiosk board reads too, so the two boards can never disagree), trams first, with the small badge, the destination, the
@@ -170,14 +201,14 @@ function lightBoard(ctx: LayerContext, zet: ModuleSnapshot | undefined, fixes: r
   const items = rows
     .map((row, i) => {
       const route = routeEntry(row.routeId);
-      return signRow({
-        lead: badge(row.label, row.type, 's'),
-        title: route.long || kindWord(i18n, row.type),
-        sub: trPlural(i18n, 'vehiclesNow', row.count),
-        trail: delayTrail(i18n, delays.get(row.routeId)),
-        key: row.routeId,
-        attrs: i >= RUNNING_ROWS && !open ? { hidden: '' } : {},
-      });
+      return lightRouteRow(
+        badge(row.label, row.type, 's'),
+        route.long || kindWord(i18n, row.type),
+        vehicleCountGlyph(i18n, row.type, row.count),
+        delayTrail(i18n, delays.get(row.routeId)),
+        row.routeId,
+        i >= RUNNING_ROWS && !open,
+      );
     })
     .join('');
   const folded = rows.length - RUNNING_ROWS;
