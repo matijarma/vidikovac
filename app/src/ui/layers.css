@@ -220,10 +220,8 @@
 /* The "+ N" foot: a 44 px link into the domain in the brand tone; the empty word in the muted tone. */
 .tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); text-decoration: none; }
 .tb-empty { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); }
-/* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span.
-   Like the heads and lanes it yields its width (min-inline-size: 0): as a grid item of .ws its auto minimum would be the five
-   non-wrapping words, 547 px at 200 % text on a 390 px phone, and the whole workspace would widen with it; the spans ellipsise instead. */
-.tb-seg { display: none; gap: 0.25rem; min-inline-size: 0; }
+/* The phone's segmented control, hidden until the 36rem room shows it: 44 px buttons, the accent "on" pill the inner 34 px span. */
+.tb-seg { display: none; gap: 0.25rem; }
 .tb-seg-btn { flex: 1 1 0; min-inline-size: 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
 .tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
