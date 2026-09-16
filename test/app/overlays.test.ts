@@ -4,10 +4,12 @@ import {
   BELOW_LABELS,
   LAYERS,
   NEVER,
+  PILL_IMAGE_PREFIX,
   PILL_MAX_CHARS,
   PILL_OVERLAP_ZOOM,
   PILL_ZOOM,
   PLACE_FILTERS,
+  PLATE_IMAGE_PREFIX,
   SOURCES,
   WORKS_ONGOING_PHASE,
   firstSymbolLayer,
@@ -18,7 +20,9 @@ import {
   stopFilter,
   vehicleFilter,
   vehicleKinds,
+  type ProzorOptions,
 } from '../../app/src/map/overlays';
+import { SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
 import { ASSEMBLY_CAP, assemblyPoints, placedEvents, quakePoints, seatPoint } from '../../app/src/kiosk/mapview';
@@ -57,13 +61,100 @@ describe('the overlay layer list', () => {
     expect(layerById(LAYERS.vehicleNoses).layout!['icon-rotation-alignment']).toBe('map');
   });
 
-  it('generates one SDF pill per label length up to PILL_MAX_CHARS, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
+  it('generates one SDF pill and one plate per label length up to PILL_MAX_CHARS, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
     const images = overlayImages();
-    expect(images.map((i) => i.id)).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
+    expect(images.map((i) => i.id)).toEqual([
+      'vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4',
+      'vehicle-plate-1', 'vehicle-plate-2', 'vehicle-plate-3', 'vehicle-plate-4',
+      'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
+    ]);
     expect(PILL_MAX_CHARS).toBe(4);
     const widths = images.slice(0, 4).map((i) => i.image.width);
     for (let i = 1; i < widths.length; i++) expect(widths[i]).toBeGreaterThan(widths[i - 1]!);
+    // A plate is the pill's box with the corners barely rounded: same size, and the corner pixel a capsule leaves empty is filled.
+    for (let i = 0; i < 4; i++) {
+      const pill = images[i]!.image;
+      const plate = images[4 + i]!.image;
+      expect([plate.width, plate.height]).toEqual([pill.width, pill.height]);
+      const corner = (img: { width: number; data: Uint8ClampedArray }) => img.data[((SDF_SPREAD_PX + 1) * img.width + SDF_SPREAD_PX + 1) * 4 + 3]!;
+      expect(corner(plate)).toBeGreaterThan(corner(pill) + 60);
+    }
     expect(JSON.stringify(layerById(LAYERS.vehicles).layout!['icon-image'])).toContain('"length",["get","short"]');
+    expect(JSON.stringify(layerById(LAYERS.vehicles).layout!['icon-image'])).not.toContain(PLATE_IMAGE_PREFIX);
+  });
+});
+
+// The public screen's overlay set (plan D4, R-KP4): the tram network is the
+// figure, buses and every stop off the screen's routes step aside, trams are
+// plates and buses capsules (the badge rule), the screen's stop is the largest
+// mark on the map, and the fixed 14.5 thresholds follow the field's own zoom.
+describe('the kiosk overlay set (prozor)', () => {
+  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6 };
+
+  it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, trams as plates and buses as pills, the screen\u2019s stop as the largest mark, and no seat', () => {
+    for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
+      const layers = overlayLayers(p, { scale: 2, prozor: PROZOR });
+      const by = (id: string) => layers.find((l) => l.id === id)!;
+      expect(by(LAYERS.networkBus).layout!.visibility).toBe('none');
+      const tram = by(LAYERS.networkTram);
+      expect(tram.layout!.visibility).toBe('visible');
+      expect(tram.paint!['line-color']).toBe(p.figure);
+      expect(tram.paint!['line-opacity']).toBe(p.figureOpacity);
+      expect(tram.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 14, 3, 15, 5, 16, 6]);
+      expect(tram.layout!['line-cap']).toBe('round');
+      expect(tram.layout!['line-join']).toBe('round');
+      // Stops: the screen's routes only, as filled dots in the figure colour.
+      const stops = by(LAYERS.stops);
+      const stopsFilter = JSON.stringify(stops.filter);
+      expect(stopsFilter).toContain(JSON.stringify(['in', '6', ['get', 'routes']]));
+      expect(stopsFilter).toContain(JSON.stringify(['in', '11', ['get', 'routes']]));
+      expect(stops.paint!['circle-radius']).toBe(6);
+      expect(stops.paint!['circle-color']).toBe(p.figure);
+      expect(stops.paint!['circle-stroke-width']).toBe(0);
+      // Their names: hubs only (rank 4 and up), from the field's zoom, never below it; the same routes filter as the dots.
+      const labels = by(LAYERS.stopLabels);
+      expect(labels.minzoom).toBe(14.6);
+      expect(JSON.stringify(labels.filter)).toContain(JSON.stringify(['>=', ['get', 'rank'], 4]));
+      expect(JSON.stringify(labels.filter)).toContain(JSON.stringify(['in', '6', ['get', 'routes']]));
+      expect(labels.layout!['text-size']).toBe(22);
+      // Vehicles: a tram takes the plate of its label's length, a bus the pill; every mark places unconditionally and the noses draw from the field's zoom.
+      const pills = by(LAYERS.vehicles);
+      const image = JSON.stringify(pills.layout!['icon-image']);
+      expect(image).toContain(PLATE_IMAGE_PREFIX);
+      expect(image).toContain(PILL_IMAGE_PREFIX);
+      expect(image).toContain('"tram"');
+      expect(image).toContain('"length",["get","short"]');
+      expect(pills.layout!['icon-allow-overlap']).toEqual(['step', ['zoom'], false, 14.6, true]);
+      expect(pills.layout!['text-allow-overlap']).toEqual(['step', ['zoom'], false, 14.6, true]);
+      expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6);
+      expect(JSON.stringify(by(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
+      // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
+      const screenStop = by(LAYERS.screenStop);
+      expect(screenStop.paint!['circle-radius']).toBe(18);
+      expect(screenStop.paint!['circle-stroke-width']).toBe(4);
+      const screenStopLabel = by(LAYERS.screenStopLabel);
+      expect(screenStopLabel.layout!['text-size']).toBe(30);
+      expect(screenStopLabel.layout!['text-allow-overlap']).toBe(true);
+      expect(by(LAYERS.placeSeat).layout!.visibility).toBe('none');
+    }
+    // Every stop when the routes are unknown (today's drawing), none for an empty list.
+    const stopsOf = (prozor: ProzorOptions) => overlayLayers(OVERLAY_LIGHT, { prozor }).find((l) => l.id === LAYERS.stops)!;
+    expect(stopsOf({ ...PROZOR, stopRoutes: null }).filter).toEqual(stopFilter(null));
+    expect(stopsOf({ ...PROZOR, stopRoutes: [] }).filter).toEqual(NEVER);
+    // Both kinds asked for: both networks drawn, as without the options.
+    expect(overlayLayers(OVERLAY_LIGHT, { prozor: { ...PROZOR, networkKinds: ['tram', 'bus'] } }).find((l) => l.id === LAYERS.networkBus)!.layout!.visibility).toBe('visible');
+    // The two faces share the list and differ in paint alone, exactly as without the options.
+    const light = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR });
+    const dark = overlayLayers(OVERLAY_DARK, { prozor: PROZOR });
+    expect(dark.map((l) => l.id)).toEqual(light.map((l) => l.id));
+    expect(dark.map((l) => l.id)).toEqual(overlayLayers(OVERLAY_LIGHT).map((l) => l.id));
+    expect(styleDiff(light, dark).every((op) => op.kind === 'paint')).toBe(true);
+    // The figure: ink by day, the muted paper tier by night; the pinned tram blue is not touched.
+    expect(OVERLAY_LIGHT.figure).toBe('#0c1250');
+    expect(OVERLAY_LIGHT.figureOpacity).toBe(0.9);
+    expect(OVERLAY_DARK.figure).toBe('#b6bbe0');
+    expect(OVERLAY_DARK.figureOpacity).toBe(0.7);
+    expect(OVERLAY_LIGHT.routeTram).toBe('#03409c');
   });
 });
 
