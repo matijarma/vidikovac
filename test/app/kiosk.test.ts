@@ -121,7 +121,7 @@ function mount(opts: MountOptions = {}) {
     fire: (ms: number) => [...timers].reverse().find((t) => t.ms === ms && !t.cleared),
     /** Fires every armed timer registered at a delay, oldest first. */
     tick: (ms: number) => { for (const t of [...timers]) if (t.ms === ms && !t.cleared) t.fn(); },
-    /** Fires the teaser poll alone: its fallback delay equals the 20 s rotation tick, which `tick(POLL_FALLBACK_MS)` would fire as well. */
+    /** Fires the teaser poll alone (the fallback delay is the feed's own 10 s tick, R-TE4, distinct from the 20 s rotation tick). */
     poll: () => {
       const armed = [...timers].reverse().find((t) => t.ms === POLL_FALLBACK_MS && !t.cleared && !armedAtMount.has(t));
       if (!armed) throw new Error('no teaser poll is armed');
@@ -637,6 +637,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(calls.at(-1)).toBe('live'); // the teaser's live copy outranks the stale session copy
     failTeaser = true;
     k.tick(ROTATE_MS);
+    k.poll(); // the teaser poll has its own 10 s beat now (R-TE4), no longer the rotation tick
     await flush();
     expect(calls.at(-1)).toBe('stale');
     expect(text(q(k.root, '[data-testid=k-delays]'))).toContain('zastarjelo');

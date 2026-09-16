@@ -51,3 +51,35 @@ describe('routeDelayMap', () => {
     expect(routeDelayMap(undefined).size).toBe(0);
   });
 });
+
+// A6 (R-TE2): a pin that carries the twin's fix history becomes one Fix per
+// past report, oldest first, each dated against the snapshot's source time,
+// and each carrying the static join (shape, direction, headsign) so the
+// model can pin the vehicle to its own shape from the first fix.
+describe('vehicleFixes with the twin history', () => {
+  const origin = '2026-09-12T09:59:40Z';
+  const pin: ModuleSnapshot['items'][number] = {
+    id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', at: '2026-09-12T09:59:36Z',
+    geo: { type: 'Point', coordinates: [15.9792, 45.8132] },
+    data: { routeId: '6', tripId: 'T1', vehicleId: '1', routeShortName: '6', routeType: 0, direction: 1, headsign: 'Črnomerec', shapeId: '6_12', nextStopId: '231_2', delaySeconds: 45 },
+    motion: { history: [[-24, 15.977, 45.813], [-14, 15.978, 45.8131], [-4, 15.9792, 45.8132]] },
+  };
+  it('expands the history into ordered fixes dated against sourceUpdatedAt, each with the join', () => {
+    const fixes = vehicleFixes({ ...snapshot([pin]), sourceUpdatedAt: origin }, NOW);
+    const T = Date.parse(origin);
+    expect(fixes).toEqual([
+      { id: 'vehicle:1', lon: 15.977, lat: 45.813, at: T - 24_000, tripId: 'T1', routeId: '6', type: 0, shapeId: '6_12', direction: 1, headsign: 'Črnomerec' },
+      { id: 'vehicle:1', lon: 15.978, lat: 45.8131, at: T - 14_000, tripId: 'T1', routeId: '6', type: 0, shapeId: '6_12', direction: 1, headsign: 'Črnomerec' },
+      { id: 'vehicle:1', lon: 15.9792, lat: 45.8132, at: T - 4_000, tripId: 'T1', routeId: '6', type: 0, shapeId: '6_12', direction: 1, headsign: 'Črnomerec' },
+    ]);
+  });
+  it('falls back to the single pin when the snapshot has no source time to date the history against', () => {
+    const fixes = vehicleFixes(snapshot([pin]), NOW);
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0]).toMatchObject({ lon: 15.9792, lat: 45.8132, at: Date.parse('2026-09-12T09:59:36Z'), shapeId: '6_12', direction: 1, headsign: 'Črnomerec' });
+  });
+  it('keeps direction 0 as a value, not as an absence', () => {
+    const zero = { ...pin, data: { ...pin.data, direction: 0 }, motion: undefined };
+    expect(vehicleFixes({ ...snapshot([zero]), sourceUpdatedAt: origin }, NOW)[0].direction).toBe(0);
+  });
+});

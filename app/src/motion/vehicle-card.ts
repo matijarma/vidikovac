@@ -4,7 +4,9 @@
 // in, three strings out. Direction is the terminus of the shape the model
 // has the vehicle on -- what the headsign would say -- and reads "smjer
 // nepoznat" whenever the model's heading is null, i.e. at a standstill or
-// under the evidence threshold (decision 5), rather than being guessed.
+// under the evidence threshold (decision 5), rather than being guessed --
+// unless the twin's join carries the trip's headsign, which names the
+// direction whatever the mark is doing (R-TE2).
 import { routeName } from '../data/routes';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
@@ -46,7 +48,11 @@ export function describeVehicle(i18n: I18n, net: Network, v: Drawn, delays: Read
   const line = v.routeId !== undefined ? routeName(v.routeId) : i18n.t('motion.lineUnknown');
 
   let direction: string;
-  if (!v.heading) {
+  if (v.headsign) {
+    // The twin's static join names the direction outright (R-TE2); the model's
+    // heading is the fallback for a trip the index does not know.
+    direction = i18n.t('motion.direction', { towards: v.headsign });
+  } else if (!v.heading) {
     direction = i18n.t('motion.directionUnknown');
   } else {
     const terminus = v.onShape !== null ? terminusName(net, v.onShape) : null;

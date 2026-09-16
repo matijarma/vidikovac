@@ -77,6 +77,7 @@ export function headingFromBearing(bearing: number): { x: number; y: number } {
  * model has no heading (decision 5), never a guess.
  */
 export function vehicleDirection(i18n: I18n, net: Network | null, v: VehicleInfo): string {
+  if (v.headsign) return i18n.t('motion.direction', { towards: v.headsign });
   if (v.bearing === null) return i18n.t('motion.directionUnknown');
   const terminus = net && v.onShape !== null ? terminusName(net, v.onShape) : null;
   const towards = terminus ?? i18n.t(`motion.compass.${compassKey(headingFromBearing(v.bearing))}`);

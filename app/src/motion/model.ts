@@ -35,6 +35,15 @@ export interface Fix {
    *  before/without the artefact (lightweight mode never loads it). The
    *  artefact's own answer wins when it has one. */
   type?: number;
+  /** The twin's static-GTFS join of the vehicle's trip (R-TE2, phase A):
+   *  the shape the trip runs, its direction and headsign. The shape pins the
+   *  candidate set to one shape, so the two directional shapes of a line can
+   *  no longer trade the vehicle back and forth and read as a reversal; the
+   *  headsign names the direction on the card without waiting for heading
+   *  confidence. All absent for a trip the index does not know. */
+  shapeId?: string;
+  direction?: 0 | 1;
+  headsign?: string;
 }
 
 export interface Drawn {
@@ -60,6 +69,8 @@ export interface Drawn {
    *  change) and re-seeded; undefined if it never has. Never set by an
    *  along-track gap, however large -- see convergeScalar. */
   lastSnapAt?: number;
+  /** The trip's headsign from the twin's join, when the index knows the trip. */
+  headsign?: string;
 }
 
 export interface Model {
@@ -202,6 +213,7 @@ interface VehicleState {
   tripId?: string;
   short?: string;
   type: number;
+  headsign?: string;
 
   intervals: Interval[]; // the last three *moving* intervals, most recent last (R-F10)
 
@@ -400,6 +412,19 @@ function selectShape(net: Network, candidates: readonly number[], q: XY, dirVec:
 
 export function createModel(net: Network | null): Model {
   const vehicles = new Map<string, VehicleState>();
+  const shapeIndexById = new Map<string, number>(net ? net.shapes.map((shape, idx) => [shape.id, idx] as const) : []);
+
+  /** The shapes a fix may be matched to: the trip's own shape when the twin's
+   *  join names one the artefact knows (phase A of R-TE10: one candidate, so
+   *  no flip between a line's two tracks), else every shape of the route. */
+  function candidatesFor(fix: Pick<Fix, 'routeId' | 'shapeId'>): readonly number[] {
+    if (!net) return [];
+    if (fix.shapeId !== undefined) {
+      const idx = shapeIndexById.get(fix.shapeId);
+      if (idx !== undefined) return [idx];
+    }
+    return (fix.routeId !== undefined ? net.routes.get(fix.routeId)?.shapes : undefined) ?? [];
+  }
 
   function routeMeta(fix: Pick<Fix, 'routeId' | 'type'>): { short?: string; type: number } {
     const route = net && fix.routeId !== undefined ? net.routes.get(fix.routeId) : undefined;
@@ -447,7 +472,7 @@ export function createModel(net: Network | null): Model {
   function initVehicle(fix: Fix, now: number): VehicleState {
     const p = toPlane(fix.lon, fix.lat);
     const meta = routeMeta(fix);
-    const candidates = (net && fix.routeId !== undefined ? net.routes.get(fix.routeId)?.shapes : undefined) ?? [];
+    const candidates = candidatesFor(fix);
     let shapeIdx: number | null = null;
     let s = 0;
     let shapeScore = Infinity;
@@ -469,6 +494,7 @@ export function createModel(net: Network | null): Model {
       tripId: fix.tripId,
       short: meta.short,
       type: meta.type,
+      headsign: fix.headsign,
       intervals: [],
       shapeIdx,
       shapeScore,
@@ -504,6 +530,7 @@ export function createModel(net: Network | null): Model {
 
     const tripChanged = v.tripId !== undefined && fix.tripId !== undefined && v.tripId !== fix.tripId;
     v.tripId = fix.tripId;
+    if (fix.headsign !== undefined || tripChanged) v.headsign = fix.headsign;
     if (tripChanged) {
       // Decision: clear the hysteresis so a terminus turn-around is free
       // (the brief's own words). The old arc length lives in a shape whose
@@ -524,7 +551,7 @@ export function createModel(net: Network | null): Model {
     // see CONFIDENCE_EASE.
     v.confidence = isStationary ? v.confidence * (1 - CONFIDENCE_EASE) : v.confidence + (1 - v.confidence) * CONFIDENCE_EASE;
 
-    const candidates = (net && fix.routeId !== undefined ? net.routes.get(fix.routeId)?.shapes : undefined) ?? [];
+    const candidates = candidatesFor(fix);
     const sel: Selection = net
       ? selectShape(net, candidates, newP, dirVec, v.shapeIdx)
       : { shapeIdx: null, shapeScore: Infinity, proj: null, changed: v.shapeIdx !== null };
@@ -598,12 +625,32 @@ export function createModel(net: Network | null): Model {
 
   return {
     update(fixes, now) {
+      const created = new Set<string>();
       for (const fix of fixes) {
         const v = vehicles.get(fix.id);
         if (!v) {
           vehicles.set(fix.id, initVehicle(fix, now));
+          created.add(fix.id);
         } else {
           applyFix(v, fix, now);
+        }
+      }
+      // A vehicle born in this update from a run of history (the twin hands
+      // over its last fixes in one go, R-TE2) is seeded at its latest
+      // evidence, not its oldest: nothing has been drawn yet, so this is no
+      // jump (R-P2 concerns a mark already on screen), and the alternative is
+      // a mark two minutes behind racing to catch up on the first frames.
+      for (const id of created) {
+        const v = vehicles.get(id);
+        if (!v || v.intervals.length === 0) continue;
+        if (v.shapeIdx !== null && net) {
+          v.s = v.targetS;
+          const shape = net.shapes[v.shapeIdx];
+          v.p = at(shape.pts, shape.cum, v.s);
+        } else {
+          v.p = v.freeToP;
+          v.freeFromP = v.freeToP;
+          v.freeFromAt = v.freeToAt;
         }
       }
       evict(now);
@@ -693,6 +740,7 @@ export function createModel(net: Network | null): Model {
         if (track) drawn.track = track;
         if (heldByGate) drawn.held = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
+        if (v.headsign !== undefined) drawn.headsign = v.headsign;
         out.push(drawn);
       }
       return out;

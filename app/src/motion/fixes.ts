@@ -6,6 +6,7 @@
 // stage) go through this one file, so the wire vocabulary (DATA_KEYS.vehicle
 // in worker/feed/schema.ts) is read in exactly one place on the client.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
+import { isHistoryMotion } from '../../../shared/motion/wire';
 import { dataNumber, dataText } from '../panels/panel';
 import type { Fix } from './model';
 
@@ -25,22 +26,38 @@ function parseTime(iso: string | undefined): number | null {
  */
 export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number): Fix[] {
   if (!snapshot) return [];
-  const fallbackAt = parseTime(snapshot.sourceUpdatedAt) ?? parseTime(snapshot.fetchedAt) ?? now;
+  const sourceAt = parseTime(snapshot.sourceUpdatedAt);
+  const fallbackAt = sourceAt ?? parseTime(snapshot.fetchedAt) ?? now;
   const fixes: Fix[] = [];
   for (const item of snapshot.items) {
     if (!item.id.startsWith('vehicle:') || item.geo?.type !== 'Point') continue;
     const [lon, lat] = item.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     const type = dataNumber(item, 'routeType');
-    fixes.push({
+    const rawDirection = dataNumber(item, 'direction');
+    const direction: 0 | 1 | undefined = rawDirection === 0 ? 0 : rawDirection === 1 ? 1 : undefined;
+    const shared = {
       id: item.id,
-      lon,
-      lat,
-      at: parseTime(item.at) ?? fallbackAt,
       tripId: dataText(item, 'tripId') || undefined,
       routeId: dataText(item, 'routeId') || undefined,
       type: type ?? undefined,
-    });
+      // The twin's static join (R-TE2): the trip's shape, direction and headsign.
+      shapeId: dataText(item, 'shapeId') || undefined,
+      direction,
+      headsign: dataText(item, 'headsign') || undefined,
+    };
+    // The twin's fix history rides in `motion.history`, times relative to the
+    // snapshot's source time (R-TE13): one Fix per past report, oldest first,
+    // so the model starts with evidence instead of a single point. Without a
+    // source time to date them against, the pin alone is the honest fix.
+    if (item.motion && isHistoryMotion(item.motion) && sourceAt !== null && item.motion.history.length > 0) {
+      for (const [atSec, hLon, hLat] of item.motion.history) {
+        if (!Number.isFinite(hLon) || !Number.isFinite(hLat) || !Number.isFinite(atSec)) continue;
+        fixes.push({ ...shared, lon: hLon, lat: hLat, at: sourceAt + atSec * 1000 });
+      }
+      continue;
+    }
+    fixes.push({ ...shared, lon, lat, at: parseTime(item.at) ?? fallbackAt });
   }
   return fixes;
 }

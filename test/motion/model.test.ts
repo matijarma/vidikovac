@@ -1004,3 +1004,55 @@ describe('eviction (R-F2)', () => {
     expect(model.size()).toBe(0);
   });
 });
+
+// A6 (R-TE10, phase A): the twin hands the model a vehicle's recent history
+// in one update, so the first drawn frame is already the latest evidence
+// with a speed and a heading behind it, not a two-minute-old fix the mark
+// then races to catch up with. And the trip's own shape (the twin's join)
+// is the one candidate, so the two directional shapes of a line can no
+// longer trade the vehicle back and forth and read as a reversal.
+describe('a vehicle whose first update carries its history', () => {
+  it('draws at its latest fix on the first frame, moving and facing along the shape', () => {
+    const net = straightNetwork();
+    const model = createModel(net);
+    // Five fixes over 40 s, 10 m/s northbound, the newest 4 s before now.
+    const fixes = [0, 1, 2, 3, 4].map((k) => fixAt('v1', { x: 0, y: 500 + 100 * k }, T0 - 44_000 + 10_000 * k));
+    model.update(fixes, T0);
+    const [drawn] = model.step(T0);
+    expect(drawn.p.y).toBeGreaterThanOrEqual(900 - 1); // at the latest fix, not the first
+    expect(drawn.p.y).toBeLessThan(900 + 60); // and at most a few seconds of reckoning past it
+    expect(drawn.speed).toBeGreaterThan(8);
+    expect(drawn.speed).toBeLessThan(12);
+    expect(drawn.heading).not.toBeNull();
+    expect(drawn.heading!.y).toBeGreaterThan(0.99);
+  });
+
+  it('keeps the shape the wire names even when the opposite track is geometrically closer', () => {
+    // Two directional shapes of one line, 8 m apart: northbound at x = 0,
+    // southbound at x = 8. A fix at x = 6 is nearer the southbound track.
+    const net = buildNetwork(
+      [
+        { id: 'N', route: 'R1', pts: [{ x: 0, y: 0 }, { x: 0, y: 2000 }] },
+        { id: 'S', route: 'R1', pts: [{ x: 8, y: 2000 }, { x: 8, y: 0 }] },
+      ],
+      [],
+      [{ id: 'R1', short: '1', type: 0, shapes: [0, 1] }],
+    );
+    // One fix, no movement evidence yet: only the wire's shape can decide.
+    const model = createModel(net);
+    model.update([fixAt('v1', { x: 6, y: 500 }, T0, { shapeId: 'N' })], T0);
+    const [drawn] = model.step(T0);
+    expect(drawn.onShape).toBe(0);
+    expect(drawn.headsign).toBeUndefined();
+    // Without the join the model would have picked the nearer track.
+    const free = createModel(net);
+    free.update([fixAt('v2', { x: 6, y: 500 }, T0)], T0);
+    expect(free.step(T0)[0].onShape).toBe(1);
+  });
+
+  it('carries the headsign from the wire onto what is drawn', () => {
+    const model = createModel(straightNetwork());
+    model.update([fixAt('v1', { x: 0, y: 100 }, T0, { headsign: 'Sopot', direction: 0 })], T0);
+    expect(model.step(T0)[0].headsign).toBe('Sopot');
+  });
+});

@@ -798,7 +798,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(teaserTimer); // the injected pair is interval-shaped
       teaserTimer = null;
       continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
-    }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now()));
+    }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now(), byModule(teaser)['zet-rt']?.validUntil));
   }
   let teaserSeq = 0;
   async function loadTeaser(): Promise<void> {

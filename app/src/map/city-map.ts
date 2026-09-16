@@ -348,6 +348,8 @@ export interface VehicleInfo {
   confidence: number;
   held: boolean;
   onShape: number | null;
+  /** The trip's headsign from the twin's join, when known (R-TE2). */
+  headsign?: string;
 }
 
 export interface MapCamera {
@@ -1129,6 +1131,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         confidence: v.confidence,
         held: v.held === true,
         onShape: v.onShape,
+        ...(v.headsign !== undefined ? { headsign: v.headsign } : {}),
       };
     });
   }
