@@ -2,7 +2,7 @@
 // Local Worker + ordinary self-service screen + ordinary code redemption.
 // No credentials or raw feed payloads are written to the provenance manifest.
 import { chromium } from 'playwright';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -11,8 +11,9 @@ if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) {
   throw new Error('Capture is local-only. It must not provision public deployment screens.');
 }
 const root = resolve(import.meta.dirname, '..');
-const output = resolve(root, 'app/public/landing');
 const raw = resolve(root, 'review.local/landing-captures');
+const output = resolve(raw, 'optimized');
+const published = resolve(root, 'app/public/landing');
 mkdirSync(output, { recursive: true });
 mkdirSync(raw, { recursive: true });
 const records = [];
@@ -182,6 +183,16 @@ try {
     await phone.locator('[data-testid=session-sheet] .dialog-close').click();
     await capture(phone, 'frozen', variant, [390, 780], '/d/ genuinely expired snapshot');
   }
+  // A failed capture never replaces the published set with a partial set.
+  // The asset names are fixed by this script, not read from the network.
+  if (records.length !== variants.length * 7) throw new Error('Incomplete capture set.');
+  saveManifest();
+  mkdirSync(published, { recursive: true });
+  for (const record of records) for (const width of record.widths) {
+    const file = `${record.name}-${record.locale}-${record.theme}-${width}.webp`;
+    copyFileSync(resolve(output, file), resolve(published, file));
+  }
+  copyFileSync(resolve(output, 'captures.json'), resolve(published, 'captures.json'));
 } finally {
   saveManifest();
   await browser.close();
