@@ -84,6 +84,13 @@ export function vehicleDirection(i18n: I18n, net: Network | null, v: VehicleInfo
   return i18n.t('motion.direction', { towards });
 }
 
+/** "sljedeće stajalište X" when the twin names a next stop the network knows, else null. */
+export function vehicleNextStop(i18n: I18n, net: Network | null, v: VehicleInfo): string | null {
+  if (!net || v.nextStopId === undefined) return null;
+  const name = net.stops.find((s) => s.id === v.nextStopId)?.name;
+  return name ? i18n.t('motion.nextStop', { stop: name }) : null;
+}
+
 /** The two ZET feeds inside the events module (worker/feed/modules/dogadanja/zet-rss.ts). */
 export const ZET_NOTICE_SOURCES: readonly string[] = ['zet-promet', 'zet-novosti'];
 

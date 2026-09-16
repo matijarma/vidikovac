@@ -4,7 +4,7 @@ import * as basemap from '../../app/src/map/basemap';
 import { createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
 import { toPlane } from '../../app/src/motion/geo';
-import type { Drawn } from '../../app/src/motion/model';
+import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../app/src/motion/network';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

@@ -1,10 +1,9 @@
 // One schematic per page, kept for the page's whole life -- the motion
 // analogue of map/map-slots.ts. A dashboard rebuilds its layer sections on
 // every poll and a kiosk repaints its stage every twenty seconds; if each
-// render mounted a fresh view, every poll would throw away every vehicle's
-// fix history and speed estimate -- the very evidence the motion model
-// converges from (R-P2) -- and start all over again from the reported
-// positions. So the page creates one host, the render moves its stable
+// render mounted a fresh view, every poll would throw away every mark's
+// drawn position and its convergence onto the twin's plan (R-P2) and start
+// all over again from the reported positions. So the page creates one host, the render moves its stable
 // element into whatever panel or slot the current markup has, and hands it
 // this poll's evidence through update().
 //
@@ -26,7 +25,7 @@ import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } fr
 /** R-P2's user-facing sentence, pinned here as a constant so the test that
  *  guards the verbatim wording reads the same source the page does. The
  *  catalogue carries it under motion.note; the two must agree. */
-export const HONESTY_NOTE_HR = 'Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.';
+export const HONESTY_NOTE_HR = 'Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.';
 
 /** R-P1: a locked kiosk shows trams only by default. */
 export const TRAMS_ONLY: ReadonlySet<number> = new Set([ROUTE_TYPE_TRAM]);

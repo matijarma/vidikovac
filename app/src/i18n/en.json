@@ -965,9 +965,10 @@
     }
   },
   "motion": {
-    "note": "Each position is computed from that vehicle’s own reports and the line’s geometry; ZET publishes neither heading nor speed.",
+    "note": "Each position is computed from that vehicle’s own reports, the track geometry and the timetable; ZET publishes neither heading nor speed.",
     "direction": "towards {towards}",
     "directionUnknown": "direction unknown",
+    "nextStop": "next stop {stop}",
     "delay": "route delay: {word}",
     "delayUnknown": "route delay unknown",
     "lineUnknown": "line unknown",

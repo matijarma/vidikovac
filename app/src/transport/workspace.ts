@@ -29,7 +29,7 @@ import { statusText } from '../panels/panel';
 import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
-import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
+import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehicleNextStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
 import { searchTransport, type StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
 import { tr, trPlural } from './strings';
@@ -567,6 +567,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           vehicle: v,
           route: v.routeId === undefined ? null : routeEntry(v.routeId),
           direction,
+          nextStop: vehicleNextStop(i18n, net, v),
           delay: v.routeId === undefined ? undefined : delays().get(v.routeId),
           following: following === v.id,
           kiosk: k,
