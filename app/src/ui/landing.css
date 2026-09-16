@@ -57,7 +57,7 @@
 .ld-title-city { color: var(--tone-text-brand); }
 .ld-hero-copy { display: grid; align-content: start; gap: 1rem; }
 .ld-lead { max-inline-size: 38ch; font-size: 1.125rem; line-height: 1.55; }
-.ld-intro { max-inline-size: 40ch; font-size: .9375rem; line-height: 1.55; color: var(--tone-text-muted); }
+.ld-intro { max-inline-size: 40ch; font-size: 1rem; line-height: 1.55; color: var(--tone-text-muted); }
 .ld-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem 1.5rem; margin-block-start: .25rem; }
 .ld-hero-figure { margin-block-start: clamp(2rem, 4vw, 3.5rem); }
 .ld-hero-visual { position: relative; padding-block-end: 1rem; }
