@@ -35,12 +35,20 @@ rotacija prizora: polje karte razapeto na 2,8 km širine, sjever gore,
 tramvajske pruge i vozila na njima, stajalište, zatvaranja, radovi i
 obris kvarta. Nema drugog prizora na koji bi se prešlo, pa nema ni
 odbrojavanja. Desno od polja stoji stupac od najviše tri izjave (naslov ·
-vrijednost · kontekst), poredane po tome što je upravo sada najvažnije, od
-osam mogućih: prometna presuda, potres, zatvaranje u blizini, zadnji
+vrijednost · kontekst), koliko stupac drži cijelih: izjava koja ne stane
+cijela skriva se, nikad se ne reže ni ne skraćuje trotočkom, pa na 1920 × 1080
+stoje najmanje dvije (tri kad je svaka vrijednost u jednom retku), na
+1366 × 768 najmanje jedna (dvije kad je prometna vrijednost u jednom retku),
+a na portretnom totemu tri. Poredane su po tome što je upravo sada
+najvažnije, od osam mogućih: prometna presuda, potres, zatvaranje u blizini, zadnji
 polazak (od 20 sati, po rasporedu ZET-a, nikad kao procjena dolaska),
 ZET-ova prometna obavijest, najava sjednice Gradske skupštine, radovi u
-kvartu ili gradu i kvartovske novosti. Ispod stupca stoji stalna pozivnica
-s QR-om i kodom. Zaglavlje nosi sat i, kad DHMZ odgovara, vrijeme kao
+kvartu ili gradu i kvartovske novosti. Ispod stupca stoji stalna pozivnica:
+QR uz poziv i uputu, kod preko cijele širine. Dežurna ljekarna na karti
+nosi prsten i svoju adresu; kad leži unutar 150 m od stajališta zaslona,
+adresa se s karte ispušta (ležala bi preko imena stajališta), a prsten
+ostaje i sigurnosna je traka i dalje imenuje u cijelosti. Zaglavlje nosi
+sat i, kad DHMZ odgovara, vrijeme kao
 stanje uz sat, nikad kao pločicu. Sigurnosna traka nosi presudu i tri
 stavke, bez odbrojavanja. Rasporedi za 1920 × 1080 i 1366 × 768 namjerno
 su različiti; QR u oba mora biti najmanje 240 CSS piksela.

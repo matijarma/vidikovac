@@ -536,16 +536,22 @@ slika viših od prozora.
 
 Plan `C:/Users/MatijaRadeljak/.claude/plans/observe-the-layout-and-valiant-fiddle.md`, grana i
 radna stabla `kiosk-prozor` / `kp-P1`…`kp-P4`, odluke i tumačenja u
-`.superpowers/sdd/2026-09-16-kiosk-prozor/rulings.md` (R-KP1 do R-KP15). Val A gradi u
+`.superpowers/sdd/2026-09-16-kiosk-prozor/rulings.md` (R-KP1 do R-KP23). Val A gradi u
 četiri usporedna radna stabla; ovaj odjeljak opisuje protokol provjere koji vlasnik čita nakon
 spajanja (val B) -- brojke i snimke iz vala A same po sebi nisu dovoljne jer ni jedno radno
-stablo samo ne vidi cijeli sastavljen zaslon.
+stablo samo ne vidi cijeli sastavljen zaslon. Rezultati ispod izmjereni su u valu B (16. 9. 2026.,
+grana `kiosk-prozor`, izvještaj `task-WB-report.md`); redci označeni „proizvodnja” popunjavaju se
+nakon spajanja na `main`.
 
 ### Matrica snimanja
 
 `review.local/kiosk-pass/capture.mjs <naziv>` (git-ignorirana lokalna alatka, pokreće se protiv
 `APP_URL`) snima nepovezani zaslon po veličini iz plana, svjetlo i tamno, jednom po veličini
-(nema više prizora kroz koje bi trebalo prolaziti -- polje je jedno):
+(nema više prizora kroz koje bi trebalo prolaziti -- polje je jedno). Zaslon se postavlja sa
+stajalištem `106_1` (zadano stajalište čarobnjaka; zaslon bez stajališta nema ni prometnu izjavu
+ni prsten stajališta, a takav zaslon ni jedan kafić ne dobiva), a lice se nameće adresom
+`?tema=svijetla|tamna` jer se javni zaslon otvara na sunčevoj temi i Playwrightov `colorScheme`
+sam ga ne preokreće:
 
 | Veličina | Zašto |
 |---|---|
@@ -562,11 +568,35 @@ Za nacrtanu veličinu (1920 × 1080) alatka dodatno snima par „3m” (ista sli
 `deviceScaleFactor 0.25`, svjetlo i tamno) i, na istoj stranici bez ponovnog učitavanja, jedan
 snimak nakon 20 sati po zagrebačkom vremenu (sat je pomaknut unaprijed, `page.clock`, da zadnji
 polazak stigne na zaslon bez nove navigacije). `geometry.json` po veličini bilježi: udio polja
-(`[data-testid=kiosk-live]`) u pozornici, broj prikazanih `article.k-say`, prelijeva li ijedna
-`.k-say-value` (`scrollHeight > clientHeight + 1`), `data-major-labels` domaćina karte i okvir
-atribucijske kontrole.
+(`[data-testid=kiosk-live]`) u pozornici, prostor stupca i visinu kartice, koliko je izjava
+ranker ponudio i koliko ih stoji cijelih (`fit()` skriva ostale od dna), retke svake prikazane
+vrijednosti (visina kutije kroz visinu retka -- nikad `scrollHeight`, koji broji i tintu lica
+preko retka od 1,1 pa laže o prelijevanju), prelazi li ijedna vrijednost dva retka ili dno svoje
+izjave, `data-major-labels` domaćina karte i okvir atribucijske kontrole.
 
-**Rezultat: popuniti u integraciji.**
+**Rezultat (val B, 16. 9. 2026., `review.local/kiosk-pass/prozor/`, 17:42 po zagrebačkom
+vremenu, stajalište Trg bana J. Jelačića):** snimke `<veličina>-light.png`, `<veličina>-dark.png`
+i `<veličina>-after-20.png` za svih osam veličina, `3m-light.png`, `3m-dark.png`, `geometry.json`.
+
+| Veličina | polje | prostor stupca | kartica | izjave (cijele / ponuđene) | retci vrijednosti | imena ulica |
+|---|---|---|---|---|---|---|
+| 1920 × 1080 | 72,9 % | 473 px | 365 px | 2 / 3 (promet, zatvoreno) | 2, 1 | 7 |
+| 1366 × 768 | 67,8 % | 248 px | 341 px | 2 / 2 | 1, 1 | 4 |
+| 1080 × 1920 | 76,9 % | 382 px | 382 px | 3 / 3 | 1, 1, 1 | 7 |
+| 2560 × 1440 | 72,9 % | 631 px | 486 px | 2 / 3 | 2, 1 | 9 |
+| 3840 × 2160 | 81,7 % | 1149 px | 527 px | 2 / 3 | 2, 1 | 15 |
+| 2560 × 1080 | 79,7 % | 473 px | 365 px | 2 / 3 | 2, 1 | 9 |
+| 1920 × 1200 | 72,9 % | 593 px | 365 px | 3 / 3 | 2, 1, 2 | 7 |
+| 390 × 844 | 19,8 % (traka) | u tijeku | 401 px | 4 / 4 (nakon 20 h 5 / 5) | 1, 1, 2, 2 | 0 |
+
+Nijedna vrijednost ne prelazi dva retka ni dno svoje izjave; nijedan stupac se ne prelijeva. Živa
+prometna vrijednost u trenutku snimanja bila je dvoredna („13 rani 4 min · 6 rani 3 min”, prijelom
+samo na razdjelniku), pa 1920 × 1080 drži dvije izjave (R-KP22, donja granica); kadar nakon 20 h
+nudi zadnji polazak kao treću, koju na 1080p zidu ta dvoredna vrijednost skriva, dok je
+1920 × 1200 i telefon pokazuju. Zamrznuti sat (`page.clock`) ostavlja vozila bez svježih
+očitanja, pa ih kadar nakon 20 h ne crta -- artefakt alata, ne zaslona. Iznad nacrtanih veličina
+imena ulica prelaze osam (9 na 2560, 15 na 4K): razmak imena (R-KP17) izmjeren je na nacrtanom
+polju, a veće polje nosi više imena.
 
 ### Provjera na 3 metre
 
@@ -576,7 +606,13 @@ referentne udaljenosti -- jedina poštena provjera da znak čita se s tri metra.
 i vrijednosti izjava u stupcu; ništa se drugo ne smije natjecati za pažnju (nema sitnog teksta
 karte, nema imena ulica ispod praga `roads_labels_major`).
 
-**Rezultat: popuniti u integraciji.**
+**Rezultat (val B, `3m-light.png`, `3m-dark.png`):** s tri metra prvo se čita tramvajska pruga
+(tinta danju, papir noću) i veliko ime stajališta „Trg bana J. Jelačića” s prstenom; potom imena
+četvrti (KAPTOL, MARTIĆEVA, GORNJI GRAD, VOĆARSKO NASELJE) i u stupcu vrijednost prometne izjave u
+boji stanja („13 rani 4 min · 6 rani 3 min”) te „Amruševa”; QR i kod („MXQS · X1QJ”) čitaju se
+kao blok. Brojevi na pločama vozila raspoznaju se kao plave točke s brojem na granici čitljivosti;
+naslovi izjava (PROMET, ZATVORENO), kontekstni redci, imena ulica i atribucija ne natječu se s
+gornjim. Ništa drugo na slici nije čitljivo, što je i cilj.
 
 ### Pravila slaganja
 
@@ -589,16 +625,35 @@ jedinstvena postavljena imena `roads_labels_major` ≤ 8 (mjereno preko `placedN
 `CityMapHandle`); bez preklapanja, bez prelijevanja, točno jedan `h1`, zastoj kod prekida izvora
 (`stale-feed-hold`), uparene kompozicije zadržavaju svoje čuvare. `?prizor=` više ne postoji ni
 kao ruta ni kao query -- njegovo odsustvo provjerava i `node scripts/audit-production.mjs`
-(pravilo `legacy-prizor-param`).
+(pravilo `legacy-prizor-param`). Broj izjava pinira se kao donja granica, ne kao obećanje (R-KP22):
+najmanje dvije na 1920 × 1080 (tri kad je svaka vrijednost u jednom retku), najmanje jedna na
+1366 × 768 (dvije kad je prometna vrijednost u jednom retku), tri u portretu; imena ulica
+najviše 8 na pejzažnim poljima i 12 na totemu, čije polje na istom razmaku (R-KP17) nosi dvostruko
+tla sjever--jug.
 
-**Rezultat: popuniti u integraciji.**
+**Rezultat (val B):** `gate.sh unit` -- `UNIT STAGES PASSED` (`gate-logs/gate-20260916-171723.log`:
+typecheck, vitest 179 datoteka / 2534 testova u oba projekta, build). `e2e/kiosk-layout.spec.ts`
+16 testova: okvir na 1920 × 1080 drži 2 cijele izjave uz dvorednu prometnu vrijednost i 3 uz
+jednoredne, na 1366 × 768 po 2 (granice 1 / 2), na 1080 × 1920 3 i 3; redci oznaka prometa 2 / 1 /
+2; `data-major-labels` 1--7 na 1920 × 1080 unutar jednog sata (brojka raste kako se pločice
+iscrtaju), 0--4 na 1366 × 768 (nula je stvarno brojanje: na z14,14 ploče i imena čvorišta prvi
+uzimaju sidra), 7--9 na 1080 × 1920. Preglednički stupanj (`gate.sh browser`,
+`gate-logs/gate-20260916-174346.log`): Playwright 91 testova u oba projekta -- 86 zelenih i pet
+crvenih koji su svi imali isti uzrok (zaslon za e2e dobio je stajalište, pa su dokazi pisani za
+zaslon bez stajališta -- telefonska sesija u a11y i motion, ploča lagano u lagano i motion -- i
+čekanje na pozitivan broj imena ulica na 1366 × 768 pali); popravak u `e2e/helpers.ts`
+(stajalište dobivaju samo Prozorovi dokazi) i `e2e/kiosk-layout.spec.ts` (brojanje nakon jednog
+ciklusa dohvata), a četiri pogođene specifikacije ponovno su zelene protiv istog poslužitelja
+(`task-WB-report.md`); `review:visual` 77 površina, 0 nalaza; Lighthouse pristupačnost 100 na
+`/`, `/hitno`, `/kiosk/`, `/s/`, `/d/` i `/prijava/`.
 
 ### Oznake sadržaja za proizvodnju
 
 Testid-ovi koji preživljavaju spajanje (global-constraints.md, ugovor 8): `kiosk-live` (polje),
 `kiosk-map-host` (nosi `data-major-labels`), `kiosk-map`, `kiosk-lines` (redak crta prijevoza,
 i na izjavi i na laganoj ploči), `kiosk-says` (stupac), `kiosk-say` (svaki `article.k-say`),
-`kiosk-strip`, `kiosk-code`/`code-a`/`code-b`, QR testid-ovi, `kiosk-context`, `kiosk-clock`,
+`kiosk-strip`, `pair-code`/`code-a`/`code-b` (kod za uparivanje; `kiosk-code` nikad nije
+postojao), QR testid-ovi, `kiosk-context`, `kiosk-clock`,
 `kiosk-weather`. Ukinuti: `kiosk-scene`, `kiosk-scene-meta`, `kiosk-scene-position`,
 `kiosk-tonight`, `kiosk-city`, `kiosk-works`, `tile-vehicles`, `tile-closures`, `k-city-ink`.
 Osam mogućih izjava u stupcu (`app/src/kiosk/say.ts`, P2): prometna presuda, potres, zatvaranje,
@@ -608,4 +663,5 @@ kvartovske novosti -- najviše tri istovremeno, poredane po važnosti sada. Work
 1900 m), otvoreni redci `dogadanja` poredani (sjednice, ZET promet, pa ostatak) i ograničeni
 na 20.
 
-**Rezultat: popuniti u integraciji.**
+**Rezultat (proizvodnja): popunjava kontrolor nakon spajanja na `main`** -- živi `kiosk.css` nosi
+`.k-say`, posluženi stil nema sloj `pois`, teaser odgovara pinovima dalje od 1,4 km.
