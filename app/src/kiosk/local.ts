@@ -351,9 +351,12 @@ function summariseClosures(sorted: ClosureAtDistance[], state: SourceState, stop
 }
 
 /** Approximate geocodes of the curated on-duty addresses (worker/hitno/ljekarne.ts),
- *  used only to order the list by distance from the screen's stop; the
- *  distance itself is never printed. */
-const PHARMACY_POINTS: Readonly<Record<string, { lon: number; lat: number }>> = {
+ *  used to order the list by distance from the screen's stop, and by the map
+ *  to place the nearest one; the distance itself is never printed. Because
+ *  these are hand-entered and the published address is the exact part, the map
+ *  draws a hollow ring rather than a filled pin and labels it with the address
+ *  (map/overlays.ts, kiosk/mapview.ts). */
+export const PHARMACY_POINTS: Readonly<Record<string, { lon: number; lat: number }>> = {
   'Trg bana J. Jelačića 3': { lon: 15.9776, lat: 45.8131 },
   'Ilica 291': { lon: 15.934, lat: 45.811 },
   'Ozaljska 1': { lon: 15.956, lat: 45.8025 },

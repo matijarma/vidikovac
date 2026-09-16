@@ -75,6 +75,20 @@ const PUSH_TOLERANCE_MS = 1;
  *  uses, so both renderers read alike. */
 const MIN_ICON_ALPHA = 0.55;
 
+/** What a drawn point IS, when it is more than an untyped place. A point with
+ *  no `place` keeps the one plain circle this map has always drawn, which is
+ *  what the dashboard's quake map and the kvart thumbnail's work points still
+ *  ask for; a point with one is drawn by its own layer, with its own mark and
+ *  its own honesty rule (map/overlays.ts). */
+export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat';
+
+/** A value a place may carry alongside its name, flat, for a layer filter to
+ *  read: an event's `source` and `phase`, a quake's `mag`, a pharmacy's
+ *  published `address`. Flat and few on purpose -- a filter cannot reach into
+ *  a nested object, and a rule this map will not draw without has to be
+ *  expressible as a filter, not as a comment. */
+export type PointProp = string | number | boolean;
+
 export interface MapPoint {
   id: string;
   lon: number;
@@ -89,6 +103,9 @@ export interface MapPoint {
   tripId?: string;
   /** GTFS route_type off the wire (zet-rt.ts's routeType). */
   type?: number;
+  /** Absent: the plain place circle, exactly as before. */
+  place?: PlaceKind;
+  props?: Readonly<Record<string, PointProp>>;
 }
 
 export interface MapLine {
@@ -97,12 +114,20 @@ export interface MapLine {
   coordinates: [number, number][];
 }
 
+export interface PointProperties {
+  id: string;
+  title: string;
+  routeId?: string;
+  place?: PlaceKind;
+  [key: string]: PointProp | undefined;
+}
+
 export interface PointFeatureCollection {
   type: 'FeatureCollection';
   features: {
     type: 'Feature';
     geometry: { type: 'Point'; coordinates: [number, number] };
-    properties: { id: string; title: string; routeId?: string };
+    properties: PointProperties;
   }[];
 }
 
@@ -144,17 +169,30 @@ export interface VehicleFeatureCollection {
 
 export const isVehicleReport = (p: MapPoint): boolean => p.at !== undefined;
 
-/** Places only: a vehicle report never reaches a drawn source (R-P2). */
+/** Keys a place's own props may never overwrite. */
+const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'routeId', 'place']);
+
+/** Places only: a vehicle report never reaches a drawn source (R-P2). An
+ *  untagged point produces exactly the properties it always did, so the
+ *  dashboard's quake map and the kvart thumbnail are byte for byte unchanged. */
 export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollection {
   return {
     type: 'FeatureCollection',
     features: points
       .filter((p) => !isVehicleReport(p) && Number.isFinite(p.lon) && Number.isFinite(p.lat))
-      .map((p) => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] },
-        properties: p.routeId === undefined ? { id: p.id, title: p.title } : { id: p.id, title: p.title, routeId: p.routeId },
-      })),
+      .map((p) => {
+        const properties: PointProperties = p.routeId === undefined ? { id: p.id, title: p.title } : { id: p.id, title: p.title, routeId: p.routeId };
+        if (p.place !== undefined) properties.place = p.place;
+        for (const [key, value] of Object.entries(p.props ?? {})) {
+          if (RESERVED_POINT_PROPS.has(key) || value === undefined) continue;
+          properties[key] = value;
+        }
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] },
+          properties,
+        };
+      }),
   };
 }
 
@@ -419,6 +457,9 @@ export interface CityMapOptions {
   stop?: ScreenStop | null;
   /** GTFS route types drawn (0 trams, 3 buses); null, the default, is every type. */
   modes?: ReadonlySet<number> | null;
+  /** Which kinds of city point are lit. null, the default, lights every one;
+   *  a kiosk chapter passes the subset it is about (kiosk/mapview.ts). */
+  emphasis?: readonly PlaceKind[] | null;
   /** false hides the closures until setClosuresVisible(true). */
   closures?: boolean;
   /** false: no pointer or keyboard handling and no controls (a public screen). */
@@ -474,6 +515,8 @@ export interface CityMapHandle {
   /** After the container's box changed while it sat outside the layout. */
   resize?(): void;
   setModes?(modes: ReadonlySet<number> | null): void;
+  /** The kinds of city point this chapter lights; null lights every one. */
+  setEmphasis?(emphasis: readonly PlaceKind[] | null): void;
   setClosuresVisible?(visible: boolean): void;
   /** The feed's own state: anything but 'live' holds every vehicle where it is (an outage is no evidence of motion) until the feed is live again. */
   setFeedState?(state: 'live' | 'stale' | 'down'): void;
@@ -648,6 +691,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let following: string | boolean | null = options.follow ?? null;
   let routeFollowAt = -Infinity;
   let modes: ReadonlySet<number> | null = options.modes ?? null;
+  let emphasis: readonly PlaceKind[] | null = options.emphasis ?? null;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
   let status: MapStatus = 'loading';
@@ -681,7 +725,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function overlayOptions(): OverlayOptions {
-    return { scale, modes, closuresVisible, selection };
+    return { scale, modes, closuresVisible, selection, emphasis };
   }
 
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
@@ -1208,6 +1252,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     },
     setModes(next) {
       modes = next;
+      applyOverlays();
+    },
+    setEmphasis(next) {
+      if (JSON.stringify(next ?? null) === JSON.stringify(emphasis ?? null)) return;
+      emphasis = next;
       applyOverlays();
     },
     setClosuresVisible(visible) {

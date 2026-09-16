@@ -328,6 +328,11 @@ export interface OverlayPalette {
   closure: string;
   closureCasing: string;
   place: string;
+  /** A dated happening the source itself gave a coordinate: the events role. */
+  event: string;
+  /** A communal work the register files at a point: the muted-ink role, a
+   *  step back from an event because a register entry is not an occasion. */
+  work: string;
   selection: string;
   selectionHalo: string;
   screenStop: string;
@@ -360,6 +365,8 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   closure: '#b3271e',
   closureCasing: '#fbfaf6',
   place: '#b8731a',
+  event: '#6b3fa0',
+  work: '#4a5178',
   selection: '#0c1250',
   selectionHalo: '#fbfaf6',
   screenStop: '#03409c',
@@ -381,6 +388,8 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   closure: '#ff9d9d',
   closureCasing: '#0b1150',
   place: '#f0c060',
+  event: '#c9b3ff',
+  work: '#b6bbe0',
   selection: '#f4f2ec',
   selectionHalo: '#0b1150',
   screenStop: '#f4f2ec',

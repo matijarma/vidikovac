@@ -15,8 +15,8 @@
 // named stop, and yield to the vehicles above them.
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
-import type { MapSelection, VehicleKind } from './city-map';
-import { sdfRing, sdfRoundedRect, sdfTriangle, type SdfImage } from './sdf';
+import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
+import { sdfRing, sdfRoundedRect, sdfSquareRing, sdfTriangle, type SdfImage } from './sdf';
 
 export const SOURCES = Object.freeze({
   network: 'network',
@@ -35,6 +35,7 @@ export const LAYERS = Object.freeze({
   closuresCasing: 'closures-casing',
   closures: 'closures',
   places: 'places',
+  placeQuakes: 'place-quakes',
   stopsRoute: 'stops-route',
   stops: 'stops',
   stopsSelected: 'stops-selected',
@@ -43,6 +44,12 @@ export const LAYERS = Object.freeze({
   vehicleNoses: 'vehicle-noses',
   vehicles: 'vehicles',
   stopLabels: 'stop-labels',
+  placeWorks: 'place-works',
+  placeEvents: 'place-events',
+  placeAssembly: 'place-assembly',
+  placePharmacy: 'place-pharmacy',
+  placeSeat: 'place-seat',
+  placeQuakeLabels: 'place-quake-labels',
   screenStopLabel: 'screen-stop-label',
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
@@ -75,12 +82,54 @@ export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
 export const NOSE_IMAGE = 'vehicle-nose';
 export const RING_IMAGE = 'selection-ring';
 
+// --- The city, not only the network ---------------------------------------
+//
+// Three marks for the five kinds of point the city itself publishes, each
+// chosen so the shape says what sort of claim the point is. A filled square
+// is a thing the register says is happening at that spot (a communal work,
+// and turned 45 degrees, a dated happening); a hollow square is a place named
+// in a register with no claim about its state (an assembly point, a district
+// seat); a hollow ring is a position the product itself only knows
+// approximately (the on-duty pharmacy, whose coordinate is hand-entered and
+// whose ADDRESS is the exact part). A quake is the one circle, because the
+// one number it carries is a size.
+export const PLACE_SQUARE_IMAGE = 'place-square';
+export const PLACE_SQUARE_RING_IMAGE = 'place-square-ring';
+export const PLACE_RING_IMAGE = 'place-ring';
+export const PLACE_SQUARE_PX = 12;
+export const PLACE_SQUARE_RING_PX = 14;
+export const PLACE_RING_PX = 14;
+export const PLACE_STROKE_PX = 2.5;
+/** A place mark is a thing to walk to, so it appears once the camera is close
+ *  enough that walking there is a real thought. */
+export const PLACE_ZOOM = 11;
+/** The name beside a place mark, in CSS px before the surface's scale; on the
+ *  public screen (scale 2) that is 22 px, over the readability floor. */
+export const PLACE_LABEL_PX = 11;
+/** A dated happening is the events role; a communal work the muted-ink role. */
+export const PLACE_EVENT_ROTATE_DEG = 45;
+/** The komunalne register's own word for work that is under way. A row in any
+ *  of its five other phases is announced, not happening, and never draws. */
+export const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
+/** A quake's circle: a screen-fixed radius that encodes the magnitude and
+ *  nothing else. Screen-fixed on purpose -- a radius in metres would read as
+ *  a shaking footprint, which no part of this feed measures. */
+export const QUAKE_BASE_RADIUS_PX = 2;
+export const QUAKE_RADIUS_PER_MAG_PX = 3;
+
 export interface OverlayImage { id: string; image: SdfImage }
 
 /** Every SDF image the overlays reference, generated once per map. */
 export function overlayImages(): OverlayImage[] {
   const pills = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PILL_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
-  return [...pills, { id: NOSE_IMAGE, image: sdfTriangle(NOSE_LENGTH_PX, NOSE_WIDTH_PX) }, { id: RING_IMAGE, image: sdfRing(RING_DIAMETER_PX, RING_STROKE_PX) }];
+  return [
+    ...pills,
+    { id: NOSE_IMAGE, image: sdfTriangle(NOSE_LENGTH_PX, NOSE_WIDTH_PX) },
+    { id: RING_IMAGE, image: sdfRing(RING_DIAMETER_PX, RING_STROKE_PX) },
+    { id: PLACE_SQUARE_IMAGE, image: sdfRoundedRect(PLACE_SQUARE_PX, PLACE_SQUARE_PX, 0) },
+    { id: PLACE_SQUARE_RING_IMAGE, image: sdfSquareRing(PLACE_SQUARE_RING_PX, PLACE_STROKE_PX) },
+    { id: PLACE_RING_IMAGE, image: sdfRing(PLACE_RING_PX, PLACE_STROKE_PX) },
+  ];
 }
 
 type Expr = unknown[];
@@ -197,6 +246,11 @@ export interface OverlayOptions {
   modes?: ReadonlySet<number> | null;
   closuresVisible?: boolean;
   selection?: MapSelection | null;
+  /** Which kinds of city point this chapter lights. null, the default, lights
+   *  every one -- the phone and the desk have no chapters. An unlit kind is
+   *  hidden, not dimmed: a mark a reader cannot act on is not a quieter mark,
+   *  it is a mark that should not be there. */
+  emphasis?: readonly PlaceKind[] | null;
 }
 
 function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks): StyleLayerLike {
@@ -254,6 +308,44 @@ function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number,
   };
 }
 
+/** The filter each place layer carries. Every one of these is a rule the
+ *  product will not draw without, written where MapLibre itself enforces it
+ *  rather than where a reader has to trust a comment:
+ *
+ *  - a communal work draws only in the register's "under way" phase, so an
+ *    announced work is never a hole in the road;
+ *  - a happening draws wherever its own source published a coordinate, and
+ *    nowhere else -- a venue name is never geocoded into a position;
+ *  - an on-duty pharmacy draws only with its published address, because the
+ *    address is the exact part and the coordinate is hand-entered;
+ *  - a quake draws a circle only with a magnitude, because a circle without
+ *    one would be the claim "M 0".
+ *
+ *  What would widen the placed-event layer is data, not design: more of the
+ *  City's event sources publishing coordinates at all, and the planned static
+ *  gazetteer of known venues with fuzzy name matching, which could say how it
+ *  matched a venue string. Until that exists the line holds: a point is drawn
+ *  only where a source put one. */
+export const PLACE_FILTERS: Readonly<Record<string, Expr>> = Object.freeze({
+  [LAYERS.placeWorks]: ['all', ['==', ['get', 'place'], 'event'], ['==', ['get', 'source'], 'komunalne'], ['==', ['get', 'phase'], WORKS_ONGOING_PHASE]],
+  [LAYERS.placeEvents]: ['all', ['==', ['get', 'place'], 'event'], ['!=', ['get', 'source'], 'komunalne']],
+  [LAYERS.placeAssembly]: ['==', ['get', 'place'], 'assembly'],
+  [LAYERS.placePharmacy]: ['all', ['==', ['get', 'place'], 'pharmacy'], ['has', 'address']],
+  [LAYERS.placeSeat]: ['==', ['get', 'place'], 'seat'],
+  [LAYERS.placeQuakes]: ['all', ['==', ['get', 'place'], 'quake'], ['has', 'mag']],
+  [LAYERS.placeQuakeLabels]: ['==', ['get', 'place'], 'quake'],
+});
+
+interface PlaceMarkSpec {
+  id: string;
+  kind: PlaceKind;
+  image: string;
+  color: string;
+  /** Draw order among the place marks; lower wins a crowded viewport. */
+  sort: number;
+  rotate?: number;
+}
+
 /** The basemap layer the line overlays are inserted before: its first label layer. */
 export function firstSymbolLayer(layers: readonly StyleLayerLike[]): string | undefined {
   return layers.find((layer) => layer.type === 'symbol')?.id;
@@ -293,6 +385,42 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   });
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
+  const lit = (kind: PlaceKind): boolean => options.emphasis == null || options.emphasis.includes(kind);
+  /** One city point: its mark, its own name under it, and the honesty rule in
+   *  its filter. The name is `text-optional`: the mark is the claim, the name
+   *  is the convenience, and a crowded viewport drops the second, never the
+   *  first. */
+  const placeMark = (spec: PlaceMarkSpec): StyleLayerLike => ({
+    id: spec.id,
+    type: 'symbol',
+    source: SOURCES.places,
+    minzoom: PLACE_ZOOM,
+    filter: PLACE_FILTERS[spec.id]!,
+    layout: {
+      ...visible(lit(spec.kind)),
+      'icon-image': spec.image,
+      'icon-size': s,
+      'icon-rotation-alignment': 'viewport',
+      ...(spec.rotate ? { 'icon-rotate': spec.rotate } : {}),
+      'icon-allow-overlap': true,
+      'text-field': ['get', 'title'],
+      'text-font': [MAP_FONTS.medium],
+      'text-size': PLACE_LABEL_PX * s,
+      'text-anchor': 'top',
+      'text-offset': [0, 0.9],
+      'text-max-width': 10,
+      'text-optional': true,
+      'symbol-sort-key': spec.sort,
+    },
+    paint: {
+      'icon-color': spec.color,
+      'icon-halo-color': p.halo,
+      'icon-halo-width': 1,
+      'text-color': spec.color,
+      'text-halo-color': p.halo,
+      'text-halo-width': 1.6,
+    },
+  });
   return [
     network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.7, 13, 1.4, 16, 3.5)),
     network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 1, 13, 1.8, 16, 4.5)),
@@ -300,7 +428,24 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelected], layout: round, paint: { 'line-color': ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other], 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
     { id: LAYERS.closures, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closure, 'line-width': closureWidth(selectedClosure, 4) } },
-    circle(LAYERS.places, SOURCES.places, { 'circle-radius': 6 * s, 'circle-color': p.place, 'circle-stroke-color': p.halo, 'circle-stroke-width': 1.5 }),
+    // A point with no `place` is the plain circle this map has always drawn:
+    // the dashboard's quake map and the kvart thumbnail's work points keep it.
+    circle(LAYERS.places, SOURCES.places, { 'circle-radius': 6 * s, 'circle-color': p.place, 'circle-stroke-color': p.halo, 'circle-stroke-width': 1.5 }, { filter: ['!', ['has', 'place']] }),
+    // The radius is the magnitude and nothing else. A quake the source gave no
+    // magnitude draws no circle at all -- its label alone names its region,
+    // because a circle with no magnitude would be the claim "M 0".
+    circle(
+      LAYERS.placeQuakes,
+      SOURCES.places,
+      {
+        'circle-radius': ['*', s, ['+', QUAKE_BASE_RADIUS_PX, ['*', QUAKE_RADIUS_PER_MAG_PX, ['get', 'mag']]]],
+        'circle-color': p.place,
+        'circle-opacity': 0.25,
+        'circle-stroke-color': p.place,
+        'circle-stroke-width': 2,
+      },
+      { filter: PLACE_FILTERS[LAYERS.placeQuakes]!, layout: visible(lit('quake')) },
+    ),
     circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5 }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
     circle(
       LAYERS.stops,
@@ -349,6 +494,35 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'symbol-sort-key': ['-', 100, ['get', 'rank']],
       },
       paint: { ...labelInk, 'text-halo-width': 1.4 },
+    },
+    placeMark({ id: LAYERS.placeWorks, kind: 'event', image: PLACE_SQUARE_IMAGE, color: p.work, sort: 30 }),
+    placeMark({ id: LAYERS.placeEvents, kind: 'event', image: PLACE_SQUARE_IMAGE, color: p.event, sort: 20, rotate: PLACE_EVENT_ROTATE_DEG }),
+    placeMark({ id: LAYERS.placeSeat, kind: 'seat', image: PLACE_SQUARE_RING_IMAGE, color: p.other, sort: 40, rotate: PLACE_EVENT_ROTATE_DEG }),
+    // In ink, never alarm red, and only while the safety state is urgent
+    // (kiosk/mapview.ts decides that; nothing here can). A screen permanently
+    // covered in emergency marks is fearmongering, and it teaches people to
+    // stop seeing them on the day it matters.
+    placeMark({ id: LAYERS.placeAssembly, kind: 'assembly', image: PLACE_SQUARE_RING_IMAGE, color: p.label, sort: 10 }),
+    // Hollow, never a filled pin: the coordinate is approximate and the
+    // published address under it is the exact part.
+    placeMark({ id: LAYERS.placePharmacy, kind: 'pharmacy', image: PLACE_RING_IMAGE, color: p.label, sort: 5 }),
+    {
+      id: LAYERS.placeQuakeLabels,
+      type: 'symbol',
+      source: SOURCES.places,
+      minzoom: PLACE_ZOOM,
+      filter: PLACE_FILTERS[LAYERS.placeQuakeLabels]!,
+      layout: {
+        ...visible(lit('quake')),
+        'text-field': ['get', 'title'],
+        'text-font': [MAP_FONTS.medium],
+        'text-size': PLACE_LABEL_PX * s,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.9],
+        'text-max-width': 10,
+        'symbol-sort-key': 15,
+      },
+      paint: { 'text-color': p.place, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
     },
     {
       id: LAYERS.screenStopLabel,

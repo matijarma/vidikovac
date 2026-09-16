@@ -7,7 +7,9 @@ import {
   PILL_MAX_CHARS,
   PILL_OVERLAP_ZOOM,
   PILL_ZOOM,
+  PLACE_FILTERS,
   SOURCES,
+  WORKS_ONGOING_PHASE,
   firstSymbolLayer,
   overlayImages,
   overlayLayers,
@@ -17,6 +19,10 @@ import {
   vehicleFilter,
   vehicleKinds,
 } from '../../app/src/map/overlays';
+import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
+import { DISTRICTS } from '../../app/src/kiosk/districts';
+import { ASSEMBLY_CAP, assemblyPoints, placedEvents, quakePoints, seatPoint } from '../../app/src/kiosk/mapview';
+import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
 
 const layerById = (id: string) => overlayLayers(OVERLAY_LIGHT).find((l) => l.id === id)!;
@@ -53,7 +59,7 @@ describe('the overlay layer list', () => {
 
   it('generates one SDF pill per label length up to PILL_MAX_CHARS, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
     const images = overlayImages();
-    expect(images.map((i) => i.id)).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring']);
+    expect(images.map((i) => i.id)).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
     expect(PILL_MAX_CHARS).toBe(4);
     const widths = images.slice(0, 4).map((i) => i.image.width);
     for (let i = 1; i < widths.length; i++) expect(widths[i]).toBeGreaterThan(widths[i - 1]!);
@@ -116,5 +122,117 @@ describe('filters and the selection', () => {
       expect(pillInks(p, '6').halo).toEqual(['case', ['==', ['get', 'routeId'], '6'], p.halo, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]);
       expect(lit.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, 0.35]]);
     }
+  });
+});
+// Four rules the product will not draw without. Two of them live where
+// MapLibre itself enforces them (a layer filter), two where the screen picks
+// which points exist at all; both halves are checked here, because a rule
+// that is only a comment is not a rule.
+describe('the city on the map: the rules that keep each mark honest', () => {
+  /** The expression subset PLACE_FILTERS uses, evaluated over one feature's
+   *  properties. Small on purpose: a filter that needed more than this would
+   *  be a filter a reviewer could not read either. */
+  function matches(filter: unknown, props: Record<string, unknown>): boolean {
+    if (!Array.isArray(filter)) throw new Error(`not an expression: ${JSON.stringify(filter)}`);
+    const [op, ...args] = filter as [string, ...unknown[]];
+    const value = (expr: unknown): unknown => {
+      if (Array.isArray(expr) && expr[0] === 'get') return props[expr[1] as string];
+      if (Array.isArray(expr) && expr[0] === 'literal') return expr[1];
+      return expr;
+    };
+    switch (op) {
+      case 'all': return args.every((a) => matches(a, props));
+      case '!': return !matches(args[0], props);
+      case '==': return value(args[0]) === value(args[1]);
+      case '!=': return value(args[0]) !== value(args[1]);
+      case 'has': return Object.prototype.hasOwnProperty.call(props, args[0] as string);
+      default: throw new Error(`unhandled operator ${op}`);
+    }
+  }
+  /** Which place layers would draw this feature. */
+  const drawnBy = (props: Record<string, unknown>): string[] =>
+    Object.entries(PLACE_FILTERS).filter(([, filter]) => matches(filter, props)).map(([id]) => id);
+
+  const NOW = Date.parse('2026-09-16T20:00:00+02:00');
+  const iso = (hours: number) => new Date(NOW + hours * 3_600_000).toISOString();
+  const snap = (module: ModuleId, items: FeedItem[], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot =>
+    ({ module, tier: 'open', status, fetchedAt: iso(0), attribution: { text: '', url: '', licence: '' }, items });
+  const row = (module: ModuleId, id: string, extra: Partial<FeedItem>): FeedItem =>
+    ({ id, module, kind: 'event', tier: 'open', title: id, ...extra });
+  const STOP = { id: 's', name: 'Stop', lon: 15.98, lat: 45.81, routes: ['6'], district: 'donji-grad' };
+
+  it('an announced work never draws, an assembly point draws only while it is urgent, a quake outside the window never draws, and an untagged point still lands on the plain old circle', () => {
+    // 1. A communal work draws in the register's "under way" phase and in no
+    //    other. An announced one matches neither the works layer nor the
+    //    placed-event layer, so it is not drawn as something else instead.
+    expect(drawnBy({ place: 'event', source: 'komunalne', phase: WORKS_ONGOING_PHASE })).toEqual([LAYERS.placeWorks]);
+    for (const phase of ['U pripremi', 'Ugovaranje', 'Provedba javne nabave', 'Izvodac uveden u posao', 'Zavrseni radovi', '']) {
+      expect(drawnBy({ place: 'event', source: 'komunalne', phase }), phase).toEqual([]);
+    }
+    // A placed row from any other source is an event, whatever its phase field
+    // says: the layer keys on geometry and styling, never on the source list.
+    expect(drawnBy({ place: 'event', source: 'kvartovske', phase: '' })).toEqual([LAYERS.placeEvents]);
+    expect(drawnBy({ place: 'event', source: 'kulturpunkt', phase: '' })).toEqual([LAYERS.placeEvents]);
+
+    // 2. Assembly points ride every teaser; they are drawn only while the
+    //    safety state is urgent.
+    const zborna = snap('ckan-geo', Array.from({ length: 20 }, (_, i) =>
+      row('ckan-geo', `zm${i}`, { kind: 'poi', title: `Zborno ${i}`, geo: { type: 'Point', coordinates: [15.98 + i * 0.01, 45.81] }, data: { layer: 'zborna-mjesta' } })));
+    expect(assemblyPoints(zborna, STOP, false)).toEqual([]);
+    const urgent = assemblyPoints(zborna, STOP, true);
+    expect(urgent).toHaveLength(ASSEMBLY_CAP);
+    expect(urgent[0]!.title).toBe('Zborno 0'); // nearest the stop first
+    expect(urgent.every((p) => p.place === 'assembly')).toBe(true);
+
+    // 3. A quake outside the declared 72 h / 150 km window never reaches the
+    //    map, and one with no magnitude carries its region, never "M 0".
+    const emsc = snap('emsc', [
+      row('emsc', 'old', { kind: 'quake', at: iso(-80), geo: { type: 'Point', coordinates: [15.9, 45.8] }, data: { mag: 4 } }),
+      row('emsc', 'far', { kind: 'quake', at: iso(-2), geo: { type: 'Point', coordinates: [13, 44] }, data: { mag: 4 } }),
+      row('emsc', 'near', { kind: 'quake', at: iso(-2), geo: { type: 'Point', coordinates: [16.1, 45.9] }, data: { mag: 1.5 } }),
+      row('emsc', 'nomag', { kind: 'quake', at: iso(-3), geo: { type: 'Point', coordinates: [16, 45.85] }, data: { region: 'CROATIA' } }),
+    ]);
+    const quakes = quakePoints(emsc, NOW, 'hr');
+    expect(quakes.map((q) => q.id)).toEqual(['quake:near', 'quake:nomag']);
+    expect(quakes.map((q) => q.title)).toEqual(['M 1,5', 'CROATIA']);
+    expect(drawnBy({ place: 'quake', mag: 1.5 })).toEqual([LAYERS.placeQuakes, LAYERS.placeQuakeLabels]);
+    expect(drawnBy({ place: 'quake' })).toEqual([LAYERS.placeQuakeLabels]);
+
+    // 4. An untagged point is drawn by the one circle this map always had, and
+    //    its GeoJSON properties are what they always were, so the dashboard's
+    //    quake map and the kvart thumbnail are unchanged.
+    const plain: MapPoint = { id: 'w1', lon: 15.97, lat: 45.8, title: 'Radovi' };
+    expect(pointsToGeoJson([plain]).features[0]!.properties).toEqual({ id: 'w1', title: 'Radovi' });
+    const places = overlayLayers(OVERLAY_LIGHT).find((l) => l.id === LAYERS.places)!;
+    expect(places.filter).toEqual(['!', ['has', 'place']]);
+    expect(matches(places.filter, { id: 'w1', title: 'Radovi' })).toBe(true);
+    expect(matches(places.filter, { place: 'event' })).toBe(false);
+    expect(drawnBy({ id: 'w1', title: 'Radovi' })).toEqual([]);
+
+    // 5. A pharmacy without its published address does not draw: the address
+    //    is the exact part, the coordinate is hand-entered.
+    expect(drawnBy({ place: 'pharmacy', address: 'Ilica 301' })).toEqual([LAYERS.placePharmacy]);
+    expect(drawnBy({ place: 'pharmacy' })).toEqual([]);
+
+    // 6. The district seat is the real seat address, never the polygon centroid.
+    const seat = seatPoint(STOP)[0]!;
+    const donji = DISTRICTS.find((d) => d.slug === 'donji-grad')!;
+    expect([seat.lon, seat.lat]).toEqual([donji.seat.lon, donji.seat.lat]);
+    expect(seatPoint(null)).toEqual([]);
+
+    // 7. A placed happening keeps the evening's own band: still running or
+    //    starting today, never a pin for something months out.
+    const dogadanja = snap('dogadanja', [
+      row('dogadanja', 'tonight', { dateBasis: 'event', at: iso(2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kvartovske' } }),
+      row('dogadanja', 'months', { dateBasis: 'event', at: iso(24 * 60), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kvartovske' } }),
+      row('dogadanja', 'ended', { dateBasis: 'event', at: iso(-40), until: iso(-2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kvartovske' } }),
+      row('dogadanja', 'novenue', { dateBasis: 'event', at: iso(2), data: { source: 'kvartovske' } }),
+      row('dogadanja', 'barred', { dateBasis: 'event', at: iso(2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kulturpunkt' } }),
+      row('dogadanja', 'work', { dateBasis: 'updated', at: iso(-100), geo: { type: 'Point', coordinates: [15.96, 45.8] }, data: { source: 'komunalne', phase: WORKS_ONGOING_PHASE } }),
+    ]);
+    // A row whose venue is free text and carries no coordinate is not placed:
+    // geocoding a venue name on the client would be inventing a position.
+    // The licence gate still decides which rows exist at all on the open tier.
+    expect(placedEvents(dogadanja, NOW).map((p) => p.id)).toEqual(['event:tonight', 'event:work']);
   });
 });

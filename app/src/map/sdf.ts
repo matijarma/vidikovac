@@ -111,6 +111,18 @@ export function sdfRing(cssDiameter: number, cssStroke: number): SdfImage {
 }
 
 /**
+ * A hollow square of `cssSize` across and `cssStroke` line width: the mark a
+ * point that is a register entry rather than a drawn thing gets -- an
+ * assembly point, a district seat. Hollow on purpose: the City publishes a
+ * register of places, not a statement that anyone is standing at one.
+ */
+export function sdfSquareRing(cssSize: number, cssStroke: number): SdfImage {
+  const half = (cssSize * SDF_PIXEL_RATIO) / 2;
+  const stroke = (cssStroke * SDF_PIXEL_RATIO) / 2;
+  return sdfImage(cssSize, cssSize, (x, y) => Math.abs(Math.max(Math.abs(x) - half + stroke, Math.abs(y) - half + stroke)) - stroke);
+}
+
+/**
  * A filled isosceles triangle pointing along +x (east at rest), `cssLength`
  * long and `cssWidth` across its base: the direction nose a vehicle shows
  * only when the model knows which way it faces. Rotated through

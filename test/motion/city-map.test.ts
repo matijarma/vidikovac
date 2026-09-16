@@ -322,7 +322,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
     map.fire('styleimagemissing', { id: 'townhall' });
     expect(map.images.get('townhall')).toBe(image);
     map.fire('styleimagemissing', {});
-    expect(map.images.size).toBe(7); // the six overlay images and the one stand-in
+    expect(map.images.size).toBe(10); // the nine overlay images and the one stand-in
   });
 });
 
@@ -340,7 +340,7 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('closures')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
     expect(ids[ids.length - 1]).toBe('selection-ring');
-    expect([...map.images.keys()]).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring']);
+    expect([...map.images.keys()]).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'places', 'screen-stop', 'stops', 'vehicles']);
   });

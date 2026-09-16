@@ -15,13 +15,20 @@
 // re-parented, and `setFeedState` from the ZET snapshot's own status on every
 // paint, so a stale or down feed holds every vehicle where it is and neither
 // a reparent nor `resume()` can animate through an outage.
-import type { ModuleSnapshot } from '../../../worker/feed/schema';
-import type { PublicSelection, ScreenStop } from '../core/contracts';
+import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
+import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
+import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
+import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapPoint } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import { vehicleFixes } from '../motion/fixes';
+import { dataNumber, dataText } from '../panels/panel';
+import { districtBySlug } from './districts';
+import { fmtNumber, sameZagrebDay } from './format';
+import { isLive, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
+import { stopDistanceM } from './stops';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** Street level around one stop: named streets, the stop, the vehicles near it. */
@@ -175,6 +182,143 @@ export function stopPlace(stop: ScreenStop): MapPoint {
   return { id: `stop:${stop.id}`, lon: stop.lon, lat: stop.lat, title: stop.name };
 }
 
+// --- The city, not only the network ---------------------------------------
+//
+// Five kinds of point the city itself publishes, each with the rule that
+// keeps it honest stated beside it. Four of the five are already on every
+// 30-second teaser this screen fetches and nothing has ever read them.
+//
+// What is NOT here, and why: of the six dogadanja sources, Kulturpunkt and
+// the Etnografski are barred from the open tier by licence, and of the five
+// that are not, komunalne is the only one that publishes coordinates at all.
+// The rest carry a venue as free text, and geocoding a venue name on the
+// client would be inventing a position -- the one thing this codebase refuses
+// everywhere else ("a reported vehicle position is evidence, never output").
+
+/** Every dogadanja row whose own source published a coordinate.
+ *
+ *  Keyed on geometry, never on which source the row came from: today
+ *  komunalne is the only open-licence source with points, so what this
+ *  actually draws today is the communal works, but the day another source
+ *  starts publishing coordinates it appears here with no code change. That
+ *  forward compatibility is the point of selecting this way. The licence gate
+ *  still decides which rows exist at all, so a paired session that carries
+ *  Kulturpunkt places its rows through this same function, and the open tier
+ *  a public screen reads never sees them.
+ *
+ *  Two things would widen this, and neither is design: more of the City's
+ *  sources publishing coordinates, and the planned static gazetteer of known
+ *  venues with fuzzy name matching, which could say how it matched a venue
+ *  string. Until that exists a point is drawn only where a source put one --
+ *  never derived from a venue name, a district, or a polygon centroid. */
+export function placedEvents(dogadanja: ModuleSnapshot | undefined, now: number): MapPoint[] {
+  const out: MapPoint[] = [];
+  for (const item of isLive(dogadanja) ? dogadanja.items : []) {
+    if (!isOpenLicenceEvent(item) || item.geo?.type !== 'Point') continue;
+    const [lon, lat] = item.geo.coordinates as number[];
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    if (windowOf(item, now) === 'expired') continue;
+    // A row dated by the happening itself is placed only while it runs or
+    // starts today -- the evening's own band, not a pin for something months
+    // out. A row dated by a register change (a communal work) has no such
+    // band: its phase decides, in the layer's own filter.
+    if (item.dateBasis === 'event' && item.at && !sameZagrebDay(item.at, now) && windowOf(item, now) !== 'active') continue;
+    out.push({
+      id: `event:${item.id}`,
+      lon: lon!,
+      lat: lat!,
+      title: item.title,
+      place: 'event',
+      props: { source: dataText(item, 'source'), phase: dataText(item, 'phase'), category: dataText(item, 'category') },
+    });
+  }
+  return out;
+}
+
+/** The quakes recentQuakes() already selects: 72 hours, 150 km of Zagreb. The
+ *  circle carries the magnitude and nothing else; a quake the source gave no
+ *  magnitude carries its region as its name and draws no circle, because a
+ *  circle with no magnitude would be the claim "M 0". */
+export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
+  const out: MapPoint[] = [];
+  for (const quake of recentQuakes(emsc, now)) {
+    if (quake.geo?.type !== 'Point') continue;
+    const [lon, lat] = quake.geo.coordinates as number[];
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const mag = dataNumber(quake, 'mag');
+    const region = dataText(quake, 'region') || quake.title;
+    out.push({
+      id: `quake:${quake.id}`,
+      lon: lon!,
+      lat: lat!,
+      title: mag === null ? region : `M ${fmtNumber(locale, mag, 1)}`,
+      place: 'quake',
+      ...(mag === null ? {} : { props: { mag } }),
+    });
+  }
+  return out;
+}
+
+/** Up to eight assembly points, nearest the stop. */
+export const ASSEMBLY_CAP = 8;
+
+/** The civil-protection assembly points, drawn ONLY while the safety state is
+ *  urgent. Up to 500 of them ride every teaser and nothing reads them, which
+ *  is a waste; but a screen permanently covered in emergency marks is
+ *  fearmongering, and it teaches people to stop seeing them on the day it
+ *  matters. Nothing here implies the point is open or staffed: the City
+ *  publishes a register of places, not a state, which is why the mark is a
+ *  hollow square in ink and never an alarm colour. */
+export function assemblyPoints(geo: ModuleSnapshot | undefined, stop: ScreenStop | null, urgent: boolean): MapPoint[] {
+  if (!urgent) return [];
+  const rows: { point: MapPoint; distanceM: number }[] = [];
+  for (const item of isLive(geo) ? geo.items : []) {
+    if (item.kind !== 'poi' || dataText(item, 'layer') !== 'zborna-mjesta' || item.geo?.type !== 'Point') continue;
+    const [lon, lat] = item.geo.coordinates as number[];
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    rows.push({
+      point: { id: `assembly:${item.id}`, lon: lon!, lat: lat!, title: item.title, place: 'assembly' },
+      distanceM: stop ? stopDistanceM({ lon: lon!, lat: lat! }, stop) : Number.POSITIVE_INFINITY,
+    });
+  }
+  rows.sort((a, b) => a.distanceM - b.distanceM);
+  return rows.slice(0, ASSEMBLY_CAP).map((r) => r.point);
+}
+
+/** The one on-duty pharmacy the safety strip also names, so the map and the
+ *  strip can never name two different ones. Its coordinate is hand-entered and
+ *  approximate (local.ts's PHARMACY_POINTS) and its ADDRESS is exact, so the
+ *  address is the label and the mark is a hollow ring, never a filled pin. */
+export function pharmacyPoint(stop: ScreenStop | null): MapPoint[] {
+  const pharmacy = nearestPharmacy(stop);
+  const at = PHARMACY_POINTS[pharmacy.label];
+  if (!at) return [];
+  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: pharmacy.address, place: 'pharmacy', props: { address: pharmacy.address } }];
+}
+
+/** The seat of the stop's own gradska cetvrt, from the real seat coordinates
+ *  the district table carries (kiosk/districts.ts) -- never from the ckan-geo
+ *  polygon centroid the open feed serves, which is a label anchor and not a
+ *  venue, and which for a concave district need not even lie inside it. */
+export function seatPoint(stop: ScreenStop | null): MapPoint[] {
+  const district = districtBySlug(stop?.district);
+  if (!district) return [];
+  return [{ id: `seat:${district.slug}`, lon: district.seat.lon, lat: district.seat.lat, title: district.name, place: 'seat', props: { address: district.seat.address } }];
+}
+
+/** Every city point, in one call: what the screen's own corner of Zagreb
+ *  publishes about itself. The chapter decides which of them are lit
+ *  (chapterView), never which of them exist. */
+export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, now: number, locale: string): MapPoint[] {
+  return [
+    ...placedEvents(snapshots.dogadanja, now),
+    ...quakePoints(snapshots.emsc, now, locale),
+    ...assemblyPoints(snapshots['ckan-geo'], stop, safetyState(snapshots, now).level === 'urgent'),
+    ...pharmacyPoint(stop),
+    ...seatPoint(stop),
+  ];
+}
+
 /** Metres per CSS pixel at a zoom and latitude (512 px tiles, as MapLibre counts). */
 export function metresPerPixel(zoom: number, lat: number): number {
   return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
@@ -182,7 +326,9 @@ export function metresPerPixel(zoom: number, lat: number): number {
 
 export interface KioskMapInput {
   stop: ScreenStop | null;
-  snapshots: Partial<Record<'zet-rt' | 'prometnice', ModuleSnapshot>>;
+  /** The whole teaser, not only the two transport modules: the map draws the
+   *  city's own points too (cityPoints). */
+  snapshots: FeedSnapshots;
   now: number;
   selection: PublicSelection | null;
   ariaLabel: string;
@@ -200,6 +346,7 @@ export interface KioskMapInput {
 export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: KioskMapAdapter): HTMLElement | null {
   const points = vehiclePoints(input.snapshots['zet-rt'], input.now);
   if (input.stop) points.push(stopPlace(input.stop));
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr'));
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,
     className: 'k-map-canvas',
