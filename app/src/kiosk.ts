@@ -464,8 +464,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function invitationModel(): InvitationModel {
     return {
       modules: teaser, stop, now: now(), sceneIndex, pinned: deps.pinScene ?? null, rotate: rotationAllowed(),
-      // Six line tiles in the wide 3 × 2 field, four in the compact 2 × 2 (spec §4.8; kajimafix 03.3).
-      lineCap: lightweight ? 10 : layout.size === 'wide' ? 6 : 4, size: layout.size === 'wide' ? 'wide' : 'compact',
+      // The drawing's own rail width, used only before anything is laid out: the field measures its rail and asks for exactly what fits (kiosk/scenes.ts, kiosk/layout.ts's railColumns).
+      columns: lightweight ? 10 : layout.size === 'wide' ? 6 : layout.size === 'compact' ? 4 : 3, size: layout.size === 'wide' ? 'wide' : 'compact',
     };
   }
   function pairedContext(): PairedContext {

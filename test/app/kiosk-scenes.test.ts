@@ -8,8 +8,8 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { NEARBY_CLOSURE_M } from '../../app/src/kiosk/local';
 import {
-  closuresNear, currentScene, eventsTonight, GRAD_ROW_CAP, gradRows, mountScenes, nextSession, parsePinnedScene, SCENE_ENTER_MS,
-  SCENE_LEAVE_MS, SCENE_ORDER, sceneHeadMarkup, sceneMarkup, sceneOrder, TONIGHT_ROW_CAP, WORKS_RADIUS_M, worksInKvart,
+  closuresNear, currentScene, eventsTonight, GRAD_ROW_FLOOR, gradRows, mountScenes, nextSession, parsePinnedScene, SCENE_ENTER_MS,
+  SCENE_LEAVE_MS, SCENE_ORDER, sceneHeadMarkup, sceneMarkup, sceneOrder, TONIGHT_ROW_FLOOR, WORKS_RADIUS_M, worksInKvart,
   type SceneContext, type SceneModel,
 } from '../../app/src/kiosk/scenes';
 import { routeLongName } from '../../app/src/kiosk/stops';
@@ -72,11 +72,11 @@ const without = (modules: readonly ModuleSnapshot[], id: ModuleId): ModuleSnapsh
 const TONIGHT_MODULES = withModule(MODULES, 'dogadanja', { items: [SESSION_TONIGHT, SESSION_ENDED, KULTURPUNKT, ...CITY_ROWS] });
 
 function ctx(over: Partial<SceneContext> = {}): SceneContext {
-  return { modules: MODULES, stop: KVART_STOP, now: NOW, strings: s, i18n, locale: 'hr', lightweight: false, size: 'compact', lineCap: 4, ...over };
+  return { modules: MODULES, stop: KVART_STOP, now: NOW, strings: s, i18n, locale: 'hr', lightweight: false, size: 'compact', columns: 4, ...over };
 }
-/** The wide drawing's rail: six members, so the chapter that leads with a tile of its own still has three beside it. */
+/** The wide drawing's rail: six members across where the compact one holds four. */
 function wide(over: Partial<SceneContext> = {}): SceneContext {
-  return ctx({ size: 'wide', lineCap: 6, ...over });
+  return ctx({ size: 'wide', columns: 6, ...over });
 }
 function model(over: Partial<SceneModel> = {}): SceneModel {
   return { ...ctx(), index: 0, pinned: null, rotate: true, ...over };
@@ -87,12 +87,12 @@ const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelec
 const qa = (root: ParentNode, sel: string): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(sel)];
 
 describe('the constants the CSS and the controller pin', () => {
-  it('names the three scenes in order, the two fade durations and the caps', () => {
+  it('names the three scenes in order, the two fade durations and the floors', () => {
     expect(SCENE_ORDER).toEqual(['promet', 'veceras', 'grad']);
     expect(SCENE_LEAVE_MS).toBe(180);
     expect(SCENE_ENTER_MS).toBe(220);
-    expect(TONIGHT_ROW_CAP).toBe(3);
-    expect(GRAD_ROW_CAP).toBe(3);
+    expect(TONIGHT_ROW_FLOOR).toBe(3);
+    expect(GRAD_ROW_FLOOR).toBe(3);
     expect(WORKS_RADIUS_M).toBe(1500);
     expect(WORKS_RADIUS_M).toBe(NEARBY_CLOSURE_M);
   });
@@ -181,11 +181,11 @@ describe('closuresNear, nextSession, gradRows', () => {
     expect(nextSession(TONIGHT_MODULES, NOW)!.id).toBe('skupstina:14');
     expect(nextSession(withModule(MODULES, 'dogadanja', { items: [KVARTOVSKE, ...WORKS] }), NOW)).toBeNull();
   });
-  it('takes the stories minus the Assembly, at most what the rail holds beside the ink tile, never a gazette issue', () => {
-    const rows = gradRows(wide());
-    expect(rows.length).toBeLessThanOrEqual(GRAD_ROW_CAP);
-    // A narrower rail carries the ink tile and fewer rows, never a row the room has no width for.
-    expect(gradRows(ctx())).toHaveLength(2);
+  it('takes the stories minus the Assembly, as many as the rail holds beside the ink tile, never a gazette issue', () => {
+    const rows = gradRows(ctx());
+    expect(rows).toHaveLength(GRAD_ROW_FLOOR);
+    // A wider rail carries more of them beside the ink tile; the floor is what a narrow one still asks for.
+    expect(gradRows(wide()).length).toBeGreaterThan(rows.length);
     expect(rows.map((r) => r.id)).toEqual(['quake:q1', 'city:kvartovske:1', 'city:zet-promet:1']);
     for (const row of rows) {
       expect(row.id).not.toMatch(/^city:skupstina:/);
@@ -250,12 +250,12 @@ describe('sceneMarkup: Promet', () => {
   it('gives a wider rail more lines and a narrower one fewer, saying the rest once in the meta', () => {
     expect(qa(dom(sceneMarkup('promet', wide()).body), '.tl[data-route]')).toHaveLength(5);
     expect(sceneMarkup('promet', wide()).regions['kiosk-scene-meta']).toBe('još 4 linije');
-    const narrow = sceneMarkup('promet', ctx({ lineCap: 3 }));
+    const narrow = sceneMarkup('promet', ctx({ columns: 3 }));
     expect(qa(dom(narrow.body), '.tl[data-route]')).toHaveLength(2);
     expect(narrow.regions['kiosk-scene-meta']).toBe('još 7 linija');
   });
   it('stands the rail up as rows at one column, in the lagano board\'s own grammar', () => {
-    const markup = sceneMarkup('promet', ctx({ lineCap: 1 }));
+    const markup = sceneMarkup('promet', ctx({ columns: 1 }));
     const body = dom(markup.body);
     const rail = q(body, 'ul.k-rail[data-chapter=promet][data-rows="1"]')!;
     expect(rail).not.toBeNull();
@@ -313,7 +313,7 @@ describe('sceneMarkup: Promet', () => {
   });
   it('under lagano the lines board is the whole scene: ten rows, the rest said once, the map host hidden', () => {
     const stop = { ...STOP, routes: [...STOP.routes, '106', '109'] };
-    const markup = sceneMarkup('promet', ctx({ lightweight: true, lineCap: 10, stop }));
+    const markup = sceneMarkup('promet', ctx({ lightweight: true, columns: 10, stop }));
     const body = dom(markup.body);
     expect(q(body, '.k-scene-grid')!.dataset.board).toBe('1');
     expect(q(body, '.k-map[data-testid=kiosk-live] > [data-testid=kiosk-map-host][hidden]')).not.toBeNull();
@@ -347,10 +347,15 @@ describe('sceneMarkup: Večeras', () => {
   it('caps the rows at three and counts the rest in the meta; a day-precision row says "cijeli dan"', () => {
     const more = ['15', '16', '17', '18'].map((n) => item('dogadanja', `skupstina:${n}`, 'event', `${n}. sjednica`, { at: `2026-09-11T${n}:00:00Z`, dateBasis: 'event', data: { ...SESSION_DATA } }));
     const allDay = item('dogadanja', 'skupstina:19', 'event', 'Dan otvorenih vrata', { at: '2026-09-10T22:00:00Z', dateBasis: 'event', data: { source: 'skupstina', category: 'sjednica-odbora', precision: 'day' } });
-    const markup = sceneMarkup('veceras', ctx({ modules: withModule(MODULES, 'dogadanja', { items: [allDay, ...more] }) }));
+    const narrow = ctx({ columns: 3, modules: withModule(MODULES, 'dogadanja', { items: [allDay, ...more] }) });
+    const markup = sceneMarkup('veceras', narrow);
     const body = dom(markup.body);
-    expect(qa(body, '.tl[data-variant=time]')).toHaveLength(TONIGHT_ROW_CAP);
+    expect(qa(body, '.tl[data-variant=time]')).toHaveLength(TONIGHT_ROW_FLOOR);
     expect(markup.regions['kiosk-scene-meta']).toBe('još 2 događanja');
+    // A wider rail shows one more of the same five and says one fewer is left.
+    const wider = sceneMarkup('veceras', wide({ modules: narrow.modules }));
+    expect(qa(dom(wider.body), '.tl[data-variant=time]')).toHaveLength(5);
+    expect(wider.regions['kiosk-scene-meta']).toBe('');
     const first = q(body, '.tl[data-variant=time]')!;
     expect(text(q(first, '.tl-time'))).toBe('cijeli dan');
     expect(q(first, '.tl-time')!.hasAttribute('data-allday')).toBe(true);
@@ -362,7 +367,7 @@ describe('sceneMarkup: Večeras', () => {
     expect(text(band)).toBe('Večeras nema najavljenih događanja u kvartu.');
     expect(qa(empty, '.tl[data-variant=time]')).toHaveLength(0);
     const loading = dom(sceneMarkup('veceras', ctx({ modules: without(MODULES, 'dogadanja') })).body);
-    expect(qa(loading, '[data-testid=kiosk-tonight] .sk-row')).toHaveLength(3);
+    expect(qa(loading, '[data-testid=kiosk-tonight] .sk-row')).toHaveLength(4);
     expect(qa(loading, '.tl')).toHaveLength(0);
     const down = dom(sceneMarkup('veceras', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'down', items: [] }) })).body);
     const unknown = q(down, '[data-testid=kiosk-tonight] .tl[data-variant=band][data-level=unknown]')!;
@@ -383,7 +388,7 @@ describe('sceneMarkup: Večeras', () => {
 
 describe('sceneMarkup: Grad', () => {
   it('puts exactly one ink tile on the screen: the next session with its time, the dated label, the title and the venue line', () => {
-    const markup = sceneMarkup('grad', wide());
+    const markup = sceneMarkup('grad', ctx());
     const city = dom(markup.body).querySelector('.k-rail[data-chapter=grad][data-testid=kiosk-city]')!;
     const inks = city.querySelectorAll<HTMLElement>('.tl[data-variant=ink]');
     expect(inks).toHaveLength(1);
@@ -396,28 +401,31 @@ describe('sceneMarkup: Grad', () => {
     expect(markup.regions['kiosk-city']).toBe(city.innerHTML);
   });
   it('without a session the ink tile keeps its place, its time empty and the honest sentence as the title', () => {
-    const body = dom(sceneMarkup('grad', wide({ modules: withModule(MODULES, 'dogadanja', { items: [KVARTOVSKE, ZET_NOTICE, ...WORKS] }) })).body);
+    const body = dom(sceneMarkup('grad', ctx({ modules: withModule(MODULES, 'dogadanja', { items: [KVARTOVSKE, ZET_NOTICE, ...WORKS] }) })).body);
     const ink = q(body, '.tl[data-variant=ink][data-testid=k-city-ink]')!;
     expect(text(q(ink, '.tl-time'))).toBe('');
     expect(text(q(ink, '.tl-title'))).toBe('Nema najavljenih sjednica.');
     expect(q(ink, '.badge')).toBeNull();
     expect(qa(body, '.tl[data-variant=ink]')).toHaveLength(1);
     // A stale "none announced" is unconfirmed: the badge rides the tile.
-    const stale = dom(sceneMarkup('grad', wide({ modules: withModule(MODULES, 'dogadanja', { status: 'stale', items: [KVARTOVSKE] }) })).body);
+    const stale = dom(sceneMarkup('grad', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'stale', items: [KVARTOVSKE] }) })).body);
     expect(q(stale, '.tl[data-variant=ink][data-state=stale] .badge[data-tone=stale]')).not.toBeNull();
     expect(text(q(stale, '.tl[data-variant=ink] .tl-title'))).toBe('Nema najavljenih sjednica.');
   });
   it('lists up to three rows with their glyphs and credits: never a session, never the gazette', () => {
-    const body = dom(sceneMarkup('grad', wide()).body);
+    const body = dom(sceneMarkup('grad', ctx()).body);
     const rows = qa(body, '.tl[data-variant=row]');
     expect(rows).toHaveLength(3);
     expect(rows.map((r) => r.dataset.kind)).toEqual(['quake', 'city', 'city']);
+    // The wide drawing's rail holds every story the city has beside the same one ink tile.
+    expect(qa(dom(sceneMarkup('grad', wide()).body), '.tl[data-variant=row]')).toHaveLength(4);
+    expect(qa(dom(sceneMarkup('grad', wide()).body), '.tl[data-variant=ink]')).toHaveLength(1);
     expect(rows.map((r) => q(r, '.k-glyph use')!.getAttribute('href'))).toEqual(['#icon-activity', '#icon-landmark', '#icon-tram-front']);
     expect(text(q(rows[0]!, '.tl-trail'))).toBe('EMSC · 12:11');
     expect(text(q(rows[1]!, '.tl-title'))).toBe('Novi park u Trnju');
     expect(text(q(rows[1]!, '.tl-trail'))).toBe('Grad Zagreb');
     expect(text(q(rows[2]!, '.tl-trail'))).toBe('ZET · 11:10');
-    const stories = gradRows(wide());
+    const stories = gradRows(ctx());
     rows.forEach((row, i) => {
       expect(text(row).toLowerCase()).not.toContain('sjednica');
       expect(text(row).toLowerCase()).not.toContain('glasnik');
@@ -428,7 +436,7 @@ describe('sceneMarkup: Grad', () => {
   });
   it('keeps yesterday\'s date on a row that is not today\'s, and the register day for a works change', () => {
     const modules = withModule(MODULES, 'dogadanja', { items: [WORKS[0]!] });
-    const rows = qa(dom(sceneMarkup('grad', wide({ modules })).body), '.tl[data-variant=row]');
+    const rows = qa(dom(sceneMarkup('grad', ctx({ modules })).body), '.tl[data-variant=row]');
     // stories() interleaves city and quake: the works change leads, the quake follows.
     expect(rows.map((r) => r.dataset.kind)).toEqual(['city', 'quake']);
     expect(text(q(rows[0]!, '.tl-trail'))).toBe('Grad Zagreb · čet 2. 7.');
@@ -436,7 +444,7 @@ describe('sceneMarkup: Grad', () => {
   });
   it('marks a stale source on its own tiles: the badge after a row\'s title, in place of the ink tile\'s context', () => {
     const modules = withModule(MODULES, 'dogadanja', { status: 'stale' });
-    const body = dom(sceneMarkup('grad', wide({ modules })).body);
+    const body = dom(sceneMarkup('grad', ctx({ modules })).body);
     const rows = qa(body, '.tl[data-variant=row]');
     expect(q(rows[0]!, '.badge')).toBeNull();
     expect(text(q(rows[0]!, '.tl-trail'))).toBe('EMSC · 12:11');
@@ -449,19 +457,20 @@ describe('sceneMarkup: Grad', () => {
   });
   it('with nothing to list, a stale city says unconfirmed and only an answering city says "nothing new"', () => {
     const quiet = MODULES.map((m) => (['dogadanja', 'emsc'].includes(m.module) ? { ...m, items: [] } : m));
-    const calm = dom(sceneMarkup('grad', wide({ modules: quiet })).body);
+    const calm = dom(sceneMarkup('grad', ctx({ modules: quiet })).body);
     expect(text(q(calm, '.tl[data-variant=band][data-level=calm] .tl-title'))).toBe('Trenutačno nema novih obavijesti.');
-    const stale = dom(sceneMarkup('grad', wide({ modules: quiet.map((m) => (m.module === 'dogadanja' ? { ...m, status: 'stale' as const } : m)) })).body);
+    const stale = dom(sceneMarkup('grad', ctx({ modules: quiet.map((m) => (m.module === 'dogadanja' ? { ...m, status: 'stale' as const } : m)) })).body);
     expect(q(stale, '.tl[data-level=calm]')).toBeNull();
     expect(text(q(stale, '.tl[data-variant=band][data-level=unknown][data-state=stale] .tl-title'))).toContain('Zastarjelo');
   });
   it('shows the ink and the rows as bars while every city source loads, and one unknown band when all are down', () => {
-    const loading = dom(sceneMarkup('grad', wide({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body);
+    const loading = dom(sceneMarkup('grad', ctx({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body);
     expect(qa(loading, '.tl[data-variant=ink][data-skeleton]')).toHaveLength(1);
     expect(qa(loading, '.tl[data-variant=row][data-skeleton]')).toHaveLength(3);
+    expect(qa(dom(sceneMarkup('grad', wide({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body), '.tl[data-variant=row][data-skeleton]')).toHaveLength(5);
     expect(qa(loading, '.tl[data-variant=ink]')).toHaveLength(1);
     const down = MODULES.map((m) => (['dogadanja', 'emsc'].includes(m.module) ? { ...m, status: 'down' as const, items: [] } : m));
-    const body = dom(sceneMarkup('grad', wide({ modules: down })).body);
+    const body = dom(sceneMarkup('grad', ctx({ modules: down })).body);
     expect(text(q(body, '.tl[data-variant=ink][data-state=down] .tl-title'))).toBe('Izvor trenutačno ne odgovara');
     expect(qa(body, '.tl[data-variant=band][data-level=unknown]')).toHaveLength(1);
     expect(qa(body, '.tl[data-variant=row]')).toHaveLength(0);

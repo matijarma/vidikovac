@@ -46,8 +46,8 @@ export interface InvitationModel {
   pinned: SceneId | null;
   /** False under reduced motion, lagano and the pin: the field holds Promet (or the pinned scene). */
   rotate: boolean;
-  /** Line tiles the Promet scene shows before its meta says the rest (4 wide, 3 compact, 10 lightweight). */
-  lineCap: number;
+  /** Members a chapter's rail asks for before it has been measured: the drawing's own count (6 wide, 4 compact, 3 handheld, 10 lightweight). */
+  columns: number;
   size: 'wide' | 'compact';
 }
 
@@ -174,7 +174,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     update(model) {
       field.update({
         modules: model.modules, stop: model.stop, now: model.now, strings: s, i18n, locale, lightweight,
-        size: model.size, lineCap: model.lineCap, index: model.sceneIndex, pinned: model.pinned, rotate: model.rotate,
+        size: model.size, columns: model.columns, index: model.sceneIndex, pinned: model.pinned, rotate: model.rotate,
       });
       const tiles = valueTiles(model.modules, model.stop, i18n, s, locale, model.now).map((tile) => tileMarkup(tile, s)).join('');
       if (tiles !== lastTiles) { tilesBox.innerHTML = tiles; lastTiles = tiles; }

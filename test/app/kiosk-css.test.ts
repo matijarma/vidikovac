@@ -288,6 +288,10 @@ describe('the scene field: transitions and grids', () => {
       const rule = decls(`.kiosk[data-size='${size}']`);
       for (const [token, px] of Object.entries(tokens)) expect(rule[token], `${size} ${token}`).toBe(`max(${px}px, calc(${px}px * var(--k-zoom)))`);
     }
+    // Registered as lengths, so kiosk/scenes.ts can read them back off the field in px and ask railColumns how many members that buys.
+    for (const token of Object.keys(MINIMA.wide)) {
+      expect(BARE, token).toMatch(new RegExp(`@property ${escape(token)} \\{ syntax: '<length>'; inherits: true; initial-value: \\d+px; \\}`));
+    }
   });
   it('gives the lagano board the whole scene (D12): data-board=1 is one column, one row, and the field without a map keeps its head row', () => {
     const board = decls(".k-scene-grid[data-board='1']");

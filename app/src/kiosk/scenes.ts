@@ -29,6 +29,7 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { clock, dayTime, fmtDistance, sameZagrebDay, weekdayDayMonth } from './format';
 import { kBadge, lineRows, linesMarkup } from './invitation';
+import { railColumns } from './layout';
 import {
   byModule, cityKicker, closuresNear as closuresNearby, isLive, linesAtStop, NEARBY_CLOSURE_M, routeDelays, sourceState, stories, windowOf,
   type LineRow, type LinesBoard, type SourceState, type Story,
@@ -44,18 +45,18 @@ export const SCENE_LEAVE_MS = 180;
 export const SCENE_ENTER_MS = 220;
 /** Closures "u blizini" for the right column's value tile: local.ts's nearby radius under the scene contract's name. */
 export const WORKS_RADIUS_M = NEARBY_CLOSURE_M;
-export const TONIGHT_ROW_CAP = 3;
-export const GRAD_ROW_CAP = 3;
-/** Members the chapter's rail asks for, from the room the drawing gives it
- *  (`lineCap`): Promet fills the rail with the works band and its lines,
- *  Večeras with its evening's tiles, Grad with the ink tile and the city's
- *  rows. Each chapter's member is a different width (kiosk.css's
- *  `--k-tile-min`, `--k-time-min`, `--k-row-min` beside `--k-ink-w`), so the
- *  same rail holds a different number of each. */
-const LINE_TILE_CAP = 3;
-const railMembers = (lineCap: number): number => Math.max(LINE_TILE_CAP, lineCap);
-const tonightRows = (lineCap: number): number => Math.max(TONIGHT_ROW_CAP, lineCap - 2);
-const gradRowCap = (lineCap: number): number => Math.max(GRAD_ROW_CAP - 1, lineCap - 3);
+/** The fewest members a chapter asks its rail for, however little room it
+ *  has: at one column the rail stands them up as rows, and three of those is
+ *  the least a chapter says. The room decides the rest, and fitRail hides
+ *  what it turns out not to hold. */
+export const TONIGHT_ROW_FLOOR = 3;
+export const GRAD_ROW_FLOOR = 3;
+const LINE_TILE_FLOOR = 3;
+/** Promet fills the rail with the works band and its lines, Večeras with the
+ *  evening's tiles, Grad with the ink tile and the city's rows. */
+const prometMembers = (columns: number): number => Math.max(LINE_TILE_FLOOR, columns);
+const tonightRows = (columns: number): number => Math.max(TONIGHT_ROW_FLOOR, columns);
+const gradRowCap = (columns: number): number => Math.max(GRAD_ROW_FLOOR, columns - 1);
 /** The register's phase for works one can see on the street (komunalne.ts's closed vocabulary). */
 const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
 
@@ -68,8 +69,11 @@ export interface SceneContext {
   locale: string;
   lightweight: boolean;
   size: 'wide' | 'compact';
-  /** Line tiles before the meta says the rest: 4 wide, 3 compact, 10 lightweight. */
-  lineCap: number;
+  /** Members this chapter's rail has room for: the columns its own minimum
+   *  buys in the rail's measured width (mountScenes asks kiosk/layout.ts's
+   *  railColumns), or the drawing's own count before anything is laid out --
+   *  6 wide, 4 compact, 3 handheld, 10 lightweight. */
+  columns: number;
 }
 
 export interface SceneModel extends SceneContext {
@@ -194,7 +198,7 @@ export function nextSession(modules: readonly ModuleSnapshot[], now: number): Fe
 
 /** stories() minus the Assembly (the ink tile says it), at most what the rail has room for beside that tile; the gazette is session tier and never among them. */
 export function gradRows(ctx: SceneContext): Story[] {
-  return stories(ctx.modules, ctx.strings, ctx.locale, ctx.now).filter((story) => !story.id.startsWith('city:skupstina:')).slice(0, gradRowCap(ctx.lineCap));
+  return stories(ctx.modules, ctx.strings, ctx.locale, ctx.now).filter((story) => !story.id.startsWith('city:skupstina:')).slice(0, gradRowCap(ctx.columns));
 }
 
 // --- Markup -------------------------------------------------------------------
@@ -236,7 +240,13 @@ function emptyBand(state: SourceState, glyphName: IconName, label: string, empty
   return noteBand('calm', glyphName, label, empty);
 }
 
-interface BuiltScene { body: string; regions: Record<string, string>; meta: string }
+interface BuiltScene {
+  body: string;
+  regions: Record<string, string>;
+  meta: string;
+  /** The chip's "još N" once fitRail has hidden `hidden` members it turns out the room does not hold; `meta` is this at zero. */
+  more(hidden: number): string;
+}
 
 // Promet: the map spanning the rows of column 1, the line tiles, the works band.
 
@@ -272,8 +282,9 @@ function linesInner(board: LinesBoard, ctx: SceneContext, cap: number, stood: bo
 }
 
 /** The lines beyond the cap, said once here; nothing while the board is not a board yet. */
-function linesMeta(board: LinesBoard, ctx: SceneContext): string {
-  return (board.state === 'live' || board.state === 'stale') && board.more > 0 ? plural(ctx.locale, ctx.strings.lines.more, board.more) : '';
+function linesMeta(board: LinesBoard, ctx: SceneContext, hidden = 0): string {
+  const rest = board.more + hidden;
+  return (board.state === 'live' || board.state === 'stale') && rest > 0 ? plural(ctx.locale, ctx.strings.lines.more, rest) : '';
 }
 
 /** The works band as the rail's lead member; nothing at all when nothing is ongoing. */
@@ -294,19 +305,20 @@ function promet(ctx: SceneContext): BuiltScene {
   if (ctx.lightweight) {
     // D12: no map under lagano, so the lines board is the whole field, exactly today's left column (li.k-line × cap and .k-line-more,
     // e2e/lagano.spec.ts's contract); the board says its own overflow, so the meta stays quiet.
-    const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, ctx.lineCap);
+    const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, ctx.columns);
     const lines = linesMarkup(board, ctx.stop, ctx.strings, ctx.locale);
     const body = `<div class="k-scene-grid" data-board="1"><div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host" hidden></div><div class="k-lines k-lines--board" data-testid="kiosk-lines">${lines}</div></div></div>`;
-    return { body, regions: { 'kiosk-lines': lines }, meta: '' };
+    return { body, regions: { 'kiosk-lines': lines }, meta: '', more: () => '' };
   }
   // The works band is one member of the rail like any other, so the lines take what the rail has left.
   const works = worksBand(worksInKvart(ctx.modules, ctx.stop, ctx.now), ctx);
-  const stood = ctx.lineCap <= 1;
-  const cap = Math.max(1, railMembers(ctx.lineCap) - (works === '' ? 0 : 1));
+  const stood = ctx.columns <= 1;
+  const cap = Math.max(1, prometMembers(ctx.columns) - (works === '' ? 0 : 1));
   const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, cap);
   const inner = `${works}${linesInner(board, ctx, cap, stood)}`;
   const body = `<ul class="k-rail" data-chapter="promet" data-testid="kiosk-lines"${stood ? ' data-rows="1"' : ''}>${inner}</ul>`;
-  return { body, regions: { 'kiosk-lines': inner }, meta: linesMeta(board, ctx) };
+  const more = (hidden: number): string => linesMeta(board, ctx, hidden);
+  return { body, regions: { 'kiosk-lines': inner }, meta: more(0), more };
 }
 
 // Večeras: up to three time tiles, the next one tinted.
@@ -323,16 +335,16 @@ function eventRow(item: FeedItem, state: SourceState, next: boolean, ctx: SceneC
     + `<div class="tl-main"><p class="tl-label">${escapeHtml(cityKicker(source, s))}</p><p class="tl-title">${escapeHtml(item.title)}</p>${tail}</div></div>`;
 }
 
-function tonightMeta(rows: readonly FeedItem[], ctx: SceneContext): string {
-  const cap = tonightRows(ctx.lineCap);
-  return rows.length > cap ? plural(ctx.locale, ctx.strings.scenes.moreEvents, rows.length - cap) : '';
+function tonightMeta(rows: readonly FeedItem[], ctx: SceneContext, hidden = 0): string {
+  const shown = Math.max(0, Math.min(rows.length, tonightRows(ctx.columns)) - hidden);
+  return rows.length > shown ? plural(ctx.locale, ctx.strings.scenes.moreEvents, rows.length - shown) : '';
 }
 
 function veceras(ctx: SceneContext): BuiltScene {
   const s = ctx.strings;
   const state = sourceState(byModule(ctx.modules).dogadanja);
   const rows = eventsTonight(ctx.modules, ctx.now);
-  const cap = tonightRows(ctx.lineCap);
+  const cap = tonightRows(ctx.columns);
   let inner: string;
   if (state === 'loading') inner = `${hidden(ctx.i18n.t('status.loading'))}${'<div class="sk sk-row" aria-hidden="true"></div>'.repeat(cap)}`;
   else if (rows.length === 0) inner = emptyBand(state, 'calendar-days', state === 'live' ? '' : s.scenes.tonight, s.scenes.tonightEmpty, s);
@@ -340,8 +352,9 @@ function veceras(ctx: SceneContext): BuiltScene {
     const next = rows.findIndex((row) => startOf(row) >= ctx.now);
     inner = rows.slice(0, cap).map((row, i) => eventRow(row, state, i === next, ctx)).join('');
   }
-  const stood = ctx.lineCap <= 1 ? ' data-rows="1"' : '';
-  return { body: `<div class="k-rail" data-chapter="veceras" data-testid="kiosk-tonight"${stood}>${inner}</div>`, regions: { 'kiosk-tonight': inner }, meta: tonightMeta(rows, ctx) };
+  const stood = ctx.columns <= 1 ? ' data-rows="1"' : '';
+  const more = (hidden: number): string => tonightMeta(rows, ctx, hidden);
+  return { body: `<div class="k-rail" data-chapter="veceras" data-testid="kiosk-tonight"${stood}>${inner}</div>`, regions: { 'kiosk-tonight': inner }, meta: more(0), more };
 }
 
 // Grad: the one ink tile spanning the rows of column 1, then up to three rows.
@@ -412,7 +425,7 @@ function grad(ctx: SceneContext): BuiltScene {
   let rowsHtml: string;
   if (rows.length > 0) rowsHtml = rows.map((story) => gradRow(story, ctx)).join('');
   else if (sources.every((snapshot) => snapshot === undefined)) {
-    rowsHtml = `${hidden(ctx.i18n.t('status.loading'))}${`<div class="tl" data-variant="row" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('title1')}</span>${bar('context')}</div>`.repeat(gradRowCap(ctx.lineCap))}`;
+    rowsHtml = `${hidden(ctx.i18n.t('status.loading'))}${`<div class="tl" data-variant="row" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('title1')}</span>${bar('context')}</div>`.repeat(gradRowCap(ctx.columns))}`;
   } else {
     // Only an answering source with nothing new is "nothing new": every source down is said so, a stale one among them is unconfirmed.
     const state: SourceState = sources.every((snapshot) => snapshot === undefined || snapshot.status === 'down') ? 'down'
@@ -420,8 +433,9 @@ function grad(ctx: SceneContext): BuiltScene {
     rowsHtml = emptyBand(state, 'landmark', s.story.city, s.story.empty, s);
   }
   const inner = `${ink}${rowsHtml}`;
-  const stood = ctx.lineCap <= 1 ? ' data-rows="1"' : '';
-  return { body: `<div class="k-rail" data-chapter="grad" data-testid="kiosk-city"${stood}>${inner}</div>`, regions: { 'kiosk-city': inner }, meta: '' };
+  const stood = ctx.columns <= 1 ? ' data-rows="1"' : '';
+  // Grad never counted the rows it left out; the rail hides one the room cannot hold exactly as the old cap of three did.
+  return { body: `<div class="k-rail" data-chapter="grad" data-testid="kiosk-city"${stood}>${inner}</div>`, regions: { 'kiosk-city': inner }, meta: '', more: () => '' };
 }
 
 function buildScene(id: SceneId, ctx: SceneContext): BuiltScene {
@@ -489,6 +503,8 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
   let order: readonly SceneId[] = SCENE_ORDER.filter((id) => id !== 'veceras');
   let lastHead = '';
   let lastRegions: Record<string, string> = {};
+  /** The chapter's own "još N" for a given number of hidden members; fitRail writes it into the chip. */
+  let moreText: (hidden: number) => string = () => '';
 
   const currentItem = (): HTMLElement | null => body.querySelector<HTMLElement>('.k-scene-item:not([data-leaving])');
 
@@ -509,8 +525,70 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
     body.appendChild(item);
   }
 
+  /** The rail on show, whichever chapter built it. */
+  const railBox = (): HTMLElement | null => currentItem()?.querySelector<HTMLElement>('.k-rail') ?? null;
+
+  /** How many members a chapter's rail has room for, measured off the rail on
+   *  show: its width is the map's whatever chapter drew it, and kiosk.css
+   *  registers the four minima as lengths so they resolve here. Zero before
+   *  anything is laid out (a pre-paint mount, happy-dom), and the caller
+   *  falls back to the drawing's own count. */
+  function measuredColumns(id: SceneId): number {
+    const rail = railBox();
+    if (!rail) return 0;
+    const width = rail.clientWidth - 1;
+    const style = getComputedStyle(rail);
+    const gap = Number.parseFloat(style.columnGap);
+    const px = (token: string): number => Number.parseFloat(style.getPropertyValue(token));
+    if (!(gap >= 0)) return 0;
+    // One column of the narrowest member any rail holds: the rail stands its members up as rows and every chapter asks for its floor.
+    const across = railColumns(width, px('--k-tile-min'), gap);
+    if (across <= 1) return across;
+    if (id === 'promet') return across;
+    if (id === 'veceras') return railColumns(width, px('--k-time-min'), gap);
+    // Grad's ink tile has a lead track of its own; the city's rows fill what is left of the rail.
+    return railColumns(width - px('--k-ink-w') - gap, px('--k-row-min'), gap) + 1;
+  }
+
+  /** The rail is one row over the map's foot: a member the room turns out not
+   *  to hold is hidden and counted in the chip rather than allowed to open a
+   *  second row over the picture. Where the rail stands under the picture
+   *  instead (a handheld's map band) there is nothing to keep it out of, and
+   *  a DOM without layout measures nothing and changes nothing. */
+  function fitRail(): void {
+    const rail = railBox();
+    if (!rail) return;
+    const members = [...rail.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
+    for (const member of members) member.hidden = false;
+    let trimmed = 0;
+    if (members.length > 1 && rail.clientHeight > 0) {
+      const stood = rail.dataset.rows === '1';
+      const limit = railLimit(rail);
+      let shown = members.filter((m) => !m.hidden);
+      while (shown.length > 1) {
+        const wrapped = !stood && shown[shown.length - 1]!.offsetTop > shown[0]!.offsetTop + 1;
+        if (!wrapped && !(rail.getBoundingClientRect().height > limit + 1)) break;
+        shown[shown.length - 1]!.hidden = true;
+        trimmed += 1;
+        shown = shown.slice(0, -1);
+      }
+    }
+    const meta = element.querySelector<HTMLElement>('[data-testid=kiosk-scene-meta]');
+    const text = moreText(trimmed);
+    if (meta && meta.textContent !== text) meta.textContent = text;
+  }
+
+  /** The tallest the rail may be: half the picture where it hangs over one, unbounded where it stands beneath it. */
+  function railLimit(rail: HTMLElement): number {
+    if (!mapHostEl) return Infinity;
+    const picture = mapHostEl.getBoundingClientRect();
+    if (!(picture.height > 0)) return Infinity;
+    return rail.getBoundingClientRect().top < picture.bottom - 1 ? picture.height / 2 : Infinity;
+  }
+
   /** Every titled tile drops data-lines, then gets it back when two lines overflow; a DOM without layout measures nothing and changes nothing. */
   function fit(): void {
+    fitRail();
     for (const tile of element.querySelectorAll<HTMLElement>('.k-scene-item:not([data-leaving]) .tl')) {
       if (tile.clientHeight === 0 || !tile.querySelector('.tl-title')) continue;
       delete tile.dataset.lines;
@@ -520,7 +598,7 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
 
   /** The rail's height where it hangs over the map; 0 when nothing is laid out (happy-dom) or the rail stands under the picture rather than on it (a handheld's map band). */
   function railPad(): number {
-    const rail = currentItem()?.querySelector<HTMLElement>('.k-rail');
+    const rail = railBox();
     if (!rail || !mapHostEl) return 0;
     const box = rail.getBoundingClientRect();
     const picture = mapHostEl.getBoundingClientRect();
@@ -536,7 +614,10 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
     update(model) {
       order = sceneOrder(model);
       const id = currentScene(model);
-      const built = buildScene(id, model);
+      // The room the rail actually has, asked of the engine's own arithmetic; the model's count stands before the first paint.
+      const ctx: SceneModel = { ...model, columns: measuredColumns(id) || model.columns };
+      const built = buildScene(id, ctx);
+      moreText = built.more;
       const headHtml = headMarkup(id, model.strings, built.meta, model.rotate && order.length > 1 ? { index: Math.max(0, order.indexOf(id)), count: order.length } : null);
       if (headHtml !== lastHead) { head.innerHTML = headHtml; lastHead = headHtml; }
       if (id !== currentId) {

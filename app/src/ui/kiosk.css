@@ -110,6 +110,17 @@
   line-height: 1.25;
 }
 
+/* The rail's four minima are registered as lengths so they compute to real
+   pixels: kiosk/scenes.ts reads them off the field and asks kiosk/layout.ts's
+   railColumns how many members that leaves room for, rather than repeating
+   these numbers in JS where they could drift from the sheet. An engine
+   without @property hands back the unresolved token, railColumns answers 0,
+   and the drawing's own count stands. */
+@property --k-tile-min { syntax: '<length>'; inherits: true; initial-value: 168px; }
+@property --k-row-min { syntax: '<length>'; inherits: true; initial-value: 240px; }
+@property --k-time-min { syntax: '<length>'; inherits: true; initial-value: 240px; }
+@property --k-ink-w { syntax: '<length>'; inherits: true; initial-value: 260px; }
+
 /* --- Per-composition tokens: every size is a token times --k-zoom -------- */
 .kiosk[data-size='wide'] {
   --k-head-h: calc(96px * var(--k-zoom));
