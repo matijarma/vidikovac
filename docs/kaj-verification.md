@@ -394,6 +394,7 @@ Provjere na grani (obje kapije prošle u cijelosti; ništa nije preskočeno ni s
 | A (faza A: blizanac, indeks vožnji, klijent s poviješću) | `bb8539c` → `0edb503` | čisto | 153 datoteke / 2502 | 20 / 149 | čisto | 69/70, jedini crveni (`motion.spec` klizanje u slobodnoj ravnini) popravljen u `0edb503` i četiri motion specifikacije ponovno zelene | 18/18 | 89 površina / 0 nalaza | 100 × 6 stranica |
 | B (faza B: graf pruge, motor, planovi na žici, integrator) | `8e19313` | čisto | 157 / 2430 | 20 / 148 | čisto | 70/70 (motion.spec prepisan za planove, prvi prolaz) | 18/18 | 89 / 0 | 100 × 6 |
 | Spojeno stablo (`twin-engine` u `main`, prije objave) | `6f73559` | čisto | 158 / 2412 | 21 / 149 | čisto | 70/70 | 18/18 | 77 / 0 | 100 × 6 |
+| Spojeno stablo (`twin-hindsight` u `main`, krug E, prije objave) | `d3bf2e6` | čisto | 158 / 2415 | 21 / 149 | čisto | 70/70 | 18/18 | 77 / 0 | 100 × 6 |
 
 Motorova vlastita kapija (R-TE30, `test/motion/engine-envelope.test.ts`): šest tramvaja na dijeljenom koridoru kroz 20 simuliranih minuta, šum GPS-a 8 m, 2 od 3 osvježenja po otkucaju, kašnjenje 2 do 25 s: 0 pretjecanja, 0 vožnji unatrag, smjer poznat nakon prvog očitanja, svaki prvi plan u pokretu, ocjena unatrag na 30 s p95 32,2 m (41,0 m poslije kruga E, odjeljak niže). Na živom feedu (probom kroz `wrangler dev` 16. rujna oko 05:10): 38 vozila u kvadratu zaslona, sva s planom na stvarnoj stazi grafa, hladno dekodiranje artefakata 46 ms (mreža) + 195 ms (indeks).
 
@@ -442,6 +443,50 @@ Ocjena unatrag prije i poslije, isti snimci, isti ocjenjivač (bez ocjena preko 
 | 09:35 | 60 s | 122 m / 672 m / 33 % | 105 m / 479 m / 27 % |
 
 Tramvaji sami, snimak 07:00, 10 s: p50 52 → 41 m, p95 644 → 195 m, udio ≥ 200 m 11 → 5 %. Autobusi koji stoje, 10 s: p50 76 → 12 m. Što ostaje: vozila u pokretu (p50 oko 50 m, plan iza brzog tramvaja u tri četvrtine slučajeva) i autobusi bez voznog reda na svojim polilinijama (dionice iza vlastite brzine voze zadanih 8 m/s); sljedeći krug je vozni red za autobusne oblike. Koridor (R-TE30) poslije kruga E: p95 41 m na 30 s (32 m prije), jer simulator vozi točno po redu.
+
+#### Krug E u proizvodnji
+
+Objavljeno 16. rujna 2026. u 06:39 UTC: spojno stablo `merge-hindsight` iz `origin/main`
+(`b954148`), spoj grane `twin-hindsight` (`d3e21b8`) bez ijednog sukoba, spojni commit
+`d3bf2e6` gurnut u `main`; Workers Builds je gradnjom `70b0b6f1` objavio inačicu `62761abe`
+u 06:39:55 UTC. Cijela kapija prošla je na spojenom stablu prije guranja (redak u tablici gore).
+
+Brojila na `/stats` su zbrojna, pa je svako očitanje ispod razlika dvaju pogleda. Prozor je
+06:47 do 07:18 UTC (08:47 do 09:18 po zagrebačkom, jutarnji vrh), dakle topao objekt nakon
+objave:
+
+| Provjera | Rezultat u prozoru 06:47 do 07:18 UTC |
+|---|---|
+| Otkucaji | 306 otkucaja: 164 `ok`, 142 `unchanged`, 0 `error`, 0 `stale_index`; nijedan novi hladan start (zbrojno i dalje 3), objekt ostaje u memoriji |
+| Ocjena unatrag, 10 s | 44.401 očitanje: 31,8 % ispod 25 m, 48,6 % ispod 50 m, 70,7 % ispod 100 m, 89,9 % ispod 200 m, 10,1 % na 200 m ili više |
+| Ocjena unatrag, 30 s | 44.076 očitanja: 23,1 % ispod 25 m, 36,8 % ispod 50 m, 56,2 % ispod 100 m, 77,8 % ispod 200 m, 22,2 % na 200 m ili više |
+| Ocjena unatrag, 60 s | 43.627 očitanja: 18,4 % ispod 25 m, 28,8 % ispod 50 m, 44,5 % ispod 100 m, 65,0 % ispod 200 m, 35,0 % na 200 m ili više |
+| Zdravlje | `/api/health` odgovara `{"ok":true}` u 06:40 i u 07:18 UTC |
+| Planovi na žici | `/api/teaser` u 06:40:34 UTC: 65 vozila u kvadratu, svih 65 s planom, stazom i odredištem, 51 tramvaj i 14 autobusa; u 07:18:46 UTC: 60 vozila, svih 60 s planom, stazom i odredištem, tramvaj linije 1 na sintetičkoj stazi `path:1:0:...` |
+| Snimanje u R2 | okviri `064023-1789540823.pb` (98.949 B) i `071832-1789543112.pb` (91.641 B) dohvaćeni po točnom ključu; spremnik u 07:19 UTC drži 704 objekta i 73 MB |
+| Statični GTFS | `static_watch`: 0 od 2 provjere zatekle noviji statični GTFS |
+
+Usporedba sa starim motorom mora pasti na isto doba dana. Očitanje od dvanaest minuta iz
+tablice gore (10,2 % / 20,0 % / 34,6 % na 200 m ili više) snimljeno je između 06:28 i 06:40 po
+zagrebačkom, prije vrha, pa nije mjera za jutarnji vrh. Mjera je isti izvor u prozoru 04:40 do
+06:41 UTC (06:40 do 08:41 po zagrebačkom, stari motor, 189.380 očitanja na 10 s), dobiven kao
+razlika zbrojnih brojila:
+
+| Horizont | Stari motor, 04:40 do 06:41 UTC | Krug E, 06:47 do 07:18 UTC |
+|---|---|---|
+| 10 s | 41,8 % ispod 50 m, 16,5 % na 200 m ili više | 48,6 % ispod 50 m, 10,1 % na 200 m ili više |
+| 30 s | 31,2 % ispod 50 m, 27,9 % na 200 m ili više | 36,8 % ispod 50 m, 22,2 % na 200 m ili više |
+| 60 s | 23,4 % ispod 50 m, 41,1 % na 200 m ili više | 28,8 % ispod 50 m, 35,0 % na 200 m ili više |
+
+Cijeli život starog motora (04:28 do 06:41 UTC, 207.643 očitanja na 10 s) daje 16,0 % / 27,2 % /
+40,6 % na 200 m ili više, dakle isto. Smjer i veličina pomaka slažu se s ponavljanjem snimaka:
+udio na 200 m ili više pada za oko šest postotnih bodova na svakom horizontu. Prag iz koridora
+(p95 ispod 60 m na 30 s) živi feed i dalje ne doseže: na 30 s je 77,8 % očitanja ispod 200 m,
+pa p95 leži iznad 200 m. Mjerenje od 24 h ostaje ono koje odlučuje, a sljedeći krug (vozni red
+za autobusne oblike) ima gdje pomoći.
+
+Za runbook: `npx wrangler r2 object get` bez zastavice `--remote` čita lokalnu pohranu radnog
+stabla i javlja da ključ ne postoji; provjera snimljenog okvira ide s `--remote`.
 
 ## Ponavljanje snimljenih okvira (B8)
 
