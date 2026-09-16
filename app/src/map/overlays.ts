@@ -128,6 +128,22 @@ export const QUAKE_RADIUS_PER_MAG_PX = 3;
 
 export interface OverlayImage { id: string; image: SdfImage }
 
+/** The public screen's overlay set (plan D4, R-KP4): present, the tram network
+ *  is the figure, trams draw as plates, stops only on the screen's routes, and
+ *  the fixed 14.5 overlap zoom follows the field's own zoom. Absent, every
+ *  surface draws exactly as before. TYPED STUB on the integration branch
+ *  (R-KP15): area P1 gives it behaviour. */
+export interface ProzorOptions {
+  /** Which network lines are drawn; the kiosk passes ['tram']. */
+  networkKinds: readonly ('tram' | 'bus')[];
+  /** Route ids whose stops are drawn; null draws every stop (today's behaviour). */
+  stopRoutes: readonly string[] | null;
+  /** Stops labelled only from this rank (kiosk 4; today's gate is rank 2 at the overlap zoom). */
+  stopLabelMinRank: number;
+  /** The zoom from which pills place unconditionally and noses draw (today's fixed 14.5). */
+  overlapZoom: number;
+}
+
 /** Every SDF image the overlays reference, generated once per map. */
 export function overlayImages(): OverlayImage[] {
   const pills = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PILL_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));

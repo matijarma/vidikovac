@@ -30,7 +30,7 @@ export type MapTheme = 'light' | 'dark';
 /** Which basemap the surface asks for: 'sign' is the one surface read from
  *  across a room (kiosk/mapview.ts); the phone (transport/workspace.ts) and
  *  the kvart thumbnail (experience/kvart.ts) stay on 'default'. */
-export type BasemapProfile = 'default' | 'sign';
+export type BasemapProfile = 'default' | 'sign' | 'prozor';
 
 /** The one vector source every basemap layer reads from. */
 export const BASEMAP_SOURCE = 'basemap';
@@ -733,7 +733,8 @@ export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}
   for (const raw of upstream) {
     if (options.placeLabels === false && raw.id.startsWith('places_')) continue;
     const house = houseLayer(raw);
-    const layer = options.profile === 'sign' ? signLayer(house, flavor) : house;
+    // 'prozor' is a typed stub on the integration branch (R-KP15): it draws as 'sign' until area P1 gives it its own pass.
+    const layer = options.profile === 'sign' || options.profile === 'prozor' ? signLayer(house, flavor) : house;
     if (layer) out.push(layer);
   }
   return out;

@@ -24,7 +24,7 @@ import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
-import type { OverlayOptions } from './overlays';
+import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 
 // --- Kept for callers: the first basemap was the OpenStreetMap community
@@ -507,6 +507,8 @@ export interface CityMapOptions {
    *  labels are sized from a stated viewing geometry and whose POI list is cut
    *  to a ranked civic one (map/basemap.ts). Default 'default'. */
   basemapProfile?: BasemapProfile;
+  /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. */
+  prozor?: ProzorOptions;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -561,6 +563,8 @@ export interface CityMapHandle {
   network?(): Network | null;
   /** The vehicles as the model draws them right now. */
   vehicles?(): VehicleInfo[];
+  /** Unique `name` values of the symbols MapLibre actually placed for a layer (the e2e's proof that the prozor profile places few street names); [] before the style loads. */
+  placedNames?(layerId: string): string[];
 }
 
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
