@@ -154,6 +154,10 @@ describe('stripMarkup', () => {
     expect(markup).toContain('sljedeći prizor za 20 s');
     expect(markup).not.toContain('k-strip-sub');
     expect(markup).not.toContain('k-strip-item--sun');
+    // The public, unpaired /kiosk/ screen renders this on every load: no
+    // engineering note (deprecation markers included) ships as an HTML
+    // comment into production output, visible via view-source.
+    expect(markup).not.toContain('<!--');
   });
   it('names an active warning as the trail in DHMZ\'s words, with its glyph and the level word, instead of the sources', () => {
     const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, items: [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe' })] } : m));

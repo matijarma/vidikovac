@@ -136,17 +136,46 @@ async function fetchSnapshot(stopId: string, fetchImpl: typeof fetch): Promise<L
 }
 
 const cache = new Map<string, Promise<LastRunSnapshot | null>>();
+/** What each cached promise resolved to (absent while it is still pending),
+ *  kept alongside the promise so a later call can judge `validUntil` without
+ *  waiting on the fetch a second time. */
+const resolvedSnapshot = new Map<string, LastRunSnapshot | null>();
+
+/**
+ * True once `now` has passed a live snapshot's own `validUntil`: the table
+ * promises nothing beyond it, so a caller holding it must fetch again before
+ * trusting it further (plan D6: "the kiosk fetches its stop's table on stop
+ * change ... and again once now >= validUntil"). A down snapshot, or none at
+ * all, has nothing to expire -- the existing down-retry rule already covers
+ * those -- so only a live one can be expired.
+ */
+export function lastRunExpired(snapshot: LastRunSnapshot | null, now: number): boolean {
+  return snapshot !== null && snapshot.status === 'live' && now >= Date.parse(snapshot.validUntil);
+}
 
 /**
  * The stop's table, fetched once per stop and kept in memory: a live file and
  * a missing one (null: the stop is not in the generated set) are remembered,
- * a down answer is not, so the next caller may try again.
+ * a down answer is not, so the next caller may try again. A live table is
+ * remembered only until its own `validUntil`: past that instant this drops
+ * the cache entry and fetches a fresh one, the same way a down answer already
+ * lets the next call retry, rather than serving a table that has run out for
+ * the rest of the screen's life (today's cache-forever behaviour this fixes).
+ * `now` defaults to the wall clock; a caller (or a test) may pin it.
  */
-export function loadLastRun(stopId: string, fetchImpl: typeof fetch = fetch): Promise<LastRunSnapshot | null> {
+export function loadLastRun(stopId: string, fetchImpl: typeof fetch = fetch, now: number = Date.now()): Promise<LastRunSnapshot | null> {
   const cached = cache.get(stopId);
-  if (cached) return cached;
+  if (cached) {
+    if (!resolvedSnapshot.has(stopId) || !lastRunExpired(resolvedSnapshot.get(stopId)!, now)) return cached;
+    cache.delete(stopId);
+    resolvedSnapshot.delete(stopId);
+  }
   const pending = fetchSnapshot(stopId, fetchImpl).then((snapshot) => {
-    if (snapshot?.status === 'down') cache.delete(stopId);
+    resolvedSnapshot.set(stopId, snapshot);
+    if (snapshot?.status === 'down') {
+      cache.delete(stopId);
+      resolvedSnapshot.delete(stopId);
+    }
     return snapshot;
   });
   cache.set(stopId, pending);

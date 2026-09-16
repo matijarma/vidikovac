@@ -811,6 +811,26 @@
       "quakeBody": "Magnituda {mag} · {region} · dubina {depth} km",
       "empty": "Trenutačno nema novih obavijesti."
     },
+    "say": {
+      "transit": "Promet",
+      "transitRegular": "Sve linije voze redovito",
+      "transitNoData": "Nema podataka o kašnjenju",
+      "nearby_one": "{count} vozilo u blizini",
+      "nearby_few": "{count} vozila u blizini",
+      "nearby_other": "{count} vozila u blizini",
+      "nearbyNone": "nema vozila u blizini",
+      "quake": "Potres",
+      "closure": "Zatvoreno",
+      "zet": "ZET javlja",
+      "kvart": "Kvart",
+      "worksKvart": "Radovi u kvartu",
+      "worksCity": "Radovi u gradu",
+      "works_one": "{count} rad u tijeku",
+      "works_few": "{count} rada u tijeku",
+      "works_other": "{count} radova u tijeku",
+      "today": "danas",
+      "tomorrow": "sutra"
+    },
     "scenes": {
       "tonight": "Večeras",
       "position": "prizor {index} od {count}",

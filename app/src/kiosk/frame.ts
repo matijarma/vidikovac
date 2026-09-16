@@ -84,7 +84,11 @@ export function frameStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop 
   return { level: state.level, verdict: strings.safety.verdict[state.level], parts, nextIn, confirmedAt: state.confirmedAt };
 }
 
-/** "sljedeći prizor za 15 s"; '' when the field is not rotating (the caller hides the element). */
+/** @deprecated wave B: R-KP11 removes the rotation the strip counted down to
+ *  (one fixed field, no chapters); P2 leaves this in place so P3's worktree
+ *  keeps typechecking against it until the merge (contract 7). "sljedeći
+ *  prizor za 15 s"; '' when the field is not rotating (the caller hides the
+ *  element). */
 export function countdownText(nextIn: number | null, strings: KioskStrings): string {
   return nextIn === null ? '' : fill(strings.safety.nextScene, { seconds: nextIn });
 }
@@ -97,6 +101,13 @@ export function countdownText(nextIn: number | null, strings: KioskStrings): str
  * sources and the moment they last confirmed calm together); the on-duty
  * pharmacy; the rotation's countdown; the /hitno pill. Closures are said
  * once, on the right column's tile, never here.
+ *
+ * @deprecated wave B (the `k-strip-next` span only): the countdown item
+ * (R-KP11, no more rotation); kept until the merge so P3's worktree still
+ * typechecks (contract 7). Not a source-level comment inside the returned
+ * template literal on purpose: this markup renders on every load of the
+ * public, unpaired `/kiosk/` screen, and an HTML comment there would ship
+ * this engineering note into production output, visible via view-source.
  */
 export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean }): string {
   const w = strip.parts.warning;
@@ -130,7 +141,11 @@ export interface ValueTile {
   context: string;
 }
 
-/** Vehicles moving on the network (the `zet-rt` fleet count), then closures
+/** @deprecated wave B: the right column is say.ts's ranked statements now
+ *  (transit's own nearby count replaces the fleet-count tile, R-KP12; the
+ *  closure statement replaces the closures tile); P2 leaves this in place so
+ *  P3's worktree keeps typechecking against it until the merge (contract 7).
+ *  Vehicles moving on the network (the `zet-rt` fleet count), then closures
  *  within the 1.5 km nearby radius (D18); the strip's closures cell drops the
  *  nearest street so it is said once, here. */
 // `i18n` is unused today (every word here comes from `strings`) but kept in

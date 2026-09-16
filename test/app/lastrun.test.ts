@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { lastDeparture, loadLastRun, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
+import { lastDeparture, lastRunExpired, loadLastRun, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
 import { lastRunProducer } from '../../app/src/experience/producers';
 import { bucketOf, columnsFor } from '../../app/src/experience/timeband';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -120,6 +120,26 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
     expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
     expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it('evicts a live table once its own validUntil has passed, and fetches a fresh one', async () => {
+    const before = at('2026-09-11T12:00:00Z');
+    const after = at('2026-10-02T01:30:01Z'); // one second past FILE.validUntil below
+    const fetchImpl = vi.fn(answer(200));
+    const first = await loadLastRun('600_1', asFetch(fetchImpl), before);
+    expect(first).toMatchObject({ status: 'live', validUntil: '2026-10-02T01:30:00Z' });
+    // Still inside the window: the same promise, no second fetch.
+    expect(await loadLastRun('600_1', asFetch(fetchImpl), before)).toBe(first);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const second = await loadLastRun('600_1', asFetch(fetchImpl), after);
+    expect(second).not.toBe(first);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it('lastRunExpired is true only for a live table past its own validUntil', () => {
+    const live = { status: 'live' as const, fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-09-13T22:30:00Z', routes: TABLE };
+    expect(lastRunExpired(live, at('2026-09-13T22:29:59Z'))).toBe(false);
+    expect(lastRunExpired(live, at('2026-09-13T22:30:00Z'))).toBe(true);
+    expect(lastRunExpired({ status: 'down', fetchedAt: '2026-09-11T12:00:00Z' }, at('2026-09-13T22:30:00Z'))).toBe(false);
+    expect(lastRunExpired(null, at('2026-09-13T22:30:00Z'))).toBe(false);
   });
 });
 
