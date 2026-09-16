@@ -874,9 +874,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     };
   }
 
-  /** A map of places alone (a quake map) fits its places once the style is up. */
+  /** A map of places alone (the dashboard's quake map) fits its places once
+   *  the style is up. Tagged city points do not count: a public screen whose
+   *  stop is not set yet still carries the on-duty pharmacy and the recent
+   *  quakes, and fitting the camera to those would frame a pharmacy instead of
+   *  the city. */
   function placesOnly(): boolean {
-    return points.length > 0 && points.every((p) => !isVehicleReport(p));
+    const drawn = points.filter((p) => !isVehicleReport(p));
+    return drawn.length > 0 && drawn.length === points.length && drawn.every((p) => p.place === undefined);
   }
 
   function initialCamera(l: MaplibreModule): MapCamera {

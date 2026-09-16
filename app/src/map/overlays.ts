@@ -411,7 +411,10 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       'icon-size': s,
       'icon-rotation-alignment': 'viewport',
       ...(spec.rotate ? { 'icon-rotate': spec.rotate } : {}),
-      'icon-allow-overlap': true,
+      // No allow-overlap: a crowded quarter thins its own marks, and
+      // symbol-sort-key decides which survive -- the pharmacy and the assembly
+      // points first, the seat last. A pile of squares is not more honest than
+      // a chosen one, it is only less readable.
       'text-field': ['get', 'title'],
       'text-font': [MAP_FONTS.medium],
       'text-size': PLACE_LABEL_PX * s,

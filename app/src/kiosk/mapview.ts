@@ -6,16 +6,24 @@
 // never a drawn position (R-P2); closures as lines; the screen's own stop as
 // an undated place, which the map draws where given.
 //
-// The request carries the map workstream's additive options: the stop as
-// centre at street zoom (shifted so the lines board over the map's foot does
-// not cover it), the screen's stop to mark, the phone's selected route or
-// stop, route follow, no pointer handling and larger symbols for a screen
-// read across a room. The handle's additive methods are driven from here
-// too: `setView` when the view changes, `resize` after the container is
-// re-parented, and `setFeedState` from the ZET snapshot's own status on every
-// paint, so a stale or down feed holds every vehicle where it is and neither
-// a reparent nor `resume()` can animate through an outage.
-import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
+// The request carries the map workstream's additive options: the camera the
+// showing chapter asks for (chapterView), the sides of the box the
+// composition covers, the screen's stop to mark, the phone's selected route
+// or stop, route follow, no pointer handling, the sign basemap profile and
+// symbols at twice size for a screen read from three metres. The handle's
+// additive methods are driven from here too: `setView` when the view changes,
+// `resize` after the container is re-parented, `setOutline` when the chapter
+// wants the quarter drawn, and `setFeedState` from the ZET snapshot's own
+// status on every paint, so a stale or down feed holds every vehicle where it
+// is and neither a reparent nor `resume()` can animate through an outage.
+//
+// The map is not only the network any more. cityPoints() puts what the city
+// itself publishes on it -- placed happenings, the communal works under way,
+// the recent quake, the on-duty pharmacy, the seat of the quarter, and the
+// assembly points while the state is urgent -- each with the rule that keeps
+// it honest stated beside it, and most of them enforced in a layer filter
+// rather than in a comment (map/overlays.ts).
+import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
