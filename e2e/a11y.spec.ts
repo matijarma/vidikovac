@@ -236,11 +236,11 @@ test.describe('the moving map has a text path (R-F5)', () => {
     // A public screen's route board is glanceable, not a hidden interactive
     // phone list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
-    // The readable route board beside the map is the transit statement's badge
-    // row (contract 4: data-testid="kiosk-lines" on it), written by say.ts once
-    // zet-rt has answered (R-KP16: absent, not "always", while it loads).
-    await expect(page.locator('[data-testid=kiosk-says] article.k-say:not([data-skeleton])').first()).toBeAttached({ timeout: 15_000 });
-    await expect(page.locator('[data-testid=kiosk-say][data-say=transit] [data-testid=kiosk-lines]')).toContainText('6');
+    // The readable route board beside the map is the lines panel's rows
+    // (kiosk/front.ts: data-testid="kiosk-lines" on the list), the stop's own
+    // lines with their badges, from the first paint.
+    await expect(page.locator('[data-testid=kiosk-panel-promet][data-say=transit] [data-testid=kiosk-lines] li.k-fr').first()).toBeAttached({ timeout: 15_000 });
+    await expect(page.locator('[data-testid=kiosk-panel-promet] [data-testid=kiosk-lines]')).toContainText('6');
   });
 
   test('/d/ in a session with U pokretu open: no nested-interactive violation, a name on every Tab stop (the map’s zoom buttons and the OpenStreetMap link included), and the vehicle list among them', async ({

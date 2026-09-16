@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
 // The kiosk controller with every dependency faked: the setup wizard, the
-// invitation (one field, one column, one map), codes, the paired
+// invitation (the front page: five panels, one map), codes, the paired
 // compositions, expiry and revocation, the basics panel, alerts, polling and
-// disposal. say.ts is mocked at its contract (global constraints, contracts 4
-// and 5): the ranker and the markup are area P2's; what is proven here is
-// that the controller hands them the right input on the right beats and
-// reconciles what they return.
+// disposal. The panels are the real kiosk/front.ts over the fixture teaser;
+// what is proven here is that the controller paints them on the right beats,
+// reconciles what changed and hides what the box does not hold.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,17 +16,11 @@ import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
-import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS } from '../../app/src/kiosk/layout';
+import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
-import type { SayInput, Slot, Statement } from '../../app/src/kiosk/say';
-import type * as SayModule from '../../app/src/kiosk/say';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 
-const say = vi.hoisted(() => ({ rank: vi.fn(), markup: vi.fn() }));
-// The ranker and the markup are faked at their contract; everything else say.ts exports (SAY_KINDS, which layout.ts sizes the handheld's "all" from) is the real thing.
-vi.mock('../../app/src/kiosk/say', async (importOriginal) => ({ ...(await importOriginal<typeof SayModule>()), rankStatements: say.rank, sayMarkup: say.markup }));
-const realSay = await vi.importActual<typeof SayModule>('../../app/src/kiosk/say');
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
@@ -59,26 +52,6 @@ const CODE_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function batch(start: number, count = 20): CodeSlot[] {
   return Array.from({ length: count }, (_, i) => ({ code: `ABCDEFG${CODE_CHARS[i]}`, slotStart: start + i * 30_000, slotEnd: start + (i + 1) * 30_000 }));
 }
-
-/** A statement in the contract's shape (contract 5), the transit kind by default. */
-function statement(key: string, value: string, over: Partial<Statement> = {}): Slot {
-  return { key, statement: { key, domain: 'transit', say: 'transit', weight: 100, label: 'Promet', value, aria: value, ...over } };
-}
-/** The contract-4 markup for a set of slots, as say.ts writes it: a keyed article, the value with its crossfade signature. */
-function sayHtml(slots: readonly Slot[]): string {
-  return slots.map(({ statement: st }) =>
-    `<article class="k-say" data-key="${st.key}" data-domain="${st.domain}" data-testid="kiosk-say" data-say="${st.say}">`
-    + `<p class="k-say-label"><span class="k-say-kicker">${st.label}</span>${st.badgesMarkup ?? ''}</p>`
-    + `<p class="k-say-value" data-replace data-sig="${st.value}">${st.value}</p>${st.context ? `<p class="k-say-context">${st.context}</p>` : ''}</article>`).join('');
-}
-/** The last SayInput the ranker received. */
-const lastInput = (): SayInput => say.rank.mock.calls.at(-1)![0] as SayInput;
-
-beforeEach(() => {
-  // By default the ranker has nothing to say and the markup is the real one, so a loading column shows say.ts's own skeleton (contract 5) and a loaded one nothing.
-  say.rank.mockReset().mockImplementation(() => []);
-  say.markup.mockReset().mockImplementation(realSay.sayMarkup);
-});
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
 type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
@@ -269,11 +242,30 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(field.getAttribute('aria-label')).toBe('Trg bana J. Jelačića');
     expect([...field.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-map-host']);
     expect(k.root.querySelectorAll('[data-testid=kiosk-live]')).toHaveLength(1);
-    // The column: the statements, then the card; no chapters, no rail, no tiles, no dots anywhere.
-    const column = q(k.root, '[data-testid=kiosk-invitation] .k-column')!;
+    // The front page: tonight across the top left, the lines, the field and the surroundings under it, the forecast, the city and the card on the right (kiosk/invitation.ts).
+    const front = q(k.root, '[data-testid=kiosk-invitation]')!;
+    expect(front.classList.contains('k-front')).toBe(true);
+    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['tonight', 'k-bottom', 'k-column']);
+    expect([...q(front, '.k-bottom')!.children].map((el) => (el as HTMLElement).dataset.panel ?? (el as HTMLElement).dataset.testid)).toEqual(['promet', 'kiosk-live', 'around']);
+    const column = q(front, '.k-column')!;
     expect(column.tagName).toBe('ASIDE');
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-says', 'kiosk-invite']);
-    expect(q(column, '[data-testid=kiosk-says]')!.getAttribute('aria-live')).toBe('off');
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'city', 'k-panel k-panel--card']);
+    expect(q(column, '.k-panel--card [data-testid=kiosk-invite]')).not.toBeNull();
+    // The lines panel: the stop's routes as rows with their badges, the state word and the vehicles near, capped at eight of the stop's nine; the kicker names the count beyond.
+    const promet = q(front, '[data-testid=kiosk-panel-promet]')!;
+    expect(promet.dataset.say).toBe('transit');
+    const rows = [...promet.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-fr')];
+    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11', 'line:12', 'line:13', 'line:14', 'line:17', 'line:31', 'line:32']);
+    expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
+    expect(text(q(rows[0]!, '.k-fr-sub'))).toBe('kasni 2 min · 1 vozilo u blizini');
+    expect(rows[0]!.dataset.tone).toBe('late');
+    expect(text(q(promet, '.k-panel-meta'))).toBe('1 vozilo u blizini · ZET 14:31 · još 1 linija');
+    // The city panel names the Assembly's next session with its day; the surroundings the closure by distance; the forecast and the gazette, not in this teaser, say so honestly.
+    expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-title'))).toBe('13. sjednica Gradske skupštine');
+    expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-day'))).toBe('čet 17. 9.');
+    expect(text(q(front, '[data-testid=kiosk-panel-around] li[data-key="closure:c1"] .k-fr-title'))).toBe('Ilica');
+    expect(q(front, '[data-testid=kiosk-panel-weather] .k-panel-note')).not.toBeNull();
+    expect(q(front, '[data-testid=kiosk-panel-tonight] .k-panel-note')).not.toBeNull();
     for (const gone of ['kiosk-scene', 'kiosk-scene-meta', 'kiosk-tiles', 'tile-vehicles', 'tile-closures', 'kiosk-tonight', 'kiosk-city', 'k-city-ink']) expect(q(k.root, `[data-testid=${gone}]`), gone).toBeNull();
     for (const gone of ['.k-scene', '.k-rail', '.k-side-tiles', '.k-dot', '.k-scene-head']) expect(q(k.root, gone), gone).toBeNull();
     expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
@@ -360,8 +352,9 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(board.querySelectorAll('li.k-line')).toHaveLength(9);
     expect(text(board)).toContain('kasni 2 min');
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
-    expect(q(k.root, '[data-testid=kiosk-says]')).not.toBeNull();
-    expect(say.rank).toHaveBeenCalled();
+    // The lines panel does not repeat the board's rows (R-L2); the other panels stand.
+    expect(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-panel-city] li.k-fr')).not.toBeNull();
     // Ten rows at most, then "još N" (R-V1, e2e/lagano.spec.ts): the board's cap is its own, not the composition's slot count.
     const eleven = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', Array.from({ length: 11 }, (_, i) => item('zet-rt', `vehicle:${i}`, 'vehicle', String(i + 1), { geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: String(i + 1), routeType: 0 } }))) : m));
     const many = mount({ hash: '#BEACON01.tajna', lightweight: true, fetchTeaser: async () => ({ modules: eleven }) });
@@ -589,16 +582,16 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
-  it('a cold screen waits for readings: the column shows one skeleton statement while zet-rt has not answered, and no weather', async () => {
+  it('a cold screen waits for readings: every panel says it is loading, no row is invented, and no weather', async () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
-    // say.ts's skeleton (contract 5) stands until the ranker has something to say; the composition adds no fallback of its own (R-KP23).
-    const skeleton = q(k.root, '[data-testid=kiosk-says] article.k-say[data-skeleton]')!;
-    expect(skeleton).not.toBeNull();
-    expect(skeleton.getAttribute('aria-hidden')).toBe('true');
-    expect(skeleton.querySelectorAll('.sk')).toHaveLength(3);
-    expect(text(q(k.root, '[data-testid=kiosk-says]'))).toBe('');
-    expect(lastInput().modules).toEqual([]);
+    // The lines panel lists the stop's own routes from the stop alone, each with the honest "no data" word; every other panel has no row to show yet.
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(8);
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr .k-fr-sub'))).toBe('Nema podataka o kašnjenju · nijedno vozilo u blizini');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(8);
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-note'))).toBe('Učitavanje podataka ZET-a…');
+    for (const id of ['around', 'city', 'tonight']) expect(text(q(k.root, `[data-testid=kiosk-panel-${id}] .k-panel-note`)), id).toBe('učitavanje podataka');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-panel-note'))).toBe('Učitavanje podataka DHMZ-a…');
     expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
     k.handle.destroy();
   });
@@ -636,28 +629,26 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(calls.at(-1)).toBe('stale');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
-    // The ranker is told, source by source: the last-good copies are stale, and the field is still one field with its map.
-    // The fixture's seven modules go stale; the two the payload never carried (forecast, gazette) stand as honest down placeholders behind them.
-    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'stale'));
-    expect(lastInput().modules.slice(MODULES.length).every((m) => m.status === 'down')).toBe(true);
+    // The panels are told, source by source: the last-good copies are stale (the lines panel says so in its credit), and the field is still one field with its map.
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.dataset.state).toBe('stale');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-credit'))).toContain('zastarjelo');
     expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-map]')).not.toBeNull();
     fail = false;
     k.poll();
     await flush();
     expect(calls.at(-1)).toBe('live');
-    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'live'));
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.dataset.state).toBe('live');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
-    // Every module the teaser would carry is handed to the ranker as down (never absent, which would read as loading), and the column shows no skeleton.
-    const input = lastInput();
-    expect(input.modules.length).toBeGreaterThan(0);
-    expect(input.modules.every((m) => m.status === 'down')).toBe(true);
-    expect(q(k.root, '[data-testid=kiosk-says] [data-skeleton]')).toBeNull();
+    // Every panel reads its source as down (never absent, which would read as loading): the honest word in rose, no loading word anywhere.
+    for (const id of ['tonight', 'city', 'promet', 'around']) expect(q(k.root, `[data-testid=kiosk-panel-${id}]`)!.dataset.state, id).toBe('down');
+    expect(q(k.root, '[data-testid=kiosk-panel-around] .k-panel-note')!.dataset.state).toBe('down');
+    expect(text(q(k.root, '[data-testid=kiosk-invitation]'))).not.toContain('Učitavanje');
     // The clock stands alone (D11): no sentence and no dash where the reading was.
     expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
   });
@@ -786,12 +777,12 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(k.requestFullscreen).toHaveBeenCalledTimes(1);
     expect(k.requestWakeLock).toHaveBeenCalledTimes(1);
   });
-  it('speaks English when the page does, and hands the ranker the page\u2019s locale', async () => {
+  it('speaks English when the page does, panels included', async () => {
     const k = mount({ stored: STORED, locale: 'en' });
     await flush();
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
-    expect(lastInput().locale).toBe('en');
-    expect(lastInput().strings.lines.title).toBe('Lines from this stop');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-around] .k-panel-kicker'))).toBe('Around the stop');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-city] .k-panel-kicker'))).toBe('City');
   });
   it('destroy() clears every timer, closes both sockets and removes the DOM', async () => {
     const k = await pairedKiosk();
@@ -806,11 +797,11 @@ describe('alerts, polling, the first tap and disposal', () => {
 // The invitation composed (plan "Frame", R-KP1, R-KP5): one field, one column
 // of statements over the card, the header's weather group, the strip.
 describe('the invitation composition: the card, the header group, the strip', () => {
-  it('orders the column statements then card; the header carries the weather group with the condition icon, the reading and the sun time; the card is the lead over the hint beside the QR, then the code (R-KP21)', async () => {
+  it('orders the column forecast, city, then the card; the header carries the weather group with the condition icon, the reading and the sun time; the card is the lead over the hint beside the QR, then the code (R-KP21)', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const column = q(k.root, '[data-testid=kiosk-invitation] .k-column')!;
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-says', 'kiosk-invite']);
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? (el as HTMLElement).querySelector('[data-testid]')?.getAttribute('data-testid'))).toEqual(['weather', 'city', 'kiosk-invite']);
     const weather = q(k.root, '.k-head .k-clock-row [data-testid=kiosk-weather]')!;
     expect(weather.hidden).toBe(false);
     expect(weather.dataset.state).toBe('live');
@@ -833,9 +824,9 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect([...q(card, '.k-invite-side')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint']);
     expect(q(card, '.k-invite-code [data-testid=pair-code]')).not.toBeNull();
     expect(q(card, '.k-invite-code [data-testid=code-progress] .k-progress-bar')).not.toBeNull();
-    // One h1 on the screen (the card's lead); the field is a labelled section, not a headed one.
+    // One h1 on the screen (the card's lead); each of the five panels is headed by its kicker as an h2, the field is a labelled section.
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
-    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] h2')).toHaveLength(0);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] h2')).toHaveLength(5);
   });
   it('DHMZ down: the header weather group hides, the clock stands alone and no dash stands in for the reading', async () => {
     const down = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [], 'down') : m));
@@ -851,9 +842,9 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect(head).not.toContain('°C');
     expect(head).not.toContain('DHMZ');
     expect(q(k.root, '[data-testid=kiosk-temp]')).toBeNull();
-    // The rest of the screen is unaffected: the strip still speaks and the ranker still hears every module.
+    // The rest of the screen is unaffected: the strip still speaks and the lines panel still lists the stop.
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(lastInput().modules.find((m) => m.module === 'dhmz-now')?.status).toBe('down');
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(8);
   });
   it('builds the hostname sentence from codeBase, never from a literal', async () => {
     const k = mount({ stored: STORED, codeBase: 'https://example.test' });
@@ -1012,129 +1003,64 @@ describe('the field, the column and the one map', () => {
     expect(map.handle.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('the column is reconciled: an unchanged statement keeps its node, a changed value swaps only the value node, a newcomer joins without rebuilding the rest, and the ranker gets its own last answer back', async () => {
-    let slots: Slot[] = [statement('say:transit', 'Sve linije voze redovito', { context: '3 vozila u blizini · ZET 14:32' })];
-    say.rank.mockImplementation(() => slots);
-    say.markup.mockImplementation((s: readonly Slot[]) => sayHtml(s));
-    const k = mount({ stored: STORED });
+  it('the panels are reconciled: an unchanged row keeps its node, a changed reading rewrites its own row and nothing else, a new row joins without rebuilding the panel', async () => {
+    let modules = MODULES;
+    const k = mount({ stored: STORED, fetchTeaser: async () => ({ modules }) });
     await flush();
-    const says = q(k.root, '[data-testid=kiosk-says]')!;
-    const first = q(says, 'article[data-key="say:transit"]')!;
-    const value = q(first, '.k-say-value')!;
-    expect(text(value)).toBe('Sve linije voze redovito');
-    expect(says.children).toHaveLength(1);
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    const row = q(promet, 'li[data-key="line:6"]')!;
+    const sub = q(row, '.k-fr-sub')!;
+    expect(text(sub)).toBe('kasni 2 min · 1 vozilo u blizini');
     // The same answer on the next poll: the same nodes stand (a reader mid-glance is never interrupted).
     k.poll();
     await flush();
-    expect(q(says, 'article[data-key="say:transit"]')).toBe(first);
-    expect(q(first, '.k-say-value')).toBe(value);
-    expect(say.rank.mock.calls.at(-1)![1]).toBe(slots); // hysteresis: the previous slots go back in
-    // A changed value: the article node stays, the value node is swapped wholesale (data-replace by data-sig), so the k-say-in keyframe replays on insertion.
-    slots = [statement('say:transit', '6 kasni 4 min · 13 kasni 3 min', { tone: 'late', context: '3 vozila u blizini · ZET 14:33' })];
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(promet);
+    expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
+    // Line 6 recovers and a second vehicle arrives: the row's context changes in place, the panel and the row are the same nodes.
+    modules = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [
+      ...m.items.filter((i) => i.id !== 'route:6'),
+      item('zet-rt', 'vehicle:2', 'vehicle', '6', { at: '2026-09-11T12:31:50Z', geo: { type: 'Point', coordinates: [15.9775, 45.8128] }, data: { routeId: '6', routeType: 0 } }),
+      item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 5, vehicles: 12 } }),
+    ]) : m));
     k.poll();
     await flush();
-    expect(q(says, 'article[data-key="say:transit"]')).toBe(first);
-    const swapped = q(first, '.k-say-value')!;
-    expect(swapped).not.toBe(value);
-    expect(text(swapped)).toBe('6 kasni 4 min · 13 kasni 3 min');
-    expect(swapped.dataset.sig).toBe('6 kasni 4 min · 13 kasni 3 min');
-    // A newcomer takes the second slot; the first article is still the same node.
-    slots = [...slots, statement('say:closure', 'Amruševa', { domain: 'komunalno', say: 'closure', label: 'Zatvoreno', weight: 90 })];
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(promet);
+    expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
+    expect(text(q(row, '.k-fr-sub'))).toBe('na vrijeme · 2 vozila u blizini');
+    expect(row.dataset.tone).toBe('ontime');
+    // A ZET notice arrives: it joins the lines panel as its last row; the line rows are untouched.
+    modules = modules.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [...m.items, item('dogadanja', 'zet-promet:1', 'event', 'Linija 6 mijenja trasu', { at: '2026-09-11T10:00:00Z', dateBasis: 'published', data: { source: 'zet-promet' } })]) : m));
     k.poll();
     await flush();
-    expect([...says.children].map((el) => (el as HTMLElement).dataset.key)).toEqual(['say:transit', 'say:closure']);
-    expect(q(says, 'article[data-key="say:transit"]')).toBe(first);
-    expect(q(says, 'article[data-key="say:closure"]')!.dataset.domain).toBe('komunalno');
-    expect(q(says, '[data-skeleton]')).toBeNull();
+    expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
+    const notice = q(promet, 'li[data-key="notice:zet-promet:1"]')!;
+    expect(text(q(notice, '.k-fr-title'))).toBe('Linija 6 mijenja trasu');
+    expect(text(q(notice, '.k-fr-sub'))).toBe('ZET javlja · 12:00');
+    // The same notice appears in no other panel: the city panel keeps its Assembly row alone.
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-city] li.k-fr')).toHaveLength(1);
   });
 
-  it('the column fits by measurement (R-KP5) after a paint, on a resize and once after the fonts arrive, never on the 1 s tick: a value past two lines is cut at a word with "…" while its signature stays whole and is then left alone until its text or its width changes, a value of pairs is left alone, and a statement the room does not hold is hidden whole', async () => {
-    const long = 'Dvadeset peta sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba u velikoj vijećnici';
-    const pairs = '<span class="k-say-pair"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span><time>23:58</time></span>';
-    say.rank.mockImplementation(() => [statement('say:assembly', long), statement('say:lastrun', '23:58', { say: 'lastrun' }), statement('say:kvart', 'Novi park u Trnju', { say: 'kvart' })]);
-    say.markup.mockImplementation((slots: readonly Slot[]) => sayHtml(slots).replace('data-replace data-sig="23:58">23:58', `data-replace data-sig="23:58">${pairs}`));
-    // The fonts arrive when this test says so (document.fonts.ready), as a late web font does on a cold screen.
-    let fontsReady: () => void = () => {};
-    const fontsDescriptor = Object.getOwnPropertyDescriptor(document, 'fonts');
-    Object.defineProperty(document, 'fonts', { value: { ready: new Promise<void>((resolve) => { fontsReady = resolve; }) }, configurable: true });
-    try {
-      const k = mount({ stored: STORED });
-      await flush();
-      const says = q(k.root, '[data-testid=kiosk-says]')!;
-      const [first, second, third] = [...says.children] as HTMLElement[];
-      const value = q(first!, '.k-say-value')!;
-      // A line every `perLine` characters at a 44 px line box, a value box `width` wide, and a column that holds two statements of three.
-      let perLine = 30;
-      let width = 472;
-      for (const el of [first!, second!, third!]) Object.defineProperty(el, 'getBoundingClientRect', { value: () => ({ height: 120 }) });
-      Object.defineProperty(value, 'clientHeight', { get: () => Math.ceil((value.textContent ?? '').length / perLine) * 44 });
-      Object.defineProperty(value, 'clientWidth', { get: () => width });
-      value.style.lineHeight = '44px';
-      Object.defineProperty(says, 'clientHeight', { get: () => 300 });
-      Object.defineProperty(says, 'scrollHeight', { get: () => [...says.children].filter((el) => !(el as HTMLElement).hidden).length * 120 });
-      // The 1 s tick paints the clock and the code's bar; it measures nothing (the column is fitted where it changes).
-      k.tick(CODE_TICK_MS);
-      expect(value.textContent).toBe(long);
-      expect(third!.hidden).toBe(false);
-      // A resize re-fits (kiosk.ts's repaint path).
-      k.repaint();
-      const cut = value.textContent ?? '';
-      expect(cut.endsWith('…')).toBe(true);
-      expect(cut.length).toBeLessThanOrEqual(61);
-      expect(cut).toMatch(/^Dvadeset peta sjednica Odbora za Statut, Poslovnik/);
-      expect(cut).not.toMatch(/\s…$/); // cut at a word boundary, the space with it
-      expect(value.dataset.sig).toBe(long); // the whole text stays the reconciler's signature
-      expect(q(second!, '.k-say-value')!.innerHTML).toContain('<time>23:58</time>'); // pairs are not text to cut
-      expect([first!.hidden, second!.hidden, third!.hidden]).toEqual([false, false, true]);
-      // A poll with the same answer keeps the nodes, the clamp and the hiding -- and re-measures nothing: the value's text and width are what they were at the cut, so even a changed geometry is not read.
-      perLine = 20;
-      k.poll();
-      await flush();
-      expect(q(says, 'article[data-key="say:assembly"]')).toBe(first);
-      expect(value.textContent).toBe(cut);
-      expect(third!.hidden).toBe(true);
-      // A narrower box is a new measurement: the cut follows it.
-      width = 400;
-      k.repaint();
-      const narrower = value.textContent ?? '';
-      expect(narrower.endsWith('…')).toBe(true);
-      expect(narrower.length).toBeLessThan(cut.length);
-      // The fonts arriving late re-measure everything once, whatever the memo says: the glyphs changed under the same text and width.
-      perLine = 30;
-      fontsReady();
-      await flush();
-      expect(value.textContent).toBe(cut);
-    } finally {
-      if (fontsDescriptor) Object.defineProperty(document, 'fonts', fontsDescriptor);
-      else delete (document as { fonts?: unknown }).fonts;
-    }
+  it('a panel fits by measurement after a paint and on a resize, never on the 1 s tick: rows the box does not hold whole are hidden from the foot up, and a taller box shows them again', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    const rows = [...promet.querySelectorAll<HTMLElement>('li.k-fr')];
+    expect(rows).toHaveLength(8);
+    // A box that holds five rows of eight (happy-dom lays nothing out: the box is stubbed at 300 px and each shown row costs 60).
+    let height = 300;
+    Object.defineProperty(promet, 'clientHeight', { get: () => height, configurable: true });
+    Object.defineProperty(promet, 'scrollHeight', { get: () => rows.filter((el) => !el.hidden).length * 60, configurable: true });
+    k.tick(CODE_TICK_MS);
+    expect(rows.every((el) => !el.hidden)).toBe(true); // the tick measures nothing
+    k.repaint();
+    expect(rows.map((el) => el.hidden)).toEqual([false, false, false, false, false, true, true, true]);
+    // The box grows (a resize): every row comes back.
+    height = 600;
+    k.repaint();
+    expect(rows.every((el) => !el.hidden)).toBe(true);
   });
 
-  it('each composition hands the ranker its own tables (R-KP5): wide 3/7/56, compact 2/4/44, portrait 3/8/48, handheld all/6/40, with the stop, the modules and the moment', async () => {
-    const cases: [string, { width: number; height: number }, keyof typeof SAY_SLOTS][] = [
-      ['wide', { width: 1920, height: 1080 }, 'wide'], ['compact', { width: 1366, height: 768 }, 'compact'],
-      ['portrait', { width: 1080, height: 1920 }, 'portrait'], ['handheld', { width: 390, height: 844 }, 'handheld'],
-    ];
-    for (const [name, viewport, composition] of cases) {
-      mount({ stored: STORED, viewport });
-      await flush();
-      const input = lastInput();
-      expect([input.slots, input.badgeCap, input.valueChars], name).toEqual([SAY_SLOTS[composition], SAY_BADGE_CAP[composition], SAY_VALUE_CHARS[composition]]);
-      expect(input.stop, name).toEqual(STOP);
-      expect(input.now, name).toBe(NOW);
-      expect(input.modules, name).toEqual(MODULES);
-      expect(input.lastRun, name).toBeNull();
-    }
-    expect([SAY_SLOTS.wide, SAY_SLOTS.compact, SAY_SLOTS.portrait]).toEqual([3, 2, 3]);
-    // The badge caps are what the label row holds beside the kicker with its "+N" tail (kiosk/layout.ts): two rows at wide, one at compact.
-    expect(SAY_BADGE_CAP).toEqual({ wide: 7, compact: 4, portrait: 8, handheld: 6 });
-    expect(SAY_VALUE_CHARS).toEqual({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
-    // A phone shows every candidate: "all" is every kind say.ts knows, read from say.ts itself so it cannot drift.
-    expect(SAY_SLOTS.handheld).toBe(realSay.SAY_KINDS.length);
-    expect(realSay.SAY_KINDS).toHaveLength(10);
-  });
-
-  it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design box before layout; the totem doubles the street names’ padding for its twice-the-wall ground and follows the measured box on a repaint (R-KP17, contract 3)', async () => {
+  it('a handheld frames 1400 m across its band and a totem 1500 m across its map panel, each at its design box before layout; the names’ padding follows the ground the panel shows and the measured box on a repaint (R-KP17, contract 3)', async () => {
     type Prozor = { prozor: { labelPadding: number } };
     const phone = spyMap();
     mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: phone.factory as never });
@@ -1147,7 +1073,9 @@ describe('the field, the column and the one map', () => {
     await flush();
     expect((totem.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.portrait, STOP.lat, FIELD_SPAN_M));
     expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
-    expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(48);
+    // The wall's own panel is the ruling's 24; the totem's taller panel shows more ground north to south and pads its names more.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
+    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBeGreaterThan(24);
     // Laid out taller than the design table says, the measured box wins and the live map hears the new padding.
     const host = q(k.root, '[data-testid=kiosk-map-host]')!;
     Object.defineProperty(host, 'clientWidth', { value: 1080, configurable: true });
@@ -1155,18 +1083,21 @@ describe('the field, the column and the one map', () => {
     k.repaint();
     await flush();
     expect(totem.handle.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: labelPadding(1080, 1500, FIELD_SPAN_M) }));
-    expect(labelPadding(1080, 1500, FIELD_SPAN_M)).toBe(53);
+    expect(labelPadding(1080, 1500, FIELD_SPAN_M)).toBeGreaterThan(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
   });
 
-  it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN, handed to the ranker, and fetched again once now passes validUntil', async () => {
-    let now = NOW;
+  it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN, shown in the lines panel from 20:00, and fetched again once now passes validUntil', async () => {
+    // 21:32 in Zagreb: the evening window is open and the 23:58 departure is ahead within ten hours.
+    const EVENING = NOW + 7 * 3_600_000;
+    let now = EVENING;
     const live = (validUntil: number): LastRunSnapshot => ({ status: 'live', fetchedAt: new Date(now).toISOString(), sourceUpdatedAt: '2026-09-15T00:00:00Z', validUntil: new Date(validUntil).toISOString(), routes: { '6': { '2026-09-11': '23:58' } } });
-    const loadLastRun = vi.fn(async () => live(NOW + 60_000));
+    const loadLastRun = vi.fn(async () => live(EVENING + 60_000));
     const k = mount({ stored: STORED, now: () => now, loadLastRun });
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
     expect(loadLastRun).toHaveBeenCalledWith('106_1');
-    expect(lastInput().lastRun).toEqual(live(NOW + 60_000));
+    const foot = q(k.root, '[data-testid=kiosk-panel-promet] [data-testid=kiosk-lastrun]')!;
+    expect(text(foot)).toBe('Zadnji polazak 6 23:58 po rasporedu · ZET GTFS');
     // Polls within the table's validity never refetch.
     k.poll();
     await flush();
@@ -1175,13 +1106,14 @@ describe('the field, the column and the one map', () => {
     expect(loadLastRun).toHaveBeenCalledTimes(1);
     // A new stop drops the old table at once (it must not pose as the new stop's) and fetches the new one.
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOPS[2]! });
-    expect(lastInput().lastRun).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-lastrun]')).toBeNull();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(2);
     expect(loadLastRun).toHaveBeenLastCalledWith('200_1');
-    expect(lastInput().lastRun).toEqual(live(NOW + 60_000));
-    // The table expires: the next paint asks again (P2's loader refetches past validUntil; today's returns its cache, which is still one call per expiry).
-    now = NOW + 61_000;
+    // The new stop's line 7 has no row in the table: nothing is shown for it.
+    expect(q(k.root, '[data-testid=kiosk-lastrun]')).toBeNull();
+    // The table expires: the next paint asks again (the loader refetches past validUntil; one call per expiry).
+    now = EVENING + 61_000;
     k.poll();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(3);
@@ -1196,7 +1128,6 @@ describe('the field, the column and the one map', () => {
     const k = mount({ stored: STORED, now: () => now, loadLastRun });
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
-    expect(lastInput().lastRun).toEqual(down);
     now = NOW + LASTRUN_DOWN_RETRY_MS - 60_000;
     k.poll();
     await flush();
@@ -1206,31 +1137,11 @@ describe('the field, the column and the one map', () => {
     k.poll();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(2);
-    expect(lastInput().lastRun).toEqual(live);
     now = NOW + 5 * LASTRUN_DOWN_RETRY_MS;
     k.poll();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(2); // a live table inside its validity is never asked for again
     expect(LASTRUN_DOWN_RETRY_MS).toBe(3_600_000);
-  });
-
-  it('statements repaint on every poll and, on the 1 s tick, only when the minute turns (the ZET time in a context)', async () => {
-    let now = NOW;
-    const k = mount({ stored: STORED, now: () => now });
-    await flush();
-    const painted = say.rank.mock.calls.length;
-    now = NOW + 1_000;
-    k.tick(CODE_TICK_MS);
-    now = NOW + 2_000;
-    k.tick(CODE_TICK_MS);
-    expect(say.rank.mock.calls.length).toBe(painted); // the same minute: the column is left alone
-    now = Date.parse('2026-09-11T12:33:00Z');
-    k.tick(CODE_TICK_MS);
-    expect(say.rank.mock.calls.length).toBe(painted + 1);
-    expect(lastInput().now).toBe(now);
-    k.poll();
-    await flush();
-    expect(say.rank.mock.calls.length).toBe(painted + 2);
   });
 
   it('the placed-labels seam (contract 3, R-KP19): the count is stamped on the map host after each map paint and once when the map first reports ready; the 1 s tick polls readiness only until then; a stub stamps nothing', async () => {
@@ -1261,14 +1172,14 @@ describe('the field, the column and the one map', () => {
     expect(host.dataset.majorLabels).toBe('3');
   });
 
-  it('lightweight: no map factory, no fetch for the quarter, the field is the board and the column still ranks', async () => {
+  it('lightweight: no map factory, no fetch for the quarter, the field is the board and the other panels stand', async () => {
     const map = spyMap();
     const k = mount({ stored: STORED, lightweight: true, mapFactory: map.factory as never });
     await flush();
     expect(map.factory).not.toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-lines] li.k-line')).not.toBeNull();
-    expect(lastInput().slots).toBe(SAY_SLOTS.wide);
+    expect(q(k.root, '[data-testid=kiosk-panel-around] li.k-fr')).not.toBeNull();
   });
 });
 
@@ -1298,7 +1209,8 @@ describe('handheld: the kiosk on a phone', () => {
     // No separate handheld composition: the phone draws the invitation with a map band, the column in flow beneath it, the card stood up.
     expect(css).toContain('--k-map-band: 280px;');
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-field \{[^}]*height: var\(--k-map-band\);/);
-    expect(css).toContain(".kiosk[data-size='handheld'] .k-invitation { grid-template-columns: minmax(0, 1fr); }");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-front, .kiosk[data-size='handheld'] .k-bottom, .kiosk[data-size='handheld'] .k-column { display: flex; flex-direction: column;");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-field { height: var(--k-map-band); border-radius: var(--k-radius); }");
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\]\[data-phase='invitation'\] \.k-stage \{ padding: var\(--k-pad\); \}/);
     for (const dead of ['.k-handheld', '.k-invite-text', '.k-support', '.k-scene', '.k-rail']) expect(css, dead).not.toContain(dead);
   });
@@ -1312,7 +1224,7 @@ describe('handheld: the kiosk on a phone', () => {
     expect(k.handle.phase()).toBe('invitation');
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
     // The same composition a wall gets: the field with its map host, the column of statements and the card.
-    for (const present of ['kiosk-invitation', 'kiosk-live', 'kiosk-map-host', 'kiosk-says', 'kiosk-invite']) {
+    for (const present of ['kiosk-invitation', 'kiosk-live', 'kiosk-map-host', 'kiosk-panel-tonight', 'kiosk-panel-promet', 'kiosk-invite']) {
       expect(q(k.root, `[data-testid=${present}]`), present).not.toBeNull();
     }
     // The address that provisions the wall is an aside with an h2, so the page's one h1 is the invitation's lead here as everywhere.

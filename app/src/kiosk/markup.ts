@@ -5,7 +5,7 @@
 // pieces (the typed address, the code block). Pure string builders over
 // already-read models: no DOM, no fetch, no clock.
 //
-// Kept apart from kiosk/invitation.ts on purpose: field.ts and say.ts draw
+// Kept apart from kiosk/invitation.ts on purpose: field.ts and front.ts draw
 // with these and invitation.ts composes field and column, so the helpers
 // living in invitation.ts made a module cycle (field -> invitation -> field).
 // invitation.ts keeps only the invitation composition (R-KP23).

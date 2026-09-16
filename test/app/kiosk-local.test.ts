@@ -623,7 +623,7 @@ describe('the one map, through the additive adapter', () => {
     expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ overlapZoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M) - 0.1 }));
     // Stood up as a totem the field shows twice the wall's ground: the names' padding doubles on the same map (labelPadding), so the totem places no more of them than the wall (contract 3, R-KP17).
     requestKioskMap(maps, { ...input, widthPx: 1080, heightPx: 1365 }, adapter);
-    expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: 48 }));
+    expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: labelPadding(1080, 1365, FIELD_SPAN_M) }));
     // The DO's applyScreen moves the stop: the dots follow its routes on the same map.
     requestKioskMap(maps, { ...input, stop: { ...STOP, id: '200_1', routes: ['7', '109'] } }, adapter);
     expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopRoutes: ['7', '109'] }));
@@ -632,9 +632,10 @@ describe('the one map, through the additive adapter', () => {
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
   });
-  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s field and grows in step with the ground a field shows beyond it -- doubled on the totem, whose field holds twice the wall’s ground north to south -- in whole pixels, never below 24, and 24 for a box not yet laid out or a phone’s half-span band', () => {
+  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s map panel and grows in step with the ground a panel shows beyond it -- more on the totem, whose panel is taller than the wall’s -- in whole pixels, never below 24, and 24 for a box not yet laid out or a phone’s band', () => {
     expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
-    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(48);
+    // The totem's panel: 360 x 340 px at the same 1500 m span shows 1.24 of the wall's ground, so 30.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(30);
     // The compact wall's field is a little taller than the wide one's for its width: a pixel more, not the same 24 by fiat.
     expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(25);
     // A wall wider than 16:9 (a 3840 x 2160 panel's 3138 x 1900 field) shows less ground north to south than the design wall: the ruling's literal, never less.

@@ -319,12 +319,12 @@ describe('the city on the map: the rules that keep each mark honest', () => {
       row('dogadanja', 'months', { dateBasis: 'event', at: iso(24 * 60), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kvartovske' } }),
       row('dogadanja', 'ended', { dateBasis: 'event', at: iso(-40), until: iso(-2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kvartovske' } }),
       row('dogadanja', 'novenue', { dateBasis: 'event', at: iso(2), data: { source: 'kvartovske' } }),
-      row('dogadanja', 'barred', { dateBasis: 'event', at: iso(2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kulturpunkt' } }),
+      row('dogadanja', 'culture', { dateBasis: 'event', at: iso(2), geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { source: 'kulturpunkt' } }),
       row('dogadanja', 'work', { dateBasis: 'updated', at: iso(-100), geo: { type: 'Point', coordinates: [15.96, 45.8] }, data: { source: 'komunalne', phase: WORKS_ONGOING_PHASE } }),
     ]);
     // A row whose venue is free text and carries no coordinate is not placed:
     // geocoding a venue name on the client would be inventing a position.
-    // The licence gate still decides which rows exist at all on the open tier.
-    expect(placedEvents(dogadanja, NOW).map((p) => p.id)).toEqual(['event:tonight', 'event:work']);
+    // Every source the app fetches reaches the screen, a Kulturpunkt row with a coordinate included (owner, 16 Sept 2026: no licence wall on the app's own screens).
+    expect(placedEvents(dogadanja, NOW).map((p) => p.id)).toEqual(['event:tonight', 'event:culture', 'event:work']);
   });
 });

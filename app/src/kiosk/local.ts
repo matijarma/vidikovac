@@ -460,7 +460,7 @@ export const STORY_CAP = 8;
 export function stories(modules: readonly ModuleSnapshot[], strings: KioskStrings, locale: string, now: number): Story[] {
   const map = byModule(modules);
   const dogadanja = map.dogadanja;
-  // Only Otvorena dozvola rows reach a public screen, whatever the payload carried (the licence boundary).
+  // Every source the payload carries reaches the screen, each row credited with its own source (owner, 16 Sept 2026).
   const city: Story[] = (isLive(dogadanja) ? dogadanja.items : []).slice(0, 4).map((item) => {
     const source = dataText(item, 'source');
     return {
@@ -513,7 +513,7 @@ export function nearbyCountLine(board: LinesBoard, strings: KioskStrings, locale
   return board.moving === null ? '' : plural(locale, strings.lines.vehiclesMoving, board.moving);
 }
 
-// --- Moved from kiosk/scenes.ts (P3 deletes that file): say.ts's own readers
+// --- The front page's readers (kiosk/front.ts), moved here from the old scenes
 // need eventsTonight, worksInKvart and nextSession, and the scene-contract
 // shape of closuresNear (renamed closuresNearby here, since this file
 // already exports a closuresNear of its own -- the wider read every other
@@ -531,7 +531,7 @@ const hasEnded = (item: FeedItem, now: number): boolean => {
   return Number.isFinite(end) && end < now;
 };
 
-/** Today's dated open-licence rows whose end has not passed, in start order; none before the source answers or while it is down. */
+/** Today's dated rows from any source whose end has not passed, in start order; none before the source answers or while it is down. */
 export function eventsTonight(modules: readonly ModuleSnapshot[], now: number): FeedItem[] {
   const dogadanja = byModule(modules).dogadanja;
   if (!isLive(dogadanja)) return [];
@@ -601,7 +601,7 @@ export function nextSession(modules: readonly ModuleSnapshot[], now: number): Fe
   return sessions[0] ?? null;
 }
 
-// --- New for say.ts: the vehicle count within the field's own radius (never
+// --- The vehicle count within the map panel's own radius (never
 // the whole-box fleet count, R-KP12), the one kiosk quake rule (R-KP9) and
 // the last-departures-ahead board (R-KP6, R-KP14). --------------------------
 

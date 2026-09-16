@@ -86,7 +86,24 @@ export interface KioskStrings {
     quakeBody: string;
     empty: string;
   };
-  /** The column's kicker words and filler sentences (say.ts, contracts 4/5):
+  /** The front page's own words (kiosk/front.ts): the events panel's counts and
+   *  its empty sentence, the city panel's kicker and lead words, the acts plural,
+   *  the surroundings' kicker and the works lead. */
+  front: {
+    eventsToday: PluralForms;
+    eventsTomorrow: PluralForms;
+    eventsNone: string;
+    /** "Sutra u gradu": the events kicker once tonight is over. */
+    tomorrowCity: string;
+    city: string;
+    around: string;
+    acts: PluralForms;
+    /** The lead cell of an act row, a gazette row's short word. */
+    actLead: string;
+    kvartLead: string;
+    worksLead: string;
+  };
+  /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
    *  transit's three value states, its "N vozila u blizini" plural and its
    *  zero, the other seven statements' kickers and the works plural, and
    *  "danas"/"sutra" for the Assembly's context line. */
@@ -291,6 +308,12 @@ function build(code: SupportedLocale): KioskStrings {
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    front: {
+      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead']),
+      eventsToday: forms('front', 'eventsToday'),
+      eventsTomorrow: forms('front', 'eventsTomorrow'),
+      acts: forms('front', 'acts'),
+    },
     say: {
       ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
       nearby: forms('say', 'nearby'),

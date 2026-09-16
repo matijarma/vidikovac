@@ -5,8 +5,7 @@
 // down" (unknown/down) and a true, confirmed answer, because a public screen
 // that guesses for an outage is lying (PRODUCT.md, principle 4). kiosk.ts
 // calls these from paintWeather and paintStrip. Nothing here counts down and
-// nothing is a tile any more (R-KP11, R-KP23): the column beside the field
-// is say.ts's ranked statements.
+// nothing is a tile any more (R-KP11, R-KP23): the stage is front.ts's panels.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import { SAFETY_ICON } from '../experience/producers/safety';

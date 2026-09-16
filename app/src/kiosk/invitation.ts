@@ -1,21 +1,23 @@
-// The unpaired composition (plan "Frame", R-KP1): the field on the left, the
-// window onto the kvart (kiosk/field.ts), and the column on the right -- a
-// headless stack of at most a few ranked statements in words (label, value,
-// context; say.ts ranks and writes them, R-KP5) over the fixed, accent-filled
-// invitation card with the rotating QR, the lead, the hint and the readable
-// code. Built once; update() hands the field its model and paints the column
-// through ui/dom/reconcile.ts, so only the nodes whose content changed are
-// touched, a changed value swaps its own node (data-replace by data-sig: the
-// k-say-in keyframe replays on insertion, with no timer), and the map
-// container the controller hosts and the code the rotation paints are never
-// rewritten by a poll.
+// The unpaired composition: the city's front page for this stop (plan
+// "/kiosk/: a screen a person can use"). Five panels of the teaser's content
+// (kiosk/front.ts), the map as one panel among them sized to what it usefully
+// shows (this stop, its vehicles, the closures around it), and the invitation
+// card at the foot of the right column. Built once; update() re-reads the
+// panels and paints each through ui/dom/reconcile.ts, so only the rows whose
+// content changed are touched, the map container the controller hosts is
+// never rewritten by a poll, and the card the rotation paints is never
+// re-rendered.
 //
-// The header carries the weather (D11) and the strip the safety words, so
-// nothing here says either. The markup helpers the compositions share (the
-// badge, the kicker, the lines board, the card's own pieces) live in
-// kiosk/markup.ts, so field.ts and say.ts can draw with them without a cycle
-// through this file. A phone gets this same composition at the handheld
-// tokens; there is no second one for it.
+//   ┌ tonight (events, two columns) ───────────────┬ weather (sutra / danas) ┐
+//   │                                              ├ city (Skupština, Glasnik,│
+//   ├ promet (lines) ┬ field (map) ┬ around ───────┤       kvart)             │
+//   │                │             │ (closures,    ├ card (QR, code) ─────────┤
+//   └────────────────┴─────────────┴ works) ───────┴──────────────────────────┘
+//
+// The header carries the weather now (D11) and the strip the safety words, so
+// nothing here says either. A panel's rows the box does not hold whole are
+// hidden from the foot up (fit), never clipped. A phone gets the same panels
+// in one column and scrolls.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { LastRunSnapshot } from '../core/lastrun';
@@ -23,10 +25,9 @@ import type { I18n } from '../i18n/i18n';
 import { reconcile } from '../ui/dom/reconcile';
 import { escapeHtml } from '../ui/dom/escape';
 import { mountField, type FieldHandle } from './field';
-import { SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS, type Composition } from './layout';
-import { byModule } from './local';
+import { frontPanels, PANEL_IDS, panelMarkup, type PanelId } from './front';
+import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
-import { rankStatements, sayMarkup, type Slot } from './say';
 import type { KioskStrings } from './strings';
 
 export interface InvitationDeps {
@@ -44,7 +45,7 @@ export interface InvitationModel {
   now: number;
   /** The stop's last-departure table (R-KP6), null until it answers or without one. */
   lastRun: LastRunSnapshot | null;
-  /** Which of the four drawings this is: decides how many statements the column asks for and how long a title it keeps (kiosk/layout.ts). */
+  /** Which of the four drawings this is (kiosk/layout.ts); the sheet lays the panels out by it. */
   composition: Composition;
 }
 
@@ -59,134 +60,87 @@ export interface InvitationHandle {
   measureHeight(): number;
   /** Contract 3: the map's placed major street names, counted, onto the map host. */
   setMajorLabels(count: number): void;
-  /** Re-measures the column: a value past two lines is shortened at a word, a statement the room does not hold is hidden whole (R-KP5). Runs after every update, when the controller says the box changed (a resize) and once by itself when the fonts arrive; a value whose text and width are unchanged since its last cut is left as it is. */
+  /** Re-measures every panel: a row the box does not hold whole is hidden from the foot up. Runs after every update, when the controller says the box changed (a resize) and once by itself when the fonts arrive. */
   fit(): void;
   destroy(): void;
 }
 
-/** The column (contract 4): the statements, then the card whose QR and code
- *  the rotation paints (R-KP21): the lead over the hint in one side wrapper
- *  the QR stands beside on a wall (kiosk.css lays the totem's and the
- *  phone's card out of the same pieces), then the code and its bar across.
- *  Reading order is the lead, the hint, the QR, the code; the lead is the
- *  page's one h1. */
-function columnMarkup(s: KioskStrings, codeBase?: string): string {
-  return `<div class="k-says" data-testid="kiosk-says" aria-live="off"></div>
-    <article class="k-invite" data-testid="kiosk-invite">
+/** The card the rotation paints (R-KP21): the lead over the hint in one side
+ *  wrapper the QR stands beside, then the code and its bar across. Reading
+ *  order is the lead, the hint, the QR, the code; the lead is the page's one h1. */
+function cardMarkup(s: KioskStrings, codeBase?: string): string {
+  return `<article class="k-invite" data-testid="kiosk-invite">
       <div class="k-invite-side"><h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>${hintMarkup(s, codeBase)}</div>
       <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
       ${codeBlockMarkup(s)}
     </article>`;
 }
 
-/** A value is at most this many lines of the main tier (R-KP5); a longer one is shortened at a word by measurement, never ellipsised by CSS. */
-export const VALUE_LINES = 2;
+function panelShell(id: PanelId): string {
+  return `<section class="k-panel" data-panel="${id}" data-testid="kiosk-panel-${id}"${id === 'promet' ? ' data-say="transit"' : ''}></section>`;
+}
 
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const { strings: s, i18n, locale, lightweight } = deps;
   const element = document.createElement('section');
-  element.className = 'k-invitation';
+  element.className = 'k-front';
   element.dataset.testid = 'kiosk-invitation';
+  // The tonight panel across the top left; the bottom row of the lines, the field and the surroundings; the right column of the forecast, the city and the card.
+  element.innerHTML = `${panelShell('tonight')}<div class="k-bottom">${panelShell('promet')}</div><aside class="k-column">${panelShell('weather')}${panelShell('city')}<div class="k-panel k-panel--card">${cardMarkup(s, deps.codeBase)}</div></aside>`;
   host.appendChild(element);
-  // The field takes the grid's first column, the column the second.
-  const field: FieldHandle = mountField(element, { lightweight });
-  const column = document.createElement('aside');
-  column.className = 'k-column';
-  column.innerHTML = columnMarkup(s, deps.codeBase);
-  element.appendChild(column);
-  const says = column.querySelector<HTMLElement>('[data-testid=kiosk-says]')!;
-  /** The ranker's own last answer, handed back for hysteresis (contract 5). */
-  let previous: Slot[] = [];
-  let lastSays = '';
+  const bottom = element.querySelector<HTMLElement>('.k-bottom')!;
+  // The field takes the bottom row's middle cell; the surroundings its last.
+  const field: FieldHandle = mountField(bottom, { lightweight });
+  bottom.insertAdjacentHTML('beforeend', panelShell('around'));
+  const panels = Object.fromEntries(PANEL_IDS.map((id) => [id, element.querySelector<HTMLElement>(`[data-panel="${id}"]`)!])) as Record<PanelId, HTMLElement>;
+  const lastHtml: Partial<Record<PanelId, string>> = {};
   let disposed = false;
-  /** What each value node was last measured at: its whole text and its box's
-   *  width. The same text in the same width was already cut right, so a fit
-   *  after a poll reads nothing and writes nothing for it (no restore-and-cut
-   *  under a reader's eyes); a swapped node, a new text or a new width is
-   *  measured afresh, and the fonts arriving late re-measure everything once. */
-  const measured = new WeakMap<HTMLElement, string>();
 
-  /** A value made of words is cut at a word boundary with "…" until it fits
-   *  VALUE_LINES of its own line-height; its data-sig is the whole text, so
-   *  the next reconcile keeps the node and this runs again on it. A value
-   *  made of pairs (the last departures' badges and times) wraps as its
-   *  badges dictate and is left alone. A DOM without layout measures nothing.
-   *  Lines are the box's height over its line-height, never its scrollHeight:
-   *  a 1.1 line box lets the face's ascenders and descenders paint a few
-   *  pixels past it, which is ink, not a line. */
-  function clampValue(article: HTMLElement, remeasure: boolean): void {
-    const value = article.querySelector<HTMLElement>('.k-say-value');
-    if (!value || value.children.length > 0 || value.clientHeight === 0) return;
-    const whole = value.dataset.sig ?? value.textContent ?? '';
-    const key = `${whole}\u0000${value.clientWidth}`;
-    if (!remeasure && measured.get(value) === key) return;
-    if (value.textContent !== whole) value.textContent = whole;
-    const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
-    if (!(lineHeight > 0)) return;
-    const lines = (): number => Math.round(value.clientHeight / lineHeight);
-    let text = whole;
-    while (lines() > VALUE_LINES) {
-      const cut = text.replace(/…$/, '').trimEnd().lastIndexOf(' ');
-      if (cut <= 0) break;
-      text = `${text.slice(0, cut).trimEnd()}…`;
-      value.textContent = text;
-    }
-    measured.set(value, key);
-  }
-
-  /** Every statement whole or not at all: the ones the column's box does not
-   *  hold are hidden from the foot up and counted by nobody -- a half-shown
-   *  statement is the hole a fixed frame reads as a fault. The column's slot
-   *  count (kiosk/layout.ts SAY_SLOTS) is the most the ranker offers; the
-   *  room decides the rest (R-KP22). `remeasure` re-reads every value even
-   *  where its text and width are unchanged: the fonts arriving late. */
-  function fit(remeasure = false): void {
-    const items = [...says.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
-    for (const item of items) {
-      item.hidden = false;
-      clampValue(item, remeasure);
-    }
-    if (says.clientHeight === 0) return;
-    let shown = items;
-    while (shown.length > 1 && says.scrollHeight > says.clientHeight + 1) {
-      shown[shown.length - 1]!.hidden = true;
-      shown = shown.slice(0, -1);
+  /** Every row whole or not at all: the ones a panel's box does not hold are hidden from the foot up. */
+  function fit(): void {
+    for (const id of PANEL_IDS) {
+      const panel = panels[id];
+      const rows = [...panel.querySelectorAll<HTMLElement>('.k-fr')];
+      for (const row of rows) row.hidden = false;
+      if (panel.clientHeight === 0) continue;
+      let shown = rows;
+      while (shown.length > 1 && panel.scrollHeight > panel.clientHeight + 1) {
+        shown[shown.length - 1]!.hidden = true;
+        shown = shown.slice(0, -1);
+      }
     }
   }
 
-  function paintSays(model: InvitationModel): void {
-    previous = rankStatements({
-      modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
-      slots: SAY_SLOTS[model.composition], badgeCap: SAY_BADGE_CAP[model.composition], valueChars: SAY_VALUE_CHARS[model.composition],
-    }, previous);
-    // Loading is zet-rt not having answered at all; a down or stale source is an answer and say.ts words it. A loading column with nothing ranked yet is say.ts's own skeleton (contract 5).
-    const loading = byModule(model.modules)['zet-rt'] === undefined;
-    const html = sayMarkup(previous, { strings: s, locale, loading });
-    if (html === lastSays) return;
-    lastSays = html;
-    const next = document.createElement('div');
-    next.innerHTML = html;
-    reconcile(says, next);
+  function paint(model: InvitationModel): void {
+    const built = frontPanels({ modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale, lightweight });
+    for (const id of PANEL_IDS) {
+      const html = panelMarkup(built[id]);
+      if (html === lastHtml[id]) continue;
+      lastHtml[id] = html;
+      const next = document.createElement('div');
+      next.innerHTML = html;
+      reconcile(panels[id], next);
+      const state = built[id].state;
+      if (state) panels[id].dataset.state = state; else delete panels[id].dataset.state;
+    }
     fit();
   }
 
-  // A cold screen paints its first column in the fallback face; the web font
-  // arriving changes every wrap under the same text and width, so the column
-  // is measured once more when the fonts are ready (and never on a timer).
+  // A cold screen paints in the fallback face; the web font arriving changes every wrap, so the panels are fitted once more when the fonts are ready (never on a timer).
   const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts;
-  void fonts?.ready?.then(() => { if (!disposed) fit(true); });
+  void fonts?.ready?.then(() => { if (!disposed) fit(); });
 
   return {
     element,
     get mapHost() { return field.mapHost; },
     update(model) {
       field.update({ modules: model.modules, stop: model.stop, strings: s, i18n, locale });
-      paintSays(model);
+      paint(model);
     },
     measureWidth: () => field.measureWidth(),
     measureHeight: () => field.measureHeight(),
     setMajorLabels: (count) => field.setMajorLabels(count),
-    fit: () => fit(),
+    fit,
     destroy() {
       disposed = true;
       field.destroy();

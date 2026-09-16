@@ -941,6 +941,24 @@
       "tonightMore_few": "još {count} događanja",
       "tonightMore_other": "još {count} događanja"
     },
+    "front": {
+      "eventsToday_one": "{count} događanje danas",
+      "eventsToday_few": "{count} događanja danas",
+      "eventsToday_other": "{count} događanja danas",
+      "eventsTomorrow_one": "{count} sutra",
+      "eventsTomorrow_few": "{count} sutra",
+      "eventsTomorrow_other": "{count} sutra",
+      "eventsNone": "Otvoreni izvori večeras ne najavljuju ništa.",
+      "tomorrowCity": "Sutra u gradu",
+      "city": "Grad",
+      "around": "Oko stajališta",
+      "acts_one": "{count} akt",
+      "acts_few": "{count} akta",
+      "acts_other": "{count} akata",
+      "actLead": "akt",
+      "kvartLead": "kvart",
+      "worksLead": "radovi"
+    },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",
       "warningsStale": "Upozorenja DHMZ-a: zastarjelo, nepotvrđeno",

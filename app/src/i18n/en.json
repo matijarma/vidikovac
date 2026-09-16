@@ -911,6 +911,21 @@
       "tonightMore_one": "{count} more event",
       "tonightMore_other": "{count} more events"
     },
+    "front": {
+      "eventsToday_one": "{count} event today",
+      "eventsToday_other": "{count} events today",
+      "eventsTomorrow_one": "{count} tomorrow",
+      "eventsTomorrow_other": "{count} tomorrow",
+      "eventsNone": "The open sources announce nothing tonight.",
+      "tomorrowCity": "Tomorrow in the city",
+      "city": "City",
+      "around": "Around the stop",
+      "acts_one": "{count} act",
+      "acts_other": "{count} acts",
+      "actLead": "act",
+      "kvartLead": "district",
+      "worksLead": "works"
+    },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
       "warningsStale": "DHMZ warnings: stale, unconfirmed",

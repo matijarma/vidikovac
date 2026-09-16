@@ -257,15 +257,15 @@ describe('the field camera and the paired camera', () => {
   const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6'], district: 'donji-grad' };
   const LAT = 45.815;
 
-  it('derives the zoom from the width: 2800 m across the field, 1400 m across a handheld band, clamped to what the archive carries', () => {
+  it('derives the zoom from the width: 1500 m across the map panel, 1400 m across a handheld band, clamped to what the archive carries', () => {
     // The four design widths (kiosk/layout.ts FIELD_DESIGN_WIDTH) at Zagreb's latitude.
-    expect(fieldZoom(1400, LAT, FIELD_SPAN_M)).toBeCloseTo(14.74, 2);
-    expect(fieldZoom(926, LAT, FIELD_SPAN_M)).toBeCloseTo(14.14, 2);
-    expect(fieldZoom(1080, LAT, FIELD_SPAN_M)).toBeCloseTo(14.36, 2);
+    expect(fieldZoom(555, LAT, FIELD_SPAN_M)).toBeCloseTo(14.30, 2);
+    expect(fieldZoom(367, LAT, FIELD_SPAN_M)).toBeCloseTo(13.70, 2);
+    expect(fieldZoom(360, LAT, FIELD_SPAN_M)).toBeCloseTo(13.68, 2);
     expect(fieldZoom(358, LAT, HANDHELD_SPAN_M)).toBeCloseTo(13.77, 2);
     // The inverse of metresPerPixel: at the derived zoom the span fills the width exactly.
-    expect(metresPerPixel(fieldZoom(1400, LAT, FIELD_SPAN_M), LAT) * 1400).toBeCloseTo(FIELD_SPAN_M, 6);
-    expect(FIELD_SPAN_M).toBe(2800);
+    expect(metresPerPixel(fieldZoom(555, LAT, FIELD_SPAN_M), LAT) * 555).toBeCloseTo(FIELD_SPAN_M, 6);
+    expect(FIELD_SPAN_M).toBe(1500);
     expect(HANDHELD_SPAN_M).toBe(1400);
     // The clamp: a tiny box never leaves the archive's readable floor, a huge one never overzooms past its ceiling; no width yet is the floor, never NaN.
     expect(fieldZoom(200, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);

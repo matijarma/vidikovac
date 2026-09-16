@@ -30,31 +30,33 @@ pokreće izričitom radnjom, ne automatskom petljom.
 
 ## Što zaslon prikazuje
 
-Nepovezan zaslon je jedna nepomična slika kvarta oko stajališta, ne
-rotacija prizora: polje karte razapeto na 2,8 km širine, sjever gore,
-tramvajske pruge i vozila na njima, stajalište, zatvaranja, radovi i
-obris kvarta. Nema drugog prizora na koji bi se prešlo, pa nema ni
-odbrojavanja. Desno od polja stoji stupac od najviše tri izjave (naslov ·
-vrijednost · kontekst), koliko stupac drži cijelih: izjava koja ne stane
-cijela skriva se, nikad se ne reže ni ne skraćuje trotočkom, pa na 1920 × 1080
-stoje najmanje dvije (tri kad je svaka vrijednost u jednom retku), na
-1366 × 768 najmanje jedna (dvije kad je prometna vrijednost u jednom retku),
-a na portretnom totemu tri. Poredane su po tome što je upravo sada
-najvažnije, od osam mogućih: prometna presuda, potres, zatvaranje u blizini, zadnji
-polazak (od 20 sati, po rasporedu ZET-a, nikad kao procjena dolaska),
-ZET-ova prometna obavijest, najava sjednice Gradske skupštine, radovi u
-kvartu ili gradu i kvartovske novosti. Ispod stupca stoji stalna pozivnica:
-QR uz poziv i uputu, kod preko cijele širine. Dežurna ljekarna na karti
-nosi prsten i svoju adresu; kad leži unutar 150 m od stajališta zaslona,
-adresa se s karte ispušta (ležala bi preko imena stajališta), a prsten
-ostaje i sigurnosna je traka i dalje imenuje u cijelosti. Zaglavlje nosi
-sat i, kad DHMZ odgovara, vrijeme kao
-stanje uz sat, nikad kao pločicu. Sigurnosna traka nosi presudu i tri
-stavke, bez odbrojavanja. Rasporedi za 1920 × 1080 i 1366 × 768 namjerno
-su različiti; QR u oba mora biti najmanje 240 CSS piksela.
+Nepovezan zaslon je gradska naslovnica za svoje stajalište: pet ploča na
+jednoj slici, bez rotacije prizora i bez odbrojavanja. Gore lijevo
+„Večeras u gradu”: današnja događanja po početku (ono što tek počinje, pa
+ono što traje), zatim sutrašnja s oznakom „sutra”, svako s vremenom,
+naslovom, vrstom, mjestom i izvorom; kad večer prođe, ploča se zove „Sutra u
+gradu”. Ispod nje donji red: „Promet” s linijama stajališta (bedž, oba kraja
+linije, riječ stanja i vozila u blizini), od 20 sati redak „Zadnji polazak”
+po rasporedu ZET-a (nikad kao procjena dolaska) i najnovija ZET-ova
+obavijest; karta stajališta razapeta na 1,5 km širine, sjever gore, s
+prugama, vozilima, zatvaranjima i obrisom kvarta; „Oko stajališta” sa
+zatvaranjima do 1,5 km po udaljenosti i radovima u kvartu. Desni stupac:
+„Sutra” s DHMZ-ovom prognozom za idući dan kao brojkom i današnjim rasponom
+pod njom, „Grad” sa sljedećom sjednicom Skupštine, brojem Službenog
+glasnika s njegovim aktima i kvartovskim novostima, te stalna pozivnica na
+dnu: QR uz poziv i uputu, kod preko cijele širine. Redovi koje ploča ne
+drži cijele skrivaju se od dna, nikad se ne režu; naslov reda ide u najviše
+dva retka. Svaka ploča nosi navod svojih izvora. Zaglavlje nosi sat i, kad
+DHMZ odgovara, vrijeme kao stanje uz sat, nikad kao pločicu. Sigurnosna
+traka nosi presudu i tri stavke, bez odbrojavanja. Rasporedi za 1920 × 1080,
+1366 × 768 i okomiti totem namjerno su različiti; QR u svima mora biti
+najmanje 240 CSS piksela. Dežurna ljekarna na karti nosi prsten i svoju
+adresu; kad leži unutar 150 m od stajališta zaslona, adresa se s karte
+ispušta (ležala bi preko imena stajališta), a prsten ostaje i sigurnosna je
+traka i dalje imenuje u cijelosti.
 
 Radovi u tijeku broje se za gradsku četvrt stajališta kad je poznata i
-izjava to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
+ploča to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
 tek uveden, broje cijeli grad i kažu to izričito („Radovi u gradu”).
 Adresa `/kiosk/` više ne prima dodatak `?prizor=`: nema više odabira
 prizora jer postoji samo jedan. Aplikacija i dalje poštuje sustavnu
@@ -152,13 +154,13 @@ verzija ne tvrdi da su fizičke postave već testirane.
 tramvajsku shemu. `?prikaz=karta` izričito bira gradsku kartu; bez parametra vrijedi
 lokalna postavka `kajima:map-mode:v1`, zadano gradska karta. Parametar ostaje u URL-u
 nakon uklanjanja jednokratnih podataka za postavljanje. Prozor zadržava jedno
-polje i stupac izjava: `prikaz` bira samo renderer, a umirovljeni `prizor`
+polje i ploče naslovnice: `prikaz` bira samo renderer, a umirovljeni `prizor`
 ne vraća rotaciju poglavlja.
 
 Zaslon sa stajalištem koje postoji na shemi pokazuje čitljiv kadar oko njega,
 s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta pokazuje cijelu
 mrežu bez sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
-geografsku kameru. Stupac izjava ne prekriva polje pa nema donje tračnice ni
+geografsku kameru. Ploče ne prekrivaju polje pa nema donje tračnice ni
 dodatnog odmaka kadra.
 Prikazuje samo tramvaje čija se postojeća staza može smjestiti na nacrt.
 Autobusi, gradske točke i obrisi četvrti nisu dio tog prikaza.

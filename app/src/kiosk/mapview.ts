@@ -54,12 +54,14 @@ export const PAIRED_ZOOM = 15;
 /** The archive stops at z14 and the worker refuses z>14, so every zoom from
  *  there up is overzoomed; no kiosk camera goes past here. */
 export const KIOSK_MAX_ZOOM = 15.5;
-/** The ground the invitation's field spans across its width (R-KP2): about
- *  the kvart around the stop, one stop spacing beyond the worker's teaser
- *  box either side once wave B grows it (TEASER_BOX_HALF_M 1900). */
-export const FIELD_SPAN_M = 2800;
-/** A phone's 280 px map band spans half the field's ground: at the full span
- *  the band would sit under the archive's readable floor and show a blob. */
+/** The ground the front page's map panel spans across its width (R-KP2): the
+ *  stop's own surroundings, about three stops each way, which is what a panel
+ *  of some 550 px can show at street level -- the vehicles on this stop's
+ *  lines and the closures around it. The worker's teaser box (TEASER_BOX_HALF_M
+ *  1900) reaches well past it. */
+export const FIELD_SPAN_M = 1500;
+/** A phone's 280 px map band spans about the panel's ground: the band is a
+ *  glance at the stop, not a stage. */
 export const HANDHELD_SPAN_M = 1400;
 /** The derived zoom never goes below the basemap's readable floor for a
  *  screen read from three metres (the prozor profile's names and the tram
@@ -77,8 +79,8 @@ export function metresPerPixel(zoom: number, lat: number): number {
 
 /** The zoom at which `spanM` of ground fills `widthPx` of box at `lat`, the
  *  inverse of metresPerPixel, clamped to the archive's readable range (R-KP2).
- *  At Zagreb's latitude the four design widths give about 14.74 (1400 px),
- *  14.14 (926), 14.36 (1080) and 13.77 (358 px at the handheld span); a box
+ *  At Zagreb's latitude the four design widths give about 14.30 (555 px),
+ *  13.71 (367), 13.68 (360) and 13.77 (358 px at the handheld span); a box
  *  not yet laid out (0 px) is the floor, never NaN. */
 export function fieldZoom(widthPx: number, lat: number, spanM: number): number {
   const across = EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180) * widthPx;
@@ -261,7 +263,7 @@ export function stopPlace(stop: ScreenStop): MapPoint {
 /** Every dogadanja row whose own source published a coordinate.
  *
  *  Keyed on geometry, never on which source the row came from: today
- *  komunalne is the only open-licence source with points, so what this
+ *  komunalne is the only event source that publishes points, so what this
  *  actually draws today is the communal works, but the day another source
  *  starts publishing coordinates it appears here with no code change. That
  *  forward compatibility is the point of selecting this way. The licence gate
@@ -319,7 +321,7 @@ export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, local
 /** The quakes the kiosk's own rule selects (R-KP9: kiosk/local.ts
  *  kioskQuakes -- magnitude 3.0 or more within the last 24 hours, on top of
  *  recentQuakes()'s 150 km), as places; cityPoints lights them on both
- *  phases. One rule for the map and the statement (say.ts reads the same
+ *  phases. One rule for the map and the panels (front.ts reads the same
  *  reader), so the picture can never show a tremor the column would not
  *  name: a magnitude-1.4 tremor in Slovenia two days ago is not a fact a
  *  café reads from three metres, while the paired stories and the teaser

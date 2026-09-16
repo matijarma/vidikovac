@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 // faces, the OKLCH twins and the contrast proof live in tokens.css alone) and
 // sets its type in seven tiers per composition. The literals pinned here are
 // the contract the compositions build on (kiosk/field.ts, kiosk/invitation.ts,
-// the statements say.ts writes), so a new tier or a private colour has to be
-// added here on purpose.
+// the panels kiosk/front.ts writes), so a new tier or a private colour has to
+// be added here on purpose.
 const CSS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
 const withoutComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const BARE = withoutComments(CSS);
@@ -114,7 +114,7 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     expect(sizes.length).toBeGreaterThan(30);
     for (const size of sizes) expect(size).toMatch(/^(?:min\()?var\(--k-(?:display|clock|main|sup|hint|label|credit)-size\)/);
   });
-  it('retired the scene-time and tile tiers with their only users: the statements use the label, main and hint tiers alone', () => {
+  it('retired the scene-time and tile tiers with their only users: the panels use the label, supporting, hint, main and credit tiers alone', () => {
     expect(BARE).not.toContain('--k-scene-time-size');
     expect(BARE).not.toContain('--k-tile-size');
   });
@@ -126,8 +126,8 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
   it('keeps .k-temp at main: the header weather group and the paired weather block share the token', () => {
     expect(decls('.k-temp')['font-size']).toBe('var(--k-main-size)');
   });
-  it('reserves the credit tier for attribution lines: .k-meta alone', () => {
-    expect(rulesUsing('--k-credit-size')).toEqual(['.k-meta']);
+  it('reserves the credit tier for attribution lines: .k-meta and the panels\u2019 credit', () => {
+    expect(rulesUsing('--k-credit-size').sort()).toEqual(['.k-meta', '.k-panel-credit']);
   });
   it('gives the header and the strip a fixed 96/72 px row, equal at both', () => {
     expect(decls(".kiosk[data-size='wide']")['--k-head-h']).toBe('calc(96px * var(--k-zoom))');
@@ -138,17 +138,18 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     expect(decls('.k-strip').height).toBe('var(--k-strip-h)');
     expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
   });
-  it('pins the column at 520/440 on the sign scale beside a field that takes the rest, with no gap between them (plan "Frame"); the paired side keeps its own token', () => {
+  it('pins the column at 520/440 on the sign scale beside the panels that take the rest, joined on 1 px hairlines; the paired side keeps its own token', () => {
     // 1 at both design sizes, so 520 / 440 px is the drawing; capped at 1.35, so above Full HD the column stops growing and the map takes the room.
     expect(decls('.kiosk')['--k-sign-zoom']).toBe('min(var(--k-zoom), 1.35)');
     expect(decls(".kiosk[data-size='wide']")['--k-side-w']).toBe('calc(520px * var(--k-sign-zoom))');
     expect(decls(".kiosk[data-size='compact']")['--k-side-w']).toBe('calc(440px * var(--k-sign-zoom))');
     expect(decls(".kiosk[data-size='wide']")['--k-paired-side-w']).toBe('calc(720px * var(--k-zoom))');
     expect(decls(".kiosk[data-size='compact']")['--k-paired-side-w']).toBe('calc(540px * var(--k-zoom))');
-    const invitation = decls('.k-invitation');
-    expect(invitation['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-side-w)');
-    expect(invitation.gap).toBeUndefined();
-    expect(invitation['column-gap']).toBeUndefined();
+    const front = decls('.k-front');
+    expect(front['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-side-w)');
+    expect(front['grid-template-rows']).toBe('minmax(0, 1.1fr) minmax(0, 1fr)');
+    expect(front.gap).toBe('1px');
+    expect(front.background).toBe('var(--k-line)');
     expect(decls('.k-paired')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-paired-side-w)');
   });
   it('keeps the QR at 240 px at every landscape size, and above Full HD grows it on the sign scale alone -- with the card\u2019s own gap, lead and hint, which are the composition\u2019s gap, supporting and hint sizes on that same scale, so a 4K wall\u2019s doubled type never outgrows the card it stands in', () => {
@@ -167,10 +168,12 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     // The paired corner QR belongs to a composition this wave leaves alone: it keeps the composition scale, 120 px at zoom 1 as it always was.
     expect(decls('.k-join-qr').width).toBe('calc(120px * var(--k-zoom))');
   });
-  it('roles: the statement value at main, its label at label, its context and the hint/date/strip at hint', () => {
-    expect(decls('.k-say-value')['font-size']).toBe('var(--k-main-size)');
-    expect(decls('.k-say-label')['font-size']).toBe('var(--k-label-size)');
-    expect(decls('.k-say-context')['font-size']).toBe('var(--k-hint-size)');
+  it('roles: the panel figure at main, a row title and its lead at supporting, the kicker at label, a row context and the hint/date/strip at hint', () => {
+    expect(decls('.k-panel-figure')['font-size']).toBe('var(--k-main-size)');
+    expect(decls('.k-fr-title')['font-size']).toBe('var(--k-sup-size)');
+    expect(decls('.k-fr-lead')['font-size']).toBe('var(--k-sup-size)');
+    expect(decls('.k-panel-kicker')['font-size']).toBe('var(--k-label-size)');
+    expect(decls('.k-fr-sub')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-hint')['font-size']).toBe('min(var(--k-hint-size), var(--k-card-hint))');
     expect(decls('.k-date')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
@@ -274,93 +277,52 @@ describe('the invitation: one field, one column', () => {
     expect(BARE).not.toContain('.maplibregl-ctrl-bottom-right');
     expect(decls(':root[data-lagano=\'1\'] .k-field').background).toBe('var(--k-surface)');
   });
-  it('the column is a surface panel on a budget: the statements over the card, a hairline on its left, a gap of block padding and the composition inline padding, half a gap before the card (two statements whole at 1920 x 1080 and 1366 x 768; kiosk.css "The column")', () => {
+  it('the bottom row is the lines, the field and the surroundings at 1 : 1.15 : 0.75; the column is the forecast, the city and the card, the card at its foot', () => {
+    const bottom = decls('.k-bottom');
+    expect(bottom['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.75fr)');
+    expect(bottom.gap).toBe('1px');
     const column = decls('.k-column');
-    expect(column.display).toBe('grid');
-    expect(column['grid-template-rows']).toBe('minmax(0, 1fr) auto');
-    expect(column.background).toBe('var(--k-surface)');
-    expect(column['border-left']).toBe('1px solid var(--k-line)');
-    expect(column.padding).toBe('var(--k-gap) var(--k-pad)');
-    expect(column['row-gap']).toBe('calc(var(--k-gap) * 0.5)');
-    const says = decls('.k-says');
-    expect(says.display).toBe('flex');
-    expect(says['flex-direction']).toBe('column');
-    expect(says['min-height']).toBe('0');
-    expect(says.overflow).toBe('hidden');
-    // The paired side column keeps its own rules; the invitation's old two-row side and the tiles are gone.
+    expect(column['grid-row']).toBe('1 / span 2');
+    expect(column['grid-template-rows']).toBe('auto minmax(0, 1fr) auto');
+    expect(decls('.k-panel--card')['align-content']).toBe('end');
+    // The old column of statements and its side tiles are gone.
+    for (const dead of ['.k-says', '.k-say ', '.k-say-value', '.k-invitation', '.k-side-tiles']) expect(BARE, dead).not.toContain(dead);
     expect(decls('.k-side').display).toBe('flex');
-    expect(BARE).not.toContain('.k-invitation .k-side');
-    expect(BARE).not.toContain('.k-side-tiles');
   });
-  it('a statement is label, value and context on hairlines with no box, 0.6 of a gap above and below: the label uppercase at the label tier in the domain colour, the value at the main tier never ellipsised or clamped, the context one line at the hint tier with its own line-height', () => {
-    const say = decls('.k-say');
-    expect(say['border-top']).toBe('1px solid var(--k-line)');
-    expect(say['padding-block']).toBe('calc(var(--k-gap) * 0.6)');
-    expect(say.background).toBeUndefined();
-    expect(say['border-radius']).toBeUndefined();
-    expect(say.border).toBeUndefined();
-    expect(decls('.k-say:first-child')['border-top']).toBe('0');
-    const label = decls('.k-say-label');
-    expect(label['font-size']).toBe('var(--k-label-size)');
-    expect(label['text-transform']).toBe('uppercase');
-    expect(label['letter-spacing']).toBe('0.04em');
-    expect(label['font-weight']).toBe('700');
-    for (const [domain, colour] of [['transit', '--k-action'], ['komunalno', '--k-amber'], ['safety', '--k-rose'], ['events', '--k-violet']]) {
-      expect(decls(`.k-say[data-domain='${domain}'] .k-say-label`).color, domain).toBe(`var(${colour})`);
+  it('a panel is a surface box that clips at its edge and hides whole rows by measurement: a kicker in the domain colour with a meta line, rows on hairlines with a lead cell, a two-line title and a one-line context, the credit pushed to the foot', () => {
+    const panel = decls('.k-panel');
+    expect(panel.background).toBe('var(--k-surface)');
+    expect(panel.overflow).toBe('hidden');
+    expect(panel['border-radius']).toBeUndefined();
+    expect(panel['box-shadow']).toBeUndefined();
+    expect(decls('.k-panel-kicker')['text-transform']).toBe('uppercase');
+    for (const [id, colour] of [['tonight', '--k-violet'], ['weather', '--k-amber'], ['city', '--k-action'], ['promet', '--k-action'], ['around', '--k-amber']]) {
+      expect(decls(`.k-panel[data-panel='${id}'] .k-panel-kicker`).color, id).toBe(`var(${colour})`);
     }
-    expect(decls(".k-say[data-domain='civic'] .k-say-label, .k-say[data-domain='mobility'] .k-say-label").color).toBe('var(--k-ink-3)');
-    const value = decls('.k-say-value');
-    expect(value['font-size']).toBe('var(--k-main-size)');
-    expect(value['font-weight']).toBe('700');
-    expect(value['line-height']).toBe('1.1');
-    expect(value['overflow-wrap']).toBe('anywhere');
-    expect(value['text-overflow']).toBeUndefined();
-    expect(value['-webkit-line-clamp']).toBeUndefined();
-    expect(value['white-space']).toBeUndefined();
-    // No rule anywhere clamps or ellipsises a value: the composer shortens by rule and by measurement (R-KP5).
-    expect(BARE).not.toMatch(/\.k-say-value[^{]*\{[^}]*(text-overflow|line-clamp)/);
-    const context = decls('.k-say-context');
-    expect(context['font-size']).toBe('var(--k-hint-size)');
-    expect(context['line-height']).toBe('1.2');
-    expect(context.color).toBe('var(--k-ink-2)');
-    expect(context['white-space']).toBe('nowrap');
-    expect(context.overflow).toBe('hidden');
-    expect(context['text-overflow']).toBe('ellipsis');
-    const badges = decls('.k-say-badges');
-    expect(badges.display).toBe('inline-flex');
-    expect(badges['flex-wrap']).toBe('wrap');
-    // With badges the kicker keeps the first row's left and the badges wrap under themselves, never under the kicker.
-    expect(decls('.k-say-label:has(.k-say-badges)')['grid-template-columns']).toBe('auto minmax(0, 1fr)');
-    expect(decls('.k-say-label:has(.k-say-badges) .k-say-kicker')['line-height']).toBe('calc(var(--k-badge) * 0.62)');
-    expect(decls('.k-say-more')['font-size']).toBe('var(--k-hint-size)');
-    expect(decls('.k-say-more')['text-transform']).toBe('none');
-    const pair = decls('.k-say-pair');
-    expect(pair.display).toBe('inline-flex');
-    expect(pair['align-items']).toBe('center');
+    expect(decls(".k-panel[data-panel='tonight'] .k-rows")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    const row = decls('.k-fr');
+    expect(row['border-top']).toBe('1px solid var(--k-line)');
+    expect(row['grid-template-columns']).toBe('auto minmax(0, 1fr)');
+    expect(decls('.k-rows > .k-fr:first-child')['border-top']).toBe('0');
+    const title = decls('.k-fr-title');
+    expect(title['-webkit-line-clamp']).toBe('2');
+    expect(title['overflow-wrap']).toBe('anywhere');
+    const sub = decls('.k-fr-sub');
+    expect(sub['white-space']).toBe('nowrap');
+    expect(sub['text-overflow']).toBe('ellipsis');
+    for (const [tone, colour] of [['late', '--k-rose'], ['early', '--k-amber'], ['ontime', '--k-green'], ['unknown', '--k-ink-3']]) {
+      expect(decls(`.k-fr[data-tone='${tone}'] .k-fr-sub`).color, tone).toBe(`var(${colour})`);
+    }
+    expect(decls('.k-panel-credit')['margin-top']).toBe('auto');
+    expect(decls('.k-panel-note[data-state=\'down\']').color).toBe('var(--k-rose)');
+    expect(decls('.k-panel-text')['-webkit-line-clamp']).toBe('3');
   });
-  it('states and tones: a stale statement colours its context and its badge as the strip does, a down value is the third ink, the transit value takes the line word colours', () => {
-    expect(decls(".k-say[data-state='stale'] .k-say-context").color).toBe('var(--k-amber)');
-    expect(decls(".k-say[data-state='down'] .k-say-value").color).toBe('var(--k-ink-3)');
-    expect(decls(".k-say[data-tone='late'] .k-say-value").color).toBe('var(--k-rose)');
-    expect(decls(".k-say[data-tone='early'] .k-say-value").color).toBe('var(--k-amber)');
-    expect(decls(".k-say[data-tone='ontime'] .k-say-value").color).toBe('var(--k-green)');
-    expect(decls(".k-say[data-tone='unknown'] .k-say-value").color).toBe('var(--k-ink-3)');
-    // base.css's .badge[data-tone='stale'] paints the word; the kiosk sizes it to the hint tier as the paired rows do (.k-badge).
-    expect(decls('.k-say .badge')['font-size']).toBe('var(--k-hint-size)');
-  });
-  it('the skeleton bars are sized to the three tiers', () => {
-    expect(decls('.k-say-sk-label')['block-size']).toBe('var(--k-label-size)');
-    expect(decls('.k-say-sk-value')['block-size']).toBe('calc(var(--k-main-size) * 1.1)');
-    expect(decls('.k-say-sk-context')['block-size']).toBe('var(--k-hint-size)');
-    expect(decls('.k-say[data-skeleton]').gap).toBe('calc(var(--k-gap) * 0.4)');
-  });
-  it('a changed value fades in for 180 ms on insertion, by a keyframe and no timer; off under reduced motion and lagano, where the code crossfade stops too', () => {
-    expect(decls('.k-say-value[data-replace]').animation).toBe('k-say-in 180ms var(--ease-enter) both');
-    expect(BARE).toMatch(/@keyframes k-say-in \{ from \{ opacity: 0; \} \}/);
+  it('the code crossfade is the one animation, by a keyframe and no timer; off under reduced motion and lagano', () => {
+    expect(BARE).not.toContain('k-say-in');
     const reduced = BARE.slice(BARE.indexOf('@media (prefers-reduced-motion: reduce)'));
-    for (const rule of ['.kiosk .k-say-value[data-replace]', ".kiosk .k-code[data-swap='1']", ".kiosk .k-join-code[data-swap='1']"]) expect(reduced).toContain(rule);
+    for (const rule of [".kiosk .k-code[data-swap='1']", ".kiosk .k-join-code[data-swap='1']"]) expect(reduced).toContain(rule);
     expect(reduced).toMatch(/\.kiosk \.k-code-ghost \{ display: none; \}/);
-    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-say-value\[data-replace\], :root\[data-lagano='1'\] \.k-code\[data-swap='1'\], :root\[data-lagano='1'\] \.k-join-code\[data-swap='1'\] \{ animation: none; \}/);
+    expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-code\[data-swap='1'\], :root\[data-lagano='1'\] \.k-join-code\[data-swap='1'\] \{ animation: none; \}/);
     expect(BARE).toMatch(/:root\[data-lagano='1'\] \.k-code-ghost \{ display: none; \}/);
     for (const dead of ['k-scene-in', 'k-scene-out', '.k-story-item', 'k-story-in', 'k-story-out']) expect(BARE, dead).not.toContain(dead);
     expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
@@ -425,16 +387,15 @@ describe('the invitation: one field, one column', () => {
 
 describe('the portrait composition', () => {
   const P = ".kiosk[data-portrait='1']";
-  it('stacks the invitation: the field on top at half the stage or more, the column under it as one row with the statements left of the card, joined by a hairline on top', () => {
-    const invitation = decls(`${P} .k-invitation`);
-    expect(invitation['grid-template-columns']).toBe('minmax(0, 1fr)');
-    expect(invitation['grid-template-rows']).toBe('minmax(50%, 1fr) auto');
+  it('stacks the front page: tonight on top, the bottom row of three at a third each with the field at least 340 px, the column as a row at the foot with the forecast over the city beside the card', () => {
+    const front = decls(`${P} .k-front`);
+    expect(front['grid-template-columns']).toBe('minmax(0, 1fr)');
+    expect(front['grid-template-rows']).toBe('minmax(0, 1fr) auto auto');
+    expect(decls(`${P} .k-bottom .k-field`)['min-height']).toBe('calc(340px * var(--k-zoom))');
     const column = decls(`${P} .k-column`);
     expect(column['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 1.1fr)');
-    expect(column['grid-template-rows']).toBe('minmax(0, auto)');
-    expect(column['column-gap']).toBe('var(--k-gap)');
-    expect(column['border-left']).toBe('0');
-    expect(column['border-top']).toBe('1px solid var(--k-line)');
+    expect(column['grid-template-rows']).toBe('auto auto');
+    expect(decls(`${P} .k-column > .k-panel--card`)['grid-row']).toBe('1 / span 2');
     // The paired compositions keep their portrait stack as before.
     expect(decls(`${P} .k-paired`)['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
   });
@@ -451,16 +412,19 @@ describe('the portrait composition', () => {
 
 describe('the handheld composition', () => {
   const H = ".kiosk[data-size='handheld']";
-  it('the field is a 280 px band with the map inside it, the column stands in flow with its statements uncapped, and the card is the same card stood up', () => {
+  it('the field is a 280 px band among the panels, which stand in one scrolling column, each its own surface with the kiosk radius and no clipping; the card is the same card stood up', () => {
     expect(decls(H)['--k-map-band']).toBe('280px');
     const field = decls(`${H} .k-field`);
     expect(field.height).toBe('var(--k-map-band)');
     expect(field['border-radius']).toBe('var(--k-radius)');
-    const column = decls(`${H} .k-column`);
-    expect(column.display).toBe('block');
-    expect(column.border).toBe('0');
-    expect(column.background).toBe('transparent');
-    expect(decls(`${H} .k-says`).overflow).toBe('visible');
+    const stack = decls(`${H} .k-front, ${H} .k-bottom, ${H} .k-column`);
+    expect(stack.display).toBe('flex');
+    expect(stack['flex-direction']).toBe('column');
+    expect(stack.background).toBe('transparent');
+    const panel = decls(`${H} .k-panel`);
+    expect(panel.overflow).toBe('visible');
+    expect(panel['border-radius']).toBe('var(--k-radius)');
+    expect(decls(`${H} .k-panel[data-panel='tonight'] .k-rows`)['grid-template-columns']).toBe('minmax(0, 1fr)');
     expect(decls(`${H} .k-invite`)['margin-top']).toBe('var(--k-gap)');
   });
 });

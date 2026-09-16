@@ -1,0 +1,369 @@
+// The public screen's front page: five panels of the city read from the
+// teaser's nine modules, each a list a person in front of the screen can use
+// (plan "/kiosk/: a screen a person can use"). Every source the app fetches
+// is here with its credit; nothing is ranked away into one sentence. Pure:
+// readers in, HTML strings out; kiosk/invitation.ts mounts the panels, hosts
+// the map between them and hides the rows a panel's box does not hold whole.
+//
+//   tonight  today's events by start (running ones after the upcoming), then
+//            tomorrow's, each marked; time · title · category, venue, source
+//   weather  tomorrow's forecast as the figure, today's range under it (DHMZ)
+//   city     the next Assembly session, the gazette's issue and its acts, the
+//            kvart news (Skupština, Grad Zagreb)
+//   promet   the stop's lines with their state words and vehicles near, the
+//            last departures from 20:00, ZET's newest notice
+//   around   closures within 1.5 km by distance, works under way in the kvart
+import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
+import type { ScreenStop } from '../core/contracts';
+import type { LastRunSnapshot } from '../core/lastrun';
+import { delayTone } from '../experience/delay';
+import type { I18n } from '../i18n/i18n';
+import { dataNumber, dataText } from '../panels/panel';
+import { routeEnds } from '../transport/catalogue';
+import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { clock, dayKey, dayMonth, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
+import {
+  byModule, cleanCondition, closuresByDistance, isLive, lastDeparturesAhead, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
+  routeDelays, sourceState, worksInKvart, type SourceState,
+} from './local';
+import { kBadge } from './markup';
+import { fill, plural, type KioskStrings } from './strings';
+import { districtLabel } from './districts';
+
+export type PanelId = 'tonight' | 'weather' | 'city' | 'promet' | 'around';
+export const PANEL_IDS: readonly PanelId[] = ['tonight', 'weather', 'city', 'promet', 'around'];
+
+export interface FrontInput {
+  modules: readonly ModuleSnapshot[];
+  stop: ScreenStop | null;
+  now: number;
+  lastRun: LastRunSnapshot | null;
+  strings: KioskStrings;
+  i18n: I18n;
+  locale: string;
+  /** R-L2: no map under lagano, so the field is the lines board and the promet panel does not repeat the lines. */
+  lightweight: boolean;
+}
+
+/** One row of a panel's list: a lead cell (a time, a distance, a badge), a title, one line of context. */
+export interface FrontRow {
+  key: string;
+  /** The lead cell's text: a clock, a distance, a day word; empty with a badge. */
+  lead?: string;
+  /** A day word over the lead ("sutra") when the row is not today's. */
+  day?: string;
+  /** Trusted markup for the lead cell (a line badge). */
+  leadMarkup?: string;
+  title: string;
+  sub?: string;
+  tone?: 'late' | 'early' | 'ontime' | 'unknown';
+}
+
+export interface FrontPanel {
+  id: PanelId;
+  kicker: string;
+  meta?: string;
+  rows: FrontRow[];
+  /** A sentence in place of rows: loading, down, or a true empty. */
+  note?: string;
+  /** Trusted markup above the rows (the weather figure). */
+  figureMarkup?: string;
+  /** Trusted markup under the rows (the last departures line). */
+  footMarkup?: string;
+  credit?: string;
+  state?: SourceState;
+}
+
+// --- Rows the panels share -------------------------------------------------------
+
+const startOf = (item: FeedItem): number => (item.at ? Date.parse(item.at) : NaN);
+const isDatedEvent = (item: FeedItem): boolean => item.dateBasis === 'event' && Number.isFinite(startOf(item));
+const hasEnded = (item: FeedItem, now: number): boolean => {
+  const end = item.until ? Date.parse(item.until) : NaN;
+  return Number.isFinite(end) && end < now;
+};
+
+/** The i18n name of an events source ("Kulturpunkt", "Etnografski muzej"); '' for one the catalogue has no word for. */
+function sourceName(i18n: I18n, source: string): string {
+  const key = `events.sources.${source}`;
+  const name = i18n.t(key);
+  return name === key ? '' : name;
+}
+
+/** The kiosk's lowercase word for an event's category; '' when the catalogue has none. */
+function categoryWord(s: KioskStrings, item: FeedItem): string {
+  return s.events[dataText(item, 'category')] ?? '';
+}
+
+/** A dated event as a row: the clock (or the all-day word) in the lead, the title, category · venue · source under it. */
+function eventRow(item: FeedItem, s: KioskStrings, i18n: I18n, day?: string): FrontRow {
+  const timed = dataText(item, 'precision') === 'time';
+  const source = dataText(item, 'source');
+  return {
+    key: `event:${item.id}`,
+    lead: timed ? clock(item.at) : s.say.allDay,
+    day,
+    title: item.title,
+    sub: [categoryWord(s, item), dataText(item, 'venue'), sourceName(i18n, source)].filter(Boolean).join(' · '),
+  };
+}
+
+/** The source credit of a set of event rows, each source once, in order of first appearance. */
+function eventCredit(items: readonly FeedItem[], i18n: I18n): string {
+  const names: string[] = [];
+  for (const item of items) {
+    const name = sourceName(i18n, dataText(item, 'source'));
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names.join(' · ');
+}
+
+// --- tonight -------------------------------------------------------------------------
+
+/** Culture and community events: every dated row that is not the Assembly's (the city panel has those). */
+function cultureEvents(dogadanja: ModuleSnapshot | undefined): FeedItem[] {
+  return (isLive(dogadanja) ? dogadanja.items : []).filter((item) => isDatedEvent(item) && dataText(item, 'source') !== 'skupstina');
+}
+
+export function tonightPanel(input: FrontInput): FrontPanel {
+  const { strings: s, i18n, now } = input;
+  const dogadanja = byModule(input.modules).dogadanja;
+  const state = sourceState(dogadanja);
+  const all = cultureEvents(dogadanja);
+  const today = all.filter((item) => sameZagrebDay(item.at!, now) && !hasEnded(item, now));
+  // What is still to come tonight first, then what is running (an exhibition opened at 19:00 that has not closed).
+  const upcoming = today.filter((item) => startOf(item) >= now).sort((a, b) => startOf(a) - startOf(b));
+  const running = today.filter((item) => startOf(item) < now).sort((a, b) => startOf(b) - startOf(a));
+  const tomorrowKey = zagrebDayAfter(now, 1);
+  const tomorrow = all.filter((item) => dayKey(item.at!) === tomorrowKey).sort((a, b) => startOf(a) - startOf(b));
+  const rows = [
+    ...upcoming.map((item) => eventRow(item, s, i18n)),
+    ...running.map((item) => eventRow(item, s, i18n)),
+    ...tomorrow.map((item) => eventRow(item, s, i18n, s.say.tomorrow)),
+  ];
+  const meta = [today.length > 0 ? plural(input.locale, s.front.eventsToday, today.length) : '', tomorrow.length > 0 ? plural(input.locale, s.front.eventsTomorrow, tomorrow.length) : ''].filter(Boolean).join(' · ');
+  const note = state === 'loading' ? i18n.t('status.loading') : state === 'down' ? s.paired.sourceDown : rows.length === 0 ? s.front.eventsNone : undefined;
+  return {
+    id: 'tonight',
+    kicker: today.length > 0 ? s.say.tonight : s.front.tomorrowCity,
+    meta,
+    rows,
+    note,
+    credit: eventCredit([...today, ...tomorrow], i18n),
+    state,
+  };
+}
+
+// --- weather -------------------------------------------------------------------------
+
+function forecastFor(snap: ModuleSnapshot | undefined, key: string): FeedItem | undefined {
+  return snap?.items.find((item) => item.kind === 'forecast' && item.at && dayKey(item.at) === key);
+}
+
+function rangeOf(item: FeedItem, s: KioskStrings, locale: string): string {
+  const tmin = dataNumber(item, 'tmin');
+  const tmax = dataNumber(item, 'tmax');
+  return tmin !== null && tmax !== null ? fill(s.weather.range, { min: fmtNumber(locale, tmin, 0), max: fmtNumber(locale, tmax, 0) }) : s.paired.rangeUnknown;
+}
+
+/** DHMZ's forecast 'vrijeme' is sometimes a symbol code, never a word to print. */
+function conditionWord(item: FeedItem): string {
+  const raw = dataText(item, 'weather');
+  return /^\d+$/.test(raw) ? '' : cleanCondition(raw);
+}
+
+export function weatherPanel(input: FrontInput): FrontPanel {
+  const { strings: s, now, locale } = input;
+  const snap = byModule(input.modules)['dhmz-forecast'];
+  const state = sourceState(snap);
+  const tomorrow = forecastFor(snap, zagrebDayAfter(now, 1));
+  const today = forecastFor(snap, dayKey(now));
+  // Tomorrow is the figure: people plan by it; today's range stands under it (the header already says the weather now).
+  const lead = tomorrow ?? today;
+  if (!lead) {
+    return { id: 'weather', kicker: s.say.forecast, rows: [], note: state === 'loading' ? s.weather.loading : state === 'down' ? s.paired.sourceDown : s.paired.rangeUnknown, credit: 'DHMZ', state };
+  }
+  const leadIsTomorrow = lead === tomorrow;
+  const figure = `<p class="k-panel-figure">${escapeHtml(rangeOf(lead, s, locale))}</p>${lead.summary ? `<p class="k-panel-text">${escapeHtml(lead.summary)}</p>` : conditionWord(lead) ? `<p class="k-panel-text">${escapeHtml(conditionWord(lead))}</p>` : ''}`;
+  const rows: FrontRow[] = [];
+  if (leadIsTomorrow && today) {
+    rows.push({ key: 'forecast:today', lead: s.paired.today, title: rangeOf(today, s, locale), sub: conditionWord(today) || today.summary || undefined });
+  }
+  const dateWord = lead.at ? weekdayDayMonth(locale, lead.at) : '';
+  return {
+    id: 'weather',
+    kicker: leadIsTomorrow ? s.say.forecast : s.paired.today,
+    meta: dateWord,
+    rows,
+    figureMarkup: figure,
+    credit: `DHMZ · ${s.paired.forecast.toLowerCase()}`,
+    state,
+  };
+}
+
+// --- city ------------------------------------------------------------------------------
+
+const ASSEMBLY_SOURCE = 'Skupština Grada Zagreba';
+const CITY_SOURCE = 'Grad Zagreb';
+/** The gazette's first row is its own table of contents, not an act. */
+const GAZETTE_CONTENTS_TITLE = 'Sadržaj';
+/** How many of the issue's acts the panel names; the fitter hides what the box does not hold. */
+const GAZETTE_ACTS = 3;
+const KVART_NEWS = 3;
+
+export function cityPanel(input: FrontInput): FrontPanel {
+  const { strings: s, now, locale } = input;
+  const map = byModule(input.modules);
+  const rows: FrontRow[] = [];
+  const session = nextSession(input.modules, now);
+  if (session?.at) {
+    const at = Date.parse(session.at);
+    const dayWord = sameZagrebDay(at, now) ? s.say.today : dayKey(at) === zagrebDayAfter(now, 1) ? s.say.tomorrow : weekdayDayMonth(locale, at);
+    const timed = dataText(session, 'precision') === 'time';
+    rows.push({ key: `session:${session.id}`, lead: timed ? clock(at) : s.say.allDay, day: dayWord, title: session.title, sub: [dataText(session, 'venue'), ASSEMBLY_SOURCE].filter(Boolean).join(' · ') });
+  }
+  const glasnik = map.glasnik;
+  if (isLive(glasnik) && glasnik.items.length > 0) {
+    const issue = glasnik.items[0]!;
+    const number = `${dataText(issue, 'broj')}/${dataText(issue, 'godina')}`;
+    const acts = glasnik.items.filter((act) => act.title !== GAZETTE_CONTENTS_TITLE);
+    const published = issue.at ? fill(s.story.published, { time: dayMonth(issue.at) }) : '';
+    rows.push({ key: 'gazette', lead: number, title: `${s.paired.acts} · ${plural(locale, s.front.acts, acts.length)}`, sub: [published, CITY_SOURCE].filter(Boolean).join(' · ') });
+    for (const act of acts.slice(0, GAZETTE_ACTS)) rows.push({ key: `act:${act.id}`, lead: s.front.actLead, title: act.title, sub: `${s.paired.acts} ${number}` });
+  }
+  const dogadanja = map.dogadanja;
+  const news = (isLive(dogadanja) ? dogadanja.items : []).filter((item) => dataText(item, 'source') === 'kvartovske').slice(0, KVART_NEWS);
+  for (const item of news) rows.push({ key: `kvart:${item.id}`, lead: s.front.kvartLead, title: item.title, sub: s.story.neighbourhood });
+  const state = sourceState(dogadanja);
+  return {
+    id: 'city',
+    kicker: s.front.city,
+    meta: CITY_SOURCE,
+    rows,
+    note: rows.length === 0 ? (state === 'loading' ? input.i18n.t('status.loading') : state === 'down' ? s.paired.sourceDown : s.story.empty) : undefined,
+    credit: [ASSEMBLY_SOURCE, s.paired.acts, s.story.neighbourhood].join(' · '),
+    state,
+  };
+}
+
+// --- promet ---------------------------------------------------------------------------
+
+/** The lines the panel lists before "+N": the stop's routes in rider order, trams first. */
+const PROMET_LINES = 8;
+/** A ZET notice is worth the panel while it is fresh. */
+const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
+
+function routeKind(kind: 'tram' | 'bus' | 'other'): 'tram' | 'bus' | 'other' { return kind; }
+
+export function prometPanel(input: FrontInput): FrontPanel {
+  const { strings: s, i18n, now, locale, stop } = input;
+  const zet = byModule(input.modules)['zet-rt'];
+  const state = sourceState(zet);
+  const board = linesAtStop(input.modules, stop, i18n, PROMET_LINES);
+  const delays = routeDelays(zet);
+  const rows: FrontRow[] = input.lightweight ? [] : board.rows.map((row) => {
+    const delay = delays.get(row.routeId);
+    const toneRaw = delayTone(i18n, delay);
+    const kindWord = row.kind === 'tram' ? s.lines.tram : row.kind === 'bus' ? s.lines.bus : '';
+    const near = row.nearby > 0 ? plural(locale, s.lines.nearby, row.nearby) : s.lines.noneNearby;
+    return {
+      key: `line:${row.routeId}`,
+      leadMarkup: kBadge(row.label, routeKind(row.kind), `${kindWord} ${row.label}`.trim()),
+      title: routeEnds(row.longName) || row.longName,
+      sub: [row.word || s.say.transitNoData, near].join(' · '),
+      tone: toneRaw === 'none' ? 'unknown' : toneRaw,
+    };
+  });
+  // The newest ZET notice as the board's last row: what the network says about itself.
+  const dogadanja = byModule(input.modules).dogadanja;
+  const notice = (isLive(dogadanja) ? dogadanja.items : [])
+    .filter((item) => dataText(item, 'source') === 'zet-promet' && item.at && now - Date.parse(item.at) <= ZET_NOTICE_WINDOW_MS && Date.parse(item.at) <= now)
+    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))[0];
+  if (notice) rows.push({ key: `notice:${notice.id}`, lead: 'ZET', title: notice.title, sub: `${s.say.zet} · ${clock(notice.at)}` });
+  // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
+  const departures = lastDeparturesAhead(input.lastRun, stop, now);
+  const foot = departures.length > 0
+    ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindOfRoute(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
+    : undefined;
+  const nearby = nearbyVehicleCount(zet, stop);
+  const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
+  const meta = state === 'live' || state === 'stale'
+    ? [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), time ? `ZET ${time}` : '', board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ')
+    : '';
+  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : !stop ? s.lines.noStop : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
+  return {
+    id: 'promet',
+    kicker: s.say.transit,
+    meta,
+    rows,
+    note: input.lightweight && rows.length === 0 ? undefined : note,
+    footMarkup: foot,
+    credit: `${s.lines.modelNote} · ZET${state === 'stale' ? ` · ${s.paired.stale}` : ''}`,
+    state,
+  };
+}
+
+function kindOfRoute(board: ReturnType<typeof linesAtStop>, routeId: string): 'tram' | 'bus' | 'other' {
+  return board.rows.find((row) => row.routeId === routeId)?.kind ?? 'other';
+}
+
+// --- around ---------------------------------------------------------------------------
+
+const AROUND_CLOSURES = 5;
+
+export function aroundPanel(input: FrontInput): FrontPanel {
+  const { strings: s, now, locale, stop } = input;
+  const prometnice = byModule(input.modules).prometnice;
+  const state = sourceState(prometnice);
+  const rows: FrontRow[] = [];
+  const near = closuresByDistance(prometnice, stop, now).filter((c) => stop === null || (c.distanceM !== null && c.distanceM <= NEARBY_CLOSURE_M)).slice(0, AROUND_CLOSURES);
+  for (const { item, distanceM } of near) {
+    const untilMs = item.until ? Date.parse(item.until) : NaN;
+    const until = Number.isFinite(untilMs) ? (sameZagrebDay(untilMs, now) ? fill(s.paired.untilTime, { time: clock(untilMs) }) : weekdayDayMonth(locale, untilMs)) : '';
+    rows.push({ key: `closure:${item.id}`, lead: distanceM === null ? s.say.closure : fmtDistance(locale, distanceM), title: item.title, sub: [item.summary ?? '', until].filter(Boolean).join(' · ') });
+  }
+  const works = worksInKvart(input.modules, stop, now);
+  if (works.count > 0 && (works.state === 'live' || works.state === 'stale')) {
+    const label = works.scope === 'kvart' ? s.say.worksKvart : s.say.worksCity;
+    rows.push({
+      key: 'works',
+      lead: s.front.worksLead,
+      title: works.nearest?.title ?? label,
+      sub: [plural(locale, s.say.works, works.count), works.nearest?.distanceM != null ? fmtDistance(locale, works.nearest.distanceM) : '', CITY_SOURCE].filter(Boolean).join(' · '),
+    });
+  }
+  const district = stop?.district ? districtLabel(stop.district) : '';
+  return {
+    id: 'around',
+    kicker: s.front.around,
+    meta: district,
+    rows,
+    note: rows.length === 0 ? (state === 'loading' ? input.i18n.t('status.loading') : state === 'down' ? s.safety.closuresUnknown : s.paired.closuresNone) : undefined,
+    credit: CITY_SOURCE,
+    state,
+  };
+}
+
+// --- All five, and their markup ---------------------------------------------------
+
+export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
+  return { tonight: tonightPanel(input), weather: weatherPanel(input), city: cityPanel(input), promet: prometPanel(input), around: aroundPanel(input) };
+}
+
+function rowMarkup(row: FrontRow): string {
+  const lead = row.leadMarkup
+    ? `<span class="k-fr-lead k-fr-lead--badge">${row.leadMarkup}</span>`
+    : `<span class="k-fr-lead">${row.day ? `<span class="k-fr-day">${escapeHtml(row.day)}</span>` : ''}${escapeHtml(row.lead ?? '')}</span>`;
+  const tone = row.tone ? ` data-tone="${escapeAttribute(row.tone)}"` : '';
+  return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span></li>`;
+}
+
+/** One panel's inner markup: the head (kicker and meta), the figure, the rows or the note, the foot, the credit. */
+export function panelMarkup(panel: FrontPanel): string {
+  const head = `<header class="k-panel-head"><h2 class="k-panel-kicker">${escapeHtml(panel.kicker)}</h2>${panel.meta ? `<p class="k-panel-meta">${escapeHtml(panel.meta)}</p>` : ''}</header>`;
+  const rowsId = panel.id === 'promet' ? ' data-testid="kiosk-lines"' : '';
+  const body = panel.rows.length > 0 ? `<ul class="k-rows"${rowsId}>${panel.rows.map(rowMarkup).join('')}</ul>` : '';
+  const note = panel.note ? `<p class="k-panel-note"${panel.state === 'down' ? ' data-state="down"' : ''}>${escapeHtml(panel.note)}</p>` : '';
+  const credit = panel.credit ? `<p class="k-panel-credit">${escapeHtml(panel.credit)}</p>` : '';
+  return `${head}${panel.figureMarkup ?? ''}${body}${note}${panel.footMarkup ?? ''}${credit}`;
+}
