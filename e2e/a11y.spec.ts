@@ -4,7 +4,7 @@
 // is exactly how a person without a phone meets them.
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
-import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { APP_URL, E2E_STOP_ID, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
 
 // The two sizes newdesignsystem.md and Vidikovac.dc.html were drawn at: kiosk 1080p
@@ -224,7 +224,8 @@ async function assertTextPath(page: Page, surface: string, interactiveTransport 
 test.describe('the moving map has a text path (R-F5)', () => {
   test('/kiosk/ has a readable route board beside its named map, and every interactive control has a name', async ({ page, request }) => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
-    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    // The screen's stop: the readable route board is the transit statement's badge row, which is the stop's own lines.
+    const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
     await page.setViewportSize(KIOSK);
     // One fixed window (R-KP1): the map and the column are there from the first paint, nothing rotates away.
     await page.goto(kioskUrl);
@@ -251,6 +252,9 @@ test.describe('the moving map has a text path (R-F5)', () => {
     const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: KIOSK });
     const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
     try {
+      // A stopless screen, as this proof was written for: with the screen's stop known the phone's U pokretu sheet opens
+      // on a route of that stop rather than on the running-routes list, which is the phone's own behaviour to settle
+      // (task-WB-report.md, concerns), not what this text-path proof is about.
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       const kiosk = await kioskCtx.newPage();
       await kiosk.goto(kioskUrl);

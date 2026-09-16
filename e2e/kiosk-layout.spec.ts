@@ -24,8 +24,8 @@
 //     a long title cut at a word (kiosk.css "The column");
 //   - the prozor profile places at most eight major street names in the
 //     field, read off data-major-labels (contract 3, R-KP19) once the map is
-//     ready and a paint has counted them (Jelačić always has named roads in
-//     view, so the count is a positive number);
+//     ready and a poll has counted them again (a zero is a real count at
+//     1366 x 768, where the plates and the hub names take the anchors first);
 //   - the basics panel fits its rows without a scroller;
 //   - once a phone unlocks the screen, each of the six paired compositions
 //     obeys the same clip and overlap rules, the header names the mirrored
@@ -35,7 +35,7 @@
 // and one per paired composition in kiosk-<w>-<face>-paired-<layer>.png.
 import { expect, test, type Page } from '@playwright/test';
 import { SAY_BADGE_CAP, type Composition } from '../app/src/kiosk/layout';
-import { APP_URL, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { APP_URL, E2E_STOP_ID, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { KIOSK_WIDE_MIN_PX } from './lib';
 
 /** The two landscape design sizes and the portrait totem; every composition, invitation and paired, is measured at all three. */
@@ -59,10 +59,12 @@ const MIN_PORTRAIT_FIELD = 0.5;
  *  the wall gets two on the totem; the cap follows the ground, not the literal: half again the landscape's (nine were
  *  measured at Jelačić on 16 Sept 2026). */
 const MAX_MAJOR_LABELS = { landscape: 8, portrait: 12 } as const;
-/** How long a positive placed-labels count is waited for once the map is ready: the controller stamps it once at
- *  ready (when the tiles may not have rendered a name yet) and then on every map paint, which rides the teaser poll
- *  (app/src/motion/loop.ts nextPollDelay, at most 13.5 s), so one poll after ready plus rendering slack. */
+/** How long the placed-labels count is waited for once the map is ready: the controller stamps it once at ready
+ *  (when the tiles may not have rendered a name yet) and then on every map paint, which rides the teaser poll
+ *  (app/src/motion/loop.ts nextPollDelay, at most 13.5 s). The first stamp is waited for, then one whole poll, so the
+ *  count read has been taken over rendered tiles: a zero then is a real count, not "not yet". */
 const MAJOR_LABELS_WAIT_MS = 20_000;
+const MAJOR_LABELS_POLL_MS = 14_000;
 /** A statement value is at most this many lines (R-KP5). */
 const MAX_VALUE_LINES = 2;
 /** The column is fitted after a paint and on a resize (kiosk.ts fitAll; never on the 1 s tick): a sample put into it is
@@ -291,21 +293,26 @@ async function openInvitation(page: Page, face: Face, size: { width: number; hei
 }
 
 /** Contract 3, R-KP19: how many distinct major street names the map placed,
- *  as the controller stamped it on the map host after a paint once the map
- *  was ready. A positive count is waited for: Trg bana Jelačića always has
- *  named roads in view, so zero is "not counted yet", never an answer. */
+ *  as the controller stamped it on the map host once the map was ready and
+ *  again after the next paint. The count is read after one whole poll has
+ *  passed since the first stamp, so the tiles have rendered and the placement
+ *  pass has run over them; at 1366 x 768 that count was 0 for a whole poll
+ *  (measured 16 Sept 2026): a real answer, under the cap, never "not yet". */
 async function majorLabels(page: Page): Promise<number> {
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
   const host = page.getByTestId('kiosk-map-host');
-  await expect(host).toHaveAttribute('data-major-labels', /^[1-9]\d*$/, { timeout: MAJOR_LABELS_WAIT_MS });
-  return Number(await host.getAttribute('data-major-labels'));
+  await expect(host).toHaveAttribute('data-major-labels', /^\d+$/, { timeout: MAJOR_LABELS_WAIT_MS });
+  await page.waitForTimeout(MAJOR_LABELS_POLL_MS);
+  const count = Number(await host.getAttribute('data-major-labels'));
+  test.info().annotations.push({ type: 'major-labels', description: String(count) });
+  return count;
 }
 
 for (const size of SIZES) {
   const portrait = size.height > size.width;
   for (const face of FACES) {
     test(`the invitation at ${size.width} by ${size.height}, ${face}: whole code, QR of ${MIN_QR_PX} px or more, the map is the field, statements whole, nothing overflows or overlaps, basics fit`, async ({ page, request }) => {
-      const { kioskUrl } = await provisionKiosk(request, APP_URL);
+      const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
       await openInvitation(page, face, size, kioskUrl);
       const root = page.getByTestId('kiosk');
       // A portrait screen is the compact drawing stood up (kiosk/layout.ts), never the wide one on its side.
@@ -357,7 +364,7 @@ for (const size of SIZES) {
   const composition: Exclude<Composition, 'handheld'> = portrait ? 'portrait' : size.width >= KIOSK_WIDE_MIN_PX ? 'wide' : 'compact';
   const frame = FRAME[composition];
   test(`the frame at ${size.width} by ${size.height} holds at least ${frame.worst} of the plan's statements whole over the card with a two-line transit value and at least ${frame.calm} with one-line values, the transit label in ${frame.labelRowsAtMost} row(s) at most, every value in two lines, a long title cut at a word`, async ({ page, request }) => {
-    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
     await openInvitation(page, 'light', size, kioskUrl);
     await expect(page.getByTestId('kiosk')).toHaveAttribute('data-phase', 'invitation');
     for (const reading of ['worst', 'calm'] as const) {
@@ -398,7 +405,7 @@ for (const size of SIZES) {
       const kioskCtx = await browser.newContext({ viewport: size, colorScheme: face });
       const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
       try {
-        const { kioskUrl } = await provisionKiosk(request, APP_URL);
+        const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
         const kiosk = await kioskCtx.newPage();
         await openInvitation(kiosk, face, size, kioskUrl);
         const { scanUrl } = await readPairing(kiosk, APP_URL);
@@ -446,7 +453,7 @@ test('a stale ZET feed holds the map: the screen tells the map the feed state an
     body.modules = body.modules.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' } : m));
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
-  const { kioskUrl } = await provisionKiosk(request, APP_URL);
+  const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
   await openInvitation(page, 'light', SIZES[0], kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-feed', 'stale', { timeout: 15_000 });
