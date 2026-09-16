@@ -16,10 +16,9 @@
 // feed being reachable, or on it happening to carry a moving vehicle at
 // test time -- exactly the reachability gap the wave-1 review flagged, and
 // exactly why R-X1 asked for this to be re-run once something actually
-// mounts the model. Two fixes for the same vehicle id inside one response
-// are enough to hand the model real fix-to-fix evidence (initVehicle() then
-// applyFix(), model.ts's own two-step contract) from a single poll, so nothing
-// here waits on a second real 20 s cycle for that.
+// mounts the engine. Since the twin (B5/B6), one response carries the twin's
+// plan for each vehicle: a free-plane plan spanning a few seconds is enough
+// for the integrator to glide across two frames without a second poll.
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
@@ -33,11 +32,10 @@ const CENTRE_LAT = 45.813;
 // (15 m), so the model actually eases instead of sitting still; comfortably
 // under DISCREPANCY_LIMIT_M (150 m), so it glides instead of snapping.
 const MOVED_LAT = CENTRE_LAT + 0.0006;
-// The two fixes are 5 s apart by their own `at`, not by wall clock: the
-// free-plane branch (model.ts) eases over exactly that span starting the
-// moment update() runs, so a sample 500 ms later is still mid-ease however
-// long the mocked response itself took to arrive.
-const FIX_INTERVAL_MS = 5000;
+// The plan spans 5 s from the snapshot's own source time: the integrator
+// follows it from the moment update() runs, so a sample 500 ms later is
+// still mid-glide however long the mocked response itself took to arrive.
+const PLAN_SPAN_S = 5;
 // Deliberately not a real ZET route id (those are '1'..'99'-shaped): this
 // guarantees the vehicle never matches a real shape in the real network
 // artefact (which the browser really does fetch, R-L4), so every scenario
@@ -45,45 +43,36 @@ const FIX_INTERVAL_MS = 5000;
 // exact stop spacing this test cannot see and does not need to.
 const ROUTE_ID = 'E2E6';
 
-interface Fix {
-  id: string;
-  lon: number;
-  lat: number;
-  at: number;
-  routeType?: number;
-}
-
-function vehicleItem(fix: Fix) {
+/**
+ * One vehicle as the twin publishes it: its estimate at the source time and
+ * a free-plane plan (the fake route matches no geometry) that carries it
+ * ~67 m north over PLAN_SPAN_S, plus the twin's confidence so the facing
+ * shows. `routeType` is included only when the caller wants the vehicle to
+ * pass a trams-only filter (R-P1's locked-kiosk default); a session sees
+ * every type and does not need it.
+ */
+function vehicleItem(vehicleId: string, routeType?: number) {
   return {
-    id: `vehicle:${fix.id}`,
+    id: `vehicle:${vehicleId}`,
     module: 'zet-rt',
     kind: 'vehicle',
     tier: 'open',
     title: 'Tramvaj E2E6',
-    at: new Date(fix.at).toISOString(),
-    geo: { type: 'Point', coordinates: [fix.lon, fix.lat] },
+    at: new Date().toISOString(),
+    geo: { type: 'Point', coordinates: [CENTRE_LON, CENTRE_LAT] },
     data: {
       routeId: ROUTE_ID,
-      ...(fix.routeType !== undefined ? { routeType: fix.routeType } : {}),
+      speed: 13,
+      confidence: 0.5,
+      ...(routeType !== undefined ? { routeType } : {}),
     },
+    motion: { plan: [[0, CENTRE_LON, CENTRE_LAT], [PLAN_SPAN_S, CENTRE_LON, MOVED_LAT]] },
   };
 }
 
-/**
- * A `zet-rt` ModuleSnapshot carrying two fixes for one vehicle id, in order:
- * model.update() folds an array of fixes in sequence, so the first entry
- * seeds initVehicle() and the second immediately runs applyFix() against
- * it -- real fix-to-fix speed and direction evidence from a single poll,
- * standing in for two real ones ~20 s apart. `routeType` is included only
- * when the caller wants the vehicle to pass a trams-only filter (R-P1's
- * locked-kiosk default); a session sees every type and does not need it.
- */
+/** A `zet-rt` ModuleSnapshot carrying one vehicle with its plan, dated now. */
 function zetSnapshot(vehicleId: string, routeType?: number) {
   const now = Date.now();
-  const fixes: Fix[] = [
-    { id: vehicleId, lon: CENTRE_LON, lat: CENTRE_LAT, at: now - FIX_INTERVAL_MS, routeType },
-    { id: vehicleId, lon: CENTRE_LON, lat: MOVED_LAT, at: now, routeType },
-  ];
   return {
     module: 'zet-rt',
     tier: 'open',
@@ -95,7 +84,7 @@ function zetSnapshot(vehicleId: string, routeType?: number) {
       url: 'https://www.zet.hr/gtfs-rt-protobuf',
       licence: 'Otvorena dozvola',
     },
-    items: fixes.map(vehicleItem),
+    items: [vehicleItem(vehicleId, routeType)],
   };
 }
 

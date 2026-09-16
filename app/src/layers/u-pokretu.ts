@@ -17,7 +17,7 @@ import { searchField } from '../experience/blocks';
 import type { I18n } from '../i18n/i18n';
 import type { MapLine, MapPoint } from '../map/city-map';
 import { routeDelayMap, vehicleFixes } from '../motion/fixes';
-import type { Fix } from '../motion/model';
+import type { Fix } from '../motion/integrator';
 import { createLayerSection, dataNumber, dataText, statusText } from '../panels/panel';
 import { routeEntry } from '../transport/catalogue';
 import { closureItems, plausibleDelays, zetNotices } from '../transport/detail';

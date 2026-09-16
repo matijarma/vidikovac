@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { toPlane } from '../../app/src/motion/geo';
-import type { Fix } from '../../app/src/motion/model';
+import type { Fix } from '../../app/src/motion/integrator';
 import type { Network, Shape, Stop } from '../../app/src/motion/network';
 import { cumulative } from '../../app/src/motion/polyline';
 import { DEFAULT_CROP, HIT_RADIUS_CSS_PX, ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
@@ -405,7 +405,8 @@ describe('mountSchematicView, the tap card (T9)', () => {
     expect(c.hidden).toBe(false);
     expect(c.getAttribute('role')).toBe('dialog');
     expect(c.querySelector('[data-testid=vehicle-line]')!.textContent).toBe('R-tram');
-    expect(c.querySelector('[data-testid=vehicle-direction]')!.textContent).toBe('smjer Jelačić plac');
+    // Without the twin's headsign a bare fix names its direction by its own movement (east here), never a guessed terminus.
+    expect(c.querySelector('[data-testid=vehicle-direction]')!.textContent).toBe('smjer istok');
     expect(c.querySelector('[data-testid=vehicle-delay]')!.textContent).toBe('kašnjenje linije: kasni 1 min');
   });
 

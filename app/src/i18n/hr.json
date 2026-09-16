@@ -996,9 +996,10 @@
     }
   },
   "motion": {
-    "note": "Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.",
+    "note": "Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.",
     "direction": "smjer {towards}",
     "directionUnknown": "smjer nepoznat",
+    "nextStop": "sljedeće stajalište {stop}",
     "delay": "kašnjenje linije: {word}",
     "delayUnknown": "kašnjenje linije nepoznato",
     "lineUnknown": "linija nepoznata",

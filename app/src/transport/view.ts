@@ -357,6 +357,8 @@ export interface VehicleDetailData {
   route: RouteEntry | null;
   /** vehicleDirection()'s sentence. */
   direction: string;
+  /** vehicleNextStop()'s sentence, or null. */
+  nextStop?: string | null;
   delay: number | undefined;
   following: boolean;
   kiosk: boolean;
@@ -383,6 +385,7 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk, { cast: d.cast }) +
     `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(d.direction, locale))}</p>` +
+    (d.nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(d.nextStop, locale))}</p>` : '') +
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
     (d.kiosk ? '' : actions([follow, route])) +

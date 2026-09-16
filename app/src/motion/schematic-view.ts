@@ -7,11 +7,11 @@
 // (T9) with its text path for people who cannot see the canvas (R-F5): a
 // visually hidden list of the drawn vehicles as real buttons that open the
 // same card, which is a real dialog that takes focus and hands it back.
-// This file owns the motion model and the frame loop; the caller only
-// ever hands it fixes and per-route delay figures through `update()`. It
-// never reads a reported position off a `Fix` itself, and nothing here ever
-// paints one (R-P2): the card, like the marks and the list, describes the
-// model's own estimate.
+// This file owns the integrator (motion/integrator.ts) and the frame loop;
+// the caller only ever hands it the twin's fixes and plans and per-route
+// delay figures through `update()`. It never reads a reported position off
+// a `Fix` itself, and nothing here ever paints one (R-P2): the card, like
+// the marks and the list, describes the integrator's own estimate.
 //
 // The two surfaces that mount this (through motion/schematic-host.ts: the U
 // pokretu panel and the kiosk's `.kiosk-live` stage slot) differ only in
@@ -20,7 +20,7 @@
 // resolved `Network` once network.ts's loadNetwork() has settled.
 import { dist, type XY } from './geo';
 import { createLoop, type Loop } from './loop';
-import { createModel, type Drawn, type Fix, type Model } from './model';
+import { createIntegrator, type Drawn, type Fix, type Model } from './integrator';
 import type { Network } from './network';
 import {
   DEFAULT_CROP,
@@ -228,6 +228,7 @@ function markup(lightweight: boolean, i18n: I18n, ids: MarkupIds): string {
            <h3 class="schematic-card-line" id="${ids.line}" data-testid="vehicle-line"></h3>
            <p class="schematic-card-row" data-testid="vehicle-direction"></p>
            <p class="schematic-card-row" data-testid="vehicle-delay"></p>
+           <p class="schematic-card-row" data-testid="vehicle-next-stop" hidden></p>
            <button type="button" class="btn-ghost schematic-card-close" data-testid="vehicle-card-close">${escapeHtml(i18n.t('common.close'))}</button>
          </section>
        </div>
@@ -244,7 +245,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
   const setTimer = deps.setTimer ?? ((fn, ms) => globalThis.setTimeout(fn, ms));
   const clearTimer = deps.clearTimer ?? ((h) => globalThis.clearTimeout(h as never));
 
-  const model: Model = createModel(deps.net);
+  const model: Model = createIntegrator(deps.net);
   let delays: ReadonlyMap<string, number> = new Map();
   let hasData = false; // before the first update(): "loading", never a false zero (R-P2's own honesty discipline elsewhere in this area)
   // R-F8: the lightweight list's own status line, read only from the caller's
@@ -268,6 +269,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
   const cardLine = element.querySelector<HTMLElement>('[data-testid=vehicle-line]');
   const cardDirection = element.querySelector<HTMLElement>('[data-testid=vehicle-direction]');
   const cardDelay = element.querySelector<HTMLElement>('[data-testid=vehicle-delay]');
+  const cardNextStop = element.querySelector<HTMLElement>('[data-testid=vehicle-next-stop]');
 
   let layout: SchematicLayout = layoutSchematic(netOrEmpty, crop, NOMINAL_PX, NOMINAL_PX, 1, types);
   let vehiclesCtx: CanvasRenderingContext2D | null = null;
@@ -392,12 +394,16 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     const v = drawnList.find((d) => d.id === selectedId);
     if (!v) return;
     const card: VehicleCard = describeVehicle(i18n, netOrEmpty, v, delays);
-    const text = `${card.line}\n${card.direction}\n${card.delay}`;
+    const text = `${card.line}\n${card.direction}\n${card.delay}\n${card.nextStop ?? ''}`;
     if (text === lastCardText) return;
     lastCardText = text;
     cardLine!.textContent = card.line;
     cardDirection!.textContent = card.direction;
     cardDelay!.textContent = card.delay;
+    if (cardNextStop) {
+      cardNextStop.textContent = card.nextStop ?? '';
+      cardNextStop.hidden = card.nextStop === undefined;
+    }
   }
 
   /** `opener` is what gets focus back when the person closes the card;
@@ -544,7 +550,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
    *  surprises: "6 · Črnomerec-Sopot, smjer Sopot, kašnjenje linije: +40 s". */
   function paintVehicleButton(button: HTMLButtonElement, v: Drawn): void {
     const card = describeVehicle(i18n, netOrEmpty, v, delays);
-    const text = `${card.line}, ${card.direction}, ${card.delay}`;
+    const text = [card.line, card.direction, card.delay, card.nextStop].filter(Boolean).join(', ');
     if (button.textContent !== text) button.textContent = text;
   }
 

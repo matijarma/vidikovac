@@ -15,7 +15,7 @@
 // own estimate; a reported fix never reaches this file (R-P2).
 
 import { dist, toPlane, type XY } from './geo';
-import type { Drawn } from './model';
+import type { Drawn } from './integrator';
 import type { Network } from './network';
 
 /** The narrow stroke/path/clip surface a canvas 2D context exposes,

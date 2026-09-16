@@ -1,23 +1,24 @@
 // What the tap card says about one vehicle (T9): the line, the direction it
-// is heading, and its route's median delay. Pure: a Drawn (the model's own
-// estimate, never a reported fix -- R-P2), the network and the delay map
-// in, three strings out. Direction is the terminus of the shape the model
-// has the vehicle on -- what the headsign would say -- and reads "smjer
-// nepoznat" whenever the model's heading is null, i.e. at a standstill or
-// under the evidence threshold (decision 5), rather than being guessed --
-// unless the twin's join carries the trip's headsign, which names the
-// direction whatever the mark is doing (R-TE2).
+// is heading, its route's median delay, and -- when the twin's join names
+// one -- the next stop. Pure: a Drawn (the integrator's own estimate, never
+// a reported fix -- R-P2), the network and the delay map in, strings out.
+// Direction is the trip's headsign from the twin's join (R-TE2) whatever the
+// mark is doing; without a join it falls back to the terminus of the shape
+// the mark rides, else a compass word, and reads "smjer nepoznat" whenever
+// the heading is null (decision 5) rather than being guessed.
 import { routeName } from '../data/routes';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
 import type { XY } from './geo';
-import type { Drawn } from './model';
+import type { Drawn } from './integrator';
 import type { Network } from './network';
 
 export interface VehicleCard {
   line: string;
   direction: string;
   delay: string;
+  /** "sljedeće stajalište X", only when the wire names a stop the network knows. */
+  nextStop?: string;
 }
 
 const COMPASS = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'] as const;
@@ -49,18 +50,19 @@ export function describeVehicle(i18n: I18n, net: Network, v: Drawn, delays: Read
 
   let direction: string;
   if (v.headsign) {
-    // The twin's static join names the direction outright (R-TE2); the model's
-    // heading is the fallback for a trip the index does not know.
     direction = i18n.t('motion.direction', { towards: v.headsign });
   } else if (!v.heading) {
     direction = i18n.t('motion.directionUnknown');
   } else {
-    const terminus = v.onShape !== null ? terminusName(net, v.onShape) : null;
+    const terminus = v.onShape !== null && v.onShape >= 0 ? terminusName(net, v.onShape) : null;
     direction = i18n.t('motion.direction', { towards: terminus ?? i18n.t(`motion.compass.${compassKey(v.heading)}`) });
   }
 
   const seconds = v.routeId !== undefined ? delays.get(v.routeId) : undefined;
   const delay = seconds === undefined ? i18n.t('motion.delayUnknown') : i18n.t('motion.delay', { word: delayWord(i18n, seconds) });
 
-  return { line, direction, delay };
+  const card: VehicleCard = { line, direction, delay };
+  const stopName = v.nextStopId !== undefined ? net.stops.find((s) => s.id === v.nextStopId)?.name : undefined;
+  if (stopName) card.nextStop = i18n.t('motion.nextStop', { stop: stopName });
+  return card;
 }

@@ -129,16 +129,7 @@ export function viewOf(request: KioskMapRequest): KioskMapView {
 
 /** zet-rt pins as dated map points: evidence for the motion model. */
 export function vehiclePoints(zet: ModuleSnapshot | undefined, now: number): MapPoint[] {
-  return vehicleFixes(zet, now).map((fix) => ({
-    id: fix.id,
-    lon: fix.lon,
-    lat: fix.lat,
-    at: fix.at,
-    routeId: fix.routeId,
-    tripId: fix.tripId,
-    type: fix.type,
-    title: routeName(fix.routeId ?? ''),
-  }));
+  return vehicleFixes(zet, now).map((fix) => ({ ...fix, title: routeName(fix.routeId ?? '') }));
 }
 
 /** Closures with a line geometry, as map lines. */
