@@ -151,9 +151,19 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     expect(invitation['column-gap']).toBeUndefined();
     expect(decls('.k-paired')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-paired-side-w)');
   });
-  it('keeps the QR at 240 px at every landscape size, and above Full HD grows it on the sign scale alone', () => {
+  it('keeps the QR at 240 px at every landscape size, and above Full HD grows it on the sign scale alone -- with the card\u2019s own gap, lead and hint, which are the composition\u2019s gap, supporting and hint sizes on that same scale, so a 4K wall\u2019s doubled type never outgrows the card it stands in', () => {
     expect(decls(".kiosk[data-size='wide']")['--k-qr']).toBe('calc(240px * var(--k-sign-zoom))');
     expect(decls(".kiosk[data-size='compact']")['--k-qr']).toBe('calc(240px * var(--k-sign-zoom))');
+    for (const [size, gap, lead, hint] of [['wide', 20, 28, 26], ['compact', 14, 22, 20]] as const) {
+      const rule = decls(`.kiosk[data-size='${size}']`);
+      expect(rule['--k-card-gap'], size).toBe(`calc(${gap}px * var(--k-sign-zoom))`);
+      expect(rule['--k-card-lead'], size).toBe(`calc(${lead}px * var(--k-sign-zoom))`);
+      expect(rule['--k-card-hint'], size).toBe(`calc(${hint}px * var(--k-sign-zoom))`);
+      expect(rule['--k-gap'], size).toBe(`calc(${gap}px * var(--k-zoom))`);
+    }
+    // A phone's card tokens are its own gap and tiers (zoom is 1 there): the same card, no second drawing.
+    const phone = decls(".kiosk[data-size='handheld']");
+    expect([phone['--k-card-gap'], phone['--k-card-lead'], phone['--k-card-hint']]).toEqual([phone['--k-gap'], phone['--k-sup-size'], phone['--k-hint-size']]);
     // The paired corner QR belongs to a composition this wave leaves alone: it keeps the composition scale, 120 px at zoom 1 as it always was.
     expect(decls('.k-join-qr').width).toBe('calc(120px * var(--k-zoom))');
   });
@@ -161,7 +171,7 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     expect(decls('.k-say-value')['font-size']).toBe('var(--k-main-size)');
     expect(decls('.k-say-label')['font-size']).toBe('var(--k-label-size)');
     expect(decls('.k-say-context')['font-size']).toBe('var(--k-hint-size)');
-    expect(decls('.k-hint')['font-size']).toBe('var(--k-hint-size)');
+    expect(decls('.k-hint')['font-size']).toBe('min(var(--k-hint-size), var(--k-card-hint))');
     expect(decls('.k-date')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
   });
@@ -355,7 +365,7 @@ describe('the invitation: one field, one column', () => {
     for (const dead of ['k-scene-in', 'k-scene-out', '.k-story-item', 'k-story-in', 'k-story-out']) expect(BARE, dead).not.toContain(dead);
     expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
   });
-  it('the card is the QR beside the lead over the hint, then the code spanning (R-KP21): accent-filled, padded by a gap with its rows 0.6 of a gap apart, the QR row at least the QR tall and free to grow (the card never clips), the lead at the supporting tier and weight 800, the address wrapping at its own joints and never ellipsised', () => {
+  it('the card is the QR beside the lead over the hint, then the code spanning (R-KP21): accent-filled, padded by the card gap with its rows 0.6 of it apart, the QR row at least the QR tall and free to grow (the card never clips), the lead at the supporting tier and weight 800, the address wrapping at its own joints and never ellipsised', () => {
     const card = decls('.k-invite');
     expect(card['grid-template-columns']).toBe('var(--k-qr) minmax(0, 1fr)');
     expect(card['grid-template-rows']).toBe('minmax(var(--k-qr), auto) auto');
@@ -363,15 +373,16 @@ describe('the invitation: one field, one column', () => {
     expect(card.overflow).toBeUndefined();
     expect(card.background).toBe('var(--k-action)');
     expect(card.color).toBe('var(--k-action-ink)');
-    expect(card.padding).toBe('var(--k-gap)');
-    expect(card['row-gap']).toBe('calc(var(--k-gap) * 0.6)');
+    expect(card.padding).toBe('var(--k-card-gap)');
+    expect(card['column-gap']).toBe('var(--k-card-gap)');
+    expect(card['row-gap']).toBe('calc(var(--k-card-gap) * 0.6)');
     const side = decls('.k-invite-side');
     expect(side['grid-area']).toBe('side');
     expect(side.display).toBe('grid');
     expect(side['align-content']).toBe('space-between');
     expect(side['min-width']).toBe('0');
     const lead = decls('.k-lead');
-    expect(lead['font-size']).toBe('var(--k-sup-size)');
+    expect(lead['font-size']).toBe('min(var(--k-sup-size), var(--k-card-lead))');
     expect(lead['font-weight']).toBe('800');
     expect(lead['line-height']).toBe('1.15');
     expect(rulesUsing('--k-main-size')).not.toContain('.k-lead');

@@ -118,6 +118,13 @@
   --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
+  /* The card's own measures on the sign scale: its gap, its lead (the supporting tier) and its hint (the hint tier).
+     1 at the design sizes, so these equal --k-gap, --k-sup-size and --k-hint-size there; above Full HD the wall's type
+     doubles (--k-zoom 2 at 4K) while the card stops at 1.35, and words that followed the type would not fit the side
+     column beside the QR. */
+  --k-card-gap: calc(20px * var(--k-sign-zoom));
+  --k-card-lead: calc(28px * var(--k-sign-zoom));
+  --k-card-hint: calc(26px * var(--k-sign-zoom));
   --k-display-size: calc(84px * var(--k-zoom));
   --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
@@ -140,6 +147,9 @@
   --k-side-w: calc(440px * var(--k-sign-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
+  --k-card-gap: calc(14px * var(--k-sign-zoom));
+  --k-card-lead: calc(22px * var(--k-sign-zoom));
+  --k-card-hint: calc(20px * var(--k-sign-zoom));
   --k-display-size: calc(64px * var(--k-zoom));
   --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
@@ -261,25 +271,27 @@
    two lines is shortened at a word, a statement the room does not hold is
    hidden whole -- never clipped, never ellipsised (R-KP5).
 
-   The vertical budget at the design sizes, the numbers the composition is
-   held to (e2e/kiosk-layout.spec.ts measures them with the plan's own three
-   statements): the column is 888 px tall at 1920 x 1080 and 624 at
-   1366 x 768. The card takes 465 / 380 px -- its --k-gap padding, the lead
-   (two lines of the main tier at wide, one at compact: the copy and the
-   tier are the design system's), the 240 px QR, the code at 15cqi of the
-   card with its 8 px bar, two row gaps of 0.6 gap. This panel's block
-   padding takes two gaps and the gap before the card half a gap. What is
-   left, 373 / 209 px, holds two statements whole at each size: at wide a
-   transit statement of two badge rows and a two-line value (222 px) over a
-   one-line statement (137 px); at compact a one-badge-row transit statement
-   (99 px) over a one-line statement (99 px), the caps in kiosk/layout.ts
-   keeping that badge row single. A third statement would need about 400 px
-   at wide, so Full HD shows two, and the third the ranker offers appears
-   where the type outgrows the card: a 4K wall scales the type by 2 and the
-   card by 1.35 and leaves about 946 px. The block padding is --k-gap, the
-   card's own padding, so the column reads as one rhythm; the inline padding
-   stays --k-pad so the column's content aligns with the header's and the
-   strip's. */
+   The vertical budget at the design sizes, measured on 16 Sept 2026 with
+   the plan's own three statements in the live column (e2e/kiosk-layout.spec.ts
+   pins it as floors, R-KP22): the column is 888 px tall at 1920 x 1080 and
+   624 at 1366 x 768. The card takes 365 / 341 px -- its --k-gap padding,
+   the 240 px QR row (the lead at the supporting tier over the hint beside
+   the QR, 232 / 206 px of the 240, R-KP21), one row gap of 0.6 gap, the
+   code at 15cqi of the card with its 8 px bar (73 / 64 px). This panel's
+   block padding takes two gaps and the gap before the card half a gap. What
+   is left, 473 / 248 px, holds: at wide, two statements whole with the
+   worst transit value (two badge rows and a two-line value, 222 px, over a
+   one-line statement, 137 px: 359 used) and three when every value is one
+   line (178 + 137 + 137 = 452); at compact, two whole (a one-badge-row
+   transit statement, 99 px, over a one-line statement, 99 px; a two-line
+   transit value would still leave 19 px), never three (297). The totem's
+   row is its card's height, 382 px, and holds three (360 in the worst
+   reading, 329 in the calm). Above Full HD the type follows --k-zoom while
+   the card follows --k-sign-zoom (capped 1.35), so a 4K wall shows the
+   three the ranker offers with room over. The block padding is --k-gap,
+   the card's own padding, so the column reads as one rhythm; the inline
+   padding stays --k-pad so the column's content aligns with the header's
+   and the strip's. */
 .k-column { display: grid; grid-template-rows: minmax(0, 1fr) auto; row-gap: calc(var(--k-gap) * 0.5); box-sizing: border-box; min-width: 0; min-height: 0; background: var(--k-surface); border-left: 1px solid var(--k-line); padding: var(--k-gap) var(--k-pad); }
 .k-says { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 /* A statement: label, value, context, separated from the next by a hairline; no fill, no border, no radius.
@@ -332,20 +344,25 @@
    Two rows: the 240 px QR in the first column with the lead over the hint
    beside it, then the code with its bar across both. The first row is at
    least the QR's height and grows if the side column outgrows it: the card
-   never clips. Padded by a gap, its rows 0.6 of a gap apart: the card's
+   never clips. Padded by the card gap, its rows 0.6 of it apart: the card's
    height is part of the column's budget (above). The lead sits at the
    supporting tier, weight 800, wrapping freely beside the QR: at the main
-   tier across the card it took two lines and cost the column a statement. */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: minmax(var(--k-qr), auto) auto; grid-template-areas: 'qr side' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+   tier across the card it took two lines and cost the column a statement.
+   Everything the card is made of follows the sign scale (--k-card-*: the
+   card is a thing a person walks up to, like its QR), so on a 4K wall, where
+   the type doubles and the card stops at 1.35, the lead and the hint keep
+   the card's own proportions instead of overflowing the side column; at
+   the design sizes and up to 2560 x 1440 the two scales are one. */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: minmax(var(--k-qr), auto) auto; grid-template-areas: 'qr side' 'code code'; column-gap: var(--k-card-gap); row-gap: calc(var(--k-card-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-card-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
 /* The lead and the hint share the side column: the lead at its head, the hint at its foot, over the QR's own height. */
 .k-invite-side { grid-area: side; display: grid; align-content: space-between; min-width: 0; }
-.k-lead { font-size: var(--k-sup-size); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
+.k-lead { font-size: min(var(--k-sup-size), var(--k-card-lead)); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
-.k-hint { min-width: 0; font-size: var(--k-hint-size); line-height: 1.3; }
+.k-hint { min-width: 0; font-size: min(var(--k-hint-size), var(--k-card-hint)); line-height: 1.3; }
 /* The typed address, whole: beside a 240 px QR it wraps at the break points
    the markup gives it (after each dot, before the path) and, as the last
    resort, anywhere -- a typed address is useless ellipsised. */
@@ -667,6 +684,9 @@ button.k-strip-verdict { cursor: pointer; }
   --k-radius: 14px;
   --k-radius-s: 10px;
   --k-control: 48px;
+  --k-card-gap: 12px;
+  --k-card-lead: 18px;
+  --k-card-hint: 18px;
   --k-map-band: 280px;
   --k-block-min: 160px;
   --k-arc-w: 280px;
