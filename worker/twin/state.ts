@@ -6,6 +6,7 @@
 // knowing the fleet.
 
 import type { PublishedPlan } from '../../shared/motion/hindsight';
+import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
 
@@ -35,10 +36,16 @@ export interface TwinState {
   tripUpdates: Record<string, TripNext>;
   /** Per vehicle, the plans published in the last ticks, oldest first. */
   published: Record<string, PublishedPlan[]>;
+  /** Per vehicle, the report time of the newest fix already mined for
+   *  evidence (learn.ts), so a traversal or a dwell is counted once. */
+  learnedUpTo: Record<string, number>;
+  /** Evidence counted since the last flush to SQLite (C1): rides in the
+   *  state row so an eviction between two flushes loses nothing. */
+  pendingLearned: LearnedAggregates;
 }
 
 export function emptyState(): TwinState {
-  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {} };
+  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates() };
 }
 
 /** The update to keep for a trip: the earliest stop still ahead of the header
