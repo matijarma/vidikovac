@@ -1,12 +1,27 @@
 #!/usr/bin/env node
-// Builds app/public/data/zet-network.json (simplified route shapes, stop
-// arc-fractions and an octilinear schematic diagram) plus the plain-constant
-// summary app/src/motion/network-meta.ts, from ZET's static GTFS feed.
+// Builds app/public/data/zet-network.json version 2 -- the tram rail GRAPH
+// (directed edges shared by every line that runs them), every tram shape as
+// a sequence of those edges, synthetic paths for tram patterns whose trips
+// carry no shape_id (line 1), bus shapes as plain simplified polylines, stops
+// with an exact arc on every tram edge and bus shape they sit on, and the
+// octilinear schematic diagram -- plus the plain-constant summary
+// app/src/motion/network-meta.ts, from ZET's static GTFS feed.
 //
-// Reuses the zero-dependency zip reader and CSV parser from gtfs-routes.mjs
-// rather than adding a dependency; run locally with `npm run build:network`
-// and commit both generated files. The Worker never downloads the 15 MB
-// archive -- this is a local build step, exactly like gtfs-routes.
+// Why a graph (plan "Static data -> Network artefact v2", R-TE11): ZET draws
+// all 78 tram shapes from ONE rail centreline point set -- 98 % of shape
+// segments are shared bit-for-bit across lines and the two directions of a
+// line are separate tracks 3 to 6 m apart. So an edge is simply a maximal run
+// of segments that exactly the same set of lines traverse, cut wherever that
+// set changes or a third track attaches; no fuzzy merging is needed beyond a
+// snapping pass for the 2 % of near-duplicate digitisations of one track.
+// The twin (worker/do/twin-do.ts) map-matches trams onto these edges and
+// keeps their order per edge; the client draws along the same geometry.
+//
+// Reuses the zero-dependency zip reader and CSV parser from gtfs-routes.mjs;
+// run locally with `npm run build:network` and commit both generated files.
+// The Worker never downloads the 15 MB archive -- a local build step, and the
+// trip index (scripts/gtfs-trips.mjs) must be cut from the same feed version
+// (R-TE16: `npm run build:network && npm run build:trips`).
 //
 // Attribution obligation (Otvorena dozvola, ZET) carries over unchanged;
 // see ZET_ATTRIBUTION in gtfs-routes.mjs.
@@ -16,81 +31,89 @@ import { Readable } from 'node:stream';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { compareRouteIds, extractEntry, localFileDataOffset, parseCsv, readZipEntries } from './gtfs-routes.mjs';
 
 export const GTFS_URL = 'https://www.zet.hr/gtfs-scheduled/latest';
 export const OUTPUT_PATH = 'app/public/data/zet-network.json';
 export const META_OUTPUT_PATH = 'app/src/motion/network-meta.ts';
 
+/** The wire version shared/motion/network.ts decodes; a cached version 1
+ *  artefact must fail loudly there, never be misread. */
+export const ARTEFACT_VERSION = 2;
+
 const DOWNLOAD_TIMEOUT_MS = 60_000; // build-time download of a >10 MB archive, not a live request
 const USER_AGENT = 'Vidikovac/0.1 (zagreb.aningfilm.hr; kontakt@aningfilm.hr)';
 
 // The artefact's delta-encoding origin and unit: every lon/lat in the file is
-// stored as an integer (value - origin) / scale, so shapes.txt's ~77k points
-// become small integers instead of 8-decimal floats. 1e-5 deg is a ~1.1 m
-// quantum at Zagreb's latitude -- comfortably finer than the 5 m shape
-// simplification below, so quantisation never shows up as visible jitter.
+// stored as an integer (value - origin) / scale. 1e-5 deg is a ~1.1 m quantum
+// at Zagreb's latitude -- the feed's own precision, and the quantum the rail
+// graph is built on: two shapes share a segment when both quantised endpoints
+// coincide.
 export const ORIGIN = [15.9, 45.75]; // lon, lat
 export const SCALE = 1e-5; // degrees per integer unit
 
 // The equirectangular projection used ONLY for internal metre-space work
-// (Douglas-Peucker, arc length, the 40 m stop radius, the octilinear
-// diagram): a single cos(lat) factor around Zagreb's own latitude, rather
-// than a projection library the brief explicitly says not to add.
+// (Douglas-Peucker, arc length, the 40 m stop radius, the snap distance, the
+// octilinear diagram): a single cos(lat) factor around Zagreb's own latitude.
 const PROJECTION_LAT_DEG = 45.8;
 const EARTH_RADIUS_M = 6378137; // WGS84 equatorial radius; good enough at this scale
 const DEG2RAD = Math.PI / 180;
 const COS_LAT0 = Math.cos(PROJECTION_LAT_DEG * DEG2RAD);
 
-// Simplify shapes at 5 m: well above the ~1.1 m coordinate quantum above, so
-// simplification error is never confused with quantisation noise.
+// Simplify edge interiors and bus shapes at 5 m: well above the ~1.1 m
+// coordinate quantum, so simplification error is never confused with
+// quantisation noise. Edge endpoints (the graph's nodes) are always kept.
 export const SIMPLIFY_METRES = 5;
-// A stop is linked to a shape when it passes within 40 m of it.
+// A stop is linked to an edge or a bus shape when it passes within 40 m of it.
 export const STOP_SHAPE_MAX_METRES = 40;
+// The first and last stop of a shapeless pattern may sit further from the
+// rails any shape draws: a terminus platform served only by that line has
+// no shape of its own in the feed (line 1 at Zapadni kolodvor, 168 m past
+// the last drawn rail). Up to 200 m such a stop is linked to the nearest
+// edge, the way the trip-endpoint override links a shaped route's terminus;
+// an interior stop that far off the graph is a data error and fails the build.
+export const TERMINUS_STOP_MAX_METRES = 200;
+// How many stops a synthetic path may drop at either end when the rails
+// there are drawn by no shape at all: one terminus and the stop after it,
+// which is how far line 1 runs on its own rails out of Zapadni kolodvor.
+export const TERMINUS_TRIM_STOPS = 2;
 // The diagram's second simplification pass, after the octilinear snap.
 export const DIAGRAM_SIMPLIFY_METRES = 120;
-// Zagreb's real network is dense enough downtown that a stop is often within
-// 40 m of a dozen different lines' shapes (524 shapes average ~57 linked
-// stops each -- genuinely how many stops a route serves, not noise). Storing
-// each stop's shape index as a plain absolute integer and its fraction as a
-// four-decimal float does not fit the budget below, so both are quantised:
-// the index as a delta from the previous (ascending) index in the same
-// stop's own list, the fraction to the nearest 1/50th of the shape's own
-// length -- at a typical 1-5 km shape that is 20-100 m of absolute error on
-// *where along the shape* a stop sits, which only has to be tight enough to
-// order stops correctly and gate dead reckoning at roughly the right one
-// (one stop spacing, per the area's own motion-model tolerance), not to
-// place a stop precisely.
-export const ON_FRAC_SCALE = 50;
 
-// There is deliberately no cap on how many shapes one stop links to. T1
-// shipped one (ON_MAX_PER_STOP = 12, trimming the geometrically farthest
-// matches at a stop once it exceeded 12), and the controller removed it
-// (ruling R-T1): a cap means the busiest interchanges -- Trg bana Jelačića
-// first among them, with real p90 20 and max 63 links/stop -- are missing
-// from some of their own shapes' stop lists, so a tram can be dead-reckoned
-// straight through the main square without the model ever seeing a stop to
-// gate on. That is a correctness defect at the one place every screen looks,
-// not a size optimisation worth keeping. Every association within
-// STOP_SHAPE_MAX_METRES is now kept; the byte budget below moved (R-T2) to
-// make room instead of trimming this list.
+// The snapping pass for near-duplicate digitisations of one track: a run of
+// one shape's vertices all within 2.5 m of an earlier shape's polyline, in
+// the same direction, sustained over at least 30 m, is replaced by that
+// polyline so the two share segments exactly. 2.5 m is under half the
+// measured 3 to 6 m between a line's two directions (which the direction
+// test excludes anyway) and well over the 1.1 m quantum; 30 m is longer than
+// any at-grade crossing's brush with another track, which touches at one
+// point, and shorter than the shortest real shared stretch worth an edge.
+export const SNAP_METRES = 2.5;
+export const SNAP_MIN_RUN_METRES = 30;
+
+// Bus stops link to bus shapes as a fraction of the shape's own simplified
+// length, quantised to 1/500: on a 1 to 20 km bus shape that is 2 to 40 m of
+// arc error, enough for the stop gate and the planner's dwell on a vehicle
+// that runs no graph and obeys no ordering law, while exact decimetres for
+// the ~19,500 bus links would cost about 60 KB of raw budget the tram graph
+// does not save (R-TE11). Tram stops get exact decimetres on their edges.
+export const BUS_ON_FRAC_SCALE = 500;
 
 // Column order for the struct-of-arrays wire format (see toColumnar).
 export const ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes'];
-export const SHAPE_KEYS = ['id', 'route', 'd', 'len'];
-export const STOP_KEYS = ['id', 'name', 'p', 'on'];
+export const EDGE_KEYS = ['from', 'to', 'd'];
+export const SHAPE_KEYS = ['id', 'route', 'dir', 'd', 'e', 'len'];
+export const PATH_KEYS = ['id', 'route', 'dir', 'e', 'stops'];
+export const STOP_KEYS = ['id', 'name', 'p', 'on', 'onEdge'];
 export const LINE_KEYS = ['route', 'pts'];
 // Diagram legibility cut: every tram route, plus this many of the busiest
-// bus routes by trip count (154 routes total would not read as a schematic
-// map; 19 trams + the top 20 buses mirrors how ZET's own printed network map
-// picks its "trunk" lines). This no longer trades against a per-stop cap
-// (there is none -- see the note above); it stands on its own legibility
-// reasoning alone.
+// bus routes by trip count (19 trams + the top 20 buses mirrors how ZET's own
+// printed network map picks its "trunk" lines).
 export const DIAGRAM_BUS_COUNT = 20;
 
 /** Converts lon/lat degrees to a local metre-space plane (translation
- *  doesn't matter here: only used for distances, lengths and angles, all of
- *  which are translation-invariant). */
+ *  doesn't matter here: only used for distances, lengths and angles). */
 export function toMetres(lon, lat) {
   return { x: lon * DEG2RAD * COS_LAT0 * EARTH_RADIUS_M, y: lat * DEG2RAD * EARTH_RADIUS_M };
 }
@@ -99,18 +122,17 @@ function deltaEncode(value, origin) {
   return Math.round((value - origin) / SCALE);
 }
 
+/** An integer unit pair back to the metre plane. */
+function unitsToMetres([x, y]) {
+  return toMetres(ORIGIN[0] + x * SCALE, ORIGIN[1] + y * SCALE);
+}
+
 /**
  * True delta (chain) encoding of a sequence of integer (x, y) units: every
- * point is stored as its difference from the *previous* point, not from a
- * shared origin. The first point's difference is taken against (0, 0), so
- * the whole shape still anchors to ORIGIN through the caller's own
- * deltaEncode of its first lon/lat. Consecutive shape (or stop) points are
- * typically tens to a few hundred metres apart -- far smaller numbers than
- * their several-kilometre offset from ORIGIN -- which is what actually keeps
- * the artefact inside its byte budget; a per-point offset from one shared
- * origin does not. Lossless: summing the deltas back (chainDecodeXY)
- * reproduces the exact original integers, because integer subtraction has no
- * rounding error.
+ * point is stored as its difference from the *previous* point, the first
+ * against (0, 0). Consecutive points are typically tens to a few hundred
+ * metres apart -- far smaller numbers than their offset from ORIGIN -- which
+ * is what keeps the artefact inside its byte budget. Lossless.
  */
 export function chainEncodeXY(unitsList) {
   const out = [];
@@ -137,16 +159,56 @@ export function chainDecodeXY(flat) {
   return out;
 }
 
-/** Inverse of the stop-transfer-sorted, chain-delta-and-scaled `on` encoding
- *  built in buildNetwork: returns absolute [shapeIdx, frac] pairs. */
+/** Edge geometry is one chain across the WHOLE edges array (each edge's
+ *  first point is a delta from the previous edge's last point), so a
+ *  junction where one edge starts where another ends costs two zeros, not a
+ *  coordinate. Returns the absolute [x, y] units per edge. */
+export function decodeEdgeChain(dList) {
+  const flat = [];
+  for (const d of dList) flat.push(...d);
+  const units = chainDecodeXY(flat);
+  const out = [];
+  let at = 0;
+  for (const d of dList) {
+    const count = d.length / 2;
+    out.push(units.slice(at, at + count));
+    at += count;
+  }
+  return out;
+}
+
+/** Inverse of the bus-shape `on` encoding: absolute [shapeIdx, frac] pairs. */
 export function decodeStopOn(wireOn) {
   const out = [];
   let idx = 0;
   for (const [dIdx, scaledFrac] of wireOn) {
     idx += dIdx;
-    out.push([idx, scaledFrac / ON_FRAC_SCALE]);
+    out.push([idx, scaledFrac / BUS_ON_FRAC_SCALE]);
   }
   return out;
+}
+
+/** Inverse of the tram-edge `onEdge` encoding: absolute [edgeIdx, metres] pairs. */
+export function decodeStopOnEdge(wireOn) {
+  const out = [];
+  let idx = 0;
+  for (const [dIdx, decimetres] of wireOn) {
+    idx += dIdx;
+    out.push([idx, decimetres / 10]);
+  }
+  return out;
+}
+
+/** FNV-1a (32-bit) of the stop sequence, eight hex digits: names a synthetic
+ *  path by what it visits, stable across builds of the same pattern. */
+export function stopSequenceHash(stopIds) {
+  let h = 0x811c9dc5;
+  const text = stopIds.join(',');
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
 }
 
 function round1(x) {
@@ -162,26 +224,10 @@ function clamp01(x) {
 }
 
 /**
- * Struct-of-arrays transposition: turns a row-major array of objects into a
- * column-major object of arrays, one array per key, index-aligned. Applied
- * to routes/shapes/stops/diagram-lines below in place of the row-major
- * array-of-objects shown in the brief's illustrative interface: with 524
- * shapes and 2,529 stops (after the parent-station filter), repeating each
- * object's key names (`"id":`, `"name":`, `"p":`, `"on":`, …) as literal text
- * on every row costs tens of kilobytes of raw JSON that carries no
- * information -- gzip erases most of it, but the artefact's raw-byte budget
- * (R-L4) does not get that discount. Every field name and value from the
- * documented shape survives exactly, just transposed; fromColumnar (below,
- * exported for tests and for T4's future decodeNetwork) is its exact
- * inverse, so nothing the interface promises is lost, only how it is laid
- * out on disk.
- *
- * FLAGGED FOR CONTROLLER SIGN-OFF before T4 begins: this is a documented-
- * interface deviation (the brief's sketch is row-major array-of-objects),
- * not merely an implementation detail -- T4/T7/T8 must read this artefact
- * via fromColumnar/decodeStopOn/chainDecodeXY, never the brief's illustrative
- * JSON directly. See task-T1-report.md's Rulings for why a literal reading
- * is mathematically incompatible with the R-L4 byte budget.
+ * Struct-of-arrays transposition: a row-major array of objects into a
+ * column-major object of arrays, one array per key, index-aligned. Repeating
+ * each object's key names on every row would cost tens of kilobytes of raw
+ * JSON that carries no information; fromColumnar is the exact inverse.
  */
 export function toColumnar(rows, keys) {
   const out = {};
@@ -202,8 +248,8 @@ export function fromColumnar(columns, keys) {
 }
 
 // ---------------------------------------------------------------------------
-// Douglas-Peucker, on plane points, used both for shape simplification (5 m)
-// and, applied a second time to the octilinear diagram, at 120 m.
+// Douglas-Peucker, on plane points, used for edge interiors and bus shapes
+// (5 m) and, applied a second time to the octilinear diagram, at 120 m.
 
 function pointSegmentDistance(p, a, b) {
   const dx = b.x - a.x;
@@ -265,11 +311,22 @@ function bboxExpanded(points, margin) {
   return { minX: minX - margin, maxX: maxX + margin, minY: minY - margin, maxY: maxY + margin };
 }
 
+function inBbox(p, bb) {
+  return p.x >= bb.minX && p.x <= bb.maxX && p.y >= bb.minY && p.y <= bb.maxY;
+}
+
+function bboxesOverlap(a, b) {
+  return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+}
+
 /** Nearest point on a polyline (given its cumulative arc length), returning
- *  the perpendicular distance and the arc length at the nearest point. */
+ *  the perpendicular distance, the arc length at the nearest point, the
+ *  segment index and the fraction along that segment. */
 function nearestOnPolyline(p, points, cum) {
   let best = Infinity;
   let bestArc = 0;
+  let bestSeg = 0;
+  let bestT = 0;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
     const b = points[i];
@@ -283,9 +340,595 @@ function nearestOnPolyline(p, points, cum) {
     if (d < best) {
       best = d;
       bestArc = cum[i - 1] + t * Math.hypot(dx, dy);
+      bestSeg = i - 1;
+      bestT = t;
     }
   }
-  return { dist: best, arc: bestArc };
+  return { dist: best, arc: bestArc, seg: bestSeg, t: bestT };
+}
+
+// ---------------------------------------------------------------------------
+// The rail graph (B1).
+
+const unitKey = (u) => `${u[0]},${u[1]}`;
+const segmentKey = (a, b) => `${unitKey(a)}>${unitKey(b)}`;
+
+/** A shape's digitisation noise a single-ended tram cannot run: an immediate
+ *  reversal (a, b, a: out to a vertex and straight back) and a loop that
+ *  returns to the same point within SPIKE_LOOP_METRES. Left in, such a run
+ *  fragments a corridor every line shares into runs no other line has, one
+ *  spike at a time. A real terminus loop is hundreds of metres long and
+ *  never returns to a point it already left within thirty. */
+const SPIKE_LOOP_METRES = 30;
+
+function collapseSpikes(units) {
+  let out = units.map((u) => [u[0], u[1]]);
+  let removed = 0;
+  // Immediate reversals, repeated until none is left (a spike can nest).
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 1; i + 1 < out.length; i++) {
+      if (unitKey(out[i - 1]) === unitKey(out[i + 1])) {
+        out.splice(i, 2);
+        removed += 2;
+        changed = true;
+        break;
+      }
+    }
+  }
+  // Small loops: the path comes back to a point it left less than
+  // SPIKE_LOOP_METRES ago; everything between goes.
+  for (let i = 0; i < out.length; i++) {
+    let length = 0;
+    for (let j = i + 1; j < out.length; j++) {
+      const a = unitsToMetres(out[j - 1]);
+      const b = unitsToMetres(out[j]);
+      length += Math.hypot(b.x - a.x, b.y - a.y);
+      if (length > SPIKE_LOOP_METRES) break;
+      if (unitKey(out[j]) === unitKey(out[i])) {
+        out.splice(i + 1, j - i);
+        removed += j - i;
+        j = i;
+        length = 0;
+      }
+    }
+  }
+  return { units: out, removed };
+}
+
+function dedupeUnits(units) {
+  const out = [];
+  for (const u of units) {
+    const last = out[out.length - 1];
+    if (!last || last[0] !== u[0] || last[1] !== u[1]) out.push([u[0], u[1]]);
+  }
+  return out;
+}
+
+function sameSet(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+/** The direction (unit vector, metres) of a polyline around vertex i. */
+function localDirection(plane, i) {
+  const a = plane[Math.max(0, i - 1)];
+  const b = plane[Math.min(plane.length - 1, i + 1)];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const mag = Math.hypot(dx, dy);
+  return mag === 0 ? { x: 0, y: 0 } : { x: dx / mag, y: dy / mag };
+}
+
+function segmentDirection(plane, seg) {
+  const a = plane[seg];
+  const b = plane[seg + 1];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const mag = Math.hypot(dx, dy);
+  return mag === 0 ? { x: 0, y: 0 } : { x: dx / mag, y: dy / mag };
+}
+
+/** Share of shape-segments whose exact quantised segment no other shape in
+ *  the set traverses: the sharing measure the plan's findings quote (2 % for
+ *  the tram shapes), reported before snapping. */
+function unsharedShare(shapesUnits) {
+  const owners = new Map();
+  let total = 0;
+  for (const [si, units] of shapesUnits.entries()) {
+    for (let i = 1; i < units.length; i++) {
+      total++;
+      const k = segmentKey(units[i - 1], units[i]);
+      let set = owners.get(k);
+      if (!set) owners.set(k, (set = new Set()));
+      set.add(si);
+    }
+  }
+  if (total === 0) return 0;
+  let unshared = 0;
+  for (const set of owners.values()) if (set.size === 1) unshared += 1;
+  return unshared / total;
+}
+
+/**
+ * The snapping pass. Shapes are processed in index order; each is compared
+ * with the shapes before it, so the reference geometry is always the
+ * earliest shape's. Shape S is sampled every SNAP_SAMPLE_METRES along its
+ * current geometry (a long chord with no vertex inside a shared stretch is
+ * the common case, so vertices alone would miss it); a run of samples that
+ * all lie within SNAP_METRES of one earlier shape T, moving the same way,
+ * and spanning at least SNAP_MIN_RUN_METRES, is a stretch of one track drawn
+ * twice. Its two ends are projected onto both shapes and inserted as
+ * vertices -- into S and T, and into EVERY shape that shares the split
+ * segment, or the exact sharing the graph is built on would break where a
+ * third line ran the same segment -- and S's interior between them is
+ * replaced by T's own sub-polyline, after which S and T share the stretch
+ * segment for segment. A sample within the distance but heading the other
+ * way (the opposite track of a double-track line) never counts; a single
+ * touch at an at-grade crossing never spans the minimum run.
+ */
+const SNAP_SAMPLE_METRES = 2.5;
+const SNAP_GRID_METRES = 50;
+
+function snapNearDuplicates(shapesUnits, trace = null) {
+  const shapes = shapesUnits.map((units) => units.map((u) => [u[0], u[1]]));
+  let snappedRuns = 0;
+
+  /** All shapes that currently run the segment a->b, in either direction. */
+  const sharersOf = (a, b) => {
+    const fwd = segmentKey(a, b);
+    const rev = segmentKey(b, a);
+    const out = [];
+    shapes.forEach((U, si) => {
+      for (let i = 1; i < U.length; i++) {
+        const k = segmentKey(U[i - 1], U[i]);
+        if (k === fwd || k === rev) out.push({ si, i });
+      }
+    });
+    return out;
+  };
+
+  /** Places `unit` on shape `si` where plane point `p` projects: reuses a
+   *  vertex already within a metre of it, moves the vertex there when the
+   *  shape is the one being snapped (`move`: its own end is being put onto
+   *  the reference, a stub beside it would be a second track), else inserts
+   *  it into the segment -- and into every other shape sharing that segment,
+   *  or the exact sharing the graph is built on would break there. Returns
+   *  the unit's index in shape `si`. */
+  const VERTEX_REUSE_M = 1; // under one coordinate quantum: the same point, rounded differently
+  const insertAt = (si, p, unit, move) => {
+    const U = shapes[si];
+    const plane = U.map(unitsToMetres);
+    const near = nearestOnPolyline(p, plane, cumulative(plane));
+    const a = U[near.seg];
+    const b = U[near.seg + 1];
+    // The run ends exactly at one of this shape's vertices: that vertex IS the
+    // end, and on the shape being snapped it moves onto the reference.
+    const atVertex = near.t <= 1e-9 ? near.seg : near.t >= 1 - 1e-9 ? near.seg + 1 : -1;
+    if (move && atVertex >= 0) {
+      if (unitKey(U[atVertex]) !== unitKey(unit)) U[atVertex] = [unit[0], unit[1]];
+      return atVertex;
+    }
+    const q = unitsToMetres(unit);
+    const dA = Math.hypot(q.x - plane[near.seg].x, q.y - plane[near.seg].y);
+    const dB = Math.hypot(q.x - plane[near.seg + 1].x, q.y - plane[near.seg + 1].y);
+    const reuse = dA <= dB ? near.seg : near.seg + 1;
+    if (Math.min(dA, dB) <= VERTEX_REUSE_M) return reuse;
+    // Insert into every sharer, highest index first within each shape.
+    const sharers = sharersOf(a, b).sort((x, y) => y.i - x.i);
+    for (const { si: other, i } of sharers) shapes[other].splice(i, 0, [unit[0], unit[1]]);
+    for (let i = 1; i < U.length; i++) if (unitKey(U[i]) === unitKey(unit) && (unitKey(U[i - 1]) === unitKey(a) || unitKey(U[i - 1]) === unitKey(b))) return i;
+    return U.findIndex((u) => unitKey(u) === unitKey(unit));
+  };
+
+  // Each shape is snapped in passes: applying a run moves its ends onto the
+  // reference, which can bring the stretch between two runs within reach,
+  // so detection repeats until a pass finds nothing new (a few passes at
+  // most; the cap only guards against a pathological ping-pong).
+  const SNAP_MAX_PASSES = 6;
+  for (let si = 1; si < shapes.length; si++) {
+    for (let pass = 0; pass < SNAP_MAX_PASSES; pass++) {
+    const S = shapes[si];
+    if (S.length < 2) break;
+    const plane = S.map(unitsToMetres);
+    const cum = cumulative(plane);
+    // A grid over the earlier shapes' segments for candidate discovery.
+    const grid = new Map();
+    const cell = (p) => `${Math.floor(p.x / SNAP_GRID_METRES)},${Math.floor(p.y / SNAP_GRID_METRES)}`;
+    const refPlane = [];
+    for (let ti = 0; ti < si; ti++) {
+      const T = shapes[ti];
+      const tp = T.map(unitsToMetres);
+      refPlane.push(tp);
+      for (let j = 1; j < tp.length; j++) {
+        const a = tp[j - 1];
+        const b = tp[j];
+        const minX = Math.floor((Math.min(a.x, b.x) - SNAP_METRES) / SNAP_GRID_METRES);
+        const maxX = Math.floor((Math.max(a.x, b.x) + SNAP_METRES) / SNAP_GRID_METRES);
+        const minY = Math.floor((Math.min(a.y, b.y) - SNAP_METRES) / SNAP_GRID_METRES);
+        const maxY = Math.floor((Math.max(a.y, b.y) + SNAP_METRES) / SNAP_GRID_METRES);
+        for (let cx = minX; cx <= maxX; cx++) {
+          for (let cy = minY; cy <= maxY; cy++) {
+            const key = `${cx},${cy}`;
+            let list = grid.get(key);
+            if (!list) grid.set(key, (list = []));
+            list.push([ti, j - 1]);
+          }
+        }
+      }
+    }
+    if (grid.size === 0) break;
+
+    // Samples along S: every vertex, and every SNAP_SAMPLE_METRES between.
+    const total = cum[cum.length - 1];
+    const samples = [];
+    for (let seg = 0; seg < S.length - 1; seg++) {
+      const a = plane[seg];
+      const b = plane[seg + 1];
+      const len = cum[seg + 1] - cum[seg];
+      const dir = len === 0 ? { x: 0, y: 0 } : { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+      const steps = Math.max(1, Math.ceil(len / SNAP_SAMPLE_METRES));
+      for (let k = 0; k < steps; k++) {
+        const t = k / steps;
+        samples.push({ arc: cum[seg] + t * len, seg, p: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dir });
+      }
+    }
+    samples.push({ arc: total, seg: S.length - 2, p: plane[plane.length - 1], dir: samples[samples.length - 1].dir });
+
+    // For each sample: the earlier shapes within reach, moving the same way.
+    const validAt = samples.map((smp) => {
+      const found = new Map(); // ti -> distance
+      for (const [ti, j] of grid.get(cell(smp.p)) ?? []) {
+        const tp = refPlane[ti];
+        const d = pointSegmentDistance(smp.p, tp[j], tp[j + 1]);
+        if (d > SNAP_METRES) continue;
+        const sd = segmentDirection(tp, j);
+        if (smp.dir.x * sd.x + smp.dir.y * sd.y <= 0) continue;
+        if (!found.has(ti) || d < found.get(ti)) found.set(ti, d);
+      }
+      return found;
+    });
+    // Runs of consecutive samples on one reference, with hysteresis: keep the
+    // run's reference while it is still within reach, else the nearest.
+    const runs = [];
+    let run = null;
+    for (let i = 0; i < samples.length; i++) {
+      const valid = validAt[i];
+      if (run && valid.has(run.ti)) {
+        run.end = i;
+        continue;
+      }
+      if (run) {
+        if (samples[run.end].arc - samples[run.start].arc >= SNAP_MIN_RUN_METRES) runs.push(run);
+        run = null;
+      }
+      if (valid.size > 0) {
+        let best = null;
+        for (const [ti, d] of valid) if (!best || d < best.d || (d === best.d && ti < best.ti)) best = { ti, d };
+        run = { ti: best.ti, start: i, end: i };
+      }
+    }
+    if (run && samples[run.end].arc - samples[run.start].arc >= SNAP_MIN_RUN_METRES) runs.push(run);
+    trace?.(`shape ${si}: ${samples.length} samples, ${samples.filter((_, i) => validAt[i].size > 0).length} within reach, ${runs.length} runs`);
+
+    // A run is worth applying only if the part of it S does not already share
+    // with T segment for segment is itself a duplicate's length: an already
+    // merged stretch has nothing left (so the passes converge), and at a
+    // turnout the chord that leaves T at a shallow angle would otherwise be
+    // merged a sample step further on every pass, a vertex at a time.
+    const tKeys = new Map();
+    const keysOf = (ti) => {
+      let set = tKeys.get(ti);
+      if (!set) {
+        set = new Set();
+        const T = shapes[ti];
+        for (let j = 1; j < T.length; j++) set.add(segmentKey(T[j - 1], T[j]));
+        tKeys.set(ti, set);
+      }
+      return set;
+    };
+    const worthIt = runs.filter((r) => {
+      const keys = keysOf(r.ti);
+      let unshared = 0;
+      for (let seg = samples[r.start].seg; seg <= samples[r.end].seg && seg + 1 < S.length; seg++) {
+        if (!keys.has(segmentKey(S[seg], S[seg + 1]))) unshared += cum[seg + 1] - cum[seg];
+      }
+      return unshared >= SNAP_MIN_RUN_METRES;
+    });
+    trace?.(`shape ${si}: ${runs.length - worthIt.length} of ${runs.length} runs already shared or a creep, skipped`);
+    runs.length = 0;
+    runs.push(...worthIt);
+    if (runs.length === 0) break;
+    // Apply from the last run back, so arcs before an edit stay valid.
+    let applied = 0;
+    for (const r of runs.reverse()) {
+      const T = shapes[r.ti];
+      const pA = samples[r.start].p;
+      const pB = samples[r.end].p;
+      const tPlane = T.map(unitsToMetres);
+      const tCum = cumulative(tPlane);
+      const nearA = nearestOnPolyline(pA, tPlane, tCum);
+      const nearB = nearestOnPolyline(pB, tPlane, tCum);
+      if (nearB.seg + nearB.t < nearA.seg + nearA.t) {
+        trace?.(`shape ${si} run ${samples[r.start].arc.toFixed(0)}-${samples[r.end].arc.toFixed(0)} m on ${r.ti}: skipped, reference runs the other way`);
+        continue;
+      }
+      const unitOnT = (near) => {
+        const u0 = T[near.seg];
+        const u1 = T[near.seg + 1];
+        return [Math.round(u0[0] + (u1[0] - u0[0]) * near.t), Math.round(u0[1] + (u1[1] - u0[1]) * near.t)];
+      };
+      const unitA = unitOnT(nearA);
+      const unitB = unitOnT(nearB);
+      // Both ends become vertices of T (and of every shape sharing the split
+      // segments), then of S: S's ends are placed on T's geometry.
+      // On the reference the end may land on a vertex it already has (within a
+      // metre); the snapped shape then takes THAT vertex, not the rounded
+      // projection, or its boundary segments would miss the reference by a unit.
+      const jA = insertAt(r.ti, pA, unitA, false);
+      const jB = insertAt(r.ti, pB, unitB, false);
+      const onA = shapes[r.ti][jA];
+      const onB = shapes[r.ti][jB];
+      const iA = insertAt(si, pA, onA, true);
+      const iB = insertAt(si, pB, onB, true);
+      if (jB < jA || iB < iA) {
+        trace?.(`shape ${si} run ${samples[r.start].arc.toFixed(0)}-${samples[r.end].arc.toFixed(0)} m on ${r.ti}: skipped, indices ${jA}/${jB} ${iA}/${iB}`);
+        continue;
+      }
+      trace?.(`shape ${si} run ${samples[r.start].arc.toFixed(0)}-${samples[r.end].arc.toFixed(0)} m on ${r.ti}: applied (T ${jA}..${jB}, S ${iA}..${iB})`);
+      // S's interior between the two ends becomes T's own sub-polyline.
+      const interior = shapes[r.ti].slice(jA + 1, jB).map((u) => [u[0], u[1]]);
+      S.splice(iA + 1, iB - iA - 1, ...interior);
+      snappedRuns++;
+      applied++;
+    }
+    // A run's moved end can land a vertex behind its neighbour and leave a
+    // zigzag or a metres-long loop no track has; those, and any zero-length
+    // step, are collapsed again here on every shape touched so far.
+    for (let k = 0; k <= si; k++) shapes[k] = collapseSpikes(dedupeUnits(shapes[k])).units;
+    if (applied === 0) break;
+    }
+  }
+  return { shapes, snappedRuns };
+}
+
+/** Sampled points every `step` metres along a polyline, vertices included. */
+function samplePolyline(plane, cum, step) {
+  const out = [];
+  const total = cum[cum.length - 1];
+  for (let s = 0; s < total; s += step) out.push(pointAtArc(plane, cum, s));
+  out.push(plane[plane.length - 1]);
+  return out;
+}
+
+function pointAtArc(plane, cum, s) {
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < s) i++;
+  const a = plane[i - 1];
+  const b = plane[i];
+  const span = cum[i] - cum[i - 1];
+  const t = span === 0 ? 0 : clamp01((s - cum[i - 1]) / span);
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/** Same-direction edge pairs that still run within SNAP_METRES of each other
+ *  over at least SNAP_MIN_RUN_METRES after the snapping pass: the residual
+ *  the build report lists and the builder refuses to ship silently. */
+function findNearParallel(edges) {
+  const geo = edges.map((e) => {
+    const plane = e.units.map(unitsToMetres);
+    return { plane, cum: cumulative(plane), bbox: bboxExpanded(plane, SNAP_METRES) };
+  });
+  const pairs = [];
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      if (!bboxesOverlap(geo[i].bbox, geo[j].bbox)) continue;
+      const samples = samplePolyline(geo[i].plane, geo[i].cum, 5);
+      let run = 0;
+      let longest = 0;
+      let prevOn = null;
+      for (const p of samples) {
+        const near = nearestOnPolyline(p, geo[j].plane, geo[j].cum);
+        const dirI = localDirection(geo[i].plane, Math.min(geo[i].plane.length - 1, nearestOnPolyline(p, geo[i].plane, geo[i].cum).seg + 1));
+        const dirJ = segmentDirection(geo[j].plane, near.seg);
+        const on = near.dist <= SNAP_METRES && dirI.x * dirJ.x + dirI.y * dirJ.y > 0;
+        if (on) {
+          run += prevOn ? Math.hypot(p.x - prevOn.x, p.y - prevOn.y) : 0;
+          prevOn = p;
+        } else {
+          longest = Math.max(longest, run);
+          run = 0;
+          prevOn = null;
+        }
+      }
+      longest = Math.max(longest, run);
+      if (longest >= SNAP_MIN_RUN_METRES) pairs.push({ a: i, b: j, metres: round1(longest) });
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Builds the directed rail graph from tram shapes given as integer unit
+ * pairs. An edge is a maximal run of consecutive segments traversed by
+ * exactly the same set of shapes, with no interior vertex where a third
+ * track attaches (an undirected degree above two); a node is an edge
+ * endpoint; a run traversed both ways yields two opposite edges. Returns the
+ * edges (with the shapes that own each), every shape as an edge sequence, the
+ * node count and a report (snapped runs, residual near-parallel pairs, the
+ * unshared-segment share before snapping).
+ *
+ * Options: `snap: false` skips the near-duplicate merge (the residual-pair
+ * report then shows what it would have merged); `trace(line)` receives one
+ * line per detected run, for diagnosing a build whose residual check fails.
+ * `snappedShapes` in the result is the geometry after snapping, for the same
+ * diagnostic use; the artefact is cut from the edges, not from it.
+ */
+export function buildRailGraph(shapesUnits, opts = {}) {
+  const { snap = true, trace = null } = opts;
+  let spikePoints = 0;
+  const deduped = shapesUnits.map((units) => {
+    const cleaned = collapseSpikes(dedupeUnits(units));
+    spikePoints += cleaned.removed;
+    return cleaned.units;
+  });
+  const unsharedShareBefore = unsharedShare(deduped);
+  let shapes = deduped;
+  let snappedRuns = 0;
+  if (snap) ({ shapes, snappedRuns } = snapNearDuplicates(deduped, trace));
+
+  const owners = new Map(); // segment key -> Set(shape index)
+  const neighbours = new Map(); // unit key -> Set(unit key), undirected
+  const addNeighbour = (a, b) => {
+    const k = unitKey(a);
+    let set = neighbours.get(k);
+    if (!set) neighbours.set(k, (set = new Set()));
+    set.add(unitKey(b));
+  };
+  for (const [si, units] of shapes.entries()) {
+    for (let i = 1; i < units.length; i++) {
+      const k = segmentKey(units[i - 1], units[i]);
+      let set = owners.get(k);
+      if (!set) owners.set(k, (set = new Set()));
+      set.add(si);
+      addNeighbour(units[i - 1], units[i]);
+      addNeighbour(units[i], units[i - 1]);
+    }
+  }
+
+  const nodeIds = new Map();
+  const nodeOf = (u) => {
+    const k = unitKey(u);
+    let id = nodeIds.get(k);
+    if (id === undefined) nodeIds.set(k, (id = nodeIds.size));
+    return id;
+  };
+  const edgeByRun = new Map();
+  const edges = [];
+  const shapeEdges = [];
+  for (const [si, units] of shapes.entries()) {
+    const seq = [];
+    let runStart = 0;
+    for (let i = 1; i < units.length; i++) {
+      const isLast = i === units.length - 1;
+      let split = isLast;
+      if (!isLast) {
+        const own = owners.get(segmentKey(units[i - 1], units[i]));
+        const next = owners.get(segmentKey(units[i], units[i + 1]));
+        if (!sameSet(own, next) || neighbours.get(unitKey(units[i])).size > 2) split = true;
+      }
+      if (!split) continue;
+      const runUnits = units.slice(runStart, i + 1);
+      const runKey = runUnits.map(unitKey).join('>');
+      let e = edgeByRun.get(runKey);
+      if (e === undefined) {
+        e = edges.length;
+        edges.push({ from: nodeOf(runUnits[0]), to: nodeOf(runUnits[runUnits.length - 1]), units: runUnits, owners: new Set() });
+        edgeByRun.set(runKey, e);
+      }
+      edges[e].owners.add(si);
+      seq.push(e);
+      runStart = i;
+    }
+    shapeEdges.push(seq);
+  }
+  const residualPairs = findNearParallel(edges);
+  return { edges, shapeEdges, nodeCount: nodeIds.size, snappedShapes: shapes, report: { snappedRuns, residualPairs, unsharedShareBefore, spikePoints } };
+}
+
+/** Shortest path over directed edges from any of `sources` to any of
+ *  `targets` (each {edge, s}), returning the edge sequence (source edge
+ *  first) and the target reached, or null. Dijkstra over nodes with the
+ *  edge lengths as costs; the graph has a few hundred edges, so a plain
+ *  array stands in for a heap. */
+function routeBetween(edges, outgoing, lens, sources, targets) {
+  const targetOn = new Map();
+  for (const t of targets) {
+    const prev = targetOn.get(t.edge);
+    if (prev === undefined || t.s < prev) targetOn.set(t.edge, t.s);
+  }
+  let best = null;
+  const consider = (cost, path, end) => {
+    if (!best || cost < best.cost) best = { cost, path, end };
+  };
+  const dist = new Map();
+  const cameFrom = new Map(); // node -> { edge, node | null }
+  const open = [];
+  for (const src of sources) {
+    const ts = targetOn.get(src.edge);
+    if (ts !== undefined && ts >= src.s) consider(ts - src.s, [src.edge], { edge: src.edge, s: ts });
+    const node = edges[src.edge].to;
+    const cost = lens[src.edge] - src.s;
+    if (!dist.has(node) || cost < dist.get(node)) {
+      dist.set(node, cost);
+      cameFrom.set(node, { edge: src.edge, node: null });
+      open.push(node);
+    }
+  }
+  const pathTo = (node) => {
+    const path = [];
+    let at = node;
+    while (at !== null && at !== undefined) {
+      const step = cameFrom.get(at);
+      path.unshift(step.edge);
+      at = step.node;
+    }
+    return path;
+  };
+  while (open.length > 0) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (dist.get(open[i]) < dist.get(open[bi])) bi = i;
+    const node = open.splice(bi, 1)[0];
+    const cost = dist.get(node);
+    if (best && cost >= best.cost) break;
+    for (const e of outgoing.get(node) ?? []) {
+      const ts = targetOn.get(e);
+      if (ts !== undefined) consider(cost + ts, [...pathTo(node), e], { edge: e, s: ts });
+      const next = edges[e].to;
+      const nextCost = cost + lens[e];
+      if (!dist.has(next) || nextCost < dist.get(next)) {
+        dist.set(next, nextCost);
+        cameFrom.set(next, { edge: e, node });
+        if (!open.includes(next)) open.push(next);
+      }
+    }
+  }
+  return best;
+}
+
+/** The edge sequence visiting `stopLinks` (one array of {edge, s} candidates
+ *  per stop) in order: the cheapest chain over every stop's candidates at
+ *  once, not leg by leg, because a stop within 40 m of both tracks of a line
+ *  links to both, and the shorter first leg can land on the opposite track
+ *  from which no leg to the next stop exists. Throws with the label when no
+ *  chain visits every stop. */
+function pathThroughStops(edges, outgoing, lens, stopLinks, label, describe = (k) => `stop ${k}`) {
+  let layer = stopLinks[0].map((link) => ({ cost: 0, link, legs: [] }));
+  for (let k = 1; k < stopLinks.length; k++) {
+    const next = [];
+    for (const target of stopLinks[k]) {
+      let best = null;
+      for (const entry of layer) {
+        const leg = routeBetween(edges, outgoing, lens, [entry.link], [target]);
+        if (!leg) continue;
+        const cost = entry.cost + leg.cost;
+        if (!best || cost < best.cost) best = { cost, link: leg.end, legs: [...entry.legs, leg.path] };
+      }
+      if (best) next.push(best);
+    }
+    if (next.length === 0) {
+      const error = new Error(`${label}: no route over the rail graph from ${describe(k - 1)} to ${describe(k)}`);
+      error.leg = k;
+      throw error;
+    }
+    layer = next;
+  }
+  let winner = layer[0];
+  for (const entry of layer) if (entry.cost < winner.cost) winner = entry;
+  const path = [];
+  for (const leg of winner.legs) for (const e of leg) if (path.length === 0 || path[path.length - 1] !== e) path.push(e);
+  return path;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,8 +952,7 @@ function dedupeConsecutive(points) {
 
 /** Rebuilds a polyline where every point's direction from its immediate
  *  predecessor is snapped to the nearest 45 degrees, preserving each
- *  original segment's length. Every point in the input must differ from its
- *  predecessor (see dedupeConsecutive), so this never drops a point. */
+ *  original segment's length. */
 function snapChain(points) {
   if (points.length === 0) return [];
   const out = [points[0]];
@@ -320,7 +962,7 @@ function snapChain(points) {
     const dx = raw.x - prev.x;
     const dy = raw.y - prev.y;
     const mag = Math.hypot(dx, dy);
-    if (mag === 0) continue; // defensive; dedupeConsecutive already rules this out
+    if (mag === 0) continue;
     const angle = snapOctant(Math.atan2(dy, dx));
     out.push({ x: prev.x + mag * Math.cos(angle), y: prev.y + mag * Math.sin(angle) });
   }
@@ -328,11 +970,8 @@ function snapChain(points) {
 }
 
 /** Snaps a simplified shape onto the octilinear grid, then simplifies again
- *  at `tolerance` metres. The second pass re-snaps every surviving segment
- *  (rather than connecting the chosen points with a raw chord), so the
- *  octilinear invariant holds for the *final* polyline, not just the first
- *  pass -- a plain Douglas-Peucker chord across two non-collinear octilinear
- *  steps would generally point in some other, non-octilinear direction. */
+ *  at `tolerance` metres, re-snapping every surviving segment so the
+ *  octilinear invariant holds for the final polyline. */
 export function buildOctilinearLine(planePoints, tolerance = DIAGRAM_SIMPLIFY_METRES) {
   const dedup = dedupeConsecutive(planePoints);
   if (dedup.length < 2) return dedup;
@@ -371,29 +1010,44 @@ export function parseRoutesTxt(rows) {
   return map;
 }
 
+/** trips.txt: which route each shape belongs to (first trip wins, no shape is
+ *  shared between routes), a sample trip per shape for the terminus override,
+ *  trip counts per route, the majority direction_id per shape, and the trips
+ *  that carry no shape_id at all (route and direction), which the synthetic
+ *  paths are built for. */
 export function parseTripsTxt(rows) {
   if (rows.length === 0) throw new Error('trips.txt is empty');
   const col = columnIndexer(rows[0], 'trips.txt');
   const routeIdx = col('route_id');
   const tripIdx = col('trip_id');
   const shapeIdx = col('shape_id');
+  const directionIdx = rows[0].indexOf('direction_id'); // optional in GTFS
   const tripCountByRoute = new Map();
   const shapeToRoute = new Map();
   const shapeSampleTrip = new Map();
+  const directionVotes = new Map(); // shapeId -> [count0, count1]
+  const shapelessTrips = new Map(); // tripId -> { route, direction }
   for (const r of rows.slice(1)) {
     const routeId = r[routeIdx];
     const tripId = r[tripIdx];
     const shapeId = (r[shapeIdx] ?? '').trim();
+    const direction = directionIdx === -1 ? 0 : Number(r[directionIdx]) === 1 ? 1 : 0;
     tripCountByRoute.set(routeId, (tripCountByRoute.get(routeId) ?? 0) + 1);
-    if (shapeId !== '' && !shapeToRoute.has(shapeId)) {
-      // "No shape is shared between routes" (verified fact); the first trip
-      // seen for a shape_id decides its route and stands in as the sample
-      // trip the stop-transfer helper below reads its endpoints from.
+    if (shapeId === '') {
+      if (tripId) shapelessTrips.set(tripId, { route: routeId, direction });
+      continue;
+    }
+    if (!shapeToRoute.has(shapeId)) {
       shapeToRoute.set(shapeId, routeId);
       shapeSampleTrip.set(shapeId, tripId);
     }
+    const votes = directionVotes.get(shapeId) ?? [0, 0];
+    votes[direction]++;
+    directionVotes.set(shapeId, votes);
   }
-  return { tripCountByRoute, shapeToRoute, shapeSampleTrip };
+  const shapeDirection = new Map();
+  for (const [shapeId, [zero, one]] of directionVotes) shapeDirection.set(shapeId, one > zero ? 1 : 0);
+  return { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips };
 }
 
 export function parseShapesTxt(rows) {
@@ -430,10 +1084,8 @@ export function parseStopsTxt(rows) {
   const lonIdx = col('stop_lon');
   // location_type 0 (the GTFS default when the column is blank) is an actual
   // boarding point; 1 is a parent "station" grouping several of those, never
-  // itself a place a vehicle stops. ZET's feed also carries 1,276 such
-  // grouping rows (a third of stops.txt) that would otherwise inflate the
-  // artefact with entries no vehicle ever reaches.
-  const typeIdx = rows[0].indexOf('location_type'); // absent header -> -1, treated as "no filter"
+  // itself a place a vehicle stops.
+  const typeIdx = rows[0].indexOf('location_type');
   return rows
     .slice(1)
     .filter((r) => typeIdx === -1 || r[typeIdx] === '' || r[typeIdx] === '0')
@@ -451,38 +1103,29 @@ function feedInfoField(rows, field) {
 
 // ---------------------------------------------------------------------------
 // stop_times.txt: 92 MB uncompressed, never held in memory as one string.
-// Streamed as inflate -> line reader, keeping only a Map<tripId, {first,
-// last} stop_id> -- the "stop-transfer helper": all a shape's own endpoints
-// need to know is which stop each end trip started and finished at, so a
-// terminus reachable only from a driveway or loop set back from the road
-// (a real GTFS pattern, and further than 40 m from the recorded shape) still
-// gets linked to its shape rather than silently missing from `on`.
-//
-// localFileDataOffset (the header/offset arithmetic that locates where the
-// entry's compressed bytes start) is imported from gtfs-routes.mjs rather
-// than duplicated here: extractEntry there needs the identical offset, but
-// inflates the whole entry synchronously, which would defeat the point of
-// streaming this specific 92 MB file. compareRouteIds is imported for the
-// same reason -- gtfs-shapes.mjs's own tram/bus ranking below needs the
-// exact same numeric-aware id ordering gtfs-routes.mjs already implements.
+// Streamed as inflate -> line reader, once, keeping two things: every trip's
+// first and last stop (the "stop-transfer helper": a terminus set back from
+// the road, further than 40 m from the recorded geometry, still gets linked
+// at the shape's own end), and the whole ordered stop sequence of the trips
+// that carry no shape_id (the synthetic paths need it, and there are only a
+// few thousand such trips).
 
-/** Streams stop_times.txt and returns Map<tripId, {firstStop, lastStop}>,
- *  determined by stop_sequence rather than file order (correct even if a
- *  future export is not grouped by trip). */
-export async function streamTripEndpoints(buf, entry) {
+function stopTimesStream(buf, entry) {
   const start = localFileDataOffset(buf, entry);
   const compressed = buf.subarray(start, start + entry.compressedSize);
   const source = Readable.from([Buffer.from(compressed)]);
-  let stream;
-  if (entry.method === 8) {
-    stream = source.pipe(createInflateRaw());
-  } else if (entry.method === 0) {
-    stream = source;
-  } else {
-    throw new Error(`Unsupported compression method ${entry.method} for ${entry.name}`);
-  }
-  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  if (entry.method === 8) return source.pipe(createInflateRaw());
+  if (entry.method === 0) return source;
+  throw new Error(`Unsupported compression method ${entry.method} for ${entry.name}`);
+}
+
+/** Streams stop_times.txt and returns { endpoints: Map<tripId, {firstStop,
+ *  lastStop}>, sequences: Map<tripId, stopId[]> } -- the sequences only for
+ *  the trip ids in `sequenceTrips`, sorted by stop_sequence. */
+export async function streamStopTimes(buf, entry, sequenceTrips = new Set()) {
+  const rl = createInterface({ input: stopTimesStream(buf, entry), crlfDelay: Infinity });
   const endpoints = new Map();
+  const raw = new Map();
   let header = null;
   let tripIdx = -1;
   let stopIdx = -1;
@@ -507,26 +1150,40 @@ export async function streamTripEndpoints(buf, entry) {
     const existing = endpoints.get(tripId);
     if (!existing) {
       endpoints.set(tripId, { firstStop: stopId, firstSeq: seq, lastStop: stopId, lastSeq: seq });
-      continue;
+    } else {
+      if (seq < existing.firstSeq) {
+        existing.firstStop = stopId;
+        existing.firstSeq = seq;
+      }
+      if (seq > existing.lastSeq) {
+        existing.lastStop = stopId;
+        existing.lastSeq = seq;
+      }
     }
-    if (seq < existing.firstSeq) {
-      existing.firstStop = stopId;
-      existing.firstSeq = seq;
-    }
-    if (seq > existing.lastSeq) {
-      existing.lastStop = stopId;
-      existing.lastSeq = seq;
+    if (sequenceTrips.has(tripId)) {
+      let list = raw.get(tripId);
+      if (!list) raw.set(tripId, (list = []));
+      list.push({ seq, stopId });
     }
   }
-  return endpoints;
+  const sequences = new Map();
+  for (const [tripId, list] of raw) {
+    list.sort((a, b) => a.seq - b.seq);
+    sequences.set(tripId, list.map((x) => x.stopId));
+  }
+  return { endpoints, sequences };
+}
+
+/** Kept for callers that only want the endpoints (task A1's script imports it). */
+export async function streamTripEndpoints(buf, entry) {
+  return (await streamStopTimes(buf, entry)).endpoints;
 }
 
 // ---------------------------------------------------------------------------
 // Orchestration.
 
 /**
- * Builds the network artefact object (see the artefact shape documented in
- * the T1 brief) from a fully-loaded GTFS zip buffer.
+ * Builds the version 2 artefact from a fully-loaded GTFS zip buffer.
  * @param {Uint8Array} zipBuf
  * @param {{ now?: () => Date, diagramBusCount?: number, fallbackMtime?: string | null, log?: (s: string) => void }} [opts]
  */
@@ -542,7 +1199,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const textOf = (name) => new TextDecoder('utf-8').decode(extractEntry(zipBuf, findEntry(name)));
 
   const routesMeta = parseRoutesTxt(parseCsv(textOf('routes.txt')));
-  const { tripCountByRoute, shapeToRoute, shapeSampleTrip } = parseTripsTxt(parseCsv(textOf('trips.txt')));
+  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips } = parseTripsTxt(parseCsv(textOf('trips.txt')));
   const rawShapesByShapeId = parseShapesTxt(parseCsv(textOf('shapes.txt')));
   const rawStops = parseStopsTxt(parseCsv(textOf('stops.txt')));
 
@@ -557,35 +1214,83 @@ export async function buildNetwork(zipBuf, opts = {}) {
     throw new Error('No feedVersion available: feed_info.txt lacks feed_version and no fallback mtime was supplied');
   }
 
-  const tripEndpoints = await streamTripEndpoints(zipBuf, findEntry('stop_times.txt'));
+  const isTramRoute = (routeId) => routesMeta.get(routeId)?.type === 0;
+  const shapelessTramTrips = new Set([...shapelessTrips].filter(([, t]) => isTramRoute(t.route)).map(([id]) => id));
+  const { endpoints: tripEndpoints, sequences: shapelessSequences } = await streamStopTimes(zipBuf, findEntry('stop_times.txt'), shapelessTramTrips);
 
-  // Shapes: simplify, delta-encode, and keep the plane-space simplified
-  // points (with a per-shape cumulative arc length and expanded bbox) around
-  // for the stop-on-shape pass and the diagram below.
+  // Shapes in id order, split by mode: trams go to the graph, buses stay polylines.
   const shapeIds = [...rawShapesByShapeId.keys()].sort();
-  const shapes = [];
-  const planeByShapeIdx = [];
-  const cumByShapeIdx = [];
-  const bboxByShapeIdx = [];
+  const shapeRows = []; // { id, route, dir, kind: 'tram' | 'bus', rawPts }
   for (const shapeId of shapeIds) {
     const routeId = shapeToRoute.get(shapeId);
     if (!routeId) {
       log(`Skipping shape ${shapeId}: no trip references it`);
       continue;
     }
-    const rawPts = rawShapesByShapeId.get(shapeId);
-    const plane = rawPts.map((p) => toMetres(p.lon, p.lat));
-    const keepIdx = dpIndices(plane, SIMPLIFY_METRES);
-    const simplifiedLonLat = keepIdx.map((i) => rawPts[i]);
-    const simplifiedPlane = keepIdx.map((i) => plane[i]);
-    const cum = cumulative(simplifiedPlane);
-    const len = cum[cum.length - 1];
-    const units = simplifiedLonLat.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]);
-    const d = chainEncodeXY(units);
-    shapes.push({ id: shapeId, route: routeId, d, len: round1(len) });
-    planeByShapeIdx.push(simplifiedPlane);
-    cumByShapeIdx.push(cum);
-    bboxByShapeIdx.push(bboxExpanded(simplifiedPlane, STOP_SHAPE_MAX_METRES));
+    shapeRows.push({ id: shapeId, route: routeId, dir: isTramRoute(routeId) ? shapeDirection.get(shapeId) ?? 0 : -1, kind: isTramRoute(routeId) ? 'tram' : 'bus', rawPts: rawShapesByShapeId.get(shapeId) });
+  }
+
+  // --- The rail graph from the RAW tram points (before any simplification).
+  const tramRows = shapeRows.filter((s) => s.kind === 'tram');
+  const tramUnits = tramRows.map((s) => s.rawPts.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]));
+  const graph = buildRailGraph(tramUnits);
+  if (graph.report.residualPairs.length > 0) {
+    const listed = graph.report.residualPairs.map((p) => `edges ${p.a} and ${p.b} run together for ${p.metres} m`).join('; ');
+    throw new Error(`Rail graph: ${graph.report.residualPairs.length} same-direction near-parallel edge pair(s) survived the snapping pass: ${listed}`);
+  }
+  // Edge interiors simplified at 5 m, endpoints kept (the graph's nodes).
+  const edgeUnits = graph.edges.map((e) => {
+    const plane = e.units.map(unitsToMetres);
+    const keep = dpIndices(plane, SIMPLIFY_METRES);
+    return keep.map((i) => e.units[i]);
+  });
+  const edgePlane = edgeUnits.map((units) => units.map(unitsToMetres));
+  const edgeCum = edgePlane.map(cumulative);
+  const edgeLen = edgeCum.map((cum) => cum[cum.length - 1]);
+  const edgeBbox = edgePlane.map((plane) => bboxExpanded(plane, STOP_SHAPE_MAX_METRES));
+  const outgoing = new Map();
+  graph.edges.forEach((e, idx) => {
+    const list = outgoing.get(e.from);
+    if (list) list.push(idx);
+    else outgoing.set(e.from, [idx]);
+  });
+
+  // Bus sharing ratio, informational: the same segment measure on bus shapes.
+  const busRows = shapeRows.filter((s) => s.kind === 'bus');
+  const busUnsharedShare = unsharedShare(busRows.map((s) => s.rawPts.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])])));
+
+  // --- Shapes: trams as edge sequences (geometry reconstructed for the
+  // diagram and the length), buses simplified and chain-encoded as in v1.
+  const shapes = [];
+  const planeByShapeIdx = [];
+  const cumByShapeIdx = [];
+  const bboxByShapeIdx = [];
+  let tramCursor = 0;
+  for (const row of shapeRows) {
+    if (row.kind === 'tram') {
+      const seq = graph.shapeEdges[tramCursor++];
+      const plane = [];
+      for (const e of seq) {
+        const pts = edgePlane[e];
+        for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
+      }
+      const cum = cumulative(plane);
+      shapes.push({ id: row.id, route: row.route, dir: row.dir, d: [], e: seq, len: round1(cum[cum.length - 1]) });
+      planeByShapeIdx.push(plane);
+      cumByShapeIdx.push(cum);
+      bboxByShapeIdx.push(bboxExpanded(plane, STOP_SHAPE_MAX_METRES));
+    } else {
+      const plane = row.rawPts.map((p) => toMetres(p.lon, p.lat));
+      const keepIdx = dpIndices(plane, SIMPLIFY_METRES);
+      const simplifiedLonLat = keepIdx.map((i) => row.rawPts[i]);
+      const simplifiedPlane = keepIdx.map((i) => plane[i]);
+      const cum = cumulative(simplifiedPlane);
+      const units = simplifiedLonLat.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]);
+      shapes.push({ id: row.id, route: row.route, dir: -1, d: chainEncodeXY(units), e: [], len: round1(cum[cum.length - 1]) });
+      planeByShapeIdx.push(simplifiedPlane);
+      cumByShapeIdx.push(cum);
+      bboxByShapeIdx.push(bboxExpanded(simplifiedPlane, STOP_SHAPE_MAX_METRES));
+    }
   }
 
   const shapeIdxByRoute = new Map();
@@ -596,9 +1301,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
   }
 
   // Rank: every tram route, then every other route, each group ordered by
-  // trip count descending (the plan's "all tram routes, then bus routes by
-  // trip count"). Rank is dense 1..N across the full route list; the
-  // diagram keeps only ranks at or above the cut.
+  // trip count descending; dense 1..N; the diagram keeps ranks up to the cut.
   const withCounts = [...routesMeta.entries()].map(([id, meta]) => ({
     id,
     type: meta.type,
@@ -619,83 +1322,186 @@ export async function buildNetwork(zipBuf, opts = {}) {
   }));
   const diagramRouteIds = new Set(routes.filter((r) => r.rank <= diagramCutRank).map((r) => r.id));
 
-  // Stops: chain-delta-encode position across the output array (see
-  // chainEncodeXY), then link to every shape within 40 m.
+  // --- Stops: position chained across the array; tram stops linked to edges
+  // with an exact arc, bus stops to bus shapes with the 1/500 fraction.
   const stopIndexById = new Map();
   const stopPlane = [];
   const stopUnits = rawStops.map((s) => [deltaEncode(s.lon, ORIGIN[0]), deltaEncode(s.lat, ORIGIN[1])]);
   const stopPChain = chainEncodeXY(stopUnits);
   const stops = rawStops.map((s, i) => {
     stopIndexById.set(s.id, i);
-    stopPlane.push(toMetres(s.lon, s.lat));
-    return {
-      id: s.id,
-      name: s.name,
-      p: [stopPChain[2 * i], stopPChain[2 * i + 1]],
-      on: [],
-    };
+    // Linked from the QUANTISED position, the one the decoder reconstructs, so
+    // a stop 39.9 m from a track is linked by the builder exactly when the
+    // client would measure it so; the raw coordinate can differ by half a unit.
+    stopPlane.push(unitsToMetres(stopUnits[i]));
+    return { id: s.id, name: s.name, p: [stopPChain[2 * i], stopPChain[2 * i + 1]], on: [], onEdge: [] };
   });
-  // Stop-transfer overrides (see streamTripEndpoints above): computed first
-  // and kept per stop index, so the geometric pass below can skip re-finding
-  // them (overrideShapeIdx) -- a verified terminus link (a real endpoint
-  // further than STOP_SHAPE_MAX_METRES from the recorded shape, e.g. a
-  // driveway or loop) is recorded once, not duplicated by the geometric scan.
-  const overridesByStop = new Map(); // stopIdx -> [shapeIdx, frac][]
-  for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
-    const sampleTripId = shapeSampleTrip.get(shapes[shapeIdx].id);
-    if (!sampleTripId) continue;
-    const endpoints = tripEndpoints.get(sampleTripId);
-    if (!endpoints) continue;
-    const add = (stopId, frac) => {
-      const stopIdx = stopIndexById.get(stopId);
-      if (stopIdx === undefined) return;
-      const list = overridesByStop.get(stopIdx);
-      if (list) list.push([shapeIdx, frac]);
-      else overridesByStop.set(stopIdx, [[shapeIdx, frac]]);
-    };
-    add(endpoints.firstStop, 0);
-    add(endpoints.lastStop, 1);
-  }
+  const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
+  const shapeLinks = stops.map(() => []); // stopIdx -> [{ shape, frac }]
+
+  // Stop-transfer overrides: the sample trip's first and last stop of every
+  // shape link to its first edge at arc 0 and its last edge at its full
+  // length (trams), or to the shape at fraction 0 and 1 (buses).
+  const overriddenEdge = stops.map(() => new Set());
+  const overriddenShape = stops.map(() => new Set());
+  shapes.forEach((shape, shapeIdx) => {
+    const sampleTripId = shapeSampleTrip.get(shape.id);
+    const ends = sampleTripId ? tripEndpoints.get(sampleTripId) : undefined;
+    if (!ends) return;
+    const first = stopIndexById.get(ends.firstStop);
+    const last = stopIndexById.get(ends.lastStop);
+    if (shape.e.length > 0) {
+      const firstEdge = shape.e[0];
+      const lastEdge = shape.e[shape.e.length - 1];
+      if (first !== undefined) {
+        edgeLinks[first].push({ edge: firstEdge, s: 0 });
+        overriddenEdge[first].add(firstEdge);
+      }
+      if (last !== undefined) {
+        edgeLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
+        overriddenEdge[last].add(lastEdge);
+      }
+    } else {
+      if (first !== undefined) {
+        shapeLinks[first].push({ shape: shapeIdx, frac: 0 });
+        overriddenShape[first].add(shapeIdx);
+      }
+      if (last !== undefined) {
+        shapeLinks[last].push({ shape: shapeIdx, frac: 1 });
+        overriddenShape[last].add(shapeIdx);
+      }
+    }
+  });
 
   for (let si = 0; si < stops.length; si++) {
     const p = stopPlane[si];
-    const overrides = overridesByStop.get(si) ?? [];
-    const overrideShapeIdx = new Set(overrides.map(([idx]) => idx));
-    for (const [shapeIdx, frac] of overrides) stops[si].on.push([shapeIdx, frac]);
-    // At a handful of big interchanges a stop sits within 40 m of dozens of
-    // overlapping lines (real, not a bug: Zagreb's dense core shares
-    // corridors between many routes, Trg bana Jelačića foremost). Every one
-    // of them is kept (R-T1): the stop gate (nextStop, dead reckoning) needs
-    // every such association to avoid carrying a vehicle straight through a
-    // stop it never actually passed unseen.
-    for (let shapeIdx = 0; shapeIdx < planeByShapeIdx.length; shapeIdx++) {
-      if (overrideShapeIdx.has(shapeIdx)) continue; // the override already links this pair
+    for (let e = 0; e < graph.edges.length; e++) {
+      if (overriddenEdge[si].has(e) || !inBbox(p, edgeBbox[e])) continue;
+      const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
+      if (near.dist <= STOP_SHAPE_MAX_METRES) edgeLinks[si].push({ edge: e, s: near.arc });
+    }
+    for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
+      if (shapes[shapeIdx].e.length > 0 || overriddenShape[si].has(shapeIdx) || !inBbox(p, bboxByShapeIdx[shapeIdx])) continue;
       const poly = planeByShapeIdx[shapeIdx];
       if (poly.length < 2) continue;
-      const bb = bboxByShapeIdx[shapeIdx];
-      if (p.x < bb.minX || p.x > bb.maxX || p.y < bb.minY || p.y > bb.maxY) continue;
-      const { dist, arc } = nearestOnPolyline(p, poly, cumByShapeIdx[shapeIdx]);
-      if (dist <= STOP_SHAPE_MAX_METRES) {
+      const near = nearestOnPolyline(p, poly, cumByShapeIdx[shapeIdx]);
+      if (near.dist <= STOP_SHAPE_MAX_METRES) {
         const len = cumByShapeIdx[shapeIdx][cumByShapeIdx[shapeIdx].length - 1];
-        const frac = len > 0 ? clamp01(arc / len) : 0;
-        stops[si].on.push([shapeIdx, frac]);
+        shapeLinks[si].push({ shape: shapeIdx, frac: len > 0 ? clamp01(near.arc / len) : 0 });
       }
     }
   }
-  // Encode each stop's `on` list: sort by shapeIdx (both passes above appended
-  // in different orders), then chain-delta the index and scale the fraction
-  // (see ON_FRAC_SCALE). decodeStopOn is the exact inverse.
-  for (const stop of stops) {
-    stop.on.sort((a, b) => a[0] - b[0]);
-    let prevIdx = 0;
-    stop.on = stop.on.map(([idx, frac]) => {
-      const wire = [idx - prevIdx, Math.round(frac * ON_FRAC_SCALE)];
-      prevIdx = idx;
-      return wire;
-    });
+  // Encode: sorted by index, chain-delta on the index, the arc as decimetres
+  // (edges) or as the scaled fraction (bus shapes). One link per edge or
+  // shape per stop -- a stop within reach of an edge twice (a loop) keeps the
+  // nearer, first-found arc.
+  const encodeEdgeLinks = (links) => {
+    const byEdge = new Map();
+    for (const link of links) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+    let prev = 0;
+    return [...byEdge]
+      .sort((a, b) => a[0] - b[0])
+      .map(([edge, s]) => {
+        const wire = [edge - prev, Math.round(s * 10)];
+        prev = edge;
+        return wire;
+      });
+  };
+  for (let si = 0; si < stops.length; si++) {
+    stops[si].onEdge = encodeEdgeLinks(edgeLinks[si]);
+    let prev = 0;
+    const byShape = new Map();
+    for (const link of shapeLinks[si]) if (!byShape.has(link.shape)) byShape.set(link.shape, link.frac);
+    prev = 0;
+    stops[si].on = [...byShape]
+      .sort((a, b) => a[0] - b[0])
+      .map(([shape, frac]) => {
+        const wire = [shape - prev, Math.round(frac * BUS_ON_FRAC_SCALE)];
+        prev = shape;
+        return wire;
+      });
   }
 
-  // The octilinear diagram: one line per shape of every diagram-cut route.
+  // --- Synthetic paths for tram patterns whose trips carry no shape_id
+  // (line 1): the shortest path over the directed graph visiting the
+  // pattern's stops in order, one per distinct (route, direction, stop
+  // sequence). A stop the graph does not reach within 40 m fails the build.
+  const patterns = new Map(); // key -> { route, dir, stops }
+  for (const tripId of shapelessTramTrips) {
+    const seq = shapelessSequences.get(tripId);
+    const trip = shapelessTrips.get(tripId);
+    if (!seq || seq.length < 2 || !trip) continue;
+    const key = `${trip.route}|${trip.direction}|${seq.join(',')}`;
+    if (!patterns.has(key)) patterns.set(key, { route: trip.route, dir: trip.direction, stops: seq });
+  }
+  const paths = [];
+  const trimmed = [];
+  const unroutable = [];
+  for (const pattern of [...patterns.values()].sort((a, b) => compareRouteIds(a.route, b.route) || a.dir - b.dir || a.stops.join().localeCompare(b.stops.join()))) {
+    const label = `path:${pattern.route}:${pattern.dir}:${stopSequenceHash(pattern.stops)}`;
+    const links = pattern.stops.map((stopId, k) => {
+      const si = stopIndexById.get(stopId);
+      if (si === undefined) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not in stops.txt`);
+      let list = edgeLinks[si];
+      if (list.length === 0 && (k === 0 || k === pattern.stops.length - 1)) {
+        // A terminus set back from the drawn rails: the nearest edge within the
+        // terminus tolerance starts or ends the route (TERMINUS_STOP_MAX_METRES).
+        // For routing only: the stop is NOT linked to that edge on the wire,
+        // whose lines do not serve it (Zapadni kolodvor would list lines 2 and
+        // 11); the twin runs the stretch to the platform off-graph.
+        const p = stopPlane[si];
+        let best = null;
+        for (let e = 0; e < graph.edges.length; e++) {
+          const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
+          if (near.dist <= TERMINUS_STOP_MAX_METRES && (!best || near.dist < best.dist)) best = { edge: e, s: near.arc, dist: near.dist };
+        }
+        if (best) list = [{ edge: best.edge, s: best.s }];
+      }
+      if (list.length === 0) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not within ${STOP_SHAPE_MAX_METRES} m of any tram edge`);
+      return list;
+    });
+    // A terminus stretch no shape draws (line 1 leaving Zapadni kolodvor runs
+    // rails only its own missing shape would carry) cannot be routed; up to
+    // TERMINUS_TRIM_STOPS stops at either end are dropped from the path, said
+    // so in the report, and left to the twin as off-graph running. A gap in
+    // the middle of a pattern is a data error and fails the build.
+    let from = 0;
+    let to = pattern.stops.length - 1;
+    let edgesOnPath = null;
+    while (edgesOnPath === null) {
+      try {
+        edgesOnPath = pathThroughStops(graph.edges, outgoing, edgeLen, links.slice(from, to + 1), `${label} (route ${pattern.route})`, (k) => {
+          const stopId = pattern.stops[from + k];
+          const si = stopIndexById.get(stopId);
+          const name = si === undefined ? "?" : stops[si].name;
+          const on = links[from + k].map((l) => `${l.edge}@${Math.round(l.s)}m`).join(",");
+          return `stop ${from + k} ${stopId} "${name}" [edges ${on}]`;
+        });
+      } catch (error) {
+        const leg = typeof error.leg === "number" ? from + error.leg : -1;
+        if (leg >= 0 && leg <= from + TERMINUS_TRIM_STOPS) from = leg;
+        else if (leg >= 0 && leg >= to - TERMINUS_TRIM_STOPS + 1) to = leg - 1;
+        else {
+          // Rails between two interior stops that no shape draws (a diversion
+          // or a crossover only short-turning trips use): the pattern gets no
+          // path rather than a wrong one, and the report says so by name; its
+          // trips stay on geometric matching within their route.
+          unroutable.push({ id: label, route: pattern.route, reason: error.message });
+          edgesOnPath = undefined;
+          break;
+        }
+        if (to - from < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
+      }
+    }
+    if (edgesOnPath === undefined) continue;
+    const covered = pattern.stops.slice(from, to + 1);
+    if (from > 0 || to < pattern.stops.length - 1) {
+      trimmed.push({ id: label, leading: pattern.stops.slice(0, from), trailing: pattern.stops.slice(to + 1) });
+    }
+    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered });
+  }
+
+  // --- The octilinear diagram: one line per shape of every diagram-cut route.
   const rawLines = [];
   for (const route of routes) {
     if (!diagramRouteIds.has(route.id)) continue;
@@ -732,25 +1538,49 @@ export async function buildNetwork(zipBuf, opts = {}) {
     };
   }
 
-  // Every array below is struct-of-arrays (toColumnar), not the row-major
-  // array-of-objects the brief's interface sketch shows -- see toColumnar's
-  // own comment for why. ROUTE_KEYS / SHAPE_KEYS / STOP_KEYS / LINE_KEYS name
-  // exactly the fields that sketch shows, in the same order; fromColumnar is
-  // the exact inverse and is what a decoder (T4) reads with.
+  // --- Edges on the wire: one chain across the whole array (decodeEdgeChain).
+  const flatUnits = [];
+  for (const units of edgeUnits) flatUnits.push(...units);
+  const chained = chainEncodeXY(flatUnits);
+  const edgeD = [];
+  let at = 0;
+  for (const units of edgeUnits) {
+    edgeD.push(chained.slice(2 * at, 2 * (at + units.length)));
+    at += units.length;
+  }
+  const edges = graph.edges.map((e, idx) => ({ from: e.from, to: e.to, d: edgeD[idx] }));
+
+  const report = {
+    tramShapes: tramRows.length,
+    edges: edges.length,
+    nodes: graph.nodeCount,
+    snappedRuns: graph.report.snappedRuns,
+    unsharedShareBefore: graph.report.unsharedShareBefore,
+    spikePoints: graph.report.spikePoints,
+    busUnsharedShare,
+    paths: paths.length,
+    trimmedPaths: trimmed,
+    unroutablePaths: unroutable,
+    residualPairs: graph.report.residualPairs,
+  };
+
   return {
-    version: 1,
+    version: ARTEFACT_VERSION,
     feedVersion,
     builtAt: now().toISOString(),
     origin: ORIGIN,
     scale: SCALE,
     routes: toColumnar(routes, ROUTE_KEYS),
+    edges: toColumnar(edges, EDGE_KEYS),
     shapes: toColumnar(shapes, SHAPE_KEYS),
+    paths: toColumnar(paths, PATH_KEYS),
     stops: toColumnar(stops, STOP_KEYS),
     diagram: { lines: toColumnar(diagram.lines, LINE_KEYS), box: diagram.box },
+    report,
   };
 }
 
-function renderNetworkMeta({ feedVersion, builtAt, routeCount, byteSize }) {
+function renderNetworkMeta({ feedVersion, builtAt, routeCount, edgeCount, byteSize }) {
   return (
     `// Generated by scripts/gtfs-shapes.mjs -- do not edit by hand.\n` +
     `// Lets the app state the network artefact's age and size without fetching\n` +
@@ -758,6 +1588,7 @@ function renderNetworkMeta({ feedVersion, builtAt, routeCount, byteSize }) {
     `export const FEED_VERSION = ${JSON.stringify(feedVersion)};\n` +
     `export const BUILT_AT = ${JSON.stringify(builtAt)};\n` +
     `export const ROUTE_COUNT = ${routeCount};\n` +
+    `export const EDGE_COUNT = ${edgeCount};\n` +
     `export const BYTE_SIZE = ${byteSize};\n`
   );
 }
@@ -783,16 +1614,19 @@ export async function main({
   const buf = new Uint8Array(await res.arrayBuffer());
   log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
 
-  const artefact = await buildNetwork(buf, { now, diagramBusCount, fallbackMtime, log });
+  const { report, ...artefact } = await buildNetwork(buf, { now, diagramBusCount, fallbackMtime, log });
 
   const target = resolve(cwd, out);
   await mkdir(dirname(target), { recursive: true });
   const json = JSON.stringify(artefact) + '\n';
   await writeFile(target, json, 'utf8');
   const bytes = Buffer.byteLength(json, 'utf8');
+  const gzipBytes = gzipSync(Buffer.from(json, 'utf8')).byteLength;
 
   const routeCount = artefact.routes.id.length;
   const shapeCount = artefact.shapes.id.length;
+  const edgeCount = artefact.edges.from.length;
+  const pathCount = artefact.paths.id.length;
   const stopCount = artefact.stops.id.length;
   const diagramLineCount = artefact.diagram.lines.route.length;
 
@@ -800,20 +1634,36 @@ export async function main({
   await mkdir(dirname(metaTarget), { recursive: true });
   await writeFile(
     metaTarget,
-    renderNetworkMeta({ feedVersion: artefact.feedVersion, builtAt: artefact.builtAt, routeCount, byteSize: bytes }),
+    renderNetworkMeta({ feedVersion: artefact.feedVersion, builtAt: artefact.builtAt, routeCount, edgeCount, byteSize: bytes }),
     'utf8',
   );
 
-  log(`${routeCount} routes, ${shapeCount} shapes, ${stopCount} stops, ${diagramLineCount} diagram lines -> ${out} (${bytes} bytes)`);
+  log(
+    `${routeCount} routes, ${shapeCount} shapes (${report.tramShapes} tram), ${edgeCount} edges over ${report.nodes} nodes, ` +
+      `${pathCount} synthetic paths, ${stopCount} stops, ${diagramLineCount} diagram lines -> ${out} (${bytes} bytes raw, ${gzipBytes} gzip)`,
+  );
+  log(
+    `Rail graph report: ${(report.unsharedShareBefore * 100).toFixed(1)} % of tram shape-segments unshared before snapping, ` +
+      `${report.spikePoints} spike points collapsed, ${report.snappedRuns} runs snapped, ${report.residualPairs.length} residual near-parallel pairs; ` +
+      `bus shapes ${(report.busUnsharedShare * 100).toFixed(1)} % unshared (informational, buses stay polylines)`,
+  );
+  for (const u of report.unroutablePaths) log(`Synthetic path skipped, rails not drawn by any shape: ${u.reason}`);
+  for (const t of report.trimmedPaths) {
+    log(`Synthetic path ${t.id}: off-graph terminus stretch dropped, leading [${t.leading.join(", ")}], trailing [${t.trailing.join(", ")}]`);
+  }
   return {
     routeCount,
     shapeCount,
+    edgeCount,
+    pathCount,
     stopCount,
     bytes,
+    gzipBytes,
     target,
     metaTarget,
     feedVersion: artefact.feedVersion,
     builtAt: artefact.builtAt,
+    report,
   };
 }
 
