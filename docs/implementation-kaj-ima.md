@@ -22,13 +22,13 @@ Owner-approved full overhaul, implemented jointly by Codex and Claude Fable.
 
 ## Behaviour
 
-Seven LayerIds remain stable, user labels become Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja, Vijesti. Phone Sada/Promet/Događanja/Još; desktop sidebar. No new decorative panorama or meander.
+Six LayerIds remain stable, user labels become Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja. Phone Sada/Promet/Događanja/Još; desktop sidebar. No new decorative panorama or meander.
 
 Real screen creation: `POST /api/screens`, Access-verified evaluator, five creations per principal/hour, thirty globally/hour, 24h screen TTL, default Donji grad / stop 106_1. Returns ordinary credentials and context. Setup never bypasses session tokens. Same-Wi-Fi redemption succeeds. APP_ENV=test is the only admin test-bypass gate, missing env means production. All session signing secrets explicit.
 
 Selection relay allows only layer/module/public item key/routeId/stopId. No search strings, coordinates, arbitrary URLs or private location. Screen stop metadata reaches phone and kiosk. New screen expiry prevents grants but leaves existing sessions to complete. Temporary evaluation metrics remain separate from venue metrics.
 
-Current feeds only: ZET realtime and route geometry; closures; observation/forecast/warnings; EMSC; HRT/Sljeme; gazette; spatial sources; six-source events. No stop ETA. Fix synthetic Kvartovske dates; separate undated notices. Missing source is never zero/all-clear. Preserve licence boundaries.
+Current feeds only: ZET realtime and route geometry; closures; observation/forecast/warnings; EMSC; gazette; spatial sources; six-source events. No stop ETA. Fix synthetic Kvartovske dates; separate undated notices. Missing source is never zero/all-clear. Preserve licence boundaries.
 
 ## Verification and handoff
 

@@ -6,7 +6,6 @@ import { fetchDhmzForecast } from './modules/dhmz-forecast';
 import { fetchDhmzNow } from './modules/dhmz-now';
 import { fetchEmsc } from './modules/emsc';
 import { fetchGlasnik } from './modules/glasnik';
-import { fetchHrtNews } from './modules/hrt-news';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt, inTeaserBox } from './modules/zet-rt';
 import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
@@ -18,7 +17,6 @@ import { openLicenceEvents, OPEN_LICENCE_EVENT_SOURCES } from './modules/dogadan
 
 export const OPEN_LICENCE = 'Otvorena dozvola (NN 67/17)';
 export const EMSC_LICENCE = 'EMSC terms';
-export const HRT_LICENCE = 'HRT uvjeti korištenja, tekst uz navođenje izvora i poveznicu';
 
 // Controller ruling R-08 fixes these strings. Braces are templates filled at
 // render time from the snapshot (sourceUpdatedAt, item title, act number); the
@@ -53,11 +51,6 @@ export const ATTRIBUTION: Record<ModuleId, Attribution> = {
     text: 'Izvor: EMSC, seismicportal.eu',
     url: 'https://www.seismicportal.eu/',
     licence: EMSC_LICENCE,
-  },
-  'hrt-news': {
-    text: 'Izvor: HRT, {naslov}, poveznica na izvornik',
-    url: 'https://feed.hrt.hr/vijesti/page.xml',
-    licence: HRT_LICENCE,
   },
   glasnik: {
     text: 'Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}',
@@ -116,7 +109,6 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: fetchDhmzForecast }),
   'dhmz-cap': defineModule({ id: 'dhmz-cap', tier: 'open', ttl: 300, maxStale: 7200, load: fetchDhmzCap }),
   emsc: defineModule({ id: 'emsc', tier: 'open', ttl: 60, maxStale: 3600, load: fetchEmsc }),
-  'hrt-news': defineModule({ id: 'hrt-news', tier: 'session', ttl: 300, maxStale: 7200, load: fetchHrtNews }),
   glasnik: defineModule({ id: 'glasnik', tier: 'session', ttl: 3600, maxStale: 604800, load: fetchGlasnik }),
   'ckan-geo': defineModule({ id: 'ckan-geo', tier: 'open', ttl: 86400, maxStale: 2592000, load: fetchCkanGeo }),
   // Not built through defineModule: its own fetcher already returns the
@@ -164,11 +156,10 @@ export function clearFetcherOverrides(): void {
   FETCHER_OVERRIDES.clear();
 }
 
-// The kiosk shows a reduced view of four session modules before anyone scans:
+// The kiosk shows a reduced view of three session modules before anyone scans:
 // enough to be useful standing in a cafe, not enough to replace the session.
 // dogadanja is reduced by licence first and only then by size (teaserSubset below).
-export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'hrt-news', 'dogadanja'];
-export const TEASER_NEWS_LIMIT = 3;
+export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja'];
 export const TEASER_EMSC_LIMIT = 10;
 // The kiosk shows one city row per card; ten leaves room for the card to grow
 // without shipping the whole register (40 komunalne rows with their activity
@@ -219,17 +210,6 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
         data: { vehicles },
       };
       return { ...snapshot, items: [count, ...boxed, ...delays] };
-    }
-    case 'hrt-news': {
-      // The tokenless teaser carries headline, date and link only. HRT's terms
-      // allow carrying its news with attribution and a link to the original,
-      // and the kiosk prints headlines; the lede stays behind the scan.
-      const headlines = snapshot.items.slice(0, TEASER_NEWS_LIMIT).map((entry) => {
-        const { summary, ...headline } = entry;
-        void summary;
-        return headline;
-      });
-      return limitedSnapshot(snapshot, headlines);
     }
     case 'dogadanja': {
       // The licence boundary (modules/dogadanja/licence.ts): Kulturpunkt

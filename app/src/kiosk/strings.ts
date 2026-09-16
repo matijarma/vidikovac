@@ -80,7 +80,6 @@ export interface KioskStrings {
     zet: string;
     neighbourhood: string;
     works: string;
-    news: string;
     quake: string;
     published: string;
     changed: string;
@@ -167,7 +166,6 @@ export interface KioskStrings {
     ongoing: string;
     ongoingWord: string;
     ongoingUntil: string;
-    headlines: string;
     overviewTransport: string;
     allDay: string;
     noData: string;
@@ -190,7 +188,6 @@ export interface KioskStrings {
     warningsNone: string;
     closuresNone: string;
     eventsNone: string;
-    newsNone: string;
     actsNone: string;
     worksNone: string;
     sessionsNone: string;
@@ -293,7 +290,7 @@ function build(code: SupportedLocale): KioskStrings {
       more: forms('lines', 'more'),
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
-    story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'news', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
     scenes: {
       ...group('scenes', ['tonight', 'position', 'worksKvart', 'worksCity', 'tonightEmpty', 'live']),
       moreEvents: forms('scenes', 'moreEvents'),
@@ -313,9 +310,9 @@ function build(code: SupportedLocale): KioskStrings {
     paired: {
       ...group('paired', [
         'warnings', 'closures', 'delays', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
-        'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'ongoingUntil', 'headlines', 'overviewTransport', 'allDay',
+        'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'ongoingUntil', 'overviewTransport', 'allDay',
         'noData', 'sourceDown', 'unconfirmed', 'dataFrom', 'fetchedAt', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
-        'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'newsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
+        'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
         'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',
       ]),
       coverageLines: forms('paired', 'coverageLines'),

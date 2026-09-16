@@ -340,19 +340,18 @@ function inkTile(session: FeedItem | null, state: SourceState, ctx: SceneContext
   return `${open} data-state="${state}">${time}<p class="tl-label">${escapeHtml(label)}</p><p class="tl-title">${escapeHtml(session.title)}</p>${tail}</div>`;
 }
 
-type StoryKind = 'news' | 'quake' | 'city';
+type StoryKind = 'quake' | 'city';
 
-/** The snapshot and the feed row behind a story (`news:<id>`, `quake:<id>`, `city:<id>`), for the source's state and the row's own date. */
+/** The snapshot and the feed row behind a story (`quake:<id>`, `city:<id>`), for the source's state and the row's own date. */
 function storySource(story: Story, modules: readonly ModuleSnapshot[]): { snapshot: ModuleSnapshot | undefined; item: FeedItem | undefined } {
   const cut = story.id.indexOf(':');
   const kind = story.id.slice(0, cut);
   const id = story.id.slice(cut + 1);
-  const snapshot = byModule(modules)[kind === 'news' ? 'hrt-news' : kind === 'quake' ? 'emsc' : 'dogadanja'];
+  const snapshot = byModule(modules)[kind === 'quake' ? 'emsc' : 'dogadanja'];
   return { snapshot, item: snapshot?.items.find((item) => item.id === id) };
 }
 
 function rowGlyph(kind: StoryKind, source: string): IconName {
-  if (kind === 'news') return 'newspaper';
   if (kind === 'quake') return 'activity';
   if (source === 'komunalne') return 'hard-hat';
   if (source === 'zet-promet' || source === 'zet-novosti') return 'tram-front';
@@ -371,7 +370,7 @@ function whenText(item: FeedItem | undefined, now: number, locale: string): stri
 
 function gradRow(story: Story, ctx: SceneContext): string {
   const { snapshot, item } = storySource(story, ctx.modules);
-  const kind: StoryKind = story.tone === 'news' ? 'news' : story.tone === 'quake' ? 'quake' : 'city';
+  const kind: StoryKind = story.tone === 'quake' ? 'quake' : 'city';
   const source = item ? dataText(item, 'source') : '';
   const trail = [kind === 'city' && source ? publisherOf(source) : story.source, whenText(item, ctx.now, ctx.locale)].filter(Boolean).join(' · ');
   // A stale source marks its own rows, after the title (C.3); the trail keeps saying when the row happened.
@@ -385,7 +384,7 @@ function grad(ctx: SceneContext): BuiltScene {
   const map = byModule(ctx.modules);
   const ink = inkTile(nextSession(ctx.modules, ctx.now), sourceState(map.dogadanja), ctx);
   const rows = gradRows(ctx);
-  const sources = [map.dogadanja, map['hrt-news'], map.emsc];
+  const sources = [map.dogadanja, map.emsc];
   let rowsHtml: string;
   if (rows.length > 0) rowsHtml = rows.map((story) => gradRow(story, ctx)).join('');
   else if (sources.every((snapshot) => snapshot === undefined)) {

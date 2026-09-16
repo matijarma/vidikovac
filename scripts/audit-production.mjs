@@ -481,7 +481,7 @@ try {
   await shot(kiosk, 'kiosk-paired-sada');
   await metrics(kiosk, 'kiosk-paired-sada');
 
-  for (const layer of ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti']) {
+  for (const layer of ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura']) {
     try {
       await openDomain(phone, layer);
       await shot(phone, `iphone-${layer}`, true);
@@ -490,7 +490,6 @@ try {
       if (layer === 'u-pokretu') await transportJourney(phone, 'iphone');
       if (layer === 'kultura') await clickFirstItem(phone, layer, 'iphone-kultura-detail');
       if (layer === 'uprava-i-pravo') await clickFirstItem(phone, layer, 'iphone-grad-detail');
-      if (layer === 'vijesti') await clickFirstItem(phone, layer, 'iphone-vijesti-detail');
     } catch (e) { fail(`iphone ${layer}`, e); }
   }
   try { await phone.getByTestId('tab-more').click(); await phone.waitForTimeout(900); await shot(phone, 'iphone-more', true); await metrics(phone, 'iphone-more'); } catch (e) { fail('iphone more', e); }
@@ -616,7 +615,7 @@ try {
     await shot(desk, 'desktop-landing', true);
     await metrics(desk, 'desktop-landing');
     await unlock(desk, await freshCode(kiosk), 'desktop');
-    for (const layer of ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti']) { await openDomain(desk, layer); await shot(desk, `desktop-${layer}`); await metrics(desk, `desktop-${layer}`); }
+    for (const layer of ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura']) { await openDomain(desk, layer); await shot(desk, `desktop-${layer}`); await metrics(desk, `desktop-${layer}`); }
     await openDomain(desk, 'grad-sada');
     await desk.getByTestId('session-label').click();
     await desk.waitForTimeout(700);

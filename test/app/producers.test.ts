@@ -1,4 +1,4 @@
-// The nine producers of A.6, each over its own small fixture: the exact
+// The eight producers of A.6, each over its own small fixture: the exact
 // tiles they hand buildTimeband, not the band's own sorting/capping/staleness
 // machinery (timeband.test.ts owns that, with hand-made producer stubs).
 // @vitest-environment happy-dom
@@ -14,7 +14,6 @@ import {
   eventsProducer,
   gazetteProducer,
   lastRunProducer,
-  newsProducer,
   safetyProducer,
   safetyVerdict,
   transitProducer,
@@ -405,31 +404,6 @@ describe('gazetteProducer', () => {
 });
 
 // ---------------------------------------------------------------------------
-// news
-
-describe('newsProducer', () => {
-  it('leads with the first HRT vijesti item', () => {
-    const news = base('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', at: '2026-09-11T11:00:00Z' }]);
-    const tile = newsProducer.produce(ctx({ snapshots: { 'hrt-news': news } }))[0]!;
-    expect(tile).toMatchObject({ key: 'hrt-news:n1', domain: 'news', variant: 'row', icon: 'newspaper', label: 'Vijesti', title: 'Naslov vijesti', bucket: 'sada', testid: 'tile-news' });
-    expect(tile.context).toMatch(/^HRT vijesti · /);
-  });
-
-  it('falls back to Radio Sljeme when HRT vijesti has nothing, and skips a source reporting down', () => {
-    const withSljeme = base('hrt-news', [{ id: 's1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Sa Sljemena', at: '2026-09-11T10:00:00Z', data: { source: 'Radio Sljeme' } }]);
-    expect(newsProducer.produce(ctx({ snapshots: { 'hrt-news': withSljeme } }))[0]!.title).toBe('Sa Sljemena');
-
-    const hrtDown: ModuleSnapshot = { ...base('hrt-news', [
-      { id: 'h1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'HRT vijest', at: '2026-09-11T10:00:00Z', data: { source: 'HRT vijesti' } },
-      { id: 's1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Sa Sljemena', at: '2026-09-11T10:00:00Z', data: { source: 'Radio Sljeme' } },
-    ]), sources: { 'HRT vijesti': { status: 'down', itemCount: 0 }, 'Radio Sljeme': { status: 'live', itemCount: 1 } } };
-    expect(newsProducer.produce(ctx({ snapshots: { 'hrt-news': hrtDown } }))[0]!.title).toBe('Sa Sljemena');
-  });
-
-  it('shows nothing once both sources are down or empty', () => {
-    expect(newsProducer.produce(ctx({ snapshots: { 'hrt-news': base('hrt-news', []) } }))).toEqual([]);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // last run (behind FEED_LASTRUN, T3.1): GTFS static, never zet-rt, never an arrival

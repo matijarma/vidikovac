@@ -179,7 +179,7 @@ const down = (module: ModuleId): ModuleSnapshot => ({ ...live(module), status: '
 const OBSERVATION = live('dhmz-now', [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', at: '2026-09-11T12:00:00Z', data: { temp: 21, weather: 'vedro' } }]);
 const NO_TEMP = live('dhmz-now', [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', at: '2026-09-11T12:00:00Z', data: { weather: 'vedro' } }]);
 
-const ALL_LIVE: LayerContext['snapshots'] = { 'zet-rt': live('zet-rt'), dogadanja: live('dogadanja'), 'hrt-news': live('hrt-news'), glasnik: live('glasnik'), 'dhmz-cap': live('dhmz-cap') };
+const ALL_LIVE: LayerContext['snapshots'] = { 'zet-rt': live('zet-rt'), dogadanja: live('dogadanja'), prometnice: live('prometnice'), glasnik: live('glasnik'), 'dhmz-cap': live('dhmz-cap') };
 
 function screen(surface: 'phone' | 'desktop'): ScreenContext {
   return { surface, locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false };
@@ -210,9 +210,11 @@ const events = (starts: readonly Start[], moreLabel?: TileProducer['moreLabel'])
   produce: (_ctx, o) => starts.flatMap((s) => { const b = o.bucket(s.at, s.until, s.allDay); return b && b !== 'sada' ? [eventTile(s)] : []; }),
   moreLabel,
 });
-const news: TileProducer = {
-  domain: 'news', modules: ['hrt-news'], layer: 'vijesti', skeleton: { bucket: 'sada', variant: 'row', count: 1 },
-  produce: () => [{ key: 'hrt-news:n1', domain: 'news', variant: 'row', icon: 'newspaper', label: 'Vijesti', title: 'Naslov vijesti', context: 'HRT vijesti · prije 3 sata', layer: 'vijesti', bucket: 'sada', testid: 'tile-news' }],
+/** A row-variant producer on a module no other stub in PRODUCERS declares, so
+ *  one failed source marks exactly one domain's state foot. */
+const closures: TileProducer = {
+  domain: 'mobility', modules: ['prometnice'], layer: 'u-pokretu', skeleton: { bucket: 'sada', variant: 'row', count: 1 },
+  produce: () => [{ key: 'prometnice:c1', domain: 'mobility', variant: 'row', icon: 'car-front', label: 'Zatvaranja', title: 'Grada Vukovara', context: 'Grad Zagreb · do 22:00', layer: 'u-pokretu', bucket: 'sada', testid: 'tile-closures' }],
 };
 const gazette: TileProducer = {
   domain: 'civic', modules: ['glasnik'], layer: 'uprava-i-pravo', skeleton: { bucket: 'sada', variant: 'value', count: 1 },
@@ -240,7 +242,7 @@ const STARTS: Start[] = [
   { id: 'running', at: '2026-09-10T07:00:00Z', until: '2026-10-01T16:00:00Z' },
   { id: 'friAllDay', at: '2026-09-11T00:00:00Z', allDay: true },
 ];
-const PRODUCERS: TileProducer[] = [gazette, news, safety, transit(SIX_LINES), events(STARTS)];
+const PRODUCERS: TileProducer[] = [gazette, closures, safety, transit(SIX_LINES), events(STARTS)];
 const lane = (model: ReturnType<typeof buildTimeband>, col: string) => model.lanes.find((l) => l.col === col)!;
 const keys = (model: ReturnType<typeof buildTimeband>, col: string): string[] => lane(model, col).tiles.map((t) => t.key);
 
@@ -257,7 +259,7 @@ describe('buildTimeband: the model', () => {
   });
   it('orders the sada lane by DOMAIN_ORDER whatever order the producers came in', () => {
     const model = buildTimeband(ctx(), PRODUCERS);
-    expect(keys(model, 'sada')).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'zet-rt:route:12', 'zet-rt:route:13', 'safety', 'hrt-news:n1', 'glasnik:issue']);
+    expect(keys(model, 'sada')).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'zet-rt:route:12', 'zet-rt:route:13', 'prometnice:c1', 'safety', 'glasnik:issue']);
   });
   it('trims sada transit to two on the phone and four on the desktop, counting the rest into one more foot in the producer’s words', () => {
     const onPhone = lane(buildTimeband(phone(), PRODUCERS), 'sada');
@@ -301,18 +303,18 @@ describe('buildTimeband: the model', () => {
     for (const tile of sada.tiles) expect(tile.stale, tile.key).toBe(tile.domain === 'transit' ? badge : undefined);
   });
   it('a source that failed puts one state foot with a retry in the producer’s lane and paints no tile: before its first answer, and when it answers down', () => {
-    const withoutNews: LayerContext['snapshots'] = { ...ALL_LIVE };
-    delete withoutNews['hrt-news'];
-    const failed = lane(buildTimeband(ctx({ snapshots: withoutNews, errors: { 'hrt-news': 'HTTP 503' } }), PRODUCERS), 'sada');
-    expect(failed.tiles.some((t) => t.domain === 'news')).toBe(false);
+    const withoutClosures: LayerContext['snapshots'] = { ...ALL_LIVE };
+    delete withoutClosures.prometnice;
+    const failed = lane(buildTimeband(ctx({ snapshots: withoutClosures, errors: { prometnice: 'HTTP 503' } }), PRODUCERS), 'sada');
+    expect(failed.tiles.some((t) => t.domain === 'mobility')).toBe(false);
     expect(failed.busy).toBe(false);
     const state = failed.foot.find((f) => f.kind === 'state');
-    expect(state).toMatchObject({ kind: 'state', domain: 'news' });
-    expect(state!.kind === 'state' && state!.markup).toContain('data-testid="tb-state-news"');
-    expect(state!.kind === 'state' && state!.markup).toContain('data-action="retry" data-module="hrt-news"');
+    expect(state).toMatchObject({ kind: 'state', domain: 'mobility' });
+    expect(state!.kind === 'state' && state!.markup).toContain('data-testid="tb-state-mobility"');
+    expect(state!.kind === 'state' && state!.markup).toContain('data-action="retry" data-module="prometnice"');
     expect(state!.kind === 'state' && state!.markup).toContain('Stanje nije potvrđeno: izvor ne odgovara.');
-    const answeredDown = lane(buildTimeband(ctx({ snapshots: { ...ALL_LIVE, 'hrt-news': down('hrt-news') } }), PRODUCERS), 'sada');
-    expect(answeredDown.tiles.some((t) => t.domain === 'news')).toBe(false);
+    const answeredDown = lane(buildTimeband(ctx({ snapshots: { ...ALL_LIVE, prometnice: down('prometnice') } }), PRODUCERS), 'sada');
+    expect(answeredDown.tiles.some((t) => t.domain === 'mobility')).toBe(false);
     expect(answeredDown.foot.filter((f) => f.kind === 'state')).toHaveLength(1);
   });
   it('says a down module once per lane even when several producers read it, and once per lane it feeds', () => {
@@ -324,11 +326,11 @@ describe('buildTimeband: the model', () => {
     expect(model.lanes.flatMap((l) => l.tiles)).toHaveLength(0);
   });
   it('a lead module still loading paints the producer’s skeletons in its lane and marks it busy: transit 2/4 in sada, events 3 in the first time lane', () => {
-    const onPhone = buildTimeband(phone({ snapshots: { 'hrt-news': live('hrt-news'), glasnik: live('glasnik') } }), PRODUCERS);
+    const onPhone = buildTimeband(phone({ snapshots: { prometnice: live('prometnice'), glasnik: live('glasnik') } }), PRODUCERS);
     const sada = lane(onPhone, 'sada');
     expect(sada.busy).toBe(true);
     expect(sada.skeletons).toEqual([{ domain: 'transit', variant: 'value', key: 'sk-transit-0' }, { domain: 'transit', variant: 'value', key: 'sk-transit-1' }]);
-    expect(sada.tiles.map((t) => t.key)).toEqual(['safety', 'hrt-news:n1', 'glasnik:issue']);
+    expect(sada.tiles.map((t) => t.key)).toEqual(['prometnice:c1', 'safety', 'glasnik:issue']);
     const danas = lane(onPhone, 'danas');
     expect(danas.busy).toBe(true);
     expect(danas.skeletons.map((s) => s.key)).toEqual(['sk-events-0', 'sk-events-1', 'sk-events-2']);
@@ -587,7 +589,7 @@ describe('renderTimeband: the band (A.4)', () => {
   it('renders each tile through the tile grammar in lane order, then the feet', () => {
     const tb = render(phone());
     const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'safety', 'hrt-news:n1', 'glasnik:issue', 'next-head', 'next:dogadanja:friAllDay', 'next:dogadanja:fri17', 'more-transit']);
+    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'prometnice:c1', 'safety', 'glasnik:issue', 'next-head', 'next:dogadanja:friAllDay', 'next:dogadanja:fri17', 'more-transit']);
     expect(sada.querySelector('.tl[data-variant="value"][data-domain="transit"][data-testid="tile-transit"]')).not.toBeNull();
     expect(sada.querySelector('.tl[data-variant="band"][data-domain="safety"][data-level="calm"]')).not.toBeNull();
     expect(text(tb.querySelector('[data-testid="tb-lane-danas"] .tl-time'))).toBe('cijeli dan');
@@ -606,11 +608,11 @@ describe('renderTimeband: the band (A.4)', () => {
     expect(more.getAttribute('href')).toBe('#layer=kultura');
   });
   it('a busy lane carries aria-busy and one visually hidden loading word, then the skeletons where their domain will stand', () => {
-    const tb = render(phone({ snapshots: { 'hrt-news': live('hrt-news'), glasnik: live('glasnik') } }));
+    const tb = render(phone({ snapshots: { prometnice: live('prometnice'), glasnik: live('glasnik') } }));
     const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
     expect(sada.getAttribute('aria-busy')).toBe('true');
     expect(sada.firstElementChild?.outerHTML).toBe('<span class="visually-hidden" data-key="loading">učitavanje podataka</span>');
-    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['loading', 'sk-transit-0', 'sk-transit-1', 'safety', 'hrt-news:n1', 'glasnik:issue']);
+    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['loading', 'sk-transit-0', 'sk-transit-1', 'prometnice:c1', 'safety', 'glasnik:issue']);
     expect(sada.querySelectorAll('.tl[data-skeleton][data-variant="value"][aria-hidden="true"]')).toHaveLength(2);
     expect(sada.querySelectorAll('.visually-hidden')).toHaveLength(1);
     const danas = tb.querySelector('[data-testid="tb-lane-danas"]')!;
@@ -633,11 +635,11 @@ describe('renderTimeband: the band (A.4)', () => {
     expect(tb.querySelectorAll('.tl[data-stale]')).toHaveLength(4);
   });
   it('a down source renders the state block with its retry at the foot of the lane, after the tiles, and no tile of its own', () => {
-    const tb = render(ctx({ snapshots: { ...ALL_LIVE, 'hrt-news': down('hrt-news') } }));
+    const tb = render(ctx({ snapshots: { ...ALL_LIVE, prometnice: down('prometnice') } }));
     const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect(sada.querySelector('[data-testid="tile-news"]')).toBeNull();
-    const state = sada.querySelector('.state[data-kind="down"][data-testid="tb-state-news"]')!;
-    expect(state.querySelector('[data-action="retry"][data-module="hrt-news"]')).not.toBeNull();
+    expect(sada.querySelector('[data-testid="tile-closures"]')).toBeNull();
+    const state = sada.querySelector('.state[data-kind="down"][data-testid="tb-state-mobility"]')!;
+    expect(state.querySelector('[data-action="retry"][data-module="prometnice"]')).not.toBeNull();
     expect(text(state)).toContain('Stanje nije potvrđeno: izvor ne odgovara.');
     expect(sada.lastElementChild).toBe(state);
     expect([...sada.children].filter((el) => el.classList.contains('tl'))).toHaveLength(6);
@@ -722,7 +724,6 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
     ]),
     'dhmz-cap': snap('dhmz-cap', []),
     emsc: snap('emsc', []),
-    'hrt-news': snap('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', at: '2026-09-11T11:00:00Z' }]),
     glasnik: snap('glasnik', [{ id: 'a1', module: 'glasnik', kind: 'act', tier: 'open', title: 'Odluka', at: '2026-09-10T00:00:00Z', data: { broj: '21', godina: '2026' } }]),
     dogadanja: snap('dogadanja', [
       { id: 'kulturpunkt:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert u parku', at: '2026-09-12T18:00:00Z', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time' } },
@@ -742,12 +743,11 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
   it('assembles every sada domain from the real producers, in DOMAIN_ORDER, using the default parameter', () => {
     const model = buildTimeband(realCtx()); // no second argument: DEFAULT_PRODUCERS
     const sada = model.lanes.find((l) => l.col === 'sada')!;
-    expect(sada.tiles.map((t) => t.domain)).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic']);
+    expect(sada.tiles.map((t) => t.domain)).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety', 'civic']);
     expect(sada.tiles.find((t) => t.testid === 'tile-safety')?.tone).toBe('calm');
     expect(sada.tiles.find((t) => t.testid === 'tile-gazette')?.value).toBe('21/2026');
     expect(sada.tiles.find((t) => t.testid === 'tile-works')?.value).toBe('1');
     expect(sada.tiles.find((t) => t.testid === 'tile-closures')?.title).toBe('Grada Vukovara');
-    expect(sada.tiles.find((t) => t.testid === 'tile-news')?.title).toBe('Naslov vijesti');
   });
 
   it('marks the saved line 6 once its own delay (read off the tile, T3.3) passes 300 s with notify.delays on; line 11 is unsaved and stays plain', () => {
@@ -797,7 +797,7 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
 
   it('is the same producer list DEFAULT_PRODUCERS exports, in the sada reading order the plan names', () => {
     expect(DEFAULT_PRODUCERS.map((p) => p.domain)).toEqual([
-      'transit', 'mobility', 'komunalno', 'safety', 'news', 'civic', 'civic', 'events', 'transit', 'mobility', 'mobility', 'komunalno',
+      'transit', 'mobility', 'komunalno', 'safety', 'civic', 'civic', 'events', 'transit', 'mobility', 'mobility', 'komunalno',
     ]);
   });
 

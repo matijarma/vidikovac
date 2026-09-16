@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 
-// One XML configuration for CAP, both DHMZ dialects and the HRT RSS feeds.
+// One XML configuration for CAP, both DHMZ dialects and ZET's two RSS feeds.
 // Repeated elements are only arrays when the caller names their jpath, because
 // fast-xml-parser collapses a one-element list into a bare object otherwise.
 
@@ -26,7 +26,7 @@ export function parseXml<T = unknown>(xml: string, options: XmlOptions = {}): T 
     // is a no-op on the string we always receive at runtime.
     isArray: (_name, jpath) => arrayPaths.has(String(jpath)),
   });
-  // The HRT feeds begin with a UTF-8 BOM, which is not a legal first character.
+  // A feed may begin with a UTF-8 BOM, which is not a legal first character.
   return parser.parse(xml.charCodeAt(0) === 0xfeff ? xml.slice(1) : xml) as T;
 }
 

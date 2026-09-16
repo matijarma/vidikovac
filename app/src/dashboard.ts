@@ -53,7 +53,7 @@ const CAST_SENT_MS = 1_500;
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
 
 /** Layers whose renderers declare interactions as data-action and are safe to reconcile in place. */
-const RECONCILED_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti']);
+const RECONCILED_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura']);
 
 function safeSessionStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
   try { return globalThis.sessionStorage; } catch { return undefined; }

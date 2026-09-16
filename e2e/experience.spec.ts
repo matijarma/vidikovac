@@ -5,7 +5,7 @@ import type { LayerId } from '../worker/protocol';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { DESKTOP_MIN_PX } from './lib';
 
-const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'];
 /** Sada's promise at 390×844: the city's now is on the first screen without a scroll. */
 const SADA_FOLD_PX = 700;
 const SADA_TILES_IN_FOLD = 2;
@@ -35,7 +35,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
   test.describe(`Kaj ima? ${viewport.width}px`, () => {
     test.use({ viewport, locale: 'hr-HR' });
 
-    test('all seven workspaces are discoverable, not seven simultaneous columns', async ({ page }) => {
+    test('all six workspaces are discoverable, not six simultaneous columns', async ({ page }) => {
       const snapshots = await experienceSnapshots();
       await installExperienceFixture(page, snapshots);
       await page.goto(FIXTURE_DASHBOARD);

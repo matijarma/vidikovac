@@ -14,7 +14,7 @@ import { byModule, closuresNear, isLive, recentQuakes, safetyStrip, weatherNow }
 import { kioskStrings } from './strings';
 
 export interface TeaserCard {
-  id: 'weather' | 'quake' | 'closures' | 'news' | 'city' | 'invitation';
+  id: 'weather' | 'quake' | 'closures' | 'city' | 'invitation';
   title: string;
   body: string;
   attribution?: Attribution;
@@ -34,8 +34,6 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, now:
   const quakes = map.emsc;
   const quake = recentQuakes(quakes, now)[0];
   const near = closuresNear(modules, null, now);
-  const hrt = map['hrt-news'];
-  const news = isLive(hrt) ? hrt.items[0] : undefined;
   const city = map.dogadanja;
   const cityRow = cityTeaserRows(city)[0];
   const weatherBody = weather.state === 'loading' ? loading
@@ -45,7 +43,6 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, now:
     { id: 'weather', title: s.weather.title, body: weatherBody, attribution: filled(map['dhmz-now']) },
     { id: 'quake', title: s.story.quake, body: quake ? quakeCard(quake) : isLive(quakes) ? s.paired.quakeNone : quakes ? s.paired.sourceDown : loading, attribution: filled(quakes, quake) },
     { id: 'closures', title: s.paired.closures, body: near.state === 'loading' ? loading : near.state === 'down' ? s.safety.closuresUnknown : i18n.t('panels.closuresCount', { count: near.count }), attribution: filled(map.prometnice) },
-    { id: 'news', title: s.story.news, body: news ? news.title : hrt ? s.paired.newsNone : loading, attribution: filled(hrt, news) },
     { id: 'city', title: s.story.city, body: city ? (cityRow ? cityTeaserBody(cityRow, i18n) : s.story.empty) : loading, attribution: cityTeaserAttribution(city, cityRow) },
     { id: 'invitation', title: s.appName, body: `${s.invitation.lead} ${s.invitation.support}` },
   ];

@@ -185,7 +185,6 @@ describe('the kiosk teaser renders the real feed output', () => {
     expect(card('weather').body).toMatch(/-?\d+([.,]\d+)? °C/);
     expect(card('quake').body).toMatch(/M \d+([.,]\d+)?/);
     expect(card('closures').body).toMatch(/^\d+ zatvaranj/);
-    expect(card('news').body).not.toBe('');
     for (const c of cards) {
       expect(c.body, c.id).not.toContain(UNAVAILABLE);
       expect(c.body, c.id).not.toContain(DASH);

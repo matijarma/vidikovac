@@ -13,7 +13,7 @@ slijede samo uz financiranje. Nema zasebnog javnog lansiranja.
 3. Telefonom skenirati aktualni QR kod ili na `/s/` upisati prikazani kôd.
    Ista Wi-Fi mreža dopuštena je.
 4. Potvrditi ulazak. Telefon dobiva redovnu desetominutnu sesiju. Provjeriti
-   svih sedam područja, odabrati liniju/stajalište ili stavku i pratiti kako se
+   svih šest područja, odabrati liniju/stajalište ili stavku i pratiti kako se
    kontekst prenosi na zaslon.
 5. Putem „Podijeli grad” dati drugom telefonu pet minuta. Taj telefon ne može
    nastaviti lanac dijeljenja.
@@ -37,7 +37,6 @@ uparivanje, ne posebna demonstracija. Sama postava zaslona ne otključava sesiju
   bez datuma.
 - **Grad:** razlikovati fazu radova i navedeni iznos od potrošnje; pročitati
   podatke o sjednici i pronaći akt u najnovijem broju glasnika.
-- **Vijesti:** razlikovati HRT i Radio Sljeme te vidjeti stvarni datum objave.
 - **Sigurnost:** doći do broja i ljekarne, provjeriti upozorenja i zborna mjesta,
   otvoriti `/hitno` bez JavaScripta. Nedostupan izvor ne znači da nema upozorenja.
 

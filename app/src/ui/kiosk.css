@@ -245,7 +245,6 @@
 .k-kicker { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; font-size: var(--k-sup-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-kicker > span:first-child { min-width: 0; }
 .k-kicker-meta { flex: none; margin-left: auto; padding-left: var(--k-gap); text-transform: none; letter-spacing: 0; font-weight: 500; text-align: right; }
-.k-kicker--news { color: var(--k-violet); }
 .k-kicker--quake { color: var(--k-rose); }
 .k-kicker--city { color: var(--k-action); }
 .k-meta { font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); }
@@ -563,13 +562,10 @@ button.k-strip-verdict { cursor: pointer; }
 .k-paired[data-layer='uprava-i-pravo'] .k-main { grid-template-columns: 1.1fr 1fr; }
 .k-paired[data-layer='kultura'] .k-main { grid-template-columns: 1.1fr 1fr; }
 .kiosk [hidden] { display: none !important; }
-.k-paired[data-layer='vijesti'] .k-main { grid-template-columns: 1.15fr 1fr; }
 .k-main > .k-block { min-height: 0; }
 .k-stack { display: flex; flex-direction: column; min-height: 0; }
 .k-stack > * + * { margin-top: var(--k-gap); }
 .k-headline { font-size: var(--k-main-size); font-weight: 800; line-height: 1.12; letter-spacing: -0.015em; }
-.k-block--lead { background: var(--k-violet-soft); }
-.k-block--lead .k-kicker { color: var(--k-violet); }
 
 /* The join card: the small QR the next person scans, painted by the controller. */
 .k-join { display: flex; flex: none; align-items: center; box-sizing: border-box; margin-top: auto; padding: var(--k-gap) var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }

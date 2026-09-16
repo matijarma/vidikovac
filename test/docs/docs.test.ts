@@ -19,7 +19,6 @@ describe('docs/izvori.md', () => {
     expect(izvori).toContain('Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom');
     expect(izvori).toContain('Izvor: DHMZ, Otvorena dozvola');
     expect(izvori).toContain('Izvor: EMSC, seismicportal.eu');
-    expect(izvori).toContain('Izvor: HRT,');
     expect(izvori).toContain('https://data.zagreb.hr/dataset/7ff5514d-0a1f-4f6c-86bd-8ed9a3c55eee/resource/e48b6992-add0-45a1-ae95-c5d97d8db259/download/data.json');
   });
   // R-08 and R-58: the registry is the single source, so both columns are its

@@ -36,7 +36,6 @@ flowchart LR
     G[data.zagreb.hr / ArcGIS]
     D[DHMZ XML + CAP]
     E[EMSC]
-    H[HRT RSS]
     SG[Sluzbeni glasnik API]
   end
   K -- "wss /ws/beacon/:id" --> B

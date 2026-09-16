@@ -12,7 +12,6 @@ const ATTRIBUTIONS = [
   'Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom',
   'Izvor: DHMZ, Otvorena dozvola',
   'Izvor: EMSC, seismicportal.eu',
-  'Izvor: HRT, poveznica na izvornik',
 ];
 
 const Line: React.FC<{ from: number; children: React.ReactNode; style?: React.CSSProperties }> = ({

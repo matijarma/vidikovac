@@ -228,9 +228,9 @@
 .tl[data-compact='1'] .tl-time { grid-row: 1 / span 2; align-self: center; font-size: var(--type-tile-m); }
 .tl[data-compact='1'] .tl-title { font-size: var(--type-body); -webkit-line-clamp: 1; line-clamp: 1; }
 .tl[data-compact='1'] .tl-context { display: none; }
-/* At the desk a title that still ellipsises at two lines may take a third (kajimafix, cross-cutting): the evening's events and the one news lead. */
+/* At the desk a title that still ellipsises at two lines may take a third (kajimafix, cross-cutting): the evening's events. */
 @media (min-width: 60rem) {
-  .tb-lane[data-col='veceras'] .tl[data-domain='events'] .tl-title, .tb-lane[data-col='sada'] .tl[data-domain='news'] .tl-title { -webkit-line-clamp: 3; line-clamp: 3; }
+  .tb-lane[data-col='veceras'] .tl[data-domain='events'] .tl-title { -webkit-line-clamp: 3; line-clamp: 3; }
 }
 /* The phone's segmented control, hidden until the 36rem room shows it: five equal 44 px buttons in a surface-2 track, the accent "on" pill the inner 34 px span (kajimafix 02.3). A button never shrinks under its word (its minimum is its content), so at 200 % text the track wraps to a second row instead of clipping. */
 .tb-seg { display: none; }
@@ -321,7 +321,6 @@
 .dir-item[data-layer='zrak-i-nebo'] .dir-icon { color: var(--tone-weather); }
 .dir-item[data-layer='sigurnost'] .dir-icon { color: var(--tone-urgency); }
 .dir-item[data-layer='uprava-i-pravo'] .dir-icon { color: var(--tone-action-brand); }
-.dir-item[data-layer='vijesti'] .dir-icon { color: var(--tone-text-primary); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .dir-pages a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--target); min-inline-size: var(--target); }
 /* Events: the search and one chip row first, a count line under them, then a
@@ -420,21 +419,6 @@
 /* On paper print.css boxes .sec and .detail again; the civic blocks get their inner air back inside that box. */
 @media print { .cv-sec, .cv-detail { padding: var(--sp-3); } }
 
-/* News: source-separated hierarchy, one lead per source set apart by size and
-   space alone. A source panel is not a card: the shared .sec box is switched
-   off and a single hairline (Chrome, not Floating) separates it from its
-   neighbour, mirroring how .sec.wx-lead already flattens the weather lead. */
-.nw-grid { display: grid; gap: var(--sp-4); }
-@media (min-width: 60rem) { .nw-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }
-.sec.nw-source { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 0 0 var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
-.nw-source-head { display: flex; align-items: center; gap: var(--sp-2); }
-.nw-source-head .icon { color: var(--tone-text-muted); }
-.nw-source-title { font-size: var(--type-head); font-weight: 700; line-height: var(--lh-title); }
-.nw-lead .row-button { align-items: flex-start; }
-.nw-lead .row-main { gap: var(--sp-2); }
-.nw-lead .row-title { font-size: var(--type-title); font-weight: 700; line-height: var(--lh-title); }
-.nw-lead-lede { display: block; font-size: var(--type-body); font-weight: 400; line-height: var(--lh-prose); max-inline-size: 68ch; }
-.nw-disclaimer { margin: 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
 
 /* Safety workspace (T3.2, plan "Sigurnost"). The verdict is one band and the
    first thing on the page; every section is flat, a hairline and 24 px of air
@@ -556,7 +540,7 @@
   .tb-lanes { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x pan-y; margin-inline: -2px; padding: 2px 2px 5rem; }
   .tb-lanes::-webkit-scrollbar { display: none; }
   .tb[data-cols] .tb-lane[data-col] { display: grid; flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
-  .wx-grid, .cv-grid, .nw-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
+  .wx-grid, .cv-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
   .wx-wide, .cv-wide, .sf-wide { grid-column: auto; }
   .ws-split[data-detail-open='true'] { grid-template-columns: minmax(0, 1fr); }
   .ws-split[data-detail-open='true'] .ws-primary { display: none; }

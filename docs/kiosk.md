@@ -33,7 +33,7 @@ pokreće izričitom radnjom, ne automatskom petljom.
 Nepovezan zaslon rotira tri prizora svakih 20 sekundi: Promet (lokalna
 vektorska karta, linije odabranog stajališta i radovi u tijeku), Večeras
 (današnja događanja, dok ih otvoreni izvor ima) i Grad (najava sljedeće
-sjednice Gradske skupštine i gradske vijesti). Bočni stupac uz prizor nosi
+sjednice Gradske skupštine, gradske obavijesti i najnoviji potres). Bočni stupac uz prizor nosi
 dvije brojčane pločice (vozila u pogonu na mreži, zatvaranja u blizini
 stajališta) i stalnu pozivnicu s QR-om i kodom. Zaglavlje nosi sat i, kad
 DHMZ odgovara, vrijeme kao stanje uz sat, nikad kao pločicu. Sigurnosna

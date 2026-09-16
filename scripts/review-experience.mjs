@@ -19,7 +19,7 @@ const loader = await createServer({
 const browser = await chromium.launch({ headless: true });
 const findings = [];
 const records = [];
-const layers = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+const layers = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'];
 const matrix = [
   { name: 'phone', width: 390, height: 844, theme: 'light', locale: 'hr' },
   { name: 'phone-dark', width: 390, height: 844, theme: 'dark', locale: 'hr' },

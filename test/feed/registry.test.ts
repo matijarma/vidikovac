@@ -10,7 +10,6 @@ import {
   OPEN_MODULES,
   TEASER_EVENTS_LIMIT,
   TEASER_MODULES,
-  TEASER_NEWS_LIMIT,
   WARM_MODULES,
   isModuleId,
   teaserSubset,
@@ -18,15 +17,15 @@ import {
 
 describe('module registry', () => {
   it('preserves subsource health and coverage through generic and dogadanja wrappers', async () => {
-    for (const id of ['hrt-news', 'ckan-geo', 'dogadanja'] as const) {
+    for (const id of ['ckan-geo', 'dogadanja'] as const) {
       const snapshot = await MODULES[id].fetcher(FIXTURE_CONTEXTS[id]);
       expect(Object.keys(snapshot.sources ?? {}).length).toBeGreaterThan(1);
       expect(snapshot.coverage?.shown).toBe(snapshot.items.length);
       expect(Object.values(snapshot.sources!).reduce((sum, source) => sum + source.itemCount, 0)).toBe(snapshot.items.length);
     }
   });
-  it('carries all ten modules with the refresh windows the plan fixes', () => {
-    expect(MODULE_IDS).toHaveLength(10);
+  it('carries all nine modules with the refresh windows the plan fixes', () => {
+    expect(MODULE_IDS).toHaveLength(9);
     const windows: Record<ModuleId, [number, number]> = {
       'zet-rt': [30, 300],
       prometnice: [180, 1800],
@@ -34,7 +33,6 @@ describe('module registry', () => {
       'dhmz-cap': [300, 7200],
       'dhmz-now': [600, 7200],
       'dhmz-forecast': [1800, 86400],
-      'hrt-news': [300, 7200],
       glasnik: [3600, 604800],
       'ckan-geo': [86400, 2592000],
       dogadanja: [900, 86400],
@@ -49,10 +47,10 @@ describe('module registry', () => {
   it('puts the safety tier in the open tier and everything else behind a session', () => {
     expect([...OPEN_MODULES].sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
     expect(MODULE_IDS.filter((id) => MODULES[id].tier === 'session').sort()).toEqual(
-      ['dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'hrt-news', 'zet-rt'].sort(),
+      ['dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'zet-rt'].sort(),
     );
     expect([...WARM_MODULES].sort()).toEqual(
-      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'hrt-news'].sort(),
+      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik'].sort(),
     );
     expect(isModuleId('zet-rt')).toBe(true);
     expect(isModuleId('nepostojeci')).toBe(false);
@@ -80,11 +78,6 @@ describe('module registry', () => {
       text: 'Izvor: EMSC, seismicportal.eu',
       url: 'https://www.seismicportal.eu/',
       licence: 'EMSC terms',
-    });
-    expect(ATTRIBUTION['hrt-news']).toEqual({
-      text: 'Izvor: HRT, {naslov}, poveznica na izvornik',
-      url: 'https://feed.hrt.hr/vijesti/page.xml',
-      licence: 'HRT uvjeti korištenja, tekst uz navođenje izvora i poveznicu',
     });
     expect(ATTRIBUTION.glasnik.text).toBe('Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}');
     expect(ATTRIBUTION.glasnik.url).toBe('https://www1.zagreb.hr/sluzbeni-glasnik/');
@@ -115,9 +108,8 @@ describe('teaserSubset', () => {
     const missing = { ...snapshot('zet-rt', []), status: 'down' as const };
     expect(teaserSubset(missing).items).toEqual([]);
   });
-  it('names the four session modules the kiosk may show without a scan', () => {
-    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'hrt-news', 'dogadanja']);
-    expect(TEASER_NEWS_LIMIT).toBe(3);
+  it('names the three session modules the kiosk may show without a scan', () => {
+    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'dogadanja']);
   });
 
   // R-P1: the whole-fleet count stays (the panorama and the catalogue read
@@ -147,22 +139,9 @@ describe('teaserSubset', () => {
     expect(twentyOne.items[0].title).toBe('21 vozilo u pokretu');
   });
 
-  it('keeps dhmz-now whole and cuts the news to three headlines', () => {
+  it('keeps dhmz-now whole: the one station the teaser carries is not cut', () => {
     const weather = snapshot('dhmz-now', [item({ id: 'zagreb-maksimir', kind: 'observation', title: 'Zagreb-Maksimir', module: 'dhmz-now' })]);
     expect(teaserSubset(weather)).toEqual(weather);
-
-    const news = snapshot(
-      'hrt-news',
-      Array.from({ length: 8 }, (_, n) => item({ id: `n${n}`, kind: 'news', title: `Naslov ${n}`, summary: `Uvod ${n}`, module: 'hrt-news' })),
-    );
-    const cut = teaserSubset(news);
-    expect(cut.items).toHaveLength(3);
-    // HRT's lede stays behind the scan: the tokenless teaser carries headlines only.
-    expect(cut.items.every((entry) => entry.summary === undefined)).toBe(true);
-    expect(cut.items[0]?.title).toBe('Naslov 0');
-    expect(cut.items.map((i) => i.id)).toEqual(['n0', 'n1', 'n2']);
-    expect(cut.status).toBe('live');
-    expect(cut.attribution).toEqual(news.attribution);
   });
 
   it('cuts dogadanja to its Otvorena dozvola rows and restates the attribution without Kulturpunkt (E8: the kiosk is the open tier)', () => {

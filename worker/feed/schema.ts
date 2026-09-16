@@ -10,7 +10,6 @@ export type ModuleId =
   | 'dhmz-forecast'
   | 'dhmz-cap'
   | 'emsc'
-  | 'hrt-news'
   | 'glasnik'
   | 'ckan-geo'
   | 'dogadanja';
@@ -25,7 +24,6 @@ export type ItemKind =
   | 'forecast'
   | 'warning'
   | 'quake'
-  | 'news'
   | 'act'
   | 'poi'
   | 'event';
@@ -54,7 +52,7 @@ export interface FeedItem {
   /** ISO 8601 end, expiry or expected reopening. */
   until?: string;
   geo?: Geo;
-  /** Link to the source item (news article, act, event). */
+  /** Link to the source item (act, event, notice). */
   link?: string;
   /** Flat, source-specific extras (route id, delay seconds, magnitude...). */
   data?: Record<string, string | number | boolean>;
@@ -134,7 +132,6 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   forecast: ['tmin', 'tmax', 'weather', 'text'],
   warning: ['event', 'certainty', 'urgency'],
   quake: ['mag', 'depth', 'magType', 'region'],
-  news: ['source'],
   act: ['broj', 'godina', 'category'],
   poi: ['layer', 'category', 'district'],
   // The dogadanja module's six sub-fetchers between them use every one of

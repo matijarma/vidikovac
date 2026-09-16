@@ -66,20 +66,12 @@ function civicLine(i18n: I18n, ctx: LayerContext): string {
   return i18n.t('directory.civicSummary', { broj: dataText(act, 'broj'), godina: dataText(act, 'godina') });
 }
 
-function newsLine(i18n: I18n, ctx: LayerContext): string {
-  const news = ctx.snapshots['hrt-news'];
-  if (!news || unusable(news)) return i18n.t('directory.noSummary');
-  const count = news.items.filter((item) => item.at && ctx.now - Date.parse(item.at) < 86_400_000).length;
-  return count > 0 ? i18n.t('directory.newsSummary', { count }) : i18n.t('directory.noSummary');
-}
-
 const LINES: Record<string, (i18n: I18n, ctx: LayerContext) => string> = {
   'u-pokretu': transitLine,
   'zrak-i-nebo': weatherLine,
   sigurnost: safetyLine,
   kultura: eventsLine,
   'uprava-i-pravo': civicLine,
-  vijesti: newsLine,
 };
 
 export function renderDirectory(ctx: LayerContext): HTMLElement {

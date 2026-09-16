@@ -3,8 +3,8 @@
 // children everywhere. label · value · context is the value tile (a line at
 // the stop, the gazette number); time · label · title · context the time tile
 // (what starts next) and, under the ink fill, the one Skupština tile; glyph ·
-// main · trail the band (works now, the safety verdict) and the row (the news
-// lead). The whole tile is the control and its hash is a real, restorable URL
+// main · trail the band (works now, the safety verdict) and the row (a city
+// story on the screen). The whole tile is the control and its hash is a real, restorable URL
 // (selectionParams), so a tile is a link a reader can open, copy or send to
 // the screen, never a JS-only button.
 //
@@ -21,10 +21,10 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { attrs } from './blocks';
 
-export type TileDomain = 'transit' | 'mobility' | 'komunalno' | 'safety' | 'events' | 'civic' | 'news';
+export type TileDomain = 'transit' | 'mobility' | 'komunalno' | 'safety' | 'events' | 'civic';
 export type TileVariant = 'value' | 'time' | 'band' | 'row' | 'ink';
 /** The sada lane's reading order: what moves first, what the city decided last. */
-export const DOMAIN_ORDER: readonly TileDomain[] = ['transit', 'mobility', 'komunalno', 'safety', 'news', 'civic'];
+export const DOMAIN_ORDER: readonly TileDomain[] = ['transit', 'mobility', 'komunalno', 'safety', 'civic'];
 export type Bucket = 'sada' | 'danas' | 'veceras' | 'sutra' | 'tjedan';
 
 export interface Tile {

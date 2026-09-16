@@ -37,7 +37,6 @@ const MODULES: ModuleSnapshot[] = [
     item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0 } }),
     item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 130, vehicles: 12 } }),
   ]),
-  snap('hrt-news', [item('hrt-news', 'n1', 'news', 'Naslov vijesti', { at: '2026-09-11T11:10:00Z', data: { source: 'HRT vijesti' } }), item('hrt-news', 'n2', 'news', 'Drugi naslov', { at: '2026-09-11T10:00:00Z' })]),
   snap('emsc', [item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } })]),
   snap('dogadanja', [item('dogadanja', 'skupstina:13', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T07:00:00Z', dateBasis: 'event', data: { source: 'skupstina', precision: 'time' } })]),
   snap('ckan-geo', [item('ckan-geo', 'p1', 'poi', 'Ljekarna Centar, Ilica 1', { data: { category: 'ljekarne' } })]),
@@ -370,7 +369,7 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
     expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });
-  it('mirrors each of the seven domains with its own blocks; the join QR survives every layer change', async () => {
+  it('mirrors each of the six domains with its own blocks; the join QR survives every layer change', async () => {
     const k = await pairedKiosk();
     const expectations: [string, string[]][] = [
       ['u-pokretu', ['k-delays', 'kiosk-map-host']],
@@ -378,7 +377,6 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
       ['sigurnost', ['k-warnings', 'k-closures', 'k-quakes', 'k-assembly', 'k-pharmacies']],
       ['uprava-i-pravo', ['k-acts', 'k-sessions', 'k-works']],
       ['kultura', ['k-today', 'k-tomorrow', 'k-later', 'k-notices']],
-      ['vijesti', ['k-lead', 'k-headlines']],
     ];
     for (const [layer, ids] of expectations) {
       k.view(layer);
@@ -388,8 +386,6 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
       expect(q(k.root, '[data-testid=corner-qr] .qr'), layer).not.toBeNull();
     }
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-map-host]')).toBeNull();
-    expect(text(q(k.root, '[data-testid=k-lead]'))).toContain('Naslov vijesti');
-    expect(text(q(k.root, '[data-testid=k-headlines]'))).toContain('Drugi naslov');
   });
 });
 
@@ -406,10 +402,10 @@ describe('paired: selection and ending', () => {
     await flush();
     expect(k.loadStops).toHaveBeenCalledTimes(1);
     expect(text(q(k.root, '[data-testid=k-selection]'))).toContain('Zapruđe');
-    k.view('vijesti', { kind: 'item', id: publicItemKey('hrt-news', 'n2'), module: 'hrt-news' });
+    k.view('uprava-i-pravo', { kind: 'item', id: publicItemKey('dogadanja', 'skupstina:13'), module: 'dogadanja' });
     await flush();
-    expect(text(q(k.root, '[data-testid=k-selection]'))).toContain('Drugi naslov');
-    k.view('vijesti', { q: 'private search', lat: '45.8' });
+    expect(text(q(k.root, '[data-testid=k-selection]'))).toContain('13. sjednica');
+    k.view('uprava-i-pravo', { q: 'private search', lat: '45.8' });
     await flush();
     expect(q(k.root, '[data-testid=k-selection]')).toBeNull();
     expect(k.root.innerHTML).not.toContain('private search');
@@ -687,11 +683,11 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(map.calls.slice(before, resize)).toEqual(['pause', 'feed:stale']); // parked, then told from the teaser on the paired paint
     expect(map.calls.slice(resize, resize + 3)).toEqual(['resize', 'resume', 'feed:stale']);
     expect(map.calls.at(-1)).toBe('feed:live'); // the session's own zet-rt answered live
-    const beforeVijesti = map.calls.length;
-    k.view('vijesti');
+    const beforeKultura = map.calls.length;
+    k.view('kultura');
     await flush();
     // A domain without a map parks it, never destroys it, and every paint since (the view's own, then the session refresh's) still tells it the feed.
-    expect(map.calls.slice(beforeVijesti)).toEqual(['pause', 'feed:live', 'feed:live']);
+    expect(map.calls.slice(beforeKultura)).toEqual(['pause', 'feed:live', 'feed:live']);
     expect(map.factory).toHaveBeenCalledTimes(1);
     k.view('u-pokretu');
     await flush();
@@ -862,9 +858,9 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
     k.view('u-pokretu');
     await flush();
     expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Promet');
-    k.view('vijesti');
+    k.view('kultura');
     await flush();
-    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Vijesti');
+    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Događanja');
   });
   it('paired Promet: the board shows the stop\u2019s lines first, then the five largest deviations with vehicle counts, and says how many of all lines it shows', async () => {
     const route = (id: string, delay: number, vehicles: number) => item('zet-rt', 'route:' + id, 'vehicle', id, { data: { routeId: id, routeShortName: id, medianDelaySeconds: delay, vehicles } });

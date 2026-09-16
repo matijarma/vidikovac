@@ -172,8 +172,7 @@ export type LayerId =
   | 'zrak-i-nebo'
   | 'sigurnost'
   | 'uprava-i-pravo'
-  | 'kultura'
-  | 'vijesti';
+  | 'kultura';
 
 export const LAYERS: readonly LayerId[] = [
   'grad-sada',
@@ -182,7 +181,6 @@ export const LAYERS: readonly LayerId[] = [
   'sigurnost',
   'uprava-i-pravo',
   'kultura',
-  'vijesti',
 ];
 
 /** Client-side counter events; anything else is dropped by the room. */

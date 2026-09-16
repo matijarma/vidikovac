@@ -99,7 +99,7 @@ describe('static pages', () => {
     const hero = section(html, '<section class="ld-hero"', '</section>');
     expect(html).not.toContain('kicker');
     expect(hero).toContain('Deset minuta grada na tvom uređaju.');
-    expect(hero).toContain('Promet, vrijeme, događanja, odluke Grada, sigurnost i vijesti iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.');
+    expect(hero).toContain('Promet, vrijeme, događanja, odluke Grada i sigurnost iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.');
     expect(hero).toMatch(/<a class="btn btn-primary" href="\/s\/" data-testid="cta-scan"[^>]*>Skeniraj ili upiši kod<\/a>/);
     expect(hero).toMatch(/<a class="btn-ghost" href="\/hitno" data-testid="cta-safety"[^>]*>Sigurnost, bez skeniranja<\/a>/);
     expect(hero).toMatch(/<a class="btn-quiet" href="\/kiosk\/" data-testid="cta-kiosk"[^>]*>Otvori gradski zaslon<\/a>/);

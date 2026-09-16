@@ -61,10 +61,6 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
   'dhmz-forecast': fixtureContext([['prognoza_danas.xml', () => text('prognoza_danas.xml')]]),
   'dhmz-cap': fixtureContext([['cap_hr_today.xml', () => text('cap_hr_today.xml')]]),
   emsc: fixtureContext([['seismicportal.eu', () => text('emsc.json')]]),
-  'hrt-news': fixtureContext([
-    ['vijesti/page.xml', () => text('hrt-vijesti.xml')],
-    ['sljeme/latest.xml', () => text('hrt-sljeme.xml')],
-  ]),
   glasnik: fixtureContext([
     ['sifarnici', () => text('glasnik_sifarnici.json')],
     ['akti', () => AKTI],

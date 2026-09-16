@@ -20,7 +20,7 @@ export type Surface = 'phone' | 'desktop';
 /** A phone tab: a domain, or the Kvart panel, which is a shell surface and never a LayerId (D9). */
 export type PhoneTab = { kind: 'layer'; layer: LayerId } | { kind: 'kvart' };
 export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'kvart' }];
-export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti'];
+export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo'];
 export const KVART_ICON: IconName = 'map-pin';
 
 export const LAYER_ICONS: Record<LayerId, IconName> = {
@@ -30,7 +30,6 @@ export const LAYER_ICONS: Record<LayerId, IconName> = {
   sigurnost: 'shield',
   'uprava-i-pravo': 'landmark',
   kultura: 'calendar-days',
-  vijesti: 'newspaper',
 };
 
 /** The one in-flow notice: the 60 s and 20 s marks, a share refusal (8 s). The unlock itself gets none: the pill says it. */

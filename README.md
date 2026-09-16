@@ -1,6 +1,6 @@
 # Kaj ima?
 
-Radni prototip gradske informacijske usluge za prijavu na zagrebački poziv za otvorene podatke. Cilj je pretvoriti stvarne gradske podatke u razumljivu kartu, vrijeme, događanja, sigurnost, gradske aktivnosti i vijesti. Dizajn i interakcija dio su funkcionalnosti, ne dodatak tablicama.
+Radni prototip gradske informacijske usluge za prijavu na zagrebački poziv za otvorene podatke. Cilj je pretvoriti stvarne gradske podatke u razumljivu kartu, vrijeme, događanja, sigurnost i gradske aktivnosti. Dizajn i interakcija dio su funkcionalnosti, ne dodatak tablicama.
 
 Pristup se na vlastitom uređaju otključava na deset minuta skeniranjem koda sa zaslona, odnosno na pet minuta s telefona druge osobe. Ista Wi-Fi mreža radi. Sigurnost je dostupna bez sesije, također bez JavaScripta. Ne postoji posebna demonstracija koja zaobilazi uparivanje.
 
@@ -8,9 +8,9 @@ Prototip: https://zagreb.aningfilm.hr, javno dostupan od 14. rujna 2026. Namijen
 
 *English: a working Zagreb city-information prototype for the City's open-data funding application. Real screens and rotating codes grant ten-minute sessions, with five-minute one-hop sharing. Safety is sessionless. The prototype is public since 14 September 2026; only the operator routes require Cloudflare Access. A citizen rollout is conditional on City backing.*
 
-## Tri površine, sedam slojeva
+## Tri površine, šest slojeva
 
-Telefon, radna površina i javni zaslon dijele podatke i vizualni jezik, s rasporedima za vlastiti način uporabe. Sedam područja: Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja i Vijesti. Vrijeme opažanja, objave ili događanja odvojeno je od vremena dohvata. Nedostupan izvor nije nula ili potvrda da nema upozorenja.
+Telefon, radna površina i javni zaslon dijele podatke i vizualni jezik, s rasporedima za vlastiti način uporabe. Šest područja: Sada, Promet, Vrijeme, Sigurnost, Grad i Događanja. Vrijeme opažanja, objave ili događanja odvojeno je od vremena dohvata. Nedostupan izvor nije nula ili potvrda da nema upozorenja.
 
 Tehničko ime repozitorija, Workera, domena i postojeći ključevi pohrane ostaju `vidikovac`. Promjena brenda ne briše postojeće postave.
 

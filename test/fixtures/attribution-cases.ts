@@ -18,14 +18,6 @@ export interface AttributionCase {
 const SOURCE_UPDATED_AT = '2026-09-11T13:00:00Z';
 const FETCHED_AT = '2026-09-11T13:20:00Z';
 
-const HRT_ITEM: FeedItem = {
-  id: 'n1',
-  module: 'hrt-news',
-  kind: 'news',
-  tier: 'session',
-  title: 'Predsjednik potpisao zakon',
-};
-
 const GLASNIK_ITEM: FeedItem = {
   id: '48210',
   module: 'glasnik',
@@ -56,13 +48,6 @@ export const ATTRIBUTION_CASES: readonly AttributionCase[] = [
     attribution: ATTRIBUTION['dhmz-cap'],
     snapshot: { fetchedAt: FETCHED_AT },
     expected: 'Izvor: DHMZ, Otvorena dozvola, dohvaćeno 11. 9. 2026. 15:20',
-  },
-  {
-    name: 'HRT template with an item',
-    attribution: ATTRIBUTION['hrt-news'],
-    snapshot: { fetchedAt: FETCHED_AT },
-    item: HRT_ITEM,
-    expected: 'Izvor: HRT, Predsjednik potpisao zakon, poveznica na izvornik',
   },
   {
     name: 'glasnik template with an act item',

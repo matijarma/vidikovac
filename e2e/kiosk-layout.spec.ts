@@ -18,7 +18,7 @@
 //   - Večeras and Grad, reached through their own `?prizor=` pins, pass the
 //     same clip and overlap checks;
 //   - the basics panel fits its rows without a scroller;
-//   - once a phone unlocks the screen, each of the seven paired compositions
+//   - once a phone unlocks the screen, each of the six paired compositions
 //     obeys the same clip and overlap rules, the header names the mirrored
 //     domain, and no column or strip line is cut by its box.
 //
@@ -33,8 +33,8 @@ import { KIOSK_WIDE_MIN_PX } from './lib';
 const SIZES = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }] as const;
 const FACES = ['light', 'dark'] as const;
 type Face = (typeof FACES)[number];
-/** The seven mirrored domains and the word the kiosk's header names each by (kiosk/strings-hr.ts layers). */
-const LAYERS = { 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja', vijesti: 'Vijesti' } as const;
+/** The six mirrored domains and the word the kiosk's header names each by (kiosk/strings-hr.ts layers). */
+const LAYERS = { 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' } as const;
 /** kiosk/scenes.ts's SCENE_ORDER, mirrored here so the spec names no import from app code. */
 const OTHER_SCENES = ['veceras', 'grad'] as const;
 const SHOTS_DIR = 'test-results';

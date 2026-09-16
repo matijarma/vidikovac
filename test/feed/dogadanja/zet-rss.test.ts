@@ -104,7 +104,7 @@ describe('fetchZetRss', () => {
     }
   });
 
-  it('keeps one feed when the other fails, the same allSettled shape as hrt-news', async () => {
+  it('keeps one feed when the other fails, the allSettled shape both ZET feeds share', async () => {
     const result = await fetchZetRss(
       makeContext({ [ZET_RSS_PROMET_URL]: () => { throw new Error('upstream 503'); } }),
     );

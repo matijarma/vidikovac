@@ -29,7 +29,6 @@ export const KIOSK_LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
   'uprava-i-pravo': ['glasnik', 'dogadanja'],
   kultura: ['dogadanja'],
-  vijesti: ['hrt-news'],
 };
 
 export const PAIRED_MAP_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'u-pokretu']);
@@ -95,7 +94,6 @@ const PUBLISHER: Partial<Record<ModuleId, string>> = {
   'dhmz-forecast': 'DHMZ',
   'dhmz-cap': 'DHMZ',
   emsc: 'EMSC, seismicportal.eu',
-  'hrt-news': 'HRT',
   glasnik: 'Službeni glasnik Grada Zagreba',
 };
 /** The dogadanja sources whose /izvori name does not already say who publishes them. */
@@ -724,22 +722,6 @@ function renderKultura(ctx: PairedContext): PairedMarkup {
   return { lines: '', main, side: `${selectionCard(ctx)}${notices}` };
 }
 
-// --- Vijesti ---------------------------------------------------------------------
-
-function renderVijesti(ctx: PairedContext): PairedMarkup {
-  const { strings: s } = ctx;
-  const hrt = ctx.snapshots['hrt-news'];
-  const items = isLive(hrt) ? hrt.items : [];
-  const [lead, ...rest] = items;
-  const leadBody = lead
-    ? `<p class="k-headline">${escapeHtml(lead.title)}</p>${lead.summary ? `<p class="k-text k-text--long">${escapeHtml(lead.summary)}</p>` : ''}<p class="k-figure-sub">${escapeHtml([dataText(lead, 'source') || 'HRT', lead.at ? fill(s.story.published, { time: dayTime(lead.at) }) : ''].filter(Boolean).join(' · '))}</p>`
-    : hrt?.status === 'down' ? `<p class="k-board-note" data-state="down">${escapeHtml(s.paired.sourceDown)}</p>` : `<p class="k-board-note">${escapeHtml(hrt ? s.paired.newsNone : s.paired.noData)}</p>`;
-  const leadBlock = block(s.story.news, leadBody, { s, snapshot: hrt, item: lead, testid: 'k-lead', tone: 'lead', grow: true });
-  const rows = rest.slice(0, ctx.size === 'wide' ? 6 : 4).map((item) => row(escapeHtml(item.title), escapeHtml(dataText(item, 'source') || 'HRT'), item.at ? escapeHtml(clock(item.at)) : ''));
-  const list = lead && rows.length === 0 ? '' : block(s.paired.headlines, listBody(hrt, rows, s.paired.newsNone, s, rest.length), { s, snapshot: hrt, testid: 'k-headlines', grow: true });
-  return { lines: '', main: `${leadBlock}${list}`, side: selectionCard(ctx) };
-}
-
 // --- Dispatch and mount ------------------------------------------------------------
 
 export function pairedMarkup(ctx: PairedContext): PairedMarkup {
@@ -749,7 +731,6 @@ export function pairedMarkup(ctx: PairedContext): PairedMarkup {
     case 'sigurnost': return renderSigurnost(ctx);
     case 'uprava-i-pravo': return renderGrad(ctx);
     case 'kultura': return renderKultura(ctx);
-    case 'vijesti': return renderVijesti(ctx);
     default: return renderSada(ctx);
   }
 }

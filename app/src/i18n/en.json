@@ -68,8 +68,7 @@
     "zrak-i-nebo": "Weather",
     "sigurnost": "Safety",
     "uprava-i-pravo": "City",
-    "kultura": "Events",
-    "vijesti": "News"
+    "kultura": "Events"
   },
   "nav": {
     "kvart": "District",
@@ -161,7 +160,7 @@
     "gazette": "Gazette",
     "event": "Event",
     "lastRun": "Last departure",
-"scheduled": "scheduled · ZET GTFS",
+    "scheduled": "scheduled · ZET GTFS",
     "bikesFree": "Bikes",
     "parkingFree": "Garage",
     "waste": {
@@ -359,17 +358,6 @@
     },
     "legalNote": "The title comes from the gazette; the content and legal effect are at the original."
   },
-  "news": {
-    "published": "published {time}",
-    "publishedUnknown": "publication time not given",
-    "sourceDown": "{source} is not responding right now.",
-    "sourceEmpty": "{source} has no news right now.",
-    "openHrt": "Read at HRT",
-    "openSljeme": "Read at Radio Sljeme",
-    "summaryNote": "The summary is the lede from HRT's RSS; the full article is at the original.",
-    "empty": "No news from the available sources.",
-    "detailTitle": "Story"
-  },
   "transit": {
     "fromStop": "From {stop}",
     "mostDeviating": "Lines deviating most right now",
@@ -520,7 +508,6 @@
     "safetySummaryUrgent": "Active warnings",
     "safetySummaryUnknown": "Status not confirmed",
     "civicSummary": "Gazette {broj}/{godina}",
-    "newsSummary": "{count} stories today",
     "eventsSummary_one": "{count} event today",
     "eventsSummary_other": "{count} events today",
     "noSummary": "Open for details"
@@ -641,7 +628,7 @@
   "landing": {
     "quickNav": "Quick access",
     "title": "Ten minutes of the city on your device.",
-    "lead": "Traffic, weather, events, City decisions, safety and news from open data, with a source beside every view. No account, no install, no tracking.",
+    "lead": "Traffic, weather, events, City decisions and safety from open data, with a source beside every view. No account, no install, no tracking.",
     "actions": {
       "scan": "Scan or type a code",
       "safety": "Safety, no scan needed",
@@ -791,7 +778,6 @@
       "zet": "ZET notice",
       "neighbourhood": "Neighbourhood news",
       "works": "Municipal works",
-      "news": "HRT news",
       "quake": "Latest earthquake",
       "published": "published {time}",
       "changed": "last changed {date}",
@@ -889,7 +875,6 @@
       "ongoing": "Ongoing",
       "ongoingWord": "ongoing",
       "ongoingUntil": "until {date}",
-      "headlines": "Headlines",
       "overviewTransport": "Transit around the stop",
       "allDay": "all day",
       "noData": "No data",
@@ -911,7 +896,6 @@
       "upcomingFrom": "announced from {time}",
       "quakeNone": "No earthquakes recorded in the last 72 hours.",
       "eventsNone": "No events announced.",
-      "newsNone": "No new headlines.",
       "actsNone": "No new acts.",
       "worksNone": "No works on record.",
       "sessionsNone": "No sessions announced.",

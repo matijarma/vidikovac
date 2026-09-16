@@ -51,7 +51,6 @@ const MODULES: ModuleSnapshot[] = [
     item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 130, vehicles: 12 } }),
     item('zet-rt', 'route:11', 'vehicle', '11', { data: { routeId: '11', medianDelaySeconds: -5, vehicles: 8 } }),
   ]),
-  snap('hrt-news', [item('hrt-news', 'n1', 'news', 'Naslov vijesti', { at: '2026-09-11T11:10:00Z', data: { source: 'HRT vijesti' } })]),
   snap('emsc', [item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } })]),
   snap('dogadanja', [
     item('dogadanja', 'skupstina:13', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T07:00:00Z', dateBasis: 'event', data: { source: 'skupstina', precision: 'time' } }),
@@ -91,7 +90,7 @@ describe('kiosk copy', () => {
     expect(hr.header.unlockedUntil).toBe(i18n.t('shared.unlockedUntil'));
     expect(hr.safety.hitno).toBe(i18n.t('shared.safetyPage'));
     expect(hr.safety.label).toBe(i18n.t('shared.safetyPage'));
-    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja', vijesti: 'Vijesti' });
+    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' });
     expect(hr.weather.compass.NW).toBe(i18n.t('motion.compass.NW'));
     expect(kioskStrings('en').status.offline).toBe('Screen offline; no code can be issued');
     expect(hr.setup.errorAccess).toBe('Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.');
@@ -262,13 +261,12 @@ describe('local content from the stop-scoped teaser', () => {
     const active = safetyStrip(MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w', 'warning', 'Grmljavina', { severity: 'moderate' })]) : m)), STOP, i18n, hr, NOW);
     expect(active.warning).toEqual({ state: 'active', text: 'žuto upozorenje · Grmljavina', severity: 'moderate' });
   });
-  it('interleaves city notices, headlines and the last quake into a bounded rotation with honest date lines', () => {
+  it('interleaves city notices and the last quake into a bounded rotation with honest date lines', () => {
     const list = stories(MODULES, hr, 'hr', NOW);
     expect(list.length).toBeLessThanOrEqual(8);
-    expect(list.slice(0, 3).map((s) => s.tone)).toEqual(['city', 'news', 'quake']);
+    expect(list.slice(0, 2).map((s) => s.tone)).toEqual(['city', 'quake']);
     expect(list[0]).toMatchObject({ kicker: 'Gradska skupština', meta: 'čet 17. 9. 09:00', source: 'Skupština Grada Zagreba' });
-    expect(list[1]).toMatchObject({ kicker: 'HRT vijesti', meta: 'objavljeno 11. 9. 13:10' });
-    expect(list[2]!.title).toBe('Magnituda 1,6 · CROATIA · dubina 10 km');
+    expect(list[1]!.title).toBe('Magnituda 1,6 · CROATIA · dubina 10 km');
     const byId = new Map(list.map((s) => [s.id, s]));
     expect(byId.get('city:kvartovske:1')?.meta).toBe('');
     expect(byId.get('city:zet-promet:1')?.meta).toBe('objavljeno 11. 9. 11:10');
@@ -281,11 +279,11 @@ describe('local content from the stop-scoped teaser', () => {
     expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(false); // the licence boundary holds on the screen itself
     expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
     const cards = teaserCards(MODULES, i18n, NOW);
-    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'news', 'city', 'invitation']);
+    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'city', 'invitation']);
     expect(cards[0]!.body).toBe('21,4 °C · vedro');
     expect(cards[1]!.body).toBe('M 1,6 · CROATIA');
     expect(cards[2]!.body).toBe('2 zatvaranja');
-    expect(cards[4]!.body).toContain('13. sjednica Gradske skupštine');
+    expect(cards[3]!.body).toContain('13. sjednica Gradske skupštine');
     expect(cards.every((c) => !(c.attribution?.text ?? '').includes('{'))).toBe(true);
     // The strip is judged at the fixture's clock: by the real one the Ilica closure (until 12 September) has ended.
     expect(safetyStripText(MODULES, i18n, NOW)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
@@ -534,7 +532,7 @@ describe('the one map, through the additive adapter', () => {
 
 describe('credits and rows on a screen read from steps away', () => {
   const all = () => Object.fromEntries(MODULES.map((m) => [m.module, m]));
-  const ctx = (layer: 'kultura' | 'uprava-i-pravo' | 'vijesti', extra: Partial<Parameters<typeof pairedMarkup>[0]> = {}) => pairedMarkup({ layer, strings: hr, i18n, locale: 'hr', snapshots: all(), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const, ...extra });
+  const ctx = (layer: 'kultura' | 'uprava-i-pravo', extra: Partial<Parameters<typeof pairedMarkup>[0]> = {}) => pairedMarkup({ layer, strings: hr, i18n, locale: 'hr', snapshots: all(), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' as const, ...extra });
   it('a credit names the publisher and the licence and points at /izvori; an act\u2019s UUID and the six-source paragraph never print; ZET\u2019s mandated sentence stays verbatim', () => {
     const glasnik = snap('glasnik', [item('glasnik', 'a1', 'act', 'Zaključak o prihvaćanju pokroviteljstva', { at: '2026-09-07T00:00:00Z', data: { broj: '29', godina: '2026', id: 'e5f003b0-c950-44de-be5f-ac76aa2ee8c6' } })]);
     glasnik.attribution = { text: 'Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}', url: '', licence: 'Otvorena dozvola (NN 67/17)' };
@@ -556,10 +554,10 @@ describe('credits and rows on a screen read from steps away', () => {
   it('a row keeps its whole title with the aside inside it; the selected item grows to main size; an observation without a reading says so in a word', () => {
     expect(row('Naslov', 'detalj', '20:00', ' data-x="1"')).toBe('<span class="k-row-main" data-x="1"><span class="k-row-aside">20:00</span>Naslov</span><span class="k-row-sub">detalj</span>');
     expect(row('Naslov')).toBe('<span class="k-row-main">Naslov</span>');
-    const selected = ctx('vijesti', { selection: { kind: 'item', id: publicItemKey('hrt-news', 'n1'), module: 'hrt-news' } }).side;
+    const selected = ctx('kultura', { selection: { kind: 'item', id: publicItemKey('dogadanja', 'kp:1'), module: 'dogadanja' } }).side;
     expect(selected).toContain('k-block--grow');
     expect(selected).toContain('class="k-select-main k-select-main--item"');
-    expect(selected).toContain('Izvor: HRT · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
+    expect(selected).toContain('potpuna atribucija: /izvori');
     const noTemp = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { humidity: 60 } })]) : m));
     const markup = weatherMarkup(weatherNow(noTemp, hr, 'hr'), hr);
     expect(markup).toContain('bez očitanja temperature');

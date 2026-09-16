@@ -69,8 +69,7 @@
     "zrak-i-nebo": "Vrijeme",
     "sigurnost": "Sigurnost",
     "uprava-i-pravo": "Grad",
-    "kultura": "Događanja",
-    "vijesti": "Vijesti"
+    "kultura": "Događanja"
   },
   "nav": {
     "kvart": "Kvart",
@@ -171,7 +170,7 @@
     "gazette": "Glasnik",
     "event": "Događanje",
     "lastRun": "Zadnji polazak",
-"scheduled": "po rasporedu · ZET GTFS",
+    "scheduled": "po rasporedu · ZET GTFS",
     "bikesFree": "Bicikli",
     "parkingFree": "Garaža",
     "waste": {
@@ -375,17 +374,6 @@
     },
     "legalNote": "Naslov je preuzet iz glasnika; sadržaj i pravni učinak akta su na izvorniku."
   },
-  "news": {
-    "published": "objavljeno {time}",
-    "publishedUnknown": "vrijeme objave nije navedeno",
-    "sourceDown": "{source} trenutačno ne odgovara.",
-    "sourceEmpty": "{source} trenutačno nema vijesti.",
-    "openHrt": "Otvori na HRT-u",
-    "openSljeme": "Otvori na Radio Sljemenu",
-    "summaryNote": "Sažetak je uvodni odlomak iz HRT-ova RSS-a; cijeli članak je na izvorniku.",
-    "empty": "Nema vijesti iz dostupnih izvora.",
-    "detailTitle": "Vijest"
-  },
   "transit": {
     "fromStop": "Sa stanice {stop}",
     "mostDeviating": "Linije koje sada najviše odstupaju",
@@ -539,7 +527,6 @@
     "safetySummaryUrgent": "Aktivna upozorenja",
     "safetySummaryUnknown": "Stanje nije potvrđeno",
     "civicSummary": "Glasnik {broj}/{godina}",
-    "newsSummary": "{count} vijesti danas",
     "eventsSummary_one": "{count} događanje danas",
     "eventsSummary_few": "{count} događanja danas",
     "eventsSummary_other": "{count} događanja danas",
@@ -665,7 +652,7 @@
   "landing": {
     "quickNav": "Brzi pristup",
     "title": "Deset minuta grada na tvom uređaju.",
-    "lead": "Promet, vrijeme, događanja, odluke Grada, sigurnost i vijesti iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.",
+    "lead": "Promet, vrijeme, događanja, odluke Grada i sigurnost iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.",
     "actions": {
       "scan": "Skeniraj ili upiši kod",
       "safety": "Sigurnost, bez skeniranja",
@@ -818,7 +805,6 @@
       "zet": "ZET obavijest",
       "neighbourhood": "Kvartovske novosti",
       "works": "Komunalni radovi",
-      "news": "HRT vijesti",
       "quake": "Posljednji potres",
       "published": "objavljeno {time}",
       "changed": "zadnja izmjena {date}",
@@ -917,7 +903,6 @@
       "ongoing": "U tijeku",
       "ongoingWord": "u tijeku",
       "ongoingUntil": "do {date}",
-      "headlines": "Naslovi",
       "overviewTransport": "Promet oko stanice",
       "allDay": "cijeli dan",
       "noData": "Nema podataka",
@@ -941,7 +926,6 @@
       "upcomingFrom": "najavljeno od {time}",
       "quakeNone": "Nema zabilježenih potresa u posljednja 72 sata.",
       "eventsNone": "Nema najavljenih događanja.",
-      "newsNone": "Nema novih naslova.",
       "actsNone": "Nema novih akata.",
       "worksNone": "Nema evidentiranih radova.",
       "sessionsNone": "Nema najavljenih sjednica.",

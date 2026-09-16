@@ -5,7 +5,6 @@ import { MODULES, WARM_MODULES, moduleSpec } from './registry';
 import { makeFetchContext } from './http';
 import { recordMetric } from '../metrics';
 import { DOGADANJA_AVAILABILITY_IDS } from './modules/dogadanja';
-import { HRT_FEEDS } from './modules/hrt-news';
 import { CETVRTI_DATASET, ZBORNA_MJESTA_LAYER } from './modules/ckan-geo';
 import { expireStaleSources, recoverPartialSources } from './source-recovery';
 
@@ -29,8 +28,7 @@ export function kvKey(id: ModuleId): string {
 
 function sourceKeys(id: ModuleId): readonly string[] {
   return id === 'dogadanja' ? DOGADANJA_AVAILABILITY_IDS
-    : id === 'hrt-news' ? HRT_FEEDS.map((feed) => feed.source)
-      : id === 'ckan-geo' ? [CETVRTI_DATASET, ZBORNA_MJESTA_LAYER] : [];
+    : id === 'ckan-geo' ? [CETVRTI_DATASET, ZBORNA_MJESTA_LAYER] : [];
 }
 
 /** Old last-good copies must not reintroduce the retired positional calendar. */

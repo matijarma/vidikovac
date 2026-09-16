@@ -39,11 +39,6 @@ const EXPECTED: Record<string, { url: string; text: string; licence: string }> =
     text: 'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669',
     licence: 'Otvorena dozvola (NN 67/17)',
   },
-  'hrt-news': {
-    url: 'https://feed.hrt.hr/vijesti/page.xml',
-    text: 'Izvor: HRT, {naslov}, poveznica na izvornik',
-    licence: 'HRT uvjeti korištenja, tekst uz navođenje izvora i poveznicu',
-  },
   glasnik: {
     url: 'https://www1.zagreb.hr/sluzbeni-glasnik/',
     text: 'Izvor: Službeni glasnik Grada Zagreba, {broj}/{godina}, akt {id}',
@@ -59,7 +54,7 @@ const EXPECTED: Record<string, { url: string; text: string; licence: string }> =
 };
 
 describe('app/src/data/izvori.json', () => {
-  it('lists exactly the ten modules, once each', () => {
+  it('lists exactly the nine modules, once each', () => {
     const ids = izvori.sources.map((s) => s.module);
     expect([...ids].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
@@ -95,7 +90,7 @@ describe.skipIf(registryMissing)('parity with worker/feed/registry.ts', () => {
 describe('renderIzvoriHtml', () => {
   it('renders one article per source with the text, link and licence', () => {
     const html = renderIzvoriHtml();
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(10);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
     expect(html).toContain('Public dataset by ZET provided under Open license');
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');

@@ -24,7 +24,7 @@ describe('parseXml', () => {
     expect(doc.p.s).toBe('+1.0');
   });
 
-  it('strips a UTF-8 byte order mark (the HRT feeds carry one)', () => {
+  it('strips a UTF-8 byte order mark, which a feed may begin with', () => {
     const doc = parseXml<{ a: string }>('﻿<?xml version="1.0"?><a>x</a>');
     expect(doc.a).toBe('x');
   });

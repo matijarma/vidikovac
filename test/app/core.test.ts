@@ -11,11 +11,11 @@ const weather: ModuleSnapshot = {
 
 describe('public selection', () => {
   it('bounds arbitrary source ids without embedding their URL or search text', () => {
-    const key = publicItemKey('hrt-news', 'https://example.org/news/123');
+    const key = publicItemKey('glasnik', 'https://example.org/akt/123');
     expect(key).toMatch(/^[a-f0-9]{16}$/);
-    expect(key).toBe(publicItemKey('hrt-news', 'https://example.org/news/123'));
-    expect(key).not.toBe(publicItemKey('dogadanja', 'https://example.org/news/123'));
-    const selection = { kind: 'item' as const, module: 'hrt-news' as const, id: key };
+    expect(key).toBe(publicItemKey('glasnik', 'https://example.org/akt/123'));
+    expect(key).not.toBe(publicItemKey('dogadanja', 'https://example.org/akt/123'));
+    const selection = { kind: 'item' as const, module: 'glasnik' as const, id: key };
     expect(parseSelection(selectionParams(selection))).toEqual(selection);
   });
   it('rejects private and unknown params', () => {

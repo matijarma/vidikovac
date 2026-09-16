@@ -11,7 +11,6 @@ const EXPECTED_KINDS: Record<ModuleId, ItemKind[]> = {
   'dhmz-forecast': ['forecast'],
   'dhmz-cap': ['warning'],
   emsc: ['quake'],
-  'hrt-news': ['news'],
   glasnik: ['act'],
   'ckan-geo': ['poi'],
   dogadanja: ['event'],

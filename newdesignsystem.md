@@ -11,7 +11,7 @@ One time axis, one tile, one blue. What to change in `app/src/ui/*.css`, `app/sr
 
 ## 1. Principles
 
-1. **Time is the only axis.** Sada is *sada · poslijepodne · večeras · sutra · tjedan*. Every domain writes into that axis. No column per domain, no "seven feeds".
+1. **Time is the only axis.** Sada is *sada · poslijepodne · večeras · sutra · tjedan*. Every domain writes into that axis. No column per domain, no "six feeds".
 2. **The kvart is home.** The screen's stop (or the user's chosen gradska četvrt) scopes what is shown: lines from this stop, works in this kvart, waste for this kvart, events reachable from here.
 3. **A tile, never a sentence.** Content is label · value · context. One number or one word per tile. Sentences survive only in detail views and in /hitno.
 4. **Sign before word.** Time of day, walking, vehicle counts and line membership are glyphs or line badges. Words are reserved for state (*na vrijeme · rani 3 min · kasni 4 min · nema podataka*) and for names.
@@ -174,14 +174,14 @@ Add `footprints`, `bike`, `car-front`, `trash-2`, `cast`, `bell`, `star` to `ICO
 ### 4.7 Phone
 
 - Header (4.1) + segmented control `.tb-seg` (5 segments, 34 px, "on" = accent fill with on-accent text) replace the current tab-per-domain top. Lanes are a horizontal scroll-snap row; swiping and the segments stay in sync (`view-store.timeband.col`).
-- Tab bar: **Sada · Promet · Kvart · Još**. "Kvart" replaces "Događanja" (events live on the band and under Još). Directory under Još lists Vrijeme, Sigurnost, Događanja, Grad, Vijesti with the same dir-item rows.
+- Tab bar: **Sada · Promet · Kvart · Još**. "Kvart" replaces "Događanja" (events live on the band and under Još). Directory under Još lists Vrijeme, Sigurnost, Događanja and Grad with the same dir-item rows.
 - Floating "Na zaslon" (48 px pill, accent, bottom-right, 16 px inset above the tab bar) only while a session has a screen. The lane's bottom padding is 80 px so no tile sits under it.
 - Safety = icon-only 40 px in the header (rose tint) on every width; the word lives in the tooltip and aria-label.
 
 ### 4.8 Kiosk `kiosk.css`: fixed frame, rotating scene
 
 - Frame (never changes): header 96 px (wordmark · kvart/stop chip in paper · date · 48 px clock · condition glyph + temp · sunset glyph + time); right column 600 px (two value tiles + the **invitation card**); safety strip 96 px (mirno/hitno word · sources · pharmacy · "next scene in N s" · /hitno pill).
-- Scene (left field, 1280 × 888 at wide): *Promet* (3 × 2 tiles: 5 lines from the stop + 1 works band) → *Večeras u kvartu* (3 time rows: 56 px time, 24 px label, 40 px title, context) → *Grad* (Skupština tile-ink with agenda count, Glasnik, one HRT/Sljeme lead). 20 s each; dots in the scene head show position. Out 180 / in 220 ms, disabled under `prefers-reduced-motion` and `lagano`. No scene rotation while a session is active: the paired composition (existing `paired.ts`) takes the field.
+- Scene (left field, 1280 × 888 at wide): *Promet* (3 × 2 tiles: 5 lines from the stop + 1 works band) → *Večeras u kvartu* (3 time rows: 56 px time, 24 px label, 40 px title, context) → *Grad* (Skupština tile-ink with agenda count, a city notice, the newest quake). 20 s each; dots in the scene head show position. Out 180 / in 220 ms, disabled under `prefers-reduced-motion` and `lagano`. No scene rotation while a session is active: the paired composition (existing `paired.ts`) takes the field.
 - Invitation card: accent fill (dark theme: paper fill, night text), lead 40 px spanning the card, then 240 px QR beside the 26 px hint, then the 84 px code and 8 px progress bar. Code letter-spacing 0.04em; keep the `11.5cqi` cap.
 - Compact (1366 × 768): same frame with the compact tokens; scene tiles 2 × 2; invitation QR 240 → lead 28 px. Portrait: frame stacked, scene on top 55%, right column becomes a row.
 
@@ -198,7 +198,7 @@ Sheet (existing `dialog-sheet`): toggles for *kašnjenja > 5 min na spremljenim 
 | Kvart panel | — | New `experience/kvart.ts`; reuses `map-slots` for the thumbnail and `transport/detail.ts` selections. |
 | Phone tabs | `PHONE_TABS`, `MORE_LAYERS` | `['grad-sada','u-pokretu','kvart']`; `MORE_LAYERS` += `'kultura'`. |
 | Kiosk | `invitation.ts` map + side; `k-story` rotation | New `scenes.ts` replaces the map column with the scene field; map moves into the *Promet* scene as a 1/3-width slot or stays as the whole scene in `lagano`; story rotation logic reused for scenes. |
-| Domain workspaces | `u-pokretu, zrak-i-nebo, kultura, uprava-i-pravo, vijesti, sigurnost` | No layout change in phase 1; they inherit the palette, the `xs` badge and glyph rules. Phase 3: their heads become the same tile grammar. |
+| Domain workspaces | `u-pokretu, zrak-i-nebo, kultura, uprava-i-pravo, sigurnost` | No layout change in phase 1; they inherit the palette, the `xs` badge and glyph rules. Phase 3: their heads become the same tile grammar. |
 
 ## 6. Data requirements (feature-flagged)
 

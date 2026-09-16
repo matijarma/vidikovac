@@ -61,7 +61,6 @@ const MODULES: ModuleSnapshot[] = [
   snap('dhmz-cap', []),
   snap('prometnice', [item('prometnice', 'c1', 'closure', 'Ilica', { geo: { type: 'Point', coordinates: south(500) }, data: { subtype: 'ROAD_CLOSED' } })]),
   ZET,
-  snap('hrt-news', [item('hrt-news', 'n1', 'news', 'Naslov vijesti', { at: '2026-09-11T11:10:00Z', data: { source: 'HRT vijesti' } }), item('hrt-news', 'n2', 'news', 'Drugi naslov', { at: '2026-09-11T10:00:00Z' })]),
   snap('emsc', [item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } })]),
   snap('dogadanja', CITY_ROWS),
   snap('ckan-geo', []),
@@ -181,7 +180,7 @@ describe('closuresNear, nextSession, gradRows', () => {
   it('takes the stories minus the Assembly, at most three, never a gazette issue', () => {
     const rows = gradRows(ctx());
     expect(rows.length).toBeLessThanOrEqual(GRAD_ROW_CAP);
-    expect(rows.map((r) => r.id)).toEqual(['news:n1', 'quake:q1', 'city:kvartovske:1']);
+    expect(rows.map((r) => r.id)).toEqual(['quake:q1', 'city:kvartovske:1', 'city:zet-promet:1']);
     for (const row of rows) {
       expect(row.id).not.toMatch(/^city:skupstina:/);
       expect(`${row.kicker} ${row.title}`.toLowerCase()).not.toContain('glasnik');
@@ -393,13 +392,12 @@ describe('sceneMarkup: Grad', () => {
     const body = dom(sceneMarkup('grad', ctx()).body);
     const rows = qa(body, '.tl[data-variant=row]');
     expect(rows).toHaveLength(3);
-    expect(rows.map((r) => r.dataset.kind)).toEqual(['news', 'quake', 'city']);
-    expect(rows.map((r) => q(r, '.k-glyph use')!.getAttribute('href'))).toEqual(['#icon-newspaper', '#icon-activity', '#icon-landmark']);
-    expect(text(q(rows[0]!, '.tl-title'))).toBe('Naslov vijesti');
-    expect(text(q(rows[0]!, '.tl-trail'))).toBe('HRT · 13:10');
-    expect(text(q(rows[1]!, '.tl-trail'))).toBe('EMSC · 12:11');
-    expect(text(q(rows[2]!, '.tl-title'))).toBe('Novi park u Trnju');
-    expect(text(q(rows[2]!, '.tl-trail'))).toBe('Grad Zagreb');
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['quake', 'city', 'city']);
+    expect(rows.map((r) => q(r, '.k-glyph use')!.getAttribute('href'))).toEqual(['#icon-activity', '#icon-landmark', '#icon-tram-front']);
+    expect(text(q(rows[0]!, '.tl-trail'))).toBe('EMSC · 12:11');
+    expect(text(q(rows[1]!, '.tl-title'))).toBe('Novi park u Trnju');
+    expect(text(q(rows[1]!, '.tl-trail'))).toBe('Grad Zagreb');
+    expect(text(q(rows[2]!, '.tl-trail'))).toBe('ZET · 11:10');
     const stories = gradRows(ctx());
     rows.forEach((row, i) => {
       expect(text(row).toLowerCase()).not.toContain('sjednica');
@@ -410,22 +408,20 @@ describe('sceneMarkup: Grad', () => {
     });
   });
   it('keeps yesterday\'s date on a row that is not today\'s, and the register day for a works change', () => {
-    const modules = withModule(withModule(MODULES, 'hrt-news', { items: [item('hrt-news', 'n0', 'news', 'Stariji naslov', { at: '2026-09-10T11:10:00Z' })] }), 'dogadanja', { items: [WORKS[0]!] });
+    const modules = withModule(MODULES, 'dogadanja', { items: [WORKS[0]!] });
     const rows = qa(dom(sceneMarkup('grad', ctx({ modules })).body), '.tl[data-variant=row]');
-    // stories() interleaves city, news, quake: the works change leads, the older headline follows.
-    expect(rows.map((r) => r.dataset.kind)).toEqual(['city', 'news', 'quake']);
+    // stories() interleaves city and quake: the works change leads, the quake follows.
+    expect(rows.map((r) => r.dataset.kind)).toEqual(['city', 'quake']);
     expect(text(q(rows[0]!, '.tl-trail'))).toBe('Grad Zagreb · čet 2. 7.');
     expect(q(rows[0]!, '.k-glyph use')!.getAttribute('href')).toBe('#icon-hard-hat');
-    expect(text(q(rows[1]!, '.tl-trail'))).toBe('HRT · 10. 9. 13:10');
   });
   it('marks a stale source on its own tiles: the badge after a row\'s title, in place of the ink tile\'s context', () => {
-    const modules = withModule(withModule(MODULES, 'hrt-news', { status: 'stale' }), 'dogadanja', { status: 'stale' });
+    const modules = withModule(MODULES, 'dogadanja', { status: 'stale' });
     const body = dom(sceneMarkup('grad', ctx({ modules })).body);
     const rows = qa(body, '.tl[data-variant=row]');
-    expect(q(rows[0]!, '.tl-main .badge[data-tone=stale]')).not.toBeNull();
-    expect(text(q(rows[0]!, '.tl-trail'))).toBe('HRT · 13:10');
-    expect(q(rows[1]!, '.badge')).toBeNull();
-    expect(q(rows[2]!, '.tl-main .badge[data-tone=stale]')).not.toBeNull();
+    expect(q(rows[0]!, '.badge')).toBeNull();
+    expect(text(q(rows[0]!, '.tl-trail'))).toBe('EMSC · 12:11');
+    expect(q(rows[1]!, '.tl-main .badge[data-tone=stale]')).not.toBeNull();
     const ink = q(body, '.tl[data-variant=ink]')!;
     expect(ink.dataset.state).toBe('stale');
     expect(q(ink, '.badge[data-tone=stale]')).not.toBeNull();
@@ -433,19 +429,19 @@ describe('sceneMarkup: Grad', () => {
     expect(text(q(ink, '.tl-title'))).toBe('13. sjednica Gradske skupštine');
   });
   it('with nothing to list, a stale city says unconfirmed and only an answering city says "nothing new"', () => {
-    const quiet = MODULES.map((m) => (['dogadanja', 'hrt-news', 'emsc'].includes(m.module) ? { ...m, items: [] } : m));
+    const quiet = MODULES.map((m) => (['dogadanja', 'emsc'].includes(m.module) ? { ...m, items: [] } : m));
     const calm = dom(sceneMarkup('grad', ctx({ modules: quiet })).body);
     expect(text(q(calm, '.tl[data-variant=band][data-level=calm] .tl-title'))).toBe('Trenutačno nema novih obavijesti.');
-    const stale = dom(sceneMarkup('grad', ctx({ modules: quiet.map((m) => (m.module === 'hrt-news' ? { ...m, status: 'stale' as const } : m)) })).body);
+    const stale = dom(sceneMarkup('grad', ctx({ modules: quiet.map((m) => (m.module === 'dogadanja' ? { ...m, status: 'stale' as const } : m)) })).body);
     expect(q(stale, '.tl[data-level=calm]')).toBeNull();
     expect(text(q(stale, '.tl[data-variant=band][data-level=unknown][data-state=stale] .tl-title'))).toContain('Zastarjelo');
   });
   it('shows the ink and the rows as bars while every city source loads, and one unknown band when all are down', () => {
-    const loading = dom(sceneMarkup('grad', ctx({ modules: MODULES.filter((m) => !['dogadanja', 'hrt-news', 'emsc'].includes(m.module)) })).body);
+    const loading = dom(sceneMarkup('grad', ctx({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body);
     expect(qa(loading, '.tl[data-variant=ink][data-skeleton]')).toHaveLength(1);
     expect(qa(loading, '.tl[data-variant=row][data-skeleton]')).toHaveLength(3);
     expect(qa(loading, '.tl[data-variant=ink]')).toHaveLength(1);
-    const down = MODULES.map((m) => (['dogadanja', 'hrt-news', 'emsc'].includes(m.module) ? { ...m, status: 'down' as const, items: [] } : m));
+    const down = MODULES.map((m) => (['dogadanja', 'emsc'].includes(m.module) ? { ...m, status: 'down' as const, items: [] } : m));
     const body = dom(sceneMarkup('grad', ctx({ modules: down })).body);
     expect(text(q(body, '.tl[data-variant=ink][data-state=down] .tl-title'))).toBe('Izvor trenutačno ne odgovara');
     expect(qa(body, '.tl[data-variant=band][data-level=unknown]')).toHaveLength(1);

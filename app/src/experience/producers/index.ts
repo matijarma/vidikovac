@@ -12,7 +12,6 @@ export { eventsProducer } from './events';
 export { lastRunProducer } from './last-run';
 export { closuresProducer } from './mobility';
 export { worksProducer } from './komunalno';
-export { newsProducer } from './news';
 export { parkingProducer } from './parking';
 export { safetyProducer, safetyVerdict, SAFETY_ICON } from './safety';
 export { transitProducer } from './transit';
@@ -24,7 +23,6 @@ import { eventsProducer } from './events';
 import { lastRunProducer } from './last-run';
 import { closuresProducer } from './mobility';
 import { worksProducer } from './komunalno';
-import { newsProducer } from './news';
 import { parkingProducer } from './parking';
 import { safetyProducer } from './safety';
 import { transitProducer } from './transit';
@@ -36,7 +34,6 @@ export const DEFAULT_PRODUCERS: readonly TileProducer[] = [
   closuresProducer,
   worksProducer,
   safetyProducer,
-  newsProducer,
   gazetteProducer,
   assemblyProducer,
   eventsProducer,

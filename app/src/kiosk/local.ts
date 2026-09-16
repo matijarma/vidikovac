@@ -322,7 +322,7 @@ export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot
   return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
 }
 /** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists. */
-export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-cap', 'emsc', 'hrt-news', 'ckan-geo', 'dogadanja'];
+export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja'];
 
 export function closuresNear(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): ClosuresNear {
   return summariseClosures(closuresByDistance(byModule(modules).prometnice, stop, now), sourceState(byModule(modules).prometnice), stop);
@@ -418,7 +418,7 @@ export interface Story {
   /** Short source name for the card; `attribution` is the full filled line. */
   source: string;
   attribution: string;
-  tone: 'city' | 'news' | 'quake';
+  tone: 'city' | 'quake';
 }
 
 const CITY_KICKER: Record<string, keyof KioskStrings['story']> = { skupstina: 'assembly', 'zet-promet': 'zet', 'zet-rss': 'zet', kvartovske: 'neighbourhood', komunalne: 'works' };
@@ -450,8 +450,8 @@ export function cityDateLine(item: FeedItem, strings: KioskStrings, locale: stri
 
 export const STORY_CAP = 8;
 
-/** City notices, headlines and the latest quake, interleaved so the
- *  rotation never shows three of one kind in a row; at most STORY_CAP. */
+/** City notices and the latest quake, interleaved so the rotation never
+ *  shows three of one kind in a row; at most STORY_CAP. */
 export function stories(modules: readonly ModuleSnapshot[], strings: KioskStrings, locale: string, now: number): Story[] {
   const map = byModule(modules);
   const dogadanja = map.dogadanja;
@@ -468,16 +468,6 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
       tone: 'city' as const,
     };
   });
-  const hrt = map['hrt-news'];
-  const news: Story[] = (isLive(hrt) ? hrt.items : []).slice(0, 3).map((item) => ({
-    id: `news:${item.id}`,
-    kicker: strings.story.news,
-    title: item.title,
-    meta: item.at ? fill(strings.story.published, { time: dayTime(item.at) }) : '',
-    source: 'HRT',
-    attribution: fillAttribution(hrt!.attribution, hrt!, item),
-    tone: 'news' as const,
-  }));
   const emsc = map.emsc;
   const quake = recentQuakes(emsc, now)[0];
   const quakes: Story[] = quake
@@ -492,7 +482,7 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
       }]
     : [];
   const out: Story[] = [];
-  const queues = [city, news, quakes];
+  const queues = [city, quakes];
   let added = true;
   while (added && out.length < STORY_CAP) {
     added = false;

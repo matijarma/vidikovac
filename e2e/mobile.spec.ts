@@ -28,7 +28,7 @@ const LANDSCAPE = { width: 844, height: 390 };
 const DESK = { width: 1440, height: 900 };
 type Viewport = typeof PHONE;
 
-const LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura', 'vijesti'];
+const LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'];
 const DETENTS = ['peek', 'half', 'open'] as const;
 type Detent = (typeof DETENTS)[number];
 /** Sheet detents: peek 5rem; half 50% of the stage; open leaves 2.5rem of the stage. */
@@ -221,7 +221,7 @@ async function waitForStillMap(page: Page): Promise<string> {
 
 // --- 1. geometry at three sizes ----------------------------------------------------
 for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
-  test(`the shell fits a ${viewport.width}×${viewport.height} phone: nothing overlays Sada, the tab bar is flush with the bottom, and the session pill and safety control survive a long scroll on Vijesti and Sigurnost`, async ({ page }) => {
+  test(`the shell fits a ${viewport.width}×${viewport.height} phone: nothing overlays Sada, the tab bar is flush with the bottom, and the session pill and safety control survive a long scroll on Događanja and Sigurnost`, async ({ page }) => {
     const fixture = await openDashboard(page, viewport);
     await settle(page, fixture);
     expect(await geometryIssues(page, PHONE_SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
@@ -236,7 +236,7 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
       expect(inFold.length, `at least ${SADA_TILES_IN_FOLD} sada tiles ([data-testid=tb-lane-sada] .tl, skeletons excluded) must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the tiles measure ${tiles.map((t) => `${t.id} ${t.top}→${t.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_TILES_IN_FOLD);
     }
 
-    for (const layer of ['vijesti', 'sigurnost'] as const) {
+    for (const layer of ['kultura', 'sigurnost'] as const) {
       await openLayer(page, layer);
       await settle(page, fixture);
       await scrollDocument(page, SCROLL_PX);
@@ -577,10 +577,10 @@ test('the expiry notices sit in the banners row without covering content: expiri
 });
 
 // --- 10. desktop first paint ------------------------------------------------------------------------
-/** The desk's directory (D10): Promet ahead of the five extra domains, in this order. */
-const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti'];
+/** The desk's directory (D10): Promet ahead of the four extra domains, in this order. */
+const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo'];
 
-test('at 1440 the desk paints before the session joins: no side rail, the session card reads the connecting text, Još opens the six-domain directory in order, and the kvart aside carries the cast control', async ({ page }) => {
+test('at 1440 the desk paints before the session joins: no side rail, the session card reads the connecting text, Još opens the five-domain directory in order, and the kvart aside carries the cast control', async ({ page }) => {
   await page.setViewportSize(DESK);
   // A room that never answers: the join is swallowed, so the page stays in its first paint.
   await page.routeWebSocket('**/ws/room/**', () => {});
@@ -593,7 +593,7 @@ test('at 1440 the desk paints before the session joins: no side rail, the sessio
   await expect(more, 'Još must stand in the desk status line before any data arrives').toBeVisible();
   await more.click();
   const rows = page.locator('[data-testid=dash-view] .dir-item[data-layer]');
-  await expect(rows, 'the directory lists Promet and the five extra domains').toHaveCount(DESK_DIRECTORY.length);
+  await expect(rows, 'the directory lists Promet and the four extra domains').toHaveCount(DESK_DIRECTORY.length);
   expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), 'the directory rows in order').toEqual(DESK_DIRECTORY);
   for (const layer of DESK_DIRECTORY) await expect(page.getByTestId(`dir-${layer}`), `the directory row dir-${layer}`).toBeVisible();
   await expect(page.locator('[data-testid=kvart-aside] [data-testid=cast-screen]'), 'the desk keeps the kvart panel as an aside, its cast control in place').toBeVisible();

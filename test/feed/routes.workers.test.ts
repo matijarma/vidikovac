@@ -70,7 +70,6 @@ describe('GET /api/teaser', () => {
       'ckan-geo',
       'dhmz-now',
       'zet-rt',
-      'hrt-news',
       'dogadanja',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
@@ -118,12 +117,12 @@ describe('GET /api/data', () => {
     expect(wrong.status).toBe(401);
   });
 
-  it('serves all ten modules for a valid token and never caches them', async () => {
+  it('serves all nine modules for a valid token and never caches them', async () => {
     const response = await call('/api/data?token=dobar-token');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
     const body = (await response.json()) as { modules: ModuleSnapshot[] };
-    expect(body.modules).toHaveLength(10);
+    expect(body.modules).toHaveLength(9);
     expect(body.modules.find((m) => m.module === 'zet-rt')?.items).toHaveLength(2);
   });
 

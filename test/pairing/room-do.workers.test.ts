@@ -179,7 +179,7 @@ describe('RoomDO view forwarding', () => {
     expect(await kiosk.conn.inbox.nextOfType('view')).toEqual({ t: 'view', layer: 'u-pokretu', params: { kind: 'stop', id: '2040' } });
     await scanner.conn.inbox.expectSilence();
 
-    kiosk.conn.ws.send(JSON.stringify({ t: 'view', layer: 'vijesti' }));
+    kiosk.conn.ws.send(JSON.stringify({ t: 'view', layer: 'kultura' }));
     await scanner.conn.inbox.expectSilence();
     await kiosk.conn.inbox.expectSilence();
 
@@ -197,13 +197,13 @@ describe('RoomDO events', () => {
     scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'export', dim: 'u-pokretu/zip' }));
     scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'page_view', dim: 'x' }));
     for (let i = 0; i < EVENTS_PER_SOCKET_MAX + 10; i += 1) {
-      scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'panel_open', dim: 'vijesti' }));
+      scanner.conn.ws.send(JSON.stringify({ t: 'event', name: 'panel_open', dim: 'kultura' }));
     }
 
     const stub = metricsStub(testEnv);
     await waitForRow(
       stub,
-      (row) => row.event === 'panel_open' && row.dim1 === 'vijesti' && row.count === EVENTS_PER_SOCKET_MAX - 2,
+      (row) => row.event === 'panel_open' && row.dim1 === 'kultura' && row.count === EVENTS_PER_SOCKET_MAX - 2,
       5000,
     );
     const rows = await stub.query('2020-01-01');

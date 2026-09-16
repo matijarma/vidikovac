@@ -45,10 +45,11 @@ const safety: Tile = {
   layer: 'sigurnost', data: { level: 'urgent' }, bucket: 'sada', testid: 'tile-safety',
 };
 
-const news: Tile = {
-  key: 'hrt-news:n1', domain: 'news', variant: 'row', icon: 'newspaper',
-  label: 'Vijesti', title: 'Naslov vijesti', context: 'HRT vijesti · prije 3 sata',
-  layer: 'vijesti', selection: { kind: 'item', id: 'fedcba9876543210', module: 'hrt-news' }, bucket: 'sada', testid: 'tile-news',
+/** The row variant, which the kiosk's Grad chapter draws for a city story. */
+const cityRow: Tile = {
+  key: 'dogadanja:s1', domain: 'civic', variant: 'row', icon: 'landmark',
+  label: 'Grad', title: 'Sjednica Gradske skupštine', context: 'Skupština · prije 3 sata',
+  layer: 'uprava-i-pravo', selection: { kind: 'item', id: 'fedcba9876543210', module: 'dogadanja' }, bucket: 'sada', testid: 'tile-city',
 };
 
 const TRAM_GLYPH = '<svg class="icon" aria-hidden="true"><use href="#icon-tram-front"></use></svg>';
@@ -199,18 +200,18 @@ describe('tileMarkup: band and row', () => {
     expect(html).toContain('aria-label="Radovi, 1 u tijeku, Grad Zagreb"');
     expect(html).toContain('<span class="tl-main"><span class="tl-label kicker">Radovi</span><span class="tl-title">Grad Zagreb</span></span><span class="tl-trail">1</span></a>');
   });
-  it('writes the news row exactly: glyph, the title alone in the main cell, source and age as the trail; the label is heard, not shown', () => {
-    expect(tileMarkup(hr, news)).toBe(
-      '<a class="tl" data-variant="row" data-domain="news" data-key="hrt-news:n1" data-testid="tile-news" href="#layer=vijesti&amp;kind=item&amp;id=fedcba9876543210&amp;module=hrt-news" data-action="nav" data-layer="vijesti" data-selection="{&quot;kind&quot;:&quot;item&quot;,&quot;id&quot;:&quot;fedcba9876543210&quot;,&quot;module&quot;:&quot;hrt-news&quot;}" aria-label="Vijesti, Naslov vijesti, HRT vijesti · prije 3 sata">'
-      + '<svg class="icon tl-glyph" aria-hidden="true"><use href="#icon-newspaper"></use></svg>'
-      + '<span class="tl-main"><span class="tl-title">Naslov vijesti</span></span>'
-      + '<span class="tl-trail">HRT vijesti · prije 3 sata</span>'
+  it('writes a row exactly: glyph, the title alone in the main cell, source and age as the trail; the label is heard, not shown', () => {
+    expect(tileMarkup(hr, cityRow)).toBe(
+      '<a class="tl" data-variant="row" data-domain="civic" data-key="dogadanja:s1" data-testid="tile-city" href="#layer=uprava-i-pravo&amp;kind=item&amp;id=fedcba9876543210&amp;module=dogadanja" data-action="nav" data-layer="uprava-i-pravo" data-selection="{&quot;kind&quot;:&quot;item&quot;,&quot;id&quot;:&quot;fedcba9876543210&quot;,&quot;module&quot;:&quot;dogadanja&quot;}" aria-label="Grad, Sjednica Gradske skupštine, Skupština · prije 3 sata">'
+      + '<svg class="icon tl-glyph" aria-hidden="true"><use href="#icon-landmark"></use></svg>'
+      + '<span class="tl-main"><span class="tl-title">Sjednica Gradske skupštine</span></span>'
+      + '<span class="tl-trail">Skupština · prije 3 sata</span>'
       + '</a>',
     );
   });
   it('appends context markup to a row trail and leaves the trail out when there is nothing to say', () => {
-    expect(tileMarkup(hr, { ...news, contextMarkup: lineBadge('6', 'tram', 'xs') })).toContain('<span class="tl-trail">HRT vijesti · prije 3 sata<span class="line" data-kind="tram" data-size="xs">6</span></span>');
-    expect(tileMarkup(hr, { ...news, context: undefined })).toContain('<span class="tl-main"><span class="tl-title">Naslov vijesti</span></span></a>');
+    expect(tileMarkup(hr, { ...cityRow, contextMarkup: lineBadge('6', 'tram', 'xs') })).toContain('<span class="tl-trail">Skupština · prije 3 sata<span class="line" data-kind="tram" data-size="xs">6</span></span>');
+    expect(tileMarkup(hr, { ...cityRow, context: undefined })).toContain('<span class="tl-main"><span class="tl-title">Sjednica Gradske skupštine</span></span></a>');
   });
 });
 
@@ -228,9 +229,9 @@ describe('a stale tile keeps its shape and says so', () => {
   it('places the badge after the title inside the main cell of a band or a row, keeping the trail', () => {
     const band = tileMarkup(hr, { ...safety, stale: STALE_BADGE, value: 'potvrđeno 14:31' });
     expect(band).toContain(`<span class="tl-title">žuto upozorenje: Grmljavinsko nevrijeme</span>${STALE_BADGE}</span><span class="tl-trail">potvrđeno 14:31</span></a>`);
-    const row = tileMarkup(hr, { ...news, stale: STALE_BADGE });
-    expect(row).toContain(`<span class="tl-main"><span class="tl-title">Naslov vijesti</span>${STALE_BADGE}</span><span class="tl-trail">HRT vijesti · prije 3 sata</span></a>`);
-    expect(row).toContain('data-stale data-key="hrt-news:n1"');
+    const row = tileMarkup(hr, { ...cityRow, stale: STALE_BADGE });
+    expect(row).toContain(`<span class="tl-main"><span class="tl-title">Sjednica Gradske skupštine</span>${STALE_BADGE}</span><span class="tl-trail">Skupština · prije 3 sata</span></a>`);
+    expect(row).toContain('data-stale data-key="dogadanja:s1"');
   });
   it('writes no data-stale on a live tile', () => {
     expect(tileMarkup(hr, transit)).not.toContain('data-stale');
@@ -280,8 +281,8 @@ describe('skeletonTileMarkup: the shape a source is about to fill, never a contr
     );
   });
   it('row: a round glyph, one title line, a trailing context bar', () => {
-    expect(skeletonTileMarkup('row', 'sk-news-0')).toBe(
-      '<div class="tl" data-variant="row" data-skeleton data-key="sk-news-0" aria-hidden="true"><span class="sk tl-sk-glyph"></span><span class="tl-main"><span class="sk tl-sk-title1"></span></span><span class="sk tl-sk-context"></span></div>',
+    expect(skeletonTileMarkup('row', 'sk-city-0')).toBe(
+      '<div class="tl" data-variant="row" data-skeleton data-key="sk-city-0" aria-hidden="true"><span class="sk tl-sk-glyph"></span><span class="tl-main"><span class="sk tl-sk-title1"></span></span><span class="sk tl-sk-context"></span></div>',
     );
   });
   it('escapes the key and carries no href, action or label', () => {
@@ -292,8 +293,8 @@ describe('skeletonTileMarkup: the shape a source is about to fill, never a contr
 });
 
 describe('DOMAIN_ORDER: the sada lane reads transit first and civic last', () => {
-  it('is the six domains in the order the plan fixes', () => {
-    expect(DOMAIN_ORDER).toEqual(['transit', 'mobility', 'komunalno', 'safety', 'news', 'civic']);
+  it('is the five domains in the order the plan fixes', () => {
+    expect(DOMAIN_ORDER).toEqual(['transit', 'mobility', 'komunalno', 'safety', 'civic']);
   });
 });
 

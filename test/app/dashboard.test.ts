@@ -76,7 +76,6 @@ const FIXTURE: Partial<Record<ModuleId, ModuleSnapshot>> = {
     { id: 'kp:1', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Koncert u parku', link: 'https://kulturpunkt.hr/1', at: '2026-09-12T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'koncert', precision: 'time', venue: 'Park Ribnjak' } },
     { id: 'kp:2', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Radionica keramike', at: '2026-09-13T10:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'radionica', precision: 'time' } },
   ]),
-  'hrt-news': base('hrt-news', [{ id: 'n1', module: 'hrt-news', kind: 'news', tier: 'open', title: 'Naslov vijesti', link: 'https://vijesti.hrt.hr/1', at: '2026-09-11T11:00:00Z', dateBasis: 'published', data: { source: 'HRT vijesti' } }]),
 };
 const snapshotOf = (module: ModuleId): ModuleSnapshot => FIXTURE[module] ?? base(module);
 
@@ -170,13 +169,13 @@ describe('shell and navigation', () => {
     expect(root.querySelector('.ki-tabs [data-layer=u-pokretu]')?.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
   });
-  it('Još opens the labelled directory of the five extra domains, Događanja third, and names the open one on its tab', () => {
+  it('Još opens the labelled directory of the four extra domains, Događanja third, and names the open one on its tab', () => {
     const { root, session } = mount();
     session.join();
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
@@ -418,12 +417,12 @@ describe('polling on the feed store', () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hrt-news', 'prometnice', 'zet-rt']);
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'prometnice', 'zet-rt']);
     expect(fetchData.mock.calls[0]![1]).toBe('dt1');
     fetchData.mockClear();
-    click(root, '[data-action=nav][data-layer=vijesti]');
+    click(root, '[data-action=nav][data-layer=kultura]');
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja']);
     fetchData.mockClear();
     tick();
     await flush();
@@ -514,23 +513,23 @@ describe('failure and recovery', () => {
   it('keeps the last good data marked stale when a module fails, and a failed module offers a retry that fetches again', async () => {
     let failNow = false;
     const { root, session, fetchData, tick } = mount({ snapshot: (module) => {
-      if (module === 'hrt-news') throw new Error('down');
+      if (module === 'glasnik') throw new Error('down');
       if (failNow && module === 'dhmz-now') throw new Error('boom');
       return snapshotOf(module);
     } });
     session.join();
     await flush();
     expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
-    expect(root.querySelector('[data-testid=tb-lane-sada] [data-action=retry][data-module=hrt-news]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=tb-lane-sada] [data-action=retry][data-module=glasnik]')).not.toBeNull();
     failNow = true;
     tick();
     await flush();
     expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
     expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
     fetchData.mockClear();
-    click(root, '[data-testid=tb-lane-sada] [data-action=retry][data-module=hrt-news]');
+    click(root, '[data-testid=tb-lane-sada] [data-action=retry][data-module=glasnik]');
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['hrt-news']);
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['glasnik']);
   });
   it('a lost socket shows reconnecting, and a spent ticket shows the way back to a new code', () => {
     const { root, session } = mount();
@@ -631,7 +630,7 @@ describe('the full map view (transport)', () => {
     expect(session.sent).toEqual([]);
     fetchData.mockClear();
     session.expire();
-    handle.restore('#room=r1&layer=vijesti');
+    handle.restore('#room=r1&layer=kultura');
     await flush();
     expect(handle.activeLayer()).toBe('sigurnost');
     expect(fetchData).not.toHaveBeenCalled();
@@ -695,7 +694,7 @@ describe('the full map view (transport)', () => {
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
     dash.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(dash.dataset.view).toBe('layers');
-    handle.selectLayer('vijesti');
+    handle.selectLayer('kultura');
     expect(root.querySelector('[data-testid=map-canvas]')).toBeNull();
     handle.destroy();
   });
@@ -830,14 +829,14 @@ describe('the sticky header and notices in flow', () => {
       if (down.includes(module)) throw new Error('down');
       return snapshotOf(module);
     };
-    const one = mount({ snapshot: failing('hrt-news') });
+    const one = mount({ snapshot: failing('glasnik') });
     one.session.join();
     await flush();
     const banner = one.root.querySelector<HTMLElement>('[data-testid=sources-down]');
     expect(text(banner)).toBe('1 izvor ne odgovara.');
     expect(banner?.getAttribute('role')).toBe('status');
     one.handle.destroy();
-    const two = mount({ snapshot: failing('hrt-news', 'emsc') });
+    const two = mount({ snapshot: failing('glasnik', 'emsc') });
     two.session.join();
     await flush();
     expect(text(two.root.querySelector('[data-testid=sources-down]'))).toBe('2 izvora ne odgovaraju.');
@@ -1346,7 +1345,7 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     expect(root.querySelector('#layer-kvart')).toBeNull();
     expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-disabled')).toBe('true');
   });
-  it('the desk lists six domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
+  it('the desk lists five domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
     const today = { id: 'kp:3', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Večer poezije', at: '2026-09-11T17:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'knjizevnost', precision: 'time' } };
     const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today]) : snapshotOf(module) });
     session.join();
@@ -1356,7 +1355,7 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(more.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo', 'vijesti']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo']);
     expect(text(root.querySelector('[data-testid=dir-u-pokretu] .row-sub'))).toBe('0 vozila ZET-a u pokretu');
     expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('1 događanje danas');
     expect(text(root.querySelector('[data-testid=dir-zrak-i-nebo] .row-sub'))).toBe('21 °C, vedro');

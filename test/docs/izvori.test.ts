@@ -60,8 +60,8 @@ describe('app/src/data/izvori.json carries a dogadanjaSources entry per data.sou
     }
   });
 
-  it('still lists exactly the original ten ModuleId rows in "sources" (M owns that count -- test/app/izvori.test.ts)', () => {
-    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(10);
+  it('still lists exactly the nine ModuleId rows in "sources" (M owns that count -- test/app/izvori.test.ts)', () => {
+    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(9);
   });
 });
 

@@ -16,7 +16,7 @@ describe('metric vocabulary', () => {
     // EXPORT_KINDS lives only in protocol.ts (R-44); metrics.ts no longer
     // duplicates it.
     expect(EXPORT_KINDS).toEqual(['copy', 'share', 'ics', 'geojson', 'print']);
-    expect(LAYERS).toHaveLength(7);
+    expect(LAYERS).toHaveLength(6);
   });
 });
 

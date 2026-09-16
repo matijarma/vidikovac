@@ -52,7 +52,7 @@ ili vremenskog limita.
 
 ## Vizualna matrica i ograničenja dokaza
 
-Skripta `scripts/review-experience.mjs` pokriva svih sedam područja na
+Skripta `scripts/review-experience.mjs` pokriva svih šest područja na
 390, 768 i 1440 piksela; svijetlu i tamnu temu; engleski uz smanjeno kretanje;
 200% veličinu teksta na telefonu i radnoj površini. Provjerava i očuvanje
 polja pretrage, kursora i canvasa nakon osvježavanja. Koristi stvarne parser
@@ -193,7 +193,7 @@ ne naziva datoteka: Cloudflareova gradnja i gradnja na Windowsu daju različite
 sažetke u nazivima, pa se uspoređuju pravila u CSS-u i razredi u skriptama).
 
 Snimke: vizualna matrica u `review.local/final/` (90 datoteka: telefon, tablet
-i stolno računalo u svijetloj i tamnoj temi za svih sedam područja, 320 px,
+i stolno računalo u svijetloj i tamnoj temi za svih šest područja, 320 px,
 pejzaž 844 × 390, 200 % teksta), kiosk u `test-results/` kao
 `kiosk-<1920|1366|1080>-<light|dark>.png` za prizor Promet i
 `-veceras.png` odnosno `-grad.png` za druga dva prizora na 1920 i 1080, te
@@ -245,7 +245,7 @@ Sada), `064b42b` (ljuska), `90fec50` (kiosk), `6a390a1` (e2e), `53bf21f` i
   trakom (pločica sesije i tihi živi okvir već je govore); u statusnoj liniji
   tanke crte razdvajaju sat, vrijeme i zalazak; sličica kvarta nema ime grada ni
   mjerilo, a brojevi pod njom su glifovi s cijelom rečenicom za čitač; naslovi
-  događanja večeras i vijesti smiju na tri retka na stolu.
+  događanja večeras smiju na tri retka na stolu.
 - Telefon: kicker, sat i vrijeme u jednom bloku; segmenti u traci `surface-2`
   kao pet jednakih gumba (na 200 % teksta traka se lomi u drugi red, riječ se
   nikad ne reže); ime četvrti u zaglavlju do crtice („Gornji grad”); traka Sada
@@ -319,7 +319,7 @@ Od 12:59:47 do 12:59:59 provedena je provjera na stvarnoj evaluacijskoj adresi:
 - novi Worker javlja `networkCheck: off`;
 - samoposluga stvara stvarni privremeni zaslon odgovorom 201;
 - kod povezuje drugi preglednik i zaslon prelazi u povezano stanje;
-- svih sedam područja otvara se bez horizontalnog prelijevanja i pogrešaka;
+- svih šest područja otvara se bez horizontalnog prelijevanja i pogrešaka;
 - vektorska karta, stajališta i vlastite kartografske pločice učitavaju se;
 - Access pristup bez podatkovnog tokena sesije i dalje dobiva 401 na
   `/api/data/zet-rt`.
