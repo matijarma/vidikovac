@@ -72,6 +72,12 @@
 
 .kiosk {
   --k-zoom: var(--kiosk-zoom, 1);
+  /* The invitation card is a thing a person walks up to and scans, not a
+     picture to be read across a room: above Full HD it stops growing with the
+     screen, so the extra pixels go to the city rather than to a bigger QR.
+     1 at both design sizes, so the filed drawing (600 / 520 / 240 px) is
+     untouched; at 3840 x 2160 the card is 1.35 rather than 2. */
+  --k-sign-zoom: min(var(--k-zoom), 1.35);
   --k-canvas: var(--tone-surface-canvas);
   --k-surface: var(--tone-surface-1);
   --k-surface-2: var(--tone-surface-2);
@@ -128,9 +134,9 @@
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
   --k-tile-gap: calc(10px * var(--k-zoom));
-  --k-side-w: calc(600px * var(--k-zoom));
+  --k-side-w: calc(600px * var(--k-sign-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
-  --k-qr: calc(240px * var(--k-zoom));
+  --k-qr: calc(240px * var(--k-sign-zoom));
   --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
   --k-row-min: max(280px, calc(280px * var(--k-zoom)));
   --k-time-min: max(280px, calc(280px * var(--k-zoom)));
@@ -157,9 +163,9 @@
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
   --k-tile-gap: calc(8px * var(--k-zoom));
-  --k-side-w: calc(520px * var(--k-zoom));
+  --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
-  --k-qr: calc(240px * var(--k-zoom));
+  --k-qr: calc(240px * var(--k-sign-zoom));
   --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
   --k-row-min: max(240px, calc(240px * var(--k-zoom)));
   --k-time-min: max(240px, calc(240px * var(--k-zoom)));
@@ -322,7 +328,8 @@
    holds. The per-chapter minimum is the only thing that differs: a line tile
    at the design system's 168 px floor, an evening's tile or a city row
    wider, and Grad's ink tile a lead track of its own. */
-.k-rail { --k-rail-min: var(--k-tile-min); display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); grid-auto-rows: max-content; align-content: end; box-sizing: border-box; min-width: 0; grid-gap: var(--k-tile-gap); gap: var(--k-tile-gap); padding: var(--k-tile-gap); }
+/* `.kiosk ul` zeroes a list's padding, so the rail claims its own inset back at a specificity that beats it: the members float on the picture rather than butting against the map's rounded corners. */
+.kiosk .k-rail { --k-rail-min: var(--k-tile-min); display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); grid-auto-rows: max-content; align-content: end; box-sizing: border-box; min-width: 0; grid-gap: var(--k-tile-gap); gap: var(--k-tile-gap); padding: var(--k-tile-gap); }
 .k-rail[data-chapter='veceras'] { --k-rail-min: var(--k-time-min); }
 .k-rail[data-chapter='grad'] { --k-rail-min: var(--k-row-min); grid-template-columns: minmax(var(--k-ink-w), 1.2fr) repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); }
 /* A sentence in place of a chapter's members (an empty evening, a source that does not answer) takes the rail's width after the chapter's lead member, whose track collapses when there is no lead. */
@@ -635,7 +642,7 @@ button.k-strip-verdict { cursor: pointer; }
 .k-side-blocks + .k-join { margin-top: var(--k-gap); }
 /* No side blocks (Vijesti in portrait): the join card sits at the foot of the side, not at its top. */
 .k-side-blocks:empty + .k-join { margin-top: auto; }
-.k-join-qr { flex: none; width: calc(var(--k-qr) * 0.5); height: calc(var(--k-qr) * 0.5); }
+.k-join-qr { flex: none; width: calc(120px * var(--k-zoom)); height: calc(120px * var(--k-zoom)); }
 .k-join-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.4); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-join-qr .qr svg { width: 100%; height: 100%; }
 .k-join-qr:empty { border-radius: var(--k-radius-s); background: var(--k-surface-2); }

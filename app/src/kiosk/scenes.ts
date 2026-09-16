@@ -536,10 +536,11 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
   function measuredColumns(id: SceneId): number {
     const rail = railBox();
     if (!rail) return 0;
-    const width = rail.clientWidth - 1;
     const style = getComputedStyle(rail);
     const gap = Number.parseFloat(style.columnGap);
     const px = (token: string): number => Number.parseFloat(style.getPropertyValue(token));
+    // clientWidth counts the rail's own padding; the tracks are laid in what is left of it, a hair under to survive a fractional box.
+    const width = rail.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight) - 1;
     if (!(gap >= 0)) return 0;
     // One column of the narrowest member any rail holds: the rail stands its members up as rows and every chapter asks for its floor.
     const across = railColumns(width, px('--k-tile-min'), gap);

@@ -134,17 +134,21 @@ describe('eleven type tiers per composition, each a token times --k-zoom', () =>
     expect(decls('.k-strip').height).toBe('var(--k-strip-h)');
     expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
   });
-  it('pins the invitation and paired side widths as separate tokens', () => {
-    expect(decls(".kiosk[data-size='wide']")['--k-side-w']).toBe('calc(600px * var(--k-zoom))');
-    expect(decls(".kiosk[data-size='compact']")['--k-side-w']).toBe('calc(520px * var(--k-zoom))');
+  it('pins the invitation and paired side widths as separate tokens, the invitation\'s on the sign scale', () => {
+    // 1 at both design sizes, so 600 / 520 px are the filed drawing; capped at 1.35, so above Full HD the card stops growing and the map takes the room.
+    expect(decls('.kiosk')['--k-sign-zoom']).toBe('min(var(--k-zoom), 1.35)');
+    expect(decls(".kiosk[data-size='wide']")['--k-side-w']).toBe('calc(600px * var(--k-sign-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-side-w']).toBe('calc(520px * var(--k-sign-zoom))');
     expect(decls(".kiosk[data-size='wide']")['--k-paired-side-w']).toBe('calc(720px * var(--k-zoom))');
     expect(decls(".kiosk[data-size='compact']")['--k-paired-side-w']).toBe('calc(540px * var(--k-zoom))');
     expect(decls('.k-invitation')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-side-w)');
     expect(decls('.k-paired')['grid-template-columns']).toBe('minmax(0, 1fr) var(--k-paired-side-w)');
   });
-  it('keeps the QR at 240 px at every landscape size', () => {
-    expect(decls(".kiosk[data-size='wide']")['--k-qr']).toBe('calc(240px * var(--k-zoom))');
-    expect(decls(".kiosk[data-size='compact']")['--k-qr']).toBe('calc(240px * var(--k-zoom))');
+  it('keeps the QR at 240 px at every landscape size, and above Full HD grows it on the sign scale alone', () => {
+    expect(decls(".kiosk[data-size='wide']")['--k-qr']).toBe('calc(240px * var(--k-sign-zoom))');
+    expect(decls(".kiosk[data-size='compact']")['--k-qr']).toBe('calc(240px * var(--k-sign-zoom))');
+    // The paired corner QR belongs to a composition this wave leaves alone: it keeps the composition scale, 120 px at zoom 1 as it always was.
+    expect(decls('.k-join-qr').width).toBe('calc(120px * var(--k-zoom))');
   });
   it('roles: .k-scene-title at main, .kiosk .tl-value at tile, .kiosk .tl-time at scene-time, .kiosk .tl-label at label, .k-hint/.k-date/.k-strip at hint', () => {
     expect(decls('.k-scene-title')['font-size']).toBe('var(--k-main-size)');
@@ -258,10 +262,12 @@ describe('the scene field: transitions and grids', () => {
     expect(item.bottom).toBe('0');
     expect(item.left).toBe('0');
     // One rail for all three chapters: as many members as the room holds, hanging from the foot.
-    const rail = decls('.k-rail');
+    // `.kiosk ul` would zero the Promet rail's padding, so the rail's own rule outweighs it.
+    const rail = decls('.kiosk .k-rail');
     expect(rail['grid-template-columns']).toBe('repeat(auto-fit, minmax(var(--k-rail-min), 1fr))');
     expect(rail['align-content']).toBe('end');
     expect(rail['--k-rail-min']).toBe('var(--k-tile-min)');
+    expect(rail.padding).toBe('var(--k-tile-gap)');
     expect(decls(".k-rail[data-chapter='veceras']")['--k-rail-min']).toBe('var(--k-time-min)');
     expect(decls(".k-rail[data-chapter='grad']")['grid-template-columns']).toBe('minmax(var(--k-ink-w), 1.2fr) repeat(auto-fit, minmax(var(--k-rail-min), 1fr))');
     expect(decls(".k-rail[data-rows='1']")['grid-template-columns']).toBe('minmax(0, 1fr)');
