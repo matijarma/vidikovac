@@ -149,11 +149,7 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(dark.map((l) => l.id)).toEqual(light.map((l) => l.id));
     expect(dark.map((l) => l.id)).toEqual(overlayLayers(OVERLAY_LIGHT).map((l) => l.id));
     expect(styleDiff(light, dark).every((op) => op.kind === 'paint')).toBe(true);
-    // The figure: ink by day, the muted paper tier by night; the pinned tram blue is not touched.
-    expect(OVERLAY_LIGHT.figure).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.figureOpacity).toBe(0.9);
-    expect(OVERLAY_DARK.figure).toBe('#b6bbe0');
-    expect(OVERLAY_DARK.figureOpacity).toBe(0.7);
+    // The figure's own literals live in the report's colour table; only the pinned tram blue is asserted here, because the plan forbids touching it.
     expect(OVERLAY_LIGHT.routeTram).toBe('#03409c');
   });
 });

@@ -820,15 +820,20 @@ function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme): St
       });
     case 'roads_labels_major':
       // Upstream's legacy kind filter rewritten as an expression (a legacy
-      // filter may not nest), narrowed to the four classes above. 900 px of
-      // symbol-spacing prints a street name at most twice across a 1400 px
-      // field; 40 px of padding keeps a name off the field's edge and off its
-      // neighbour. 22 px flat: 11.2 arcminutes, over the floor and under the
-      // neighbourhood names, so the two tiers never read as one.
+      // filter may not nest), narrowed to the four classes above. MapLibre
+      // reads symbol-spacing and text-padding in TILE pixels at the tile's
+      // own zoom, and the archive stops at z14 (about 4.7 m per tile pixel
+      // here), so these are ground distances, not screen ones: 360 keeps
+      // consecutive anchors on one street about 1.7 km apart (a name at most
+      // twice across the 2.8 km field), 24 is about 40 screen px of padding
+      // at the field's z14.7 (R-KP17; the first drawing's 900 / 40 read as
+      // screen px and placed one name in the whole field). 22 px flat: 11.2
+      // arcminutes, over the floor and under the neighbourhood names, so the
+      // two tiers never read as one.
       return promoted(layer, {
         size: 22,
         font: MAP_FONTS.medium,
-        layout: { 'symbol-spacing': 900, 'text-padding': 40 },
+        layout: { 'symbol-spacing': 360, 'text-padding': 24 },
         filter: ['all', ['in', ['get', 'kind'], ['literal', ['highway', 'major_road']]], ['in', ['get', 'kind_detail'], ['literal', PROZOR_MAJOR_ROAD_DETAILS]]],
       });
     case 'water_label_lakes':

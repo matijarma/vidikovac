@@ -398,8 +398,9 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       // Major street names: the trunk of the hierarchy only, spaced so one field holds a handful.
       const street = byId(layers, 'roads_labels_major');
       expect(street.layout!['text-size']).toBe(22);
-      expect(street.layout!['symbol-spacing']).toBe(900);
-      expect(street.layout!['text-padding']).toBe(40);
+      // Tile pixels at z14 (R-KP17): 360 is about 1.7 km between anchors on one street, 24 about 40 screen px at the field's zoom.
+      expect(street.layout!['symbol-spacing']).toBe(360);
+      expect(street.layout!['text-padding']).toBe(24);
       expect(street.layout!['text-font']).toEqual([MAP_FONTS.medium]);
       expect(PROZOR_MAJOR_ROAD_DETAILS).toEqual(['motorway', 'trunk', 'primary', 'secondary']);
       const filter = JSON.stringify(street.filter);
