@@ -162,6 +162,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
       </form>
       <p class="scan-status" role="status" data-testid="scan-status"></p>
       <p class="scan-intro">${escapeHtml(i18n.t('scan.intro'))}</p>
+      ${initial ? '' : `<p class="scan-no-code"><a href="/#isprobaj" data-testid="scan-no-code">${escapeHtml(i18n.t('scan.noCode'))}</a></p>`}
     </section>`);
   root.appendChild(element);
 

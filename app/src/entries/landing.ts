@@ -1,146 +1,93 @@
-// Page entry for the landing page (app/index.html). The static markup reads
-// as a finished product on its own; this adds what it cannot do: the boot
-// every surface shares (locale, theme, sprite, the language toggle in the
-// header's slot, one translatePage pass), the live strip from the open teaser
-// (weather now, the safety state, ZET vehicles moving) and the footer's source
-// line. Every dependency is injected so test/app/landing.test.ts drives it
-// without a network.
-import type { TeaserResponse } from '../api';
+// Static content is the page. This entry enhances locale/theme, image
+// selection, four-chapter motion, and the separately labelled public data.
 import { fetchTeaser } from '../api';
 import { bootPage } from '../boot';
-import { zagrebTime } from '../format';
-import { vehicleCount } from '../layers/shared';
-import { conditionText } from '../experience/text';
-import type { ModuleSnapshot } from '../../../worker/feed/schema';
+import { syncCaptureImages, watchCaptureErrors } from '../landing/images';
+import { mountLandingLive, type LandingLive } from '../landing/live';
+import { mountStory, type StoryHandle } from '../landing/story';
 import { detectLagano, markLagano } from '../ui/lagano';
-// app/index.html links tokens.css, base.css and landing.css itself; the entry
-// carries the signage sheet, which loads after them and gives the live strip
-// the same badges, rows and bands as every other surface.
+import '../ui/base.css';
 import '../ui/signage.css';
 
-export interface StripLine { text: string; state: 'live' | 'unknown' | 'urgent' }
-export interface StripTexts { weather: StripLine; safety: StripLine; transit: StripLine }
-
-const UNKNOWN: StripLine = { text: 'trenutačno nedostupno', state: 'unknown' };
-
-function usable(snapshot: ModuleSnapshot | undefined): snapshot is ModuleSnapshot {
-  return Boolean(snapshot) && snapshot!.status !== 'down';
-}
-
-const hr = (n: number, digits = 1): string => n.toLocaleString('hr-HR', { maximumFractionDigits: digits });
-
-/** Words for the strip from the teaser's modules; a missing source is unknown, never zero or all-clear. */
-export function liveStripTexts(modules: readonly ModuleSnapshot[], now: number): StripTexts {
-  const by = (id: ModuleSnapshot['module']): ModuleSnapshot | undefined => modules.find((m) => m.module === id);
-  const obs = by('dhmz-now');
-  const o = obs?.items[0];
-  const temp = typeof o?.data?.temp === 'number' ? o.data.temp : null;
-  const condition = typeof o?.data?.weather === 'string' ? conditionText(o.data.weather) : '';
-  const weather: StripLine = usable(obs) && o && temp !== null
-    ? { text: `${hr(temp)} °C${condition ? `, ${condition}` : ''}${o.at ? ` · izmjereno ${zagrebTime(o.at)}` : ''}`, state: 'live' }
-    : UNKNOWN;
-  const cap = by('dhmz-cap');
-  const roads = by('prometnice');
-  let safety: StripLine = UNKNOWN;
-  if (usable(cap)) {
-    const active = cap.items.filter((w) => (!w.at || Date.parse(w.at) <= now) && (!w.until || Date.parse(w.until) >= now));
-    if (active.length) safety = { text: `${active.length} ${active.length === 1 ? 'upozorenje' : active.length < 5 ? 'upozorenja' : 'upozorenja'} DHMZ-a na snazi`, state: 'urgent' };
-    else if (cap.status === 'live' || cap.items.length > 0) {
-      const closures = usable(roads) ? roads.items.filter((c) => c.kind === 'closure').length : null;
-      safety = { text: `Nema upozorenja DHMZ-a${closures === null ? '' : closures === 0 ? ', nema zatvorenih prometnica' : `, ${closures} ${closures === 1 ? 'zatvorena prometnica' : closures < 5 ? 'zatvorene prometnice' : 'zatvorenih prometnica'}`}`, state: 'live' };
-    }
-  }
-  const zet = by('zet-rt');
-  const count = usable(zet) ? vehicleCount(zet) : null;
-  const transit: StripLine = count !== null
-    ? { text: `${count} ${count === 1 ? 'vozilo' : 'vozila'} u pokretu${zet?.sourceUpdatedAt ? ` · ${zagrebTime(zet.sourceUpdatedAt)}` : ''}`, state: 'live' }
-    : UNKNOWN;
-  return { weather, safety, transit };
-}
-
-export interface LiveStripDeps {
-  root: ParentNode | null;
-  fetchTeaser: () => Promise<TeaserResponse>;
-  now: () => number;
-}
-
-export async function paintLiveStrip(deps: LiveStripDeps): Promise<void> {
-  if (!deps.root) return;
-  let texts: StripTexts;
-  try { texts = liveStripTexts((await deps.fetchTeaser()).modules, deps.now()); }
-  catch { texts = { weather: UNKNOWN, safety: UNKNOWN, transit: UNKNOWN }; }
-  for (const key of ['weather', 'safety', 'transit'] as const) {
-    const el = deps.root.querySelector<HTMLElement>(`[data-live=${key}]`);
-    if (!el) continue;
-    el.textContent = texts[key].text;
-    el.dataset.state = texts[key].state;
-  }
-}
-
-export interface HealthPaintDeps {
-  el: HTMLElement | null;
-  fetchImpl: typeof fetch;
-  now: () => number;
-  /** The teaser the strip painted from: a source marked down denies the all-clear. */
-  sources: () => Promise<readonly ModuleSnapshot[]>;
-}
-
-/** The footer's source line: "Izvori u redu · 14:42" from the Worker's clock,
- *  said only when the Worker answers and no source in the teaser is down;
- *  otherwise the count of sources not answering, or that the sources are
- *  unavailable when the teaser itself failed. Never an all-clear by default. */
-export async function paintHealth(deps: HealthPaintDeps): Promise<void> {
-  const { el, fetchImpl, now, sources } = deps;
-  if (!el) return;
-  let health: { ok?: boolean; time?: string };
-  try {
-    const r = await fetchImpl('/api/health', { cache: 'no-store' });
-    health = (await r.json()) as { ok?: boolean; time?: string };
-  } catch {
-    el.textContent = 'Poslužitelj nije dostupan';
-    return;
-  }
-  if (!health.ok) { el.textContent = 'Poslužitelj javlja grešku'; return; }
-  const time = zagrebTime(health.time ?? now());
-  let down: number | null;
-  try { down = (await sources()).filter((m) => m.status === 'down').length; }
-  catch { down = null; }
-  const state = down === null ? 'Izvori trenutačno nedostupni'
-    : down === 0 ? 'Izvori u redu'
-    : `${down} ${down === 1 ? 'izvor ne odgovara' : down < 5 ? 'izvora ne odgovaraju' : 'izvora ne odgovara'}`;
-  el.textContent = `${state} · ${time}`;
-}
-
-function safeLocalStorage(): Storage | undefined {
+function storage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
 }
-
 function canWebgl(): boolean {
   try {
     const canvas = document.createElement('canvas');
-    return Boolean(canvas.getContext('webgl') ?? canvas.getContext('experimental-webgl'));
+    const gl = canvas.getContext('webgl');
+    const available = Boolean(gl);
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return available;
   } catch { return false; }
 }
 
-if (typeof document !== 'undefined' && document.querySelector('[data-testid=live-strip]')) {
+if (typeof document !== 'undefined' && document.body?.classList.contains('ld-page')) {
   const lightweight = detectLagano({
-    search: location.search,
-    storage: safeLocalStorage(),
+    search: location.search, storage: storage(),
     navigator: { deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory },
-    matchMedia: (query) => globalThis.matchMedia(query),
-    canWebgl,
+    matchMedia: (query) => window.matchMedia(query), canWebgl,
   });
   markLagano(document.documentElement, lightweight);
-  // The Croatian in the HTML is the catalogue's own (test/app/landing.test.ts
-  // holds the two together), so the first translatePage pass changes nothing a
-  // Croatian reader sees; the toggle it mounts in the header's slot turns every
-  // data-i18n node English. The strip's and the footer's sentences are painted
-  // below in Croatian, as the teaser's words are.
-  bootPage({ page: 'landing' });
-  // The one Manrope family stays off the lightweight graph (R-F3).
+  let live: LandingLive | undefined;
+  let story: StoryHandle | undefined;
+  const { i18n, theme } = bootPage({
+    page: 'landing',
+    onLocaleChange: () => { sync(); live?.repaint(); story?.refresh(); },
+  });
+
+  function sync() {
+    syncCaptureImages(document, i18n, theme.getResolvedTheme());
+    document.title = `Kaj ima? · ${i18n.t('landing.title')}`;
+    document.querySelector('meta[name=description]')?.setAttribute('content', i18n.t('landing.description'));
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', document.title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', i18n.t('landing.description'));
+    document.querySelector('meta[property="og:locale"]')?.setAttribute('content', i18n.getLocale() === 'en' ? 'en_GB' : 'hr_HR');
+  }
+  sync();
+  const offTheme = theme.onChange(sync);
+  const offImages = watchCaptureErrors(document, i18n);
   if (!lightweight) void import('../ui/fonts.css');
-  // One teaser fetch feeds both the strip and the footer's verdict on the sources.
-  const teaser = fetchTeaser();
-  void paintLiveStrip({ root: document, fetchTeaser: () => teaser, now: () => Date.now() });
-  void paintHealth({ el: document.getElementById('health'), fetchImpl: fetch, now: () => Date.now(), sources: () => teaser.then((t) => t.modules) });
+  story = mountStory(document, lightweight);
+
+  const healthControllers = new Set<AbortController>();
+  async function fetchHealth(): Promise<{ ok?: boolean; time?: string }> {
+    const controller = new AbortController();
+    healthControllers.add(controller);
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetch('/api/health', { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('health-unavailable');
+      return await response.json() as { ok?: boolean; time?: string };
+    } finally {
+      window.clearTimeout(timeout);
+      healthControllers.delete(controller);
+    }
+  }
+  live = mountLandingLive({ root: document, i18n, fetchTeaser, fetchHealth });
+  live.setPageVisible(!document.hidden);
+  const region = document.querySelector('[data-live-region]');
+  let observer: IntersectionObserver | undefined;
+  if (region && typeof IntersectionObserver === 'function') {
+    observer = new IntersectionObserver((entries) => {
+      live?.setVisible(entries.some((entry) => entry.isIntersecting));
+    }, { rootMargin: '160px 0px', threshold: 0 });
+    observer.observe(region);
+  } else {
+    live.setVisible(true);
+  }
+  const onVisibility = () => live?.setPageVisible(!document.hidden);
+  const onPageShow = () => { onVisibility(); story?.refresh(); };
+  const onPageHide = (event: PageTransitionEvent) => {
+    live?.setPageVisible(false);
+    if (event.persisted) return;
+    live?.destroy(); story?.destroy(); observer?.disconnect();
+    offTheme(); offImages(); theme.destroy();
+    healthControllers.forEach((controller) => controller.abort());
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('pageshow', onPageShow);
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('pagehide', onPageHide, { once: false });
+  window.addEventListener('pageshow', onPageShow);
 }

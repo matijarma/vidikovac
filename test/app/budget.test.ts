@@ -25,6 +25,7 @@ const GZIP_LEVEL = 6;
 
 /** The two screens a lightweight device loads: the public screen and the phone. */
 const ENTRIES = ['kiosk/index.html', 'd/index.html'] as const;
+const LIGHTWEIGHT_ENTRIES = ['index.html', ...ENTRIES] as const;
 /** Manifest keys of the chunks the lightweight path must never reference. */
 const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts'] as const;
 const NETWORK_ARTEFACT = 'zet-network.json';
@@ -121,7 +122,7 @@ function print(entry: string, rows: Measured[], total: number): void {
 }
 
 describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', () => {
-  for (const entry of ENTRIES) {
+  for (const entry of LIGHTWEIGHT_ENTRIES) {
     it(`/${entry.replace('index.html', '')} transfers under ${BUDGET_BYTES} bytes gzipped`, () => {
       expect(existsSync(join(outDir, entry)), `${entry} must be built`).toBe(true);
       const { rows, total } = breakdown(entry);

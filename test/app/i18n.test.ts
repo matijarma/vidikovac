@@ -61,7 +61,12 @@ describe('catalogs', () => {
   it('no leaf is empty and hr never addresses the reader as Vi', () => {
     for (const k of leafKeys(hr)) expect(k.length).toBeGreaterThan(0);
     const all = JSON.stringify(hr);
-    expect(all).not.toMatch(/\bVi\b|\bVaš|\bVam\b|Skenirajte|Kopirajte|Podijelite|Plaćate/);
+    // JavaScript's ASCII \b splits "Više" after "Vi". Keep the informal-voice
+    // rule without rejecting an ordinary Croatian word in the new headline.
+    const formal = /(?<![\p{L}\p{N}_])(?:Vi|Vam)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])Vaš|Skenirajte|Kopirajte|Podijelite|Plaćate/u;
+    expect(all).not.toMatch(formal);
+    expect('Više grada.').not.toMatch(formal);
+    expect('Vi možete nastaviti.').toMatch(formal);
   });
   it('carries the approved copy verbatim', () => {
     expect(hr.kiosk.invitation).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');

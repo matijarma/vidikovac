@@ -272,7 +272,7 @@ describe('createScanPage', () => {
     expect(root.querySelector('[data-testid=scan-status]')?.getAttribute('role')).toBe('status');
   });
 
-  it('puts the field first: label, input, error line, hint, the primary check, "ili", the camera, then the intro last', () => {
+  it('puts the field first, then the intro and a quiet path for arrivals without a code', () => {
     const { root } = mountWithCamera();
     const selectors = [
       'h1',
@@ -287,15 +287,17 @@ describe('createScanPage', () => {
       '[data-testid=scan-camera]',
       '[data-testid=scan-status]',
       '.scan-intro',
+      '.scan-no-code',
     ];
     const nodes = selectors.map((selector) => root.querySelector(selector));
     nodes.forEach((node, i) => expect(node, selectors[i]).not.toBeNull());
     for (let i = 1; i < nodes.length; i += 1) {
       expect(before(nodes[i - 1]!, nodes[i]!), `${selectors[i - 1]} must precede ${selectors[i]}`).toBe(true);
     }
-    // The error line sits directly under the field, the intro closes the page.
+    // The recovery path does not interrupt typing or the camera flow.
     expect(root.querySelector('.scan-error')!.previousElementSibling).toBe(root.querySelector('[data-testid=code-input]'));
-    expect(root.querySelector('.scan')!.lastElementChild).toBe(root.querySelector('.scan-intro'));
+    expect(root.querySelector('.scan')!.lastElementChild).toBe(root.querySelector('.scan-no-code'));
+    expect(root.querySelector('[data-testid=scan-no-code]')?.getAttribute('href')).toBe('/#isprobaj');
     expect(text(root.querySelector('.scan-intro'))).toBe('Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.');
     expect(text(root.querySelector('.scan-label'))).toBe('Kod sa zaslona');
     expect(root.querySelector<HTMLLabelElement>('.scan-label')!.htmlFor).toBe('scan-code');
@@ -904,4 +906,3 @@ describe('the brand link on /s/ is a 44 px target', () => {
     expect(css).toContain('p.scan-brand a { display: inline-flex; align-items: center; min-block-size: var(--target);');
   });
 });
-

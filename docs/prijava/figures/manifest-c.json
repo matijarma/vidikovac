@@ -11,9 +11,9 @@
     "id": "m-kiosk",
     "file": "m-kiosk.html",
     "kind": "mock",
-    "title": "Javni zaslon: prizor Promet",
-    "desc": "Statična replika javnog zaslona 1920 × 1080 u 19:51, 15. 9. 2026., stanica Trg bana J. Jelačića: zaglavlje sa satom i vremenom, karta kao cijelo polje (shema tramvajske mreže) s oznakom prizora Promet u gornjem lijevom kutu i tračnicom pločica uz donji rub karte: traka radova i četiri pločice linija (oba kraja linije, riječ stanja, broj vozila), bočne pločice vozila u pokretu i zatvaranja, pozivnica s pravim QR kodom za zagreb.aningfilm.hr/s i kodom ABCD·EFG0, sigurnosna traka s presudom mirno.",
-    "caption": "Javni zaslon u prostoru: karta stoji kroz sva tri prizora, prizor mijenja kadar i pločice uz donji rub karte, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz: vozila u pokretu, vrijeme i sigurnost su snimka otvorenih izvora od 15. 9. 2026.; stanja linija, broj vozila, zatvaranja i radovi ilustrativni su."
+    "title": "Javni zaslon: pogled na kvart",
+    "desc": "Stvarna snimka javnog zaslona 1920 × 1080 u 19:41, 16. 9. 2026., stajalište Trg bana J. Jelačića: zaglavlje sa satom i vremenom kao stanjem, karta kvarta kao cijelo polje s tramvajskim tračnicama, vozilima s brojem linije i imenima kvartova, desni stupac s dvije rečenice (PROMET: 11 rani 3 min, 6 rani 2 min, 32 vozila u blizini, ZET 19:41; ZATVORENO: Amruševa, 190 m), pozivnica s QR kodom za zagreb.aningfilm.hr/s i kodom QB10·9YZW, sigurnosna traka s presudom mirno i dežurnom ljekarnom.",
+    "caption": "Javni zaslon u prostoru: jedan nepomičan kadar na kvartu, tramvajske tračnice i vozila kao figura, najviše tri rečenice poredane po važnosti, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz je snimka zaslona u radu 16. 9. 2026. u 19:41, sa živim podacima u tom trenutku."
   },
   {
     "id": "shema-tramvaji",

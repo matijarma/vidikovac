@@ -2,9 +2,9 @@
   {
     "id": "f-arhitektura",
     "file": "figures/f-arhitektura.svg",
-    "title": "Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika",
-    "desc": "Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, Službeni glasnik i šest izvora događanja.",
-    "caption": "Jedan Worker, četiri Durable Objecta, bez baze korisnika: tri uređaja govore s jednim Workerom, a podaci dolaze iz otvorenih izvora."
+    "title": "Arhitektura: jedan Worker, Durable Objecti sa SQLite pohranom, bez baze korisnika",
+    "desc": "Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi Durable Objecte sa SQLite pohranom (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone, a peti, promatrač ZET-ova izvora u stvarnom vremenu, nije na crtežu), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, Službeni glasnik i šest izvora događanja.",
+    "caption": "Jedan Worker, Durable Objecti sa SQLite pohranom, bez baze korisnika: tri uređaja govore s jednim Workerom, a podaci dolaze iz otvorenih izvora. Na crtežu su četiri objekta uparivanja i mjerenja; peti, promatrač ZET-ova izvora u stvarnom vremenu, nije prikazan."
   },
   {
     "id": "f-uparivanje",

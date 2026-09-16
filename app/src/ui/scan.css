@@ -24,6 +24,7 @@
 p.scan-brand a { display: inline-flex; align-items: center; min-block-size: var(--target); color: inherit; text-decoration: none; }
 .scan-tools { display: flex; gap: var(--sp-2); align-items: center; }
 
+.scan-no-code a { display: inline-flex; align-items: center; min-block-size: var(--target); padding-block: .5rem; font-size: var(--type-control); }
 .scan-page {
   max-width: 32rem;
   margin: 0 auto;

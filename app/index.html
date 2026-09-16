@@ -3,66 +3,245 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kaj ima? · Zagreb u stvarnom vremenu</title>
-<meta name="description" content="Kaj ima? je pogled na Zagreb u stvarnom vremenu, izgrađen na otvorenim podacima: promet, vrijeme, događanja, grad i sigurnost. Otključava se skeniranjem koda s javnog zaslona.">
+<title>Kaj ima? · Manje zaslona. Više grada.</title>
+<meta name="description" content="Kaj ima? pretvara otvorene podatke Zagreba u javni zaslon i deset minuta grada na tvom uređaju. Bez računa, instalacije i oglasa.">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f6f8f7">
+<meta name="theme-color" content="#f4f2ec">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="hr_HR">
+<meta property="og:title" content="Kaj ima? · Manje zaslona. Više grada.">
+<meta property="og:description" content="Otvoreni podaci Zagreba, na javnom zaslonu i u tvojoj ruci.">
+<meta property="og:url" content="https://zagreb.aningfilm.hr/">
+<meta property="og:image" content="https://zagreb.aningfilm.hr/landing/share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/src/ui/tokens.css">
 <link rel="stylesheet" href="/src/ui/base.css">
 <link rel="stylesheet" href="/src/ui/landing.css">
 <script type="module" src="/src/entries/theme-init.ts"></script>
 </head>
-<body>
+<body class="ld-page">
 <a class="skip-link" href="#ld-main" data-i18n="shell.skip">Prijeđi na sadržaj</a>
 <header class="ld-head">
-  <a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica" data-i18n-aria-label="shell.wordmarkLabel"><span class="ki-wordmark-text">Kaj ima<span class="ki-wordmark-mark">?</span></span></a>
-  <nav class="ld-nav" aria-label="Brzi pristup" data-i18n-aria-label="landing.quickNav">
-    <a href="/hitno" data-i18n="nav.safety">Sigurnost</a>
-    <a href="/s/" data-i18n="common.links.scan">Upiši kod</a>
-    <span data-lang-toggle></span>
-  </nav>
+  <div class="ld-bound ld-head-inner">
+    <a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica" data-i18n-aria-label="shell.wordmarkLabel"><span class="ki-wordmark-text">Kaj ima<span class="ki-wordmark-mark">?</span></span></a>
+    <nav class="ld-nav" aria-label="Brzi pristup" data-i18n-aria-label="landing.quickNav">
+      <a href="/hitno" data-i18n="nav.safety">Sigurnost</a>
+      <a href="/s/" data-i18n="landing.actions.scanShort">Upiši kod</a>
+      <span data-lang-toggle></span>
+      <a class="ld-nav-try" href="#isprobaj" data-i18n="landing.actions.try">Isprobaj</a>
+    </nav>
+  </div>
 </header>
-<main id="ld-main" class="ld">
-  <section class="ld-hero" aria-labelledby="ld-title">
-    <h1 id="ld-title" data-i18n="landing.title">Deset minuta grada na tvom uređaju.</h1>
-    <p class="ld-lead" data-i18n="landing.lead">Promet, vrijeme, događanja, odluke Grada i sigurnost iz otvorenih podataka, s izvorom uz svaki prikaz. Bez računa, bez instalacije, bez praćenja.</p>
-    <div class="ld-actions" data-testid="landing-actions">
-      <a class="btn btn-primary" href="/s/" data-testid="cta-scan" data-i18n="landing.actions.scan">Skeniraj ili upiši kod</a>
-      <a class="btn-ghost" href="/hitno" data-testid="cta-safety" data-i18n="landing.actions.safety">Sigurnost, bez skeniranja</a>
-      <a class="btn-quiet" href="/kiosk/" data-testid="cta-kiosk" data-i18n="landing.actions.kiosk">Otvori gradski zaslon</a>
+<main id="ld-main" tabindex="-1">
+  <section class="ld-hero ld-bound" aria-labelledby="ld-title">
+    <p class="ld-eyebrow" data-i18n="landing.location">Zagreb, pri ruci.</p>
+    <div class="ld-hero-top">
+      <h1 id="ld-title"><span data-i18n="landing.titleScreen">Manje zaslona.</span> <span class="ld-title-city" data-i18n="landing.titleCity">Više grada.</span></h1>
+      <div class="ld-hero-copy">
+        <p class="ld-lead" data-i18n="landing.lead">Tvoj tramvaj. Plan za večeras. Što se mijenja u kvartu. Saznaj što ti treba, pa nastavi svojim putem.</p>
+        <p class="ld-intro" data-i18n="landing.intro">Kaj ima? donosi otvorene podatke grada na javni zaslon i u tvoju ruku.</p>
+        <div class="ld-actions" data-testid="landing-actions">
+          <a class="ld-button" href="#kako-radi" data-testid="cta-story"><span data-i18n="landing.actions.story">Pogledaj kako radi</span><span aria-hidden="true">↓</span></a>
+          <a class="ld-text-link" href="#isprobaj" data-testid="cta-try"><span data-i18n="landing.actions.try">Isprobaj</span><span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+    <figure class="ld-hero-figure">
+      <div class="ld-hero-visual">
+        <div class="ld-device ld-device-screen ld-hero-screen">
+          <picture data-capture="kiosk">
+            <source media="(prefers-color-scheme: dark)" srcset="/landing/kiosk-hr-dark-720.webp 720w, /landing/kiosk-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 76vw, 94vw">
+            <img src="/landing/kiosk-hr-light-1280.webp" srcset="/landing/kiosk-hr-light-720.webp 720w, /landing/kiosk-hr-light-1280.webp 1280w" sizes="(min-width: 960px) 76vw, 94vw" width="1920" height="1080" fetchpriority="high" alt="Javni zaslon: karta Zagreba s vozilima ZET-a i informacijama o kvartu. Kod je skriven u ovom primjeru." data-capture-alt="kiosk">
+          </picture>
+        </div>
+        <div class="ld-device ld-device-phone ld-hero-phone">
+          <picture data-capture="phone">
+            <source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp 390w, /landing/phone-hr-dark-780.webp 780w" sizes="(min-width: 960px) 19vw, 29vw">
+            <img src="/landing/phone-hr-light-390.webp" srcset="/landing/phone-hr-light-390.webp 390w, /landing/phone-hr-light-780.webp 780w" sizes="(min-width: 960px) 19vw, 29vw" width="390" height="844" alt="Telefon nakon skeniranja: linije, događanja i gradske informacije poredani kroz dan." data-capture-alt="phone">
+          </picture>
+        </div>
+      </div>
+      <figcaption class="ld-caption" data-i18n="landing.captureCaption">Primjeri stvarnih prikaza. Podaci na snimkama nisu trenutačno stanje.</figcaption>
+    </figure>
+  </section>
+
+  <section id="kako-radi" class="ld-story" aria-labelledby="ld-story-title" data-testid="landing-story">
+    <div class="ld-bound">
+      <header class="ld-section-head ld-story-head">
+        <p class="ld-eyebrow" data-i18n="landing.story.label">Od zaslona do susreta</p>
+        <h2 id="ld-story-title" data-i18n="landing.story.title">Dođi. Saznaj. Nastavi.</h2>
+        <p data-i18n="landing.story.intro">Pristup počinje u stvarnom prostoru. A završava s više vremena za njega.</p>
+        <a class="ld-text-link" href="#isprobaj"><span data-i18n="landing.actions.try">Isprobaj</span><span aria-hidden="true">↗</span></a>
+      </header>
+      <div class="ld-story-body" data-story-body>
+        <div class="ld-story-stage" data-story-stage data-chapter="0" aria-hidden="true">
+          <div class="ld-stage-devices">
+            <div class="ld-device ld-device-screen ld-stage-kiosk"><picture data-capture="kiosk"><source media="(prefers-color-scheme: dark)" srcset="/landing/kiosk-hr-dark-720.webp"><img src="/landing/kiosk-hr-light-720.webp" width="1920" height="1080" loading="lazy" decoding="async" alt=""></picture></div>
+            <div class="ld-device ld-device-phone ld-stage-phone"><picture data-capture="phone"><source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp"><img src="/landing/phone-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt=""></picture></div>
+            <div class="ld-device ld-device-phone ld-stage-peer"><picture data-capture="peer"><source media="(prefers-color-scheme: dark)" srcset="/landing/peer-hr-dark-390.webp"><img src="/landing/peer-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt=""></picture></div>
+            <div class="ld-device ld-device-phone ld-stage-frozen"><picture data-capture="frozen"><source media="(prefers-color-scheme: dark)" srcset="/landing/frozen-hr-dark-390.webp"><img src="/landing/frozen-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt=""></picture></div>
+          </div>
+          <p class="ld-stage-caption" data-i18n="landing.captureShort">Snimka aplikacije</p>
+        </div>
+        <div class="ld-chapters">
+          <article class="ld-chapter" data-chapter="0" aria-labelledby="ld-approach">
+            <div class="ld-chapter-copy">
+              <h3 id="ld-approach" data-i18n="landing.story.approachTitle">Priđi.</h3>
+              <p data-i18n="landing.story.approachBody">U kafiću, knjižnici ili uredu četvrti: zamišljen je kao prozor u ono što se događa oko tebe. Zaslon govori i kad nemaš telefon.</p>
+              <p class="ld-chapter-note" data-i18n="landing.story.approachNote">Javni zaslon. Koristan sam po sebi.</p>
+            </div>
+            <figure class="ld-chapter-figure">
+              <div class="ld-device ld-device-screen"><picture data-capture="kiosk"><source media="(prefers-color-scheme: dark)" srcset="/landing/kiosk-hr-dark-720.webp"><img src="/landing/kiosk-hr-light-720.webp" width="1920" height="1080" loading="lazy" decoding="async" alt="Javni zaslon: karta Zagreba s vozilima ZET-a i informacijama o kvartu. Kod je skriven u ovom primjeru." data-capture-alt="kiosk"></picture></div>
+            </figure>
+          </article>
+          <article class="ld-chapter" data-chapter="1" aria-labelledby="ld-take">
+            <div class="ld-chapter-copy">
+              <h3 id="ld-take" data-i18n="landing.story.takeTitle">Ponesi.</h3>
+              <p data-i18n="landing.story.takeBody">Skeniraj kod i grad je deset minuta na tvom uređaju. Bez računa. Bez instalacije. Otvori ono što te zanima, od svoje linije do večerašnjeg programa.</p>
+              <p class="ld-chapter-note" data-i18n="landing.story.takeNote">Deset minuta za ono što ti treba.</p>
+            </div>
+            <figure class="ld-chapter-figure ld-chapter-one-phone">
+              <div class="ld-device ld-device-phone"><picture data-capture="phone"><source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp"><img src="/landing/phone-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt="Telefon nakon skeniranja: linije, događanja i gradske informacije poredani kroz dan." data-capture-alt="phone"></picture></div>
+            </figure>
+          </article>
+          <article class="ld-chapter" data-chapter="2" aria-labelledby="ld-share">
+            <div class="ld-chapter-copy">
+              <h3 id="ld-share" data-i18n="landing.story.shareTitle">Podijeli.</h3>
+              <p data-i18n="landing.story.shareBody">Osoba pokraj tebe skenira tvoj kod i dobiva svojih pet minuta. Tvoje vrijeme ostaje isto. Jedan mali razlog za susret.</p>
+              <p class="ld-chapter-note" data-i18n="landing.story.shareNote">Pet minuta za drugu osobu, jednom.</p>
+            </div>
+            <figure class="ld-chapter-figure ld-chapter-two-phones">
+              <div class="ld-device ld-device-phone"><picture data-capture="phone"><source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp"><img src="/landing/phone-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt="Telefon nakon skeniranja: linije, događanja i gradske informacije poredani kroz dan." data-capture-alt="phone"></picture></div>
+              <div class="ld-device ld-device-phone"><picture data-capture="peer"><source media="(prefers-color-scheme: dark)" srcset="/landing/peer-hr-dark-390.webp"><img src="/landing/peer-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt="Telefon druge osobe u vlastitoj petominutnoj sesiji." data-capture-alt="peer"></picture></div>
+            </figure>
+          </article>
+          <article class="ld-chapter" data-chapter="3" aria-labelledby="ld-leave">
+            <div class="ld-chapter-copy">
+              <h3 id="ld-leave" data-i18n="landing.story.leaveTitle">Nastavi.</h3>
+              <p data-i18n="landing.story.leaveBody">Deset minuta poslije osvježavanje prestaje. Ono što čitaš ostaje kao označena snimka, s izvorima i mogućnostima izvoza. Ništa te ne zove natrag.</p>
+              <p class="ld-chapter-note" data-i18n="landing.story.leaveNote">Grad te čeka.</p>
+            </div>
+            <figure class="ld-chapter-figure ld-chapter-one-phone">
+              <div class="ld-device ld-device-phone"><picture data-capture="frozen"><source media="(prefers-color-scheme: dark)" srcset="/landing/frozen-hr-dark-390.webp"><img src="/landing/frozen-hr-light-390.webp" width="390" height="844" loading="lazy" decoding="async" alt="Istekla sesija: jasno označena snimka podataka ostaje na telefonu." data-capture-alt="frozen"></picture></div>
+            </figure>
+          </article>
+        </div>
+      </div>
+      <div class="ld-story-foot">
+        <p data-i18n="landing.captureCaption">Primjeri stvarnih prikaza. Podaci na snimkama nisu trenutačno stanje.</p>
+        <a class="ld-text-link" href="/hitno"><span data-i18n="landing.story.safety">Sigurnost je uvijek otvorena, bez koda i bez ograničenja trajanja.</span><span aria-hidden="true">↗</span></a>
+      </div>
     </div>
   </section>
-  <section class="ld-live" aria-labelledby="ld-live-title">
-    <h2 id="ld-live-title" class="ld-live-title" data-i18n="landing.liveTitle">Sada u Zagrebu</h2>
+
+  <section class="ld-evidence ld-bound" aria-labelledby="ld-evidence-title">
+    <header class="ld-section-head">
+      <p class="ld-eyebrow" data-i18n="landing.evidence.label">Jedan grad, više pogleda</p>
+      <h2 id="ld-evidence-title" data-i18n="landing.evidence.title">Što ti grad ima za reći?</h2>
+      <p data-i18n="landing.evidence.intro">Ne moraš tražiti podatke po gradskim stranicama. Svaki pogled počinje onim što ti je korisno.</p>
+    </header>
+    <div class="ld-evidence-grid">
+      <figure class="ld-feature ld-feature-transport">
+        <div class="ld-feature-image ld-device ld-device-screen"><picture data-capture="transport"><source media="(prefers-color-scheme: dark)" srcset="/landing/transport-hr-dark-720.webp 720w, /landing/transport-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw"><img src="/landing/transport-hr-light-720.webp" srcset="/landing/transport-hr-light-720.webp 720w, /landing/transport-hr-light-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw" width="1440" height="900" loading="lazy" decoding="async" alt="Promet: karta vozila ZET-a, pretraga linija i stajališta te stanje linija." data-capture-alt="transport"></picture></div>
+        <figcaption><h3 data-i18n="landing.evidence.transitTitle">Tvoja linija, na karti.</h3><p data-i18n="landing.evidence.transitBody">Vozila ZET-a, pretraga stajališta i stanje linija. Kašnjenje linije nije obećanje dolaska.</p></figcaption>
+      </figure>
+      <figure class="ld-feature ld-feature-events">
+        <div class="ld-feature-image ld-device ld-device-phone"><picture data-capture="events"><source media="(prefers-color-scheme: dark)" srcset="/landing/events-hr-dark-390.webp 390w, /landing/events-hr-dark-780.webp 780w" sizes="(min-width: 960px) 20vw, 55vw"><img src="/landing/events-hr-light-390.webp" srcset="/landing/events-hr-light-390.webp 390w, /landing/events-hr-light-780.webp 780w" sizes="(min-width: 960px) 20vw, 55vw" width="390" height="844" loading="lazy" decoding="async" alt="Događanja na telefonu: datirane najave s mjestom, kategorijom i izvorom." data-capture-alt="events"></picture></div>
+        <figcaption><h3 data-i18n="landing.evidence.eventsTitle">I nakon zadnjeg tramvaja.</h3><p data-i18n="landing.evidence.eventsBody">Program grada s datumom, mjestom i izvornikom. Spremi događanje u svoj kalendar.</p></figcaption>
+      </figure>
+      <figure class="ld-feature ld-feature-day">
+        <div class="ld-feature-image ld-device ld-device-screen"><picture data-capture="desktop"><source media="(prefers-color-scheme: dark)" srcset="/landing/desktop-hr-dark-720.webp 720w, /landing/desktop-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw"><img src="/landing/desktop-hr-light-720.webp" srcset="/landing/desktop-hr-light-720.webp 720w, /landing/desktop-hr-light-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw" width="1440" height="900" loading="lazy" decoding="async" alt="Radna površina: gradske informacije od sada do kraja tjedna, uz kartu odabrane četvrti." data-capture-alt="desktop"></picture></div>
+        <figcaption><h3 data-i18n="landing.evidence.dayTitle">Sada. Večeras. Sutra.</h3><p data-i18n="landing.evidence.dayBody">Promet, radovi, najave i gradske odluke na jednoj vremenskoj osi, uz odabrani kvart.</p></figcaption>
+      </figure>
+    </div>
+    <p class="ld-domains-line" data-i18n="landing.evidence.domains">Sada · Promet · Vrijeme · Sigurnost · Grad · Događanja</p>
+    <p class="ld-caption" data-i18n="landing.captureCaption">Primjeri stvarnih prikaza. Podaci na snimkama nisu trenutačno stanje.</p>
+  </section>
+
+  <section class="ld-live ld-bound" aria-labelledby="ld-live-title" data-live-region>
+    <header class="ld-live-head">
+      <h2 id="ld-live-title" data-i18n="landing.liveTitle">Sada u Zagrebu</h2>
+      <button class="ld-text-link" type="button" data-live-refresh hidden data-i18n="landing.live.retry">Osvježi podatke</button>
+    </header>
     <ul class="ld-strip" data-testid="live-strip">
-      <li><span class="ld-k" data-i18n="landing.liveWeather">Vrijeme · Maksimir</span><span class="ld-v" data-live="weather" data-testid="live-weather" lang="hr">učitavanje…</span></li>
-      <li><span class="ld-k" data-i18n="nav.safety">Sigurnost</span><span class="ld-v" data-live="safety" data-testid="live-safety" lang="hr">učitavanje…</span></li>
-      <li><span class="ld-k">ZET</span><span class="ld-v" data-live="transit" data-testid="live-transit" lang="hr">učitavanje…</span></li>
+      <li><span class="ld-k" data-i18n="landing.liveWeather">Vrijeme · Maksimir</span><strong class="ld-v" data-live="weather" data-testid="live-weather" data-i18n="landing.live.idle">Podaci se učitavaju uz JavaScript.</strong><span class="ld-live-detail" data-live-detail="weather"></span><span class="ld-live-state" data-live-state="weather"></span></li>
+      <li><span class="ld-k" data-i18n="landing.liveTransit">Promet · ZET</span><strong class="ld-v" data-live="transit" data-testid="live-transit" data-i18n="landing.live.idle">Podaci se učitavaju uz JavaScript.</strong><span class="ld-live-detail" data-live-detail="transit"></span><span class="ld-live-state" data-live-state="transit"></span></li>
+      <li><span class="ld-k" data-i18n="landing.liveSafety">Upozorenja · DHMZ</span><strong class="ld-v" data-live="safety" data-testid="live-safety" data-i18n="landing.live.idle">Podaci se učitavaju uz JavaScript.</strong><span class="ld-live-detail" data-live-detail="safety"></span><span class="ld-live-state" data-live-state="safety"></span></li>
     </ul>
-    <p class="meta source-line" data-i18n="landing.liveSources">Otvoreni podaci DHMZ-a, ZET-a, Grada Zagreba i EMSC-a; isti podaci u sesiji, s navodom izvora uz svaki prikaz.</p>
+    <div class="ld-live-foot">
+      <p class="ld-caption" data-i18n="landing.liveSources">Ovdje su podaci iz izvora, ne snimke. Vrijeme uz podatak pripada izvoru; provjera dostupnosti prikazana je zasebno.</p>
+      <p class="ld-health" role="status" id="health"></p>
+      <a class="ld-text-link" href="/izvori/" data-i18n="landing.pages.izvori">Izvori podataka i licence</a>
+    </div>
   </section>
-  <section class="ld-how" aria-labelledby="ld-how-title">
-    <h2 id="ld-how-title" data-i18n="landing.howTitle">Kako radi</h2>
-    <ol class="ld-steps">
-      <li><span data-i18n="landing.steps.find">Zaslon pokazuje kod koji se mijenja svakih trideset sekundi: priđi mu, skeniraj kod kamerom ili upiši osam slova.</span></li>
-      <li><span data-i18n="landing.steps.unlock">Deset minuta grada otvara se na tvom uređaju; osoba pokraj tebe može jednom dobiti svojih pet minuta. Nitko ništa ne plaća, ni novcem ni pažnjom: ograničenje trajanja je svrha, ne cijena.</span></li>
-      <li><span><span data-i18n="landing.steps.end">Sesija sama završi, a prikaz ostaje na posljednjim podacima.</span> <a class="ld-step-link" href="/hitno" data-i18n="landing.steps.endLink">Sigurnost je otvorena svima, bez skeniranja i bez ograničenja trajanja.</a></span></li>
-    </ol>
+
+  <section id="isprobaj" class="ld-trial" aria-labelledby="ld-trial-title" tabindex="-1">
+    <div class="ld-bound ld-trial-inner">
+      <header class="ld-section-head">
+        <p class="ld-eyebrow" data-i18n="landing.trial.label">Isprobaj stvarni prototip</p>
+        <h2 id="ld-trial-title" data-i18n="landing.trial.title">Sad je red na tebe.</h2>
+        <p data-i18n="landing.trial.intro">Ne treba ti javni zaslon u blizini. Za probu ga postavi u pregledniku.</p>
+        <p class="ld-trial-existing"><span data-i18n="landing.trial.haveCode">Već imaš kod?</span> <a class="ld-text-link" href="/s/" data-testid="cta-scan" data-i18n="landing.actions.scan">Skeniraj ili upiši kod</a></p>
+      </header>
+      <div class="ld-trial-instructions">
+        <ol class="ld-trial-steps">
+          <li>
+            <h3 data-i18n="landing.trial.screenTitle">Prvo otvori zaslon.</h3>
+            <p data-i18n="landing.trial.screenBody">Odaberi gradsku četvrt i stajalište. Ako si zaslon već postavio, otvorit će se tvoja postojeća postava.</p>
+            <a class="ld-button" href="/kiosk/" target="_blank" rel="noopener" data-testid="cta-kiosk" aria-describedby="ld-new-tab"><span data-i18n="landing.actions.kiosk">Otvori gradski zaslon</span><span aria-hidden="true">↗</span></a>
+            <span id="ld-new-tab" class="ld-caption" data-i18n="landing.actions.newTab">Otvara se u novoj kartici</span>
+          </li>
+          <li>
+            <h3 data-i18n="landing.trial.phoneTitle">Zatim uzmi grad sa sobom.</h3>
+            <p data-i18n="landing.trial.phoneBody">Ostavi zaslon otvoren i skeniraj njegov kod telefonom. Na istom uređaju otvori upis koda u drugoj kartici.</p>
+            <a class="ld-text-link" href="/s/" target="_blank" rel="noopener" aria-describedby="ld-new-tab" data-testid="cta-same-device"><span data-i18n="landing.trial.sameDevice">Upiši kod u drugoj kartici</span><span aria-hidden="true">↗</span></a>
+          </li>
+        </ol>
+        <p class="ld-caption" data-i18n="landing.trial.validity">Privremeni zaslon vrijedi 24 sata. Skeniranje otvara redovnu desetominutnu sesiju.</p>
+      </div>
+      <div class="ld-trial-safety">
+        <p data-i18n="landing.trial.noPhone">Bez telefona? Zaslon i dalje prikazuje grad, a Sigurnost je dostupna svima.</p>
+        <a class="ld-text-link" href="/hitno" data-testid="cta-safety"><span data-i18n="landing.actions.safety">Sigurnost, bez skeniranja</span><span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
   </section>
-  <nav class="ld-pages" aria-label="Stranice" data-i18n-aria-label="landing.pagesNav">
-    <a href="/hitno" data-i18n="landing.pages.hitno">Sigurnost, otvoreno svima</a>
-    <a href="/s/" data-i18n="landing.pages.scan">Upiši kod sa zaslona</a>
-    <a href="/izvori/" data-i18n="landing.pages.izvori">Izvori podataka i licence</a>
-    <a href="/open/" data-i18n="landing.pages.open">Otvoreni podaci za preuzimanje</a>
-    <a href="/privatnost/" data-i18n="common.links.privatnost">Privatnost</a>
-    <a href="/pristupacnost/" data-i18n="common.links.pristupacnost">Pristupačnost</a>
-  </nav>
-  <footer class="ld-foot">
-    <p><a class="ld-foot-link" href="https://github.com/matijarma/vidikovac" rel="noopener noreferrer" target="_blank" data-i18n="landing.footerCode">Izvorni kod na GitHubu</a></p>
-    <p data-i18n="landing.footerLicence">Izvorni kod pod licencom AGPL-3.0-or-later. Prijava na Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026.</p>
-    <p class="ld-health" role="status" id="health" lang="hr">…</p>
-  </footer>
+
+  <section class="ld-purpose ld-bound" aria-labelledby="ld-purpose-title">
+    <header class="ld-section-head">
+      <p class="ld-eyebrow" data-i18n="landing.purpose.label">Javna usluga, ljudska mjera</p>
+      <h2 id="ld-purpose-title" data-i18n="landing.purpose.title">Za ljude koji žive grad.</h2>
+    </header>
+    <div class="ld-purpose-body">
+      <dl class="ld-principles">
+        <div><dt data-i18n="landing.purpose.presenceTitle">Prisutnost, ne pažnja.</dt><dd data-i18n="landing.purpose.presenceBody">Nitko ništa ne plaća, ni novcem ni pažnjom. Nema oglasa, računa ni osobnog praćenja unutar proizvoda.</dd></div>
+        <div><dt data-i18n="landing.purpose.screensTitle">Mjesta koja već postoje.</dt><dd data-i18n="landing.purpose.screensBody">Kafić. Knjižnica. Ured četvrti. Vizija je mreža korisnih zaslona na uređajima koje prostori već imaju.</dd></div>
+        <div><dt data-i18n="landing.purpose.openTitle">Izvori na vidjelu.</dt><dd data-i18n="landing.purpose.openBody">Svaki prikaz nosi izvor. Kod je otvoren, a izvedeni skupovi dostupni za preuzimanje uz svoje uvjete uporabe.</dd></div>
+      </dl>
+      <div class="ld-proposal">
+        <p data-i18n="landing.purpose.proposal">Radni prototip za prijavu Gradu Zagrebu. Pilot u gradskim prostorima predlaže se kroz financiranje i partnerstvo s Gradom.</p>
+        <a class="ld-text-link" href="/prijava/"><span data-i18n="landing.actions.proposal">Pročitaj prijedlog projekta</span><span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
 </main>
+<footer class="ld-foot">
+  <div class="ld-bound">
+    <p class="ld-closing" data-i18n="landing.footerClosing">Vidimo se u gradu.</p>
+    <div class="ld-foot-bottom">
+      <div><a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica" data-i18n-aria-label="shell.wordmarkLabel">Kaj ima<span class="ki-wordmark-mark">?</span></a><p class="ld-caption" data-i18n="landing.footerLicence">AGPL-3.0-or-later · Aning Film · Zagreb, 2026.</p></div>
+      <nav class="ld-pages" aria-label="Stranice" data-i18n-aria-label="landing.pagesNav">
+        <a href="/hitno" data-i18n="landing.pages.hitno">Sigurnost, otvoreno svima</a>
+        <a href="/izvori/" data-i18n="landing.pages.izvori">Izvori podataka i licence</a>
+        <a href="/open/" data-i18n="landing.pages.open">Otvoreni podaci za preuzimanje</a>
+        <a href="/privatnost/" data-i18n="common.links.privatnost">Privatnost</a>
+        <a href="/pristupacnost/" data-i18n="common.links.pristupacnost">Pristupačnost</a>
+        <a href="https://github.com/matijarma/vidikovac" rel="noopener noreferrer" data-i18n="landing.footerCode">Izvorni kod na GitHubu</a>
+      </nav>
+    </div>
+  </div>
+</footer>
 <script type="module" src="/src/entries/landing.ts"></script>
 </body>
 </html>

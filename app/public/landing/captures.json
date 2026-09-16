@@ -1,0 +1,427 @@
+{
+  "provenance": "Actual application with live source data and real local code redemption. No fixtures or session bypass.",
+  "masking": "QR, pairing code, and read-aloud code regions are explicitly masked as example captures. No active credentials are published.",
+  "frozen": "Captured after the real ten-minute session expired. No clock or source data is simulated.",
+  "captures": [
+    {
+      "name": "kiosk",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "route": "/kiosk/",
+      "capturedAt": "2026-09-16T20:13:25.402Z"
+    },
+    {
+      "name": "kiosk",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "route": "/kiosk/",
+      "capturedAt": "2026-09-16T20:13:33.226Z"
+    },
+    {
+      "name": "kiosk",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "route": "/kiosk/",
+      "capturedAt": "2026-09-16T20:13:40.774Z"
+    },
+    {
+      "name": "kiosk",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "route": "/kiosk/",
+      "capturedAt": "2026-09-16T20:13:48.127Z"
+    },
+    {
+      "name": "phone",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:14:03.732Z"
+    },
+    {
+      "name": "events",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Događanja",
+      "capturedAt": "2026-09-16T20:14:06.902Z"
+    },
+    {
+      "name": "desktop",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:14:12.303Z"
+    },
+    {
+      "name": "transport",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Promet",
+      "capturedAt": "2026-09-16T20:14:26.139Z"
+    },
+    {
+      "name": "peer",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ actual five-minute peer session",
+      "capturedAt": "2026-09-16T20:14:32.909Z"
+    },
+    {
+      "name": "phone",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:14:38.573Z"
+    },
+    {
+      "name": "events",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Događanja",
+      "capturedAt": "2026-09-16T20:14:41.483Z"
+    },
+    {
+      "name": "desktop",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:14:47.374Z"
+    },
+    {
+      "name": "transport",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Promet",
+      "capturedAt": "2026-09-16T20:14:59.860Z"
+    },
+    {
+      "name": "peer",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ actual five-minute peer session",
+      "capturedAt": "2026-09-16T20:15:05.813Z"
+    },
+    {
+      "name": "phone",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:15:11.994Z"
+    },
+    {
+      "name": "events",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Događanja",
+      "capturedAt": "2026-09-16T20:15:14.846Z"
+    },
+    {
+      "name": "desktop",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:15:19.716Z"
+    },
+    {
+      "name": "transport",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Promet",
+      "capturedAt": "2026-09-16T20:15:33.288Z"
+    },
+    {
+      "name": "peer",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ actual five-minute peer session",
+      "capturedAt": "2026-09-16T20:15:38.929Z"
+    },
+    {
+      "name": "phone",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:15:44.003Z"
+    },
+    {
+      "name": "events",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Događanja",
+      "capturedAt": "2026-09-16T20:15:45.996Z"
+    },
+    {
+      "name": "desktop",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-16T20:15:48.388Z"
+    },
+    {
+      "name": "transport",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Promet",
+      "capturedAt": "2026-09-16T20:15:53.608Z"
+    },
+    {
+      "name": "peer",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ actual five-minute peer session",
+      "capturedAt": "2026-09-16T20:15:55.765Z"
+    },
+    {
+      "name": "frozen",
+      "locale": "hr",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ genuinely expired snapshot",
+      "capturedAt": "2026-09-16T20:23:58.723Z"
+    },
+    {
+      "name": "frozen",
+      "locale": "hr",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ genuinely expired snapshot",
+      "capturedAt": "2026-09-16T20:24:03.576Z"
+    },
+    {
+      "name": "frozen",
+      "locale": "en",
+      "theme": "light",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ genuinely expired snapshot",
+      "capturedAt": "2026-09-16T20:24:09.830Z"
+    },
+    {
+      "name": "frozen",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ genuinely expired snapshot",
+      "capturedAt": "2026-09-16T20:24:19.455Z"
+    }
+  ]
+}

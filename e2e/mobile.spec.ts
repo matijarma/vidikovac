@@ -526,28 +526,28 @@ test('at 200% text the document keeps its width, the header and the tab bar have
 });
 
 // --- 8. landing -----------------------------------------------------------------------------
-test('the landing at 390 px puts "Skeniraj ili upiši kod" before the kiosk link and the live strip above the fold', async ({ page }) => {
+test('the landing at 390 px leads with purpose, product imagery and a route to trial without a code', async ({ page }) => {
   await page.setViewportSize(PHONE);
   const response = await page.goto('/');
   expect(response?.status(), '/ must answer 200').toBe(200);
   const found = await page.evaluate(() => {
-    const scan = document.querySelector('[data-testid=cta-scan]') ?? document.querySelector('a.btn-primary[href^="/s/"]');
+    const story = document.querySelector('[data-testid=cta-story]');
     const kiosk = document.querySelector('[data-testid=cta-kiosk]');
-    const strip = document.querySelector('[data-testid=live-strip]');
+    const product = document.querySelector('.ld-hero-visual');
     return {
-      scan: scan ? `${scan.tagName.toLowerCase()}.${scan.className} "${scan.textContent?.trim()}"` : null,
-      kiosk: kiosk ? `"${kiosk.textContent?.trim()}"` : null,
-      scanBeforeKiosk: scan && kiosk ? Boolean(scan.compareDocumentPosition(kiosk) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
-      scanPrimary: scan ? scan.classList.contains('btn-primary') : null,
-      stripTop: strip ? strip.getBoundingClientRect().top : null,
+      story: story?.getAttribute('href'),
+      kiosk: kiosk?.getAttribute('href'),
+      productTop: product?.getBoundingClientRect().top,
+      overflow: document.documentElement.scrollWidth - innerWidth,
     };
   });
-  expect(found.scan, 'the landing must render [data-testid=cta-scan] (or a primary action linking /s/)').not.toBeNull();
-  expect(found.kiosk, 'the landing must keep the kiosk link [data-testid=cta-kiosk]').not.toBeNull();
-  expect(found.scanBeforeKiosk, `"Skeniraj ili upiši kod" must come before the kiosk link ${found.kiosk} in DOM order (R-K6: scanning is the primary action on every width); the scan action is ${found.scan}`).toBe(true);
-  expect(found.scanPrimary, `the scan action must be the primary button; it is ${found.scan}`).toBe(true);
-  expect(found.stripTop, 'the live strip [data-testid=live-strip] must be rendered').not.toBeNull();
-  expect(found.stripTop!, `the live strip must start above the fold at 390×844; it starts at ${fmt(found.stripTop!)}`).toBeLessThan(PHONE.height);
+  expect(found.story).toBe('#kako-radi');
+  expect(found.kiosk).toBe('/kiosk/');
+  expect(found.productTop).toBeLessThan(PHONE.height - 100);
+  expect(found.overflow).toBeLessThanOrEqual(1);
+  await page.getByTestId('cta-try').click();
+  await expect(page.getByTestId('cta-kiosk')).toBeVisible();
+  await expect(page.locator('.ld-nav a[href="/s/"]')).toHaveCount(1);
 });
 
 // --- 9. notice row ------------------------------------------------------------------------------
