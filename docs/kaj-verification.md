@@ -393,26 +393,31 @@ Provjere na grani (obje kapije prošle u cijelosti; ništa nije preskočeno ni s
 |---|---|---|---|---|---|---|---|---|---|
 | A (faza A: blizanac, indeks vožnji, klijent s poviješću) | `bb8539c` → `0edb503` | čisto | 153 datoteke / 2502 | 20 / 149 | čisto | 69/70, jedini crveni (`motion.spec` klizanje u slobodnoj ravnini) popravljen u `0edb503` i četiri motion specifikacije ponovno zelene | 18/18 | 89 površina / 0 nalaza | 100 × 6 stranica |
 | B (faza B: graf pruge, motor, planovi na žici, integrator) | `8e19313` | čisto | 157 / 2430 | 20 / 148 | čisto | 70/70 (motion.spec prepisan za planove, prvi prolaz) | 18/18 | 89 / 0 | 100 × 6 |
+| Spojeno stablo (`twin-engine` u `main`, prije objave) | `6f73559` | čisto | 158 / 2412 | 21 / 149 | čisto | 70/70 | 18/18 | 77 / 0 | 100 × 6 |
 
 Motorova vlastita kapija (R-TE30, `test/motion/engine-envelope.test.ts`): šest tramvaja na dijeljenom koridoru kroz 20 simuliranih minuta, šum GPS-a 8 m, 2 od 3 osvježenja po otkucaju, kašnjenje 2 do 25 s: 0 pretjecanja, 0 vožnji unatrag, smjer poznat nakon prvog očitanja, svaki prvi plan u pokretu, ocjena unatrag na 30 s p95 32,2 m. Na živom feedu (probom kroz `wrangler dev` 16. rujna oko 05:10): 38 vozila u kvadratu zaslona, sva s planom na stvarnoj stazi grafa, hladno dekodiranje artefakata 46 ms (mreža) + 195 ms (indeks).
 
 Kako se kapija vozi u radnom stablu: vlastita dva `wrangler dev` poslužitelja na 8797 i 8798 (8787 i 8788 pripadaju drugim sesijama), pokrenuta jedan za drugim (oba pri startu vrte `npm run build` i sudaraju se ako krenu istodobno), nikad `npm run build` dok rade (poslužitelj čuva staru kartu imovine i sve pada); zatim `E2E_NO_WEBSERVER=1 E2E_APP_URL=http://localhost:8797 E2E_SHORT_URL=http://localhost:8798 npx playwright test --project=chromium` pa `--project=mobile`, `REVIEW_APP_URL=http://127.0.0.1:8797 npm run review:visual`, `E2E_APP_URL=http://127.0.0.1:8797 node scripts/lighthouse-a11y.mjs`. Radno stablo treba kopiju `.wrangler/state` glavnog stabla (arhiva pločica) i `.dev.vars`.
 
-Prije spajanja u `main`: R2 spremnik `vidikovac-feed` s pravilom isteka od sedam dana mora postojati (objava pada na nepoznatom spremniku). Spajanje rješava poznato preklapanje s uklanjanjem HRT-a, Sljemena i vijesti na `main` (`worker/feed/schema.ts`, `registry.ts`, `test/docs/docs.test.ts`, `docs/izvori.md`, `test/feed/cache.workers.test.ts`; popis u `progress.md` radnog prostora).
+Spojeno u `main` 16. rujna 2026. u 04:27 UTC (`6f73559`, spojno stablo `merge-twin` iz `origin/main`, glava grane `a19b49c`); Workers Builds je objavio inačicu `225e2715` u 04:28 UTC. Prije spajanja je na spremnik `vidikovac-feed` postavljeno pravilo isteka `expire-zet-rt-7d` (prefiks `zet-rt/`, sedam dana), jer objava pada na nepoznatom spremniku. Od poznatog preklapanja s uklanjanjem HRT-a, Sljemena i vijesti na `main` u sukob su doista otišla samo dva mjesta: `app/src/map/city-map.ts` (`MapPoint` zadržava `place`/`props` s `main` povrh grananog `extends Omit<Fix, 'at'>`) i `docs/izvori.md` (tekst s `main`, predmemorija teasera 5 s s grane); `worker/feed/schema.ts`, `registry.ts`, `test/docs/docs.test.ts` i `test/feed/cache.workers.test.ts` spojili su se sami i pročitani su redom da to potvrde.
 
-Nakon objave, provjera u proizvodnji (upisati ovdje):
+Nakon objave, provjera u proizvodnji. Prvi stupac rezultata upisan je 16. rujna oko 04:40 UTC,
+dvanaest minuta nakon objave; to je prvi pogled, a ne mjerenje od 24 h koje redci traže.
 
 | Provjera | Kako | Rezultat |
 |---|---|---|
-| Blizanac otkucava | `/stats`: `twin_tick` po ishodu (`ok`, `unchanged`, `error`, `stale_index`) i startu (`cold`/`warm`) nakon 24 h; udio hladnih startova govori koliko se objekt izbacuje između alarma | |
-| Ocjena unatrag | `/stats`: `twin_hindsight` p50/p95 po horizontu 10/30/60 s nakon 24 h; prag iz koridora je p95 < 60 m na 30 s | |
-| Statični GTFS | `/stats`: `static_watch` `newer` = 0, inače `npm run build:network && npm run build:trips`, commit, push | |
-| Ilica, Črnomerec do Trga, 10 min u vršnom satu | pogledom: nema pretjecanja na istom kolosijeku, nema vožnje unatrag, tramvaji staju na stajalištima, kartice pišu odredište i sljedeće stajalište | |
-| Hladno učitavanje kioska | vozila se gibaju u prvoj sekundi, smjer poznat | |
-| Hladno učitavanje telefona (sesija) | isto, puna karta | |
-| Linija 1 | tramvaj na pruzi (sintetička staza), ne u slobodnoj ravnini | |
-| Autobus na obilasku | glatko u slobodnoj ravnini, bez skoka | |
-| Ponavljanje snimljenog dana | `scripts/replay-twin.mjs` nad okvirima iz R2, pragovi upisani ispod | |
+| Objava | Workers Builds na `git push` u `main` | uspješno: gradnja `9b37f978`, inačica `225e2715`, objavljena 04:28 UTC; `/api/health` odgovara `{"ok":true}` |
+| Blizanac otkucava | `/stats`: `twin_tick` po ishodu (`ok`, `unchanged`, `error`, `stale_index`) i startu (`cold`/`warm`) nakon 24 h; udio hladnih startova govori koliko se objekt izbacuje između alarma | prvih 12 min: 117 otkucaja, 65 `ok` i 52 `unchanged`, 0 `error`, 0 `stale_index`; 1 hladan i 116 toplih, dakle objekt ostaje u memoriji i lanac alarma ne prekida se. **Mjerenje od 24 h još predstoji.** |
+| Ocjena unatrag | `/stats`: `twin_hindsight` p50/p95 po horizontu 10/30/60 s nakon 24 h; prag iz koridora je p95 < 60 m na 30 s | prvih 12 min, 52.708 ocjena: na 10 s 45,6 % ispod 50 m i 10,2 % na 200 m ili više; na 30 s 34,3 % ispod 50 m i 20,0 % na 200 m ili više; na 60 s 25,2 % ispod 50 m i 34,6 % na 200 m ili više. **Znatno lošije od koridora (p95 32 m na 30 s) i prag p95 < 60 m nije postignut.** Prvih dvanaest minuta blizanac nema ni jednu naučenu vrijednost ni povijest ijednog vozila, a koridor mjeri samo tramvaje u pokretu; sud se donosi tek na mjerenju od 24 h. |
+| Snimanje u R2 | okviri pod `zet-rt/GGGG/MM/DD/` u spremniku `vidikovac-feed`, pravilo isteka od 7 dana | tri okvira dohvaćena po točnom ključu kroz cijeli prozor: `042840-1789532920.pb` (101.664 B), `042913-1789532953.pb` (101.827 B), `044014-1789533614.pb` (104.206 B). `wrangler r2 bucket info` u istom trenutku još pokazuje `object_count: 0`: ta brojka kasni, objekti postoje. |
+| Planovi na žici | `/api/teaser`: stavke `zet-rt` nose `motion.plan`, `motion.path` i `data.headsign` | 66 vozila u kvadratu, svih 66 s planom, stazom i odredištem; 54 tramvaja i 12 autobusa; `status` modula `live`, `sources.zet` `live` |
+| Statični GTFS | `/stats`: `static_watch` `newer` = 0, inače `npm run build:network && npm run build:trips`, commit, push | 0 od 1 provjere zatekle noviji statični GTFS |
+| Ilica, Črnomerec do Trga, 10 min u vršnom satu | pogledom: nema pretjecanja na istom kolosijeku, nema vožnje unatrag, tramvaji staju na stajalištima, kartice pišu odredište i sljedeće stajalište | nije provedeno: pogledom, vlasnik |
+| Hladno učitavanje kioska | vozila se gibaju u prvoj sekundi, smjer poznat | nije provedeno: pogledom, vlasnik |
+| Hladno učitavanje telefona (sesija) | isto, puna karta | nije provedeno: pogledom, vlasnik |
+| Linija 1 | tramvaj na pruzi (sintetička staza), ne u slobodnoj ravnini | oba tramvaja linije 1 u kvadratu voze po sintetičkim stazama grafa (`path:1:0:...`, `path:1:1:...`), ne u slobodnoj ravnini |
+| Autobus na obilasku | glatko u slobodnoj ravnini, bez skoka | nije provedeno: pogledom, vlasnik |
+| Ponavljanje snimljenog dana | `scripts/replay-twin.mjs` nad okvirima iz R2, pragovi upisani ispod | još nema cijelog snimljenog dana; snimanje radi (redak gore) |
 
 ## Ponavljanje snimljenih okvira (B8)
 
