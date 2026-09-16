@@ -1,25 +1,34 @@
 // The kiosk's one map. Every composition that shows a map asks map-slots for
-// the same slot id, so the invitation, the paired overview and the paired
-// transit view share one live MapLibre context and one motion-model history
-// for the screen's whole life (R-54: no poll and no phase change re-creates
-// a map). Vehicle reports go in as dated points -- evidence for the model,
-// never a drawn position (R-P2); closures as lines; the screen's own stop as
-// an undated place, which the map draws where given.
+// the same slot id, so the invitation and the paired compositions share one
+// live MapLibre context and one motion-model history for the screen's whole
+// life (R-54: no poll and no phase change re-creates a map). Vehicle reports
+// go in as dated points -- evidence for the model, never a drawn position
+// (R-P2); closures as lines; the screen's own stop as an undated place, which
+// the map draws where given.
 //
-// The request carries the map workstream's additive options: the camera the
-// showing chapter asks for (chapterView), the sides of the box the
-// composition covers, the screen's stop to mark, the phone's selected route
-// or stop, route follow, no pointer handling, the sign basemap profile and
-// symbols at twice size for a screen read from three metres. The handle's
-// additive methods are driven from here too: `setView` when the view changes,
-// `resize` after the container is re-parented, `setOutline` when the chapter
-// wants the quarter drawn, and `setFeedState` from the ZET snapshot's own
-// status on every paint, so a stale or down feed holds every vehicle where it
-// is and neither a reparent nor `resume()` can animate through an outage.
+// Two cameras, one map (plan "Camera and data plumbing"). The invitation is a
+// window onto the kvart (R-KP1): the stop at the centre, north-up, the zoom
+// DERIVED from the field's measured width so that FIELD_SPAN_M of ground
+// spans it (R-KP2), no padding and no selection (R-KP11: the enlarged
+// screen-stop ring is the anchor, a `selectedStop` would draw a second ring
+// over it). A paired screen keeps today's Promet contract (R-KP8): street
+// zoom, the stop selected, the phone's route followed or its stop selected.
+// Both phases ride the `prozor` profile and the `prozor` overlay set
+// (contract 2), because one map lives for the screen's life.
 //
-// The map is not only the network any more. cityPoints() puts what the city
-// itself publishes on it -- placed happenings, the communal works under way,
-// the recent quake, the on-duty pharmacy, the seat of the quarter, and the
+// The request carries the map workstream's additive options: the camera, the
+// screen's stop to mark, the phone's selection, route follow, no pointer
+// handling, the basemap profile, the prozor overlay options and symbols at
+// twice size for a screen read from three metres. The handle's additive
+// methods are driven from here too: `setView` when the view changes,
+// `resize` after the container is re-parented, `setOutline` with the
+// quarter's boundary, and `setFeedState` from the ZET snapshot's own status
+// on every paint, so a stale or down feed holds every vehicle where it is and
+// neither a reparent nor `resume()` can animate through an outage.
+//
+// The map is not only the network. cityPoints() puts what the city itself
+// publishes on it -- placed happenings, the communal works under way, the
+// recent quake (by the kiosk's own rule, R-KP9), the on-duty pharmacy and the
 // assembly points while the state is urgent -- each with the rule that keeps
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
@@ -29,63 +38,89 @@ import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contrac
 import { routeName } from '../data/routes';
 import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
-import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
+import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
+import type { ProzorOptions } from '../map/overlays';
 import { vehicleFixes } from '../motion/fixes';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
 import { isLive, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
-import type { SceneId } from './scenes';
 import { stopDistanceM } from './stops';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
-/** Street level around one stop: named streets, the stop, the vehicles near it. */
-export const KIOSK_MAP_ZOOM = 15;
+/** The paired compositions' street level around one stop: named streets, the stop, the vehicles near it (R-KP8). */
+export const PAIRED_ZOOM = 15;
+/** @deprecated wave B (contract 7): test/app/basemap.test.ts still samples this name; the paired camera is PAIRED_ZOOM. */
+export const KIOSK_MAP_ZOOM = PAIRED_ZOOM;
 /** The archive stops at z14 and the worker refuses z>14, so every zoom from
- *  there up is overzoomed; no chapter camera goes past here. */
+ *  there up is overzoomed; no kiosk camera goes past here. */
 export const KIOSK_MAX_ZOOM = 15.5;
-/** The bounded archive's own floor. Repeated from map/basemap.ts's
- *  MAP_MIN_ZOOM rather than imported: this module is on the lightweight graph,
- *  and a value import from basemap.ts would pull the 38 kB style builder onto
- *  it (test/app/budget.test.ts would catch it, which is the point). */
-export const KIOSK_MIN_ZOOM = 10;
-/** The permanent map box on a 1920 x 1080 screen, CSS px. The box is elastic;
- *  this is the width the kvart framing is derived from, and being out by a
- *  hundred pixels moves the derived zoom by a tenth. */
-export const KIOSK_MAP_WIDTH_PX = 1250;
-/** About this much of Zagreb across that box in the kvart chapters. Fitting a
- *  raw district bounding box instead would put Sesvete and Brezovica below the
- *  archive's own minimum zoom and show a regional blob with no names on it. */
-export const KVART_SPAN_M = 6000;
+/** The ground the invitation's field spans across its width (R-KP2): about
+ *  the kvart around the stop, one stop spacing beyond the worker's teaser
+ *  box either side once wave B grows it (TEASER_BOX_HALF_M 1900). */
+export const FIELD_SPAN_M = 2800;
+/** A phone's 280 px map band spans half the field's ground: at the full span
+ *  the band would sit under the archive's readable floor and show a blob. */
+export const HANDHELD_SPAN_M = 1400;
+/** The derived zoom never goes below the basemap's readable floor for a
+ *  screen read from three metres (the prozor profile's names and the tram
+ *  figure are sized from here up)... */
+export const FIELD_MIN_ZOOM = 13.5;
+/** ...nor past the overzoom ceiling KIOSK_MAX_ZOOM explains. */
+export const FIELD_MAX_ZOOM = KIOSK_MAX_ZOOM;
+/** @deprecated wave B (contract 7): test/app/basemap.test.ts still samples this name as the kiosk's far camera; the field's floor stands in for the kvart framing it meant. */
+export const KIOSK_KVART_ZOOM = FIELD_MIN_ZOOM;
 /** Metres of equator per tile row, as MapLibre counts (512 px tiles). */
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
 
-/** The zoom at which KVART_SPAN_M of ground fills KIOSK_MAP_WIDTH_PX of box,
- *  clamped to what the archive actually carries. */
-export function kvartZoom(lat: number): number {
-  const across = EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180) * KIOSK_MAP_WIDTH_PX;
-  return Math.min(KIOSK_MAX_ZOOM, Math.max(KIOSK_MIN_ZOOM, Math.log2(across / (512 * KVART_SPAN_M))));
+/** Metres per CSS pixel at a zoom and latitude (512 px tiles, as MapLibre counts). */
+export function metresPerPixel(zoom: number, lat: number): number {
+  return (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 }
 
-/** The kvart framing at Zagreb's own latitude: about 13.5, which is still
- *  inside the archive's native zooms, so the tiles are not overzoomed. */
-export const KIOSK_KVART_ZOOM = Math.round(kvartZoom(45.815) * 100) / 100;
+/** The zoom at which `spanM` of ground fills `widthPx` of box at `lat`, the
+ *  inverse of metresPerPixel, clamped to the archive's readable range (R-KP2).
+ *  At Zagreb's latitude the four design widths give about 14.74 (1400 px),
+ *  14.14 (926), 14.36 (1080) and 13.77 (358 px at the handheld span); a box
+ *  not yet laid out (0 px) is the floor, never NaN. */
+export function fieldZoom(widthPx: number, lat: number, spanM: number): number {
+  const across = EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180) * widthPx;
+  const zoom = Math.log2(across / (512 * spanM));
+  return Math.min(FIELD_MAX_ZOOM, Math.max(FIELD_MIN_ZOOM, Number.isFinite(zoom) ? zoom : FIELD_MIN_ZOOM));
+}
+
 /** Symbols on a screen read from three metres, not from steps away. At 1.5
  *  the number on a vehicle pill was 18 CSS px, which on a 55-inch 1080p panel
- *  subtends 9.2 arcminutes -- under the ten-arcminute floor the basemap's sign
- *  profile derives (map/basemap.ts), so the one mark the whole transport
- *  chapter is about was the one mark that could not be read. At 2 it is 24 px
- *  (12.2'), and 2 is also exactly the SDF images' own pixel ratio, so the
- *  overlay rasters draw pixel for pixel on a 1x television instead of being
+ *  subtends 9.2 arcminutes -- under the ten-arcminute floor the basemap's
+ *  profile derives (map/basemap.ts), so the one mark the whole picture is
+ *  about was the one mark that could not be read. At 2 it is 24 px (12.2'),
+ *  and 2 is also exactly the SDF images' own pixel ratio, so the overlay
+ *  rasters draw pixel for pixel on a 1x television instead of being
  *  resampled. */
 export const KIOSK_SYMBOL_SCALE = 2;
 
 /** The screen is the one surface read from three metres, so it is the one
- *  surface on the sign basemap: promoted neighbourhood, street and water
- *  names, a ranked civic POI list, and nothing that cannot reach the
- *  readability floor (map/basemap.ts). */
+ *  surface on the prozor basemap: two landuse tones, hairline streets, the
+ *  neighbourhood names kept, no POIs and no minor labels (map/basemap.ts).
+ *  'sign' until area P1 lands the profile (R-KP15). */
 export const KIOSK_BASEMAP_PROFILE: BasemapProfile = 'sign';
+
+/** Which kinds of city point the kiosk lights, both phases (R-KP9): placed
+ *  happenings and the works under way, the quake by the kiosk's own rule, the
+ *  assembly points (which draw only while the state is urgent) and the one
+ *  on-duty pharmacy. Never the seat of the quarter: a civic address is not a
+ *  fact a passer-by needs on the picture. */
+export const KIOSK_EMPHASIS: readonly PlaceKind[] = Object.freeze(['event', 'quake', 'assembly', 'pharmacy'] as PlaceKind[]);
+
+/** The prozor overlay set the kiosk asks for (contract 2, R-KP4): the tram
+ *  network as the figure and the bus network off, stops drawn only on the
+ *  screen's own routes (every stop without a stop), hubs labelled from this
+ *  rank, and the thresholds that used to sit at a fixed 14.5 (vehicle noses,
+ *  unconditional pill placement) a tenth under the field's derived zoom, so
+ *  the compact and the portrait drawings keep their noses too (R-KP2). */
+export const STOP_LABEL_MIN_RANK = 4;
+export const OVERLAP_ZOOM_MARGIN = 0.1;
 
 export type FeedState = 'live' | 'stale' | 'down';
 
@@ -103,9 +138,7 @@ export interface KioskMapRequest extends MapSlotOptions {
   selectedStop?: string;
   /** Keep the camera on the selected route's vehicles (map workstream option). */
   follow?: boolean;
-  /** Sides of the map something is drawn over; the camera centres in the rest. */
-  padding?: FitPadding;
-  /** Which kinds of city point this chapter lights. */
+  /** Which kinds of city point are lit. */
   emphasis?: readonly PlaceKind[];
   /** The screen's own stop, marked and named by the map. */
   stop?: ScreenStop | null;
@@ -115,14 +148,16 @@ export interface KioskMapRequest extends MapSlotOptions {
   outline?: MapOutline | null;
   symbolScale?: number;
   locale?: string;
-  /** The screen reads its basemap from three metres: the sign profile. */
+  /** The screen reads its basemap from three metres: the prozor profile. */
   basemapProfile?: BasemapProfile;
+  /** The public screen's overlay set (contract 2). */
+  prozor?: ProzorOptions;
 }
 
-export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'padding' | 'emphasis'>;
+export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -151,7 +186,7 @@ export interface KioskMapAdapter {
  *  the options (extra fields today's createCityMap ignores) and keeps the one
  *  handle map-slots otherwise hides. `undefined` in stays `undefined` out. */
 export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMapAdapter {
-  let view: KioskMapView = { zoom: KIOSK_MAP_ZOOM };
+  let view: KioskMapView = { zoom: PAIRED_ZOOM };
   let pushed = '';
   let feed: FeedState = 'down';
   let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE };
@@ -192,7 +227,6 @@ export function viewOf(request: KioskMapRequest): KioskMapView {
   if (request.selectedRoute) view.selectedRoute = request.selectedRoute;
   if (request.selectedStop) view.selectedStop = request.selectedStop;
   if (request.follow) view.follow = true;
-  if (request.padding) view.padding = request.padding;
   return view;
 }
 
@@ -220,7 +254,7 @@ export function stopPlace(stop: ScreenStop): MapPoint {
 //
 // Five kinds of point the city itself publishes, each with the rule that
 // keeps it honest stated beside it. Four of the five are already on every
-// 30-second teaser this screen fetches and nothing has ever read them.
+// teaser this screen fetches.
 //
 // What is NOT here, and why: of the six dogadanja sources, Kulturpunkt and
 // the Etnografski are barred from the open tier by licence, and of the five
@@ -269,10 +303,18 @@ export function placedEvents(dogadanja: ModuleSnapshot | undefined, now: number)
   return out;
 }
 
-/** The quakes recentQuakes() already selects: 72 hours, 150 km of Zagreb. The
- *  circle carries the magnitude and nothing else; a quake the source gave no
- *  magnitude carries its region as its name and draws no circle, because a
- *  circle with no magnitude would be the claim "M 0". */
+/** The kiosk's own quake rule (R-KP9, one rule for the map and the statement):
+ *  magnitude 3.0 or more within the last 24 hours, on top of recentQuakes()'s
+ *  150 km -- a magnitude-1.4 tremor in Slovenia two days ago is not a fact a
+ *  café reads from three metres, while the paired stories and the teaser keep
+ *  recentQuakes()'s own 72 hours. A quake the source gave no magnitude cannot
+ *  meet the rule and draws nothing: a circle without a magnitude would be the
+ *  claim "M 0". Wave B moves the rule into kiosk/local.ts's kioskQuakes (P2)
+ *  and this becomes a call. */
+export const KIOSK_QUAKE_MIN_MAG = 3;
+export const KIOSK_QUAKE_WINDOW_MS = 24 * 3_600_000;
+
+/** The quakes the kiosk rule selects, as places. The circle carries the magnitude and nothing else. */
 export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
   const out: MapPoint[] = [];
   for (const quake of recentQuakes(emsc, now)) {
@@ -280,15 +322,10 @@ export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, local
     const [lon, lat] = quake.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     const mag = dataNumber(quake, 'mag');
-    const region = dataText(quake, 'region') || quake.title;
-    out.push({
-      id: `quake:${quake.id}`,
-      lon: lon!,
-      lat: lat!,
-      title: mag === null ? region : `M ${fmtNumber(locale, mag, 1)}`,
-      place: 'quake',
-      ...(mag === null ? {} : { props: { mag } }),
-    });
+    if (mag === null || mag < KIOSK_QUAKE_MIN_MAG) continue;
+    const at = quake.at ? Date.parse(quake.at) : NaN;
+    if (!Number.isFinite(at) || now - at > KIOSK_QUAKE_WINDOW_MS) continue;
+    out.push({ id: `quake:${quake.id}`, lon: lon!, lat: lat!, title: `M ${fmtNumber(locale, mag, 1)}`, place: 'quake', props: { mag } });
   }
   return out;
 }
@@ -333,7 +370,9 @@ export function pharmacyPoint(stop: ScreenStop | null): MapPoint[] {
 /** The seat of the stop's own gradska cetvrt, from the real seat coordinates
  *  the district table carries (kiosk/districts.ts) -- never from the ckan-geo
  *  polygon centroid the open feed serves, which is a label anchor and not a
- *  venue, and which for a concave district need not even lie inside it. */
+ *  venue, and which for a concave district need not even lie inside it. The
+ *  kiosk never lights it (KIOSK_EMPHASIS, R-KP9); it exists for the layer
+ *  filter to keep hidden rather than for a comment to promise so. */
 export function seatPoint(stop: ScreenStop | null): MapPoint[] {
   const district = districtBySlug(stop?.district);
   if (!district) return [];
@@ -341,8 +380,8 @@ export function seatPoint(stop: ScreenStop | null): MapPoint[] {
 }
 
 /** Every city point, in one call: what the screen's own corner of Zagreb
- *  publishes about itself. The chapter decides which of them are lit
- *  (chapterView), never which of them exist. */
+ *  publishes about itself. The camera decides which of them are lit
+ *  (KIOSK_EMPHASIS), never which of them exist. */
 export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, now: number, locale: string): MapPoint[] {
   return [
     ...placedEvents(snapshots.dogadanja, now),
@@ -399,8 +438,8 @@ function parseOutline(slug: string, body: unknown): MapOutline | null {
 
 /** The district's outline, fetched once per screen life and remembered --
  *  including a failure, which is remembered as "no outline" rather than
- *  retried on every 30-second poll. A screen is a long-lived thing: a flood of
- *  retries for a decoration would cost more than the decoration is worth. */
+ *  retried on every poll. A screen is a long-lived thing: a flood of retries
+ *  for a decoration would cost more than the decoration is worth. */
 export function loadKvartOutline(slug: string, fetchImpl: typeof fetch = fetch): Promise<MapOutline | null> {
   const cached = outlinePending.get(slug);
   if (cached) return cached;
@@ -426,68 +465,54 @@ export function kvartOutline(slug: string | null | undefined): MapOutline | null
   return slug ? outlineReady.get(slug) ?? null : null;
 }
 
-// --- Chapters ---------------------------------------------------------------
+// --- The two cameras ----------------------------------------------------------
 //
-// Two framings, not three. Promet holds the stop at street zoom, because the
-// chapter is about the vehicles arriving at THIS stop. Vecerasa and Grad share
-// one kvart framing, because both are about the quarter the screen stands in,
-// and a quarter is the same quarter whichever of the two is showing.
-//
-// Chapters differ by which layers they light, not by what the screen is: the
-// same map, the same camera per framing, a different subset of the city's own
-// points. Nothing here decides which points EXIST -- cityPoints does that, and
-// its honesty rules do not bend for a chapter.
-//
-// The camera move is one ease of about 600 ms (map/city-map.ts's CAMERA_MS).
-// Under prefers-reduced-motion there is nothing to add: createCityMap already
-// passes duration 0 on every move, and kiosk.ts's rotationAllowed() is false,
-// so a reduced-motion screen never changes chapter and the camera never moves
-// at all.
+// The invitation's field and the paired compositions share one map and one
+// set of lit points; they differ in the camera and in what the phone may
+// steer. Pure: no map, no DOM, no clock. Under prefers-reduced-motion there
+// is nothing to add: createCityMap already passes duration 0 on every move.
 
-/** Which kinds of city point each chapter lights. Promet is the network, so
- *  it lights only what safety puts on any screen at any hour: the assembly
- *  points (which draw only while the state is urgent) and the one on-duty
- *  pharmacy. The two kvart chapters are the city: what is happening where a
- *  source published a coordinate, the recent quake, and -- in Grad, which is
- *  the chapter about the city as an institution -- the seat of the quarter. */
-export const CHAPTER_EMPHASIS: Readonly<Record<SceneId, readonly PlaceKind[]>> = Object.freeze({
-  promet: Object.freeze(['assembly', 'pharmacy'] as PlaceKind[]),
-  veceras: Object.freeze(['event', 'quake', 'assembly', 'pharmacy'] as PlaceKind[]),
-  grad: Object.freeze(['event', 'quake', 'seat', 'assembly'] as PlaceKind[]),
-});
-
-export interface ChapterInput {
-  stop: ScreenStop | null;
-  selection: PublicSelection | null;
-  padding?: FitPadding;
-}
-
-export interface ChapterView extends KioskMapView {
+export interface KioskView extends KioskMapView {
   zoom: number;
   emphasis: readonly PlaceKind[];
-  /** Whether this chapter draws the quarter's dashed outline. */
-  outline: boolean;
+  /** The quarter's dashed outline is always drawn on the kiosk (R-KP9). */
+  outline: true;
 }
 
-/** The whole chapter contract, pure: no map, no DOM, no clock.
- *
- *  `follow` is refused outside Promet on purpose. Following a route's vehicles
- *  while framing a quarter is incoherent -- the reader is being shown the
- *  quarter and the camera is chasing a tram out of it -- and the two eases
- *  would fight each other besides. */
-export function chapterView(chapter: SceneId, input: ChapterInput): ChapterView {
-  const kvart = chapter !== 'promet';
-  const view: ChapterView = {
-    zoom: Math.min(KIOSK_MAX_ZOOM, kvart ? KIOSK_KVART_ZOOM : KIOSK_MAP_ZOOM),
-    emphasis: CHAPTER_EMPHASIS[chapter],
-    outline: kvart,
-  };
-  if (input.padding) view.padding = input.padding;
+export interface FieldInput {
+  stop: ScreenStop | null;
+  /** The map host's laid-out width in CSS px (kiosk/field.ts measureWidth), or the composition's design width before layout (kiosk/layout.ts FIELD_DESIGN_WIDTH). */
+  widthPx: number;
+  /** FIELD_SPAN_M on a wall, HANDHELD_SPAN_M on a phone's band. */
+  spanM: number;
+}
+
+/** Zagreb's own latitude, for a screen that has no stop yet: the zoom is a function of latitude and a screen with none still frames the city. */
+const ZAGREB_LAT = 45.815;
+
+/** The invitation's fixed window (R-KP1, R-KP2, R-KP11): the stop at the
+ *  derived zoom, the kiosk's points lit, the quarter drawn; no selection, no
+ *  follow, no padding. */
+export function fieldView(input: FieldInput): KioskView {
+  const view: KioskView = { zoom: fieldZoom(input.widthPx, input.stop?.lat ?? ZAGREB_LAT, input.spanM), emphasis: KIOSK_EMPHASIS, outline: true };
+  if (input.stop) view.center = [input.stop.lon, input.stop.lat];
+  return view;
+}
+
+export interface PairedInput {
+  stop: ScreenStop | null;
+  selection: PublicSelection | null;
+}
+
+/** The paired compositions' camera, today's Promet contract (R-KP8): street
+ *  zoom on the stop, the stop selected, the phone's route selected and
+ *  followed, or the phone's stop selected instead of the screen's. */
+export function pairedView(input: PairedInput): KioskView {
+  const view: KioskView = { zoom: PAIRED_ZOOM, emphasis: KIOSK_EMPHASIS, outline: true };
   if (input.stop) {
     view.center = [input.stop.lon, input.stop.lat];
     view.selectedStop = input.stop.id;
   }
-  if (kvart) return view;
   if (input.selection?.kind === 'route') {
     view.selectedRoute = input.selection.id;
     view.follow = true;
@@ -497,9 +522,15 @@ export function chapterView(chapter: SceneId, input: ChapterInput): ChapterView 
   return view;
 }
 
-/** Metres per CSS pixel at a zoom and latitude (512 px tiles, as MapLibre counts). */
-export function metresPerPixel(zoom: number, lat: number): number {
-  return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+/** The prozor overlay set for this screen (contract 2). The overlap zoom is
+ *  the FIELD's derived zoom less a tenth in both phases: the paired camera
+ *  (z15) is always above it, so the noses and the unconditional pills the
+ *  invitation gets, the paired views keep. The map is created once, so the
+ *  set is read from the first request; the design width it is derived from
+ *  lies within a few hundredths of a zoom of the measured one at every
+ *  design size (test/app/map.test.ts). */
+export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number): ProzorOptions {
+  return { networkKinds: ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN };
 }
 
 export interface KioskMapInput {
@@ -508,17 +539,17 @@ export interface KioskMapInput {
    *  city's own points too (cityPoints). */
   snapshots: FeedSnapshots;
   now: number;
+  /** The phone's relayed selection; read in the paired phase only. */
   selection: PublicSelection | null;
-  /** Which chapter is showing; 'promet' (the stop at street zoom) by default. */
-  chapter?: SceneId;
+  /** Which composition shows the map: the invitation's fixed window or a paired composition (R-KP8). */
+  phase: 'invitation' | 'paired';
+  /** The field's width and ground span for the derived zoom (fieldView) and the overlap threshold (prozorOptions). */
+  widthPx: number;
+  spanM: number;
   ariaLabel: string;
   reducedMotion?: boolean;
   /** Injected in tests; the page's own fetch otherwise. */
   fetchImpl?: typeof fetch;
-  /** Sides of the map the composition draws its own cards over, CSS px: the
-   *  kiosk measures its rail, the map centres inside what is left. Replaces
-   *  the latitude shift boardCentre used to fake. */
-  padding?: FitPadding;
   locale?: string;
 }
 
@@ -529,7 +560,17 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const points = vehiclePoints(input.snapshots['zet-rt'], input.now);
   if (input.stop) points.push(stopPlace(input.stop));
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr'));
-  const chapter = chapterView(input.chapter ?? 'promet', input);
+  const field = fieldView({ stop: input.stop, widthPx: input.widthPx, spanM: input.spanM });
+  const view = input.phase === 'paired' ? pairedView({ stop: input.stop, selection: input.selection }) : field;
+  const extras: KioskMapExtras = {
+    stop: input.stop,
+    interactive: false,
+    symbolScale: KIOSK_SYMBOL_SCALE,
+    basemapProfile: KIOSK_BASEMAP_PROFILE,
+    locale: input.locale,
+    outline: kvartOutline(input.stop?.district),
+    prozor: prozorOptions(input.stop, field.zoom),
+  };
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,
     className: 'k-map-canvas',
@@ -538,33 +579,26 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     points,
     lines: closureLines(input.snapshots.prometnice),
     reducedMotion: input.reducedMotion,
-    zoom: chapter.zoom,
-    emphasis: chapter.emphasis,
-    stop: input.stop,
-    interactive: false,
-    symbolScale: KIOSK_SYMBOL_SCALE,
-    basemapProfile: KIOSK_BASEMAP_PROFILE,
-    locale: input.locale,
-    outline: chapter.outline ? kvartOutline(input.stop?.district) : null,
+    ...extras,
+    zoom: view.zoom,
+    emphasis: view.emphasis,
   };
-  if (chapter.padding) request.padding = chapter.padding;
-  if (chapter.center) request.center = chapter.center;
-  if (chapter.selectedStop) request.selectedStop = chapter.selectedStop;
-  if (chapter.selectedRoute) request.selectedRoute = chapter.selectedRoute;
-  if (chapter.follow) request.follow = true;
+  if (view.center) request.center = view.center;
+  if (view.selectedStop) request.selectedStop = view.selectedStop;
+  if (view.selectedRoute) request.selectedRoute = view.selectedRoute;
+  if (view.follow) request.follow = true;
   // The view is set before the slot call so a map created by it starts there.
-  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale, outline: request.outline });
+  adapter?.setExtras(extras);
   adapter?.setView(viewOf(request));
   const container = maps.slot(request);
   // An outage is no evidence of motion: the map holds until the feed is live again.
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
-  // The chapter decides whether the quarter's outline is drawn at all; the
-  // handle is told either way, and ignores an unchanged one.
+  // The quarter is always drawn (R-KP9); the handle ignores an unchanged outline.
   adapter?.handle()?.setOutline?.(request.outline ?? null);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   const district = input.stop?.district;
-  if (container && chapter.outline && district && !request.outline) {
+  if (container && district && !request.outline) {
     void loadKvartOutline(district, input.fetchImpl).then((outline) => {
       if (outline) adapter?.handle()?.setOutline?.(outline);
     });
