@@ -399,6 +399,10 @@
     "unfollow": "Prestani pratiti",
     "followingNote": "Karta prati ovo vozilo; pomak karte prekida praćenje.",
     "fitCity": "Cijeli grad",
+    "mapModeSchema": "Shema linija",
+    "mapModeMap": "Karta grada",
+    "schemaTramsOnly": "Shema prikazuje tramvaje",
+    "schemaKeys": "Za pomicanje povuci kartu ili pritisni Shift i strelice. Tipke + i − približavaju i udaljavaju, a 0 vraća cijelu shemu.",
     "details": "Detalji",
     "collapse": "Skupi",
     "tram": "tramvaj",
@@ -929,7 +933,13 @@
       "works_few": "{count} rada u tijeku",
       "works_other": "{count} radova u tijeku",
       "today": "danas",
-      "tomorrow": "sutra"
+      "tomorrow": "sutra",
+      "tonight": "Večeras u gradu",
+      "forecast": "Sutra",
+      "allDay": "cijeli dan",
+      "tonightMore_one": "još {count} događanje",
+      "tonightMore_few": "još {count} događanja",
+      "tonightMore_other": "još {count} događanja"
     },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",

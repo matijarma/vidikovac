@@ -91,6 +91,81 @@ Matija, 12. rujna: oslanjamo se na rijetke podatke u stvarnom vremenu i pretpost
 | Integrator: τ / unatrag / mrtva zona / smirivanje / sustizanje / slika / razmak (`app/src/motion/integrator.ts`) | 1,5 s, 4 s / 1 m/s, 30 m / 1 m / max(6, 1,5 v) / max(8, 2 v) / 0,25 s / 35 m | Naprijed je nastavak vožnje, natrag ispravak; tramvaj vidljivo ne vozi unatrag; ispod metra nema što ispravljati; oznaka mora sustizati metu koja se i sama giba; parkirana petlja ne smije sletjeti odjednom; sljedbenik ostaje iza vođe i na klijentu. |
 | Anketiranje: otkucaj / jastuk faze / jastuk `validUntil` / ostali moduli (`app/src/motion/loop.ts`, `dashboard.ts`) | 10 s / 3,5 s / 1,5 s / 30 s | Klijent slijeće poslije blizanca i ruba; jedini zahtjev koji nosi nove dokaze ubrzava, ostali ne (R-TE4). |
 
+## Shema linija
+
+Promet ima dva iscrtavanja istih planova: gradsku kartu i ZET-ovu shemu.
+`scripts/zet-schema.mjs` čita izvorni `zet-zagreb-tram-lines-map.svg`, slaže sve
+ugniježđene transformacije u koordinatni sustav stranice, dekodira nazive iz
+znakova fonta i stvara `app/public/data/zet-schema.json`. Izvorni SVG ne ide u
+javnu imovinu. Na platnu ostaju linije, stajališta, nazivi i voda, bez zaglavlja,
+legende, logotipa, popisa brojeva na krajevima i bijelih oznaka koje prekrivaju
+linije. Krivulje vode se uzorkuju i pojednostavljuju, polilinije linija ostaju
+izvorni vrhovi.
+
+Artefakt verzije 1 ima 19 linija (15 dnevnih i četiri noćne) te istu oznaku
+`feedVersion` kao mreža i indeks vožnji. Ponovna gradnja istih ulaza daje iste
+bajtove; `builtAt` je datum ugrađene mreže, ne trenutno vrijeme naredbe.
+`npm run build:schema` ispisuje dokaze identiteta, pokrivenost stajališta i
+staza; `node scripts/zet-schema.mjs --check` ne piše ništa i pada ako je
+ugrađeni artefakt zastario. `--verbose` daje svaku pojedinačnu poveznicu.
+
+**Identitet i iznimke.** Boja nije identifikator: dvije linije imaju istu boju,
+a četiri noćne linije istu tamnoplavu. Svaka linija ima glasove obojenih brojčanih
+oznaka i provjerene krajnje točke uz terminalne kružiće. Povijesni nacrt i
+GTFS 000395 nemaju uvijek iste krajnje stanice; svaka takva odluka imenovana je
+u `scripts/zet-schema-overrides.json`. Kratka linija 15 u izvorniku ima samo
+jednu obojenu oznaku: ta je iznimka zapisana uz obje krajnje točke, bez
+pretvaranja crnih popisa u dodatne glasove. Nazivi zadržavaju dijakritike;
+skraćenice se spajaju samo prema pravilima iz skripte ili imenovanom aliasu.
+Od 122 GTFS naziva 114 se spaja, osam kojih u starijoj shemi nema izričito je
+popisano. Pet naziva koje nacrt ima, a ugrađena mreža nema, ostaje kao kontekst.
+
+**Smještaj vozila.** Integrator izlaže postojeći indeks staze `Drawn.path` i luk
+`Drawn.s`, poslije vlastitog ograničenja reda vozila. Ni plan, ni brzina, ni
+pravila motora time se ne mijenjaju. `shared/motion/schema.ts` priprema tablicu
+po pojavljivanju stajališta na stazi, ne po samom nazivu; lokalne višestruke
+projekcije istog perona sažimaju se, stvarni kasniji prolazak ostaje zaseban.
+Između dvaju susjednih podudarnih stajališta interpolira se luk nacrtane linije;
+preskočene stanice daju ravnu spojnicu bez tangente. Prije prvog i poslije
+zadnjeg podudarnog stajališta položaj se zadržava na kraju. Predznak smjera
+dolazi iz tablice, nikad iz `direction_id`. Nema bočnog pomaka po smjeru.
+Autobusi, slobodna ravnina i staze s manje od dva podudarna stajališta nisu
+iscrtani. Za ugrađenu mrežu 139 od 145 staza ima smještaj; šest kratkih ili
+depo-staza s nedovoljno pokrivenosti imenovano je u istom overrides dokumentu.
+Svaka monotona dionica provjerava se zasebno, pa povratni prolazak ostaje
+valjan umjesto da se briše drugi dio staze.
+
+**Prikaz.** `schema-map.ts` implementira isti `CityMapHandle`. Osnovni nacrt i
+vozila su na odvojenim platnima; statika se ne crta ponovno za svaku sliku.
+`schematic-view.ts` dijeli pristupačan popis, tipkovnički izbor i čuvanje
+fokusa između geografskog i novog koordinatnog sustava. Izbor na shemi
+otvara postojeći list prijevoza, ne dijalog. Nazivi koriste Manrope i postaju
+vidljivi od 1,4 CSS px po jedinici izvornika (oko 11px za izvornih 7,92).
+Javni zaslon kadrira svoje stajalište na čitljivoj skali, s podom naziva 24px;
+bez prepoznatog stajališta pokazuje cijelu mrežu bez naziva. Početni kadar
+obuhvaća zadržanu geometriju, ne praznine uklonjenog zaglavlja i legende.
+Povlačenje, pinch, kotačić i dvostruki dodir rade kroz Pointer Events;
+`+`, `-`, `0` mijenjaju skalu, Shift i strelice pomiču kadar, obične strelice
+biraju vozila. Skala je ograničena na početni fit do 8× fit, bez inercije.
+
+Preferencija `kajima:map-mode:v1` vrijedi samo na uređaju (`map` ili `schema`,
+zadano `map`). Na zaslonu `?prikaz=shema|karta` ima prednost i preživljava
+čišćenje jednokratnog fragmenta. Promet mijenja map-slot, oslobađa stari
+renderer i pamti zadnju geografsku kameru. Shema i njezina imovina učitavaju
+se dinamički; lagano ih nikada ne dohvaća. Odvojena geografska sličica Kvarta
+na desktopu ostaje kakva je bila. `stale` nastavlja plan, samo `down` zaustavlja
+slike; pauza sesije i uništavanje čiste petlju, događaje i zakašnjele dohvate.
+
+### Autobusi: predaja
+
+Autobusi i dalje voze po vlastitim polilinijama, bez tramvajskih zakona reda
+i bez učenja. Nakon horizonta vlastite brzine slijedi `DEFAULT_CRUISE_MS`,
+jer `TimesProvider` iz `times.ts` povezuje rasporede samo s tramvajskim stazama.
+Budući zasebni krug dodao bi provider voznog reda za autobusne oblike iz
+indeksa vožnji i učenje na tim oblicima (R-TE44). Uspjeh se mjeri ponavljanjem
+snimljenih okvira, s mjerilom odvojenim po vrsti vozila (R-TE53).
+Vlasnik je autobusni krug odgodio; nije dio sheme ni ove isporuke.
+
 ## Tok uparivanja
 
 1. Zaslon se spaja na `/ws/beacon/<beaconId>`; `BeaconDO` šalje nonce, zaslon odgovara `HMAC(secret, nonce)`. Nakon uspjeha `BeaconDO` kuje paket od 20 kodova po 30 s (Crockford base32, 8 znakova, 40 bita), registrira ga u `IndexDO` jednim pozivom i šalje zaslonu s `serverNow`. Zaslon rotira po zidnom satu i traži novi paket kad ostanu tri.

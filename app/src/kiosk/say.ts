@@ -11,7 +11,6 @@
 // (transit while zet-rt is still loading, lastrun once its table is down or
 // has run out, a quake below R-KP9's threshold) -- the column simply shows
 // fewer statements, never a fabricated one.
-import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import { delayTone } from '../experience/delay';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
@@ -22,7 +21,7 @@ import { kBadge } from './markup';
 import { SAY_KINDS, type SayKind } from './say-kinds';
 import {
   byModule, closuresByDistance, isLive, kioskQuakes, lastDeparturesAhead, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
-  routeDelays, sourceState, worksInKvart,
+  routeDelays, sourceState, worksInKvart, eventsTonight,
 } from './local';
 import { routeType, sortRouteIds } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
@@ -30,7 +29,7 @@ import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { LastRunSnapshot } from '../core/lastrun';
 
-export type SayDomain = 'transit' | 'komunalno' | 'civic' | 'events' | 'safety' | 'mobility';
+export type SayDomain = 'transit' | 'komunalno' | 'civic' | 'events' | 'safety' | 'mobility' | 'weather';
 /** Every kind a candidate can produce, once each (kiosk/say-kinds.ts): what "all" means when a composition shows every statement (kiosk/layout.ts SAY_SLOTS.handheld). */
 export { SAY_KINDS, type SayKind };
 export type SayTone = 'late' | 'early' | 'ontime' | 'unknown' | 'komunalno' | 'events' | 'urgent' | 'calm';
@@ -281,7 +280,7 @@ function zetCandidate(input: SayInput): Statement | null {
   const dogadanja = byModule(input.modules).dogadanja;
   if (!isLive(dogadanja)) return null;
   const notice = dogadanja.items
-    .filter((item) => isOpenLicenceEvent(item) && dataText(item, 'source') === 'zet-promet')
+    .filter((item) => dataText(item, 'source') === 'zet-promet')
     .filter((item) => {
       const at = item.at ? Date.parse(item.at) : NaN;
       return Number.isFinite(at) && at <= input.now && input.now - at <= ZET_NOTICE_WINDOW_MS;
@@ -342,7 +341,7 @@ function worksCandidate(input: SayInput): Statement | null {
 function kvartCandidate(input: SayInput): Statement | null {
   const dogadanja = byModule(input.modules).dogadanja;
   if (!isLive(dogadanja)) return null;
-  const row = dogadanja.items.find((item) => isOpenLicenceEvent(item) && dataText(item, 'source') === 'kvartovske');
+  const row = dogadanja.items.find((item) => dataText(item, 'source') === 'kvartovske');
   if (!row) return null;
   const s = input.strings;
   const value = shorten(row.title, input.valueChars);
@@ -353,8 +352,56 @@ function kvartCandidate(input: SayInput): Statement | null {
   };
 }
 
+/** tonight, weight 90: today's dated events from every source (eventsTonight),
+ *  the next to start first; the value is its title, the context its time,
+ *  venue and source, then how many more the evening holds. What the screen
+ *  is for: a person reads what is on before deciding to scan for the rest. */
+function tonightCandidate(input: SayInput): Statement | null {
+  const rows = eventsTonight(input.modules, input.now);
+  if (rows.length === 0) return null;
+  const upcoming = rows.filter((item) => Date.parse(item.at!) >= input.now);
+  const lead = (upcoming.length ? upcoming : rows)[0]!;
+  const s = input.strings;
+  const time = dataText(lead, 'precision') === 'time' ? clock(lead.at) : s.say.allDay;
+  const source = dataText(lead, 'source');
+  const sourceKey = `events.sources.${source}`;
+  const sourceName = input.i18n.t(sourceKey);
+  const more = rows.length > 1 ? plural(input.locale, s.say.tonightMore, rows.length - 1) : '';
+  const context = [time, dataText(lead, 'venue'), sourceName === sourceKey ? '' : sourceName, more].filter(Boolean).join(' · ');
+  const value = shorten(lead.title, input.valueChars);
+  return {
+    key: 'say:tonight', domain: 'events', say: 'tonight', weight: 90,
+    label: s.say.tonight, value, context, tone: 'events',
+    aria: aria(s.say.tonight, value, context),
+  };
+}
+
+/** forecast, weight 88: tomorrow's DHMZ forecast (dhmz-forecast now carries
+ *  today and tomorrow), the range as the value, the narrative as the context.
+ *  Nothing while the module has no row for tomorrow: yesterday's "tomorrow"
+ *  is today and says nothing new. */
+function forecastCandidate(input: SayInput): Statement | null {
+  const snap = byModule(input.modules)['dhmz-forecast'];
+  if (!isLive(snap)) return null;
+  const tomorrowKey = zagrebDayAfter(input.now, 1);
+  const row = snap.items.find((item) => item.kind === 'forecast' && item.at && dayKey(item.at) === tomorrowKey);
+  if (!row) return null;
+  const tmin = dataNumber(row, 'tmin');
+  const tmax = dataNumber(row, 'tmax');
+  if (tmin === null || tmax === null) return null;
+  const s = input.strings;
+  const value = unbreakable(`${fmtNumber(input.locale, tmin, 0)} do ${fmtNumber(input.locale, tmax, 0)} °C`);
+  const context = row.summary ? shorten(row.summary, input.valueChars * 2) : 'DHMZ';
+  return {
+    key: 'say:forecast', domain: 'weather', say: 'forecast', weight: 88,
+    label: s.say.forecast, value, context,
+    ...(snap.status === 'stale' ? { state: 'stale' as const } : {}),
+    aria: aria(s.say.forecast, value, context),
+  };
+}
+
 const CANDIDATES: readonly ((input: SayInput) => Statement | null)[] = [
-  transitCandidate, quakeCandidate, closureCandidate, lastrunCandidate, zetCandidate, assemblyCandidate, worksCandidate, kvartCandidate,
+  transitCandidate, quakeCandidate, tonightCandidate, forecastCandidate, closureCandidate, lastrunCandidate, zetCandidate, assemblyCandidate, worksCandidate, kvartCandidate,
 ];
 
 /**

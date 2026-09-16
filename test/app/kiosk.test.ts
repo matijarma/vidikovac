@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -128,7 +128,7 @@ function mount(opts: MountOptions = {}) {
   const handle = mountKiosk(root, {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
-    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
+    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -637,14 +637,16 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
     // The ranker is told, source by source: the last-good copies are stale, and the field is still one field with its map.
-    expect(lastInput().modules.map((m) => m.status)).toEqual(MODULES.map(() => 'stale'));
+    // The fixture's seven modules go stale; the two the payload never carried (forecast, gazette) stand as honest down placeholders behind them.
+    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'stale'));
+    expect(lastInput().modules.slice(MODULES.length).every((m) => m.status === 'down')).toBe(true);
     expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-map]')).not.toBeNull();
     fail = false;
     k.poll();
     await flush();
     expect(calls.at(-1)).toBe('live');
-    expect(lastInput().modules.map((m) => m.status)).toEqual(MODULES.map(() => 'live'));
+    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'live'));
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
@@ -964,9 +966,9 @@ describe('the field, the column and the one map', () => {
   /** happy-dom lays nothing out: a host width is stubbed so the camera can be seen to follow it. */
   const layOut = (host: HTMLElement, width: number) => Object.defineProperty(host, 'clientWidth', { value: width, configurable: true });
 
-  it('one map for the screen\u2019s life: created once at the design width, following the measured width on a resize, parked and returned through a session, never destroyed', async () => {
+  it.each(['map', 'schema'] as const)('one %s renderer for the screen\u2019s life: created once, following resize, parked and returned through a session', async (mapMode) => {
     const map = spyMap();
-    const k = mount({ stored: STORED, mapFactory: map.factory as never });
+    const k = mount({ stored: STORED, mapMode, mapFactory: map.factory as never });
     await flush();
     expect(map.factory).toHaveBeenCalledTimes(1);
     const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
@@ -976,6 +978,8 @@ describe('the field, the column and the one map', () => {
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
+    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: STOP });
+    expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
     const host = q(k.root, '[data-testid=kiosk-map-host]')!;
     expect(container.parentElement).toBe(host);
@@ -1127,7 +1131,7 @@ describe('the field, the column and the one map', () => {
     expect(SAY_VALUE_CHARS).toEqual({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
     // A phone shows every candidate: "all" is every kind say.ts knows, read from say.ts itself so it cannot drift.
     expect(SAY_SLOTS.handheld).toBe(realSay.SAY_KINDS.length);
-    expect(realSay.SAY_KINDS).toHaveLength(8);
+    expect(realSay.SAY_KINDS).toHaveLength(10);
   });
 
   it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design box before layout; the totem doubles the street names’ padding for its twice-the-wall ground and follows the measured box on a repaint (R-KP17, contract 3)', async () => {

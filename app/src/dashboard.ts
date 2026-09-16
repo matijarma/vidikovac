@@ -14,6 +14,7 @@ import { createFeedStore } from './core/feed-store';
 import { FLAGS } from './core/flags';
 import { createKvartStore, kvartLabel, resolveKvart, type KvartChoice } from './core/kvart-store';
 import { loadLastRun, type LastRunSnapshot } from './core/lastrun';
+import { createMapModeStore, type MapModeStore } from './core/map-mode-store';
 import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './core/notify-store';
 import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
@@ -103,6 +104,8 @@ export interface DashboardDeps {
   lightweight?: boolean;
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
+  /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
+  mapMode?: MapModeStore;
   loadNetwork?: () => Promise<Network | null>;
   /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
@@ -117,7 +120,7 @@ export interface DashboardDeps {
   theme?: ThemeController;
   /** Layer memory; null disables it, omitted uses sessionStorage. */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
-  /** The kvart choice, the saved lines and stops and the alert switches (D15); null disables persistence, omitted uses localStorage. */
+  /** Device preferences (kvart, saved, alerts and map renderer); null disables persistence, omitted uses localStorage. */
   localStorage?: Pick<Storage, 'getItem' | 'setItem'> | null;
   /** Static flags the shell reads (D7): `waste` shows the fourth alert switch. */
   flags?: { waste?: boolean };
@@ -161,10 +164,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     token: () => session.snapshot().dataToken,
     now,
   });
-  // The reader's own three stores (D6, D15): the kvart choice, the saved lines and stops, the alert switches.
+  // The reader's device stores: district, saved lines/stops, alerts and the live transit renderer.
   const kvartStore = createKvartStore({ storage: local });
   const saved = createSavedStore({ storage: local });
   const notifyStore = createNotifyStore({ storage: local });
+  const mapMode = deps.mapMode ?? createMapModeStore({ storage: local });
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
   /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
   let stops: readonly ScreenStop[] | null = null;
@@ -361,7 +365,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
-      maps, schematic, mapView: lightweight ? undefined : mapView, reducedMotion: deps.reducedMotion, lightweight,
+      maps, schematic, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       kvart, kvartLabel: kvartLabel(i18n, kvart), kvartChoice: kvartStore.snapshot(), notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
@@ -994,6 +998,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (surface() === 'desktop') continuePoll(refresh(), rearmPoll, 'dashboard saved refresh');
   });
   const stopNotify = onChange(notifyStore.subscribe, () => { render(); paintShell(); });
+  const stopMapMode = onChange(mapMode.subscribe, () => { if (!disposed) render(); });
   const onMedia = (): void => {
     // The desk has the aside instead of the panel.
     if (surface() === 'desktop' && panel !== null) { panel = null; updateTitle(); }
@@ -1043,6 +1048,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopKvart();
       stopSaved();
       stopNotify();
+      stopMapMode();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
       detachTimebandSync();

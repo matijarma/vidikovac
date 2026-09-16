@@ -19,6 +19,7 @@
     "review:visual": "node scripts/review-experience.mjs",
     "gtfs:routes": "node scripts/gtfs-routes.mjs",
     "build:network": "node scripts/gtfs-shapes.mjs",
+    "build:schema": "node scripts/zet-schema.mjs",
     "build:trips": "node scripts/gtfs-trips.mjs",
     "check:izvori": "node scripts/check-plan-links.mjs"
   },

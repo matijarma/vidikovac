@@ -6,11 +6,12 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { fetchData } from '../api';
 import { bootPage } from '../boot';
+import { createMapModeStore } from '../core/map-mode-store';
 import { mountDashboard, parseSessionHash, type DashboardHandle } from '../dashboard';
 import { canExportCalendarItem, copyWithAttribution, geojsonFile, icsFile, icsForItem, itemExportText, printAct, shareLink } from '../export';
 import { fillAttribution } from '../attribution';
 import { wordmarkMarkup } from '../experience/chrome';
-import { createCityMap } from '../map/city-map';
+import { createMapRenderer } from '../map/renderers';
 import { createSessionClient } from '../session';
 import { repaintOn } from '../ui/canvas';
 import { downloadFile } from '../ui/dom/download';
@@ -68,6 +69,9 @@ const lightweight = detectLagano({
   canWebgl,
 });
 markLagano(document.documentElement, lightweight);
+// Shared with the dashboard so even an in-tab choice without writable storage
+// can suppress a still-pending idle prefetch.
+const mapMode = createMapModeStore({ storage: safeLocalStorage() });
 // The one Manrope family never reaches the lightweight graph: a dynamic import
 // makes Vite emit fonts.css as its own chunk, loaded only on the modern path.
 if (!lightweight) void import('../ui/fonts.css');
@@ -121,7 +125,8 @@ if (!params) {
     reducedMotion,
     lightweight,
     onRepaint: repaintOn(theme),
-    mapFactory: createCityMap,
+    mapFactory: createMapRenderer,
+    mapMode,
     location,
     history,
     matchMedia: (query) => globalThis.matchMedia(query),
@@ -176,14 +181,12 @@ if (!params) {
       session.event('export', exportDim(kind));
     },
   });
-  // Sada links to Promet, and Promet's map is real MapLibre the moment it opens
-  // (map-slots.ts still creates it lazily): on a modern phone, the library and
-  // its worker are worth fetching into the cache while the device is idle, so
-  // the tab switch itself never pays for the download. Never on the lightweight
-  // path (R-L2), which must not reach for this chunk at all (test/app/budget.test.ts).
+  // Warm Promet's geographic renderer only while that is the device's choice.
+  // The separate Kvart thumbnail may still need MapLibre on a desktop; this
+  // guard avoids an unnecessary transit prefetch, not every page's map load.
   const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  const prefetch = () => { void import('../map/maplibre-entry'); };
-  if (!lightweight) {
+  const prefetch = () => { if (mapMode.snapshot() === 'map') void import('../map/maplibre-entry'); };
+  if (!lightweight && mapMode.snapshot() === 'map') {
     if (idle) idle(prefetch, { timeout: 4000 }); else setTimeout(prefetch, 2500);
   }
   session.connect();

@@ -4,7 +4,9 @@
 // /d/ is as reachable as a running session (Lighthouse: landmark-one-main, skip-link).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mountDashboard } from '../../app/src/dashboard';
+import type { CityMapHandle, CityMapOptions, MapFactory } from '../../app/src/map/city-map';
 import { LOCALE_STORAGE_KEY } from '../../app/src/i18n/create-default-i18n';
 import { stubLocalStorage } from './helpers';
 
@@ -63,7 +65,9 @@ async function importDashboardEntry(search: string, hash = '#room=r1&ticket=t1')
 }
 
 describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
+  beforeEach(() => localStorage.removeItem('kajima:map-mode:v1'));
   afterEach(() => {
+    localStorage.removeItem('kajima:map-mode:v1');
     delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
     vi.restoreAllMocks();
   });
@@ -84,6 +88,15 @@ describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
     (globalThis as { requestIdleCallback?: typeof idle }).requestIdleCallback = idle;
     await importDashboardEntry('?lagano=1');
     expect(idle).not.toHaveBeenCalled();
+  });
+
+  it('does not idle-prefetch MapLibre when the device prefers the schema, and shares the store with the mounted dashboard', async () => {
+    const idle = vi.fn();
+    (globalThis as { requestIdleCallback?: typeof idle }).requestIdleCallback = idle;
+    localStorage.setItem('kajima:map-mode:v1', 'schema');
+    await importDashboardEntry('?lagano=0');
+    expect(idle).not.toHaveBeenCalled();
+    expect(vi.mocked(mountDashboard).mock.lastCall?.[1].mapMode?.snapshot()).toBe('schema');
   });
 
   it('falls back to setTimeout(…, 2500) when the browser has no requestIdleCallback', async () => {
@@ -139,5 +152,100 @@ describe('the composed no-room page', () => {
     expect(CSS).toMatch(/\.ki-empty-actions \{ display: grid; gap: var\(--sp-3\); \}/);
     expect(CSS).toMatch(/@media \(min-width: 40rem\) \{[^}]*\.ki-empty-actions \{[^}]*display: flex/);
     expect(CSS).not.toContain('.ki-empty .actions');
+  });
+});
+
+describe('the synchronous, lazy schema factory', () => {
+  it('buffers the latest state until import, forwards the handle contract afterwards, and never creates or calls back from a disposed pending renderer', async () => {
+    const { createMapRenderer } = await import('../../app/src/map/renderers');
+    let resolve!: (module: { createSchemaMap: MapFactory }) => void;
+    const module = new Promise<{ createSchemaMap: MapFactory }>((done) => { resolve = done; });
+    const loadSchema = vi.fn(() => module);
+    const real: CityMapHandle = {
+      update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(),
+      select: vi.fn(), selection: () => null, follow: vi.fn(), following: () => null,
+      setTheme: vi.fn(), setLocale: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(),
+      setFeedState: vi.fn(), setStop: vi.fn(), setOutline: vi.fn(), setEmphasis: vi.fn(),
+      setView: vi.fn(), setFitPadding: vi.fn(), resize: vi.fn(), fit: vi.fn(),
+      status: () => 'ready', network: () => null, camera: () => null, vehicles: () => [],
+    };
+    const createSchemaMap = vi.fn((_options: CityMapOptions) => real);
+    const onStatus = vi.fn();
+    const options: CityMapOptions = {
+      renderer: 'schema', container: document.createElement('div'), ariaLabel: 'Shema',
+      loadNetwork: async () => null, setTimer: () => 1, clearTimer() {}, onStatus,
+    };
+    const handle: CityMapHandle = createMapRenderer(options, { loadSchema });
+    expect(handle).not.toBeInstanceOf(Promise);
+    expect(handle.status?.()).toBe('loading');
+    handle.update([], []);
+    const points = [{ id: 'v1', title: '6', lon: 15.97, lat: 45.81, at: 1000, type: 0 }];
+    handle.update(points, []);
+    handle.select?.({ kind: 'vehicle', id: 'v1' }, { fit: true });
+    handle.follow?.('v1');
+    handle.setTheme?.('dark');
+    handle.setLocale?.('en');
+    handle.setModes?.(new Set([0]));
+    handle.setFeedState?.('stale');
+    handle.setFeedState?.('down');
+    handle.setStop?.(null);
+    handle.setOutline?.(null);
+    handle.setEmphasis?.(null);
+    handle.setClosuresVisible?.(false);
+    handle.setView?.({ zoom: 15 });
+    handle.setFitPadding?.({ bottom: 300 });
+    handle.resize?.();
+    handle.fit?.('city');
+    handle.resume();
+    handle.pause();
+    expect(handle.selection?.()).toEqual({ kind: 'vehicle', id: 'v1' });
+    expect(handle.following?.()).toBe('v1');
+    expect(handle.camera?.()).toBeNull();
+    const canceledStatus = vi.fn();
+    const canceled = createMapRenderer({ ...options, container: document.createElement('div'), onStatus: canceledStatus }, { loadSchema });
+    canceled.update(points, []);
+    canceled.destroy();
+    canceled.destroy();
+    expect(createSchemaMap).not.toHaveBeenCalled();
+    resolve({ createSchemaMap });
+    await vi.waitFor(() => expect(createSchemaMap).toHaveBeenCalledTimes(1));
+    expect(createSchemaMap.mock.calls[0]?.[0]).toMatchObject({ loadNetwork: options.loadNetwork, setTimer: options.setTimer, clearTimer: options.clearTimer });
+    expect(real.update).toHaveBeenCalledTimes(1);
+    expect(real.update).toHaveBeenLastCalledWith(points, []);
+    expect(real.select).toHaveBeenLastCalledWith({ kind: 'vehicle', id: 'v1' }, { fit: true });
+    expect(real.follow).toHaveBeenLastCalledWith('v1');
+    expect(real.setTheme).toHaveBeenLastCalledWith('dark');
+    expect(real.setLocale).toHaveBeenLastCalledWith('en');
+    expect(real.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    expect(real.setFeedState).toHaveBeenCalledTimes(1);
+    expect(real.setFeedState).toHaveBeenLastCalledWith('down');
+    expect(real.setStop).toHaveBeenCalledWith(null);
+    expect(real.setOutline).toHaveBeenCalledWith(null);
+    expect(real.setEmphasis).toHaveBeenCalledWith(null);
+    expect(real.setClosuresVisible).toHaveBeenCalledWith(false);
+    expect(real.setView).toHaveBeenCalledWith({ zoom: 15 });
+    expect(real.setFitPadding).toHaveBeenCalledWith({ bottom: 300 });
+    expect(real.resize).toHaveBeenCalledTimes(1);
+    expect(real.fit).toHaveBeenCalledWith('city');
+    expect(real.pause).toHaveBeenCalledTimes(1);
+    expect(real.resume).not.toHaveBeenCalled();
+    expect(handle.status?.()).toBe('ready');
+    expect(handle.selection?.()).toBeNull(); // a real null must beat the buffered selection
+    expect(handle.following?.()).toBeNull();
+    expect(canceledStatus).not.toHaveBeenCalled();
+    handle.resume();
+    expect(real.resume).toHaveBeenCalledTimes(1);
+    handle.destroy();
+    handle.destroy();
+    createSchemaMap.mock.calls[0]?.[0].onStatus?.('ready');
+    expect(onStatus).not.toHaveBeenCalled();
+    expect(real.destroy).toHaveBeenCalledTimes(1);
+    handle.update([], []);
+    expect(real.update).toHaveBeenCalledTimes(1);
+    const failedStatus = vi.fn();
+    const failed = createMapRenderer({ ...options, container: document.createElement('div'), onStatus: failedStatus }, { loadSchema: async () => { throw new Error('offline'); } });
+    await vi.waitFor(() => expect(failed.status?.()).toBe('unavailable'));
+    expect(failedStatus).toHaveBeenCalledWith('unavailable');
+    failed.destroy();
   });
 });

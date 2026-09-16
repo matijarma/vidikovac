@@ -57,7 +57,7 @@ describe('readDataToken', () => {
 });
 
 describe('GET /api/teaser', () => {
-  it('serves the open modules whole and the session modules reduced, cacheable for 5 s', async () => {
+  it('serves every module the app fetches to the public screen, only zet-rt and emsc reduced in size, cacheable for 5 s', async () => {
     const response = await call('/api/teaser');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe(TEASER_CACHE_CONTROL);
@@ -71,6 +71,8 @@ describe('GET /api/teaser', () => {
       'dhmz-now',
       'zet-rt',
       'dogadanja',
+      'dhmz-forecast',
+      'glasnik',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
     // R-P1: the fleet count, then the pins inside the default screen's box

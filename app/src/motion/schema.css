@@ -1,0 +1,53 @@
+.schema-map {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--tone-surface-canvas);
+  color: var(--tone-text-primary);
+}
+.schema-map .schema-canvases {
+  flex: 1;
+  min-block-size: 0;
+  aspect-ratio: auto;
+  overflow: hidden;
+}
+.schema-map .schema-vehicles { touch-action: none; }
+.schema-map[data-interactive='true'] .schema-vehicles { cursor: grab; }
+.schema-map[data-interactive='true'] .schema-vehicles:active { cursor: grabbing; }
+.schema-map .schema-vehicles:focus-visible {
+  outline-offset: -3px;
+}
+.schema-map [data-testid='schema-legend'] {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.schema-map .schema-note {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: var(--schema-bottom-pad, 0px);
+  margin: 0;
+  padding: var(--sp-1) var(--sp-3);
+  font: var(--weight-normal) var(--type-meta) / var(--lh-body) var(--font-body);
+  color: var(--tone-text-muted);
+  background: var(--tone-surface-canvas);
+  pointer-events: none;
+}
+.schema-map .schematic-vehicle:focus-within {
+  z-index: 2;
+  max-inline-size: min(30rem, calc(100% - 2 * var(--sp-2)));
+}
+.schema-map .schematic-vehicle-button {
+  min-block-size: var(--target);
+  font-family: var(--font-body);
+  font-size: var(--type-control);
+}
+.schema-map[data-interactive='false'] .schema-note {
+  font-size: max(var(--type-control), 1.6cqi);
+}

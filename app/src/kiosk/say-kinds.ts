@@ -6,7 +6,7 @@
 // own ESM loader, which cannot follow say.ts's graph (it reaches JSON
 // catalogues imported without an import attribute), so the list the two
 // files share must not drag that graph behind it.
-export const SAY_KINDS = Object.freeze(['transit', 'quake', 'closure', 'lastrun', 'zet', 'assembly', 'works', 'kvart'] as const);
+export const SAY_KINDS = Object.freeze(['transit', 'quake', 'tonight', 'forecast', 'closure', 'lastrun', 'zet', 'assembly', 'works', 'kvart'] as const);
 
 /** One statement kind: the type is the list, so a new kind is added in exactly one place. */
 export type SayKind = (typeof SAY_KINDS)[number];

@@ -63,6 +63,11 @@
 .t-toggle[data-mode='0'] { --t-swatch: var(--t-tram); }
 .t-toggle[data-mode='3'] { --t-swatch: var(--t-bus); }
 .t-toggle[data-action='toggle-closures'] { --t-swatch: var(--t-closure); }
+.t-schema-legend {
+  display: inline-flex; align-items: center; flex: none; min-block-size: var(--target); padding: 0 var(--sp-3);
+  border-radius: var(--r-pill); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft);
+  color: var(--tone-text-muted); font-size: var(--text-sm);
+}
 
 /* --- Body: the map and the sheet ------------------------------------------ */
 .transport-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--t-gap); min-width: 0; }
@@ -103,13 +108,20 @@
 .t-map-tools {
   position: absolute; inset-block-start: calc(var(--target) + var(--sp-3) + 10px + 5.5rem + var(--sp-2)); inset-inline-end: var(--sp-2); z-index: 2;
   display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2);
+  max-inline-size: calc(100% - 2 * var(--sp-2));
 }
 .t-action { min-height: 2.75rem; font-size: 0.875rem; }
 .t-map-tools .t-action { gap: var(--sp-1); background: var(--tone-surface-1); border-color: var(--tone-stroke); box-shadow: var(--tone-shadow-soft); }
+.t-map-tools [data-action='toggle-map-mode'][aria-pressed='true'] {
+  background: var(--tone-surface-2); border-color: var(--tone-stroke-strong); font-weight: var(--weight-bold);
+}
+/* The schema has no MapLibre zoom controls to leave space for. */
+.transport[data-map-mode='schema'] .t-map-tools { inset-block-start: calc(var(--target) + var(--sp-3)); }
 .transport[data-status='unavailable'] .t-map-canvas { display: none; }
 .transport[data-status='unavailable'] .t-map-status { position: static; box-shadow: none; border: 1px solid var(--tone-stroke); }
-/* No map, no camera: nothing for the whole-city and full-map buttons to act on. */
-.transport[data-status='unavailable'] .t-map-tools { display: none; }
+/* A failed renderer must still offer the other mode. Camera-only actions have nothing to act on. */
+.transport[data-status='unavailable'] .t-map-tools { position: static; align-self: flex-end; margin: var(--sp-2); }
+.transport[data-status='unavailable'] .t-map-tools .t-action:not([data-action='toggle-map-mode']) { display: none; }
 
 /* --- Sheet: head (handle, peek, chevron), search, body ---------------------- */
 .transport-sheet {
@@ -229,7 +241,8 @@
 /* --- A short stage (a small phone, a landscape one): the tools sit in a row beside the zoom control instead of
    under it, so they stay above the sheet and clear of the credit at the foot. */
 @media (max-height: 40rem) {
-  .ki[data-stage='map'] .t-map-tools { inset-block-start: calc(var(--target) + var(--sp-3) + 10px); inset-inline-end: calc(var(--target) + 2 * var(--sp-2)); flex-direction: row; align-items: flex-start; }
+  .ki[data-stage='map'] .t-map-tools { inset-block-start: calc(var(--target) + var(--sp-3) + 10px); inset-inline-start: var(--sp-2); inset-inline-end: calc(var(--target) + 2 * var(--sp-2)); flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; }
+  .ki[data-stage='map'] .transport[data-map-mode='schema'] .t-map-tools { inset-inline-end: var(--sp-2); }
 }
 
 /* --- Landscape phone: the sheet is a right column, the peek board stays at its edge ---- */
@@ -240,12 +253,14 @@
   .ki[data-stage='map'] .t-sheet-head { min-block-size: var(--target); padding-block-start: var(--sp-2); touch-action: auto; cursor: default; }
   .ki[data-stage='map'] .t-map-chips, .ki[data-stage='map'] .t-map-status { inset-inline-end: calc(max(45%, 16rem) + var(--sp-2)); }
   .ki[data-stage='map'] .t-map-tools { inset-inline-end: calc(max(45%, 16rem) + var(--target) + 2 * var(--sp-2)); }
+  .ki[data-stage='map'] .transport[data-map-mode='schema'] .t-map-tools { inset-inline-end: calc(max(45%, 16rem) + var(--sp-2)); }
   .ki[data-stage='map'] .t-map-status { inset-block-end: 6rem; }
   .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-top-right, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-inline-end: max(45%, 16rem); }
   .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-block-end: 0; visibility: visible; }
   /* "Proširi kartu": the column slides out to a 5rem strip holding the chevron, like the desk's. */
   .ki[data-stage='map'][data-view='map'] .t-map-chips, .ki[data-stage='map'][data-view='map'] .t-map-status { inset-inline-end: calc(5rem + var(--sp-2)); }
   .ki[data-stage='map'][data-view='map'] .t-map-tools { inset-inline-end: calc(5rem + var(--target) + 2 * var(--sp-2)); }
+  .ki[data-stage='map'][data-view='map'] .transport[data-map-mode='schema'] .t-map-tools { inset-inline-end: calc(5rem + var(--sp-2)); }
   .ki[data-stage='map'][data-view='map'] .t-map-canvas .maplibregl-ctrl-top-right, .ki[data-stage='map'][data-view='map'] .t-map-canvas .maplibregl-ctrl-bottom-right { margin-inline-end: 5rem; }
   .ki[data-stage='map'][data-view='map'] .t-peek, .ki[data-stage='map'][data-view='map'] .transport-toolbar, .ki[data-stage='map'][data-view='map'] .t-sheet-body { display: none; }
   .ki[data-stage='map'][data-view='map'] .t-sheet-head { grid-template-columns: auto; justify-content: start; padding: var(--sp-2) calc((5rem - var(--target)) / 2); }

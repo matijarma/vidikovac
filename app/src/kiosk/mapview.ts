@@ -33,7 +33,6 @@
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
-import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
 import { safetyState } from '../experience/safety-state';
@@ -153,7 +152,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -278,7 +277,7 @@ export function stopPlace(stop: ScreenStop): MapPoint {
 export function placedEvents(dogadanja: ModuleSnapshot | undefined, now: number): MapPoint[] {
   const out: MapPoint[] = [];
   for (const item of isLive(dogadanja) ? dogadanja.items : []) {
-    if (!isOpenLicenceEvent(item) || item.geo?.type !== 'Point') continue;
+    if (item.geo?.type !== 'Point') continue;
     const [lon, lat] = item.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     if (windowOf(item, now) === 'expired') continue;
@@ -593,6 +592,8 @@ export interface KioskMapInput {
   /** Injected in tests; the page's own fetch otherwise. */
   fetchImpl?: typeof fetch;
   locale?: string;
+  /** Fixed for the screen's boot, including paired sessions. */
+  renderer?: CityMapOptions['renderer'];
 }
 
 /** Builds the request for this render and asks the slots for the one map.
@@ -605,12 +606,13 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const field = fieldView({ stop: input.stop, widthPx: input.widthPx, spanM: input.spanM });
   const view = input.phase === 'paired' ? pairedView({ stop: input.stop, selection: input.selection }) : field;
   const extras: KioskMapExtras = {
+    renderer: input.renderer ?? 'map',
     stop: input.stop,
     interactive: false,
     symbolScale: KIOSK_SYMBOL_SCALE,
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
-    outline: kvartOutline(input.stop?.district),
+    outline: input.renderer !== 'schema' ? kvartOutline(input.stop?.district) : null,
     prozor: prozorOptions(input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM)),
   };
   const request: KioskMapRequest = {
@@ -635,7 +637,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const container = maps.slot(request);
   // An outage is no evidence of motion: the map holds until the feed is live again.
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
-  // The quarter is always drawn (R-KP9); the handle ignores an unchanged outline.
+  // The geographic field draws the quarter (R-KP9); the schema has no outline.
   adapter?.handle()?.setOutline?.(request.outline ?? null);
   // The overlay set follows the request on the one live map (R-KP19): a stop
   // change (the DO's applyScreen) moves the drawn stops to the new stop's
@@ -645,7 +647,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   const district = input.stop?.district;
-  if (container && district && !request.outline) {
+  if (container && input.renderer !== 'schema' && district && !request.outline) {
     void loadKvartOutline(district, input.fetchImpl).then((outline) => {
       if (outline) adapter?.handle()?.setOutline?.(outline);
     });

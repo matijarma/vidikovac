@@ -277,7 +277,7 @@ describe('local content from the stop-scoped teaser', () => {
   it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
     const unfiltered = MODULES.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [item('dogadanja', 'kp:9', 'event', 'Koncert u Močvari (Kulturpunkt)', { at: '2026-09-11T20:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt' } }), ...m.items]) : m));
     const list = stories(unfiltered, hr, 'hr', NOW);
-    expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(false); // the licence boundary holds on the screen itself
+    expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(true); // every source the app fetches reaches the screen
     expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
     const cards = teaserCards(MODULES, i18n, NOW);
     expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'city', 'invitation']);
