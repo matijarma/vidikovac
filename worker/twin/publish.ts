@@ -12,7 +12,7 @@ import type { GraphNetwork } from '../../shared/motion/network';
 import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { STOP_ZONE_M } from '../../shared/motion/speed';
-import { lastFix, type Track } from '../../shared/motion/track';
+import { lastFix, type FreeKnot, type PathKnot, type Track } from '../../shared/motion/track';
 import type { VehicleMotion } from '../../shared/motion/wire';
 import type { FeedPayload, ItemInput } from '../feed/payload';
 import { compactData } from '../feed/payload';
@@ -40,6 +40,10 @@ export const SOURCE_KEY = 'zet';
 
 /** Coordinates on the wire keep the feed's own precision (~1.1 m). */
 const COORD_PRECISION = 1e5;
+/** Arcs on the wire keep a decimetre: finer than the feed's own ~1.1 m, coarse
+ *  enough that a plan of a dozen knots costs tens of bytes, not full-width
+ *  floats (R-TE13). Knot times are integer seconds already. */
+const ARC_PRECISION = 10;
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -53,6 +57,14 @@ function iso(ms: number): string {
 
 function round(value: number, precision: number): number {
   return Math.round(value * precision) / precision;
+}
+
+function wirePathKnots(knots: readonly PathKnot[]): PathKnot[] {
+  return knots.map(([t, s]) => [Math.round(t), round(s, ARC_PRECISION)]);
+}
+
+function wireFreeKnots(knots: readonly FreeKnot[]): FreeKnot[] {
+  return knots.map(([t, lon, lat]) => [Math.round(t), round(lon, COORD_PRECISION), round(lat, COORD_PRECISION)]);
 }
 
 interface Placed {
@@ -69,7 +81,7 @@ function place(track: Track, net: GraphNetwork | null): Placed {
   if (!plan) return { lon: last.lon, lat: last.lat, held: false };
   if (plan.on === 'free') {
     const [lon, lat] = evalFreePlan(plan.knots, 0);
-    return { lon, lat, motion: { plan: plan.knots }, held: false };
+    return { lon, lat, motion: { plan: wireFreeKnots(plan.knots) }, held: false };
   }
   if (!net) return { lon: last.lon, lat: last.lat, held: false };
   const s = evalPathPlan(plan.knots, 0);
@@ -78,13 +90,13 @@ function place(track: Track, net: GraphNetwork | null): Placed {
   if (plan.on === 'path') {
     const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, s));
     const atStop = net.stopsOnPath(plan.pathIdx).some((entry) => Math.abs(entry.s - s) <= STOP_ZONE_M);
-    return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: plan.knots }, held: flat && atStop };
+    return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: wirePathKnots(plan.knots) }, held: flat && atStop };
   }
   const shape = net.shapes[plan.shapeIdx];
   const [lon, lat] = toLonLat(at(shape.pts, shape.cum, s));
   const before = net.nextStop(plan.shapeIdx, s - STOP_ZONE_M - 0.5);
   const atStop = before !== null && Math.abs(before.s - s) <= STOP_ZONE_M;
-  return { lon, lat, motion: { path: shape.id, plan: plan.knots }, held: flat && atStop };
+  return { lon, lat, motion: { path: shape.id, plan: wirePathKnots(plan.knots) }, held: flat && atStop };
 }
 
 export function buildPayload(
