@@ -18,14 +18,14 @@ const zetRtFixture = new Uint8Array(readFileSync(new URL('../fixtures/zet-rt.pb'
  * data, so this is proof against the actual wire format, not an assumption
  * about it.
  *
- * R-TE1 narrows this to ZET's own fields: from B5 the vehicle row carries the
- * twin's own `speed`, and this guard is rewritten then to "never
- * position.speed". Until then the key stays out.
+ * R-TE1 narrows this to ZET's own fields: the vehicle row may carry `speed`,
+ * but only the twin's own estimate (worker/twin/publish.ts); the direct
+ * parser of ZET's bytes still emits neither bearing nor speed, which the
+ * fixture proves below.
  */
-describe('the vehicle data vocabulary never re-admits bearing or speed', () => {
-  it('excludes bearing and speed from DATA_KEYS.vehicle', () => {
+describe('the vehicle data vocabulary never re-admits a ZET bearing or speed', () => {
+  it('excludes bearing from DATA_KEYS.vehicle', () => {
     expect(DATA_KEYS.vehicle).not.toContain('bearing');
-    expect(DATA_KEYS.vehicle).not.toContain('speed');
   });
 
   it('never lets the real ZET fixture produce a bearing or a speed on a vehicle row', () => {

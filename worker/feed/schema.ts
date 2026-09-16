@@ -154,8 +154,10 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // to trams before, or without, the network artefact). 'direction',
   // 'headsign', 'shapeId', 'nextStopId' and 'delaySeconds' are the twin's
   // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
-  // A); the twin's own 'speed', 'confidence' and 'held' arrive in B5.
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds'],
+  // A); 'speed' (m/s), 'confidence' (0..1) and 'held' are the twin's OWN
+  // estimates from history, geometry and timetable (R-TE1), never ZET's
+  // position.speed, which the direct parser still drops.
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds', 'speed', 'confidence', 'held'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],
