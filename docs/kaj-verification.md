@@ -580,7 +580,7 @@ karte, nema imena ulica ispod praga `roads_labels_major`).
 
 ### Pravila slaganja
 
-Iz `e2e/kiosk-layout.spec.ts`'s `compositionIssues` (P3, val A): polje karte u pejzažu ≥ 0,60
+Iz provjera `compositionIssues` u `e2e/kiosk-layout.spec.ts` (P3, val A): polje karte u pejzažu ≥ 0,60
 površine `.k-invitation`; jedino `.maplibregl-ctrl-attrib` smije sjeći okvir polja; `.k-column`
 nikad ne sječe polje; QR ≥ 240 px u oba smjera; svaka `.k-say-value` ima
 `scrollHeight ≤ clientHeight + 1`, bez `text-overflow: ellipsis`, najviše dva retka; zaglavlje i
@@ -603,7 +603,7 @@ i na izjavi i na laganoj ploči), `kiosk-says` (stupac), `kiosk-say` (svaki `art
 `kiosk-tonight`, `kiosk-city`, `kiosk-works`, `tile-vehicles`, `tile-closures`, `k-city-ink`.
 Osam mogućih izjava u stupcu (`app/src/kiosk/say.ts`, P2): prometna presuda, potres, zatvaranje,
 zadnji polazak (od 20 sati), ZET-ova prometna obavijest, najava sjednice Skupštine, radovi i
-kvartovske novosti -- najviše tri istovremeno, poredane po važnosti sada. Radnički teaser
+kvartovske novosti -- najviše tri istovremeno, poredane po važnosti sada. Workerov teaser
 (`/api/teaser`, ova radna cjelina): kutija vozila 3,8 km oko stajališta (`TEASER_BOX_HALF_M`
 1900 m), otvoreni redci `dogadanja` poredani (sjednice, ZET promet, pa ostatak) i ograničeni
 na 20.
