@@ -1,5 +1,5 @@
 // The producers of the time band (plan A.6), in the sada reading order:
-// transit -> mobility -> komunalno -> safety -> news -> civic (DOMAIN_ORDER in
+// transit -> mobility -> komunalno -> safety -> civic (DOMAIN_ORDER in
 // tiles.ts). The gazette is the least time-critical value and the only
 // half-width tile after the line tiles, so it sits under the news row;
 // assembly and events fill the time lanes; last run reads the stop's GTFS

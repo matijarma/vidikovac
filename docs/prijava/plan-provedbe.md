@@ -16,7 +16,7 @@ Isporuke: lagani način zaslona bez karte, WebGL-a i `canvas` animacija, s raspo
 
 ### M2 Svi zeleni izvori u produkciji, pisma vlasnicima podataka (mjeseci 2 do 3)
 
-Isporuke: hidrološki bilten (vodostaj Save), indeks zraka (INSPIRE WFS/WMS), dolasci po stajalištu iz GTFS-RT-a, HŽPP polasci prema voznom redu, Narodne novine (ELI), otvorena savjetovanja Grada, Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi, prostorni slojevi Grada (ljekarne, vatrogasci, policija, javni zdenci, javni zahodi, knjižnice, muzeji, parkovi, biciklističke staze); test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT izvoru i uvjeti RSS-a), HRT-u (program te audio i video) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradskom uredu o uvjetima API-ja Službenog glasnika i uvjetima korištenja zagreb.hr, upit Etnografskom muzeju o licenci. Mjera: `/izvori` prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.
+Isporuke: hidrološki bilten (vodostaj Save), indeks zraka (INSPIRE WFS/WMS), dolasci po stajalištu iz GTFS-RT-a, HŽPP polasci prema voznom redu, Narodne novine (ELI), otvorena savjetovanja Grada, Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi, prostorni slojevi Grada (ljekarne, vatrogasci, policija, javni zdenci, javni zahodi, knjižnice, muzeji, parkovi, biciklističke staze); test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT izvoru i uvjeti RSS-a) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradskom uredu o uvjetima API-ja Službenog glasnika i uvjetima korištenja zagreb.hr, upit Etnografskom muzeju o licenci. Mjera: `/izvori` prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.
 
 ### M3 Šest zaslona instalirano, administracija zaslona (mjeseci 3 do 4)
 
@@ -26,9 +26,9 @@ Isporuke: zasloni u pilot kafiću, prostoru udruge, na lokaciji koju odabere Gra
 
 Isporuke: prvi mjesečni CSV i JSON `(mjesec, dan, sat, događaj, dim1, dim2, broj)` s zaokruživanjem na 5 i sažimanjem ćelija ispod 10, uz tekst licence za Grad; prezentacija na ZGBit susretu; `/open/catalog.json` (DCAT-AP) s dnevnim snimkama u R2, ispravljenom licencom skupa EMSC-a i ponudom Gradu za objavu skupova Grada i DHMZ-a na data.zagreb.hr; statička stranica "pogled izvana" s kartom javnih zaslona, na koju podijeljena poveznica vodi osobu bez sesije; otvoreni format za izdavače (javna JSON shema za najave događanja i obavijesti, upute i primjer, provjera sheme pri uključivanju) i prvi vanjski izdavači na zaslonima. Mjera: potvrda primitka Gradskog ureda; katalog validiran DCAT-AP validatorom; stranica "pogled izvana" objavljena; shema objavljena s najmanje jednim vanjskim izdavačem u produkciji.
 
-### M5 Žuti izvori, sadržaj HRT-a i HAK-a ako je dopušten, izvještaj o pouzdanosti (mjeseci 6 do 8)
+### M5 Žuti izvori, sadržaj HAK-a ako je dopušten, izvještaj o pouzdanosti (mjeseci 6 do 8)
 
-Isporuke: dežurne ljekarne, planirani prekidi HEP-a, Toplinarstva i VIO-a, peludni semafor, tekst HAK-a, sve s oznakom "neslužbeni prikaz" gdje je izvor HTML; fotogram Trga bana Jelačića ako HAK pisano odobri; ugradnja HRT-ovog ili HAK-ovog sadržaja samo ako pisano odobrenje stigne; prvi izvještaj o pouzdanosti izvora (postotak vremena živo, zastarjelo, nedostupno po izvoru), za prvo tromjesečje rada zaslona, Gradskom uredu. Mjera: izvještaj dostavljen; svaki žuti izvor ima test i atribuciju.
+Isporuke: dežurne ljekarne, planirani prekidi HEP-a, Toplinarstva i VIO-a, peludni semafor, tekst HAK-a, sve s oznakom "neslužbeni prikaz" gdje je izvor HTML; fotogram Trga bana Jelačića ako HAK pisano odobri; ugradnja HAK-ovog sadržaja samo ako pisano odobrenje stigne; prvi izvještaj o pouzdanosti izvora (postotak vremena živo, zastarjelo, nedostupno po izvoru), za prvo tromjesečje rada zaslona, Gradskom uredu. Mjera: izvještaj dostavljen; svaki žuti izvor ima test i atribuciju.
 
 ### M6 Druga revizija pristupačnosti, izjava v2, javni izvještaj (mjesec 9)
 

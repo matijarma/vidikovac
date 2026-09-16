@@ -646,7 +646,7 @@ button.k-strip-verdict { cursor: pointer; }
 /* The join card: the small QR the next person scans, painted by the controller. */
 .k-join { display: flex; flex: none; align-items: center; box-sizing: border-box; margin-top: auto; padding: var(--k-gap) var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .k-side-blocks + .k-join { margin-top: var(--k-gap); }
-/* No side blocks (Vijesti in portrait): the join card sits at the foot of the side, not at its top. */
+/* No side blocks in portrait: the join card sits at the foot of the side, not at its top. */
 .k-side-blocks:empty + .k-join { margin-top: auto; }
 .k-join-qr { flex: none; width: calc(120px * var(--k-zoom)); height: calc(120px * var(--k-zoom)); }
 .k-join-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.4); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }

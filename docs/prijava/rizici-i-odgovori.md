@@ -4,7 +4,7 @@ Osam prigovora koje očekujemo, s odgovorom koji je ugrađen u proizvod, ne obe�
 
 ### 1. "Još jedna ZET aplikacija."
 
-ZET je jedan od izvora u šest područja i ne pokušavamo ga zamijeniti: Promet prikazuje vozila i kašnjenja linija, a za planiranje putovanja upućuje na postojeće aplikacije. Vrijednost je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i vijest na istom mjestu, u istoj minuti, s istim standardom atribucije. Kaj ima? se od aplikacije za jedno područje razlikuje po tom spoju, po javnim zaslonima koje vodi telefon, po otvorenom formatu kroz koji svaki izdavač u gradu objavljuje za sve zaslone i po skupu podataka o potražnji koji se vraća Gradu.
+ZET je jedan od izvora u šest područja i ne pokušavamo ga zamijeniti: Promet prikazuje vozila i kašnjenja linija, a za planiranje putovanja upućuje na postojeće aplikacije. Vrijednost je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i večerašnje događanje na istom mjestu, u istoj minuti, s istim standardom atribucije. Kaj ima? se od aplikacije za jedno područje razlikuje po tom spoju, po javnim zaslonima koje vodi telefon, po otvorenom formatu kroz koji svaki izdavač u gradu objavljuje za sve zaslone i po skupu podataka o potražnji koji se vraća Gradu.
 
 ### 2. "Ograničen pristup se ne slaže s uvjetom 'rezultati nenaplatno dostupni javnosti'."
 
