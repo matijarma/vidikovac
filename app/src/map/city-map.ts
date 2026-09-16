@@ -23,7 +23,7 @@ import { createModel, type Drawn, type Fix, type Model } from '../motion/model';
 import type { Network } from '../motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
-import type { MapTheme, StyleLayerLike, StyleOp } from './basemap';
+import type { BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 
@@ -359,6 +359,13 @@ export interface MapCamera {
 export interface MapView {
   center?: [number, number];
   zoom?: number;
+  /** Sides of the map something else is drawn over: the kiosk's tile rail
+   *  along the foot. A camera given this centres inside the part a reader can
+   *  actually see, instead of behind the cards. Standing, exactly as
+   *  setFitPadding: applied to this move and to every later one.
+   *  (kiosk/INTEGRATION.md listed this as the one thing pending on the map
+   *  side; kiosk/mapview.ts's boardCentre faked it by shifting latitude.) */
+  padding?: FitPadding;
   selectedRoute?: string;
   selectedStop?: string;
   follow?: boolean;
@@ -798,7 +805,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function buildMap(l: MaplibreModule): void {
-    const style = l.basemapStyle(theme, { locale, origin: deps.origin, placeLabels: options.placeLabels });
+    const style = l.basemapStyle(theme, basemapOptions());
     basemap = style.layers;
     const start = initialCamera(l);
     const created = new l.Map({
@@ -1051,12 +1058,20 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     }
   }
 
+  /** Every option the basemap is built from, in one place. A theme or locale
+   *  flip rebuilds the layer list, and before this builder existed both sites
+   *  wrote the object out by hand and dropped anything not in that literal --
+   *  a silent regression on the surface that flips theme twice a day. */
+  function basemapOptions(): BasemapStyleOptions {
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels };
+  }
+
   function setTheme(next: MapTheme): void {
     if (next === theme) return;
     theme = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(next, { locale, origin: deps.origin, placeLabels: options.placeLabels });
+    const nextBasemap = l.basemapLayers(next, basemapOptions());
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
     map.setSprite?.(l.spriteUrl(next, deps.origin));
@@ -1068,7 +1083,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     locale = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(theme, { locale, origin: deps.origin, placeLabels: options.placeLabels });
+    const nextBasemap = l.basemapLayers(theme, basemapOptions());
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
     relabelControls();
@@ -1172,6 +1187,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     follow,
     following: () => following,
     setView(view) {
+      if (view.padding) fitPadding = { ...view.padding };
       const next = viewSelection(view.selectedRoute, view.selectedStop);
       if (next?.kind === 'stop') {
         const platform = net?.stops.find((s) => s.id === next.id);

@@ -18,7 +18,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
-import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapPoint } from '../map/city-map';
+import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapPoint } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import { vehicleFixes } from '../motion/fixes';
 
@@ -44,6 +44,8 @@ export interface KioskMapRequest extends MapSlotOptions {
   selectedStop?: string;
   /** Keep the camera on the selected route's vehicles (map workstream option). */
   follow?: boolean;
+  /** Sides of the map something is drawn over; the camera centres in the rest. */
+  padding?: FitPadding;
   /** The screen's own stop, marked and named by the map. */
   stop?: ScreenStop | null;
   /** A public screen: no pointer or keyboard handling and no controls. */
@@ -52,7 +54,7 @@ export interface KioskMapRequest extends MapSlotOptions {
   locale?: string;
 }
 
-export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow'>;
+export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'padding'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
 export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale'>;
@@ -124,6 +126,7 @@ export function viewOf(request: KioskMapRequest): KioskMapView {
   if (request.selectedRoute) view.selectedRoute = request.selectedRoute;
   if (request.selectedStop) view.selectedStop = request.selectedStop;
   if (request.follow) view.follow = true;
+  if (request.padding) view.padding = request.padding;
   return view;
 }
 
@@ -161,15 +164,6 @@ export function metresPerPixel(zoom: number, lat: number): number {
   return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 }
 
-/** The camera centre that puts the stop in the middle of the part of the map
- *  the lines board does not cover: the true centre moved south by half the
- *  board's height. No board (lightweight, no layout yet) means no shift. */
-export function boardCentre(stop: { lon: number; lat: number }, zoom: number, boardPx: number): [number, number] {
-  if (!(boardPx > 0)) return [stop.lon, stop.lat];
-  const metres = (boardPx / 2) * metresPerPixel(zoom, stop.lat);
-  return [stop.lon, stop.lat - metres / 111_320];
-}
-
 export interface KioskMapInput {
   stop: ScreenStop | null;
   snapshots: Partial<Record<'zet-rt' | 'prometnice', ModuleSnapshot>>;
@@ -177,8 +171,10 @@ export interface KioskMapInput {
   selection: PublicSelection | null;
   ariaLabel: string;
   reducedMotion?: boolean;
-  /** Height of the lines board over the map's foot, in CSS px. */
-  boardPx?: number;
+  /** Sides of the map the composition draws its own cards over, CSS px: the
+   *  kiosk measures its rail, the map centres inside what is left. Replaces
+   *  the latitude shift boardCentre used to fake. */
+  padding?: FitPadding;
   locale?: string;
 }
 
@@ -202,8 +198,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     symbolScale: KIOSK_SYMBOL_SCALE,
     locale: input.locale,
   };
+  if (input.padding) request.padding = input.padding;
   if (input.stop) {
-    request.center = boardCentre(input.stop, KIOSK_MAP_ZOOM, input.boardPx ?? 0);
+    request.center = [input.stop.lon, input.stop.lat];
     request.selectedStop = input.stop.id;
   }
   if (input.selection?.kind === 'route') {

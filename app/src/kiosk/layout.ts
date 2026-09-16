@@ -38,12 +38,34 @@ export const MIN_ZOOM = 0.8;
 export const MAX_ZOOM = 2.5;
 
 export interface Viewport { width: number; height: number }
-export interface LayoutDecision { size: KioskSize; zoom: number; portrait: boolean }
+export interface LayoutDecision {
+  size: KioskSize;
+  zoom: number;
+  /** The viewport is taller than it is wide, whatever the device. */
+  portrait: boolean;
+  /** The portrait drawing: a screen stood up on a wall, never a phone in a
+   *  hand. A phone is its own drawing (`size: 'handheld'`) and must not take
+   *  the totem's rules, which hide the date and lay the basics in two columns
+   *  for a 1080 x 1920 wall. */
+  totem: boolean;
+}
+
+/** How many members `repeat(auto-fit, minmax(min, 1fr))` actually puts in one
+ *  row `width` px wide with `gap` between them: n members need
+ *  n*min + (n-1)*gap. The engine's own arithmetic, so a rail asks for exactly
+ *  the number of tiles it has room to draw instead of a number drawn once for
+ *  1920 and kept at every other size. Zero means nothing has been laid out yet
+ *  (a pre-paint mount, happy-dom), and the caller falls back to the drawing's
+ *  own count; one member always fits. */
+export function railColumns(width: number, min: number, gap: number): number {
+  if (!(width > 0) || !(min > 0)) return 0;
+  return Math.max(1, Math.floor((width + gap) / (min + gap)));
+}
 
 export function decideLayout(viewport: Viewport): LayoutDecision {
   const { width, height } = viewport;
   const portrait = height > width;
-  if (width < HANDHELD_MAX_WIDTH) return { size: 'handheld', zoom: 1, portrait };
+  if (width < HANDHELD_MAX_WIDTH) return { size: 'handheld', zoom: 1, portrait, totem: false };
   const size: KioskSize = !portrait && width >= WIDE_MIN_WIDTH ? 'wide' : 'compact';
   // The drawing this screen is measured against: the largest one (wide, or the
   // portrait drawing itself) for scaling up, its own for scaling down.
@@ -56,15 +78,16 @@ export function decideLayout(viewport: Viewport): LayoutDecision {
     zoom = Math.min(width / design.width, height / design.height);
   }
   zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-  return { size, zoom: Math.round(zoom * 1000) / 1000, portrait };
+  return { size, zoom: Math.round(zoom * 1000) / 1000, portrait, totem: portrait };
 }
 
 /** Writes the decision onto the kiosk root: `data-size`, `data-portrait`
- *  and `--kiosk-zoom`, which every size in kiosk.css multiplies. */
+ *  and `--kiosk-zoom`, which every size in kiosk.css multiplies.
+ *  `data-portrait` is the totem drawing, never a phone held upright. */
 export function applyLayout(root: HTMLElement, viewport: Viewport): LayoutDecision {
   const decision = decideLayout(viewport);
   root.dataset.size = decision.size;
-  root.dataset.portrait = decision.portrait ? '1' : '0';
+  root.dataset.portrait = decision.totem ? '1' : '0';
   root.style.setProperty('--kiosk-zoom', String(decision.zoom));
   return decision;
 }

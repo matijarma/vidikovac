@@ -16,7 +16,7 @@ import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../ap
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
-import { boardCentre, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -102,12 +102,12 @@ describe('kiosk copy', () => {
 
 describe('layout: two compositions, never a proportional shrink, and a handheld below 900 px', () => {
   it('draws wide at 1920 x 1080 and compact at 1366 x 768, both at zoom 1', () => {
-    expect(decideLayout({ width: 1920, height: 1080 })).toEqual({ size: 'wide', zoom: 1, portrait: false });
-    expect(decideLayout({ width: 1366, height: 768 })).toEqual({ size: 'compact', zoom: 1, portrait: false });
+    expect(decideLayout({ width: 1920, height: 1080 })).toEqual({ size: 'wide', zoom: 1, portrait: false, totem: false });
+    expect(decideLayout({ width: 1366, height: 768 })).toEqual({ size: 'compact', zoom: 1, portrait: false, totem: false });
   });
   it('gives a screen between the two the compact drawing with the room, scales wide up for 4K, and compact down no further than 0.8', () => {
-    expect(decideLayout({ width: 1600, height: 900 })).toEqual({ size: 'compact', zoom: 1, portrait: false });
-    expect(decideLayout({ width: 3840, height: 2160 })).toEqual({ size: 'wide', zoom: 2, portrait: false });
+    expect(decideLayout({ width: 1600, height: 900 })).toEqual({ size: 'compact', zoom: 1, portrait: false, totem: false });
+    expect(decideLayout({ width: 3840, height: 2160 })).toEqual({ size: 'wide', zoom: 2, portrait: false, totem: false });
     expect(decideLayout({ width: 1280, height: 720 }).zoom).toBe(0.937);
     expect(decideLayout({ width: 1000, height: 560 }).zoom).toBe(MIN_ZOOM);
   });
@@ -117,21 +117,21 @@ describe('layout: two compositions, never a proportional shrink, and a handheld 
   // shrunk to 0.8, which would put the credit line under the 13 px floor and
   // the QR under 240 px on a wall that has the room.
   it('draws a portrait screen on the compact tiers at zoom 1 at 1080 x 1920, and scales it from that size, never below 0.8', () => {
-    expect(decideLayout({ width: 1080, height: 1920 })).toEqual({ size: 'compact', zoom: 1, portrait: true });
+    expect(decideLayout({ width: 1080, height: 1920 })).toEqual({ size: 'compact', zoom: 1, portrait: true, totem: true });
     expect(PORTRAIT).toEqual({ width: 1080, height: 1920 });
     // A 4K totem: the same drawing twice the size, compact tiers, never the wide composition on its side.
-    expect(decideLayout({ width: 2160, height: 3840 })).toEqual({ size: 'compact', zoom: 2, portrait: true });
-    expect(decideLayout({ width: 1440, height: 2560 })).toEqual({ size: 'compact', zoom: 1.333, portrait: true });
+    expect(decideLayout({ width: 2160, height: 3840 })).toEqual({ size: 'compact', zoom: 2, portrait: true, totem: true });
+    expect(decideLayout({ width: 1440, height: 2560 })).toEqual({ size: 'compact', zoom: 1.333, portrait: true, totem: true });
     // A rotated 1600 x 900 screen: scaled down by its narrower ratio; a squat portrait stops at the floor.
-    expect(decideLayout({ width: 900, height: 1600 })).toEqual({ size: 'compact', zoom: 0.833, portrait: true });
-    expect(decideLayout({ width: 1080, height: 1200 })).toEqual({ size: 'compact', zoom: MIN_ZOOM, portrait: true });
+    expect(decideLayout({ width: 900, height: 1600 })).toEqual({ size: 'compact', zoom: 0.833, portrait: true, totem: true });
+    expect(decideLayout({ width: 1080, height: 1200 })).toEqual({ size: 'compact', zoom: MIN_ZOOM, portrait: true, totem: true });
   });
   // T4.4: a kiosk opened on a phone is a handheld, never a compact screen
   // shrunk to 0.8 and cropped: zoom stays 1 and the page scrolls (kiosk.css).
   it('calls anything narrower than KIOSK_HANDHELD_MAX_PX a handheld at zoom 1, portrait as measured', () => {
     expect(HANDHELD_MAX_WIDTH).toBe(KIOSK_HANDHELD_MAX_PX);
-    expect(decideLayout({ width: 390, height: 844 })).toEqual({ size: 'handheld', zoom: 1, portrait: true });
-    expect(decideLayout({ width: 844, height: 390 })).toEqual({ size: 'handheld', zoom: 1, portrait: false });
+    expect(decideLayout({ width: 390, height: 844 })).toEqual({ size: 'handheld', zoom: 1, portrait: true, totem: false });
+    expect(decideLayout({ width: 844, height: 390 })).toEqual({ size: 'handheld', zoom: 1, portrait: false, totem: false });
     expect(decideLayout({ width: KIOSK_HANDHELD_MAX_PX - 1, height: 600 }).size).toBe('handheld');
     expect(decideLayout({ width: KIOSK_HANDHELD_MAX_PX, height: 600 }).size).toBe('compact');
   });
@@ -504,7 +504,7 @@ describe('the one map, through the additive adapter', () => {
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
   });
-  it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and centres above the lines board', () => {
+  it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and centres inside the padding the composition gives it', () => {
     const setFeedState = vi.fn();
     const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
     const adapter = createKioskMapAdapter(factory);
@@ -512,7 +512,7 @@ describe('the one map, through the additive adapter', () => {
     expect(adapter.feedState()).toBe('stale');
     const maps = createMapSlots(adapter.factory);
     const zet = MODULES.find((m) => m.module === 'zet-rt')!;
-    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': { ...zet, status: 'stale' } }, now: NOW, selection: null, ariaLabel: 'karta', boardPx: 300 }, adapter);
+    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': { ...zet, status: 'stale' } }, now: NOW, selection: null, ariaLabel: 'karta', padding: { bottom: 300 } }, adapter);
     expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
     requestKioskMap(maps, { stop: STOP, snapshots: {}, now: NOW, selection: null, ariaLabel: 'karta' }, adapter);
     expect(setFeedState).toHaveBeenLastCalledWith('down'); // no snapshot is no evidence of motion
@@ -522,10 +522,10 @@ describe('the one map, through the additive adapter', () => {
     expect(options.interactive).toBe(false);
     expect(options.symbolScale).toBe(KIOSK_SYMBOL_SCALE);
     expect(options.stop).toEqual(STOP);
-    const [lon, lat] = options.center as [number, number];
-    expect(lon).toBe(STOP.lon);
-    expect(STOP.lat - lat).toBeCloseTo((150 * metresPerPixel(15, STOP.lat)) / 111_320, 6);
-    expect(boardCentre(STOP, 15, 0)).toEqual([STOP.lon, STOP.lat]);
+    // The centre is the stop itself: the map, not the caller, keeps it clear
+    // of the rail, through the padding the request carries.
+    expect(options.center).toEqual([STOP.lon, STOP.lat]);
+    expect(options.padding).toEqual({ bottom: 300 });
     expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
   });
 });
