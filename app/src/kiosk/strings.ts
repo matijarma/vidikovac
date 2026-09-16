@@ -86,10 +86,34 @@ export interface KioskStrings {
     quakeBody: string;
     empty: string;
   };
-  /** The scene field (scenes.ts): the Večeras title (Promet and Grad are the
-   *  domain names, layers.*), the visually hidden position sentence, the works
-   *  band's two scopes (D18), the empty evening, the live-stream word and the
-   *  rows beyond the cap. */
+  /** The column's kicker words and filler sentences (say.ts, contracts 4/5):
+   *  transit's three value states, its "N vozila u blizini" plural and its
+   *  zero, the other seven statements' kickers and the works plural, and
+   *  "danas"/"sutra" for the Assembly's context line. */
+  say: {
+    transit: string;
+    transitRegular: string;
+    transitNoData: string;
+    nearby: PluralForms;
+    nearbyNone: string;
+    quake: string;
+    closure: string;
+    zet: string;
+    kvart: string;
+    worksKvart: string;
+    worksCity: string;
+    works: PluralForms;
+    today: string;
+    tomorrow: string;
+  };
+  /** @deprecated wave B: scenes.ts's own vocabulary. P2 leaves it in place
+   *  (contract 7 -- additions in wave A, removals in wave B) so this
+   *  worktree and P3's, which deletes scenes.ts, both typecheck; the column
+   *  (say.ts, above) is what a statement now reads. The scene field
+   *  (scenes.ts): the Večeras title (Promet and Grad are the domain names,
+   *  layers.*), the visually hidden position sentence, the works band's two
+   *  scopes (D18), the empty evening, the live-stream word and the rows
+   *  beyond the cap. */
   scenes: {
     tonight: string;
     /** "prizor {index} od {count}", the reader's copy of the dots. */
@@ -100,7 +124,9 @@ export interface KioskStrings {
     live: string;
     moreEvents: PluralForms;
   };
-  /** The right column's two value tiles (frame.ts's valueTiles): vehicles on
+  /** @deprecated wave B: frame.ts's valueTiles reads this; say.ts's transit
+   *  and closure statements read say.* and paired.* instead (contract 7).
+   *  The right column's two value tiles (frame.ts's valueTiles): vehicles on
    *  the network, closures within the 1.5 km nearby radius. */
   tiles: {
     vehicles: string;
@@ -133,7 +159,10 @@ export interface KioskStrings {
     openBasics: string;
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
-    /** "sljedeći prizor za {seconds} s": the strip's countdown to the next scene, hidden when the field is not rotating. */
+    /** @deprecated wave B: the rotation the strip counted down to is gone
+     *  (R-KP11: the field is one fixed view, no chapters). "sljedeći prizor
+     *  za {seconds} s": the strip's countdown to the next scene, hidden when
+     *  the field is not rotating. */
     nextScene: string;
   };
   basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
@@ -291,6 +320,11 @@ function build(code: SupportedLocale): KioskStrings {
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
+    say: {
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow']),
+      nearby: forms('say', 'nearby'),
+      works: forms('say', 'works'),
+    },
     scenes: {
       ...group('scenes', ['tonight', 'position', 'worksKvart', 'worksCity', 'tonightEmpty', 'live']),
       moreEvents: forms('scenes', 'moreEvents'),
