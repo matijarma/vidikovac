@@ -84,7 +84,11 @@ export function frameStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop 
   return { level: state.level, verdict: strings.safety.verdict[state.level], parts, nextIn, confirmedAt: state.confirmedAt };
 }
 
-/** "sljedeći prizor za 15 s"; '' when the field is not rotating (the caller hides the element). */
+/** @deprecated wave B: R-KP11 removes the rotation the strip counted down to
+ *  (one fixed field, no chapters); P2 leaves this in place so P3's worktree
+ *  keeps typechecking against it until the merge (contract 7). "sljedeći
+ *  prizor za 15 s"; '' when the field is not rotating (the caller hides the
+ *  element). */
 export function countdownText(nextIn: number | null, strings: KioskStrings): string {
   return nextIn === null ? '' : fill(strings.safety.nextScene, { seconds: nextIn });
 }
@@ -114,6 +118,7 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
     ${trail}
     <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(strings.safety.pharmacy)}: <strong>${escapeHtml(strip.parts.pharmacy.label)}</strong></span>
     </div>
+    <!-- @deprecated wave B: the countdown item (R-KP11, no more rotation); kept until the merge so P3's worktree still typechecks (contract 7). -->
     <span class="k-strip-next" data-testid="strip-next"${strip.nextIn === null ? ' hidden' : ''}>${escapeHtml(countdownText(strip.nextIn, strings))}</span>
     <a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`;
 }
@@ -130,7 +135,11 @@ export interface ValueTile {
   context: string;
 }
 
-/** Vehicles moving on the network (the `zet-rt` fleet count), then closures
+/** @deprecated wave B: the right column is say.ts's ranked statements now
+ *  (transit's own nearby count replaces the fleet-count tile, R-KP12; the
+ *  closure statement replaces the closures tile); P2 leaves this in place so
+ *  P3's worktree keeps typechecking against it until the merge (contract 7).
+ *  Vehicles moving on the network (the `zet-rt` fleet count), then closures
  *  within the 1.5 km nearby radius (D18); the strip's closures cell drops the
  *  nearest street so it is said once, here. */
 // `i18n` is unused today (every word here comes from `strings`) but kept in
