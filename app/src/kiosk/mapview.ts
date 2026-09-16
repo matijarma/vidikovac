@@ -354,15 +354,27 @@ export function assemblyPoints(geo: ModuleSnapshot | undefined, stop: ScreenStop
   return rows.slice(0, ASSEMBLY_CAP).map((r) => r.point);
 }
 
+/** Within this distance of the screen's stop the pharmacy's address label is
+ *  dropped (R-KP18): at Trg bana Jelačića the address "Trg bana Josipa
+ *  Jelačića 3" sat on the stop's own name, the biggest label on the picture.
+ *  The ring stays, and the strip names the pharmacy in full, so nothing is
+ *  lost; 150 m is about one stop's own frontage, inside which the two labels
+ *  collide at every field zoom. */
+export const PHARMACY_LABEL_MIN_M = 150;
+
 /** The one on-duty pharmacy the safety strip also names, so the map and the
  *  strip can never name two different ones. Its coordinate is hand-entered and
  *  approximate (local.ts's PHARMACY_POINTS) and its ADDRESS is exact, so the
- *  address is the label and the mark is a hollow ring, never a filled pin. */
+ *  address is the label and the mark is a hollow ring, never a filled pin.
+ *  On the screen's own stop the label is blank and the ring alone remains
+ *  (PHARMACY_LABEL_MIN_M); `props.address` stays, because the ring's layer
+ *  filter draws a pharmacy only with its published address (map/overlays.ts). */
 export function pharmacyPoint(stop: ScreenStop | null): MapPoint[] {
   const pharmacy = nearestPharmacy(stop);
   const at = PHARMACY_POINTS[pharmacy.label];
   if (!at) return [];
-  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: pharmacy.address, place: 'pharmacy', props: { address: pharmacy.address } }];
+  const onTheStop = stop !== null && stopDistanceM(at, stop) < PHARMACY_LABEL_MIN_M;
+  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: onTheStop ? '' : pharmacy.address, place: 'pharmacy', props: { address: pharmacy.address } }];
 }
 
 /** The seat of the stop's own gradska cetvrt, from the real seat coordinates

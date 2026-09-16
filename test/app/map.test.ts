@@ -15,6 +15,7 @@ import {
 } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import * as overlays from '../../app/src/map/overlays';
+import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 
 describe('open raster basemap', () => {
   it('uses the OpenStreetMap tile URL and attributes it in the style', () => {
@@ -259,6 +260,10 @@ describe('the field camera and the paired camera', () => {
     const none = fieldView({ stop: null, widthPx: 1400, spanM: FIELD_SPAN_M });
     expect(none.center).toBeUndefined();
     expect(none.zoom).toBeCloseTo(fieldZoom(1400, LAT, FIELD_SPAN_M), 6);
+  });
+
+  it('the worker\u2019s teaser box reaches past the field by one stop spacing (TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400, D2): a vehicle has given the motion model one fix of its own before it enters the picture', () => {
+    expect(TEASER_BOX_HALF_M).toBeGreaterThanOrEqual(FIELD_SPAN_M / 2 + 400);
   });
 
   it('the paired view keeps the Promet contract: street zoom, the stop selected, a relayed route followed, a relayed stop selected', () => {

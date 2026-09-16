@@ -67,11 +67,11 @@ export interface SayInput {
   strings: KioskStrings;
   i18n: I18n;
   locale: string;
-  /** How many statements the composition shows: wide 3, compact 2, portrait 3, handheld every candidate. */
+  /** How many statements the composition offers at most (kiosk/layout.ts SAY_SLOTS): wide 3, compact 2, portrait 3, handheld every kind; the room decides what shows (R-KP22). */
   slots: number;
-  /** Line badges before "+N": wide 12, compact 6, portrait 8, handheld 6. */
+  /** Line badges before "+N" (kiosk/layout.ts SAY_BADGE_CAP, the label row's budget beside the kicker): wide 7, compact 4, portrait 8, handheld 6. */
   badgeCap: number;
-  /** A title's shortening budget in characters (cut at a word boundary with "…"): wide 56, compact 44, portrait 48, handheld 40. */
+  /** A title's shortening budget in characters, cut at a word boundary with "…" (kiosk/layout.ts SAY_VALUE_CHARS): wide 56, compact 44, portrait 48, handheld 40. */
   valueChars: number;
 }
 
@@ -115,6 +115,15 @@ export function shorten(text: string, chars: number): string {
   if (text.length <= chars) return text;
   const cut = text.lastIndexOf(' ', chars - 1);
   return `${text.slice(0, cut > 0 ? cut : chars - 1)}…`;
+}
+
+/** The spaces inside one phrase made no-break (U+00A0), so a value that runs
+ *  to two lines breaks only at its " · " separators (R-KP22): "6 kasni 4 min"
+ *  is one run, a number never parts from its unit, a badge never from its
+ *  time. */
+const NBSP = '\u00a0';
+export function unbreakable(phrase: string): string {
+  return phrase.split(' ').join(NBSP);
 }
 
 // --- Small shared helpers -----------------------------------------------------
@@ -164,7 +173,7 @@ function transitCandidate(input: SayInput): Statement | null {
       .filter((row): row is { id: string; delay: number } => row.delay !== undefined && Math.abs(row.delay) >= TRANSIT_HEADLINE_DELAY_S)
       .sort((a, b) => Math.abs(b.delay) - Math.abs(a.delay))
       .slice(0, TRANSIT_HEADLINE_LINES);
-    if (worst.length > 0) value = worst.map((row) => `${row.id} ${delayWord(input.i18n, row.delay)}`).join(' · ');
+    if (worst.length > 0) value = worst.map((row) => unbreakable(`${row.id} ${delayWord(input.i18n, row.delay)}`)).join(' · ');
     else if (stop.routes.some((id) => delays.has(id))) value = s.say.transitRegular;
     else value = s.say.transitNoData;
   }
@@ -209,7 +218,7 @@ function quakeCandidate(input: SayInput): Statement | null {
   // quakeBody edits both surfaces at once and the two locales can never
   // drift the way two independently-typed templates could.
   const [magTemplate, , depthTemplate] = s.story.quakeBody.split(' · ');
-  const magPart = mag === null ? s.paired.magUnknown : fill(magTemplate!, { mag: fmtNumber(input.locale, mag, 1) });
+  const magPart = unbreakable(mag === null ? s.paired.magUnknown : fill(magTemplate!, { mag: fmtNumber(input.locale, mag, 1) }));
   const value = `${magPart} · ${region}`;
   const depthPart = depth === null ? '' : fill(depthTemplate!, { depth: fmtNumber(input.locale, depth, 1) });
   const context = ['EMSC', clock(quake.at), depthPart].filter(Boolean).join(' · ');
@@ -234,7 +243,7 @@ function closureCandidate(input: SayInput): Statement | null {
   const untilText = Number.isFinite(untilMs)
     ? (sameZagrebDay(untilMs, input.now) ? fill(s.paired.untilTime, { time: clock(untilMs) }) : weekdayDayMonth(input.locale, untilMs))
     : '';
-  const context = [distanceM === null ? '' : fmtDistance(input.locale, distanceM), item.summary ?? '', untilText].filter(Boolean).join(' · ');
+  const context = [distanceM === null ? '' : unbreakable(fmtDistance(input.locale, distanceM)), item.summary ?? '', untilText].filter(Boolean).join(' · ');
   const value = item.title;
   const weight = distanceM !== null && distanceM <= CLOSURE_STREET_M ? 90 : 70;
   return {
@@ -252,7 +261,7 @@ function lastrunCandidate(input: SayInput): Statement | null {
   const label = input.i18n.t('tiles.lastRun');
   const context = input.i18n.t('tiles.scheduled');
   const pairs = departures.map((d) => ({ routeId: d.routeId, time: clock(d.at), iso: new Date(d.at).toISOString() }));
-  const value = pairs.map((p) => `${p.routeId} ${p.time}`).join(' · ');
+  const value = pairs.map((p) => `${p.routeId}${NBSP}${p.time}`).join(' · ');
   const valueMarkup = pairs
     .map((p) => `<span class="k-say-pair">${kBadge(p.routeId, routeKind(p.routeId), routeAria(p.routeId, input.strings))}<time datetime="${escapeAttribute(p.iso)}">${escapeHtml(p.time)}</time></span>`)
     .join(' · ');

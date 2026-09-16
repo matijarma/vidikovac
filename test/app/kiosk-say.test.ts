@@ -73,21 +73,22 @@ describe('shorten: cut at a word boundary, never mid-word', () => {
 });
 
 describe('rankStatements: 14:00, the full fixture', () => {
-  it('ranks transit, quake and closure into the top three; the transit value names the two worst lines, worst first; six badges, no "+N"', () => {
+  it('ranks transit, quake and closure into the top three; the transit value names the two worst lines, worst first, each an unbreakable run so a two-line value breaks only at " · " (R-KP22); six badges, no "+N"', () => {
     const slots = rankStatements(input(), []);
     expect(keysOf(slots)).toEqual(['say:transit', 'say:quake', 'say:closure']);
     const transit = statementOf(slots, 'transit')!;
-    expect(transit.value).toBe('6 kasni 4 min · 13 kasni 3 min');
+    expect(transit.value).toBe('6\u00a0kasni\u00a04\u00a0min · 13\u00a0kasni\u00a03\u00a0min');
+    expect(transit.value.split(' · ').every((run) => !run.includes(' '))).toBe(true);
     expect(transit.tone).toBe('late');
     expect(transit.context).toContain('ZET');
     expect(transit.badgesMarkup!.match(/class="k-line-badge line"/g)).toHaveLength(6);
     expect(transit.badgesMarkup).not.toContain('k-say-more');
     const quake = statementOf(slots, 'quake')!;
-    expect(quake.value).toBe('Magnituda 3,4 · Petrinja');
+    expect(quake.value).toBe('Magnituda\u00a03,4 · Petrinja');
     expect(quake.context).toBe('EMSC · 12:00 · dubina 8 km');
     const closure = statementOf(slots, 'closure')!;
     expect(closure.value).toBe('Ilica');
-    expect(closure.context).toBe('350 m · oba smjera · do 18:00');
+    expect(closure.context).toBe('350\u00a0m · oba smjera · do 18:00');
     expect(closure.weight).toBe(90); // 350 m is inside the 500 m street radius
   });
 
@@ -130,7 +131,7 @@ describe('rankStatements: 22:30, last departures', () => {
     expect(keys).toContain('say:lastrun');
     expect(keys.indexOf('say:lastrun')).toBeLessThan(keys.indexOf('say:zet'));
     const lastrun = statementOf(slots, 'lastrun')!;
-    expect(lastrun.value).toBe('11 00:05 · 6 00:15 · 14 00:30 · 13 01:00');
+    expect(lastrun.value).toBe('11\u00a000:05 · 6\u00a000:15 · 14\u00a000:30 · 13\u00a001:00');
     expect(lastrun.valueMarkup!.match(/class="k-say-pair"/g)).toHaveLength(4);
     expect(lastrun.context).toBe(i18n.t('tiles.scheduled'));
   });
