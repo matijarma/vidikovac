@@ -82,6 +82,28 @@ describe('map slots', () => {
     expect(first.getAttribute('aria-label')).toBe('karta a');
   });
 
+  it('replaces a same-id slot when its renderer changes, treating omitted renderer as map, and disposes each instance once', () => {
+    const { factory, made } = spyFactory();
+    const maps = createMapSlots(factory as never);
+    const options = { id: 'a', className: 'map-canvas', ariaLabel: 'karta a', points: [], lines: [] };
+    const geographic = maps.slot(options)!;
+    document.body.appendChild(geographic);
+    maps.sweep();
+    expect(maps.slot({ ...options, renderer: 'map' })).toBe(geographic);
+    const schema = maps.slot({ ...options, renderer: 'schema' })!;
+    expect(schema).not.toBe(geographic);
+    expect(geographic.isConnected).toBe(false);
+    expect(made[0]!.destroy).toHaveBeenCalledTimes(1);
+    expect(maps.handle('a')).toBe(made[1]);
+    expect(maps.slot({ ...options, renderer: 'schema' })).toBe(schema);
+    maps.sweep();
+    expect(maps.slot(options)).not.toBe(schema);
+    expect(made[1]!.destroy).toHaveBeenCalledTimes(1);
+    maps.destroy();
+    expect(factory).toHaveBeenCalledTimes(3);
+    expect(made.every((handle) => handle.destroy.mock.calls.length === 1)).toBe(true);
+  });
+
   it('pauses every live map on pause() (R-F6: the frozen dashboard stops both of its maps)', () => {
     const { factory, made } = spyFactory();
     const maps = createMapSlots(factory as never);

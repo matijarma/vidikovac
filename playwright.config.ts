@@ -46,7 +46,7 @@ export default defineConfig({
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
-      testMatch: ['**/mobile.spec.ts', '**/a11y-session.spec.ts'],
+      testMatch: ['**/mobile.spec.ts', '**/a11y-session.spec.ts', '**/schema.spec.ts'],
     },
   ],
   webServer: MANAGED_SERVERS

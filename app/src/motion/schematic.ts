@@ -170,6 +170,16 @@ export interface VehicleMark {
   /** Canvas rotation in radians (y down); always 0 for a bus. */
   angle: number;
   alpha: number;
+  /** Optional line identity, supplied by a diagram scene. Geographic marks
+   *  keep the shared ink tone when no per-mark colour is present. */
+  colour?: string;
+}
+
+/** The vehicle painter needs a pixel box, not a geographic crop. */
+export interface VehicleLayout {
+  w: number;
+  h: number;
+  density: number;
 }
 
 /**
@@ -377,7 +387,7 @@ export function paintRoutes(ctx: SchematicContext, layout: SchematicLayout, line
  *  T9). Called per frame. */
 export function paintVehicles(
   ctx: SchematicContext,
-  layout: SchematicLayout,
+  layout: VehicleLayout,
   marks: readonly VehicleMark[],
   tones: VehicleTones,
   selectedId: string | null = null,
@@ -392,7 +402,7 @@ export function paintVehicles(
     ctx.fillStyle = tones.halo;
     ctx.fillRect(-m.w / 2 - halo, -m.h / 2 - halo, m.w + 2 * halo, m.h + 2 * halo);
     ctx.globalAlpha = m.alpha;
-    ctx.fillStyle = tones.ink;
+    ctx.fillStyle = m.colour ?? tones.ink;
     ctx.fillRect(-m.w / 2, -m.h / 2, m.w, m.h);
     if (m.id === selectedId) {
       const side = Math.max(m.w, m.h) * RING_SCALE;

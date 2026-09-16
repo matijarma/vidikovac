@@ -7,8 +7,10 @@
 // mounts the kiosk, and strips the secret from the address bar so a reload
 // never re-provisions from history.
 import { bootPage } from '../boot';
+import { createMapModeStore } from '../core/map-mode-store';
 import { mountKiosk } from '../kiosk';
-import { createCityMap } from '../map/city-map';
+import { parseKioskMapMode } from '../core/map-mode-store';
+import { createMapRenderer } from '../map/renderers';
 import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { THEME_STORAGE_KEY, type ThemePreference } from '../ui/theme';
@@ -67,15 +69,26 @@ markLagano(document.documentElement, lightweight);
 // stack kiosk.css already names.
 if (!lightweight) void import('../ui/fonts.css');
 
+// The renderer override is independent of the device preference.
+const mapOverride = parseKioskMapMode(location.search);
+const mapMode = mapOverride ?? createMapModeStore({ storage: safeLocalStorage() }).snapshot();
+
 mountKiosk(root, {
   i18n,
   hash: location.hash,
   theme,
   reducedMotion,
   lightweight,
+  mapMode,
   onRepaint: repaintOn(theme),
-  mapFactory: createCityMap,
+  mapFactory: createMapRenderer,
 });
 // The secret is in localStorage now, and ?tema= only ever needed to land
 // once: keep both out of the address bar and history, the same way as before.
-if (location.hash || temaParam) history.replaceState(null, '', '/kiosk/');
+// The renderer override must survive a reload without changing the preference.
+if (location.hash || temaParam) {
+  const kept = new URLSearchParams();
+  if (mapOverride) kept.set('prikaz', mapOverride === 'schema' ? 'shema' : 'karta');
+  const search = kept.toString();
+  history.replaceState(null, '', `/kiosk/${search ? `?${search}` : ''}`);
+}

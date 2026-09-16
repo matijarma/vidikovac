@@ -3,6 +3,7 @@ import type { MapSlots } from '../map/map-slots';
 import type { SchematicHost } from '../motion/schematic-host';
 import type { I18n } from '../i18n/i18n';
 import type { ExperienceActions } from '../core/contracts';
+import type { MapModeStore } from '../core/map-mode-store';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
 
@@ -50,6 +51,8 @@ export interface LayerContext extends ExperienceActions {
    * unit contexts, and the layer then renders no button.
    */
   mapView?: { readonly full: boolean; toggle(): void };
+  /** The device's live transit renderer preference. Absent on the lightweight path. */
+  mapMode?: MapModeStore;
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;

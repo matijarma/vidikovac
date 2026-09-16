@@ -19,6 +19,7 @@ import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import { FLAGS } from './core/flags';
 import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/lastrun';
+import type { MapMode } from './core/map-mode-store';
 import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
@@ -79,6 +80,8 @@ export interface KioskDeps {
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
+  /** Renderer fixed at boot: ?prikaz= wins over the entry's per-device preference. */
+  mapMode?: MapMode;
   /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
@@ -170,6 +173,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
   const storage = deps.storage === undefined ? safeLocalStorage() : deps.storage;
   const lightweight = Boolean(deps.lightweight);
+  const mapMode: MapMode = lightweight ? 'map' : deps.mapMode ?? 'map';
   const reducedMotion = Boolean(deps.reducedMotion);
   const fetchTeaser = deps.fetchTeaser ?? ((stopId?: string) => fetchTeaserImpl(fetch, stopId));
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
@@ -412,7 +416,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
     const composition = compositionOf(layout);
     const container = requestKioskMap(maps, {
-      stop, snapshots, now: now(), reducedMotion, locale,
+      stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
       phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,
       widthPx: invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],

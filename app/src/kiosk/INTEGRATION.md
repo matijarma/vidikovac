@@ -22,7 +22,7 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 The integrated `createCityMap` (the same-origin vector map) reads these, plus
 the other options the kiosk passes on creation: `stop` (the screen's stop,
 marked and named), `interactive: false` (no pointer or keyboard handling, no
-controls on a public screen), `symbolScale` 1.5 and `locale`. On the handle
+controls on a public screen), `symbolScale` 2 and `locale`. On the handle
 the kiosk drives:
 
 - `setView(view)` whenever the view changes (a new selection, a new centre);
@@ -57,6 +57,30 @@ board's, unchanged).
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn
 where given) and closure lines.
+
+## ZET schema renderer
+
+`?prikaz=shema|karta` overrides `kajima:map-mode:v1` (`schema|map`, default
+`map`) for this boot only. The entry preserves a valid `prikaz` when clearing
+the provisioning fragment and one-time `tema`. It does not overwrite the
+device preference. Prozor has no chapter pin or rotation.
+
+`KioskDeps.mapMode` reaches `requestKioskMap()` as `renderer`, and
+`KioskMapExtras` carries it to the factory alongside the stop and the
+noninteractive contract. The existing `kiosk-map` slot, Prozor field,
+statements, pairing, pause/resume and feed handling stay unchanged.
+
+The shared `createMapRenderer` factory returns a synchronous handle and
+dynamically imports `createSchemaMap` only for a schema request. Pending
+updates are buffered; destroying the handle before import prevents a late
+mount. Lightweight mode creates neither renderer and loads no schema code.
+
+The schema ignores geographic cameras, emphasis and outlines. It keeps the
+legible crop around the screen's stop; without a stop it fits the network
+without labels. Prozor's statements do not overlay the field, so no rail
+padding is needed and `setView` is a no-op. No district outline is fetched
+for a schema field. The schema renderer itself does not load MapLibre. This
+does not change the dashboard's separate geographic Kvart thumbnail.
 
 ## UI workstream (tokens, i18n)
 

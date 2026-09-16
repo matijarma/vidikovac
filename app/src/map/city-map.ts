@@ -447,6 +447,9 @@ export interface FitPadding {
 export interface CityMapOptions {
   container: HTMLElement;
   ariaLabel: string;
+  /** The page factory's output; absent means the geographic city map.
+   *  The schema implementation is loaded only when that renderer is requested. */
+  renderer?: 'map' | 'schema';
   points?: MapPoint[];
   lines?: MapLine[];
   reducedMotion?: boolean;
@@ -518,8 +521,9 @@ export interface CityMapOptions {
   onStatus?: (status: MapStatus) => void;
   /** The network artefact settled: the decoded network, or null when it could not load. */
   onNetwork?: (net: Network | null) => void;
-  /** The person moved the camera themselves, which also ends a follow. */
-  onUserMove?: (camera: MapCamera) => void;
+  /** A user gesture ends a follow. The schema reports null because its
+   *  viewport is not a geographic camera; callers must keep their saved map camera. */
+  onUserMove?: (camera: MapCamera | null) => void;
 }
 
 export interface CityMapHandle {

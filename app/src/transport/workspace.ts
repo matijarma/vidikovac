@@ -19,6 +19,7 @@
 // decision 5), and the sheet says in one sentence that ZET publishes none.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
+import type { MapMode } from '../core/map-mode-store';
 import { loadStops } from '../core/screens';
 import type { LayerContext } from '../layers/types';
 import type { CityMapHandle, FitPadding, MapCamera, MapLine, MapPoint, MapSelection, MapStatus, VehicleInfo } from '../map/city-map';
@@ -38,8 +39,9 @@ import {
   type DelayRow, type Fold,
 } from './view';
 
-/** The one map slot the layer uses: the same id means the same map for the page's life (map-slots.ts). */
+/** Separate slots let the page sweep the old renderer and release its resources after a swap. */
 export const MAP_SLOT_ID = 'u-pokretu-map';
+export const SCHEMA_MAP_SLOT_ID = 'u-pokretu-schema';
 /** Symbol size on a public screen read from across a room. */
 export const KIOSK_SYMBOL_SCALE = 1.35;
 
@@ -150,9 +152,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           <button type="button" class="t-toggle" id="${id}-mode-tram" data-action="toggle-mode" data-mode="${ROUTE_TYPE_TRAM}" aria-pressed="true"></button>
           <button type="button" class="t-toggle" id="${id}-mode-bus" data-action="toggle-mode" data-mode="${ROUTE_TYPE_BUS}" aria-pressed="true"></button>
           <button type="button" class="t-toggle" id="${id}-closures" data-action="toggle-closures" aria-pressed="true"></button>
+          <span class="t-schema-legend" data-testid="schema-mode-legend" hidden></span>
         </div>
         <p class="t-map-status" role="status" data-testid="map-status" hidden></p>
         <div class="t-map-tools" role="group" data-ref="tools">
+          <button type="button" class="btn-ghost t-action" id="${id}-map-mode" data-testid="map-mode-toggle" data-action="toggle-map-mode" aria-pressed="false" hidden></button>
           <button type="button" class="btn-ghost t-action" id="${id}-fit-city" data-action="fit-city"></button>
           <button type="button" class="btn-ghost t-action" id="u-pokretu-map-full" data-testid="map-full-toggle" data-action="toggle-full" hidden></button>
         </div>
@@ -187,9 +191,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const modeButtons: Record<number, HTMLButtonElement> = { [ROUTE_TYPE_TRAM]: q(`#${id}-mode-tram`), [ROUTE_TYPE_BUS]: q(`#${id}-mode-bus`) };
   const modesGroup = q<HTMLElement>('[data-ref=modes]');
   const closuresButton = q<HTMLButtonElement>(`#${id}-closures`);
+  const schemaLegend = q<HTMLElement>('[data-testid=schema-mode-legend]');
   const mapRegion = q<HTMLElement>('.transport-map');
   const statusEl = q<HTMLElement>('[data-testid=map-status]');
   const tools = q<HTMLElement>('[data-ref=tools]');
+  const mapModeButton = q<HTMLButtonElement>('[data-testid=map-mode-toggle]');
   const fitCityButton = q<HTMLButtonElement>(`#${id}-fit-city`);
   const fullButton = q<HTMLButtonElement>('#u-pokretu-map-full');
   const sheetEl = q<HTMLElement>('.transport-sheet');
@@ -214,6 +220,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let delaysOpen = false;
   const folds = new Set<Fold>();
   let camera: MapCamera | null = null;
+  let mapMode: MapMode = 'map';
+  let activeSlotId: string | null = null;
+  let mapEpoch = 0;
   let status: MapStatus = 'loading';
   let net: Network | null = null;
   let groups: StopGroup[] | null = null;
@@ -239,7 +248,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   }
   const kiosk = (): boolean => ctx().kiosk === true;
   /** null while every mode is on: the map then also draws vehicles of a type nobody knows. */
-  const modesArg = (): ReadonlySet<number> | null => (ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes));
+  const modesArg = (): ReadonlySet<number> | null => (
+    mapMode === 'schema' ? new Set([ROUTE_TYPE_TRAM]) : ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes)
+  );
   const delays = (): Map<string, number> => plausibleDelays(routeDelayMap(ctx().snapshots['zet-rt']));
 
   /** Every vehicle the model has placed, or, before that and without a map, the reports listed by route alone.
@@ -401,7 +412,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const c = ctx();
     const i18n = c.i18n;
     const k = kiosk();
+    const schema = mapMode === 'schema';
     element.dataset.kiosk = k ? 'true' : 'false';
+    element.dataset.mapMode = mapMode;
     toolbar.hidden = k;
     searchLabel.textContent = tr(i18n, 'searchLabel');
     searchInput.placeholder = tr(i18n, 'search');
@@ -412,11 +425,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     modesGroup.hidden = k;
     modeButtons[ROUTE_TYPE_TRAM].textContent = tr(i18n, 'trams');
     modeButtons[ROUTE_TYPE_BUS].textContent = tr(i18n, 'buses');
-    for (const mode of ALL_MODES) modeButtons[mode].setAttribute('aria-pressed', modes.has(mode) ? 'true' : 'false');
+    for (const mode of ALL_MODES) modeButtons[mode].setAttribute('aria-pressed', (schema ? mode === ROUTE_TYPE_TRAM : modes.has(mode)) ? 'true' : 'false');
+    modeButtons[ROUTE_TYPE_BUS].hidden = schema;
     closuresButton.textContent = tr(i18n, 'showClosures');
     closuresButton.setAttribute('aria-pressed', closuresVisible ? 'true' : 'false');
+    closuresButton.hidden = schema;
+    schemaLegend.hidden = !schema;
+    schemaLegend.textContent = tr(i18n, 'schemaTramsOnly');
     tools.setAttribute('aria-label', tr(i18n, 'toolsLabel'));
     tools.hidden = k;
+    mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps;
+    const modeLabel = tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema');
+    mapModeButton.innerHTML = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(modeLabel)}</span>`;
+    mapModeButton.setAttribute('aria-label', modeLabel);
+    mapModeButton.setAttribute('aria-pressed', schema ? 'true' : 'false');
     const fitCity = tr(i18n, 'fitCity');
     fitCityButton.innerHTML = `${iconMarkup('map')}<span>${esc(fitCity)}</span>`;
     fitCityButton.setAttribute('aria-label', fitCity);
@@ -428,6 +450,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     renderSheetToggle();
     if (!sheet) element.dataset.sheet = mode === 'landscape' ? 'half' : 'open';
     note.textContent = i18n.t('motion.note');
+    // The schema owns this note beside its canvas. Keep the sheet's copy only
+    // for geography or a failed renderer, where that canvas note is absent.
+    note.hidden = schema && status !== 'unavailable';
   }
 
   function renderStatus(): void {
@@ -643,7 +668,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       case 'fit-city':
         handle?.fit?.('city');
         break;
+      case 'toggle-map-mode':
+        if (!kiosk() && !ctx().lightweight) ctx().mapMode?.set(mapMode === 'schema' ? 'map' : 'schema');
+        break;
       case 'toggle-mode': {
+        // The schema has one visible mode. Keep the geographic filters for the return to the city map.
+        if (mapMode === 'schema') break;
         const mode = Number(target.dataset.mode);
         if (modes.has(mode)) {
           if (modes.size > 1) modes.delete(mode); // one mode always stays on: an empty map answers nothing
@@ -743,12 +773,29 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   // --- The map slot -----------------------------------------------------------------
   /** Asks the page's slots for the one map, moves its container in and binds the handle they hand back (a new one after a kiosk's destroy()). */
   function syncMap(c: LayerContext, points: MapPoint[], lines: MapLine[]): void {
+    const renderer = c.lightweight ? 'map' : c.mapMode?.snapshot() ?? 'map';
+    const slotId = renderer === 'schema' ? SCHEMA_MAP_SLOT_ID : MAP_SLOT_ID;
+    if (slotId !== activeSlotId || (c.maps?.handle(slotId) ?? null) !== handle) {
+      // Fits and following can move the camera without onUserMove. Read it while the old map still exists.
+      if (mapMode === 'map') camera = handle?.camera?.() ?? camera;
+      activeSlotId = slotId;
+      mapEpoch += 1;
+      handle = null;
+      status = 'loading';
+    }
+    mapMode = renderer;
+    const epoch = mapEpoch;
     const i18n = c.i18n;
     const reports = points.filter((p) => p.at !== undefined).length;
-    const label = `${tr(i18n, 'mapRegion')}: ${i18n.t('panels.vehiclesCount', { count: reports })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`;
+    // The diagram omits buses, closures and unplaceable trams, so the geographic
+    // report counts would overstate what a reader can find on that surface.
+    const label = renderer === 'schema'
+      ? `${tr(i18n, 'mapModeSchema')}: ${tr(i18n, 'schemaTramsOnly')}`
+      : `${tr(i18n, 'mapRegion')}: ${i18n.t('panels.vehiclesCount', { count: reports })}, ${i18n.t('panels.closuresCount', { count: lines.length })}`;
     const canvas =
       c.maps?.slot({
-        id: MAP_SLOT_ID,
+        id: slotId,
+        renderer,
         className: 'map-canvas t-map-canvas',
         testid: 'map-canvas',
         ariaLabel: label,
@@ -761,36 +808,40 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         selection,
         follow: following,
         modes: modesArg(),
-        closures: closuresVisible,
+        closures: renderer === 'map' && closuresVisible,
         interactive: !kiosk(),
         symbolScale: kiosk() ? KIOSK_SYMBOL_SCALE : 1,
         // The compact credit on the phone stage, where the sheet leaves the map little room; the full line on the desk and the kiosk.
         attributionCompact: !kiosk() && !deskMedia?.matches,
         fitPadding: fitPadding(),
-        center: camera?.center,
-        zoom: camera?.zoom,
-        onSelect: (sel) => setSelection(sel),
+        center: renderer === 'map' ? camera?.center : undefined,
+        zoom: renderer === 'map' ? camera?.zoom : undefined,
+        onSelect: (sel) => { if (epoch === mapEpoch) setSelection(sel); },
         onStatus: (next) => {
+          if (epoch !== mapEpoch) return;
           status = next;
           renderStatus();
           renderSheet();
         },
         onNetwork: (network) => {
+          if (epoch !== mapEpoch) return;
           net = network;
           if (network) groups = stopGroupsFromNetwork(network);
           renderSheet();
         },
         onUserMove: (cam) => {
-          camera = cam;
+          if (epoch !== mapEpoch) return;
+          if (cam !== null && renderer === 'map') camera = cam;
           if (following) {
             following = null;
+            handle?.follow?.(null);
             renderSheet();
           }
         },
       }) ?? null;
     if (canvas) {
       if (canvas.parentElement !== mapRegion) mapRegion.insertBefore(canvas, mapRegion.firstChild);
-      const next = c.maps?.handle(MAP_SLOT_ID) ?? null;
+      const next = c.maps?.handle(slotId) ?? null;
       if (next !== handle) {
         handle = next;
         status = handle?.status?.() ?? 'loading';

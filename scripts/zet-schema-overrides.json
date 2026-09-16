@@ -1,0 +1,92 @@
+{
+  "source": "zet-zagreb-tram-lines-map.svg",
+  "exclude": [
+    [0, 0, 470, 190],
+    [700, 0, 1190.5512, 160],
+    [930, 285, 1190.5512, 675],
+    [0, 775, 1190.5512, 841.8898]
+  ],
+  "routes": {
+    "1": { "colour": "#ae9675", "point": [810.39, 336.83], "termini": [[810.39, 336.83], [324.45, 337.23]], "reason": "Artwork day 1: Zapadni kolodvor to Borongaj; feed 000395 fullest pattern starts at Selska, so the historical artwork termini are explicit." },
+    "2": { "colour": "#ea506c", "termini": [[275.42, 277.57], [801.02, 626.34]], "reason": "Artwork Črnomerec / Savišće terminal dots and seven magenta 2 badges." },
+    "3": { "colour": "#cc7287", "termini": [[276.28, 459.35], [814.95, 630.12]], "reason": "Artwork Ljubljanica / Savišće terminal dots." },
+    "4": { "colour": "#cc706f", "termini": [[1001.83, 223.87], [465.76, 655.46]], "reason": "Artwork Dubec / Savski most terminal dots." },
+    "5": { "colour": "#a69ccc", "point": [232.9, 642.53], "termini": [[232.9, 642.53], [826.89, 243.03]], "reason": "Artwork Prečko / Dubrava, distinct from the same-colour line 9; feed fullest pattern extends to Žitnjak." },
+    "6": { "colour": "#f6af94", "termini": [[274.86, 265.53], [576.24, 715.29]], "reason": "Artwork Črnomerec / Sopot; feed fullest pattern terminates at Zapruđe." },
+    "7": { "colour": "#b6cbd7", "termini": [[1000.73, 236.52], [450.3, 661.84]], "reason": "Artwork Dubec / Savski most; feed fullest pattern starts at Dubrava." },
+    "8": { "colour": "#a7d3ae", "termini": [[550.53, 134.47], [671.75, 702.75]], "reason": "Artwork Mihaljevac / Zapruđe terminal dots." },
+    "9": { "colour": "#a69ccc", "point": [810.44, 350.38], "termini": [[810.44, 350.38], [276.63, 452.4]], "reason": "Artwork Borongaj / Ljubljanica; distinguished from same-colour line 5 by endpoint." },
+    "11": { "colour": "#fff481", "termini": [[1002.05, 229.81], [273.87, 271.17]], "reason": "Artwork Dubec / Črnomerec; feed has Ljubljanica extension." },
+    "12": { "colour": "#cd7fb4", "termini": [[276.43, 446.04], [828.18, 212.89]], "reason": "Artwork Ljubljanica / Dubrava terminal dots." },
+    "13": { "colour": "#ae9ba5", "termini": [[837.83, 568.07], [678.51, 262.9]], "reason": "Artwork Žitnjak / Kvaternikov trg; feed includes depot extensions." },
+    "14": { "colour": "#f6b1b5", "termini": [[544.46, 134.22], [660.36, 732.29]], "reason": "Artwork Mihaljevac / Zapruđe; feed includes Mandlova depot extension." },
+    "15": { "colour": "#e3000f", "termini": [[550.61, 66.67], [550.61, 119.78]], "badgeMinimum": 1, "reason": "The short original line has exactly ONE magenta 15 badge at (550.32,101.13), plus two terminal dots and explicit Mihaljevac / Gračansko dolje labels. Black terminus lists are not counted as votes. Feed has depot extensions." },
+    "17": { "colour": "#ef7c00", "termini": [[810.39, 343.31], [232.64, 649.13]], "reason": "Artwork Borongaj / Prečko; feed fullest direction-0 pattern is a circuit, not its regular endpoint pair." },
+    "31": { "colour": "#2f2483", "point": [273.99, 258.91], "termini": [[273.99, 258.91], [449.97, 668.91]], "reason": "Artwork night 31 Črnomerec / Savski most." },
+    "32": { "colour": "#2f2483", "point": [232.91, 635.44], "termini": [[232.91, 635.44], [810.03, 356.96]], "reason": "Artwork night 32 Prečko / Borongaj." },
+    "33": { "colour": "#2f2483", "point": [556.52, 67], "termini": [[556.52, 67], [807.45, 628.39]], "reason": "Artwork night 33 Gračansko dolje / Savišće; feed includes depot extensions." },
+    "34": { "colour": "#2f2483", "point": [275.39, 439.44], "termini": [[275.39, 439.44], [1000.55, 218.45]], "reason": "Artwork night 34 Ljubljanica / Dubec." }
+  },
+  "aliases": {
+    "HNK 2 - Adžijina": "Adžijina",
+    "Folnegovićevo": "Folnegovićevo naselje",
+    "Branimir centar": "Branimirova",
+    "Hrgovići": "Jarun",
+    "Jarun-zapad": "Hrvatskog sokola",
+    "Marijane Radev": "M. Radev",
+    "Slavenskoga-jug": "Slavenskoga",
+    "Traumatologija": "Klinika za traum."
+  },
+  "labelAnchors": {
+    "Heinzelova": [745, 516],
+    "Heinzelova-sjever": [739, 330],
+    "Frankopanska": [419, 254],
+    "Vodnikova": [479, 416],
+    "Zapruđe": [655, 747],
+    "Kvaternikov trg": [640, 252]
+  },
+  "stopGroups": {
+    "Kvaternikov trg": [678.12, 263.17]
+  },
+  "extraGroups": {
+    "Držićeva": [[674.86, 547.12], [675.03, 504.28], [651.86, 526.04]],
+    "Trg dr. F. Tuđmana": [[357.17, 268.54]],
+    "Talovčeva": [[370.34, 290.1]],
+    "St. dom S. Radić": [[428.33, 652.39]],
+    "Šubićeva": [[667.49, 350.16], [688.1, 367.44], [699.6, 346.95]],
+    "Branimir centar": [[601, 421.57]],
+    "Kvaternikov trg": [[705.26, 227.36]],
+    "Botanički vrt": [[505.76, 437.12]],
+    "Vodnikova": [[485.41, 437.05]],
+    "Žitnjak": [[815.13, 575.16]],
+    "Zagrepčanka": [[452.87, 540.72], [481.22, 526.33]],
+    "Mihaljevac": [[550.53, 120.84]],
+    "Savski most": [[450.26, 665.84]],
+    "Savišće": [[803.65, 627.12]]
+  },
+  "artworkStops": {
+    "Arena Zagreb": [383, 724],
+    "Jadranski most": [370, 693],
+    "Slavonska": [692, 580],
+    "Zagrebački transporti": [827, 616],
+    "Zapadni kolodvor": [264, 341]
+  },
+  "unmappedPaths": {
+    "14_25": "Feed 000395 short/depot path: only one stop on the printed line 14.",
+    "14_28": "Feed 000395 short/depot path: only one stop on the printed line 14.",
+    "15_3": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
+    "15_7": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
+    "path:14:0:b50fd278": "Feed 000395 synthetic depot path: no stop on the printed line 14.",
+    "path:14:1:16e81f64": "Feed 000395 synthetic depot path: only one stop on the printed line 14."
+  },
+  "unmapped": [
+    { "name": "Držićeva-petlja", "reason": "Loop-only platform absent from the original printed diagram." },
+    { "name": "Savski gaj-rotor", "reason": "Loop-only platform absent from the original printed diagram." },
+    { "name": "Mandlova", "reason": "Depot-access platform beyond the printed network." },
+    { "name": "Gračanska 10", "reason": "Additional feed platform absent from the historical artwork; not assigned an invented circle." },
+    { "name": "Jukićeva", "reason": "Additional feed stop not labelled in the historical artwork; existing neighboring stops bracket its section." },
+    { "name": "Koledovčina", "reason": "Additional feed stop not labelled in the historical artwork." },
+    { "name": "Medveščak", "reason": "Additional feed platform absent from the original printed stops." },
+    { "name": "Vinogradska 3", "reason": "Additional feed platform not labelled in the historical artwork." }
+  ]
+}

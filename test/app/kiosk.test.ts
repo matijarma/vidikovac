@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -128,7 +128,7 @@ function mount(opts: MountOptions = {}) {
   const handle = mountKiosk(root, {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
-    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale,
+    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -964,9 +964,9 @@ describe('the field, the column and the one map', () => {
   /** happy-dom lays nothing out: a host width is stubbed so the camera can be seen to follow it. */
   const layOut = (host: HTMLElement, width: number) => Object.defineProperty(host, 'clientWidth', { value: width, configurable: true });
 
-  it('one map for the screen\u2019s life: created once at the design width, following the measured width on a resize, parked and returned through a session, never destroyed', async () => {
+  it.each(['map', 'schema'] as const)('one %s renderer for the screen\u2019s life: created once, following resize, parked and returned through a session', async (mapMode) => {
     const map = spyMap();
-    const k = mount({ stored: STORED, mapFactory: map.factory as never });
+    const k = mount({ stored: STORED, mapMode, mapFactory: map.factory as never });
     await flush();
     expect(map.factory).toHaveBeenCalledTimes(1);
     const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
@@ -976,6 +976,8 @@ describe('the field, the column and the one map', () => {
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
+    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: STOP });
+    expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
     const host = q(k.root, '[data-testid=kiosk-map-host]')!;
     expect(container.parentElement).toBe(host);

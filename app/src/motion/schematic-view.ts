@@ -30,8 +30,8 @@ import {
   paintVehicles,
   vehicleMarks,
   type Crop,
-  type SchematicLayout,
   type VehicleMark,
+  type VehicleLayout,
   type VehicleTones,
 } from './schematic';
 import { describeVehicle, type VehicleCard } from './vehicle-card';
@@ -77,6 +77,39 @@ const NOMINAL_PX = 800;
 const WHOLE_NETWORK_RADIUS_THRESHOLD_M = 2_000;
 const LIST_CAP_CROP = 10;
 const LIST_CAP_NETWORK = 20;
+
+/** A scene changes the coordinate system, never the accessible contract.
+ *  Sizes and marks are in backing-store pixels; density converts CSS px.
+ *  listCap bounds the lightweight route summary, not the vehicle list:
+ *  every drawn vehicle remains reachable by its stable list button. */
+export interface Scene {
+  resize(w: number, h: number, density: number): void;
+  marks(drawn: readonly Drawn[]): VehicleMark[];
+  inFrame(vehicle: Drawn): boolean;
+  paintStatic(ctx: CanvasRenderingContext2D, tones: SceneTones): void;
+  onChange(listener: () => void): () => void;
+  readonly listCap: number;
+}
+
+export interface SceneTones extends VehicleTones {
+  line: string;
+  water: string;
+}
+
+/** The existing metre-plane crop is the first scene. It deliberately has
+ *  no import of the schema artefact, placer or gestures: lagano stays on
+ *  exactly its original lightweight import graph. */
+export function createCropScene(net: Network, crop: Crop, types: ReadonlySet<number> | null): Scene {
+  let layout = layoutSchematic(net, crop, NOMINAL_PX, NOMINAL_PX, 1, types);
+  return {
+    resize(w, h, density) { layout = layoutSchematic(net, crop, w, h, density, types); },
+    marks: (drawn) => vehicleMarks(layout, drawn),
+    inFrame: (v) => (!types || types.has(v.type)) && dist(v.p, crop.centre) <= crop.radius,
+    paintStatic: (ctx, tones) => paintRoutes(ctx, layout, tones.line),
+    onChange: () => () => {},
+    listCap: crop.radius > WHOLE_NETWORK_RADIUS_THRESHOLD_M ? LIST_CAP_NETWORK : LIST_CAP_CROP,
+  };
+}
 
 export interface SchematicUpdate {
   fixes: readonly Fix[];
@@ -198,17 +231,22 @@ type CloseReason = 'user' | 'idle' | 'gone';
 
 let uid = 0;
 
-interface MarkupIds {
-  hint: string;
-  listHint: string;
-  line: string;
+export interface SceneMarkupOptions {
+  prefix?: string;
+  /** A public screen has text equivalents, but no keyboard stops/actions. */
+  interactive?: boolean;
+  /** An external sheet replaces the old dialog; never mount a hidden one. */
+  externalSelection?: boolean;
+  canvasHint?: string;
+  listHint?: string;
 }
 
-function markup(lightweight: boolean, i18n: I18n, ids: MarkupIds): string {
-  if (lightweight) {
-    return `<ul class="schematic-list" data-testid="schematic-list"></ul>
-       <p class="schematic-legend" data-testid="schematic-legend"></p>`;
-  }
+/** Two canvases and one text path, shared by both coordinate systems. */
+export function sceneMarkup(i18n: I18n, options: SceneMarkupOptions = {}): string {
+  const prefix = options.prefix ?? 'schematic';
+  const interactive = options.interactive !== false;
+  const id = ++uid;
+  const ids = { hint: `${prefix}-hint-${id}`, listHint: `${prefix}-list-hint-${id}`, line: `${prefix}-line-${id}` };
   // Three ways in, one card out (T9, R-F5). The vehicle canvas is the
   // pointer surface and the sighted keyboard route: a tab stop whose arrow
   // keys walk the vehicles, role="img" with the legend as its label and its
@@ -218,21 +256,386 @@ function markup(lightweight: boolean, i18n: I18n, ids: MarkupIds): string {
   // mode meets it as an ordinary list of buttons. The card is a non-modal
   // dialog labelled by its own line heading, so a reader hears
   // "6 · Črnomerec-Sopot, dialog" the moment focus lands on it.
-  return `<div class="schematic-canvases">
-         <canvas class="schematic-routes" data-testid="schematic-routes" aria-hidden="true"></canvas>
-         <canvas class="schematic-vehicles" data-testid="schematic-vehicles" role="img" aria-label="" tabindex="0" aria-describedby="${ids.hint}"></canvas>
-         <p class="visually-hidden" id="${ids.hint}">${escapeHtml(i18n.t('motion.canvasHint'))}</p>
-         <p class="visually-hidden" id="${ids.listHint}">${escapeHtml(i18n.t('motion.listHint'))}</p>
-         <ul class="schematic-vehicle-list" data-testid="vehicle-list" aria-label="${escapeAttribute(i18n.t('motion.vehicleList'))}" aria-describedby="${ids.listHint}" tabindex="-1"></ul>
-         <section class="schematic-card" data-testid="vehicle-card" role="dialog" aria-modal="false" aria-labelledby="${ids.line}" tabindex="-1" hidden>
+  return `<div class="schematic-canvases ${prefix}-canvases">
+         <canvas class="schematic-routes ${prefix}-routes" data-testid="${prefix}-routes" aria-hidden="true"></canvas>
+         <canvas class="schematic-vehicles ${prefix}-vehicles" data-testid="${prefix}-vehicles" role="img" aria-label=""${interactive ? ` tabindex="0" aria-describedby="${ids.hint}"` : ''}></canvas>
+         ${interactive ? `<p class="visually-hidden scene-canvas-hint" id="${ids.hint}">${escapeHtml(options.canvasHint ?? i18n.t('motion.canvasHint'))}</p>
+         <p class="visually-hidden scene-list-hint" id="${ids.listHint}">${escapeHtml(options.listHint ?? i18n.t('motion.listHint'))}</p>` : ''}
+         <ul class="schematic-vehicle-list" data-testid="vehicle-list" aria-label="${escapeAttribute(i18n.t('motion.vehicleList'))}"${interactive ? ` aria-describedby="${ids.listHint}" tabindex="-1"` : ''}></ul>
+         ${interactive && !options.externalSelection ? `<section class="schematic-card" data-testid="vehicle-card" role="dialog" aria-modal="false" aria-labelledby="${ids.line}" tabindex="-1" hidden>
            <h3 class="schematic-card-line" id="${ids.line}" data-testid="vehicle-line"></h3>
            <p class="schematic-card-row" data-testid="vehicle-direction"></p>
            <p class="schematic-card-row" data-testid="vehicle-delay"></p>
            <p class="schematic-card-row" data-testid="vehicle-next-stop" hidden></p>
            <button type="button" class="btn-ghost schematic-card-close" data-testid="vehicle-card-close">${escapeHtml(i18n.t('common.close'))}</button>
-         </section>
+         </section>` : ''}
        </div>
-       <p class="schematic-legend" data-testid="schematic-legend"></p>`;
+       <p class="schematic-legend" data-testid="${prefix}-legend"></p>`;
+}
+
+export interface SceneAccessibilityDeps {
+  element: HTMLElement;
+  scene: Scene;
+  i18n: I18n;
+  net: Network;
+  drawn(): readonly Drawn[];
+  delays(): ReadonlyMap<string, number>;
+  density(): number;
+  nudge(): void;
+  /** Replaces the dialog with the host's own detail surface. */
+  onSelect?: (vehicleId: string | null) => void;
+  /** A schema scene tests stops after vehicles, before clearing selection. */
+  onEmptyTap?: (point: XY) => void;
+  interactive?: boolean;
+  /** Gestures already resolve taps; do not also bind a raw canvas click. */
+  bindPointer?: boolean;
+  cardIdleMs?: number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}
+
+export interface SceneAccessibility {
+  /** Poll/viewport reconciliation preserves surviving button elements. */
+  reconcile(drawn: readonly Drawn[]): void;
+  /** Per-frame selection/card work; does not rewrite the list. */
+  frame(drawn: readonly Drawn[], marks: readonly VehicleMark[]): void;
+  selection(): string | null;
+  select(vehicleId: string | null): void;
+  /** A gesture-safe tap, in backing-store pixels. */
+  tap(point: XY): void;
+  locale(hints?: { canvas?: string; list?: string }): void;
+  destroy(): void;
+}
+
+/** One stable, keyboard-accessible vehicle list for both the geographic
+ *  crop and the schema. The optional dialog is the original crop behaviour;
+ *  a schema hands the same selection to the transport sheet instead. */
+export function mountSceneAccessibility(deps: SceneAccessibilityDeps): SceneAccessibility {
+  const { element, scene, i18n, net } = deps;
+  const document = element.ownerDocument;
+  const interactive = deps.interactive !== false;
+  const vehiclesCanvas = element.querySelector<HTMLCanvasElement>('.schematic-vehicles');
+  const vehicleList = element.querySelector<HTMLElement>('[data-testid=vehicle-list]');
+  const cardEl = element.querySelector<HTMLElement>('[data-testid=vehicle-card]');
+  const cardLine = element.querySelector<HTMLElement>('[data-testid=vehicle-line]');
+  const cardDirection = element.querySelector<HTMLElement>('[data-testid=vehicle-direction]');
+  const cardDelay = element.querySelector<HTMLElement>('[data-testid=vehicle-delay]');
+  const cardNextStop = element.querySelector<HTMLElement>('[data-testid=vehicle-next-stop]');
+  const closeButton = element.querySelector<HTMLButtonElement>('[data-testid=vehicle-card-close]');
+  const setTimer = deps.setTimer ?? ((fn, ms) => globalThis.setTimeout(fn, ms));
+  const clearTimer = deps.clearTimer ?? ((h) => globalThis.clearTimeout(h as never));
+  let selectedId: string | null = null;
+  let openerEl: HTMLElement | null = null;
+  let lastMarks: readonly VehicleMark[] = [];
+  let lastCardText = '';
+  let idleHandle: unknown = null;
+  let activeVehicleId: string | null = null;
+  let disposed = false;
+
+  function disarmIdle(): void {
+    if (idleHandle === null) return;
+    clearTimer(idleHandle);
+    idleHandle = null;
+  }
+
+  function armIdle(): void {
+    disarmIdle();
+    if (deps.cardIdleMs === undefined || disposed) return;
+    idleHandle = setTimer(() => { disarmIdle(); closeCard('idle'); }, deps.cardIdleMs);
+  }
+
+  function paintCard(drawnList: readonly Drawn[]): void {
+    if (!cardEl || selectedId === null) return;
+    const v = drawnList.find((d) => d.id === selectedId);
+    if (!v) return;
+    const card: VehicleCard = describeVehicle(i18n, net, v, deps.delays());
+    const text = `${card.line}\n${card.direction}\n${card.delay}\n${card.nextStop ?? ''}`;
+    if (text === lastCardText) return;
+    lastCardText = text;
+    cardLine!.textContent = card.line;
+    cardDirection!.textContent = card.direction;
+    cardDelay!.textContent = card.delay;
+    if (cardNextStop) {
+      cardNextStop.textContent = card.nextStop ?? '';
+      cardNextStop.hidden = card.nextStop === undefined;
+    }
+  }
+
+  function vehicleButtons(): HTMLButtonElement[] {
+    return vehicleList ? [...vehicleList.querySelectorAll<HTMLButtonElement>('button')] : [];
+  }
+
+  function paintSelection(): void {
+    for (const b of vehicleButtons()) {
+      const value = String(b.dataset.vehicle === selectedId);
+      if (b.getAttribute('aria-pressed') !== value) b.setAttribute('aria-pressed', value);
+    }
+  }
+
+  function openCard(vehicleId: string, opener: HTMLElement | null, focusCard: boolean): void {
+    if (disposed || !interactive || (!cardEl && !deps.onSelect)) return;
+    const drawnList = deps.drawn();
+    if (!drawnList.some((v) => v.id === vehicleId && scene.inFrame(v))) {
+      renderVehicleList(drawnList);
+      return;
+    }
+    selectedId = vehicleId;
+    openerEl = opener;
+    lastCardText = '';
+    if (cardEl) {
+      cardEl.dataset.vehicle = vehicleId;
+      cardEl.hidden = false;
+      paintCard(drawnList);
+      if (focusCard) cardEl.focus();
+    }
+    paintSelection();
+    deps.onSelect?.(vehicleId);
+    armIdle();
+    deps.nudge();
+  }
+
+  function closeCard(reason: CloseReason): void {
+    disarmIdle();
+    if (selectedId === null || disposed) return;
+    const focusWasInside = cardEl?.contains(document.activeElement);
+    const opener = openerEl;
+    selectedId = null;
+    openerEl = null;
+    if (cardEl) {
+      cardEl.hidden = true;
+      delete cardEl.dataset.vehicle;
+    }
+    if (focusWasInside) {
+      const target = reason !== 'idle' && opener?.isConnected ? opener : (vehicleList ?? vehiclesCanvas);
+      target?.focus();
+    }
+    paintSelection();
+    deps.onSelect?.(null);
+    deps.nudge();
+  }
+
+  function tap(point: XY): void {
+    if (!interactive || disposed) return;
+    const hit = hitVehicle(lastMarks, point.x, point.y, deps.density());
+    if (hit) openCard(hit.id, vehiclesCanvas, true);
+    else if (deps.onEmptyTap) deps.onEmptyTap(point);
+    else closeCard('user');
+  }
+
+  function onCanvasClick(event: MouseEvent): void {
+    if (!vehiclesCanvas) return;
+    const rect = vehiclesCanvas.getBoundingClientRect();
+    const sx = rect.width ? vehiclesCanvas.width / rect.width : 1;
+    const sy = rect.height ? vehiclesCanvas.height / rect.height : 1;
+    tap({ x: (event.clientX - (rect.left || 0)) * sx, y: (event.clientY - (rect.top || 0)) * sy });
+  }
+
+  function stepSelection(direction: 1 | -1): void {
+    const ordered = [...lastMarks].sort(byId);
+    if (ordered.length === 0) return;
+    const at = selectedId === null ? -1 : ordered.findIndex((m) => m.id === selectedId);
+    const next = at === -1 ? (direction === 1 ? 0 : ordered.length - 1) : (at + direction + ordered.length) % ordered.length;
+    openCard(ordered[next].id, vehiclesCanvas, false);
+  }
+
+  function onCanvasKey(event: KeyboardEvent): void {
+    // Shift+arrows belongs to a movable scene; plain arrows select vehicles.
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        stepSelection(1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        stepSelection(-1);
+        break;
+      case 'Enter':
+      case ' ':
+        if (selectedId === null) stepSelection(1);
+        else { deps.onSelect?.(selectedId); armIdle(); }
+        break;
+      case 'Escape':
+        if (selectedId === null) return;
+        closeCard('user');
+        event.stopPropagation();
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  }
+
+  function onCardKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeCard('user');
+      return;
+    }
+    armIdle();
+  }
+
+  function setActiveButton(active: HTMLButtonElement): void {
+    for (const b of vehicleButtons()) {
+      const want = b === active ? '0' : '-1';
+      if (b.getAttribute('tabindex') !== want) b.setAttribute('tabindex', want);
+    }
+    activeVehicleId = active.dataset.vehicle ?? null;
+  }
+
+  function vehicleItem(vehicleId: string): HTMLLIElement {
+    const li = document.createElement('li');
+    li.className = 'schematic-vehicle';
+    li.dataset.vehicle = vehicleId;
+    const label = document.createElement(interactive ? 'button' : 'span');
+    label.className = 'schematic-vehicle-button';
+    label.dataset.vehicle = vehicleId;
+    if (interactive) {
+      (label as HTMLButtonElement).type = 'button';
+      label.setAttribute('tabindex', '-1');
+    }
+    li.appendChild(label);
+    return li;
+  }
+
+  function paintVehicleButton(label: HTMLElement, v: Drawn): void {
+    const card = describeVehicle(i18n, net, v, deps.delays());
+    const text = [card.line, card.direction, card.delay, card.nextStop].filter(Boolean).join(', ');
+    if (label.textContent !== text) label.textContent = text;
+  }
+
+  function renderVehicleList(drawnList: readonly Drawn[]): void {
+    if (!vehicleList || disposed) return;
+    const byVehicle = new Map(drawnList.map((v) => [v.id, v]));
+    const inFrame = scene.marks(drawnList).sort(byId);
+    const keep = new Set(inFrame.map((m) => m.id));
+    const focused = document.activeElement;
+    let focusLost = focused !== null && focused !== vehicleList && vehicleList.contains(focused);
+    // Merge two id-sorted sequences. Surviving items never move or get
+    // replaced, so a reader keeps the same focused button across polls.
+    let cursor: Element | null = vehicleList.firstElementChild;
+    const gone = (el: Element): Element | null => {
+      const next = el.nextElementSibling;
+      el.remove();
+      return next;
+    };
+    for (const mark of inFrame) {
+      while (cursor && !keep.has((cursor as HTMLElement).dataset.vehicle ?? '')) cursor = gone(cursor);
+      let li: HTMLLIElement;
+      if (cursor && (cursor as HTMLElement).dataset.vehicle === mark.id) {
+        li = cursor as HTMLLIElement;
+        cursor = cursor.nextElementSibling;
+      } else {
+        li = vehicleItem(mark.id);
+        vehicleList.insertBefore(li, cursor);
+      }
+      paintVehicleButton(li.firstElementChild as HTMLElement, byVehicle.get(mark.id)!);
+      if (focusLost && li.contains(focused)) focusLost = false;
+    }
+    while (cursor) cursor = gone(cursor);
+    const buttons = vehicleButtons();
+    const active = buttons.find((b) => b.dataset.vehicle === activeVehicleId) ?? buttons[0];
+    if (active) setActiveButton(active);
+    else activeVehicleId = null;
+    paintSelection();
+    if (focusLost) vehicleList.focus();
+  }
+
+  function vehicleButtonOf(event: Event): HTMLButtonElement | null {
+    const target = event.target instanceof Element ? event.target : null;
+    return target?.closest<HTMLButtonElement>('button[data-vehicle]') ?? null;
+  }
+
+  function onListClick(event: MouseEvent): void {
+    const button = vehicleButtonOf(event);
+    if (!button?.dataset.vehicle) return;
+    setActiveButton(button);
+    openCard(button.dataset.vehicle, button, true);
+  }
+
+  function onListFocusIn(event: FocusEvent): void {
+    const button = vehicleButtonOf(event);
+    if (button) setActiveButton(button);
+  }
+
+  function onListKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      if (selectedId === null) return;
+      event.preventDefault();
+      closeCard('user');
+      return;
+    }
+    const buttons = vehicleButtons();
+    if (buttons.length === 0) return;
+    const at = buttons.findIndex((b) => b === document.activeElement);
+    let next: number;
+    switch (event.key) {
+      case 'ArrowDown':
+      case 'ArrowRight': next = at === -1 ? 0 : (at + 1) % buttons.length; break;
+      case 'ArrowUp':
+      case 'ArrowLeft': next = at === -1 ? buttons.length - 1 : (at - 1 + buttons.length) % buttons.length; break;
+      case 'Home': next = 0; break;
+      case 'End': next = buttons.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    setActiveButton(buttons[next]);
+    buttons[next].focus();
+  }
+
+  const onClose = (): void => closeCard('user');
+  if (interactive) {
+    if (deps.bindPointer !== false) vehiclesCanvas?.addEventListener('click', onCanvasClick);
+    vehiclesCanvas?.addEventListener('keydown', onCanvasKey);
+    vehicleList?.addEventListener('click', onListClick);
+    vehicleList?.addEventListener('keydown', onListKey);
+    vehicleList?.addEventListener('focusin', onListFocusIn);
+    cardEl?.addEventListener('keydown', onCardKey);
+    cardEl?.addEventListener('pointerdown', armIdle);
+    closeButton?.addEventListener('click', onClose);
+  }
+
+  return {
+    reconcile: renderVehicleList,
+    frame(drawnList, marks) {
+      if (disposed) return;
+      lastMarks = marks;
+      if (selectedId !== null && !marks.some((m) => m.id === selectedId)) closeCard('gone');
+      paintCard(drawnList);
+    },
+    selection: () => selectedId,
+    select(vehicleId) {
+      if (disposed) return;
+      selectedId = vehicleId;
+      paintSelection();
+    },
+    tap,
+    locale(hints = {}) {
+      if (disposed) return;
+      vehicleList?.setAttribute('aria-label', i18n.t('motion.vehicleList'));
+      const hint = element.querySelector('.scene-canvas-hint');
+      const listHint = element.querySelector('.scene-list-hint');
+      if (hint) hint.textContent = hints.canvas ?? i18n.t('motion.canvasHint');
+      if (listHint) listHint.textContent = hints.list ?? i18n.t('motion.listHint');
+      if (closeButton) closeButton.textContent = i18n.t('common.close');
+      lastCardText = '';
+      const drawnList = deps.drawn();
+      renderVehicleList(drawnList);
+      paintCard(drawnList);
+    },
+    destroy() {
+      disposed = true;
+      disarmIdle();
+      vehiclesCanvas?.removeEventListener('click', onCanvasClick);
+      vehiclesCanvas?.removeEventListener('keydown', onCanvasKey);
+      vehicleList?.removeEventListener('click', onListClick);
+      vehicleList?.removeEventListener('keydown', onListKey);
+      vehicleList?.removeEventListener('focusin', onListFocusIn);
+      cardEl?.removeEventListener('keydown', onCardKey);
+      cardEl?.removeEventListener('pointerdown', armIdle);
+      closeButton?.removeEventListener('click', onClose);
+    },
+  };
 }
 
 export function mountSchematicView(container: HTMLElement, deps: SchematicViewDeps): SchematicViewHandle {
@@ -251,27 +654,24 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
   // R-F8: the lightweight list's own status line, read only from the caller's
   // most recent update() (kiosk.ts is the only caller that passes one today).
   let latestSnapshot: ModuleSnapshot | undefined;
-  const listCap = crop.radius > WHOLE_NETWORK_RADIUS_THRESHOLD_M ? LIST_CAP_NETWORK : LIST_CAP_CROP;
+  const scene = createCropScene(netOrEmpty, crop, types);
+  const listCap = scene.listCap;
 
-  const id = ++uid;
   const element = document.createElement('div');
   element.className = 'schematic';
   element.dataset.testid = 'schematic';
-  element.innerHTML = markup(lightweight, i18n, { hint: `schematic-hint-${id}`, listHint: `schematic-list-hint-${id}`, line: `schematic-line-${id}` });
+  element.innerHTML = lightweight
+    ? `<ul class="schematic-list" data-testid="schematic-list"></ul>
+       <p class="schematic-legend" data-testid="schematic-legend"></p>`
+    : sceneMarkup(i18n);
   container.appendChild(element);
 
   const routesCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=schematic-routes]');
   const vehiclesCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=schematic-vehicles]');
   const listEl = element.querySelector<HTMLElement>('[data-testid=schematic-list]');
-  const vehicleList = element.querySelector<HTMLElement>('[data-testid=vehicle-list]');
   const legend = element.querySelector<HTMLElement>('[data-testid=schematic-legend]')!;
-  const cardEl = element.querySelector<HTMLElement>('[data-testid=vehicle-card]');
-  const cardLine = element.querySelector<HTMLElement>('[data-testid=vehicle-line]');
-  const cardDirection = element.querySelector<HTMLElement>('[data-testid=vehicle-direction]');
-  const cardDelay = element.querySelector<HTMLElement>('[data-testid=vehicle-delay]');
-  const cardNextStop = element.querySelector<HTMLElement>('[data-testid=vehicle-next-stop]');
 
-  let layout: SchematicLayout = layoutSchematic(netOrEmpty, crop, NOMINAL_PX, NOMINAL_PX, 1, types);
+  let layout: VehicleLayout = { w: NOMINAL_PX, h: NOMINAL_PX, density: 1 };
   let vehiclesCtx: CanvasRenderingContext2D | null = null;
   // R-V2: three tones, read off computed style at every resize()/theme
   // change (never literals in schematic.ts). The fallbacks are the dark
@@ -290,13 +690,14 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     const sizedRoutes = prepareCanvas(routesCanvas, DENSITY);
     vehiclesCtx = sizedVehicles?.ctx ?? null;
     if (!sizedVehicles) return;
-    layout = layoutSchematic(netOrEmpty, crop, sizedVehicles.w, sizedVehicles.h, DENSITY, types);
+    layout = { w: sizedVehicles.w, h: sizedVehicles.h, density: DENSITY };
+    scene.resize(layout.w, layout.h, layout.density);
     tones = {
       ink: tone(vehiclesCanvas, '--tone-text-primary', tones.ink),
       halo: tone(vehiclesCanvas, '--tone-surface-canvas', tones.halo),
     };
     lineTone = tone(vehiclesCanvas, '--tone-label', lineTone);
-    if (sizedRoutes) paintRoutes(sizedRoutes.ctx, layout, lineTone);
+    if (sizedRoutes) scene.paintStatic(sizedRoutes.ctx, { ...tones, line: lineTone, water: lineTone });
   }
 
   /** R-F8: the honest lightweight face of seeing the trams around you --
@@ -360,296 +761,15 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     return true;
   }
 
-  // --- The tap card (T9) ---------------------------------------------------
-  // `selectedId` is the one vehicle the person picked; `lastMarks` is the
-  // frame they picked it from (hit-testing runs against what was actually
-  // on screen, not a frame computed after the tap). The card's three lines
-  // are rewritten only when their text changes, same discipline as the
-  // legend, so a card left open over a moving tram costs nothing per frame.
-  // `openerEl` is what opened it -- a list button, or the canvas -- and is
-  // where focus returns when the person closes it (R-F5).
-  let selectedId: string | null = null;
-  let openerEl: HTMLElement | null = null;
-  let lastMarks: readonly VehicleMark[] = [];
-  let lastCardText = '';
-  let idleHandle: unknown = null;
-
-  function disarmIdle(): void {
-    if (idleHandle === null) return;
-    clearTimer(idleHandle);
-    idleHandle = null;
-  }
-
-  function armIdle(): void {
-    disarmIdle();
-    if (deps.cardIdleMs === undefined) return;
-    idleHandle = setTimer(() => {
-      disarmIdle();
-      closeCard('idle');
-    }, deps.cardIdleMs);
-  }
-
-  function paintCard(drawnList: readonly Drawn[]): void {
-    if (!cardEl || selectedId === null) return;
-    const v = drawnList.find((d) => d.id === selectedId);
-    if (!v) return;
-    const card: VehicleCard = describeVehicle(i18n, netOrEmpty, v, delays);
-    const text = `${card.line}\n${card.direction}\n${card.delay}\n${card.nextStop ?? ''}`;
-    if (text === lastCardText) return;
-    lastCardText = text;
-    cardLine!.textContent = card.line;
-    cardDirection!.textContent = card.direction;
-    cardDelay!.textContent = card.delay;
-    if (cardNextStop) {
-      cardNextStop.textContent = card.nextStop ?? '';
-      cardNextStop.hidden = card.nextStop === undefined;
-    }
-  }
-
-  /** `opener` is what gets focus back when the person closes the card;
-   *  `focusCard` moves focus onto the dialog now -- true from a list button
-   *  or a tap, false from the arrow keys, whose whole point is that focus
-   *  stays on the canvas while the card follows the selection. */
-  function openCard(vehicleId: string, opener: HTMLElement | null, focusCard: boolean): void {
-    if (!cardEl) return;
-    const drawnList = model.step(now());
-    if (!drawnList.some((v) => v.id === vehicleId)) {
-      // Evicted between two polls (R-F2): the list still holds its button
-      // until the next update(). Nothing to describe; drop the button now.
-      renderVehicleList(drawnList);
-      return;
-    }
-    selectedId = vehicleId;
-    openerEl = opener;
-    lastCardText = '';
-    cardEl.dataset.vehicle = vehicleId;
-    cardEl.hidden = false;
-    paintCard(drawnList);
-    if (focusCard) cardEl.focus();
-    armIdle();
-    loop.nudge();
-  }
-
-  /** Focus never falls to body when the card goes (R-F5): back to the
-   *  opener while it is still in the document, else -- and always on the
-   *  idle close, R-P7's own case -- to the vehicle list, the one landing
-   *  that stays put while everything else on the canvas moves. */
-  function closeCard(reason: CloseReason): void {
-    disarmIdle();
-    if (selectedId === null || !cardEl) return;
-    const focusWasInside = cardEl.contains(document.activeElement);
-    const opener = openerEl;
-    selectedId = null;
-    openerEl = null;
-    cardEl.hidden = true;
-    delete cardEl.dataset.vehicle;
-    if (focusWasInside) {
-      const target = reason !== 'idle' && opener?.isConnected ? opener : (vehicleList ?? vehiclesCanvas);
-      target?.focus();
-    }
-    loop.nudge();
-  }
-
-  /** Device-pixel coordinates of a pointer event inside the vehicle canvas:
-   *  the canvas backing store is DENSITY times its CSS box (prepareCanvas). */
-  function devicePoint(event: MouseEvent): XY {
-    const rect = vehiclesCanvas!.getBoundingClientRect();
-    const sx = rect.width ? vehiclesCanvas!.width / rect.width : 1;
-    const sy = rect.height ? vehiclesCanvas!.height / rect.height : 1;
-    return { x: (event.clientX - (rect.left || 0)) * sx, y: (event.clientY - (rect.top || 0)) * sy };
-  }
-
-  function onCanvasClick(event: MouseEvent): void {
-    const p = devicePoint(event);
-    const hit = hitVehicle(lastMarks, p.x, p.y, layout.density);
-    if (hit) openCard(hit.id, vehiclesCanvas, true);
-    else closeCard('user');
-  }
-
-  function stepSelection(direction: 1 | -1): void {
-    const ordered = [...lastMarks].sort(byId);
-    if (ordered.length === 0) return;
-    const at = selectedId === null ? -1 : ordered.findIndex((m) => m.id === selectedId);
-    const next = at === -1 ? (direction === 1 ? 0 : ordered.length - 1) : (at + direction + ordered.length) % ordered.length;
-    openCard(ordered[next].id, vehiclesCanvas, false);
-  }
-
-  function onCanvasKey(event: KeyboardEvent): void {
-    switch (event.key) {
-      case 'ArrowRight':
-      case 'ArrowDown':
-        stepSelection(1);
-        break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        stepSelection(-1);
-        break;
-      case 'Enter':
-      case ' ':
-        if (selectedId === null) stepSelection(1);
-        else armIdle();
-        break;
-      case 'Escape':
-        if (selectedId === null) return;
-        closeCard('user');
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-  }
-
-  function onCardKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeCard('user');
-      return;
-    }
-    armIdle(); // a key inside the card means someone is still reading it
-  }
-
-  // --- The reader's route (R-F5) -------------------------------------------
-  // One real <button> per drawn vehicle, in the id order the arrow keys
-  // walk, rebuilt on update() -- a poll, twenty to thirty seconds apart --
-  // and never per frame. Reconciled by vehicle id rather than rewritten: a
-  // reader parked on a button keeps that very element across polls, and
-  // because surviving items never change their relative order (both sides
-  // sort by id) no existing node is ever moved, so focus cannot fall off
-  // one. The list is a single tab stop (a whole network is hundreds of
-  // vehicles, and a sighted keyboard user already has the canvas): the
-  // arrows move between the buttons and the one reached becomes the stop.
-  let activeVehicleId: string | null = null;
-
-  function vehicleButtons(): HTMLButtonElement[] {
-    return vehicleList ? [...vehicleList.querySelectorAll<HTMLButtonElement>('button')] : [];
-  }
-
-  function setActiveButton(active: HTMLButtonElement): void {
-    for (const b of vehicleButtons()) {
-      const want = b === active ? '0' : '-1';
-      if (b.getAttribute('tabindex') !== want) b.setAttribute('tabindex', want);
-    }
-    activeVehicleId = active.dataset.vehicle ?? null;
-  }
-
-  function vehicleItem(vehicleId: string): HTMLLIElement {
-    const li = document.createElement('li');
-    li.className = 'schematic-vehicle';
-    li.dataset.vehicle = vehicleId;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'schematic-vehicle-button';
-    button.dataset.vehicle = vehicleId;
-    button.setAttribute('tabindex', '-1');
-    li.appendChild(button);
-    return li;
-  }
-
-  /** The button says what the card would say for this vehicle, in the same
-   *  three parts and the same words (vehicle-card.ts), so pressing it never
-   *  surprises: "6 · Črnomerec-Sopot, smjer Sopot, kašnjenje linije: +40 s". */
-  function paintVehicleButton(button: HTMLButtonElement, v: Drawn): void {
-    const card = describeVehicle(i18n, netOrEmpty, v, delays);
-    const text = [card.line, card.direction, card.delay, card.nextStop].filter(Boolean).join(', ');
-    if (button.textContent !== text) button.textContent = text;
-  }
-
-  function renderVehicleList(drawnList: readonly Drawn[]): void {
-    if (!vehicleList) return;
-    const byVehicle = new Map<string, Drawn>();
-    for (const v of drawnList) byVehicle.set(v.id, v);
-    const inFrame = vehicleMarks(layout, drawnList).sort(byId);
-    const keep = new Set(inFrame.map((m) => m.id));
-    const focused = document.activeElement;
-    let focusLost = focused !== null && focused !== vehicleList && vehicleList.contains(focused);
-
-    // A merge walk over two id-sorted sequences: the items already in the
-    // list and the vehicles now in frame. Gone items are removed as the walk
-    // passes them, new ones inserted before the item they precede, and a
-    // survivor is left exactly where it is.
-    let cursor: Element | null = vehicleList.firstElementChild;
-    const gone = (el: Element): Element | null => {
-      const next = el.nextElementSibling;
-      el.remove();
-      return next;
-    };
-    for (const mark of inFrame) {
-      while (cursor && !keep.has((cursor as HTMLElement).dataset.vehicle ?? '')) cursor = gone(cursor);
-      let li: HTMLLIElement;
-      if (cursor && (cursor as HTMLElement).dataset.vehicle === mark.id) {
-        li = cursor as HTMLLIElement;
-        cursor = cursor.nextElementSibling;
-      } else {
-        li = vehicleItem(mark.id);
-        vehicleList.insertBefore(li, cursor);
-      }
-      paintVehicleButton(li.firstElementChild as HTMLButtonElement, byVehicle.get(mark.id)!);
-      if (focusLost && li.contains(focused)) focusLost = false;
-    }
-    while (cursor) cursor = gone(cursor);
-
-    const buttons = vehicleButtons();
-    const active = buttons.find((b) => b.dataset.vehicle === activeVehicleId) ?? buttons[0];
-    if (active) setActiveButton(active);
-    else activeVehicleId = null;
-    // The button a reader was on went with its vehicle: land them on the
-    // list, not on body.
-    if (focusLost) vehicleList.focus();
-  }
-
-  function vehicleButtonOf(event: Event): HTMLButtonElement | null {
-    const target = event.target instanceof Element ? event.target : null;
-    return target?.closest<HTMLButtonElement>('button[data-vehicle]') ?? null;
-  }
-
-  function onListClick(event: MouseEvent): void {
-    const button = vehicleButtonOf(event);
-    if (!button?.dataset.vehicle) return;
-    setActiveButton(button);
-    openCard(button.dataset.vehicle, button, true);
-  }
-
-  /** A reader's virtual cursor can land on any button, tab stop or not;
-   *  wherever it lands becomes the stop, so Tab and the arrows continue
-   *  from there. */
-  function onListFocusIn(event: FocusEvent): void {
-    const button = vehicleButtonOf(event);
-    if (button) setActiveButton(button);
-  }
-
-  function onListKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      if (selectedId === null) return;
-      event.preventDefault();
-      closeCard('user');
-      return;
-    }
-    const buttons = vehicleButtons();
-    if (buttons.length === 0) return;
-    const at = buttons.findIndex((b) => b === document.activeElement);
-    let next: number;
-    switch (event.key) {
-      case 'ArrowDown':
-      case 'ArrowRight':
-        next = at === -1 ? 0 : (at + 1) % buttons.length;
-        break;
-      case 'ArrowUp':
-      case 'ArrowLeft':
-        next = at === -1 ? buttons.length - 1 : (at - 1 + buttons.length) % buttons.length;
-        break;
-      case 'Home':
-        next = 0;
-        break;
-      case 'End':
-        next = buttons.length - 1;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    setActiveButton(buttons[next]);
-    buttons[next].focus();
-  }
+  const accessibility = lightweight ? null : mountSceneAccessibility({
+    element, scene, i18n, net: netOrEmpty,
+    drawn: () => model.step(now()),
+    delays: () => delays,
+    density: () => layout.density,
+    nudge: () => loop.nudge(),
+    cardIdleMs: deps.cardIdleMs,
+    setTimer, clearTimer,
+  });
 
   let lastMarksSignature = '';
 
@@ -661,13 +781,12 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
     // it awake again.
     if (!element.isConnected) return false;
     const drawnList = model.step(t);
-    const marks = vehicleMarks(layout, drawnList);
+    const marks = scene.marks(drawnList);
     const legendChanged = paintLegend(marks.length, trackedCount(drawnList));
     element.dataset.frames = String(loop.frames());
     if (lightweight) return legendChanged;
-    lastMarks = marks;
-    if (selectedId !== null && !marks.some((m) => m.id === selectedId)) closeCard('gone'); // left the crop, went quiet: nothing left to describe
-    paintCard(drawnList);
+    accessibility?.frame(drawnList, marks);
+    const selectedId = accessibility?.selection() ?? null;
     if (vehiclesCtx) paintVehicles(vehiclesCtx, layout, marks, tones, selectedId);
     const sig = marksSignature(marks, selectedId);
     const moved = sig !== lastMarksSignature;
@@ -696,23 +815,12 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
   // the loop's first scheduled frame actually fires.
   draw(now());
   const stopRepaint = deps.onRepaint?.(() => resize());
+  const stopScene = scene.onChange(() => {
+    resize();
+    accessibility?.reconcile(model.step(now()));
+    loop.nudge();
+  });
   loop.start();
-
-  const closeButton = element.querySelector<HTMLButtonElement>('[data-testid=vehicle-card-close]');
-  if (vehiclesCanvas) {
-    vehiclesCanvas.addEventListener('click', onCanvasClick);
-    vehiclesCanvas.addEventListener('keydown', onCanvasKey);
-  }
-  if (vehicleList) {
-    vehicleList.addEventListener('click', onListClick);
-    vehicleList.addEventListener('keydown', onListKey);
-    vehicleList.addEventListener('focusin', onListFocusIn);
-  }
-  if (cardEl) {
-    cardEl.addEventListener('keydown', onCardKey);
-    cardEl.addEventListener('pointerdown', armIdle); // a touch inside the card means someone is still reading it
-  }
-  closeButton?.addEventListener('click', () => closeCard('user'));
 
   return {
     element,
@@ -723,7 +831,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
       latestSnapshot = data.snapshot;
       hasData = true;
       if (lightweight) renderList();
-      else renderVehicleList(model.step(t));
+      else accessibility?.reconcile(model.step(t));
       loop.nudge();
     },
     pause() {
@@ -733,9 +841,10 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
       loop.start();
     },
     destroy() {
-      disarmIdle();
+      accessibility?.destroy();
       loop.stop();
       stopRepaint?.();
+      stopScene();
       element.remove();
     },
   };

@@ -134,6 +134,100 @@ afterEach(() => {
 });
 
 describe('the transport workspace', () => {
+  it('switches map and schema on the same workspace, persisting only the device preference and preserving search, sheet, selection, follow and the geographic camera', async () => {
+    const { createMapModeStore, MAP_MODE_STORAGE_KEY } = await import('../../app/src/core/map-mode-store');
+    const raw = new Map<string, string>();
+    const storage = { getItem: (key: string) => raw.get(key) ?? null, setItem: (key: string, value: string) => { raw.set(key, value); } };
+    const mapMode = createMapModeStore({ storage });
+    expect(mapMode.snapshot()).toBe('map');
+    const { maps, last, made } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context, navigate } = ctx({ maps });
+    context.mapMode = mapMode;
+    const main = document.createElement('main');
+    document.body.replaceChildren(main);
+    // The dashboard reconciles its persistent workspace; replacing the whole
+    // section in this test would itself blur the focused toggle.
+    const paint = (): void => {
+      const wrapper = document.createElement('div');
+      wrapper.appendChild(renderLayer('u-pokretu', context));
+      reconcile(main, wrapper);
+      maps.sweep();
+    };
+    const stop = mapMode.subscribe(paint);
+    const workspace = q<HTMLElement>('[data-testid=transport-workspace]');
+    const toggle = q<HTMLButtonElement>('[data-testid=map-mode-toggle]');
+    expect(toggle.closest('.t-map-tools')).not.toBeNull();
+    expect(toggle.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(text(toggle)).toBe('Shema linija');
+    const geographic = last();
+    const savedCamera = { center: [15.96, 45.8] as [number, number], zoom: 15 };
+    // A fitted/followed camera need not have fired onUserMove; read it before disposal.
+    geographic.camera = () => savedCamera;
+    geographic.options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
+    q<HTMLButtonElement>('#t-follow').click();
+    q<HTMLButtonElement>('.t-sheet-toggle').click();
+    expect(workspace.dataset.sheet).toBe('open');
+    const relays = navigate.mock.calls.length;
+    toggle.focus();
+    toggle.click();
+    const schema = last();
+    expect(schema).not.toBe(geographic);
+    expect(schema.options).toMatchObject({ renderer: 'schema', ariaLabel: 'Shema linija: Shema prikazuje tramvaje', selection: { kind: 'vehicle', id: 'vehicle:1' }, follow: 'vehicle:1' });
+    expect(maps.handle('u-pokretu-schema')).toBe(schema);
+    expect(maps.handle('u-pokretu-map')).toBeNull();
+    expect(geographic.destroy).toHaveBeenCalledTimes(1);
+    expect(raw.get('kajima:map-mode:v1')).toBe('schema');
+    expect(MAP_MODE_STORAGE_KEY).toBe('kajima:map-mode:v1');
+    expect(createMapModeStore({ storage }).snapshot()).toBe('schema');
+    expect(q('[data-testid=transport-workspace]')).toBe(workspace);
+    expect(workspace.dataset.sheet).toBe('open');
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(text(toggle)).toBe('Karta grada');
+    expect(q<HTMLElement>('[data-mode="3"]').hidden).toBe(true);
+    expect(q<HTMLElement>('[data-action=toggle-closures]').hidden).toBe(true);
+    expect(text(q('[data-testid=schema-mode-legend]'))).toBe('Shema prikazuje tramvaje');
+    expect(text(q('[data-testid=vehicle-title]'))).toContain('Tramvaj 6');
+    q<HTMLButtonElement>('[data-action=fit-city]').click();
+    expect(schema.fit).toHaveBeenLastCalledWith('city');
+    schema.options.onUserMove!(null);
+    expect(q('[data-testid=following-note]')).toBeNull();
+    expect(schema.follow).toHaveBeenLastCalledWith(null);
+    expect(navigate.mock.calls.length).toBe(relays);
+    // Neither the schema's null camera nor a late callback from the old map may erase the saved one.
+    geographic.options.onUserMove!({ center: [0, 0], zoom: 1 });
+    toggle.click();
+    expect(last().options).toMatchObject({ renderer: 'map', center: savedCamera.center, zoom: 15, selection: { kind: 'vehicle', id: 'vehicle:1' }, follow: null });
+    expect(schema.destroy).toHaveBeenCalledTimes(1);
+    expect(q<HTMLElement>('[data-mode="3"]').hidden).toBe(false);
+    expect(navigate.mock.calls.length).toBe(relays);
+    const search = q<HTMLInputElement>('[data-testid=transport-search]');
+    search.value = 'kva';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    const detent = workspace.dataset.sheet;
+    toggle.click();
+    expect(q('[data-testid=transport-search]')).toBe(search);
+    expect(search.value).toBe('kva');
+    expect(workspace.dataset.sheet).toBe(detent);
+    context.i18n = createDefaultI18n('en');
+    paint();
+    expect(text(toggle)).toBe('City map');
+    expect(text(q('[data-testid=schema-mode-legend]'))).toBe('The diagram shows trams');
+    const count = made.length;
+    context.lightweight = true;
+    paint();
+    expect(document.querySelector('[data-testid=map-mode-toggle]')).toBeNull();
+    expect(made).toHaveLength(count);
+    stop();
+    maps.destroy();
+    // Private mode and stale values do not change the default or break an in-tab choice.
+    expect(createMapModeStore({ storage: { getItem: () => 'other', setItem() {} } }).snapshot()).toBe('map');
+    const privateMode = createMapModeStore({ storage: { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } } });
+    privateMode.set('schema');
+    expect(privateMode.snapshot()).toBe('schema');
+  });
+
   it('renders one persistent workspace: the overview lists the routes moving now from the map’s own estimate, trams then buses, both on by default, with the closures, ZET’s notices and the honesty note', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context } = ctx({ maps });
