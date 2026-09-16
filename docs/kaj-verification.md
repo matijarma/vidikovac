@@ -16,6 +16,53 @@ ne obećava provjere na fizičkim uređajima koje nisu provedene.
 | Početne kartografske pločice, 390 i 1440 px | 295.118 primljenih bajtova; granica 1.500.000 |
 | Vanjski zahtjevi preglednika pri otvaranju karte | nijedan |
 
+### Shema linija, lokalna grana `zet-schema` (16. rujna 2026.)
+
+Implementacija je u izdvojenom radnom stablu
+`D:/scratch/kajima-wt/zet-schema`. Posljednja uputa vlasnika zamjenjuje korak
+objave iz izvornog plana: završiti i provjeriti lokalno, bez spajanja,
+commita, pusha ili deploya. Ova tablica nije tvrdnja da je shema objavljena.
+
+| Provjera | Lokalni rezultat |
+|---|---|
+| TypeScript aplikacije i Workera | prolazi |
+| Cijeli Vitest unit | 162 datoteke, 2.426 testova prolazi |
+| Cijeli Vitest workers | 21 datoteka, 149 testova prolazi |
+| Produkcijska gradnja | prolazi; schema renderer je zaseban dinamički paket |
+| Playwright Chromium i mobile | svih 94 scenarija prolazi, uključujući šest novih provjera sheme |
+| Ponovna gradnja sheme | isti bajtovi; 57.639 B izvorno, 10.582 B gzip; `feedVersion=000395` |
+| Identitet nacrta i pokrivenost | 19 linija, 114 od 122 GTFS naziva, osam imenovanih iznimaka, pet naziva samo iz nacrta, nula nerazriješenih skupina kružića |
+| Smještaj po stazama | 139 od 145 staza smjestivo, svaka dionica strogo monotona; šest staza bez dva podudarna stajališta imenovano u overrides dokumentu |
+| Svježi Opus pregled, samo čitanje | završen; uklonjeno ponovno osvježavanje cijelog pristupačnog popisa pri svakom pomaku, spremljena tablica naziva stajališta, razdvojeni testni identifikatori, provjereno uništavanje renderer-a |
+| Vizualna matrica | 84 prikaza, nula nalaza; uključeni phone, phone-dark, desktop, uvećani prikazi sheme i kiosk sa stajalištem |
+| Lighthouse pristupačnost | 100 na svih šest stranica: `/`, `/hitno`, `/kiosk/`, `/s/`, `/d/`, `/prijava/`; nema palih audita |
+
+Browser provjera koristi stvarnu ugrađenu tramvajsku stazu s determinističkim
+planom na ulazu testnog preglednika. Dokazuje pomak oznake između dvije slike
+bez drugog očitanja, povratak na geografsku kartu, odabir kroz postojeći list,
+izostanak dodatnog dijaloga, stvarni touch-pinch, pojavu naziva pri uvećanju,
+vraćanje na fit, trajnost postavke i izostanak schema paketa/artefakta u laganom
+načinu. Kiosk sa stajalištem `106_1` čuva `prikaz=shema` kroz čišćenje adrese i
+prikazuje kadar s čitljivim nazivima.
+
+Rani pokušaji pune provjere zabilježili su prekid lokalnog dev procesa i jedan
+istek petosekundnog Worker testa pri paralelnoj gradnji. Nisu prihvaćeni kao
+prolaz: cijeli Worker skup ponovljen je sekvencijalno, a cijela 94-scenarijska
+browser kapija s vlastitim procesima i odvojenim imenima lokalnih Workera
+(`vidikovac-schema-gate`, `vidikovac-schema-short`), bez promjene postojećih
+tvrdnji ili vremenskih limita. Lokalni runner čuva sve potomke do kraja
+provjere i zaustavlja samo procese koje je sam pokrenuo.
+Lighthouse je završio sa svim rezultatima 100; Windows je pri čišćenju već
+zatvorenog privremenog Chrome profila prijavio poznati `EPERM`, koji nije
+utjecao na rezultate audita. Pregledane su i stvarne snimke sheme: uklonjena
+je praznina starog zaglavlja/legende iz početnog kadra, istaknuto stajalište
+ima jedan prsten, a objašnjenje položaja ostaje vidljivo iznad lista na telefonu.
+
+Za završnu vlasničku provjeru na fizičkom uređaju ostaju: deset minuta Ilice,
+linija 17 kroz Borongaj, noćna linija poslije ponoći, obilazna spojnica,
+pinch na stvarnom telefonu i čitljivost javnog zaslona iz prostora. Automatizirani
+testovi i snimke ne proglašavaju te fizičke provjere obavljenima.
+
 Test ograničenja broja sesija jednom je prešao pet sekundi pri istodobnoj
 gradnji, velikoj vizualnoj matrici i drugim preglednicima. Izolirana provjera
 te zatim ponovna provjera cijelog skupa prolaze, bez promjene njegovih tvrdnji

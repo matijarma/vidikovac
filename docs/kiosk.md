@@ -133,6 +133,23 @@ uređaja osigurati da se zaslon ne gasi tijekom rada. Automatsko pokretanje
 na ciljnom Raspberry Pi ili doniranom uređaju provjerava se u pilotu; ova
 verzija ne tvrdi da su fizičke postave već testirane.
 
+## Shema tramvajskih linija
+
+`/kiosk/?prikaz=shema` umjesto geografske karte prikazuje ponovno iscrtanu ZET-ovu
+tramvajsku shemu. `?prikaz=karta` izričito bira gradsku kartu; bez parametra vrijedi
+lokalna postavka `kajima:map-mode:v1`, zadano gradska karta. Parametar ostaje u URL-u
+nakon uklanjanja jednokratnih podataka za postavljanje. `prizor` i `prikaz` su
+neovisni: poglavlja se i dalje izmjenjuju, osim kada ih `prizor` ili postojeća
+pravila za smanjeno kretanje zaustave.
+
+Zaslon sa stajalištem koje postoji na shemi pokazuje čitljiv kadar oko njega,
+s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta pokazuje cijelu
+mrežu bez sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
+geografske kamere poglavlja; položaj donje tračnice i dalje ulazi u fit-padding.
+Prikazuje samo tramvaje čija se postojeća staza može smjestiti na nacrt.
+Autobusi, gradske točke i obrisi četvrti nisu dio tog prikaza.
+`?lagano=1` je nepromijenjen i ne učitava shemu.
+
 ## Razvoj i automatska provjera
 
 Lokalni Worker mora imati `APP_ENV=test` i izričite tajne iz `.dev.vars`.

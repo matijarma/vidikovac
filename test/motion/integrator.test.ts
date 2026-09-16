@@ -126,6 +126,12 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
           expect(d.headsign).toBe(`Kraj ${d.routeId}`);
           if (d.confidence >= 0.3 && d.heading === null) headingUnknownOnGeometry++;
           const arc = arcOf(d, pathIdx);
+          if (k === 0) {
+            // Diagram renderers need the actual post-order-clamp arc, not a
+            // projection or a shape id (synthetic paths have no shape).
+            expect(d.path).toBe(pathIdx);
+            expect(d.s).toBeCloseTo(arc, 3);
+          }
           arcNow.set(d.id, arc);
           const prev = prevArc.get(d.id);
           if (prev !== undefined) {
@@ -198,6 +204,8 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     const first = integrator.step(T0)[0];
     expect(toLonLat(first.p).map((x) => Number(x.toFixed(5)))).toEqual([15.97, 45.81]);
     expect(first.onShape).toBeNull();
+    expect(first.path).toBeUndefined();
+    expect(first.s).toBeUndefined();
     // A new report 100 m east: the mark converges, never lands on it at once, and faces east.
     const bPlane = { x: toPlane(15.97, 45.81).x + 100, y: toPlane(15.97, 45.81).y };
     const [bLon, bLat] = toLonLat(bPlane);

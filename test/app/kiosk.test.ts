@@ -47,7 +47,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'pinScene'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'pinScene' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -92,7 +92,7 @@ function mount(opts: MountOptions = {}) {
   const handle = mountKiosk(root, {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
-    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, pinScene: opts.pinScene,
+    reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, pinScene: opts.pinScene, mapMode: opts.mapMode,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
@@ -960,11 +960,12 @@ describe('scenes: rotation, the standing map, reduced motion, lagano and the pin
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
     return { factory: vi.fn(() => handle), handle, calls };
   }
-  it('the map stands through a chapter change, is never parked or rebuilt by one, and keeps hearing the feed state', async () => {
+  it.each(['map', 'schema'] as const)('the %s renderer stands through a chapter change, is never parked or rebuilt by one, and keeps hearing the feed state', async (mapMode) => {
     let fail = false;
     const map = spyMap();
-    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
+    const k = mount({ stored: STORED, mapMode, mapFactory: map.factory as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
     await flush();
+    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: STOP });
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
     const picture = q(k.root, '[data-testid=kiosk-map-host]')!;
@@ -995,6 +996,7 @@ describe('scenes: rotation, the standing map, reduced motion, lagano and the pin
     await flush();
     expect(k.handle.phase()).toBe('paired');
     expect(map.calls).toContain('pause');
+    k.handle.destroy();
   });
   it('the countdown counts the seconds to the next scene on the 1 s tick without rebuilding the strip, and restarts on the rotation', async () => {
     let now = NOW;

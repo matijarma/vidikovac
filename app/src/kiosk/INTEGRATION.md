@@ -22,7 +22,7 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 The integrated `createCityMap` (the same-origin vector map) reads these, plus
 the other options the kiosk passes on creation: `stop` (the screen's stop,
 marked and named), `interactive: false` (no pointer or keyboard handling, no
-controls on a public screen), `symbolScale` 1.5 and `locale`. On the handle
+controls on a public screen), `symbolScale` 2 and `locale`. On the handle
 the kiosk drives:
 
 - `setView(view)` whenever the view changes (a new selection, a new centre);
@@ -36,17 +36,40 @@ the kiosk drives:
   and fades on its own. A map created during an outage is told before its
   first frame.
 
-The lines board lies over the lower part of the map column (under half of its
-height). The map API has no camera padding, so the kiosk moves the camera
-centre south by half the board's height (`boardCentre`), which puts the stop in
-the middle of the uncovered part. A `padding` option on `setView` would let the
-kiosk keep the true centre instead; nothing else is pending on the map side.
+The chapter rail lies over the map's foot. Its measured height reaches the
+geographic camera through `setView().padding`, and both renderers through
+`fitPadding` on creation and `setFitPadding()` on every paint. The screen's
+stop remains the true centre, inside the uncovered part of the field.
 The kiosk never calls the factory twice for one screen and never reaches into
 MapLibre itself.
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn
 where given) and closure lines.
+
+## ZET schema renderer
+
+`?prikaz=shema|karta` overrides `kajima:map-mode:v1` (`schema|map`, default
+`map`) for this boot only. The entry preserves a valid `prikaz` together with
+`prizor` when clearing the provisioning fragment and one-time `tema`. It
+does not overwrite the device preference or pin a chapter.
+
+`KioskDeps.mapMode` reaches `requestKioskMap()` as `renderer`, and
+`KioskMapExtras` carries it to the factory alongside the stop and the
+noninteractive contract. The existing `kiosk-map` slot, chapter order,
+rotation, pairing, pause/resume and feed handling stay unchanged.
+
+The shared `createMapRenderer` factory returns a synchronous handle and
+dynamically imports `createSchemaMap` only for a schema request. Pending
+updates are buffered; destroying the handle before import prevents a late
+mount. Lightweight mode creates neither renderer and loads no schema code.
+
+The schema ignores chapter cameras, emphasis and geographic outlines. It
+keeps the legible crop around the screen's stop across chapters; without a
+stop it fits the network without labels. It receives changing rail padding
+separately, even though `setView` is a no-op. No district outline is fetched
+for a schema field. The schema renderer itself does not load MapLibre. This
+does not change the dashboard's separate geographic Kvart thumbnail.
 
 ## UI workstream (tokens, i18n)
 

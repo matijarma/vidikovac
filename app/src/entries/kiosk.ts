@@ -7,9 +7,10 @@
 // mounts the kiosk, and strips the secret from the address bar so a reload
 // never re-provisions from history.
 import { bootPage } from '../boot';
+import { createMapModeStore } from '../core/map-mode-store';
 import { mountKiosk } from '../kiosk';
-import { parsePinnedScene } from '../kiosk/scenes';
-import { createCityMap } from '../map/city-map';
+import { parseKioskMapMode, parsePinnedScene } from '../kiosk/scenes';
+import { createMapRenderer } from '../map/renderers';
 import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { THEME_STORAGE_KEY, type ThemePreference } from '../ui/theme';
@@ -71,6 +72,8 @@ if (!lightweight) void import('../ui/fonts.css');
 // D13: ?prizor=promet|veceras|grad pins one scene and stops the rotation (a
 // test, demo and operator hook), read once here like ?tema= and passed down.
 const pinScene = parsePinnedScene(location.search);
+const mapOverride = parseKioskMapMode(location.search);
+const mapMode = mapOverride ?? createMapModeStore({ storage: safeLocalStorage() }).snapshot();
 
 mountKiosk(root, {
   i18n,
@@ -79,11 +82,18 @@ mountKiosk(root, {
   reducedMotion,
   lightweight,
   pinScene,
+  mapMode,
   onRepaint: repaintOn(theme),
-  mapFactory: createCityMap,
+  mapFactory: createMapRenderer,
 });
 // The secret is in localStorage now, and ?tema= only ever needed to land
 // once: keep both out of the address bar and history, the same way as before.
-// The pin is the screen's standing choice, not a one-time landing: it stays
-// in the address so a reload keeps the scene an operator asked for.
-if (location.hash || temaParam) history.replaceState(null, '', pinScene ? `/kiosk/?prizor=${pinScene}` : '/kiosk/');
+// The chapter pin and renderer override are standing choices. Neither is
+// persisted over the device preference, and both must survive a reload.
+if (location.hash || temaParam) {
+  const kept = new URLSearchParams();
+  if (pinScene) kept.set('prizor', pinScene);
+  if (mapOverride) kept.set('prikaz', mapOverride === 'schema' ? 'shema' : 'karta');
+  const search = kept.toString();
+  history.replaceState(null, '', `/kiosk/${search ? `?${search}` : ''}`);
+}

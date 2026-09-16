@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-16T15:40:00Z",
+  "title": "Design System: Kaj ima?",
+  "extensions": {
+    "source": "Extracted from app/src/ui/tokens.css, base.css, signage.css, dashboard.css, kiosk.css and their component builders. DESIGN.md owns primitive values; this sidecar extends them.",
+    "shadows": [
+      { "name": "palette-light-shadow-soft", "value": "0 1px 2px rgba(12, 18, 80, 0.05), 0 6px 20px rgba(12, 18, 80, 0.07)", "purpose": "Light cards and banners." },
+      { "name": "palette-light-shadow-md", "value": "0 2px 4px rgba(12, 18, 80, 0.06), 0 12px 32px rgba(12, 18, 80, 0.12)", "purpose": "Floating controls and sheets." },
+      { "name": "palette-light-shadow-heavy", "value": "0 16px 48px rgba(12, 18, 80, 0.2)", "purpose": "Dialog elevation." },
+      { "name": "palette-dark-shadow-soft", "value": "0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35)", "purpose": "Dark cards and banners." },
+      { "name": "palette-dark-shadow-md", "value": "0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 36px rgba(0, 0, 0, 0.45)", "purpose": "Dark floating controls and sheets." },
+      { "name": "palette-dark-shadow-heavy", "value": "0 24px 64px rgba(0, 0, 0, 0.6)", "purpose": "Dark dialogs." }
+    ],
+    "motion": [
+      { "name": "dur-fast", "value": "140ms", "purpose": "Control feedback." },
+      { "name": "dur-base", "value": "180ms", "purpose": "Value replacement and scene exit." },
+      { "name": "dur-slow", "value": "220ms", "purpose": "Scene entry." },
+      { "name": "ease", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Product state changes." },
+      { "name": "ease-enter", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entering content." },
+      { "name": "ease-exit", "value": "cubic-bezier(0.7, 0, 0.84, 0)", "purpose": "Leaving content." }
+    ],
+    "breakpoints": [
+      { "name": "desktop-viewport", "value": "60rem" },
+      { "name": "timeband-three-lanes-container", "value": "60rem" },
+      { "name": "timeband-snap-container", "value": "36rem" },
+      { "name": "kiosk-handheld-max-exclusive", "value": "900px" },
+      { "name": "kiosk-wide-landscape-min", "value": "1700px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Tram and bus badges",
+      "kind": "chip",
+      "description": "Noninteractive line signage from signage.css. Tram rectangle, bus capsule and compact mentioned-line size.",
+      "html": "<div class=\"ds-lines\"><span class=\"ds-line\" data-kind=\"tram\" aria-label=\"tramvaj 6\">6</span><span class=\"ds-line\" data-kind=\"bus\" aria-label=\"autobus 109\">109</span><span class=\"ds-line\" data-kind=\"tram\" data-size=\"xs\" aria-label=\"tramvaj 17\">17</span></div>",
+      "css": ".ds-lines{display:flex;align-items:center;gap:var(--sp-2,.5rem)}.ds-line{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0 .45rem;block-size:2rem;min-inline-size:2.75rem;border-radius:.3125rem;background:var(--tone-action-brand,#03409c);color:var(--tone-action-brand-fg,#ffffff);font:700 var(--type-head,1.125rem)/1 var(--font-body,system-ui);font-variant-numeric:tabular-nums;letter-spacing:.01em}.ds-line[data-kind=bus]{background:var(--tone-transit,#0c1250);border-radius:var(--r-pill,999px)}.ds-line[data-size=xs]{block-size:1.125rem;min-inline-size:1.5rem;padding:0 .3rem;border-radius:.1875rem;font-size:var(--type-secondary,.8125rem)}"
+    },
+    {
+      "name": "Phone navigation",
+      "kind": "nav",
+      "description": "Four equal destinations from dashboard.css, with the current destination identified by text weight, ink and a top rule.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Glavna navigacija\"><a class=\"ds-tab\" href=\"#layer=grad-sada\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m3 10 9-8 9 8v11H3zM9 21v-8h6v8\"/></svg>Sada</a><a class=\"ds-tab\" href=\"#layer=u-pokretu\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M4 11h16M12 3v8m-4 8-2 3m12 0-2-3\"/></svg>Promet</a><a class=\"ds-tab\" href=\"#panel=kvart\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 0 1 16 0Z\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/></svg>Kvart</a><button class=\"ds-tab\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/></svg>Još</button></nav>",
+      "css": ".ds-nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--tone-surface-1,#fbfaf6);box-shadow:inset 0 1px 0 var(--tone-stroke,rgba(12,18,80,.14))}.ds-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.25rem;inline-size:100%;min-block-size:3.5rem;padding:var(--sp-1,.25rem) 0;border:0;background:transparent;color:var(--tone-text-muted,#4a5178);font:500 .875rem/1.5 var(--font-body,system-ui);text-decoration:none;cursor:pointer}.ds-tab svg{width:1.5rem;height:1.5rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.ds-tab[aria-current=page]{color:var(--tone-action-brand,#03409c);font-weight:700}.ds-tab[aria-current=page]::before{content:'';position:absolute;inset-block-start:0;inset-inline:0;block-size:2px;background:var(--tone-action-brand,#03409c)}.ds-tab:focus-visible{outline:2px solid var(--tone-focus-ring,#03409c);outline-offset:-2px}"
+    },
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary-light",
+      "description": "The primary 48px touch action; live semantic roles also support dark theme.",
+      "html": "<button class=\"ds-primary\">Prebaci na zaslon</button>",
+      "css": ".ds-primary{min-height:var(--target-primary,3rem);padding:0 var(--sp-5,1.25rem);border:1px solid transparent;border-radius:var(--r-md,.875rem);font:500 1rem/1.2 var(--font-body,system-ui);background:var(--tone-action-brand,#03409c);color:var(--tone-action-brand-fg,#ffffff);cursor:pointer;transition:background-color var(--dur-fast,140ms) var(--ease,ease-out)}.ds-primary:hover{background:var(--tone-action-brand-hover,#00327e)}.ds-primary:focus-visible{outline:2px solid var(--tone-focus-ring,#03409c);outline-offset:2px}.ds-primary:disabled{opacity:.5;cursor:not-allowed}.ds-primary[aria-pressed=true]{background:var(--tone-tint-action,#ebe8df);color:var(--tone-text-primary,#0c1250);border-color:var(--tone-action-brand,#03409c)}"
+    },
+    {
+      "name": "Ghost button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "A 44px secondary action.",
+      "html": "<button class=\"ds-ghost\">Cijeli grad</button>",
+      "css": ".ds-ghost{min-height:var(--target,2.75rem);padding:0 var(--sp-4,1rem);border:1px solid var(--tone-stroke-strong,rgba(12,18,80,.34));border-radius:var(--r-md,.875rem);font:500 .875rem/1.2 var(--font-body,system-ui);background:transparent;color:var(--tone-action-ghost-fg,#0c1250);cursor:pointer;transition:background-color var(--dur-fast,140ms) var(--ease,ease-out)}.ds-ghost:hover,.ds-ghost:active{background:var(--tone-surface-2,#ebe8df)}.ds-ghost:focus-visible{outline:2px solid var(--tone-focus-ring,#03409c);outline-offset:2px}.ds-ghost:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Quiet button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "A low-emphasis action using muted ink.",
+      "html": "<button class=\"ds-quiet\">Zatvori</button>",
+      "css": ".ds-quiet{min-height:var(--target,2.75rem);padding:0 var(--sp-4,1rem);border:1px solid transparent;border-radius:var(--r-md,.875rem);font:500 .875rem/1.2 var(--font-body,system-ui);background:transparent;color:var(--tone-text-muted,#4a5178);cursor:pointer;transition:background-color var(--dur-fast,140ms) var(--ease,ease-out)}.ds-quiet:hover,.ds-quiet:active{background:var(--tone-surface-2,#ebe8df);color:var(--tone-text-primary,#0c1250)}.ds-quiet:focus-visible{outline:2px solid var(--tone-focus-ring,#03409c);outline-offset:2px}.ds-quiet:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Search field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A labelled field with 16px text, strong stroke and focus glow.",
+      "html": "<label class=\"ds-field\">Pretraži stanice<input class=\"ds-search\" type=\"search\" placeholder=\"Stanica ili linija\"></label>",
+      "css": ".ds-field{display:grid;gap:var(--sp-1,.25rem);font:500 .875rem/1.4 var(--font-body,system-ui);color:var(--tone-text-muted,#4a5178)}.ds-search{min-height:var(--target,2.75rem);padding:0 var(--sp-3,.75rem);border:1px solid var(--tone-stroke-strong,rgba(12,18,80,.34));border-radius:var(--r-md,.875rem);font:400 1rem/1.4 var(--font-body,system-ui);background:var(--tone-surface-1,#fbfaf6);color:var(--tone-text-primary,#0c1250)}.ds-search::placeholder{color:var(--tone-text-subtle,#5a6187);opacity:1}.ds-search:focus-visible{outline:none;border-color:var(--tone-focus-ring,#03409c);box-shadow:var(--tone-focus-glow,0 0 0 3px rgba(3,64,156,.28))}"
+    },
+    {
+      "name": "Filter chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Selected ink fill, unselected strong outline; never colour alone.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" aria-pressed=\"true\">Tramvaji</button><button class=\"ds-chip\" aria-pressed=\"false\">Autobusi</button></div>",
+      "css": ".ds-chips{display:flex;gap:var(--sp-2,.5rem);flex-wrap:wrap}.ds-chip{min-height:var(--target,2.75rem);padding:0 var(--sp-3,.75rem);border:1px solid var(--tone-stroke-strong,rgba(12,18,80,.34));border-radius:var(--r-pill,999px);font:500 .875rem/1.2 var(--font-body,system-ui);background:transparent;color:var(--tone-text-primary,#0c1250);cursor:pointer}.ds-chip:hover{background:var(--tone-surface-2,#ebe8df)}.ds-chip[aria-pressed=true]{background:var(--tone-text-primary,#0c1250);border-color:var(--tone-text-primary,#0c1250);color:var(--tone-surface-canvas,#f4f2ec)}.ds-chip:focus-visible{outline:2px solid var(--tone-focus-ring,#03409c);outline-offset:2px}"
+    },
+    {
+      "name": "Raised card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Existing general-purpose card, distinct from flat time-band tiles.",
+      "html": "<section class=\"ds-card\"><h3>Spremljeno</h3><p>Linije i stanice na ovom uređaju.</p></section>",
+      "css": ".ds-card{padding:var(--sp-4,1rem);border:1px solid var(--tone-stroke,rgba(12,18,80,.14));border-radius:var(--r-lg,1rem);background:var(--tone-surface-1,#fbfaf6);color:var(--tone-text-primary,#0c1250);box-shadow:var(--tone-shadow-soft,0 1px 2px rgba(12,18,80,.05));font:400 1rem/1.5 var(--font-body,system-ui)}.ds-card h3{margin:0;font-size:var(--type-head,1.125rem);font-weight:700}.ds-card p{margin:.5rem 0 0;color:var(--tone-text-muted,#4a5178)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Dan grada",
+    "overview": "Local, capable, alive. The phone serves a person outside, often moving and reading in daylight. The public screen is read across a room, throughout the day and night. These are different compositions of one product, not scaled copies.",
+    "keyCharacteristics": [
+      "Paper and ultramarine, with Zagreb blue in meaningful actions and transit badges.",
+      "One self-hosted type family, legible controls and a deliberately larger kiosk scale.",
+      "Label, value and context in tiles; prose and evidence in details.",
+      "Missing, stale and down are distinct states, never disguised as zero.",
+      "Croatian and English; keyboard, reduced-motion and lightweight paths."
+    ],
+    "rules": [
+      { "name": "The Role Rule", "body": "Components consume --tone-*, not raw colour values.", "section": "colors" },
+      { "name": "The Printed Object Rule", "body": "QR contrast is pinned, not theme-inverted.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "Do not add a display font, Exat, or an icon font.", "section": "typography" },
+      { "name": "The State Motion Rule", "body": "Motion communicates a change.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use semantic roles, existing type sizes and component builders.",
+      "Do keep 44px targets, 48px primary actions, labelled glyphs and visible keyboard focus.",
+      "Do test both themes, Croatian/English, 200% text, reduced motion and lightweight mode.",
+      "Do preserve the distinction between calculated vehicle position, route delay and an arrival time.",
+      "Do check code and rendered output before updating this document."
+    ],
+    "donts": [
+      "Don't revive Modrotisak, panorama, meander, gallery numbering and captions.",
+      "Don't substitute another decorative banner or mandatory graphic motif.",
+      "Don't add municipal document portals, tables disguised as dashboards, endless equal cards, washed-out surfaces, generic SaaS, ornamental glass, or visual complexity without a useful interaction.",
+      "Don't introduce news, nonexistent push delivery or future feeds as implemented capabilities.",
+      "Don't change production tokens merely to agree with newdesignsystem.md or this generated reference.",
+      "Don't use colour as the sole indication of state, hide missing data as zero, or claim ZET publishes live arrivals."
+    ]
+  }
+}

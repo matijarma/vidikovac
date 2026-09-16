@@ -11,6 +11,7 @@ import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type Teaser
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
+import type { MapMode } from './core/map-mode-store';
 import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
@@ -70,6 +71,8 @@ export interface KioskDeps {
   lightweight?: boolean;
   /** D13: `?prizor=promet|veceras|grad` shows one scene and stops the rotation (a test, demo and operator hook); the entry parses it once and passes it down. */
   pinScene?: SceneId | null;
+  /** Renderer fixed at boot: ?prikaz= wins over the entry's per-device preference. */
+  mapMode?: MapMode;
   /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
@@ -159,6 +162,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
   const storage = deps.storage === undefined ? safeLocalStorage() : deps.storage;
   const lightweight = Boolean(deps.lightweight);
+  const mapMode: MapMode = lightweight ? 'map' : deps.mapMode ?? 'map';
   const reducedMotion = Boolean(deps.reducedMotion);
   const fetchTeaser = deps.fetchTeaser ?? ((stopId?: string) => fetchTeaserImpl(fetch, stopId));
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
@@ -440,7 +444,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const bottom = phase === 'invitation' ? (invitation?.railPad() ?? 0) : 0;
     const chapter = phase === 'invitation' ? invitation?.scenes().current() : undefined;
     const container = requestKioskMap(maps, {
-      stop, snapshots, now: now(), reducedMotion, locale,
+      stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
       selection: phase === 'paired' ? selection : null,
       ...(chapter ? { chapter } : {}),
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,

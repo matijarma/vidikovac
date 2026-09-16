@@ -36,6 +36,7 @@ export function adminBypassToken(): string | undefined {
 export async function provisionKiosk(
   request: APIRequestContext,
   base: string,
+  stopId?: string,
 ): Promise<{ kioskUrl: string; beaconId: string }> {
   const preset = process.env.E2E_KIOSK_URL;
   if (preset) {
@@ -47,7 +48,7 @@ export async function provisionKiosk(
       'No E2E_KIOSK_URL and no E2E_ADMIN_BYPASS (env or .dev.vars): cannot provision a test screen. See docs/kiosk.md, section "Testni zaslon".',
     );
   }
-  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon' };
+  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon', ...(stopId ? { stopId } : {}) };
   const res = await request.post(`${base}/api/admin/beacons`, { headers: { 'x-e2e-admin-bypass': token }, data: body });
   expect([200, 201], `POST /api/admin/beacons answered ${res.status()}: ${await res.text()}`).toContain(res.status());
   const json = (await res.json()) as CreateBeaconResponse;

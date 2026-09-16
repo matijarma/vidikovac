@@ -77,6 +77,10 @@ export interface Drawn {
    *  is), -1 on a synthetic path, null in the free plane. Renderers read
    *  only "null or not". */
   onShape: number | null;
+  /** Graph path and post-order-clamp arc (metres), for alternate map
+   *  projections. Absent for a bus shape or a free-plane estimate. */
+  path?: number;
+  s?: number;
   /** The geometry's own tangent at the drawn position, on geometry only. */
   track?: XY;
   /** True while the twin holds the vehicle at a stop. */
@@ -143,6 +147,7 @@ interface Geometry {
   pts: XY[];
   cum: number[];
   onShape: number;
+  path: number | null;
 }
 
 interface VehicleState {
@@ -223,7 +228,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       let geom = geometries.get(key);
       if (!geom) {
         const g = graph.pathGeometry(pathIdx);
-        geom = { key, pts: g.pts, cum: g.cum, onShape: graph.paths[pathIdx].shape ?? -1 };
+        geom = { key, pts: g.pts, cum: g.cum, onShape: graph.paths[pathIdx].shape ?? -1, path: pathIdx };
         geometries.set(key, geom);
       }
       return geom;
@@ -234,7 +239,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       let geom = geometries.get(key);
       if (!geom) {
         const shape = net.shapes[shapeIdx];
-        geom = { key, pts: shape.pts, cum: shape.cum, onShape: shapeIdx };
+        geom = { key, pts: shape.pts, cum: shape.cum, onShape: shapeIdx, path: null };
         geometries.set(key, geom);
       }
       return geom;
@@ -440,6 +445,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           onShape: v.geom ? v.geom.onShape : null,
         };
         if (track) drawn.track = track;
+        if (v.geom && v.geom.path !== null) {
+          drawn.path = v.geom.path;
+          drawn.s = v.s;
+        }
         if (v.held) drawn.held = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
         if (v.headsign !== undefined) drawn.headsign = v.headsign;

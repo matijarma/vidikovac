@@ -11,6 +11,7 @@
 // test is about the entry's own wiring, not the controller T5.3 covers in
 // test/app/kiosk.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mountKiosk } from '../../app/src/kiosk';
 import { THEME_STORAGE_KEY } from '../../app/src/ui/theme';
 import { stubLocalStorage } from './helpers';
 
@@ -73,5 +74,23 @@ describe('the /kiosk/ entry: the solar default and ?tema=', () => {
     expect(location.hash).toBe('');
     expect(location.search).toBe('');
     expect(location.pathname).toBe('/kiosk/');
+  });
+});
+
+describe('the kiosk map renderer at boot', () => {
+  it('lets ?prikaz= override the per-device preference without changing it, preserves the override and chapter pin through URL cleanup, and otherwise reads the store', async () => {
+    localStorage.setItem('kajima:map-mode:v1', 'map');
+    await importKioskEntry('?lagano=0&tema=tamna&prizor=grad&prikaz=shema', '#BEACON01.tajna');
+    expect(vi.mocked(mountKiosk).mock.lastCall?.[1]).toMatchObject({ mapMode: 'schema', pinScene: 'grad', lightweight: false });
+    expect(location.hash).toBe('');
+    expect(location.search).toBe('?prizor=grad&prikaz=shema');
+    expect(localStorage.getItem('kajima:map-mode:v1')).toBe('map');
+    localStorage.setItem('kajima:map-mode:v1', 'schema');
+    await importKioskEntry('?lagano=0&tema=svijetla&prikaz=karta');
+    expect(vi.mocked(mountKiosk).mock.lastCall?.[1]).toMatchObject({ mapMode: 'map' });
+    expect(location.search).toBe('?prikaz=karta');
+    expect(localStorage.getItem('kajima:map-mode:v1')).toBe('schema');
+    await importKioskEntry('?lagano=0&prikaz=invalid');
+    expect(vi.mocked(mountKiosk).mock.lastCall?.[1]).toMatchObject({ mapMode: 'schema' });
   });
 });

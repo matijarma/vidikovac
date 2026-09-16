@@ -20,7 +20,7 @@ import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapPoint } fro
 export type MapSlotPassthrough = Omit<CityMapOptions, 'container' | 'ariaLabel' | 'points' | 'lines' | 'reducedMotion'>;
 
 export interface MapSlotOptions extends MapSlotPassthrough {
-  /** Stable per panel: the same id must mean the same map for the page's life. */
+  /** Stable per panel. A renderer change replaces the instance even for the same id. */
   id: string;
   ariaLabel: string;
   className: string;
@@ -46,6 +46,7 @@ export interface MapSlots {
 interface Slot {
   container: HTMLElement;
   handle: CityMapHandle;
+  renderer: NonNullable<CityMapOptions['renderer']>;
   used: boolean;
 }
 
@@ -61,7 +62,12 @@ export function createMapSlots(factory: MapFactory | undefined): MapSlots {
   return {
     slot(options) {
       if (!factory) return null;
-      const existing = slots.get(options.id);
+      const renderer = options.renderer ?? 'map';
+      let existing = slots.get(options.id);
+      if (existing && existing.renderer !== renderer) {
+        drop(options.id, existing);
+        existing = undefined;
+      }
       if (existing) {
         existing.used = true;
         existing.container.setAttribute('aria-label', options.ariaLabel);
@@ -80,7 +86,7 @@ export function createMapSlots(factory: MapFactory | undefined): MapSlots {
       if (options.testid) container.dataset.testid = options.testid;
       const { id: _id, className: _className, testid: _testid, ...rest } = options;
       const handle = factory({ ...rest, container });
-      slots.set(options.id, { container, handle, used: true });
+      slots.set(options.id, { container, handle, renderer, used: true });
       return container;
     },
     handle(id) {

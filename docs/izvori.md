@@ -24,6 +24,21 @@ Skupovi koje Worker nikad ne dohvaća: lokalna skripta ih čita jednom i pretvar
 |---|---|---|---|---|
 | ZET GTFS | ZET, statični GTFS (red vožnje: `stop_times`, `trips`, `calendar_dates`, `routes`, `shapes`, `stops`), https://www.zet.hr/gtfs-scheduled/latest (oko 15 MB, verzija `feed_version` u `feed_info.txt`) | Otvorena dozvola (NN 67/17) | `scripts/gtfs-routes.mjs` → `app/src/data/zet-routes.json` (imena linija); `scripts/gtfs-shapes.mjs` → `app/public/data/zet-network.json` (mrežni artefakt, odjeljak "Izvedeni podatak" niže); `scripts/gtfs-lastrun.mjs` → `app/public/data/lastrun/<stopId>.json` (zadnji polazak svake linije sa stajališta po servisnom danu GTFS-a, 21 dan od gradnje i dan prije; pločica "Zadnji polazak · po rasporedu · ZET GTFS" iza zastavice `FEED_LASTRUN`, nikad dolazak i nikad iz `zet-rt`) | Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669 |
 
+### ZET-ova shema tramvajskih linija
+
+| Skup | Izvor | Osnova i ograničenje | Izvedeni artefakt | Atribucija |
+|---|---|---|---|---|
+| Nacrt mreže tramvajskih linija | ZET, izvorni `zet-zagreb-tram-lines-map.svg` u repozitoriju | Izvorno ZET-ovo kartografsko djelo. Datoteka ne navodi posebnu dozvolu; Otvorena dozvola za GTFS ne proglašava se automatski dozvolom za nacrt. Potvrda osnove ponovne uporabe / obavijest ZET-u ostaje vlasnički zadatak uz M2. | `scripts/zet-schema.mjs` → `app/public/data/zet-schema.json`; ponovno iscrtane polilinije, stajališta i nazivi, bez logotipa, zaglavlja i legende; izvorni SVG nije javna imovina aplikacije | Shema linija prema nacrtu ZET-a; prikaz geometrije i naziva prilagođen aplikaciji Kaj ima?. |
+
+Nacrt je povijesna shema, a ne tvrdnja o današnjim privremenim trasama.
+Spajanje sa stajalištima i identitetom linija provjerava se prema ugrađenom
+GTFS-u; imenovane razlike stoje u `scripts/zet-schema-overrides.json`, bez
+izmišljenih lokacija za stanice kojih u nacrtu nema. Koraci osvježavanja su
+`npm run build:network`, `npm run build:trips`, zatim `npm run build:schema`.
+Verzije mreže, indeksa i sheme moraju se slagati; provjera artefakta i njegovih
+145 staza dio je testova. Shema se poslužuje statički pod `/data/`, ne kroz
+Worker i ne kao novi skup pod `/open`.
+
 ### Prostorni slojevi modula `ckan-geo`
 
 Implementirani su isključivo `gradske-cetvrti` i `zborna-mjesta`; ljekarne, vatrogasne i policijske postaje, zdenci, javni WC-i, knjižnice i muzeji nisu izvori ovog modula. Za četvrti se čitaju `IME_GC`, `RBR_GC` i tekst sjedišta `sjediste_G`. Prilagodba geometrije: za prikaz se računa centroid vanjskog prstena poligona (kod višedijelne geometrije najvećeg dijela po površini). Ta oznaka nije koordinata sjedišta niti jamstvo da je centroid unutar konkavnog poligona. Za zborna mjesta službeni GeoJSON ima naziv `zboriste`, četvrt `gradska_ce`, identifikator `OBJECTID` / GeoJSON `id` i izvorne koordinate točke. Izvorni nazivi ostaju neispravljeni; prazne, `null` ili nevaljane koordinate ne pretvaraju se u `[0, 0]`. Stavka bez valjanih koordinata može ostati tekstualna, bez oznake na karti.

@@ -14,7 +14,7 @@ mkdirSync(output, { recursive: true });
 const loader = await createServer({
   configFile: false, root, appType: 'custom',
   cacheDir: resolve(root, 'review.local/ssr-cache'),
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false, watch: null },
 });
 const browser = await chromium.launch({ headless: true });
 const findings = [];
@@ -166,6 +166,72 @@ try {
   }
 
   for (const entry of PAGES) await capturePage(browser, entry);
+
+  // The ZET schema is another real renderer, fed a real-path plan at the
+  // browser boundary. Neither application routes nor production data fake it.
+  const { schemaSnapshot } = await loader.ssrLoadModule('/e2e/schema-fixtures.ts');
+  const { FIXTURE_NOW } = await loader.ssrLoadModule('/test/feed/fixture-contexts.ts');
+  for (const scene of [
+    { name: 'schema-phone', width: 390, height: 844, theme: 'light', locale: 'hr' },
+    { name: 'schema-phone-dark', width: 390, height: 844, theme: 'dark', locale: 'hr' },
+    { name: 'schema-desktop', width: 1440, height: 1000, theme: 'light', locale: 'hr' },
+  ]) {
+    const context = await browser.newContext({
+      viewport: { width: scene.width, height: scene.height }, colorScheme: scene.theme, locale: 'hr-HR',
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+      localStorage.setItem('kajima:map-mode:v1', 'schema');
+      localStorage.setItem('vidikovac-locale', 'hr');
+    });
+    const snapshots = await experienceSnapshots();
+    snapshots['zet-rt'] = schemaSnapshot(FIXTURE_NOW.getTime());
+    await installExperienceFixture(page, snapshots);
+    await page.goto(`${base}${FIXTURE_DASHBOARD}`);
+    await openLayer(page, 'u-pokretu');
+    await page.getByTestId('schema-vehicles').waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-map-status') === 'ready');
+    await page.clock.runFor(1000);
+    await captureLayer(page, scene.name, 'u-pokretu');
+    await page.getByTestId('schema-vehicles').focus();
+    for (let i = 0; i < 5; i++) await page.keyboard.press('+');
+    await page.clock.runFor(100);
+    await captureLayer(page, `${scene.name}-zoom`, 'u-pokretu');
+    if (errors.length) findings.push({ scene: scene.name, problem: 'page-errors', errors });
+    await context.close();
+  }
+
+  // Provision a local test kiosk through the existing test-only admin path.
+  {
+    const { provisionKiosk } = await loader.ssrLoadModule('/e2e/helpers.ts');
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: 'light', locale: 'hr-HR' });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/api/teaser', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ modules: [schemaSnapshot(Date.now())] }),
+    }));
+    const { kioskUrl } = await provisionKiosk(context.request, base, '106_1');
+    const url = new URL(kioskUrl);
+    url.searchParams.set('prikaz', 'shema');
+    url.searchParams.set('prizor', 'promet');
+    await page.goto(url.href);
+    await page.getByTestId('schema-vehicles').waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-testid=kiosk-map]')?.getAttribute('data-map-status') === 'ready');
+    const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+    const blocking = audit.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
+    for (const violation of blocking) findings.push({ scene: 'schema-kiosk', problem: violation.id, targets: violation.nodes.map(n => n.target) });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    if (overflow > 1) findings.push({ scene: 'schema-kiosk', problem: 'geometry', overflow });
+    const file = 'schema-kiosk.png';
+    await page.screenshot({ path: resolve(output, file) });
+    records.push({ scene: 'schema-kiosk', file, overflow, seriousOrCritical: blocking.length });
+    if (errors.length) findings.push({ scene: 'schema-kiosk', problem: 'page-errors', errors });
+    console.log(`schema-kiosk: overflow=${overflow}, axe=${blocking.length}`);
+    await context.close();
+  }
 
   // The lightweight face of Promet at the phone size: no stage, no canvas, a scrolling list.
   {

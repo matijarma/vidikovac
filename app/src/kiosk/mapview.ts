@@ -122,7 +122,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'padding' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'fitPadding'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -520,6 +520,8 @@ export interface KioskMapInput {
    *  the latitude shift boardCentre used to fake. */
   padding?: FitPadding;
   locale?: string;
+  /** Fixed for the screen's boot; chapter changes keep this same renderer. */
+  renderer?: CityMapOptions['renderer'];
 }
 
 /** Builds the request for this render and asks the slots for the one map.
@@ -532,6 +534,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const chapter = chapterView(input.chapter ?? 'promet', input);
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,
+    renderer: input.renderer ?? 'map',
     className: 'k-map-canvas',
     testid: 'kiosk-map',
     ariaLabel: input.ariaLabel,
@@ -545,7 +548,8 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     symbolScale: KIOSK_SYMBOL_SCALE,
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
-    outline: chapter.outline ? kvartOutline(input.stop?.district) : null,
+    fitPadding: input.padding ?? {},
+    outline: input.renderer !== 'schema' && chapter.outline ? kvartOutline(input.stop?.district) : null,
   };
   if (chapter.padding) request.padding = chapter.padding;
   if (chapter.center) request.center = chapter.center;
@@ -553,18 +557,21 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   if (chapter.selectedRoute) request.selectedRoute = chapter.selectedRoute;
   if (chapter.follow) request.follow = true;
   // The view is set before the slot call so a map created by it starts there.
-  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale, outline: request.outline });
+  adapter?.setExtras({ renderer: request.renderer, stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale, outline: request.outline, fitPadding: request.fitPadding });
   adapter?.setView(viewOf(request));
   const container = maps.slot(request);
   // An outage is no evidence of motion: the map holds until the feed is live again.
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
+  // The schema ignores geographic setView cameras, but its stop crop still
+  // needs to keep the chapter rail clear when that rail's height changes.
+  adapter?.handle()?.setFitPadding?.(request.fitPadding!);
   // The chapter decides whether the quarter's outline is drawn at all; the
   // handle is told either way, and ignores an unchanged one.
   adapter?.handle()?.setOutline?.(request.outline ?? null);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   const district = input.stop?.district;
-  if (container && chapter.outline && district && !request.outline) {
+  if (container && input.renderer !== 'schema' && chapter.outline && district && !request.outline) {
     void loadKvartOutline(district, input.fetchImpl).then((outline) => {
       if (outline) adapter?.handle()?.setOutline?.(outline);
     });

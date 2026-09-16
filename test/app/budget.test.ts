@@ -26,8 +26,9 @@ const GZIP_LEVEL = 6;
 /** The two screens a lightweight device loads: the public screen and the phone. */
 const ENTRIES = ['kiosk/index.html', 'd/index.html'] as const;
 /** Manifest keys of the chunks the lightweight path must never reference. */
-const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts'] as const;
+const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts', 'src/motion/schema-map.ts'] as const;
 const NETWORK_ARTEFACT = 'zet-network.json';
+const SCHEMA_ARTEFACT = 'zet-schema.json';
 
 interface ManifestChunk {
   file: string;
@@ -129,7 +130,7 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       expect(total, `the lightweight graph of ${entry} is ${total} bytes gzipped`).toBeLessThan(BUDGET_BYTES);
     });
 
-    it(`/${entry.replace('index.html', '')} never references the fonts chunk, the MapLibre chunk or the network artefact`, () => {
+    it(`/${entry.replace('index.html', '')} never statically references fonts, MapLibre, the schema renderer or either geometry artefact`, () => {
       const graph = staticGraph(entry);
       for (const forbidden of FORBIDDEN_CHUNKS) {
         expect(graph, `${entry} statically imports ${forbidden}`).not.toContain(forbidden);
@@ -144,6 +145,7 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
         for (const css of manifest[forbidden]?.css ?? []) expect(html, `${entry} links ${css}`).not.toContain(css);
       }
       expect(html).not.toContain(NETWORK_ARTEFACT);
+      expect(html).not.toContain(SCHEMA_ARTEFACT);
       expect(html).not.toContain('.woff2');
       // Nor may any stylesheet on the wire carry an @font-face: the system
       // stack is the lightweight typography (R-F3).
@@ -154,7 +156,12 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       }
       // And the artefact is never a build-time asset of any chunk on the graph.
       for (const key of graph) {
-        for (const asset of manifest[key]?.assets ?? []) expect(asset, `${key} bundles ${asset}`).not.toContain(NETWORK_ARTEFACT);
+        for (const asset of manifest[key]?.assets ?? []) {
+          expect(asset, `${key} bundles ${asset}`).not.toContain(NETWORK_ARTEFACT);
+          expect(asset, `${key} bundles ${asset}`).not.toContain(SCHEMA_ARTEFACT);
+        }
+        const js = readFileSync(join(outDir, manifest[key]!.file), 'utf8');
+        expect(js, `${key} carries the schema geometry loader`).not.toContain(SCHEMA_ARTEFACT);
       }
     });
   }

@@ -15,6 +15,7 @@ import { KVART_STORAGE_KEY } from '../../app/src/core/kvart-store';
 import { NOTIFY_STORAGE_KEY } from '../../app/src/core/notify-store';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
 import { loadStops } from '../../app/src/core/screens';
+import type { CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 
@@ -694,7 +695,7 @@ describe('the full map view (transport)', () => {
     expect(pushes).toHaveLength(3); // the same selection again replaces instead of pushing
   });
   it('is a view mode on the shell with the session chrome kept; Escape and another domain leave it', async () => {
-    const mapFactory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
+    const mapFactory = vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
     const { root, session, handle } = mount({ mapFactory });
     session.join();
     await flush();
@@ -707,11 +708,37 @@ describe('the full map view (transport)', () => {
     expect(dash.dataset.view).toBe('map');
     expect(mapFactory).toHaveBeenCalledTimes(1);
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
+    const mode = root.querySelector<HTMLButtonElement>('[data-testid=map-mode-toggle]')!;
+    mode.focus();
+    mode.click();
+    expect(mapFactory).toHaveBeenCalledTimes(2);
+    expect(mapFactory.mock.calls[1]?.[0].renderer).toBe('schema');
+    expect(mapFactory.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('kajima:map-mode:v1')).toBe('schema');
+    expect(dash.dataset.view).toBe('map');
+    expect(document.activeElement).toBe(mode);
+    expect(session.sent).toEqual([]);
     dash.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(dash.dataset.view).toBe('layers');
     handle.selectLayer('kultura');
     expect(root.querySelector('[data-testid=map-canvas]')).toBeNull();
     handle.destroy();
+    // A new desktop session restores schema only for Promet. Its unrelated
+    // Kvart thumbnail keeps the same geographic instance across a toggle.
+    mapFactory.mockClear();
+    const desk = mount({ wide: true, mapFactory });
+    desk.session.join();
+    await flush();
+    desk.handle.selectLayer('u-pokretu');
+    await flush();
+    const thumb = desk.root.querySelector('[data-testid=kvart-map-canvas]');
+    const thumbIndex = mapFactory.mock.calls.findIndex(([o]) => o.container.dataset.testid === 'kvart-map-canvas');
+    expect(mapFactory.mock.calls[thumbIndex]?.[0].renderer ?? 'map').toBe('map');
+    expect(mapFactory.mock.calls.find(([o]) => o.container.dataset.testid === 'map-canvas')?.[0].renderer).toBe('schema');
+    click(desk.root, '[data-testid=map-mode-toggle]');
+    expect(desk.root.querySelector('[data-testid=kvart-map-canvas]')).toBe(thumb);
+    expect(mapFactory.mock.results[thumbIndex]?.value.destroy).not.toHaveBeenCalled();
+    desk.handle.destroy();
   });
 });
 

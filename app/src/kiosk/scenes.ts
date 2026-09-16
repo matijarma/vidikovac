@@ -20,6 +20,7 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import type { ScreenStop } from '../core/contracts';
+import type { MapMode } from '../core/map-mode-store';
 import { delayTone } from '../experience/delay';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
@@ -473,6 +474,12 @@ export function sceneHeadMarkup(id: SceneId, ctx: SceneContext, position: { inde
 export function parsePinnedScene(search: string): SceneId | null {
   const value = new URLSearchParams(search).get('prizor');
   return value !== null && (SCENE_ORDER as readonly string[]).includes(value) ? (value as SceneId) : null;
+}
+
+/** The standing renderer override, independent of the chapter pin and rotation. */
+export function parseKioskMapMode(search: string): MapMode | null {
+  const value = new URLSearchParams(search).get('prikaz');
+  return value === 'shema' ? 'schema' : value === 'karta' ? 'map' : null;
 }
 
 // --- The mounted field ------------------------------------------------------------
