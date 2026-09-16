@@ -633,6 +633,13 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
           const region = item?.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
           if (region) region.innerHTML = html;
         }
+        // The rail's own form is on the rail, which is body markup a poll never rewrites: a room that has
+        // since narrowed to one column stands the members up, and the rail has to be told so too.
+        const rail = item?.querySelector<HTMLElement>('.k-rail');
+        if (rail) {
+          if (ctx.columns <= 1) rail.dataset.rows = '1';
+          else delete rail.dataset.rows;
+        }
       }
       lastRegions = built.regions;
       fit();

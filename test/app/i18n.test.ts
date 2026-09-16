@@ -45,7 +45,7 @@ describe('catalogs', () => {
     expect(en.transport.trams).toBe('Trams');
     expect(hr.transport.vehiclesNow_few).toBe('{count} vozila u pokretu');
     expect(hr.kiosk.invite.lead).toBe('Skeniraj za 10 minuta grada.');
-    expect(hr.kiosk.setup.handheld).toBe('Otvori ovu adresu na zaslonu širem od 900 px.');
+    expect(hr.kiosk.setup.handheld).toBe('Ovu adresu otvori na zaslonu koji postavljaš.');
     expect(hr.kiosk.lines.nearby_few).toBe('{count} vozila u blizini');
     expect(hr.shared.closuresNone).toBe('Nema zatvorenih prometnica.');
     expect(en.shared.closuresNone).toBe('No road closures.');

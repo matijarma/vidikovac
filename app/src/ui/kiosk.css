@@ -419,10 +419,9 @@
 .k-code-dash { margin: 0 0.15em; opacity: 0.4; }
 .k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
-.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: 'qr' 'text' 'code'; background: var(--k-surface); color: var(--k-ink); }
-.kiosk[data-size='handheld'] .k-invite-text { grid-area: text; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.kiosk[data-size='handheld'] .k-invite-text .k-hint { margin-top: auto; padding-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
-.kiosk[data-size='handheld'] .k-support { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
+/* The same card, stood up: the lead, the QR, the hint, the code, one under the other. */
+.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; background: var(--k-surface); color: var(--k-ink); }
+.kiosk[data-size='handheld'] .k-invite > .k-hint { align-self: start; color: var(--k-ink-2); }
 .kiosk[data-size='handheld'] .k-code { color: var(--k-action); }
 .kiosk[data-size='handheld'] .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
@@ -688,12 +687,15 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
    data-size='handheld' on the root; the body, which owns the page scroll,
-   reads it through :has, as dashboard.css's html:has(.ki) does). Not a
-   composition for a wall but the hand that sets one up: the page scrolls
-   instead of cropping, the wizard's grids fall into as many columns as fit,
-   and after creation the stage carries the provisioning link block and the
-   code card alone (kiosk.ts mountHandheld, unchanged). Tokens at phone
-   sizes; zoom is 1 here. */
+   reads it through :has, as dashboard.css's html:has(.ki) does). There is no
+   separate handheld composition: a phone gets the invitation every screen
+   gets, drawn at phone sizes -- the header, a --k-map-band map band with the
+   chapter chip on it, the chapter's rail in flow beneath the band rather than
+   over it (a chapter change is a cut, not a crossfade, on a screen held in a
+   hand), the two value tiles two across, the card in its one-column form with
+   its 240 px QR, the safety strip, and the provisioning address as a footnote
+   at the foot. The page scrolls instead of cropping and the wizard's grids
+   fall into as many columns as fit. Zoom is 1 here. */
 .kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }
 .kiosk[data-size='handheld'] {
   --k-head-h: auto;
@@ -719,6 +721,11 @@ button.k-strip-verdict { cursor: pointer; }
   --k-radius: 14px;
   --k-radius-s: 10px;
   --k-control: 48px;
+  --k-map-band: 280px;
+  --k-tile-min: 168px;
+  --k-row-min: 240px;
+  --k-time-min: 240px;
+  --k-ink-w: 260px;
   --k-block-min: 160px;
   --k-arc-w: 280px;
   --k-arc-h: 157px;
@@ -741,6 +748,22 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-basics { position: static; }
 .kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
 
+/* The invitation on a phone: one column, and the picture a band with the rail
+   standing under it rather than on it -- 280 px of map is a glance, not a
+   stage, and a rail over that much would leave nothing to look at. */
+.kiosk[data-size='handheld'] .k-invitation { grid-template-columns: minmax(0, 1fr); }
+.kiosk[data-size='handheld'] .k-invitation .k-side { grid-template-rows: auto auto; }
+.kiosk[data-size='handheld'] .k-scene[data-map='1'] > .k-map { display: grid; grid-template-rows: var(--k-map-band) auto; height: auto; }
+.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-map-host { position: relative; inset: auto; }
+.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-scene-body { position: relative; inset: auto; }
+.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-scene-item { position: relative; inset: auto; animation: none; }
+.kiosk[data-size='handheld'] .k-scene-item[data-leaving] { display: none; }
+/* Before the first measurement the rail asks for the drawing's three across; at this width it holds one, so Grad's lead track never opens a column the phone has no room for. */
+.kiosk[data-size='handheld'] .k-rail, .kiosk[data-size='handheld'] .k-rail[data-chapter='grad'] { grid-template-columns: minmax(0, 1fr); }
+/* A line row stood up on a phone wraps its vehicles count rather than squeezing the line's name to nothing. */
+.kiosk[data-size='handheld'] .k-rail .k-line { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.2); }
+.kiosk[data-size='handheld'] .k-rail .k-line-near { flex-basis: 100%; min-width: 0; margin-left: 0; text-align: left; }
+
 /* The wizard: one card that grows with its content, grids at auto-fit, the stop list unclipped. */
 .kiosk[data-size='handheld'] .k-setup { height: auto; overflow: visible; }
 .kiosk[data-size='handheld'] .k-setup-step-box { overflow: visible; }
@@ -753,8 +776,8 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-setup-actions > * + * { margin-left: 0; }
 .kiosk[data-size='handheld'] .k-btn { max-width: 100%; }
 
-/* After creation: the link block, then the code card in one column (handheldMarkup, unchanged). */
-.kiosk[data-size='handheld'] .k-handheld { display: grid; gap: var(--k-gap); }
-.kiosk[data-size='handheld'] .k-handheld-link { padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.kiosk[data-size='handheld'] .k-handheld-title { font-size: var(--k-main-size); font-weight: 800; line-height: 1.15; letter-spacing: -0.015em; }
-.kiosk[data-size='handheld'] .k-handheld-url { display: inline-block; min-height: 44px; margin-top: var(--k-gap); font-size: var(--k-hint-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
+/* The provisioning address (kiosk.ts provisionMarkup): a footnote for the hand
+   that set the screen up, under the invitation rather than in place of it. */
+.kiosk[data-size='handheld'] .k-provision { display: block; margin-top: var(--k-gap); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.kiosk[data-size='handheld'] .k-provision-title { font-size: var(--k-sup-size); font-weight: 700; line-height: 1.3; color: var(--k-ink-2); }
+.kiosk[data-size='handheld'] .k-provision-url { display: inline-block; min-height: 44px; margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }

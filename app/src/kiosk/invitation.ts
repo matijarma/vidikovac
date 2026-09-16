@@ -11,8 +11,9 @@
 // The header carries the weather (D11) and the strip the safety words, so
 // nothing here says either. This file also keeps the shared markup helpers
 // the lagano board, the scene tiles and the paired compositions draw with
-// (kBadge, kicker, linesMarkup, weatherMarkup) and the card pieces the
-// handheld reuses (codeHost, hintMarkup, codeBlockMarkup).
+// (kBadge, kicker, lineRows, linesMarkup, weatherMarkup) and the card's own
+// pieces (codeHost, hintMarkup, codeBlockMarkup). A phone gets this same
+// composition at the handheld tokens; there is no second one for it.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { CODE_URL_BASE } from '../code';
 import type { ScreenStop } from '../core/contracts';

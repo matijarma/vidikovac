@@ -1090,10 +1090,11 @@ describe('scenes: rotation, the standing map, reduced motion, lagano and the pin
 });
 
 // T4.4: /kiosk/ opened on a phone. A handheld (kiosk/layout.ts, below
-// core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) is the hand that sets a screen
-// up, not the screen: no fullscreen, no wake lock, the wizard scrolls, and
-// after creation the stage carries the provisioning link to open on a wide
-// screen and the code card the same rotation paints, nothing else.
+// core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) still asks for no fullscreen and
+// no wake lock and still scrolls its wizard -- but there is no separate
+// handheld composition any more: after creation a phone gets the same
+// invitation a wall gets, drawn with the handheld tokens, and the address that
+// provisions the wall is a footnote under it rather than the page's subject.
 describe('handheld: the kiosk on a phone', () => {
   const PHONE = { width: 390, height: 844 };
   it('lays out as handheld and never asks for fullscreen or a wake lock, however often it is tapped', () => {
@@ -1111,8 +1112,13 @@ describe('handheld: the kiosk on a phone', () => {
     expect(css).toContain(".kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }");
     expect(css).toContain(".kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }");
     expect(css).not.toContain('data-kiosk-size');
+    // No separate handheld composition: the phone draws the invitation with a map band under the chapter chip, the rail in flow beneath it.
+    expect(css).toContain('--k-map-band: 280px;');
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-scene[data-map='1'] > .k-map { display: grid; grid-template-rows: var(--k-map-band) auto; height: auto; }");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-invitation { grid-template-columns: minmax(0, 1fr); }");
+    for (const dead of ['.k-handheld', '.k-invite-text', '.k-support']) expect(css, dead).not.toContain(dead);
   });
-  it('after creation shows the provisioning link block with the handheld sentence and the code card, nothing else', async () => {
+  it('after creation gives a phone the whole invitation, with the provisioning address as a footnote under it', async () => {
     const k = mount({ viewport: PHONE });
     expect(k.handle.phase()).toBe('setup');
     q(k.root, '[data-testid=setup-next]')!.click();
@@ -1121,26 +1127,29 @@ describe('handheld: the kiosk on a phone', () => {
     await flush();
     expect(k.handle.phase()).toBe('invitation');
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
-    const block = q(k.root, '[data-testid=kiosk-handheld]');
+    // The same composition a wall gets: the field with its map host, the chapter's rail, the two value tiles and the card.
+    for (const present of ['kiosk-invitation', 'kiosk-scene', 'kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-tiles', 'kiosk-invite']) {
+      expect(q(k.root, `[data-testid=${present}]`), present).not.toBeNull();
+    }
+    // The address that provisions the wall is an aside with an h2, so the page's one h1 is the invitation's lead here as everywhere.
+    const block = q(k.root, '[data-testid=handheld-link-block]')!;
     expect(block).not.toBeNull();
-    expect(text(q(block!, 'h1'))).toBe('Otvori ovu adresu na zaslonu širem od 900 px.');
-    const link = q(block!, '[data-testid=handheld-link]') as HTMLAnchorElement;
+    expect(block.tagName).toBe('ASIDE');
+    expect(text(q(block, 'h2'))).toBe('Ovu adresu otvori na zaslonu koji postavljaš.');
+    const link = q(block, '[data-testid=handheld-link]') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
     expect(text(link)).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
+    expect(text(q(k.root, 'h1.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     // The code card is the same one the rotation paints on a wall.
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
-    for (const absent of ['kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-scene', 'kiosk-tiles', 'kiosk-invitation']) {
-      expect(q(k.root, `[data-testid=${absent}]`), absent).toBeNull();
-    }
     // The header's weather group paints on a handheld too (C.3), the only weather there.
     expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
     expect(text(q(k.root, '.k-head [data-testid=kiosk-weather]'))).toContain('21 °C');
-    expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
   });
   it('a stored screen opened on a phone rebuilds the link from its credentials on the code base', () => {
     const k = mount({ stored: STORED, viewport: PHONE });
@@ -1148,23 +1157,24 @@ describe('handheld: the kiosk on a phone', () => {
   });
   it('speaks English when the page does', () => {
     const k = mount({ stored: STORED, viewport: PHONE, i18n: createDefaultI18n('en'), locale: 'en' });
-    expect(text(q(k.root, '[data-testid=kiosk-handheld] h1'))).toBe('Open this address on a screen wider than 900 px.');
+    expect(text(q(k.root, '[data-testid=handheld-link-block] h2'))).toBe('Open this address on the screen you are setting up.');
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
   });
-  it('crossing the handheld bound re-composes the invitation both ways: the map column appears at 1366, the block returns at 390', () => {
+  it('crossing the handheld bound keeps the invitation both ways: only the provisioning footnote comes and goes', () => {
     const viewport = { ...PHONE };
     const k = mount({ stored: STORED, viewport });
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     viewport.width = 1366; viewport.height = 768;
     k.repaint();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     viewport.width = 390; viewport.height = 844;
     k.repaint();
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-live]')).toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(k.handle.phase()).toBe('invitation');
   });
 });

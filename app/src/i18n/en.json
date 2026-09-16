@@ -916,7 +916,7 @@
       "endsAfterSession": "The open session runs to its end; the screen then stops issuing codes."
     },
     "setup": {
-      "handheld": "Open this address on a screen wider than 900 px.",
+      "handheld": "Open this address on the screen you are setting up.",
       "title": "Set up a temporary screen",
       "intro": "For evaluation: choose a city district and a stop. The screen lasts 24 hours and uses the same real pairing and data as venue screens.",
       "step1": "Step 1 of 2",

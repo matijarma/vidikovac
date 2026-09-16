@@ -384,10 +384,12 @@ describe('the invitation column and card', () => {
     expect(host.overflow).toBe('hidden');
     expect(host['text-overflow']).toBe('ellipsis');
   });
-  it('scopes .k-invite-text to the handheld card alone -- the wide/compact card has no such wrapper', () => {
-    expect(BARE).not.toMatch(/\n\.k-invite-text \{/);
-    expect(BARE).toContain(".kiosk[data-size='handheld'] .k-invite-text {");
-    expect(decls(".kiosk[data-size='handheld'] .k-invite-text").display).toBe('flex');
+  it('draws the one card at every size: a phone stands the same four areas up, with no wrapper of its own', () => {
+    // The handheld card was the one place that needed a .k-invite-text wrapper; there is no second composition to wrap for any more.
+    expect(BARE).not.toContain('.k-invite-text');
+    expect(decls(".kiosk[data-size='handheld'] .k-invite")['grid-template-areas']).toBe("'lead' 'qr' 'hint' 'code'");
+    expect(decls(".kiosk[data-size='handheld'] .k-invite").background).toBe('var(--k-surface)');
+    expect(decls(".kiosk[data-size='handheld'] .k-qr").width).toBe('min(var(--k-qr), 100%)');
   });
   it('holds the code to its column at every size (D17), letting the card colour show through it', () => {
     expect(decls('.k-code')['font-size']).toBe('min(var(--k-display-size), 15cqi)');
