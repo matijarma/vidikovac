@@ -172,10 +172,18 @@ function transitCandidate(input: SayInput): Statement | null {
   const toneRaw = delayTone(input.i18n, worstDelay);
   const tone: SayTone = toneRaw === 'none' ? 'unknown' : toneRaw;
 
-  const nearby = nearbyVehicleCount(zet, stop);
-  const nearbyText = nearby === 0 ? s.say.nearbyNone : plural(input.locale, s.say.nearby, nearby);
-  const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
-  const context = time ? `${nearbyText} · ZET ${time}` : nearbyText;
+  // Honest data: a down zet-rt carries no live pins and no real observation
+  // time, so the context (the count-and-timestamp line) is omitted rather
+  // than computed over the down snapshot's own empty items -- printing
+  // "nema vozila u blizini" or a stale clock beside the honest down word in
+  // `value` would read as a confirmed zero the source never reported.
+  let context: string | undefined;
+  if (state !== 'down') {
+    const nearby = nearbyVehicleCount(zet, stop);
+    const nearbyText = nearby === 0 ? s.say.nearbyNone : plural(input.locale, s.say.nearby, nearby);
+    const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
+    context = time ? `${nearbyText} · ZET ${time}` : nearbyText;
+  }
 
   return {
     key: 'say:transit', domain: 'transit', say: 'transit', weight: 100,

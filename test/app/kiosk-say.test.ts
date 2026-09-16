@@ -140,7 +140,13 @@ describe('rankStatements: honest absence', () => {
     const transit = statementOf(slots, 'transit')!;
     expect(transit.value).toBe(strings.paired.sourceDown);
     expect(transit.state).toBe('down');
-    expect(sayMarkup(slots.filter((s) => s.statement.say === 'transit'), { strings, locale: 'hr', loading: false })).toContain('data-state="down"');
+    // Honest data: no nearby-vehicle count and no timestamp beside the down
+    // word -- both would be computed over the down snapshot's own (empty)
+    // items, i.e. a confirmed zero and a fetch time the source never gave.
+    expect(transit.context).toBeUndefined();
+    const markup = sayMarkup(slots.filter((s) => s.statement.say === 'transit'), { strings, locale: 'hr', loading: false });
+    expect(markup).toContain('data-state="down"');
+    expect(markup).not.toContain('k-say-context');
   });
 
   it('an expired last-run table says nothing (honest absence, not a stale board)', () => {

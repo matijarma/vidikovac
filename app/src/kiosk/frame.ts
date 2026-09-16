@@ -101,6 +101,13 @@ export function countdownText(nextIn: number | null, strings: KioskStrings): str
  * sources and the moment they last confirmed calm together); the on-duty
  * pharmacy; the rotation's countdown; the /hitno pill. Closures are said
  * once, on the right column's tile, never here.
+ *
+ * @deprecated wave B (the `k-strip-next` span only): the countdown item
+ * (R-KP11, no more rotation); kept until the merge so P3's worktree still
+ * typechecks (contract 7). Not a source-level comment inside the returned
+ * template literal on purpose: this markup renders on every load of the
+ * public, unpaired `/kiosk/` screen, and an HTML comment there would ship
+ * this engineering note into production output, visible via view-source.
  */
 export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean }): string {
   const w = strip.parts.warning;
@@ -118,7 +125,6 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
     ${trail}
     <span class="k-strip-item" data-testid="strip-pharmacy">${escapeHtml(strings.safety.pharmacy)}: <strong>${escapeHtml(strip.parts.pharmacy.label)}</strong></span>
     </div>
-    <!-- @deprecated wave B: the countdown item (R-KP11, no more rotation); kept until the merge so P3's worktree still typechecks (contract 7). -->
     <span class="k-strip-next" data-testid="strip-next"${strip.nextIn === null ? ' hidden' : ''}>${escapeHtml(countdownText(strip.nextIn, strings))}</span>
     <a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`;
 }
