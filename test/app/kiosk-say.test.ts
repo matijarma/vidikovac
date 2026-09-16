@@ -91,6 +91,16 @@ describe('rankStatements: 14:00, the full fixture', () => {
     expect(closure.weight).toBe(90); // 350 m is inside the 500 m street radius
   });
 
+  it('a badge cap below the route count shows the cap in rider order and folds the rest into "+N"; the markup wraps the row as the kiosk-lines testid', () => {
+    const slots = rankStatements(input({ badgeCap: 4 }), []);
+    const transit = statementOf(slots, 'transit')!;
+    expect(transit.badgesMarkup!.match(/class="k-line-badge line"/g)).toHaveLength(4);
+    expect(transit.badgesMarkup).toContain('<span class="k-say-more">+2</span>');
+    const html = sayMarkup(slots, { strings, locale: 'hr', loading: false });
+    expect(html).toContain('<span class="k-say-badges" data-testid="kiosk-lines">');
+    expect(html.indexOf('k-say-badges')).toBeLessThan(html.indexOf('k-say-more'));
+  });
+
   it('assembly reads "sutra HH:MM"; zet and works are ranked but outside the top three', () => {
     const slots = rankStatements(input({ slots: 8 }), []);
     const assembly = statementOf(slots, 'assembly')!;
