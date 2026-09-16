@@ -15,7 +15,8 @@ import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
-import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
+import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
+import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { CHAPTER_EMPHASIS, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
@@ -416,6 +417,110 @@ describe('local content from the stop-scoped teaser', () => {
     const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
     expect(grad.main).toContain('13. sjednica');
     expect(grad.side).toContain('data-testid="k-works"');
+  });
+});
+
+// P2 task: the readers say.ts needs, moved (copy, not import: scenes.ts is
+// P3's to delete) out of kiosk/scenes.ts, and new ones say.ts alone needs.
+describe('readers moved from scenes.ts (P3 deletes it): eventsTonight, worksInKvart, closuresNearby, nextSession', () => {
+  const KVART_STOP = { ...STOP, district: 'gornji-grad-medvescak' }; // R-DG19: Jelačić square lies in Gornji grad - Medveščak
+  const south = (metres: number): [number, number] => [STOP.lon, STOP.lat - metres / ((Math.PI / 180) * 6_378_137)];
+  const SESSION_DATA = { source: 'skupstina', category: 'sjednica-skupstine', precision: 'time', venue: 'Trg Stjepana Radića 1' };
+  const SESSION_NEXT_WEEK = item('dogadanja', 'skupstina:13', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T07:00:00Z', dateBasis: 'event', data: SESSION_DATA });
+  const SESSION_TONIGHT = item('dogadanja', 'skupstina:14', 'event', '14. sjednica Gradske skupštine', { at: '2026-09-11T15:00:00Z', dateBasis: 'event', data: SESSION_DATA });
+  const SESSION_ENDED = item('dogadanja', 'skupstina:12', 'event', '12. sjednica Gradske skupštine', { at: '2026-09-11T07:00:00Z', until: '2026-09-11T10:00:00Z', dateBasis: 'event', data: SESSION_DATA });
+  const KVARTOVSKE = item('dogadanja', 'kvartovske:1', 'event', 'Novi park u Trnju', { at: '2026-09-11T00:00:00Z', dateBasis: 'unknown', data: { source: 'kvartovske' } });
+  const ZET_NOTICE = item('dogadanja', 'zet-promet:1', 'event', 'Obilazak linija 6 i 11', { at: '2026-09-11T09:10:00Z', dateBasis: 'published', data: { source: 'zet-promet' } });
+  const work = (id: string, title: string, coordinates: [number, number], district: string, phase = 'Radovi u tijeku'): Item =>
+    item('dogadanja', `komunalne:${id}`, 'event', title, { at: '2026-07-02T00:00:00Z', dateBasis: 'updated', geo: { type: 'Point', coordinates }, data: { source: 'komunalne', phase, district } });
+  const WORKS = [
+    work('w1', 'Ilica 120', south(350), 'gornji-grad-medvescak'),
+    work('w2', 'Avenija Dubrava 40', [16.07, 45.83], 'gornja-dubrava'),
+    work('w3', 'Savska cesta 1', south(200), 'gornji-grad-medvescak', 'U pripremi'),
+  ];
+  const CITY_ROWS = [SESSION_NEXT_WEEK, KVARTOVSKE, ZET_NOTICE, ...WORKS];
+  const READER_MODULES: ModuleSnapshot[] = MODULES.map((m) => {
+    if (m.module === 'dogadanja') return snap('dogadanja', CITY_ROWS);
+    if (m.module === 'prometnice') return snap('prometnice', [item('prometnice', 'rc1', 'closure', 'Ilica', { geo: { type: 'Point', coordinates: south(500) } })]);
+    return m;
+  });
+  const TONIGHT_MODULES = READER_MODULES.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [SESSION_TONIGHT, SESSION_ENDED, ...CITY_ROWS]) : m));
+  const withModule = (modules: readonly ModuleSnapshot[], id: ModuleId, patch: Partial<ModuleSnapshot>): ModuleSnapshot[] => modules.map((m) => (m.module === id ? { ...m, ...patch } : m));
+  const without = (modules: readonly ModuleSnapshot[], id: ModuleId): ModuleSnapshot[] => modules.filter((m) => m.module !== id);
+
+  it('eventsTonight keeps today’s dated open-licence rows whose end has not passed, in start order, and is empty before the source answers or while it is down', () => {
+    expect(eventsTonight(TONIGHT_MODULES, NOW).map((r) => r.id)).toEqual(['skupstina:14']);
+    expect(eventsTonight(READER_MODULES, NOW)).toEqual([]); // nothing dated today outside the tonight fixture
+    expect(eventsTonight(without(TONIGHT_MODULES, 'dogadanja'), NOW)).toEqual([]);
+    expect(eventsTonight(withModule(TONIGHT_MODULES, 'dogadanja', { status: 'down' }), NOW)).toEqual([]);
+  });
+
+  it('worksInKvart (D18) counts the district’s ongoing works nearest first, falls back to the whole city without a district match, and never flips scope on an outage', () => {
+    const works = worksInKvart(READER_MODULES, KVART_STOP, NOW);
+    expect(works).toMatchObject({ state: 'live', scope: 'kvart', count: 1 });
+    expect(works.nearest).toMatchObject({ title: 'Ilica 120' });
+    const city = worksInKvart(READER_MODULES, STOP, NOW);
+    expect(city).toMatchObject({ scope: 'city', count: 2 });
+    expect(city.nearest).toMatchObject({ title: 'Ilica 120' });
+    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), KVART_STOP, NOW).scope).toBe('kvart');
+    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), STOP, NOW).scope).toBe('city');
+  });
+
+  it('closuresNearby counts only what lies within the nearby radius and gives no nearest beyond it', () => {
+    const near = closuresNearby(READER_MODULES, KVART_STOP, NOW);
+    expect(near).toMatchObject({ state: 'live', count: 1 });
+    expect(near.nearest).toMatchObject({ title: 'Ilica' });
+    const far = withModule(READER_MODULES, 'prometnice', { items: [item('prometnice', 'c2', 'closure', 'Dubrava', { geo: { type: 'Point', coordinates: [16.07, 45.83] } })] });
+    expect(closuresNearby(far, KVART_STOP, NOW)).toEqual({ state: 'live', count: 0, nearest: null });
+  });
+
+  it('nextSession finds the Assembly’s next session that has not ended, or none', () => {
+    expect(nextSession(READER_MODULES, NOW)!.id).toBe('skupstina:13');
+    expect(nextSession(TONIGHT_MODULES, NOW)!.id).toBe('skupstina:14');
+    expect(nextSession(withModule(READER_MODULES, 'dogadanja', { items: [KVARTOVSKE, ...WORKS] }), NOW)).toBeNull();
+  });
+});
+
+describe('new local.ts readers say.ts uses: nearbyVehicleCount, kioskQuakes, lastDeparturesAhead', () => {
+  it('nearbyVehicleCount counts the feed’s own pins within radiusM of the stop, never the fleet count (R-KP12)', () => {
+    const zet = MODULES.find((m) => m.module === 'zet-rt')!; // two vehicle pins a few dozen metres from STOP, one fleet-count row that must never be read here
+    expect(nearbyVehicleCount(zet, STOP)).toBe(2);
+    expect(nearbyVehicleCount(zet, { ...STOP, lon: 16.5, lat: 46.5 })).toBe(0);
+    expect(nearbyVehicleCount(zet, null)).toBe(2); // without a stop: every pin the box carries
+    expect(nearbyVehicleCount(undefined, STOP)).toBe(0);
+  });
+
+  it('kioskQuakes keeps only magnitude >= 3.0 within the last 24 hours (R-KP9), newest first', () => {
+    const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
+    const emsc = snap('emsc', [
+      item('emsc', 'small', 'quake', 'Q', { at: at(-1), data: { mag: 2.1, depth: 5, region: 'CROATIA' } }),
+      item('emsc', 'old', 'quake', 'Q', { at: at(-30), data: { mag: 4, depth: 5, region: 'CROATIA' } }),
+      item('emsc', 'big', 'quake', 'Q', { at: at(-2), data: { mag: 3.4, depth: 8, region: 'CROATIA' } }),
+    ]);
+    expect(kioskQuakes(emsc, NOW).map((q) => q.id)).toEqual(['big']);
+    expect(kioskQuakes(undefined, NOW)).toEqual([]);
+  });
+
+  it('lastDeparturesAhead lists at most cap departures within 10 h, soonest first (R-KP14), only from 20:00 to 04:00 Zagreb', () => {
+    const EVENING = Date.parse('2026-09-11T20:32:00Z'); // 22:32 in Zagreb
+    const lastRun: LastRunSnapshot = {
+      status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-09-13T22:30:00Z',
+      routes: {
+        '6': { '2026-09-11': '24:15' }, // 00:15: 1h43 ahead of 22:32
+        '11': { '2026-09-11': '24:05' }, // 00:05: soonest, 1h33 ahead
+        '12': { '2026-09-11': '22:00' }, // already left by 22:32
+        '13': { '2026-09-11': '25:00' }, // 01:00: 2h28 ahead, still inside the 10 h window
+      },
+    };
+    const stop = { ...STOP, routes: ['6', '11', '12', '13'] };
+    const ahead = lastDeparturesAhead(lastRun, stop, EVENING, 4);
+    expect(ahead.map((d) => d.routeId)).toEqual(['11', '6', '13']);
+    expect(ahead[0]!.at).toBeLessThan(ahead[1]!.at);
+    expect(ahead[1]!.at).toBeLessThan(ahead[2]!.at);
+    expect(lastDeparturesAhead(lastRun, stop, EVENING, 1)).toHaveLength(1);
+    expect(lastDeparturesAhead(lastRun, stop, NOW)).toEqual([]); // 14:32: outside the 20:00-04:00 window
+    expect(lastDeparturesAhead(null, stop, EVENING)).toEqual([]);
+    expect(lastDeparturesAhead(lastRun, null, EVENING)).toEqual([]);
   });
 });
 
