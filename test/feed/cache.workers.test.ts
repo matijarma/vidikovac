@@ -347,7 +347,7 @@ describe('the twin-fed zet-rt module', () => {
     return { now: () => new Date(nowMs), recordMetric: sink };
   }
 
-  it('serves the twin payload with its history and caches it until the next tick', async () => {
+  it('serves the twin payload with its plan and caches it until the next tick', async () => {
     const nowMs = T * 1000 + 2_000;
     const twinDeps = await twinAt(nowMs, T);
     const ctx = createExecutionContext();
@@ -355,7 +355,11 @@ describe('the twin-fed zet-rt module', () => {
     await waitOnExecutionContext(ctx);
     expect(snapshot.status).toBe('live');
     expect(snapshot.sources?.zet.status).toBe('live');
-    expect(snapshot.items.find((item) => item.id === 'vehicle:a')?.motion).toEqual({ history: [[-5, 15.97, 45.81]] });
+    // Phase B: the pin carries the twin's plan (a path plan when the network artefact is served, a free plan otherwise), never a history.
+    const motion = snapshot.items.find((item) => item.id === 'vehicle:a')?.motion as { plan?: unknown; history?: unknown } | undefined;
+    expect(motion).toBeDefined();
+    expect(motion).not.toHaveProperty('history');
+    expect(Array.isArray(motion?.plan)).toBe(true);
     const cached = await caches.default.match(new Request(cacheKey('zet-rt')));
     const untilNextTick = Math.ceil((T * 1000 + FEED_TICK_MS + TICK_CUSHION_MS - nowMs) / 1000);
     expect(cached?.headers.get('cache-control')).toBe('s-maxage=' + untilNextTick);

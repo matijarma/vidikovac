@@ -1,51 +1,46 @@
-// TwinDO: the one observer of ZET's realtime feed. A singleton that wakes on
-// its own alarm every 10 s in step with the feed's republish, fetches the
-// frame once with a conditional GET, folds every vehicle's report into that
-// vehicle's own short history, joins the trip to the static timetable
-// (direction, headsign, shape, block), remembers the fleet in one SQLite row
-// per tick so an eviction between two alarms loses nothing, records the raw
-// bytes for replay, and publishes one payload the feed pipeline serves from
-// its per-colo cache (worker/feed/modules/zet-rt.ts asks `publish()`).
-//
-// Phase A (this file's first form) publishes history and the join; phase B
-// adds the engine (match, plan, laws) in worker/twin/tick.ts. Owner decision
-// D1: the engine lives here, on the server, so every viewer sees one world
-// and the first frame of a fresh page already moves.
+// TwinDO: the one observer of ZET's realtime feed and the one place the
+// motion engine runs. A singleton that wakes on its own alarm every 10 s in
+// step with the feed's republish, fetches the frame once with a conditional
+// GET, hands it to the engine's tick (worker/twin/tick.ts: match, speed,
+// plan, laws, hindsight), remembers the fleet in a state row so an eviction
+// between two alarms loses nothing, records the raw bytes for replay, counts
+// its own hindsight into MetricsDO, and publishes one payload the feed
+// pipeline serves from its per-colo cache (worker/feed/modules/zet-rt.ts
+// asks `publish()`). Owner decision D1: the engine lives here, on the
+// server, so every viewer sees one world and the first frame of a fresh page
+// already moves.
 //
 // Alarm discipline (the reviewer's A6): alarms are at-least-once and may run
 // late, and the object may be evicted between two of them. So `alarm()` arms
 // the next alarm before it does anything, never throws (a throwing alarm is
 // retried with backoff and would double-fetch), keys a tick by the feed's
-// header time (a repeat is "no new evidence"), refuses to fetch twice within
-// the floor, and rebuilds its memory from the last state row on a cold start.
+// header time (a repeat is "no new evidence", but still a re-plan), refuses
+// to fetch twice within the floor, and rebuilds its memory from the last
+// state row on a cold start. The static assets (index, network) load lazily
+// behind memoised, never-throwing promises; a tick without them still
+// publishes free-plane plans rather than nothing.
 
 import { DurableObject } from 'cloudflare:workers';
+import type { OrderReport } from '../../shared/motion/laws';
+import type { GraphNetwork } from '../../shared/motion/network';
+import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
 import type { FeedPayload } from '../feed/payload';
-import { loadZetRoutes } from '../feed/modules/zet-routes';
-import { logError } from '../log';
-import { recordMetric } from '../metrics';
+import { loadZetRoutes, type ZetRoutes } from '../feed/modules/zet-routes';
+import { logError, logInfo } from '../log';
+import { metricsStub, recordMetric } from '../metrics';
+import type { MetricsEntry } from '../metrics-do';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
+import { createEngine, type Engine } from '../twin/engine';
 import { decodeFeed } from '../twin/feed-decode';
-import { emptyState, foldFeed, type TwinState } from '../twin/history';
+import { BUCKETS, horizonKey, type HindsightCounts, HORIZONS_S } from '../../shared/motion/hindsight';
 import { indexRowsFromIndex } from '../twin/index-load';
-import {
-  INDEX_RECHECK_MS,
-  STATE_RETENTION_MS,
-  ensureSchema,
-  indexCheckedAt,
-  indexFeedVersion,
-  loadLatestState,
-  lookupTrips,
-  markIndexChecked,
-  pruneState,
-  replaceIndex,
-  saveState,
-} from '../twin/persist';
+import { INDEX_RECHECK_MS, ensureSchema, indexCheckedAt, indexFeedVersion, loadLatestState, lookupTrips, markIndexChecked, replaceIndex, saveState } from '../twin/persist';
 import { buildPayload, type TripJoin } from '../twin/publish';
 import { recordFrame, type RecordOutcome } from '../twin/record';
-import { twinIndexSource, twinUpstream } from '../twin/seams';
-
+import { twinIndexSource, twinNetworkSource, twinUpstream } from '../twin/seams';
+import { emptyState, type TwinState } from '../twin/state';
+import { runTick } from '../twin/tick';
 import { TWIN_DO_NAME } from '../twin/twin-name';
 
 export { TWIN_DO_NAME };
@@ -69,7 +64,19 @@ export interface TickReport {
   /** True when this tick started with no state in memory (a fresh or evicted object). */
   cold: boolean;
   indexLoaded: boolean;
+  networkLoaded: boolean;
   recorded: RecordOutcome | 'unchanged';
+  order: OrderReport | null;
+  /** Graded fixes this tick, summed over horizons. */
+  hindsightSamples: number;
+  /** Bytes of the state row written this tick. */
+  stateBytes: number;
+}
+
+/** What the cold start cost: decoding the two static assets, in milliseconds. */
+export interface ColdLoad {
+  networkMs: number;
+  indexMs: number;
 }
 
 /** The singleton in production; a test names its own object so no state
@@ -79,14 +86,30 @@ export function twinStub(env: Env, name: string = TWIN_DO_NAME): DurableObjectSt
   return namespace.get(namespace.idFromName(name));
 }
 
+/** The histogram as one batched metrics write: one entry per (horizon, bucket) with its count. */
+function hindsightEntries(counts: HindsightCounts): MetricsEntry[] {
+  const entries: MetricsEntry[] = [];
+  for (const horizon of HORIZONS_S) {
+    for (const bucket of BUCKETS) {
+      const count = counts[horizon][bucket];
+      if (count > 0) entries.push({ event: 'twin_hindsight', dim1: horizonKey(horizon), dim2: bucket, count });
+    }
+  }
+  return entries;
+}
+
 export class TwinDO extends DurableObject<Env> {
   private state: TwinState | null = null;
   private payload: FeedPayload | null = null;
   private warm = false;
   private lastTickMs = 0;
   private lastReport: TickReport | null = null;
-  private indexReady: Promise<boolean> | null = null;
-  private indexCheckedMs = 0;
+  private assetsReady: Promise<void> | null = null;
+  private assetsCheckedMs = 0;
+  private index: TripIndex | null = null;
+  private net: GraphNetwork | null = null;
+  private engine: Engine | null = null;
+  private coldLoad: ColdLoad | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -108,7 +131,7 @@ export class TwinDO extends DurableObject<Env> {
     if (!this.payload) await this.tick();
     if (this.payload) return this.payload;
     const now = this.now();
-    return buildPayload(emptyState(), new Map(), await loadZetRoutes(), now, nextTickAt(null, now));
+    return buildPayload(emptyState(), new Map(), await loadZetRoutes(), now, nextTickAt(null, now), null);
   }
 
   /** Arms the alarm chain when none is pending; a no-op otherwise. Called on
@@ -138,27 +161,30 @@ export class TwinDO extends DurableObject<Env> {
     this.warm = true;
     if (!this.state) await this.restore();
     const prev = this.state ?? emptyState();
-    const sql = this.ctx.storage.sql;
 
     const finish = async (report: TickReport): Promise<TickReport> => {
       this.lastReport = report;
       await this.ctx.storage.setAlarm(nextTickAt(this.state?.headerTs ?? null, this.now()));
       return report;
     };
-    const unchanged = (indexLoaded: boolean): TickReport => ({
-      outcome: 'unchanged',
+    const baseline = (outcome: TickOutcome): TickReport => ({
+      outcome,
       headerTs: prev.headerTs,
       newFixes: 0,
       evicted: 0,
       unknownTrips: 0,
-      vehicles: Object.keys(prev.vehicles).length,
+      vehicles: Object.keys(prev.tracks).length,
       cold,
-      indexLoaded,
+      indexLoaded: this.index !== null,
+      networkLoaded: this.net !== null,
       recorded: 'unchanged',
+      order: null,
+      hindsightSamples: 0,
+      stateBytes: 0,
     });
 
     // A retried or early alarm inside the floor: no second fetch (R-TE8).
-    if (this.lastTickMs > 0 && now - this.lastTickMs < TICK_MIN_DELAY_MS) return finish(unchanged(this.indexReady !== null));
+    if (this.lastTickMs > 0 && now - this.lastTickMs < TICK_MIN_DELAY_MS) return finish(baseline('unchanged'));
     this.lastTickMs = now;
 
     let response: Response;
@@ -167,97 +193,144 @@ export class TwinDO extends DurableObject<Env> {
     } catch (error) {
       logError('twin_fetch_failed', error);
       recordMetric(this.env, 'twin_tick', 'error', cold ? 'cold' : 'warm');
-      return finish({ ...unchanged(this.indexReady !== null), outcome: 'error' });
+      return finish(baseline('error'));
     }
 
+    await this.ensureAssets(now);
+    const routes = await loadZetRoutes();
+
     if (response.status === 304) {
-      this.state = { ...prev, tickAtMs: now };
-      await this.republish(now);
+      // Nothing new from ZET: the plans still move on (D2), validUntil moves.
+      const result = this.advance(prev, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish(unchanged(await this.ensureIndex(now)));
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes });
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
     const decoded = decodeFeed(bytes);
+    const etag = response.headers.get('etag') ?? prev.etag;
     if (decoded.headerTs !== null && decoded.headerTs === prev.headerTs) {
       // The same frame again (the cushion beat ZET's publish): nothing new.
-      this.state = { ...prev, tickAtMs: now, etag: response.headers.get('etag') ?? prev.etag };
-      await this.republish(now);
+      const result = this.advance({ ...prev, etag }, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish(unchanged(await this.ensureIndex(now)));
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes });
     }
 
-    const { state, newFixes, evicted } = foldFeed(prev, decoded, now);
-    state.etag = response.headers.get('etag') ?? prev.etag;
-    this.state = state;
-
-    const indexLoaded = await this.ensureIndex(now);
-    const tripIds = [...new Set(Object.values(state.vehicles).map((t) => t.tripId).filter((id): id is string => id !== null))];
-    const joins: Map<string, TripJoin> = indexLoaded ? lookupTrips(sql, tripIds) : new Map();
-    const unknownTrips = tripIds.filter((id) => !joins.has(id)).length;
-
-    this.payload = buildPayload(state, joins, await loadZetRoutes(), now, nextTickAt(state.headerTs, now));
-    saveState(sql, state);
-    pruneState(sql, now - STATE_RETENTION_MS);
-
+    const result = this.advance({ ...prev, etag }, decoded, now, routes);
     const recorded = decoded.headerTs !== null ? await recordFrame(this.env.RECORDINGS, decoded.headerTs, bytes) : 'skipped';
-    const outcome: TickOutcome = indexLoaded && tripIds.length > 0 && unknownTrips / tripIds.length > STALE_INDEX_SHARE ? 'stale_index' : 'ok';
+    const outcome: TickOutcome = this.index !== null && result.tripIds > 0 && result.unknownTrips / result.tripIds > STALE_INDEX_SHARE ? 'stale_index' : 'ok';
     recordMetric(this.env, 'twin_tick', outcome, cold ? 'cold' : 'warm');
     return finish({
       outcome,
-      headerTs: state.headerTs,
-      newFixes,
-      evicted,
-      unknownTrips,
-      vehicles: Object.keys(state.vehicles).length,
+      headerTs: result.state.headerTs,
+      newFixes: result.newFixes,
+      evicted: result.evicted,
+      unknownTrips: result.unknownTrips,
+      vehicles: Object.keys(result.state.tracks).length,
       cold,
-      indexLoaded,
+      indexLoaded: this.index !== null,
+      networkLoaded: this.net !== null,
       recorded,
+      order: result.order,
+      hindsightSamples: result.hindsightSamples,
+      stateBytes: result.stateBytes,
     });
   }
 
-  /** Rebuilds the payload from the state in memory (a 304 or a repeated
-   *  frame moves validUntil and the source's freshness without new fixes). */
-  private async republish(now: number): Promise<void> {
-    if (!this.state) return;
-    const indexLoaded = await this.ensureIndex(now);
-    const tripIds = [...new Set(Object.values(this.state.vehicles).map((t) => t.tripId).filter((id): id is string => id !== null))];
-    const joins: Map<string, TripJoin> = indexLoaded ? lookupTrips(this.ctx.storage.sql, tripIds) : new Map();
-    this.payload = buildPayload(this.state, joins, await loadZetRoutes(), now, nextTickAt(this.state.headerTs, now));
+  /** Runs the engine's tick over a frame (or none), publishes, persists,
+   *  counts the hindsight. The one path every observation goes through. */
+  private advance(prev: TwinState, feed: ReturnType<typeof decodeFeed> | null, nowMs: number, routes: ZetRoutes): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number } {
+    const headerTs = feed?.headerTs ?? prev.headerTs;
+    // The joins for every trip in view: the frame's trips plus the tracks already followed.
+    const tripIds = new Set<string>();
+    for (const track of Object.values(prev.tracks)) if (track.tripId !== null) tripIds.add(track.tripId);
+    if (feed) for (const v of feed.vehicles) if (v.tripId) tripIds.add(v.tripId);
+    const joins = this.joinsFor([...tripIds]);
+    const unknownTrips = [...tripIds].filter((id) => !joins.has(id)).length;
+
+    const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs) });
+    this.state = result.state;
+    this.payload = result.payload;
+    const stateBytes = saveState(this.ctx.storage.sql, result.state);
+
+    let hindsightSamples = 0;
+    const entries = hindsightEntries(result.hindsight);
+    for (const entry of entries) hindsightSamples += entry.count ?? 0;
+    if (entries.length > 0) {
+      // One batched write per tick, never one RPC per vehicle.
+      void metricsStub(this.env)
+        .recordMany(entries)
+        .catch((error: unknown) => logError('twin_hindsight_failed', error));
+    }
+    return { state: result.state, newFixes: result.newFixes, evicted: result.evicted, order: result.order, unknownTrips, tripIds: tripIds.size, hindsightSamples, stateBytes };
   }
 
-  /** Cold start: the last state row becomes memory, and the payload follows. */
+  /** The static join per trip id: from the decoded index in memory when it
+   *  loaded, else from the SQLite copy an earlier life of the object made. */
+  private joinsFor(tripIds: readonly string[]): Map<string, TripJoin> {
+    if (this.index) {
+      const out = new Map<string, TripJoin>();
+      for (const id of tripIds) {
+        const record = this.index.tripsById.get(id);
+        if (!record) continue;
+        const pattern = this.index.patterns[record.pattern];
+        if (!pattern) continue;
+        out.set(id, { direction: pattern.direction === 1 ? 1 : 0, headsign: pattern.headsign, shapeId: pattern.shape === '' ? null : pattern.shape });
+      }
+      return out;
+    }
+    return lookupTrips(this.ctx.storage.sql, tripIds);
+  }
+
+  /** Cold start: the last state row becomes memory, and the payload follows
+   *  from a re-plan on it (the assets load on the way). */
   private async restore(): Promise<void> {
     const saved = loadLatestState(this.ctx.storage.sql);
     if (!saved) return;
-    this.state = saved;
-    await this.republish(this.now());
+    const now = this.now();
+    await this.ensureAssets(now);
+    this.advance(saved, null, now, await loadZetRoutes());
   }
 
-  /** True when the trip tables hold an index. Loads or refreshes the asset
-   *  at most once an hour; a missing or broken asset keeps the stored copy
-   *  and never throws out of here (the join simply degrades). */
-  private ensureIndex(now: number): Promise<boolean> {
-    if (this.indexReady && now - this.indexCheckedMs < INDEX_RECHECK_MS) return this.indexReady;
-    this.indexCheckedMs = now;
-    this.indexReady = this.loadIndex(now).catch((error) => {
-      logError('twin_index_failed', error);
-      return indexFeedVersion(this.ctx.storage.sql) !== null;
+  /** Loads the trip index and the network once, re-checks them hourly, and
+   *  builds the engine when both are present. Never throws: a missing asset
+   *  leaves the twin joining less or planning in the free plane. */
+  private ensureAssets(now: number): Promise<void> {
+    if (this.assetsReady && now - this.assetsCheckedMs < INDEX_RECHECK_MS) return this.assetsReady;
+    this.assetsCheckedMs = now;
+    this.assetsReady = this.loadAssets(now).catch((error) => {
+      logError('twin_assets_failed', error);
     });
-    return this.indexReady;
+    return this.assetsReady;
   }
 
-  private async loadIndex(now: number): Promise<boolean> {
+  private async loadAssets(now: number): Promise<void> {
     const sql = this.ctx.storage.sql;
-    const stored = indexFeedVersion(sql);
-    const checked = indexCheckedAt(sql);
-    if (stored !== null && checked !== null && now - checked < INDEX_RECHECK_MS) return true;
-    const index = await twinIndexSource(this.env)();
-    if (index === null) return stored !== null;
-    const rows = indexRowsFromIndex(index);
-    if (rows.feedVersion !== stored) replaceIndex(this.ctx.storage, rows);
-    markIndexChecked(sql, now);
-    return true;
+    const cold: ColdLoad = { networkMs: 0, indexMs: 0 };
+    if (!this.index) {
+      const t0 = Date.now();
+      const index = await twinIndexSource(this.env)();
+      cold.indexMs = Date.now() - t0;
+      if (index) {
+        this.index = index;
+        const stored = indexFeedVersion(sql);
+        const checked = indexCheckedAt(sql);
+        if (index.feedVersion !== stored || checked === null || now - checked >= INDEX_RECHECK_MS) {
+          if (index.feedVersion !== stored) replaceIndex(this.ctx.storage, indexRowsFromIndex(index));
+          markIndexChecked(sql, now);
+        }
+      }
+    }
+    if (!this.net) {
+      const t0 = Date.now();
+      this.net = await twinNetworkSource(this.env)();
+      cold.networkMs = Date.now() - t0;
+    }
+    if (this.net && this.index && !this.engine) {
+      this.engine = createEngine(this.net, this.index);
+      this.coldLoad = cold;
+      logInfo('twin_assets_loaded', { networkMs: cold.networkMs, indexMs: cold.indexMs, edges: this.net.edges.length, trips: this.index.tripsById.size });
+    }
   }
 
   // ---- test seams ------------------------------------------------------------
@@ -269,11 +342,19 @@ export class TwinDO extends DurableObject<Env> {
     this.warm = false;
     this.lastTickMs = 0;
     this.lastReport = null;
-    this.indexReady = null;
-    this.indexCheckedMs = 0;
+    this.assetsReady = null;
+    this.assetsCheckedMs = 0;
+    this.index = null;
+    this.net = null;
+    this.engine = null;
+    this.coldLoad = null;
   }
 
   lastReportForTest(): TickReport | null {
     return this.lastReport;
+  }
+
+  coldLoadForTest(): ColdLoad | null {
+    return this.coldLoad;
   }
 }

@@ -30,6 +30,10 @@ const ROWS: MetricsDailyRow[] = [
   row('2026-09-11', 9, 'twin_tick', 'error', 'cold', 3),
   row('2026-09-11', 10, 'static_watch', 'newer', '', 2),
   row('2026-09-11', 10, 'static_watch', 'current', '', 21),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt25', 80),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt50', 15),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt100', 4),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'ge200', 1),
 ];
 
 const VIEW = { days: 7, since: '2026-09-05', today: '2026-09-11', rows: ROWS };
@@ -119,5 +123,9 @@ describe('renderStatsPage: the twin', () => {
     expect(html).toContain('>cold<');
     expect(html).toContain('2 od 23 provjera');
     expect(html).toContain('npm run build:network &amp;&amp; npm run build:trips');
+    // Hindsight: the histogram and the percentiles stated against the bucket bounds (80 % under 25 m, 95 % under 50 m).
+    expect(html).toContain('<h3>Ocjena unatrag</h3>');
+    expect(html).toContain('>lt25<');
+    expect(html).toContain('30 s: p50 ispod 25 m, p95 ispod 50 m');
   });
 });

@@ -97,6 +97,46 @@ function matrixTable(heading: string, rowLabel: string, p: Pivot, empty: string)
 }
 
 /** Every Zagreb day in the window, oldest first, so a gap renders as a zero. */
+/** The hindsight buckets in order with the bound a percentile can be stated
+ *  against: an error in `lt50` is under 50 m, so "p95 ispod 50 m" is exactly
+ *  what the bucket knows, never a guess inside it. */
+const HINDSIGHT_BUCKETS: readonly { key: string; label: string }[] = [
+  { key: 'lt25', label: 'ispod 25 m' },
+  { key: 'lt50', label: 'ispod 50 m' },
+  { key: 'lt100', label: 'ispod 100 m' },
+  { key: 'lt200', label: 'ispod 200 m' },
+  { key: 'ge200', label: '200 m ili više' },
+];
+
+/** The bucket that holds the given share of a horizon's graded fixes. */
+function hindsightPercentile(rows: readonly MetricsDailyRow[], horizon: string, share: number): string | null {
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (const r of rows) {
+    if (r.event !== 'twin_hindsight' || r.dim1 !== horizon) continue;
+    counts.set(r.dim2, (counts.get(r.dim2) ?? 0) + r.count);
+    total += r.count;
+  }
+  if (total === 0) return null;
+  let cumulative = 0;
+  for (const bucket of HINDSIGHT_BUCKETS) {
+    cumulative += counts.get(bucket.key) ?? 0;
+    if (cumulative / total >= share) return bucket.label;
+  }
+  return HINDSIGHT_BUCKETS[HINDSIGHT_BUCKETS.length - 1].label;
+}
+
+function hindsightLine(rows: readonly MetricsDailyRow[]): string {
+  const parts = ['10s', '30s', '60s']
+    .map((horizon) => {
+      const p50 = hindsightPercentile(rows, horizon, 0.5);
+      const p95 = hindsightPercentile(rows, horizon, 0.95);
+      return p50 && p95 ? `${escapeHtml(horizon.replace('s', ' s'))}: p50 ${escapeHtml(p50)}, p95 ${escapeHtml(p95)}` : null;
+    })
+    .filter((part): part is string => part !== null);
+  return parts.length ? `<p>Greška plana po horizontu: ${parts.join('; ')}.</p>` : '<p>Još nema ocijenjenih planova.</p>';
+}
+
 function dayRange(since: string, today: string): string[] {
   const days: string[] = [];
   for (let t = Date.parse(`${since}T00:00:00Z`); days.length <= MAX_DAYS; t += DAY_MS) {
@@ -307,6 +347,9 @@ export function renderStatsPage(view: StatsView): string {
     `</section>` +
     `<section><h2>Blizanac</h2><p class="lede">Promatrač ZET-ova feeda u stvarnom vremenu, jedan otkucaj svakih 10 s: <em>ok</em> je novi okvir, <em>unchanged</em> isti okvir ili 304, <em>error</em> izvor koji nije odgovorio, <em>stale_index</em> okvir čije vožnje ugrađeni statični GTFS većinom ne poznaje; <em>cold</em> znači da se objekt probudio iz pohrane.</p>` +
     matrixTable('Otkucaji blizanca po ishodu i startu', 'Ishod', pivot(rows, 'twin_tick', 'dim1', 'dim2'), 'blizanac se još nije oglasio') +
+    `<h3>Ocjena unatrag</h3><p class="lede">Svako novo očitanje ocjenjuje planove objavljene 10, 30 i 60 s prije njega: koliko je metara plan bio od mjesta gdje se vozilo zaista našlo.</p>` +
+    matrixTable('Greška plana po horizontu i razredu', 'Horizont', pivot(rows, 'twin_hindsight', 'dim1', 'dim2'), 'još nema ocijenjenih planova') +
+    hindsightLine(rows) +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
     `</section>` +
     `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +

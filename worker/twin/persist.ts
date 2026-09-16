@@ -1,46 +1,43 @@
-// What the twin keeps in its own SQLite: one compact state row per tick (so
-// an object evicted between two 10 s alarms wakes up knowing the fleet), and
-// a copy of the static trip index (task A1's zet-trips.json) in tables, so a
-// realtime trip id resolves in one indexed lookup instead of re-parsing 78k
-// rows on every cold start. Everything here is plain SQL over the storage
-// the Durable Object hands in; no Cloudflare import, so the shapes and the
-// statements can be read in isolation.
+// What the twin keeps in its own SQLite: the last few tick states (so an
+// object evicted between two 10 s alarms wakes up knowing the fleet), and a
+// copy of the static trip index in tables, so a realtime trip id resolves in
+// one indexed lookup when the decoded index is not in memory. Plain SQL over
+// the storage the Durable Object hands in; no Cloudflare import.
 
-import type { TwinState } from './history';
+import { toPlane } from '../../shared/motion/geo';
+import type { PlaneFix, Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
+import type { TwinState } from './state';
 
-/** How long tick rows are kept: two days covers a weekend of debugging a
- *  reported oddity by replaying the twin's own states, while 8,640 rows a
- *  day at well under 120 KB each stay far inside the storage the plan
- *  budgets. */
-export const STATE_RETENTION_MS = 48 * 60 * 60 * 1000;
+/** Tick rows kept: the newest is the restore point, two more survive a row
+ *  that was written half-way when the object died. Days of tick rows would
+ *  be a second recording of what R2 already holds (record.ts). */
+export const STATE_ROWS_KEPT = 3;
 
-/** How often the twin re-reads the static index asset to learn about a
- *  new deploy: the asset changes only on a push, and a push restarts the
+/** How often the twin re-reads the static assets to learn about a new
+ *  deploy: the assets change only on a push, and a push restarts the
  *  isolate anyway, so an hourly check is a safety net, not the mechanism. */
 export const INDEX_RECHECK_MS = 60 * 60 * 1000;
 
 /** Rows per multi-row INSERT: 20 trips × 4 columns keeps a statement at 80
- *  bound parameters, comfortably under SQLite's conservative limits, while
- *  cutting the 78k-row load to about 4k statements. */
+ *  bound parameters, comfortably under SQLite's conservative limits. */
 const TRIP_ROWS_PER_INSERT = 20;
 const PATTERN_ROWS_PER_INSERT = 10;
 const BLOCK_ROWS_PER_INSERT = 40;
-
-/** Trip ids per lookup statement, for the same parameter-count reason. */
 const LOOKUP_CHUNK = 50;
+
+/** Coordinates in the state row keep the feed's own precision (~1.1 m);
+ *  arcs a decimetre. The plane coordinates are recomputed on load. */
+const COORD_PRECISION = 1e5;
+const ARC_PRECISION = 10;
 
 export interface IndexPattern {
   route: string;
   direction: 0 | 1;
-  /** GTFS shape id, or null for a pattern whose trips carry none (line 1). */
   shape: string | null;
   headsign: string;
-  /** Ordered stop ids. */
   stops: string[];
-  /** Per hour band (0..23): median scheduled seconds between consecutive stops. */
   sched: number[][];
-  /** Per stop: median scheduled dwell seconds (departure minus arrival). */
   dwell: number[];
 }
 
@@ -48,7 +45,6 @@ export interface IndexTrip {
   id: string;
   pattern: number;
   block: string;
-  /** First scheduled departure, seconds past service midnight (may exceed 86400). */
   start: number;
 }
 
@@ -99,23 +95,59 @@ export function ensureSchema(sql: SqlStorage): void {
 
 // ---- tick state -------------------------------------------------------------
 
-export function saveState(sql: SqlStorage, state: TwinState): void {
-  sql.exec('INSERT OR REPLACE INTO state (tick_at, header_ts, etag, body) VALUES (?, ?, ?, ?)', state.tickAtMs, state.headerTs, state.etag, JSON.stringify(state));
+type StoredFix = Omit<PlaneFix, 'x' | 'y'>;
+type StoredTrack = Omit<Track, 'fixes'> & { fixes: StoredFix[] };
+type StoredState = Omit<TwinState, 'tracks'> & { tracks: Record<string, StoredTrack> };
+
+/** The state as one JSON string: plane coordinates dropped (recomputed on
+ *  load), lon/lat and arcs rounded to what they mean. */
+export function serializeState(state: TwinState): string {
+  const tracks: Record<string, StoredTrack> = {};
+  for (const [id, track] of Object.entries(state.tracks)) {
+    tracks[id] = {
+      ...track,
+      fixes: track.fixes.map((fix) => {
+        const stored: StoredFix = { lon: Math.round(fix.lon * COORD_PRECISION) / COORD_PRECISION, lat: Math.round(fix.lat * COORD_PRECISION) / COORD_PRECISION, atSec: fix.atSec };
+        if (fix.arc) stored.arc = { key: fix.arc.key, s: Math.round(fix.arc.s * ARC_PRECISION) / ARC_PRECISION, atStop: fix.arc.atStop };
+        return stored;
+      }),
+    };
+  }
+  const stored: StoredState = { ...state, tracks };
+  return JSON.stringify(stored);
+}
+
+export function deserializeState(body: string): TwinState {
+  const stored = JSON.parse(body) as StoredState;
+  const tracks: Record<string, Track> = {};
+  for (const [id, track] of Object.entries(stored.tracks ?? {})) {
+    tracks[id] = {
+      ...track,
+      fixes: (track.fixes ?? []).map((fix) => {
+        const plane = toPlane(fix.lon, fix.lat);
+        return { ...fix, x: plane.x, y: plane.y };
+      }),
+    };
+  }
+  return { ...stored, tracks, published: stored.published ?? {} };
+}
+
+/** Writes the tick's state and keeps only the newest STATE_ROWS_KEPT rows. */
+export function saveState(sql: SqlStorage, state: TwinState): number {
+  const body = serializeState(state);
+  sql.exec('INSERT OR REPLACE INTO state (tick_at, header_ts, etag, body) VALUES (?, ?, ?, ?)', state.tickAtMs, state.headerTs, state.etag, body);
+  sql.exec(`DELETE FROM state WHERE tick_at NOT IN (SELECT tick_at FROM state ORDER BY tick_at DESC LIMIT ${STATE_ROWS_KEPT})`);
+  return body.length;
 }
 
 export function loadLatestState(sql: SqlStorage): TwinState | null {
   const row = sql.exec<{ body: string }>('SELECT body FROM state ORDER BY tick_at DESC LIMIT 1').toArray()[0];
   if (!row) return null;
   try {
-    return JSON.parse(row.body) as TwinState;
+    return deserializeState(row.body);
   } catch {
     return null;
   }
-}
-
-/** Deletes tick rows older than `beforeMs`; returns how many went. */
-export function pruneState(sql: SqlStorage, beforeMs: number): number {
-  return sql.exec('DELETE FROM state WHERE tick_at < ?', beforeMs).rowsWritten;
 }
 
 // ---- the static index -------------------------------------------------------
@@ -165,20 +197,8 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
       rows.patterns.map((p, idx) => [idx, p.route, p.direction, p.shape, p.headsign, JSON.stringify(p.stops), JSON.stringify(p.sched), JSON.stringify(p.dwell)]),
       PATTERN_ROWS_PER_INSERT,
     );
-    insertBatched(
-      sql,
-      'trips',
-      ['trip_id', 'pattern', 'block', 'start'],
-      rows.trips.map((t) => [t.id, t.pattern, t.block, t.start]),
-      TRIP_ROWS_PER_INSERT,
-    );
-    insertBatched(
-      sql,
-      'blocks',
-      ['block', 'trips'],
-      rows.blocks.map((b) => [b.id, JSON.stringify(b.trips)]),
-      BLOCK_ROWS_PER_INSERT,
-    );
+    insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start]), TRIP_ROWS_PER_INSERT);
+    insertBatched(sql, 'blocks', ['block', 'trips'], rows.blocks.map((b) => [b.id, JSON.stringify(b.trips)]), BLOCK_ROWS_PER_INSERT);
     metaSet(sql, 'feed_version', rows.feedVersion);
   });
 }
@@ -198,13 +218,7 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[]): Map<st
       )
       .toArray();
     for (const row of rows) {
-      out.set(row.trip_id, {
-        direction: row.direction === 1 ? 1 : 0,
-        headsign: row.headsign,
-        shapeId: row.shape,
-        pattern: row.pattern,
-        block: row.block,
-      });
+      out.set(row.trip_id, { direction: row.direction === 1 ? 1 : 0, headsign: row.headsign, shapeId: row.shape, pattern: row.pattern, block: row.block });
     }
   }
   return out;

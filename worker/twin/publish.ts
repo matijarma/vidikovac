@@ -1,25 +1,28 @@
 // The twin's state as the feed pipeline's payload: the same items
-// worker/feed/modules/zet-rt.ts has always published (one `vehicle:` pin per
-// vehicle, one `route:` median-delay row per route), plus what the twin
-// knows and a single snapshot never could: the static-GTFS join of the trip
-// (direction, headsign, shape), the trip update's next stop and delay, and
-// the vehicle's own recent fixes (`motion.history`, R-TE2). Pure: the
-// Durable Object hands it state, joins and routes and forwards the result.
-//
-// Phase A publishes the latest raw fix as the pin's position; from B5 the
-// pin sits at the twin's estimate (R-TE13) and `motion` carries the plan.
+// worker/feed/modules/zet-rt.ts always published (one `vehicle:` pin per
+// vehicle, one `route:` median-delay row per route), with what only an
+// engine that outlives a page can say: the pin sits where the plan puts the
+// vehicle at the header (R-TE13, so R-P2 holds on the wire: a reported
+// position is never shown), the motion carries the plan the client
+// integrates (R-TE2), and the scalars carry the twin's own speed,
+// confidence and standing state (R-TE1) beside the static join.
 
+import { toLonLat } from '../../shared/motion/geo';
+import type { GraphNetwork } from '../../shared/motion/network';
+import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
+import { at } from '../../shared/motion/polyline';
+import { STOP_ZONE_M } from '../../shared/motion/speed';
+import { lastFix, type Track } from '../../shared/motion/track';
+import type { VehicleMotion } from '../../shared/motion/wire';
 import type { FeedPayload, ItemInput } from '../feed/payload';
 import { compactData } from '../feed/payload';
 import type { SourceAvailability } from '../feed/schema';
 import { delayWords, routeLabel, routeShortName, routeType } from '../feed/modules/zet-rt';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
-import type { HistoryFix, VehicleMotion } from '../../shared/motion/wire';
 import { FEED_TICK_MS } from './clock';
-import type { TwinState } from './history';
+import type { TwinState } from './state';
 
-/** What the trip index says about a realtime trip id (task A1's index,
- *  copied into the twin's SQLite by persist.ts). */
+/** What the trip index says about a realtime trip id. */
 export interface TripJoin {
   direction: 0 | 1;
   headsign: string;
@@ -35,6 +38,9 @@ export const SOURCE_STALE_AFTER_MS = 3 * FEED_TICK_MS;
 
 export const SOURCE_KEY = 'zet';
 
+/** Coordinates on the wire keep the feed's own precision (~1.1 m). */
+const COORD_PRECISION = 1e5;
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = sorted.length >> 1;
@@ -45,53 +51,89 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+function round(value: number, precision: number): number {
+  return Math.round(value * precision) / precision;
+}
+
+interface Placed {
+  lon: number;
+  lat: number;
+  motion?: VehicleMotion;
+  held: boolean;
+}
+
+/** The pin's position and the wire form of the plan, at the header. */
+function place(track: Track, net: GraphNetwork | null): Placed {
+  const last = lastFix(track)!;
+  const plan = track.plan;
+  if (!plan) return { lon: last.lon, lat: last.lat, held: false };
+  if (plan.on === 'free') {
+    const [lon, lat] = evalFreePlan(plan.knots, 0);
+    return { lon, lat, motion: { plan: plan.knots }, held: false };
+  }
+  if (!net) return { lon: last.lon, lat: last.lat, held: false };
+  const s = evalPathPlan(plan.knots, 0);
+  // Standing: the plan is flat over the next second and a stop is within its zone.
+  const flat = Math.abs(evalPathPlan(plan.knots, 1) - s) < 0.05;
+  if (plan.on === 'path') {
+    const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, s));
+    const atStop = net.stopsOnPath(plan.pathIdx).some((entry) => Math.abs(entry.s - s) <= STOP_ZONE_M);
+    return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: plan.knots }, held: flat && atStop };
+  }
+  const shape = net.shapes[plan.shapeIdx];
+  const [lon, lat] = toLonLat(at(shape.pts, shape.cum, s));
+  const before = net.nextStop(plan.shapeIdx, s - STOP_ZONE_M - 0.5);
+  const atStop = before !== null && Math.abs(before.s - s) <= STOP_ZONE_M;
+  return { lon, lat, motion: { path: shape.id, plan: plan.knots }, held: flat && atStop };
+}
+
 export function buildPayload(
   state: TwinState,
   joins: ReadonlyMap<string, TripJoin>,
   routes: ZetRoutes,
   nowMs: number,
   validUntilMs: number,
+  net: GraphNetwork | null,
 ): FeedPayload {
   const items: ItemInput[] = [];
   const headerTs = state.headerTs;
 
-  const tracks = Object.values(state.vehicles).filter((t) => t.fixes.length > 0).sort((a, b) => a.vehicleId.localeCompare(b.vehicleId));
+  const tracks = Object.values(state.tracks).filter((t) => t.fixes.length > 0).sort((a, b) => a.id.localeCompare(b.id));
   for (const track of tracks) {
-    const [atSec, lon, lat] = track.fixes[track.fixes.length - 1];
-    const routeId = track.routeId ?? '';
-    const join = track.tripId ? joins.get(track.tripId) : undefined;
-    const next = track.tripId ? state.tripUpdates[track.tripId] : undefined;
-    // History times are relative to the header (R-TE13); before any header
-    // the tick time stands in, the same clock the client aligns to.
-    const origin = headerTs ?? Math.floor(nowMs / 1000);
-    const history: HistoryFix[] = track.fixes.map(([t, x, y]) => [t - origin, x, y]);
-    const motion: VehicleMotion = { history };
+    const last = lastFix(track)!;
+    const routeId = track.routeId;
+    const join = track.tripId !== null ? joins.get(track.tripId) : undefined;
+    const next = track.tripId !== null ? state.tripUpdates[track.tripId] : undefined;
+    const placed = place(track, net);
     items.push({
-      id: `vehicle:${track.vehicleId}`,
+      id: `vehicle:${track.id}`,
       kind: 'vehicle',
       title: routeLabel(routeId, routes),
-      at: iso(atSec * 1000),
-      geo: { type: 'Point', coordinates: [lon, lat] },
+      at: iso(last.atSec * 1000),
+      geo: { type: 'Point', coordinates: [round(placed.lon, COORD_PRECISION), round(placed.lat, COORD_PRECISION)] },
       data: compactData({
         routeId: routeId || undefined,
         tripId: track.tripId ?? undefined,
-        vehicleId: track.vehicleId,
+        vehicleId: track.id,
         routeShortName: routeId ? routeShortName(routeId, routes) : undefined,
         routeType: routeId ? routeType(routeId, routes) : undefined,
         direction: join?.direction,
         headsign: join?.headsign,
         shapeId: join?.shapeId ?? undefined,
-        nextStopId: next?.stopId ?? undefined,
+        nextStopId: next?.stopId ?? track.next?.stopId ?? undefined,
         delaySeconds: next?.delaySec ?? undefined,
+        speed: round(track.speed, 10),
+        confidence: round(track.confidence, 100),
+        held: placed.held,
       }),
-      motion,
+      ...(placed.motion ? { motion: placed.motion } : {}),
     });
   }
 
   // One summary row per route, never per stop (R-22, R-50): a rider asks
   // whether the 6 is late, not what the delay is at stop 311_1.
   const byRoute = new Map<string, { delays: number[]; trips: number }>();
-  for (const [, update] of Object.entries(state.tripUpdates)) {
+  for (const update of Object.values(state.tripUpdates)) {
     if (!update.routeId) continue;
     const bucket = byRoute.get(update.routeId) ?? { delays: [], trips: 0 };
     bucket.delays.push(...update.delays);

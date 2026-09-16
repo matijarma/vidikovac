@@ -2,34 +2,32 @@ import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import { TwinDO, twinStub } from '../../worker/do/twin-do';
+import { metricsStub, zagrebDayHour } from '../../worker/metrics';
 import { FEED_TICK_MS, TICK_CUSHION_MS, TICK_MIN_DELAY_MS, nextTickAt } from '../../worker/twin/clock';
-import { setTwinIndexSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
+import { setTwinIndexSourceForTest, setTwinNetworkSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { recordingKey } from '../../worker/twin/record';
-import { HISTORY_FIXES } from '../../shared/motion/wire';
-import type { TripIndex, TripPattern, TripRecord } from '../../shared/motion/trips';
-import { frame, v } from './frames';
+import { evalPathPlan } from '../../shared/motion/plan';
+import { isFreeMotion, isPathMotion, type PathMotion } from '../../shared/motion/wire';
+import { corridorIndex } from './engine-fixture';
+import { frame, type FrameVehicle } from './frames';
+import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
 
 const testEnv = env as unknown as Env;
 
-// The trip index as shared/motion/trips.ts decodes it (task A1): two
-// patterns the tests join against; any other trip id is unknown.
-function fixtureIndex(): TripIndex {
-  const patterns: TripPattern[] = [
-    { route: '6', direction: 1, shape: '6_12', headsign: 'Črnomerec', stops: ['264_2', '222_2', '197_2', '231_2'], sched: Array.from({ length: 24 }, () => [91, 157, 72]), dwell: [0, 0, 0, 0], trips: 2 },
-    { route: '33', direction: 0, shape: '33_28', headsign: 'Savišće', stops: ['177_4', '175_4', '128_4', '266_4'], sched: Array.from({ length: 24 }, () => [108, 105, 2382]), dwell: [0, 0, 0, 0], trips: 1 },
-  ];
-  const tripsById = new Map<string, TripRecord>([
-    ['t33', { pattern: 1, block: '3302', start: 89154, service: '0_23' }],
-    ['t6', { pattern: 0, block: '601', start: 14400, service: '0_20' }],
-    ['t6b', { pattern: 0, block: '601', start: 15000, service: '0_20' }],
-  ]);
-  return {
-    feedVersion: '000395',
-    patterns,
-    tripsById,
-    blocks: new Map([['601', ['t6', 't6b']], ['3302', ['t33']]]),
-    schedSeconds: (patternIdx, fromStopIdx, hourBand) => patterns[patternIdx].sched[hourBand][fromStopIdx],
-  };
+// The corridor (test/motion/synthetic-network.ts) as the twin's world: route
+// '1' east along the trunk (path 1_0), route '2' north (path 2_0), bus '109'
+// on a polyline south of the trunk. Trips t1a/t1b run 1_0, t2 runs 2_0.
+const NET = syntheticNetwork(corridorSpec());
+const INDEX = corridorIndex(NET, [
+  { tripId: 't1a', pathId: '1_0' },
+  { tripId: 't1b', pathId: '1_0' },
+  { tripId: 't2', pathId: '2_0' },
+]);
+
+/** A tram on the trunk at metre `x`, reported `at`. */
+function tram(vehicleId: string, tripId: string, routeId: string, x: number, at: number): FrameVehicle {
+  const { lon, lat } = lonLatOf({ x, y: 0 });
+  return { vehicleId, tripId, routeId, lon, lat, at };
 }
 
 // A day ahead of the real clock: the alarms the twin arms around T0 are then
@@ -66,97 +64,111 @@ async function pinClock(stub: DurableObjectStub<TwinDO>, ms: number): Promise<vo
 }
 
 const armedAlarm = (stub: DurableObjectStub<TwinDO>) => runInDurableObject(stub, (_i: TwinDO, state) => state.storage.getAlarm());
-const historyOf = (payload: { items: { id: string; motion?: unknown }[] }, id: string) => payload.items.find((item) => item.id === id)!.motion;
+const pin = (payload: { items: { id: string }[] }, id: string) => payload.items.find((item) => item.id === `vehicle:${id}`) as { id: string; geo?: { coordinates: number[] }; data?: Record<string, unknown>; motion?: unknown } | undefined;
 
 beforeEach(() => {
-  setTwinIndexSourceForTest(async () => fixtureIndex());
+  setTwinIndexSourceForTest(async () => INDEX);
+  setTwinNetworkSourceForTest(async () => NET);
 });
 
 afterEach(() => {
   setTwinUpstreamForTest(null);
   setTwinIndexSourceForTest(null);
+  setTwinNetworkSourceForTest(null);
 });
 
 describe('TwinDO', () => {
-  it('ticks inline on the first read, publishes joined pins with a one-fix history, arms the alarm and records the frame', async () => {
-    const bytes = frame(T0, [v('a', T0 - 5, 15.97, 45.81, 't6', '6'), v('b', T0 - 2, 16.03709, 45.79139, 't33', '33')], [
-      { tripId: 't6', routeId: '6', stops: [{ seq: 4, stopId: '231_2', delay: 45 }] },
-    ]);
+  it('ticks inline on the first read: a path plan per tram with the pin at the plan, the join and the twin scalars, no history, the alarm armed, the frame recorded', async () => {
+    const bytes = frame(T0, [tram('a', 't1a', '1', 400, T0 - 5), tram('c', 't2', '2', 900, T0 - 2)]);
     const { upstream, seen } = scriptedUpstream([bytes]);
     setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
     await pinClock(stub, T0 * 1000 + 2_000);
 
     const payload = await stub.publish();
-    expect(seen).toEqual([null]); // no ETag to send on the first fetch
+    expect(seen).toEqual([null]);
     expect(payload.sourceUpdatedAt).toBe(new Date(T0 * 1000).toISOString());
     expect(payload.validUntil).toBe(new Date(T0 * 1000 + FEED_TICK_MS + TICK_CUSHION_MS).toISOString());
     expect(payload.sources?.zet.status).toBe('live');
-    const a = payload.items.find((item) => item.id === 'vehicle:a')!;
-    expect(a.data).toMatchObject({ routeId: '6', tripId: 't6', direction: 1, headsign: 'Črnomerec', shapeId: '6_12', nextStopId: '231_2', delaySeconds: 45 });
-    expect(a.motion).toEqual({ history: [[-5, 15.97, 45.81]] });
-    const b = payload.items.find((item) => item.id === 'vehicle:b')!;
-    expect(b.data).toMatchObject({ direction: 0, headsign: 'Savišće', shapeId: '33_28' });
-    expect(b.data).not.toHaveProperty('nextStopId');
+    const a = pin(payload, 'a')!;
+    expect(a.data).toMatchObject({ routeId: '1', tripId: 't1a', direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0' });
+    expect(typeof a.data?.speed).toBe('number');
+    expect(typeof a.data?.confidence).toBe('number');
+    expect(typeof a.data?.held).toBe('boolean');
+    expect(a.motion && isPathMotion(a.motion as PathMotion)).toBe(true);
+    const motion = a.motion as PathMotion;
+    expect(motion.path).toBe('1_0');
+    expect(motion).not.toHaveProperty('history');
+    const [lon, lat] = (() => {
+      const pathIdx = NET.paths.findIndex((p) => p.id === '1_0');
+      const p = NET.toPathPoint(pathIdx, evalPathPlan(motion.plan, 0));
+      return [lonLatOf(p).lon, lonLatOf(p).lat];
+    })();
+    expect(a.geo!.coordinates[0]).toBeCloseTo(lon, 4);
+    expect(a.geo!.coordinates[1]).toBeCloseTo(lat, 4);
+    expect((pin(payload, 'c')!.motion as PathMotion).path).toBe('2_0');
     expect(await armedAlarm(stub)).toBe(nextTickAt(T0, T0 * 1000 + 2_000));
     const stored = await testEnv.RECORDINGS!.get(recordingKey(T0));
     expect(Array.from(new Uint8Array(await stored!.arrayBuffer()))).toEqual(Array.from(bytes));
+    const report = await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest());
+    expect(report).toMatchObject({ outcome: 'ok', indexLoaded: true, networkLoaded: true, cold: true });
   });
 
-  it('grows the history across ticks, sends the ETag it was given, and never fetches twice within the floor', async () => {
-    const { upstream, seen, calls } = scriptedUpstream([
-      frame(T0, [v('a', T0 - 5, 15.97, 45.81, 't6', '6')]),
-      frame(T0 + 10, [v('a', T0 + 4, 15.971, 45.811, 't6', '6')]),
-      frame(T0 + 20, [v('a', T0 + 15, 15.972, 45.812, 't6', '6')]),
-    ]);
+  it('carries the plan forward across ticks, sends the ETag it was given, refuses a second fetch inside the floor, and grades its own plans into one batched histogram write', async () => {
+    const script = [0, 1, 2, 3].map((k) => frame(T0 + 10 * k, [tram('a', 't1a', '1', 400 + 100 * k, T0 + 10 * k - 3)]));
+    const { upstream, seen, calls } = scriptedUpstream(script);
     setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
+    const day = zagrebDayHour(new Date()).day;
+    const before = (await metricsStub(testEnv).query(day)).filter((r) => r.event === 'twin_hindsight').reduce((sum, r) => sum + r.count, 0);
     await pinClock(stub, T0 * 1000 + 2_000);
     await stub.publish();
-    await pinClock(stub, (T0 + 10) * 1000 + 2_000);
-    expect(await stub.tick()).toMatchObject({ outcome: 'ok', headerTs: T0 + 10, newFixes: 1, cold: false });
-    await pinClock(stub, (T0 + 20) * 1000 + 2_000);
-    await stub.tick();
-    expect(historyOf(await stub.publish(), 'vehicle:a')).toEqual({ history: [[-25, 15.97, 45.81], [-16, 15.971, 45.811], [-5, 15.972, 45.812]] });
-    expect(seen).toEqual([null, 'W/"frame-0"', 'W/"frame-1"']);
+    let graded = 0;
+    for (let k = 1; k <= 3; k++) {
+      await pinClock(stub, (T0 + 10 * k) * 1000 + 2_000);
+      const report = await stub.tick();
+      expect(report).toMatchObject({ outcome: 'ok', headerTs: T0 + 10 * k, newFixes: 1, cold: false });
+      graded += report.hindsightSamples;
+    }
+    expect(seen).toEqual([null, 'W/"frame-0"', 'W/"frame-1"', 'W/"frame-2"']);
+    expect(graded).toBeGreaterThan(0);
+    const payload = await stub.publish();
+    const a = pin(payload, 'a')!;
+    expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(600); // the plan has followed the tram east
+    // The histogram reached MetricsDO as counted cells, not one write per vehicle.
+    const after = (await metricsStub(testEnv).query(day)).filter((r) => r.event === 'twin_hindsight');
+    expect(after.reduce((sum, r) => sum + r.count, 0) - before).toBe(graded);
+    expect(after.every((r) => ['10s', '30s', '60s'].includes(r.dim1) && ['lt25', 'lt50', 'lt100', 'lt200', 'ge200'].includes(r.dim2))).toBe(true);
     // A retried alarm inside the floor is a no-op, not a second fetch.
-    await pinClock(stub, (T0 + 20) * 1000 + 2_000 + TICK_MIN_DELAY_MS - 1);
+    await pinClock(stub, (T0 + 30) * 1000 + 2_000 + TICK_MIN_DELAY_MS - 1);
     expect(await stub.tick()).toMatchObject({ outcome: 'unchanged' });
-    expect(calls()).toBe(3);
+    expect(calls()).toBe(4);
   });
 
-  it('treats a 304 and a repeated header as no new evidence: validUntil moves, nothing is recorded, the payload stands', async () => {
-    const first = frame(T0, [v('a', T0 - 5)]);
-    const { upstream } = scriptedUpstream([first, 304, first]);
+  it('treats a 304 and a repeated header as no new evidence but still re-plans: validUntil moves, the plan stands, nothing new is recorded; an upstream error keeps the last payload', async () => {
+    const first = frame(T0, [tram('a', 't1a', '1', 400, T0 - 5)]);
+    const { upstream } = scriptedUpstream([first, 304, first, new Error('upstream 503 Service Unavailable')]);
     setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
     await pinClock(stub, T0 * 1000 + 2_000);
     await stub.publish();
-    const before = (await testEnv.RECORDINGS!.list({ prefix: 'zet-rt/' })).objects.length;
+    const recordedBefore = (await testEnv.RECORDINGS!.list({ prefix: 'zet-rt/' })).objects.length;
     await pinClock(stub, T0 * 1000 + 12_000);
     expect(await stub.tick()).toMatchObject({ outcome: 'unchanged', headerTs: T0, newFixes: 0 });
     await pinClock(stub, T0 * 1000 + 22_000);
     expect(await stub.tick()).toMatchObject({ outcome: 'unchanged', headerTs: T0, newFixes: 0 });
-    const payload = await stub.publish();
-    // Two ticks without a new header is not yet a stall: the next try comes at the floor.
+    let payload = await stub.publish();
     expect(payload.validUntil).toBe(new Date(nextTickAt(T0, T0 * 1000 + 22_000)).toISOString());
-    expect(historyOf(payload, 'vehicle:a')).toEqual({ history: [[-5, 15.97, 45.81]] });
-    expect((await testEnv.RECORDINGS!.list({ prefix: 'zet-rt/' })).objects.length).toBe(before);
-  });
-
-  it('keeps the last payload and reports an error when the upstream fails', async () => {
-    const { upstream } = scriptedUpstream([frame(T0, [v('a', T0 - 5)]), new Error('upstream 503 Service Unavailable')]);
-    setTwinUpstreamForTest(upstream);
-    const stub = freshTwin();
-    await pinClock(stub, T0 * 1000 + 2_000);
-    await stub.publish();
-    await pinClock(stub, T0 * 1000 + 12_000);
+    expect((pin(payload, 'a')!.motion as PathMotion).path).toBe('1_0');
+    expect((await testEnv.RECORDINGS!.list({ prefix: 'zet-rt/' })).objects.length).toBe(recordedBefore);
+    await pinClock(stub, T0 * 1000 + 32_000);
     expect(await stub.tick()).toMatchObject({ outcome: 'error' });
-    expect((await stub.publish()).items.some((item) => item.id === 'vehicle:a')).toBe(true);
+    payload = await stub.publish();
+    expect(pin(payload, 'a')).toBeDefined();
   });
 
   it('the alarm ticks and re-arms one tick plus the cushion after the new header; ensureRunning arms once and leaves an armed alarm alone', async () => {
-    const { upstream } = scriptedUpstream([frame(T0, [v('a', T0 - 5)]), frame(T0 + 10, [v('a', T0 + 4, 15.971, 45.811)])]);
+    const { upstream } = scriptedUpstream([frame(T0, [tram('a', 't1a', '1', 400, T0 - 5)]), frame(T0 + 10, [tram('a', 't1a', '1', 500, T0 + 4)])]);
     setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
     await pinClock(stub, T0 * 1000 + 2_000);
@@ -165,7 +177,7 @@ describe('TwinDO', () => {
     await pinClock(stub, alarmNow);
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect(await armedAlarm(stub)).toBe(nextTickAt(T0 + 10, alarmNow));
-    expect(historyOf(await stub.publish(), 'vehicle:a')).toEqual({ history: [[-15, 15.97, 45.81], [-6, 15.971, 45.811]] });
+    expect((await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest()))?.headerTs).toBe(T0 + 10);
 
     const idle = freshTwin();
     await pinClock(idle, T0 * 1000);
@@ -178,61 +190,63 @@ describe('TwinDO', () => {
     expect(await armedAlarm(idle)).toBe(first);
   });
 
-  it('restores the fleet from its last state row after losing its memory (eviction between ticks), and the next tick says cold', async () => {
-    const { upstream } = scriptedUpstream([frame(T0, [v('a', T0 - 5, 15.97, 45.81, 't6', '6')]), frame(T0 + 10, [v('a', T0 + 4, 15.971, 45.811, 't6', '6')])]);
+  it('restores the fleet from its last state row after losing its memory, rebuilding the plans from the persisted tracks; the next tick says cold', async () => {
+    const { upstream } = scriptedUpstream([frame(T0, [tram('a', 't1a', '1', 400, T0 - 5)]), frame(T0 + 10, [tram('a', 't1a', '1', 500, T0 + 4)])]);
     setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
     await pinClock(stub, T0 * 1000 + 2_000);
     await stub.publish();
     await pinClock(stub, (T0 + 10) * 1000 + 2_000);
-    await stub.tick();
+    const live = await stub.tick();
+    expect(live.stateBytes).toBeGreaterThan(0);
     await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
     const restored = await stub.publish();
-    expect(historyOf(restored, 'vehicle:a')).toEqual({ history: [[-15, 15.97, 45.81], [-6, 15.971, 45.811]] });
-    expect(restored.items.find((item) => item.id === 'vehicle:a')!.data).toMatchObject({ direction: 1, headsign: 'Črnomerec' });
+    const a = pin(restored, 'a')!;
+    expect((a.motion as PathMotion).path).toBe('1_0');
+    expect(a.data).toMatchObject({ direction: 0, headsign: 'Kraj 1_0' });
+    expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(450);
     await pinClock(stub, (T0 + 20) * 1000 + 2_000);
     expect(await stub.tick()).toMatchObject({ cold: true });
   });
 
-  it('caps every ring at HISTORY_FIXES and evicts a vehicle silent for five minutes', async () => {
-    const frames: Uint8Array[] = [];
-    for (let i = 0; i < HISTORY_FIXES + 2; i++) {
-      frames.push(frame(T0 + 10 * i, [v('a', T0 + 10 * i - 2, 15.97 + i * 0.001, 45.81), ...(i === 0 ? [v('b', T0 - 2, 15.99, 45.82)] : [])]));
-    }
-    frames.push(frame(T0 + 400, [v('a', T0 + 398, 15.999, 45.81)]));
-    setTwinUpstreamForTest(scriptedUpstream(frames).upstream);
+  it('evicts a vehicle silent for five minutes', async () => {
+    const { upstream } = scriptedUpstream([
+      frame(T0, [tram('a', 't1a', '1', 400, T0 - 5), tram('b', 't1b', '1', 100, T0 - 5)]),
+      frame(T0 + 320, [tram('a', 't1a', '1', 1400, T0 + 318)]),
+    ]);
+    setTwinUpstreamForTest(upstream);
     const stub = freshTwin();
-    for (let i = 0; i < HISTORY_FIXES + 2; i++) {
-      await pinClock(stub, (T0 + 10 * i) * 1000 + 2_000);
-      await stub.tick();
-    }
+    await pinClock(stub, T0 * 1000 + 2_000);
     let payload = await stub.publish();
-    expect((historyOf(payload, 'vehicle:a') as { history: unknown[] }).history).toHaveLength(HISTORY_FIXES);
-    expect(payload.items.some((item) => item.id === 'vehicle:b')).toBe(true);
-    await pinClock(stub, (T0 + 400) * 1000 + 2_000);
+    expect(pin(payload, 'b')).toBeDefined();
+    await pinClock(stub, (T0 + 320) * 1000 + 2_000);
     expect((await stub.tick()).evicted).toBe(1);
     payload = await stub.publish();
-    expect(payload.items.some((item) => item.id === 'vehicle:b')).toBe(false);
+    expect(pin(payload, 'b')).toBeUndefined();
   });
 
-  it('publishes no join for a trip the index does not know (flagging a mostly-unknown frame), and still publishes when the index cannot be loaded', async () => {
-    setTwinUpstreamForTest(
-      scriptedUpstream([frame(T0, [v('a', T0 - 5, 15.97, 45.81, 'new-static-trip-1', '6'), v('b', T0 - 5, 15.98, 45.82, 'new-static-trip-2', '6'), v('c', T0 - 5, 15.99, 45.83, 't6', '6')])]).upstream,
-    );
+  it('gives an unknown trip on a known route a path from the route edges (R-TE22) and flags a mostly-unknown frame; without any network every vehicle rides a free plan', async () => {
+    setTwinUpstreamForTest(scriptedUpstream([frame(T0, [tram('a', 'new-1', '1', 400, T0 - 5), tram('b', 'new-2', '1', 800, T0 - 5), tram('c', 't1a', '1', 1200, T0 - 5)])]).upstream);
     const stub = freshTwin();
     await pinClock(stub, T0 * 1000 + 2_000);
     const payload = await stub.publish();
     expect(await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({ outcome: 'stale_index', unknownTrips: 2, vehicles: 3 });
-    expect(payload.items.find((item) => item.id === 'vehicle:a')!.data).not.toHaveProperty('headsign');
-    expect(payload.items.find((item) => item.id === 'vehicle:c')!.data).toMatchObject({ direction: 1 });
+    const a = pin(payload, 'a')!;
+    expect(a.data).not.toHaveProperty('headsign');
+    expect(a.motion && isPathMotion(a.motion as PathMotion)).toBe(true); // the route's own edges still carry it
+    expect(pin(payload, 'c')!.data).toMatchObject({ direction: 0, headsign: 'Kraj 1_0' });
 
-    setTwinIndexSourceForTest(async () => null);
-    setTwinUpstreamForTest(scriptedUpstream([frame(T0, [v('a', T0 - 5, 15.97, 45.81, 't6', '6')])]).upstream);
+    setTwinNetworkSourceForTest(async () => null);
+    setTwinUpstreamForTest(scriptedUpstream([frame(T0, [tram('a', 't1a', '1', 400, T0 - 5)]), frame(T0 + 10, [tram('a', 't1a', '1', 500, T0 + 5)])]).upstream);
     const blind = freshTwin();
     await pinClock(blind, T0 * 1000 + 2_000);
-    const noIndex = await blind.publish();
-    expect(noIndex.items.find((item) => item.id === 'vehicle:a')!.data).toMatchObject({ routeId: '6', tripId: 't6' });
-    expect(noIndex.items.find((item) => item.id === 'vehicle:a')!.data).not.toHaveProperty('headsign');
-    expect(await runInDurableObject(blind, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({ outcome: 'ok', indexLoaded: false });
+    await blind.publish();
+    await pinClock(blind, (T0 + 10) * 1000 + 2_000);
+    await blind.tick();
+    const noGeometry = await blind.publish();
+    const free = pin(noGeometry, 'a')!;
+    expect(free.motion && isFreeMotion(free.motion as never)).toBe(true);
+    expect(free.data).toMatchObject({ headsign: 'Kraj 1_0' }); // the join needs no geometry
+    expect(await runInDurableObject(blind, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({ outcome: 'ok', networkLoaded: false, indexLoaded: true });
   });
 });

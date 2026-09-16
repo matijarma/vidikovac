@@ -44,7 +44,15 @@ export interface MetricsEntry {
   event: string;
   dim1?: string;
   dim2?: string;
+  /** How many of this event the entry stands for; 1 when absent. A producer
+   *  that counts many observations per tick (the twin's hindsight histogram)
+   *  writes one entry per cell instead of one RPC per observation. */
+  count?: number;
 }
+
+/** A single entry never adds more than this: a runaway producer must not
+ *  turn one bad tick into a year of counts. */
+const COUNT_MAX = 1_000_000;
 
 /** Longest event/dimension string ever stored; a defensive clamp, not a real limit. */
 const STRING_MAX_CHARS = 64;
@@ -92,14 +100,16 @@ export class MetricsDO extends DurableObject<Env> {
     const { day, hour } = zagrebDayHour(new Date());
     for (const entry of entries) {
       if (!isMetricEvent(entry.event)) continue;
+      const count = Math.max(1, Math.min(COUNT_MAX, Math.floor(entry.count ?? 1)));
       this.ctx.storage.sql.exec(
-        `INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, ?, ?, ?, ?, 1)
-         ON CONFLICT (day, hour, event, dim1, dim2) DO UPDATE SET count = count + 1`,
+        `INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (day, hour, event, dim1, dim2) DO UPDATE SET count = count + excluded.count`,
         day,
         hour,
         entry.event,
         (entry.dim1 ?? '').slice(0, STRING_MAX_CHARS),
         (entry.dim2 ?? '').slice(0, STRING_MAX_CHARS),
+        count,
       );
     }
   }
