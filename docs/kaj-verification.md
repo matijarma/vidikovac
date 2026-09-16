@@ -515,9 +515,8 @@ Dopuna 16. 9. 2026., drugi prolaz, nakon što je područje Vijesti izašlo iz pr
 (`b8a6a19`) i karta postala cijelo polje javnog zaslona (`e60bbfc` do `c0c9867`): prijedlog,
 Obrazac 2.2, plan provedbe i pitanja Povjerenstva kažu šest područja i devet modula izvora;
 pločica vijesti nestala je iz trake Sada, imenika Još, prizora Grad i izvatka za zaslon prije
-skeniranja, a i iz naslovne trake "Sada u Zagrebu", njezine skripte i snimke; redak HRT-a u
-tablici izvora pretvoren je iz "u prototipu" u program HRT-a i radija kao plan M5 (pismo HRT-u
-u M2 traži program te audio i video), pa je označenih iznimaka pet. Replika javnog zaslona
+skeniranja, a i iz naslovne trake "Sada u Zagrebu", njezine skripte i snimke; redak HRT-a
+nestao je iz tablice izvora, pa je označenih iznimaka pet. Replika javnog zaslona
 `m-kiosk.html` nacrtana je iznova prema novoj kompoziciji (karta kroz sva tri prizora, oznaka
 prizora u kutu, tračnica s trakom radova i četiri pločice linija uz donji rub karte; shema
 tramvaja u omjeru 3 : 2, čitač artefakta `zet-network.json` prihvaća i inačicu 2), replika
@@ -676,3 +675,13 @@ na 20.
 
 **Rezultat (proizvodnja): popunjava kontrolor nakon spajanja na `main`** -- živi `kiosk.css` nosi
 `.k-say`, posluženi stil nema sloj `pois`, teaser odgovara pinovima dalje od 1,4 km.
+Treći prolaz istoga dana, odluka vlasnika: HRT nikada neće biti izvor ove aplikacije, pa je
+izbrisan iz svakog živog dokumenta, a s njim i svaki preostali trag dnevnih vijesti. Otpalo je:
+redak HRT-a u tablici izvora poglavlja 5 i u slici `f-izvori` (22 retka umjesto 23), program
+HRT-a i radija kao isporuka faze M5 u §1.3, Obrascu 2.2 (2.2.11, dvaput) i popisu izvora,
+pismo HRT-u iz faze M2 u prijedlogu, planu provedbe i Obrascu 2.2, ime HRT-a iz naslova faze
+M5 u planu, Obrascu 2.2 i slici `f-plan`, redak shit-source-im-replacing-with-this-string / ZGportal iz žute tablice registra
+izvora i rečenica da se HINA nikada ne preuzima (bespredmetna kad se vijesti ne preuzimaju
+uopće), te dva zastarjela komentara u kodu koja su imenovala uklonjeno područje Vijesti
+(`producers/index.ts`, `kiosk.css`). Ovo nije aplikacija za vijesti; hitna sigurnosna
+informacija dolazi iz DHMZ-a, EMSC-a i Grada, nikada iz novinskog izvora.
