@@ -831,23 +831,6 @@
       "today": "danas",
       "tomorrow": "sutra"
     },
-    "scenes": {
-      "tonight": "Večeras",
-      "position": "prizor {index} od {count}",
-      "worksKvart": "Radovi u kvartu",
-      "worksCity": "Radovi u gradu",
-      "tonightEmpty": "Večeras nema najavljenih događanja u kvartu.",
-      "live": "prijenos uživo",
-      "moreEvents_one": "još {count} događanje",
-      "moreEvents_few": "još {count} događanja",
-      "moreEvents_other": "još {count} događanja"
-    },
-    "tiles": {
-      "vehicles": "Vozila u pokretu",
-      "closures": "Zatvaranja",
-      "nearest": "najbliže {street} · {distance}",
-      "radius": "u krugu {radius}"
-    },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",
       "warningsStale": "Upozorenja DHMZ-a: zastarjelo, nepotvrđeno",
@@ -865,8 +848,7 @@
         "urgent": "upozorenje",
         "calm": "mirno",
         "unknown": "nepotvrđeno"
-      },
-      "nextScene": "sljedeći prizor za {seconds} s"
+      }
     },
     "basics": {
       "title": "Osnovno, bez skeniranja",

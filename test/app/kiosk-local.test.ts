@@ -17,7 +17,7 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, metresPerPixel, PAIRED_ZOOM, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, metresPerPixel, PAIRED_ZOOM, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -649,6 +649,8 @@ describe('the one map, through the additive adapter', () => {
     requestKioskMap(maps, { ...base, snapshots: { emsc } }, adapter);
     const drawn = update.mock.calls.at(-1)![0] as { id: string }[];
     expect(drawn.filter((p) => p.id.startsWith('quake:')).map((p) => p.id).sort()).toEqual(['quake:big', 'quake:edge']);
+    // The rule lives once (R-KP9, R-KP23): what the map lights is exactly what local.ts's kioskQuakes selects, in its order.
+    expect(kioskQuakePoints(emsc, NOW, 'hr').map((p) => p.id)).toEqual(kioskQuakes(emsc, NOW).map((quake) => `quake:${quake.id}`));
     expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
   });
 });

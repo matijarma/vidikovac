@@ -20,11 +20,14 @@ import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, REFRESH_MS,
 import { FIELD_DESIGN_WIDTH, SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS } from '../../app/src/kiosk/layout';
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS } from '../../app/src/kiosk/mapview';
 import type { SayInput, Slot, Statement } from '../../app/src/kiosk/say';
+import type * as SayModule from '../../app/src/kiosk/say';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 
 const say = vi.hoisted(() => ({ rank: vi.fn(), markup: vi.fn() }));
-vi.mock('../../app/src/kiosk/say', () => ({ rankStatements: say.rank, sayMarkup: say.markup }));
+// The ranker and the markup are faked at their contract; everything else say.ts exports (SAY_KINDS, which layout.ts sizes the handheld's "all" from) is the real thing.
+vi.mock('../../app/src/kiosk/say', async (importOriginal) => ({ ...(await importOriginal<typeof SayModule>()), rankStatements: say.rank, sayMarkup: say.markup }));
+const realSay = await vi.importActual<typeof SayModule>('../../app/src/kiosk/say');
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
@@ -72,9 +75,9 @@ function sayHtml(slots: readonly Slot[]): string {
 const lastInput = (): SayInput => say.rank.mock.calls.at(-1)![0] as SayInput;
 
 beforeEach(() => {
-  // The R-KP15 stub's own answers: nothing to say, no markup.
+  // By default the ranker has nothing to say and the markup is the real one, so a loading column shows say.ts's own skeleton (contract 5) and a loaded one nothing.
   say.rank.mockReset().mockImplementation(() => []);
-  say.markup.mockReset().mockImplementation(() => '');
+  say.markup.mockReset().mockImplementation(realSay.sayMarkup);
 });
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
@@ -589,7 +592,7 @@ describe('alerts, polling, the first tap and disposal', () => {
   it('a cold screen waits for readings: the column shows one skeleton statement while zet-rt has not answered, and no weather', async () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
-    // The composition's own skeleton stands until the markup says something (say.ts renders its own once P2 lands; the stub renders nothing).
+    // say.ts's skeleton (contract 5) stands until the ranker has something to say; the composition adds no fallback of its own (R-KP23).
     const skeleton = q(k.root, '[data-testid=kiosk-says] article.k-say[data-skeleton]')!;
     expect(skeleton).not.toBeNull();
     expect(skeleton.getAttribute('aria-hidden')).toBe('true');
@@ -1092,8 +1095,9 @@ describe('the field, the column and the one map', () => {
     // The badge caps are what the label row holds beside the kicker with its "+N" tail (kiosk/layout.ts): two rows at wide, one at compact.
     expect(SAY_BADGE_CAP).toEqual({ wide: 7, compact: 4, portrait: 8, handheld: 6 });
     expect(SAY_VALUE_CHARS).toEqual({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
-    // A phone shows every candidate: eight is every kind say.ts knows.
-    expect(SAY_SLOTS.handheld).toBe(8);
+    // A phone shows every candidate: "all" is every kind say.ts knows, read from say.ts itself so it cannot drift.
+    expect(SAY_SLOTS.handheld).toBe(realSay.SAY_KINDS.length);
+    expect(realSay.SAY_KINDS).toHaveLength(8);
   });
 
   it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design width before layout', async () => {

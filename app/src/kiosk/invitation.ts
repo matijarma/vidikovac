@@ -73,12 +73,6 @@ function columnMarkup(s: KioskStrings, codeBase?: string): string {
     </article>`;
 }
 
-/** A loading slot in the contract's shape (contract 4): what the column shows
- *  while zet-rt has not answered and say.ts has nothing to write yet, so a cold
- *  screen is never a blank column. Once say.ts renders its own skeleton this
- *  never shows. */
-const SKELETON = '<article class="k-say" data-skeleton aria-hidden="true"><span class="sk k-say-sk-label"></span><span class="sk k-say-sk-value"></span><span class="sk k-say-sk-context"></span></article>';
-
 /** A value is at most this many lines of the main tier (R-KP5); a longer one is shortened at a word by measurement, never ellipsised by CSS. */
 export const VALUE_LINES = 2;
 
@@ -148,9 +142,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
       slots: SAY_SLOTS[model.composition], badgeCap: SAY_BADGE_CAP[model.composition], valueChars: SAY_VALUE_CHARS[model.composition],
     }, previous);
-    // Loading is zet-rt not having answered at all; a down or stale source is an answer and say.ts words it.
+    // Loading is zet-rt not having answered at all; a down or stale source is an answer and say.ts words it. A loading column with nothing ranked yet is say.ts's own skeleton (contract 5).
     const loading = byModule(model.modules)['zet-rt'] === undefined;
-    const html = sayMarkup(previous, { strings: s, locale, loading }) || (loading ? SKELETON : '');
+    const html = sayMarkup(previous, { strings: s, locale, loading });
     if (html === lastSays) return;
     lastSays = html;
     const next = document.createElement('div');

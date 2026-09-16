@@ -34,7 +34,7 @@ import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '.
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
-import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup, type RotationClock } from './kiosk/frame';
+import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
@@ -59,8 +59,6 @@ export const PROGRESS_STEPS = 10;
 export const CODE_SWAP_MS = 180;
 /** The MapLibre layer whose placed names the e2e counts (contract 3): the prozor profile keeps at most eight major street names in the field. */
 export const MAJOR_LABELS_LAYER = 'roads_labels_major';
-/** Nothing rotates any more (R-KP11): the strip's countdown item is told so until wave B removes it from frame.ts. */
-const NO_ROTATION: RotationClock = { rotating: false, lastRotateAt: 0, period: 0 };
 
 export interface KioskDeps {
   i18n: I18n;
@@ -338,7 +336,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // A session response may still confirm a source while the preview request
     // fails (and vice versa). All visible safety copy must use the same choice.
     const noBasics = phase === 'paired' || phase === 'setup';
-    const built = frameStrip(currentSafetyModules(), stop, i18n, s, now(), NO_ROTATION);
+    const built = frameStrip(currentSafetyModules(), stop, i18n, s, now());
     strip.innerHTML = stripMarkup(built, s, { noBasics });
   }
 

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { rankStatements, sayMarkup, shorten, type SayInput, type Slot } from '../../app/src/kiosk/say';
+import { rankStatements, SAY_KINDS, sayMarkup, shorten, type SayInput, type Slot } from '../../app/src/kiosk/say';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 
 const NOW = Date.parse('2026-09-11T12:00:00Z'); // 14:00 in Zagreb
@@ -109,6 +109,17 @@ describe('rankStatements: 14:00, the full fixture', () => {
     expect(statementOf(slots, 'zet')!.value).toBe('Obustava prometa za liniju 14');
     expect(statementOf(slots, 'works')!.context).toContain('Grad Zagreb');
     expect(statementOf(slots, 'kvart')!.value).toBe('Novi parkić u Dubravi');
+  });
+});
+
+describe('SAY_KINDS: the handheld\u2019s "all" is every kind a candidate can produce, once each', () => {
+  it('names each of the eight kinds exactly once, and every statement the two fixtures produce is one of them', () => {
+    expect(new Set(SAY_KINDS).size).toBe(SAY_KINDS.length);
+    const produced = new Set([
+      ...rankStatements(input({ slots: SAY_KINDS.length }), []).map((s) => s.statement.say),
+      ...rankStatements(input({ now: EVENING, lastRun: LAST_RUN, slots: SAY_KINDS.length }), []).map((s) => s.statement.say),
+    ]);
+    expect([...produced].sort()).toEqual([...SAY_KINDS].sort());
   });
 });
 

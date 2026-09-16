@@ -229,7 +229,7 @@ describe('the safety strip: the verdict pill, no countdown, no sun line', () => 
     expect(BARE).not.toContain('k-strip--nosun');
     expect(BARE).not.toContain('k-strip--nosub');
   });
-  it('has no countdown rule any more (R-KP11): the element frame.ts still writes is hidden by its own attribute until wave B removes it', () => {
+  it('has no countdown rule (R-KP11, R-KP23): frame.ts writes no countdown element either; hidden stays the one universal off switch', () => {
     expect(BARE).not.toContain('.k-strip-next');
     expect(BARE).not.toContain('k-strip--nonext');
     expect(BARE).toContain('.kiosk [hidden] { display: none !important; }');

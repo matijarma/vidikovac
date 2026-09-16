@@ -106,36 +106,6 @@ export interface KioskStrings {
     today: string;
     tomorrow: string;
   };
-  /** @deprecated wave B: scenes.ts's own vocabulary. P2 leaves it in place
-   *  (contract 7 -- additions in wave A, removals in wave B) so this
-   *  worktree and P3's, which deletes scenes.ts, both typecheck; the column
-   *  (say.ts, above) is what a statement now reads. The scene field
-   *  (scenes.ts): the Večeras title (Promet and Grad are the domain names,
-   *  layers.*), the visually hidden position sentence, the works band's two
-   *  scopes (D18), the empty evening, the live-stream word and the rows
-   *  beyond the cap. */
-  scenes: {
-    tonight: string;
-    /** "prizor {index} od {count}", the reader's copy of the dots. */
-    position: string;
-    worksKvart: string;
-    worksCity: string;
-    tonightEmpty: string;
-    live: string;
-    moreEvents: PluralForms;
-  };
-  /** @deprecated wave B: frame.ts's valueTiles reads this; say.ts's transit
-   *  and closure statements read say.* and paired.* instead (contract 7).
-   *  The right column's two value tiles (frame.ts's valueTiles): vehicles on
-   *  the network, closures within the 1.5 km nearby radius. */
-  tiles: {
-    vehicles: string;
-    closures: string;
-    /** "najbliže {street} · {distance}": the nearest closure, with a distance in hand. */
-    nearest: string;
-    /** "u krugu {radius}": no closure within the nearby radius. */
-    radius: string;
-  };
   safety: {
     label: string;
     /** The strip's cell: the shared sentence without its full stop. */
@@ -159,11 +129,6 @@ export interface KioskStrings {
     openBasics: string;
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
-    /** @deprecated wave B: the rotation the strip counted down to is gone
-     *  (R-KP11: the field is one fixed view, no chapters). "sljedeći prizor
-     *  za {seconds} s": the strip's countdown to the next scene, hidden when
-     *  the field is not rotating. */
-    nextScene: string;
   };
   basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
   session: {
@@ -325,13 +290,8 @@ function build(code: SupportedLocale): KioskStrings {
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
     },
-    scenes: {
-      ...group('scenes', ['tonight', 'position', 'worksKvart', 'worksCity', 'tonightEmpty', 'live']),
-      moreEvents: forms('scenes', 'moreEvents'),
-    },
-    tiles: group('tiles', ['vehicles', 'closures', 'nearest', 'radius']),
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics', 'nextScene']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),

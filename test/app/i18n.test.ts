@@ -16,8 +16,10 @@ const PLURAL = ['_zero', '_one', '_two', '_few', '_many', '_other'];
 const base = (k: string): string => { const s = PLURAL.find((p) => k.endsWith(p)); return s ? k.slice(0, -s.length) : k; };
 
 // Keys every wave found dead and parked for the consolidation (T6.3), plus the
-// old flat kiosk keys the typed adapter replaced. None may come back.
+// old flat kiosk keys the typed adapter replaced, plus the old kiosk's chapter,
+// tile and countdown copy Prozor retired (R-KP23). None may come back.
 const DEAD_KEYS = [
+  'kiosk.scenes.tonight', 'kiosk.scenes.position', 'kiosk.scenes.moreEvents_one', 'kiosk.tiles.vehicles', 'kiosk.tiles.closures', 'kiosk.safety.nextScene',
   'kiosk.legendPanorama', 'kiosk.legendPanoramaLoading', 'kiosk.legendQr', 'kiosk.legendMeander', 'kiosk.safetyLabel',
   'kiosk.catalogueWeather', 'kiosk.catalogueVehicles', 'kiosk.catalogueClosures', 'kiosk.typeCode', 'kiosk.invitationEn',
   'kiosk.teaserSoon', 'kiosk.teaserCity', 'kiosk.essentialsTitle', 'kiosk.unitVehicles_one', 'kiosk.unitClosed_one',

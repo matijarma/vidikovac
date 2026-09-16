@@ -28,6 +28,7 @@
 // shows, how many line badges it lets the transit statement carry, and how
 // long a title it lets the composer keep before shortening it at a word.
 import { KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../core/breakpoints';
+import { SAY_KINDS } from './say-kinds';
 
 export type KioskSize = 'wide' | 'compact' | 'handheld';
 
@@ -116,14 +117,14 @@ export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.
 
 /** How many statements each composition asks the ranker for (R-KP5): three
  *  on a wide wall and on the totem's row, two on the compact wall, and every
- *  candidate on a phone, which scrolls -- eight is every kind say.ts knows
- *  (SayKind), so it is "all" without an infinity the composer would have to
- *  guard against. The room decides the rest: a statement the column does not
- *  hold whole is hidden by measurement (kiosk/invitation.ts), never clipped.
- *  At wide that room is 373 px at 1920 x 1080 (kiosk.css, "The column"):
- *  two statements whole, the third shown where the type outgrows the card,
- *  on a wall above Full HD. */
-export const SAY_SLOTS: Readonly<Record<Composition, number>> = Object.freeze({ wide: 3, compact: 2, portrait: 3, handheld: 8 });
+ *  candidate on a phone, which scrolls -- "all" is say.ts's own list of kinds
+ *  (SAY_KINDS, kiosk/say-kinds.ts), read rather than copied, so a ninth kind reaches the phone
+ *  without an edit here and without an infinity the composer would have to
+ *  guard against. These are ceilings the ranker offers; the room decides the
+ *  rest (R-KP22): a statement the column does not hold whole is hidden by
+ *  measurement (kiosk/invitation.ts), never clipped, and the e2e pins floors
+ *  (kiosk.css "The column" carries the measured budget). */
+export const SAY_SLOTS: Readonly<Record<Composition, number>> = Object.freeze({ wide: 3, compact: 2, portrait: 3, handheld: SAY_KINDS.length });
 
 /** Line badges before the transit statement says "+N". The kicker sits on
  *  the first badge row (kiosk.css .k-say-label), so the badges have the

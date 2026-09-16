@@ -45,14 +45,12 @@ import { vehicleFixes } from '../motion/fixes';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
-import { isLive, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
+import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
 import { stopDistanceM } from './stops';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** The paired compositions' street level around one stop: named streets, the stop, the vehicles near it (R-KP8). */
 export const PAIRED_ZOOM = 15;
-/** @deprecated wave B (contract 7): test/app/basemap.test.ts still samples this name; the paired camera is PAIRED_ZOOM. */
-export const KIOSK_MAP_ZOOM = PAIRED_ZOOM;
 /** The archive stops at z14 and the worker refuses z>14, so every zoom from
  *  there up is overzoomed; no kiosk camera goes past here. */
 export const KIOSK_MAX_ZOOM = 15.5;
@@ -69,8 +67,6 @@ export const HANDHELD_SPAN_M = 1400;
 export const FIELD_MIN_ZOOM = 13.5;
 /** ...nor past the overzoom ceiling KIOSK_MAX_ZOOM explains. */
 export const FIELD_MAX_ZOOM = KIOSK_MAX_ZOOM;
-/** @deprecated wave B (contract 7): test/app/basemap.test.ts still samples this name as the kiosk's far camera; the field's floor stands in for the kvart framing it meant. */
-export const KIOSK_KVART_ZOOM = FIELD_MIN_ZOOM;
 /** Metres of equator per tile row, as MapLibre counts (512 px tiles). */
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
 
@@ -320,27 +316,16 @@ export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, local
   return recentQuakes(emsc, now).map((quake) => quakePoint(quake, locale)).filter((point): point is MapPoint => point !== null);
 }
 
-/** The kiosk's own quake rule (R-KP9, one rule for the map and the statement):
- *  magnitude 3.0 or more within the last 24 hours, on top of recentQuakes()'s
- *  150 km -- a magnitude-1.4 tremor in Slovenia two days ago is not a fact a
- *  café reads from three metres, while the paired stories and the teaser keep
- *  recentQuakes()'s own 72 hours. A quake the source gave no magnitude cannot
- *  meet the rule and draws nothing. Wave B moves the rule into
- *  kiosk/local.ts's kioskQuakes (P2) and this becomes a call. */
-export const KIOSK_QUAKE_MIN_MAG = 3;
-export const KIOSK_QUAKE_WINDOW_MS = 24 * 3_600_000;
-
-/** The quakes the kiosk rule selects, as places (cityPoints lights them on both phases). */
+/** The quakes the kiosk's own rule selects (R-KP9: kiosk/local.ts
+ *  kioskQuakes -- magnitude 3.0 or more within the last 24 hours, on top of
+ *  recentQuakes()'s 150 km), as places; cityPoints lights them on both
+ *  phases. One rule for the map and the statement (say.ts reads the same
+ *  reader), so the picture can never show a tremor the column would not
+ *  name: a magnitude-1.4 tremor in Slovenia two days ago is not a fact a
+ *  café reads from three metres, while the paired stories and the teaser
+ *  keep recentQuakes()'s own 72 hours. */
 export function kioskQuakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
-  const out: MapPoint[] = [];
-  for (const quake of recentQuakes(emsc, now)) {
-    const mag = dataNumber(quake, 'mag');
-    const at = quake.at ? Date.parse(quake.at) : NaN;
-    if (mag === null || mag < KIOSK_QUAKE_MIN_MAG || !Number.isFinite(at) || now - at > KIOSK_QUAKE_WINDOW_MS) continue;
-    const point = quakePoint(quake, locale);
-    if (point) out.push(point);
-  }
-  return out;
+  return kioskQuakes(emsc, now).map((quake) => quakePoint(quake, locale)).filter((point): point is MapPoint => point !== null);
 }
 
 /** Up to eight assembly points, nearest the stop. */

@@ -19,6 +19,7 @@ import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kBadge } from './markup';
+import { SAY_KINDS, type SayKind } from './say-kinds';
 import {
   byModule, closuresByDistance, isLive, kioskQuakes, lastDeparturesAhead, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
   routeDelays, sourceState, worksInKvart,
@@ -30,7 +31,8 @@ import type { ScreenStop } from '../core/contracts';
 import type { LastRunSnapshot } from '../core/lastrun';
 
 export type SayDomain = 'transit' | 'komunalno' | 'civic' | 'events' | 'safety' | 'mobility';
-export type SayKind = 'transit' | 'quake' | 'closure' | 'lastrun' | 'zet' | 'assembly' | 'works' | 'kvart';
+/** Every kind a candidate can produce, once each (kiosk/say-kinds.ts): what "all" means when a composition shows every statement (kiosk/layout.ts SAY_SLOTS.handheld). */
+export { SAY_KINDS, type SayKind };
 export type SayTone = 'late' | 'early' | 'ontime' | 'unknown' | 'komunalno' | 'events' | 'urgent' | 'calm';
 
 export interface Statement {
