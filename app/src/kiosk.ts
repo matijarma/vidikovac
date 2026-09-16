@@ -426,7 +426,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   /** The map into the composition's host, or parked while none shows it. The
    *  chapter's rail hangs over the map's foot, so the camera is told how much
-   *  of the picture that rail covers and centres the stop in what is left. */
+   *  of the picture that rail covers and centres the stop in what is left, and
+   *  which chapter is showing, which decides the camera's frame and which city
+   *  points it lights (kiosk/mapview.ts, chapterView). A paired screen is not a
+   *  chapter: it keeps the stop's own frame. */
   function paintMap(): void {
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
@@ -435,9 +438,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // never coasting on a state it heard before the outage.
     if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
     const bottom = phase === 'invitation' ? (invitation?.railPad() ?? 0) : 0;
+    const chapter = phase === 'invitation' ? invitation?.scenes().current() : undefined;
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale,
       selection: phase === 'paired' ? selection : null,
+      ...(chapter ? { chapter } : {}),
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
       ...(bottom > 0 ? { padding: { top: 0, right: 0, bottom, left: 0 } } : {}),
     }, mapAdapter);

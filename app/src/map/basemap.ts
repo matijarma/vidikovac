@@ -661,7 +661,7 @@ function signLayer(layer: StyleLayerLike, flavor: Flavor): StyleLayerLike | null
       return promoted(layer, {
         size: zoomSize(11, 22, 14, 25, 18, SIGN_TEXT_MAX_PX),
         font: MAP_FONTS.medium,
-        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8 },
+        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8, 'text-padding': 12 },
       });
     case 'places_locality':
       return promoted(layer, {
@@ -695,6 +695,9 @@ function signLayer(layer: StyleLayerLike, flavor: Flavor): StyleLayerLike | null
         size: zoomSize(SIGN_POI_RANK1_ZOOM, SIGN_TEXT_MIN_PX, 15, 21, 18, 24),
         layout: {
           'text-max-width': 9,
+          // Edge guard: a name whose box does not fit inside the frame loses its
+          // slot instead of printing half of itself at the map's border.
+          'text-padding': 14,
           'icon-size': 1.4,
           'text-font': ['case', rank1, ['literal', [MAP_FONTS.medium]], ['literal', [MAP_FONTS.regular]]],
           // A real sort key: meaning first, then the archive's own min_zoom

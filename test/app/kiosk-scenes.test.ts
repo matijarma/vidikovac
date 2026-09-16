@@ -198,7 +198,7 @@ describe('sceneHeadMarkup', () => {
   it('names the scene, says the lines beyond the cap once, and shows the dots with the position only when asked', () => {
     const head = dom(sceneHeadMarkup('promet', ctx(), { index: 0, count: 3 }, true));
     expect(text(q(head, 'h2.k-scene-title#k-scene-title'))).toBe('Promet');
-    expect(text(q(head, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
+    expect(text(q(head, '[data-testid=kiosk-scene-meta]'))).toBe('još 7 linija');
     expect(qa(head, '.k-scene-dots .k-dot')).toHaveLength(3);
     expect(qa(head, '.k-dot[data-on="1"]')).toHaveLength(1);
     expect(q(head, '.k-dot')!.dataset.on).toBe('1');
@@ -221,12 +221,14 @@ describe('sceneMarkup: Promet', () => {
     const rail = q(body, 'ul.k-rail[data-chapter=promet][data-testid=kiosk-lines]')!;
     expect(rail).not.toBeNull();
     expect(rail.hasAttribute('data-rows')).toBe(false);
-    // The works band is the rail's lead member, and the lines take the rest of the four the compact rail holds.
+    // The works band leads the rail and takes two of the compact rail's four
+    // tracks, because it names a street where a line tile names a number.
     expect(rail.firstElementChild!.getAttribute('data-testid')).toBe('kiosk-works');
+    expect(rail.firstElementChild!.getAttribute('data-span')).toBe('2');
     const tiles = qa(body, '[data-testid=kiosk-lines] .tl[data-route]');
-    expect(tiles.map((t) => t.dataset.route)).toEqual(['6', '11', '12']);
-    expect(tiles.map((t) => t.dataset.tone)).toEqual(['late', 'ontime', 'early']);
-    expect(tiles.map((t) => text(q(t, '.tl-value')))).toEqual(['kasni 2 min', 'na vrijeme', 'rani 2 min']);
+    expect(tiles.map((t) => t.dataset.route)).toEqual(['6', '11']);
+    expect(tiles.map((t) => t.dataset.tone)).toEqual(['late', 'ontime']);
+    expect(tiles.map((t) => text(q(t, '.tl-value')))).toEqual(['kasni 2 min', 'na vrijeme']);
     for (const tile of tiles) {
       expect(tile.classList.contains('k-tl-line')).toBe(true);
       expect(q(tile, '.tl-label .k-line-badge.line[data-size=k]')).not.toBeNull();
@@ -242,14 +244,14 @@ describe('sceneMarkup: Promet', () => {
     expect(text(q(six, '.tl-context > span[aria-hidden=true]'))).toBe('1');
     expect(text(q(six, '.tl-context .k-visually-hidden'))).toBe('1 vozilo u blizini');
     expect(text(q(tiles[1]!, '.tl-context .k-visually-hidden'))).toBe('nijedno vozilo u blizini');
-    expect(markup.regions['kiosk-scene-meta']).toBe('još 6 linija');
+    expect(markup.regions['kiosk-scene-meta']).toBe('još 7 linija');
     // The rail is one region: the works band and the lines are rewritten together, and the map is never among them.
     expect(Object.keys(markup.regions).sort()).toEqual(['kiosk-lines', 'kiosk-scene-meta']);
-    expect(dom(markup.regions['kiosk-lines']!).querySelectorAll('.tl[data-route]')).toHaveLength(3);
+    expect(dom(markup.regions['kiosk-lines']!).querySelectorAll('.tl[data-route]')).toHaveLength(2);
   });
   it('gives a wider rail more lines and a narrower one fewer, saying the rest once in the meta', () => {
-    expect(qa(dom(sceneMarkup('promet', wide()).body), '.tl[data-route]')).toHaveLength(5);
-    expect(sceneMarkup('promet', wide()).regions['kiosk-scene-meta']).toBe('još 4 linije');
+    expect(qa(dom(sceneMarkup('promet', wide()).body), '.tl[data-route]')).toHaveLength(4);
+    expect(sceneMarkup('promet', wide()).regions['kiosk-scene-meta']).toBe('još 5 linija');
     const narrow = sceneMarkup('promet', ctx({ columns: 3 }));
     expect(qa(dom(narrow.body), '.tl[data-route]')).toHaveLength(2);
     expect(narrow.regions['kiosk-scene-meta']).toBe('još 7 linija');
@@ -298,8 +300,8 @@ describe('sceneMarkup: Promet', () => {
   it('is three bars per tile while ZET loads, one down note when it does not answer, and the stale badge on each last-good tile', () => {
     const loading = sceneMarkup('promet', ctx({ modules: without(MODULES, 'zet-rt') }));
     const lines = dom(loading.body).querySelector('[data-testid=kiosk-lines]')!;
-    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid])')).toHaveLength(3);
-    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid]) .sk')).toHaveLength(9);
+    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid])')).toHaveLength(2);
+    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid]) .sk')).toHaveLength(6);
     expect(lines.querySelectorAll('.tl[data-route]')).toHaveLength(0);
     expect(loading.regions['kiosk-scene-meta']).toBe('');
     const down = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'zet-rt', { status: 'down', items: [] }) })).body);
@@ -308,7 +310,7 @@ describe('sceneMarkup: Promet', () => {
     expect(qa(down, '.tl[data-route]')).toHaveLength(0);
     expect(qa(down, '[data-testid=kiosk-lines] .k-board-note')).toHaveLength(1);
     const stale = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'zet-rt', { status: 'stale' }) })).body);
-    expect(qa(stale, '.tl[data-route] .badge[data-tone=stale]')).toHaveLength(3);
+    expect(qa(stale, '.tl[data-route] .badge[data-tone=stale]')).toHaveLength(2);
     expect(text(q(stale, '.tl[data-route="6"] .tl-value'))).toBe('kasni 2 min');
   });
   it('under lagano the lines board is the whole scene: ten rows, the rest said once, the map host hidden', () => {
@@ -614,7 +616,7 @@ describe('mountScenes', () => {
   it('the meta follows the poll without a swap', () => {
     const f = mountField();
     f.handle.update(model());
-    expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
+    expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('još 7 linija');
     f.handle.update(model({ stop: { ...KVART_STOP, routes: ['6', '11'] } }));
     expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('');
     expect(items(f.host)).toHaveLength(1);

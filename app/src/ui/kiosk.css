@@ -252,6 +252,9 @@
 .k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .k-map-host[hidden] { display: none; }
 .k-map-canvas { width: 100%; height: 100%; }
+/* The rail owns the map's foot; the credit takes the corner the chip leaves
+   free, so it is never drawn behind a tile. */
+.kiosk .k-map-canvas .maplibregl-ctrl-bottom-right { top: 0; bottom: auto; }
 .k-lines--overlay { position: absolute; right: var(--k-gap); bottom: var(--k-gap); left: var(--k-gap); padding: var(--k-gap) calc(var(--k-gap) * 1.25); border-radius: var(--k-radius-s); background: var(--k-glass); box-shadow: var(--k-shadow); }
 .k-lines--board { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: var(--k-pad); }
 .k-lines--board .k-line-list { flex: 1; }
@@ -334,6 +337,10 @@
 .k-rail[data-chapter='grad'] { --k-rail-min: var(--k-row-min); grid-template-columns: minmax(var(--k-ink-w), 1.2fr) repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); }
 /* A sentence in place of a chapter's members (an empty evening, a source that does not answer) takes the rail's width after the chapter's lead member, whose track collapses when there is no lead. */
 .k-rail > .tl[data-level], .k-rail > .k-board-note { grid-column: 2 / -1; }
+/* A band names a street where a line tile names a number, so it takes two of
+   the rail's tracks wherever the rail has two to give. */
+.k-rail > [data-span='2'] { grid-column: span 2; }
+.kiosk .k-rail .tl-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-rail[data-chapter='veceras'] > .tl[data-level] { grid-column: 1 / -1; }
 /* At one column the rail stands its members up as rows (kiosk/scenes.ts draws the lagano board's own li.k-line there rather than inventing a grammar). */
 .k-rail[data-rows='1'] { grid-template-columns: minmax(0, 1fr); }

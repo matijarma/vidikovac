@@ -287,11 +287,15 @@ function linesMeta(board: LinesBoard, ctx: SceneContext, hidden = 0): string {
   return (board.state === 'live' || board.state === 'stale') && rest > 0 ? plural(ctx.locale, ctx.strings.lines.more, rest) : '';
 }
 
-/** The works band as the rail's lead member; nothing at all when nothing is ongoing. */
+/** The works band as the rail's lead member; nothing at all when nothing is
+ *  ongoing. It names a street where a line tile names a number, so it takes two
+ *  of the rail's tracks wherever the rail has tracks to spare: at one track its
+ *  label wrapped and the street truncated mid-word. */
 function worksBand(works: WorksInKvart, ctx: SceneContext): string {
   const s = ctx.strings;
   const label = works.scope === 'kvart' ? s.scenes.worksKvart : s.scenes.worksCity;
-  const open = '<li class="tl" data-variant="band" data-tone="komunalno" data-testid="kiosk-works"';
+  const span = ctx.columns >= 4 ? ' data-span="2"' : '';
+  const open = `<li class="tl" data-variant="band" data-tone="komunalno" data-testid="kiosk-works"${span}`;
   if (works.state === 'loading') return `${open} data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('label')}${bar('title1')}</span></li>`;
   if (works.state === 'down') return `${open} data-state="down">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p><p class="tl-title">${escapeHtml(s.paired.sourceDown)}</p></div></li>`;
   // A zero leaves the rail entirely, a stale one too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
@@ -313,7 +317,7 @@ function promet(ctx: SceneContext): BuiltScene {
   // The works band is one member of the rail like any other, so the lines take what the rail has left.
   const works = worksBand(worksInKvart(ctx.modules, ctx.stop, ctx.now), ctx);
   const stood = ctx.columns <= 1;
-  const cap = Math.max(1, prometMembers(ctx.columns) - (works === '' ? 0 : 1));
+  const cap = Math.max(1, prometMembers(ctx.columns) - (works === '' ? 0 : works.includes('data-span="2"') ? 2 : 1));
   const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, cap);
   const inner = `${works}${linesInner(board, ctx, cap, stood)}`;
   const body = `<ul class="k-rail" data-chapter="promet" data-testid="kiosk-lines"${stood ? ' data-rows="1"' : ''}>${inner}</ul>`;
