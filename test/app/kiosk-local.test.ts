@@ -14,10 +14,10 @@ import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/di
 import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
-import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
+import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -585,7 +585,7 @@ describe('the one map, through the additive adapter', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView, setProzor }));
     const adapter = createKioskMapAdapter(factory);
     const maps = createMapSlots(adapter.factory);
-    const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1400, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+    const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
     const container = requestKioskMap(maps, input, adapter)!;
     expect(container.dataset.testid).toBe('kiosk-map');
     expect(factory).toHaveBeenCalledTimes(1);
@@ -598,8 +598,8 @@ describe('the one map, through the additive adapter', () => {
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
-    // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2).
-    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1 });
+    // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2), the street names' padding R-KP17's own on the wall's field.
+    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1, labelPadding: 24 });
     // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
     expect(setProzor).toHaveBeenCalledTimes(1);
     expect(setProzor).toHaveBeenLastCalledWith(options.prozor);
@@ -621,6 +621,9 @@ describe('the one map, through the additive adapter', () => {
     expect(setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
     expect(setProzor).toHaveBeenCalledTimes(4);
     expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ overlapZoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M) - 0.1 }));
+    // Stood up as a totem the field shows twice the wall's ground: the names' padding doubles on the same map (labelPadding), so the totem places no more of them than the wall (contract 3, R-KP17).
+    requestKioskMap(maps, { ...input, widthPx: 1080, heightPx: 1365 }, adapter);
+    expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: 48 }));
     // The DO's applyScreen moves the stop: the dots follow its routes on the same map.
     requestKioskMap(maps, { ...input, stop: { ...STOP, id: '200_1', routes: ['7', '109'] } }, adapter);
     expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopRoutes: ['7', '109'] }));
@@ -628,6 +631,18 @@ describe('the one map, through the additive adapter', () => {
     expect(KIOSK_MAP_SLOT_ID).toBe('kiosk-map');
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
+  });
+  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s field and grows in step with the ground a field shows beyond it -- doubled on the totem, whose field holds twice the wall’s ground north to south -- in whole pixels, never below 24, and 24 for a box not yet laid out or a phone’s half-span band', () => {
+    expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
+    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(48);
+    // The compact wall's field is a little taller than the wide one's for its width: a pixel more, not the same 24 by fiat.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(25);
+    // A wall wider than 16:9 (a 3840 x 2160 panel's 3138 x 1900 field) shows less ground north to south than the design wall: the ruling's literal, never less.
+    expect(labelPadding(3138, 1900, FIELD_SPAN_M)).toBe(24);
+    // The phone's band spans half the ground across and a quarter of the wall's field in all.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBe(24);
+    expect(labelPadding(1400, 0, FIELD_SPAN_M)).toBe(24);
+    expect(labelPadding(0, 0, FIELD_SPAN_M)).toBe(24);
   });
   it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and lights only the kiosk quake rule (R-KP9)', () => {
     const setFeedState = vi.fn();
@@ -638,7 +653,7 @@ describe('the one map, through the additive adapter', () => {
     expect(adapter.feedState()).toBe('stale');
     const maps = createMapSlots(adapter.factory);
     const zet = MODULES.find((m) => m.module === 'zet-rt')!;
-    const base = { stop: STOP, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 926, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+    const base = { stop: STOP, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 926, heightPx: 624, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
     requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': { ...zet, status: 'stale' } } }, adapter);
     expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
     requestKioskMap(maps, { ...base, snapshots: {} }, adapter);

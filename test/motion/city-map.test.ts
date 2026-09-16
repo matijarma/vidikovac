@@ -353,8 +353,8 @@ describe('the basemap and the overlays on it', () => {
     expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
   });
 
-  it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint and zoom ranges), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
-    const prozor: overlays.ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6 };
+  it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint, zoom ranges and the street names’ padding), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
+    const prozor: overlays.ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 30 };
     const { map, handle } = await harness({ load: false, extra: { basemapProfile: 'prozor', prozor, interactive: false, symbolScale: 2 } });
     expect(handle.placedNames!('roads_labels_major')).toEqual([]);
     map.fire('load');
@@ -365,6 +365,7 @@ describe('the basemap and the overlays on it', () => {
     expect(layer('stop-labels')!.minzoom).toBe(14.6);
     expect(JSON.stringify(layer('stops')!.filter)).toContain('"6"');
     expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('vehicle-plate-');
+    expect(layer('roads_labels_major')!.layout!['text-padding']).toBe(30); // the set's padding reaches the basemap's names layer
     // The names MapLibre actually placed, once each: the e2e's proof that few street names survive the field.
     map.rendered = [
       { layer: { id: 'roads_labels_major' }, properties: { name: 'Ilica' } },
@@ -375,18 +376,20 @@ describe('the basemap and the overlays on it', () => {
     expect(handle.placedNames!('roads_labels_major')).toEqual(['Ilica', 'Savska cesta']);
     expect(handle.placedNames!('places_subplace')).toEqual(['Trešnjevka']);
     expect(handle.placedNames!('no-such-layer')).toEqual([]);
-    // The screen's stop changes, or the field is re-measured: the dots, the labels and the noses follow without a new map.
-    handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1 });
+    // The screen's stop changes, or the field is re-measured: the dots, the labels, the noses and the street names' padding follow without a new map.
+    handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1, labelPadding: 48 });
     expect(JSON.stringify(map.filters['stops'])).toContain('"17"');
     expect(JSON.stringify(map.filters['stops'])).not.toContain('"6"');
     expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, 24]);
     expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
     expect(map.layout['vehicles']?.['icon-allow-overlap']).toEqual(['step', ['zoom'], false, 15.1, true]);
-    // Back to no option set: today's drawing, thresholds included.
+    expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
+    // Back to no option set: today's drawing, thresholds and the profile's own padding included.
     handle.setProzor!(null);
     expect(map.layout['network-bus']?.visibility).toBe('visible');
     expect(map.zoomRanges['vehicle-noses']).toEqual([overlays.PILL_OVERLAP_ZOOM, 24]);
     expect(map.zoomRanges['stop-labels']).toEqual([overlays.STOP_LABEL_ZOOM, 24]);
+    expect(map.layout['roads_labels_major']?.['text-padding']).toBe(basemap.PROZOR_LABEL_PADDING_PX);
     handle.destroy();
     expect(handle.placedNames!('roads_labels_major')).toEqual([]);
   });

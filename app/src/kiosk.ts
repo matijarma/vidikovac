@@ -36,7 +36,7 @@ import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
-import { applyLayout, compositionOf, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
+import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
@@ -416,6 +416,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,
       widthPx: invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],
+      // With the width, the ground the field shows: the street names' padding follows it (mapview.ts labelPadding).
+      heightPx: invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
       spanM: composition === 'handheld' ? HANDHELD_SPAN_M : FIELD_SPAN_M,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);

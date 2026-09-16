@@ -17,8 +17,8 @@ import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
-import { FIELD_DESIGN_WIDTH, SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS } from '../../app/src/kiosk/layout';
-import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS } from '../../app/src/kiosk/mapview';
+import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS } from '../../app/src/kiosk/layout';
+import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
 import type { SayInput, Slot, Statement } from '../../app/src/kiosk/say';
 import type * as SayModule from '../../app/src/kiosk/say';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
@@ -1130,15 +1130,28 @@ describe('the field, the column and the one map', () => {
     expect(realSay.SAY_KINDS).toHaveLength(8);
   });
 
-  it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design width before layout', async () => {
+  it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design box before layout; the totem doubles the street names’ padding for its twice-the-wall ground and follows the measured box on a repaint (R-KP17, contract 3)', async () => {
+    type Prozor = { prozor: { labelPadding: number } };
     const phone = spyMap();
     mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: phone.factory as never });
     await flush();
     expect((phone.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.handheld, STOP.lat, HANDHELD_SPAN_M));
-    const totem = spyMap();
-    mount({ stored: STORED, viewport: { width: 1080, height: 1920 }, mapFactory: totem.factory as never });
+    // The band shows less ground than the wall's field, so the names keep the ruling's own padding.
+    expect((phone.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(24);
+    const totem = spyMap({ setProzor: vi.fn() });
+    const k = mount({ stored: STORED, viewport: { width: 1080, height: 1920 }, mapFactory: totem.factory as never });
     await flush();
     expect((totem.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.portrait, STOP.lat, FIELD_SPAN_M));
+    expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
+    expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(48);
+    // Laid out taller than the design table says, the measured box wins and the live map hears the new padding.
+    const host = q(k.root, '[data-testid=kiosk-map-host]')!;
+    Object.defineProperty(host, 'clientWidth', { value: 1080, configurable: true });
+    Object.defineProperty(host, 'clientHeight', { value: 1500, configurable: true });
+    k.repaint();
+    await flush();
+    expect(totem.handle.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: labelPadding(1080, 1500, FIELD_SPAN_M) }));
+    expect(labelPadding(1080, 1500, FIELD_SPAN_M)).toBe(53);
   });
 
   it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN, handed to the ranker, and fetched again once now passes validUntil', async () => {

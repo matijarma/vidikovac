@@ -44,6 +44,8 @@ export interface FieldHandle {
   readonly boardHost: HTMLElement | null;
   /** The map host's laid-out width in CSS px: fieldZoom's input. 0 before layout (a pre-paint mount, happy-dom) and under lagano, when the caller falls back to the composition's design width. */
   measureWidth(): number;
+  /** The map host's laid-out height in CSS px: with the width, the ground the field shows, which sets the street names' padding (mapview.ts labelPadding). 0 before layout, as the width. */
+  measureHeight(): number;
   /** Contract 3: how many distinct major street names the map has placed, written on the map host as data-major-labels for the e2e's proof (roads_labels_major, at most 8). */
   setMajorLabels(count: number): void;
   /** The field's label and, under lagano, the board. */
@@ -69,6 +71,7 @@ export function mountField(host: HTMLElement, deps: FieldDeps = {}): FieldHandle
     mapHost: lightweight ? null : mapHostEl,
     boardHost: board,
     measureWidth: () => mapHostEl.clientWidth,
+    measureHeight: () => mapHostEl.clientHeight,
     setMajorLabels(count) {
       const value = String(count);
       if (mapHostEl.dataset.majorLabels !== value) mapHostEl.dataset.majorLabels = value;

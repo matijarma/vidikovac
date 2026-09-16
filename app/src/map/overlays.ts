@@ -149,6 +149,13 @@ export interface ProzorOptions {
   stopLabelMinRank: number;
   /** The zoom from which pills place unconditionally and noses draw (today's fixed 14.5). */
   overlapZoom: number;
+  /** Collision padding around a major street name, in the tile pixels
+   *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
+   *  The kiosk raises it in step with the ground a field shows beyond the
+   *  wall's -- doubled on the totem (kiosk/mapview.ts labelPadding) -- so a
+   *  field of twice the ground still places at most eight names (contract 3);
+   *  symbol-spacing is no lever for that count and stays the ruling's. */
+  labelPadding: number;
 }
 
 /** Every SDF image the overlays reference, generated once per map. */

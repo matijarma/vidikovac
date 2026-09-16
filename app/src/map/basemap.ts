@@ -545,6 +545,11 @@ export interface BasemapStyleOptions {
    *  cannot reach the readability floor; 'default' (the phone, the desk, the
    *  kvart thumbnail) is the house pass alone. */
   profile?: BasemapProfile;
+  /** The prozor profile's collision padding around a major street name, in
+   *  tile pixels: PROZOR_LABEL_PADDING_PX unless the kiosk's option set widens
+   *  it for a field that shows more ground than the wall's
+   *  (overlays.ts ProzorOptions.labelPadding). */
+  labelPadding?: number;
 }
 
 // --- Reading a map from three metres ---------------------------------------
@@ -703,6 +708,15 @@ function prozorDrops(id: string): boolean {
  *  unnamed; the count of names placed is proven in e2e, never assumed. */
 export const PROZOR_MAJOR_ROAD_DETAILS: readonly string[] = Object.freeze(['motorway', 'trunk', 'primary', 'secondary']);
 
+/** Collision padding around a major street name, in tile pixels at the
+ *  archive's z14 (R-KP17): measured on the 1920 x 1080 wall's field, where
+ *  the profile places two to three names around Jelačić beside the plates
+ *  and the hub names. The kiosk widens it for a field that shows more ground
+ *  than that wall's (BasemapStyleOptions.labelPadding, from kiosk/mapview.ts
+ *  labelPadding, which keeps its own copy of this literal because it stays
+ *  off this module's graph). */
+export const PROZOR_LABEL_PADDING_PX = 24;
+
 /** Streets are ground texture, never the figure (plan D12, R-KP3), and the
  *  two faces get there by opposite moves. By day the paper roads of the house
  *  palette left 1.09:1 against the canvas, invisible at three metres, so the
@@ -786,7 +800,7 @@ function street(layer: StyleLayerLike, color: string, opacity: number, width: Zo
  * Ilica five times; and it keeps the water labels at the promoted sizes,
  * because the Sava is the best orientation cue this city has.
  */
-function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme): StyleLayerLike | null {
+function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number): StyleLayerLike | null {
   if (prozorDrops(layer.id)) return null;
   const streets = PROZOR_STREETS[theme];
   if (PROZOR_MINOR_ROADS.has(layer.id)) return street(layer, streets.minor, streets.minorOpacity, PROZOR_MINOR_WIDTH);
@@ -827,13 +841,18 @@ function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme): St
       // consecutive anchors on one street about 1.7 km apart (a name at most
       // twice across the 2.8 km field), 24 is about 40 screen px of padding
       // at the field's z14.7 (R-KP17; the first drawing's 900 / 40 read as
-      // screen px and placed one name in the whole field). 22 px flat: 11.2
-      // arcminutes, over the floor and under the neighbourhood names, so the
-      // two tiers never read as one.
+      // screen px and placed one name in the whole field). How many names a
+      // field holds is the padding's to set, not the spacing's: MapLibre
+      // anchors every road once per tile whatever the spacing (360, 473, 745
+      // and 1100 all placed 7 to 8 on the totem, 16 Sept 2026), so a field
+      // that shows more ground than the wall's gets a wider padding from the
+      // kiosk (PROZOR_LABEL_PADDING_PX, kiosk/mapview.ts labelPadding). 22 px
+      // flat: 11.2 arcminutes, over the floor and under the neighbourhood
+      // names, so the two tiers never read as one.
       return promoted(layer, {
         size: 22,
         font: MAP_FONTS.medium,
-        layout: { 'symbol-spacing': 360, 'text-padding': 24 },
+        layout: { 'symbol-spacing': 360, 'text-padding': labelPadding },
         filter: ['all', ['in', ['get', 'kind'], ['literal', ['highway', 'major_road']]], ['in', ['get', 'kind_detail'], ['literal', PROZOR_MAJOR_ROAD_DETAILS]]],
       });
     case 'water_label_lakes':
@@ -853,7 +872,7 @@ export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}
   for (const raw of upstream) {
     if (options.placeLabels === false && raw.id.startsWith('places_')) continue;
     const house = houseLayer(raw);
-    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme) : house;
+    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX) : house;
     if (layer) out.push(layer);
   }
   return out;

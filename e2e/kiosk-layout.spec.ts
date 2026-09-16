@@ -23,9 +23,11 @@
 //     totem's row, the transit label within the rows its badge cap budgets,
 //     a long title cut at a word (kiosk.css "The column");
 //   - the prozor profile places at most eight major street names in the
-//     field, read off data-major-labels (contract 3, R-KP19) once the map is
-//     ready and a poll has counted them again (a zero is a real count at
-//     1366 x 768, where the plates and the hub names take the anchors first);
+//     field at every size, the totem's twice-the-ground field included (its
+//     names' padding follows the ground, kiosk/mapview.ts labelPadding), read
+//     off data-major-labels (contract 3, R-KP19) once the map is ready and a
+//     poll has counted them again (a zero is a real count at 1366 x 768,
+//     where the plates and the hub names take the anchors first);
 //   - the basics panel fits its rows without a scroller;
 //   - once a phone unlocks the screen, each of the six paired compositions
 //     obeys the same clip and overlap rules, the header names the mirrored
@@ -52,13 +54,12 @@ const HEAD_STRIP_PX = { wide: 96, compact: 72 } as const;
 const MIN_MAP_SHARE = 0.6;
 /** The field's least share of a portrait stage's height (plan "Frame"). */
 const MIN_PORTRAIT_FIELD = 0.5;
-/** The most major street names the prozor profile places in the field (plan D3), read off data-major-labels (contract 3).
- *  Eight on the landscape fields, where R-KP17's spacing was measured (two to three at Jelačić). The totem's field spans
- *  the same 2.8 km across but twice the ground north to south (1080 x ~1420 px at z14.36 against 1400 x 888 at z14.74),
- *  and MapLibre's symbol-spacing is a distance along a road in tile pixels, so a north-south road that gets one name on
- *  the wall gets two on the totem; the cap follows the ground, not the literal: half again the landscape's (nine were
- *  measured at Jelačić on 16 Sept 2026). */
-const MAX_MAJOR_LABELS = { landscape: 8, portrait: 12 } as const;
+/** The most major street names the prozor profile places in the field (plan D3, R-KP17), read off data-major-labels
+ *  (contract 3), at every size. The totem's field spans the same 2.8 km across but twice the wall's ground north to
+ *  south (1080 x 1365 px at z14.36 against 1400 x 888 at z14.74) and placed 7 to 9 names on its own before the kiosk
+ *  doubled the names' collision padding there in step with the ground (kiosk/mapview.ts labelPadding): 3 since, against
+ *  the wall's 6 to 8 (measured at Jelačić, 16 Sept 2026, before the vehicles' plates take their anchors). */
+const MAX_MAJOR_LABELS = 8;
 /** How long the placed-labels count is waited for once the map is ready: the controller stamps it once at ready
  *  (when the tiles may not have rendered a name yet) and then on every map paint, which rides the teaser poll
  *  (app/src/motion/loop.ts nextPollDelay, at most 13.5 s). The first stamp is waited for, then one whole poll, so the
@@ -294,17 +295,23 @@ async function openInvitation(page: Page, face: Face, size: { width: number; hei
 
 /** Contract 3, R-KP19: how many distinct major street names the map placed,
  *  as the controller stamped it on the map host once the map was ready and
- *  again after the next paint. The count is read after one whole poll has
- *  passed since the first stamp, so the tiles have rendered and the placement
- *  pass has run over them; at 1366 x 768 that count was 0 for a whole poll
- *  (measured 16 Sept 2026): a real answer, under the cap, never "not yet". */
+ *  again after the next paint. The first stamp is the profile's own placement,
+ *  before the vehicles' plates have taken their anchors; the count is read
+ *  after one whole poll has passed since it, so the tiles have rendered and a
+ *  paint has stamped again -- at 1366 x 768 that read 0 for a whole poll
+ *  (measured 16 Sept 2026): a real answer, under the cap, never "not yet".
+ *  Both readings go to the annotations and the log, so the report can say what
+ *  the profile placed alone and what the live picture kept. */
 async function majorLabels(page: Page): Promise<number> {
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
   const host = page.getByTestId('kiosk-map-host');
   await expect(host).toHaveAttribute('data-major-labels', /^\d+$/, { timeout: MAJOR_LABELS_WAIT_MS });
+  const atReady = Number(await host.getAttribute('data-major-labels'));
   await page.waitForTimeout(MAJOR_LABELS_POLL_MS);
   const count = Number(await host.getAttribute('data-major-labels'));
-  test.info().annotations.push({ type: 'major-labels', description: String(count) });
+  const reading = `${count} after a poll (${atReady} at ready)`;
+  test.info().annotations.push({ type: 'major-labels', description: reading });
+  console.log(`[kiosk-layout] major labels ${page.viewportSize()?.width}x${page.viewportSize()?.height}: ${reading}`);
   return count;
 }
 
@@ -344,8 +351,8 @@ for (const size of SIZES) {
       expect(await compositionIssues(page, portrait, MAX_VALUE_LINES, MIN_MAP_SHARE, MIN_PORTRAIT_FIELD), 'the map is the field').toEqual([]);
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}.png`, fullPage: false });
 
-      // Contract 3: the prozor profile places at most eight major street names in the field (R-KP17 measured two to three at Jelačić).
-      expect(await majorLabels(page), 'the prozor profile places few major street names in the field').toBeLessThanOrEqual(portrait ? MAX_MAJOR_LABELS.portrait : MAX_MAJOR_LABELS.landscape);
+      // Contract 3: the prozor profile places at most eight major street names in the field at every size (R-KP17; the totem's names' padding follows its ground).
+      expect(await majorLabels(page), 'the prozor profile places few major street names in the field').toBeLessThanOrEqual(MAX_MAJOR_LABELS);
 
       await page.getByTestId('kiosk-essentials-open').click();
       const panel = page.getByTestId('kiosk-essentials');

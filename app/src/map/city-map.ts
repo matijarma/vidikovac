@@ -1181,9 +1181,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** Every option the basemap is built from, in one place. A theme or locale
    *  flip rebuilds the layer list, and before this builder existed both sites
    *  wrote the object out by hand and dropped anything not in that literal --
-   *  a silent regression on the surface that flips theme twice a day. */
+   *  a silent regression on the surface that flips theme twice a day. The
+   *  kiosk set's street-name padding rides along (basemap.ts roads_labels_major). */
   function basemapOptions(): BasemapStyleOptions {
-    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile };
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding } : {}) };
+  }
+
+  /** Re-derives the basemap for the current theme and options and applies what moved: a face flip, a locale switch, a changed prozor set. */
+  function applyBasemap(): void {
+    const l = lib;
+    if (!map || !styled || !l) return;
+    const nextBasemap = l.basemapLayers(theme, basemapOptions());
+    applyOps(map, l.styleDiff(basemap, nextBasemap));
+    basemap = nextBasemap;
   }
 
   function setTheme(next: MapTheme): void {
@@ -1191,9 +1201,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     theme = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(next, basemapOptions());
-    applyOps(map, l.styleDiff(basemap, nextBasemap));
-    basemap = nextBasemap;
+    applyBasemap();
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
   }
@@ -1201,11 +1209,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function setLocale(next: string): void {
     if (next === locale) return;
     locale = next;
-    const l = lib;
-    if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(theme, basemapOptions());
-    applyOps(map, l.styleDiff(basemap, nextBasemap));
-    basemap = nextBasemap;
+    if (!map || !styled || !lib) return;
+    applyBasemap();
     relabelControls();
   }
 
@@ -1377,6 +1382,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setProzor(next) {
       if (JSON.stringify(next) === JSON.stringify(prozor)) return;
       prozor = next;
+      // The set's street-name padding lives on a basemap layer; the rest on the overlays.
+      applyBasemap();
       applyOverlays();
     },
     placedNames,

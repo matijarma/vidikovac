@@ -115,6 +115,16 @@ export function compositionOf(decision: Pick<LayoutDecision, 'size' | 'totem'>):
  *  tenth, which is why the measurement, not this table, wins once it exists. */
 export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.freeze({ wide: 1400, compact: 926, portrait: 1080, handheld: 358 });
 
+/** The field's height in CSS px at each composition's design size, beside the
+ *  width: together they say how much ground the field shows, which sets the
+ *  street names' collision padding (kiosk/mapview.ts labelPadding) before the
+ *  map host is measured. Wide: 1080 less the 96 px header and strip. Compact:
+ *  768 less 72 and 72. Portrait: the totem's 1920 less 72 and 72 and the
+ *  column's row under the field (411 px with R-KP21's card, measured 16 Sept
+ *  2026). Handheld: the 280 px map band (kiosk.css --k-map-band). As with the
+ *  width, the measurement wins once it exists. */
+export const FIELD_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = Object.freeze({ wide: 888, compact: 624, portrait: 1365, handheld: 280 });
+
 /** How many statements each composition asks the ranker for (R-KP5): three
  *  on a wide wall and on the totem's row, two on the compact wall, and every
  *  candidate on a phone, which scrolls -- "all" is say.ts's own list of kinds

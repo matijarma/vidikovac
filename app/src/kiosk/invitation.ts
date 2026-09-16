@@ -55,6 +55,8 @@ export interface InvitationHandle {
   update(model: InvitationModel): void;
   /** The field's laid-out width for the camera (kiosk/field.ts); 0 before layout. */
   measureWidth(): number;
+  /** The field's laid-out height, which with the width sets the street names' padding (kiosk/mapview.ts labelPadding); 0 before layout. */
+  measureHeight(): number;
   /** Contract 3: the map's placed major street names, counted, onto the map host. */
   setMajorLabels(count: number): void;
   /** Re-measures the column: a value past two lines is shortened at a word, a statement the room does not hold is hidden whole (R-KP5). Runs after every update, when the controller says the box changed (a resize) and once by itself when the fonts arrive; a value whose text and width are unchanged since its last cut is left as it is. */
@@ -182,6 +184,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       paintSays(model);
     },
     measureWidth: () => field.measureWidth(),
+    measureHeight: () => field.measureHeight(),
     setMajorLabels: (count) => field.setMajorLabels(count),
     fit: () => fit(),
     destroy() {

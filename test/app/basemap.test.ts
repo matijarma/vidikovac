@@ -10,6 +10,7 @@ import {
   OVERLAY_LIGHT,
   PROZOR_ARCMIN_PER_PX,
   PROZOR_DROPPED_LAYERS,
+  PROZOR_LABEL_PADDING_PX,
   PROZOR_MAJOR_ROAD_DETAILS,
   PROZOR_RECOGNITION_ARCMIN,
   PROZOR_TEXT_MAX_PX,
@@ -29,7 +30,7 @@ import {
   type StyleLayerLike,
 } from '../../app/src/map/basemap';
 import { overlayLayers, type ProzorOptions } from '../../app/src/map/overlays';
-import { KIOSK_SYMBOL_SCALE } from '../../app/src/kiosk/mapview';
+import { KIOSK_SYMBOL_SCALE, LABEL_PADDING_TILE_PX } from '../../app/src/kiosk/mapview';
 import { deltaE, hexToLinear } from './oklab';
 
 const ORIGIN = 'https://zagreb.example';
@@ -398,9 +399,16 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       // Major street names: the trunk of the hierarchy only, spaced so one field holds a handful.
       const street = byId(layers, 'roads_labels_major');
       expect(street.layout!['text-size']).toBe(22);
-      // Tile pixels at z14 (R-KP17): 360 is about 1.7 km between anchors on one street, 24 about 40 screen px at the field's zoom.
+      // Tile pixels at z14 (R-KP17): 360 is about 1.7 km between anchors on one street, 24 the collision padding measured on the wall's field.
       expect(street.layout!['symbol-spacing']).toBe(360);
-      expect(street.layout!['text-padding']).toBe(24);
+      expect(street.layout!['text-padding']).toBe(PROZOR_LABEL_PADDING_PX);
+      // The kiosk keeps its own copy of the literal off this module's graph (mapview.ts labelPadding); the two never drift apart.
+      expect(PROZOR_LABEL_PADDING_PX).toBe(LABEL_PADDING_TILE_PX);
+      // The kiosk's option set carries a wider padding for a field that shows more ground than the wall's (kiosk/mapview.ts labelPadding); the names' layer alone reads it, the spacing stays the ruling's.
+      const wider = byId(basemapLayers(theme, { profile: 'prozor', labelPadding: 48 }), 'roads_labels_major');
+      expect(wider.layout!['text-padding']).toBe(48);
+      expect(wider.layout!['symbol-spacing']).toBe(360);
+      expect(byId(basemapLayers(theme, { profile: 'prozor', labelPadding: 48 }), 'places_subplace').layout!['text-padding']).toBe(12);
       expect(street.layout!['text-font']).toEqual([MAP_FONTS.medium]);
       expect(PROZOR_MAJOR_ROAD_DETAILS).toEqual(['motorway', 'trunk', 'primary', 'secondary']);
       const filter = JSON.stringify(street.filter);
@@ -415,7 +423,7 @@ describe('the prozor basemap profile: the ground under the figure, readable from
     // The overlays are drawn at the screen's own symbol scale with the kiosk's
     // option set, and a route number on a plate is read across the same room
     // as a street name.
-    const prozor: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6 };
+    const prozor: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
     for (const layer of overlayLayers(OVERLAY_LIGHT, { scale: KIOSK_SYMBOL_SCALE, prozor })) {
       if (layer.type !== 'symbol' || layer.layout?.['text-size'] === undefined) continue;
       for (const zoom of ZOOMS) {

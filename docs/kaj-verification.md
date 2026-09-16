@@ -575,14 +575,17 @@ preko retka od 1,1 pa laže o prelijevanju), prelazi li ijedna vrijednost dva re
 izjave, `data-major-labels` domaćina karte i okvir atribucijske kontrole.
 
 **Rezultat (val B, 16. 9. 2026., `review.local/kiosk-pass/prozor/`, 17:42 po zagrebačkom
-vremenu, stajalište Trg bana J. Jelačića):** snimke `<veličina>-light.png`, `<veličina>-dark.png`
+vremenu i ponovno 19:10 nakon popravka 1 -- iste brojke osim imena ulica na totemu -- stajalište
+Trg bana J. Jelačića):** snimke `<veličina>-light.png`, `<veličina>-dark.png`
 i `<veličina>-after-20.png` za svih osam veličina, `3m-light.png`, `3m-dark.png`, `geometry.json`.
+Stupac imena ulica čita `data-major-labels` u trenutku snimke, tj. u pravilu slaganje profila prije
+pločica vozila (najveću brojku); kadar nakon 20 h čita 2 / 2 / 0 / 5 / 10 / 4 / 2 / 0 istim redom.
 
 | Veličina | polje | prostor stupca | kartica | izjave (cijele / ponuđene) | retci vrijednosti | imena ulica |
 |---|---|---|---|---|---|---|
 | 1920 × 1080 | 72,9 % | 473 px | 365 px | 2 / 3 (promet, zatvoreno) | 2, 1 | 7 |
 | 1366 × 768 | 67,8 % | 248 px | 341 px | 2 / 2 | 1, 1 | 4 |
-| 1080 × 1920 | 76,9 % | 382 px | 382 px | 3 / 3 | 1, 1, 1 | 7 |
+| 1080 × 1920 | 76,9 % | 382 px | 382 px | 3 / 3 | 1, 1, 1 | 3 (7 prije popravka 1) |
 | 2560 × 1440 | 72,9 % | 631 px | 486 px | 2 / 3 | 2, 1 | 9 |
 | 3840 × 2160 | 81,7 % | 1149 px | 527 px | 2 / 3 | 2, 1 | 15 |
 | 2560 × 1080 | 79,7 % | 473 px | 365 px | 2 / 3 | 2, 1 | 9 |
@@ -628,16 +631,24 @@ kao ruta ni kao query -- njegovo odsustvo provjerava i `node scripts/audit-produ
 (pravilo `legacy-prizor-param`). Broj izjava pinira se kao donja granica, ne kao obećanje (R-KP22):
 najmanje dvije na 1920 × 1080 (tri kad je svaka vrijednost u jednom retku), najmanje jedna na
 1366 × 768 (dvije kad je prometna vrijednost u jednom retku), tri u portretu; imena ulica
-najviše 8 na pejzažnim poljima i 12 na totemu, čije polje na istom razmaku (R-KP17) nosi dvostruko
-tla sjever--jug.
+najviše 8 na svakoj veličini (R-KP17). Totem, čije polje nosi dvostruko tla sjever--jug, sam bi
+postavio 7--9 imena: kiosk zato širi razmak sudara imena (`text-padding`) u koraku s tlom koje polje
+pokazuje preko zidnog (`labelPadding` u `kiosk/mapview.ts`, 48 umjesto 24 pločastih piksela na
+totemu, 24 na zidu), čime je vlastito slaganje profila prije pločica vozila palo na 3 imena uz
+zidnih 6--8 (mjereno 16. 9. 2026.). Razmak sidara (`symbol-spacing`) nije poluga za taj broj: MapLibre
+sidri svaku cestu jednom po pločici bez obzira na razmak (360, 473, 745 i 1100 dali su isto 7--8
+imena na totemu).
 
 **Rezultat (val B):** `gate.sh unit` -- `UNIT STAGES PASSED` (`gate-logs/gate-20260916-171723.log`:
 typecheck, vitest 179 datoteka / 2534 testova u oba projekta, build). `e2e/kiosk-layout.spec.ts`
 16 testova: okvir na 1920 × 1080 drži 2 cijele izjave uz dvorednu prometnu vrijednost i 3 uz
 jednoredne, na 1366 × 768 po 2 (granice 1 / 2), na 1080 × 1920 3 i 3; redci oznaka prometa 2 / 1 /
-2; `data-major-labels` 1--7 na 1920 × 1080 unutar jednog sata (brojka raste kako se pločice
-iscrtaju), 0--4 na 1366 × 768 (nula je stvarno brojanje: na z14,14 ploče i imena čvorišta prvi
-uzimaju sidra), 7--9 na 1080 × 1920. Preglednički stupanj (`gate.sh browser`,
+2; `data-major-labels` (prvi otisak pri `ready`, tj. slaganje profila prije pločica vozila / nakon
+jednog ciklusa dohvata, popravak 1, 19:05): 4--7 / 2 na 1920 × 1080, 4 / 0 na 1366 × 768, 3 / 0 na
+1080 × 1920 -- brojka pada kad pločice vozila zauzmu sidra, ne raste (nula je stvarno brojanje);
+prije proširenja razmaka sudara totem je sam postavljao 7--9 (jedanput 9 preko granice), zid 6--8.
+Jedinični stupanj ponovljen je na konačnom HEAD-u popravka 1 (naziv dnevnika u
+`task-WB-report.md`). Preglednički stupanj (`gate.sh browser`,
 `gate-logs/gate-20260916-174346.log`): Playwright 91 testova u oba projekta -- 86 zelenih i pet
 crvenih koji su svi imali isti uzrok (zaslon za e2e dobio je stajalište, pa su dokazi pisani za
 zaslon bez stajališta -- telefonska sesija u a11y i motion, ploča lagano u lagano i motion -- i

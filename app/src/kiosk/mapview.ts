@@ -45,6 +45,7 @@ import { vehicleFixes } from '../motion/fixes';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
+import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from './layout';
 import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
 import { stopDistanceM } from './stops';
 
@@ -532,15 +533,45 @@ export function pairedView(input: PairedInput): KioskView {
   return view;
 }
 
+/** R-KP17's collision padding around a major street name on the wall's
+ *  field, in tile pixels: a hand-copy of map/basemap.ts
+ *  PROZOR_LABEL_PADDING_PX (this module stays off the basemap's graph;
+ *  test/app/basemap.test.ts pins the two equal). */
+export const LABEL_PADDING_TILE_PX = 24;
+/** The ground the 1920 x 1080 wall's field shows, in square metres:
+ *  FIELD_SPAN_M across and, north to south, that times the design field's
+ *  height over its width (2.8 x 1.8 km) -- where R-KP17's padding was
+ *  measured. */
+const WALL_FIELD_GROUND_M2 = FIELD_SPAN_M * FIELD_SPAN_M * (FIELD_DESIGN_HEIGHT.wide / FIELD_DESIGN_WIDTH.wide);
+
+/** The street names' collision padding for a field of widthPx x heightPx
+ *  showing spanM across (ProzorOptions.labelPadding, contract 3): R-KP17's
+ *  24 on the wall's field and, on a field that shows more ground than the
+ *  wall's, 24 times that ratio -- doubled on the totem, whose field holds
+ *  twice the wall's ground north to south -- in whole tile pixels, never
+ *  below 24. The count of names a field places is the padding's to hold, not
+ *  the spacing's: MapLibre anchors every road once per tile whatever
+ *  symbol-spacing says (360, 473, 745 and 1100 all placed 7 to 8 names on the
+ *  totem before the plates took their anchors, 16 Sept 2026), while 48
+ *  placed 3 against the wall's 6 to 8 at 24 -- under the e2e's cap of eight
+ *  with room, where 24 had left none on the totem (9 placed once). A box not
+ *  yet laid out (0) and a phone's half-span band keep the ruling's own. */
+export function labelPadding(widthPx: number, heightPx: number, spanM: number): number {
+  const groundM2 = spanM * spanM * (heightPx / widthPx);
+  const overWall = Number.isFinite(groundM2) ? groundM2 / WALL_FIELD_GROUND_M2 : 1;
+  return Math.round(LABEL_PADDING_TILE_PX * Math.max(1, overWall));
+}
+
 /** The prozor overlay set for this screen (contract 2). The overlap zoom is
  *  the FIELD's derived zoom less a tenth in both phases: the paired camera
  *  (z15) is always above it, so the noses and the unconditional pills the
- *  invitation gets, the paired views keep. The map is created once with the
- *  first request's set and hears every later one through setProzor
- *  (R-KP19), so the stop's routes and the measured field's threshold reach
+ *  invitation gets, the paired views keep; the street names' padding is the
+ *  field's too (labelPadding). The map is created once with the first
+ *  request's set and hears every later one through setProzor (R-KP19), so
+ *  the stop's routes, the measured field's threshold and its padding reach
  *  the picture without a second map. */
-export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number): ProzorOptions {
-  return { networkKinds: ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN };
+export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number): ProzorOptions {
+  return { networkKinds: ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
 }
 
 export interface KioskMapInput {
@@ -553,8 +584,9 @@ export interface KioskMapInput {
   selection: PublicSelection | null;
   /** Which composition shows the map: the invitation's fixed window or a paired composition (R-KP8). */
   phase: 'invitation' | 'paired';
-  /** The field's width and ground span for the derived zoom (fieldView) and the overlap threshold (prozorOptions). */
+  /** The field's box and ground span: the derived zoom (fieldView), the overlap threshold and the street names' padding (prozorOptions, labelPadding). */
   widthPx: number;
+  heightPx: number;
   spanM: number;
   ariaLabel: string;
   reducedMotion?: boolean;
@@ -579,7 +611,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
     outline: kvartOutline(input.stop?.district),
-    prozor: prozorOptions(input.stop, field.zoom),
+    prozor: prozorOptions(input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM)),
   };
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,

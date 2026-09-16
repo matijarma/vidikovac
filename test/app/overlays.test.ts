@@ -89,7 +89,7 @@ describe('the overlay layer list', () => {
 // plates and buses capsules (the badge rule), the screen's stop is the largest
 // mark on the map, and the fixed 14.5 thresholds follow the field's own zoom.
 describe('the kiosk overlay set (prozor)', () => {
-  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6 };
+  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
 
   it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, trams as plates and buses as pills, the screen\u2019s stop as the largest mark, and no seat', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
