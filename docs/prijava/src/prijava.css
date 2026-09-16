@@ -159,7 +159,6 @@ strong { font-weight: var(--weight-bold); }
 .live-lane { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr)); gap: 0.625rem; margin-block-start: var(--sp-3); }
 .live-lane > .tl[data-variant='band'], .live-lane > .tl[data-variant='row'] { grid-column: 1 / -1; }
 .live-lane .tl { cursor: default; }
-.live-lane .tl[data-domain='news'] .kicker { color: var(--tone-text-muted); }
 .live-lane .tl-glyph { color: var(--tone-text-muted); }
 .live-lane .tl[data-tone='calm'] .tl-glyph { color: var(--tone-live); }
 .live-note { margin-block-start: var(--sp-3); font-size: var(--type-secondary); color: var(--tone-text-muted); }

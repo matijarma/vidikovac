@@ -282,7 +282,7 @@ def build():
         lk = doc.add_paragraph(); _run(lk, "SADA U ZAGREBU · snimka otvorenih podataka, 15. 9. 2026. 19:51", size=8.5, color=LABEL, bold=True)
         lk.paragraph_format.space_before = Pt(12); lk.paragraph_format.keep_with_next = True
         pp = doc.add_paragraph(); pp.add_run().add_picture(live, width=Cm(16.5))
-        caption(doc, "Iste pločice, isti izvori i ista stanja kao u aplikaciji: 275 vozila u pokretu, 39 zatvaranja, 21,4 °C na Maksimiru, tri potresa u 72 sata, DHMZ mirno, naslov HRT-a. Na adresi zagreb.aningfilm.hr/prijava/ isti dokument te vrijednosti osvježava uživo.")
+        caption(doc, "Iste pločice, isti izvori i ista stanja kao u aplikaciji: 275 vozila u pokretu, 39 zatvaranja, 21,4 °C na Maksimiru, tri potresa u 72 sata, DHMZ mirno. Na adresi zagreb.aningfilm.hr/prijava/ isti dokument te vrijednosti osvježava uživo.")
     doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
     # Body with figure placement

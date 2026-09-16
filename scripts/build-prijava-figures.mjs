@@ -46,7 +46,8 @@ function buildQr() {
 /** The artefact's `diagram` as {route, kind, pts:[x,y][]}[] plus its box; only what this figure reads (see app/src/motion/network.ts RawNetworkArtefact). */
 function readDiagram() {
   const raw = JSON.parse(readFileSync(NETWORK, 'utf8'));
-  if (raw.version !== 1) throw new Error(`zet-network.json: unexpected artefact version ${raw.version}`);
+  // Versions 1 and 2 (the twin engine's rail graph) carry the same `routes` and `diagram` members this figure reads.
+  if (raw.version !== 1 && raw.version !== 2) throw new Error(`zet-network.json: unexpected artefact version ${raw.version}`);
   const typeOf = new Map(raw.routes.id.map((id, i) => [id, raw.routes.type[i]]));
   const lines = raw.diagram.lines.route.map((route, i) => ({ route, type: typeOf.get(route), pts: raw.diagram.lines.pts[i] }));
   return { lines, box: raw.diagram.box, feedVersion: raw.feedVersion };
@@ -165,9 +166,9 @@ function buildSchematic() {
   const { lines, box, feedVersion } = readDiagram();
   const trams = lines.filter((l) => l.type === 0 && l.pts.length > 1);
   const hub = hubOf(trams, box);
-  // The window: about a third of the network's width, a little taller than wide (the kiosk's map slot stands upright), the hub in the middle, clamped to the box.
-  const winW = Math.min(box[0], 0.34);
-  const winH = Math.min(box[1], winW * 1.2);
+  // The window: about half of the network's width, three by two like the kiosk's field (the map is the whole field of the public screen, the rail hangs at its foot), the hub in the middle, clamped to the box.
+  const winW = Math.min(box[0], 0.5);
+  const winH = Math.min(box[1], winW / 1.5);
   const x0 = Math.min(Math.max(0, hub.x - winW / 2), box[0] - winW);
   const y0 = Math.min(Math.max(0, hub.y - winH / 2), box[1] - winH);
   const win = { x0, y0, x1: x0 + winW, y1: y0 + winH };
@@ -206,7 +207,7 @@ function buildSchematic() {
   <title id="shm-title">Shema tramvajske mreže ZET-a oko Trga bana J. Jelačića</title>
   <desc id="shm-desc">Pojednostavljeni oktilinearni prikaz ${routes.length} tramvajskih linija iz GTFS podataka ZET-a (inačica ${feedVersion}), izrezan oko središta mreže; bez pozadine i bez oznaka stanica. ${ZET_CREDIT}</desc>
   <style>.shm path{vector-effect:non-scaling-stroke}</style>
-  <g fill="none" stroke="var(--tone-action-brand)" stroke-opacity="0.9" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+  <g fill="none" stroke="var(--tone-action-brand)" stroke-opacity="0.9" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
     ${paths}
   </g>
 </svg>

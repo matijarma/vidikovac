@@ -258,10 +258,6 @@
         setText('tile-safety-ctx', 'DHMZ · EMSC · ' + hhmm(new Date(m.fetchedAt || m.sourceUpdatedAt || now)));
       }
     }
-    if ((m = mods['hrt-news']) && m.items && m.items[0]) {
-      setText('tile-news-title', m.items[0].title);
-      setText('tile-news-ctx', 'HRT · ' + hhmm(new Date(m.items[0].at || now)));
-    }
     setText('live-when', 'uživo, ' + hhmm(new Date(t.generatedAt || now)));
     setText('live-note', 'Iste pločice, isti izvori i ista stanja kao u aplikaciji. Vrijednosti su osvježene pri otvaranju dokumenta s otvorenih izvora; snimka u priloženoj datoteci nosi datum izrade.');
   }

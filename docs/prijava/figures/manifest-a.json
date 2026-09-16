@@ -3,7 +3,7 @@
     "id": "f-arhitektura",
     "file": "figures/f-arhitektura.svg",
     "title": "Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika",
-    "desc": "Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, HRT, Službeni glasnik i šest izvora događanja.",
+    "desc": "Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, Službeni glasnik i šest izvora događanja.",
     "caption": "Jedan Worker, četiri Durable Objecta, bez baze korisnika: tri uređaja govore s jednim Workerom, a podaci dolaze iz otvorenih izvora."
   },
   {

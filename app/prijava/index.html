@@ -553,9 +553,6 @@
   .fg-table .fg-stanje { white-space: normal; }
 }
 
-
-
-
 .mk, .mk *, .mk *::before, .mk *::after { box-sizing: border-box; }
 .mk { margin: 0; font-family: var(--font-sans); color: var(--tone-text-primary); -webkit-font-smoothing: antialiased; }
 
@@ -570,10 +567,8 @@ figure.mk li { padding: 0; }
 .mk .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .mk-caption { margin: var(--sp-2) 0 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 
-
 .mk-phone { --mk-safe-top: 24px; --mk-safe-bottom: 16px; --ki-tabs: calc(3.5rem + var(--mk-safe-bottom)); position: relative; inline-size: min(100%, 393px); block-size: auto; border: 1.5px solid var(--tone-stroke-strong); border-radius: 40px; overflow: hidden; background: var(--tone-surface-canvas); font-size: var(--text-body); line-height: var(--leading-normal); }
 .mk-phone .ki { display: grid; grid-template-rows: auto auto; background: var(--tone-surface-canvas); }
-
 
 .mk-phone .ki-head { position: relative; z-index: 2; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: var(--sp-2); min-block-size: calc(3.25rem + var(--mk-safe-top)); padding-block-start: var(--mk-safe-top); padding-inline: var(--sp-3) var(--sp-2); background: var(--tone-surface-1); border-block-end: 1px solid var(--tone-stroke); }
 .mk-phone .ki-head > * { min-inline-size: 0; }
@@ -593,16 +588,13 @@ figure.mk li { padding: 0; }
 .mk-phone .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; font-variant-numeric: tabular-nums; }
 .mk-phone .ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); }
 
-
 .mk-phone .ki-main { min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) var(--sp-4) calc(var(--ki-tabs) + var(--sp-6)); }
-
 
 .mk-phone .tb-seg { display: block; min-inline-size: 0; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }
 .mk-phone .tb-seg-track { display: flex; flex-wrap: wrap; gap: 0.125rem; min-inline-size: 0; padding: 2px; border-radius: var(--r-md); background: var(--tone-surface-2); }
 .mk-phone .tb-seg-btn { flex: 1 1 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; }
 .mk-phone .tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-phone .tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
-
 
 .mk-phone .tb { display: grid; row-gap: var(--sp-3); }
 .mk-phone .tb-heads { display: block; position: relative; }
@@ -627,7 +619,6 @@ figure.mk li { padding: 0; }
 
 .mk-phone .tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); }
 
-
 .mk-phone .ki-tabbar { position: absolute; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); box-shadow: inset 0 1px 0 var(--tone-stroke); padding-block-end: var(--mk-safe-bottom); }
 .mk-phone .ki-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
 .mk-phone .ki-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; inline-size: 100%; min-block-size: 3.5rem; padding: var(--sp-1) 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); }
@@ -639,14 +630,12 @@ figure.mk li { padding: 0; }
 .mk-phone .ki-fab { position: absolute; inset-inline-end: var(--sp-4); inset-block-end: calc(var(--ki-tabs) + var(--sp-4)); z-index: var(--z-sticky); display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target-primary); padding: 0 var(--sp-5); border: 0; border-radius: var(--r-pill); background: var(--tone-action-brand); color: var(--tone-action-brand-fg); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-md); }
 .mk-phone .ki-fab .icon { color: inherit; }
 
-
 .mk-kiosk { container-type: inline-size; inline-size: 100%; }
 .mk-kiosk-scale { --mk-s: 0.5; position: relative; inline-size: 100%; aspect-ratio: 16 / 9; overflow: hidden; }
 @supports (inline-size: 1cqw) and (rotate: calc(tan(atan2(1px, 2px)) * 1deg)) {
   .mk-kiosk-scale { --mk-s: tan(atan2(100cqw, 1920px)); }
 }
 .mk-kiosk-frame { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 1920px; block-size: 1080px; transform-origin: 0 0; transform: scale(var(--mk-s)); }
-
 
 .mk-kiosk .kiosk {
   --k-canvas: var(--tone-surface-canvas);
@@ -677,7 +666,6 @@ figure.mk li { padding: 0; }
 .mk-kiosk .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mk-kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
 
-
 .mk-kiosk .k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
 .mk-kiosk .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .mk-kiosk .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
@@ -694,29 +682,27 @@ figure.mk li { padding: 0; }
 .mk-kiosk .k-sun { display: inline-flex; align-items: center; gap: 0.25em; font-size: var(--k-hint-size); color: var(--k-ink-2); }
 .mk-kiosk .k-sun .k-icon { color: var(--k-amber); }
 
-
 .mk-kiosk .k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
 .mk-kiosk .k-stage > section { height: 100%; min-height: 0; }
 .mk-kiosk .k-invitation { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); gap: var(--k-gap); }
 .mk-kiosk .k-side { display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: var(--k-gap); min-height: 0; }
 .mk-kiosk .k-side-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); }
+
 .mk-kiosk .k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
 .mk-kiosk .k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .mk-kiosk .k-map-host > svg { display: block; width: 100%; height: 100%; }
-.mk-kiosk .k-scene { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: calc(var(--k-gap) * 0.6); min-width: 0; min-height: 0; }
-.mk-kiosk .k-scene-head { display: flex; align-items: baseline; gap: var(--k-gap); min-width: 0; }
+.mk-kiosk .k-scene { position: relative; display: grid; grid-template-areas: 'stack'; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
+.mk-kiosk .k-scene > .k-map { grid-area: stack; }
+.mk-kiosk .k-scene-head { position: absolute; top: var(--k-gap); left: var(--k-gap); display: flex; align-items: center; gap: var(--k-gap); box-sizing: border-box; max-width: calc(100% - var(--k-gap) * 2); min-width: 0; padding: calc(var(--k-gap) * 0.45) var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .mk-kiosk .k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
 .mk-kiosk .k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
 .mk-kiosk .k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
 .mk-kiosk .k-dot { box-sizing: border-box; width: 10px; height: 10px; border: 2px solid var(--k-line); border-radius: 999px; background: transparent; }
 .mk-kiosk .k-dot[data-on='1'] { border-color: var(--k-ink); background: var(--k-ink); }
-.mk-kiosk .k-scene-body { position: relative; min-height: 0; overflow: hidden; }
-.mk-kiosk .k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; }
-.mk-kiosk .k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: var(--k-tile-gap); min-height: 0; }
-.mk-kiosk .k-scene-grid > .k-map { grid-column: 1; grid-row: 1 / -1; }
-.mk-kiosk .k-scene-col { grid-column: 2; grid-row: 1; display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--k-tile-gap); min-width: 0; min-height: 0; }
-.mk-kiosk .k-scene-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: max-content; gap: var(--k-tile-gap); min-width: 0; }
-
+.mk-kiosk .k-scene-body { position: absolute; top: 0; right: 0; bottom: 0; left: 0; min-height: 0; }
+.mk-kiosk .k-scene-item { position: absolute; top: auto; right: 0; bottom: 0; left: 0; display: grid; min-height: 0; }
+.mk-kiosk .k-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); grid-auto-rows: max-content; align-content: end; box-sizing: border-box; min-width: 0; margin: 0; gap: var(--k-tile-gap); padding: var(--k-tile-gap); list-style: none; }
+.mk-kiosk .k-rail > [data-span='2'] { grid-column: span 2; }
 
 .mk-kiosk .tl { display: grid; gap: calc(var(--k-gap) * 0.3); align-content: space-between; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.8) var(--k-gap); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); overflow: hidden; }
 .mk-kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -740,6 +726,12 @@ figure.mk li { padding: 0; }
 .mk-kiosk .k-tl-line[data-tone='ontime'] .tl-value { color: var(--k-green); }
 .mk-kiosk .k-tl-line[data-tone='unknown'] .tl-value { color: var(--k-ink-3); }
 
+.mk-kiosk .k-rail .tl { padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
+.mk-kiosk .k-rail .tl-title { font-size: var(--k-sup-size); overflow-wrap: break-word; }
+.mk-kiosk .k-rail .tl[data-variant='band'] { grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: start; min-height: 0; padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
+.mk-kiosk .k-rail .tl[data-variant='band'] .tl-label { white-space: normal; }
+.mk-kiosk .k-rail .tl[data-variant='band'] > .tl-trail { grid-column: 1 / -1; font-size: var(--k-sup-size); }
+.mk-kiosk .k-rail .k-tl-line .tl-value { font-size: var(--k-sup-size); white-space: normal; }
 
 .mk-kiosk .k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr text' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.8); min-height: 0; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
 .mk-kiosk .k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
@@ -758,7 +750,6 @@ figure.mk li { padding: 0; }
 .mk-kiosk .k-code-dash { margin: 0 0.15em; opacity: 0.4; }
 .mk-kiosk .k-progress { height: 8px; overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .mk-kiosk .k-progress-bar { height: 100%; border-radius: 999px; background: var(--k-action-ink); }
-
 
 .mk-kiosk .k-strip { display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
 .mk-kiosk .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
@@ -914,7 +905,6 @@ strong { font-weight: var(--weight-bold); }
 .live-lane { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr)); gap: 0.625rem; margin-block-start: var(--sp-3); }
 .live-lane > .tl[data-variant='band'], .live-lane > .tl[data-variant='row'] { grid-column: 1 / -1; }
 .live-lane .tl { cursor: default; }
-.live-lane .tl[data-domain='news'] .kicker { color: var(--tone-text-muted); }
 .live-lane .tl-glyph { color: var(--tone-text-muted); }
 .live-lane .tl[data-tone='calm'] .tl-glyph { color: var(--tone-live); }
 .live-note { margin-block-start: var(--sp-3); font-size: var(--type-secondary); color: var(--tone-text-muted); }
@@ -1070,14 +1060,6 @@ strong { font-weight: var(--weight-bold); }
           </div>
           <div class="tl-trail"><span class="tl-ctx-text" id="tile-safety-ctx">DHMZ · EMSC · 19:51</span></div>
         </div>
-        <div class="tl" data-variant="row" data-domain="news">
-          <svg class="tl-glyph" viewBox="0 0 24 24" aria-hidden="true" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
-          <div class="tl-main">
-            <div class="tl-label"><span class="kicker">Vijesti</span></div>
-            <div class="tl-title" id="tile-news-title">Krenuo prvi hibridni elektrodizelski vlak</div>
-          </div>
-          <div class="tl-trail"><span class="tl-ctx-text" id="tile-news-ctx">HRT · 19:49</span></div>
-        </div>
       </div>
       <p class="live-note" id="live-note">Iste pločice, isti izvori i ista stanja kao u aplikaciji. Vrijednosti su snimka otvorenih izvora u trenutku izrade dokumenta; na adresi zagreb.aningfilm.hr/prijava/ osvježavaju se pri otvaranju.</p>
       <p class="live-demo">
@@ -1096,7 +1078,7 @@ strong { font-weight: var(--weight-bold); }
 <p>Projekt namjerno nosi ime postojećeg gradskog e-biltena: prijavljujemo ga Gradu kao suvremenu inačicu iste funkcije, u vrijeme kad e-poruke postaju stvar prošlosti. Obrazloženje je u opasci autora na kraju dokumenta.</p>
 <section class="sec sec-h3" id="sto-povjerenstvo-provjerava-u-prototipu" aria-labelledby="sto-povjerenstvo-provjerava-u-prototipu-h">
 <h3 id="sto-povjerenstvo-provjerava-u-prototipu-h">Što Povjerenstvo provjerava u prototipu</h3>
-<p>Prototip koristi deset modula izvora kroz sedam područja: Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja i Vijesti. Privremeni zaslon postavlja se u pregledniku na stranici <code>/kiosk/</code>, odabire se gradska četvrt i stvarno stajalište, a telefon ili druga kartica preglednika ulazi redovnim jednokratnim kodom. Zaslon bez sesije izmjenjuje tri prizora (Promet, Večeras, Grad), a nakon skeniranja prikazuje sloj koji gleda osoba koja ga vodi. Ne postoji odvojena demonstracija s izmišljenim podacima ili zaobiđenom sesijom.</p>
+<p>Prototip koristi devet modula izvora kroz šest područja: Sada, Promet, Vrijeme, Sigurnost, Grad i Događanja. Privremeni zaslon postavlja se u pregledniku na stranici <code>/kiosk/</code>, odabire se gradska četvrt i stvarno stajalište, a telefon ili druga kartica preglednika ulazi redovnim jednokratnim kodom. Zaslon bez sesije izmjenjuje tri prizora (Promet, Večeras, Grad), a nakon skeniranja prikazuje sloj koji gleda osoba koja ga vodi. Ne postoji odvojena demonstracija s izmišljenim podacima ili zaobiđenom sesijom.</p>
 <p>Položaji vozila su procjene iz očitanja i geometrije linije; kašnjenje linije nije procjena dolaska na stajalište. Prognoza sadrži dnevni raspon, ne izmišljenu satnu krivulju. Događanja imaju stvarne datume, a nedatirane kvartovske obavijesti ostaju bez datuma. Službeni glasnik prikazuje podatke o aktima i izvornike, ne izmišljeni pravni sažetak. Status modula razlikuje živo, zastarjelo i nedostupno; kad dio izvora modula ne odgovara, modul je označen zastarjelim uz popis izvora koji ne odgovaraju, a prazan uspješan odgovor razlikuje se od nedostupnog izvora.</p>
 <p>Poglavlje 1 opisuje cilj financiranog proizvoda. Sve što je u njemu označeno s <strong>(plan: M#)</strong> je isporuka financiranog razdoblja, vezana na fazu plana provedbe, i nije predstavljeno kao dovršena funkcija prototipa. Oznake M1 do M7 su faze, ne mjeseci: M1 je 1. i 2. mjesec od potpisa ugovora, M1b 2., M2 2. i 3., M3 3. i 4., M4 5., M5 6. do 8., M6 9., a M7 10. mjesec. Sve neoznačeno Povjerenstvo može provjeriti u prototipu danas.</p>
 </section>
@@ -1180,14 +1162,15 @@ strong { font-weight: var(--weight-bold); }
 </section>
 <section class="sec sec-h3" id="1-2-javni-zaslon-prozor-citljiv-bez-telefona" aria-labelledby="1-2-javni-zaslon-prozor-citljiv-bez-telefona-h">
 <h3 id="1-2-javni-zaslon-prozor-citljiv-bez-telefona-h">1.2 Javni zaslon (Prozor), čitljiv bez telefona</h3>
-<p>Zaslon bez dodira ima stalan okvir i izmjenjive prizore. Zaglavlje nosi znak Kaj ima?, oznaku stajališta prostora, datum, sat i, kad DHMZ odgovara, vrijeme kao stanje uz sat (glif, temperatura, zalazak sunca), nikad kao pločicu. Desni stupac nosi dvije brojčane pločice (vozila u pokretu na mreži, zatvaranja u blizini stajališta) i pozivnu karticu "Skeniraj za 10 minuta grada." s QR kodom od najmanje 240 piksela, uputom za tipkanje koda i kodom ispisanim u dvije skupine po četiri znaka (ABCD·EFG0) za čitanje naglas ili tipkanje, uz vidljivu traku koja pokazuje koliko je ostalo do sljedećeg koda. Polje prizora izmjenjuje tri prizora svakih 20 sekundi: Promet (lokalna vektorska karta s linijama stajališta prostora i vozilima u blizini uz pločice linija s oba kraja linije, riječju stanja i brojem vozila, te radovi u kvartu), Večeras (današnja datirana događanja iz otvorenih izvora za cijeli grad, dok ih ima) i Grad (sljedeća sjednica Gradske skupštine, gradska obavijest pod Otvorenom dozvolom, jedna vijest HRT-a s izvorom i najnoviji potres EMSC-a kad ga ima; akti Službenog glasnika razine su sesije i pojavljuju se tek nakon skeniranja). Karta, vrijeme i pozivna kartica stoje na mjestu; kod i QR kod mijenjaju se svakih 30 sekundi. Sigurnosna traka uz donji rub u jednom je retku: štit i riječ Sigurnost, presuda riječju (mirno, upozorenje ili nepotvrđeno), izvori DHMZ · EMSC s vremenom potvrde ili aktivno upozorenje, dežurna ljekarna, odbrojavanje do sljedećeg prizora i poveznica na <code>/hitno</code>. Svaki blok nosi vlastiti navod izvora. Dolasci po stajalištu <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, kvaliteta zraka na najbližoj postaji <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span> i arhivska slika Zagreba s atribucijom <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span> dodaju se kad izvori budu u produkciji.</p>
+<p>Zaslon bez dodira ima stalan okvir i izmjenjive prizore. Zaglavlje nosi znak Kaj ima?, oznaku stajališta prostora, datum, sat i, kad DHMZ odgovara, vrijeme kao stanje uz sat (glif, temperatura, zalazak sunca), nikad kao pločicu. Desni stupac nosi dvije brojčane pločice (vozila u pokretu na mreži, zatvaranja u blizini stajališta) i pozivnu karticu "Skeniraj za 10 minuta grada." s QR kodom od najmanje 240 piksela, uputom za tipkanje koda i kodom ispisanim u dvije skupine po četiri znaka (ABCD·EFG0) za čitanje naglas ili tipkanje, uz vidljivu traku koja pokazuje koliko je ostalo do sljedećeg koda. Polje je lokalna vektorska karta koja stoji kroz sva tri prizora; prizor mijenja kadar, oznaku u kutu karte i tračnicu pločica uz njezin donji rub, svakih 20 sekundi: Promet (kadar na stajalištu prostora: linije stajališta i vozila u blizini na karti, pločice linija s oba kraja linije, riječju stanja i brojem vozila, te traka radova u kvartu), Večeras (kadar na gradskoj četvrti: današnja datirana događanja iz otvorenih izvora za cijeli grad, dok ih ima, a ona s objavljenom koordinatom i na karti) i Grad (isti kadar sa sjedištem četvrti: sljedeća sjednica Gradske skupštine, gradske obavijesti pod Otvorenom dozvolom i najnoviji potres EMSC-a kad ga ima; akti Službenog glasnika razine su sesije i pojavljuju se tek nakon skeniranja). Karta je nacrtana za čitanje s tri metra i nosi točke koje Grad objavljuje: radove u tijeku, najbližu dežurnu ljekarnu, zborna mjesta dok je stanje sigurnosti hitno, najnoviji potres i obris četvrti. Karta, vrijeme i pozivna kartica stoje na mjestu; kod i QR kod mijenjaju se svakih 30 sekundi. Sigurnosna traka uz donji rub u jednom je retku: štit i riječ Sigurnost, presuda riječju (mirno, upozorenje ili nepotvrđeno), izvori DHMZ · EMSC s vremenom potvrde ili aktivno upozorenje, dežurna ljekarna, odbrojavanje do sljedećeg prizora i poveznica na <code>/hitno</code>. Svaki blok nosi vlastiti navod izvora. Dolasci po stajalištu <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, kvaliteta zraka na najbližoj postaji <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span> i arhivska slika Zagreba s atribucijom <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span> dodaju se kad izvori budu u produkciji.</p>
 <p>Zaslon s dodirom nosi i "Osnovno": dodir na riječ presude u sigurnosnoj traci otvara važeće upozorenje ako postoji, linije u blizini stajališta, vrijeme, zatvorene prometnice i dežurnu ljekarnu, bez skeniranja, bez sesije i bez odbrojavanja, a nakon devedeset sekundi bez dodira zaslon se vraća na poziv. Gradski zaslon ne smije uskratiti informaciju čovjeku koji nema telefon za skeniranje; skeniranje otključava grad na vlastitom uređaju, a ne oduzima ga zaslonu pred kojim čovjek stoji. Tema je tamna nakon zalaska i svijetla danju, prema izračunatim vremenima sunca, uz mogućnost da prostor odabere. Tipografija zaslona ima po kompoziciji devet razina, sve iz jednog skupa tokena: na 1080p kod 84 px (ograničen na 15 % širine svoje kartice), naslovi 40 px, tekst 28 px, navodi izvora 20 px; kompozicija za 1366 × 768 i za okomiti totem 1080 × 1920 zasebno je nacrtana, ne proporcionalno smanjena. Nakon skeniranja zaslon prikazuje sloj koji gleda osoba koja ga vodi, u rasporedu za gledanje s udaljenosti, i vraća se pozivu kad sesija istekne. Izmjena prizora staje uz sustavnu postavku smanjenog pokreta i u laganom načinu rada.</p>
 <figure class="fig" id="fig-m-kiosk" data-kind="html"><div class="fig-body"><!-- Kaj ima? · prijava · slika: javni zaslon 1920 × 1080 (data-size='wide'), prizor Promet u 19:51 (15. 9. 2026.), stanica Trg bana J. Jelačića.
-     Statična replika app/src/kiosk.ts (zaglavlje), kiosk/scenes.ts (polje prizora, pločice linija, traka radova), kiosk/invitation.ts i frame.ts
-     (bočni stupac, pozivnica, sigurnosna traka). Razredi su aplikacijski, pravila u mocks.css uz tokens.css i signage.css; okvir od 1920 × 1080 CSS px
-     skalira se na širinu spremnika (--mk-s), bez upita spremnika ostaje 0,5. Shema i QR ulaze iz shema-tramvaji.svg i qr-s.svg kroz
-     scripts/build-prijava-figures.mjs (oznake mk:svg). Unutrašnjost je aria-hidden; slika govori kroz aria-label. -->
-<figure class="mk mk-kiosk" role="img" aria-label="Javni zaslon 1920 × 1080: zaglavlje s natpisom Kaj ima?, stanicom Trg bana J. Jelačića, datumom uto 15. 9., satom 19:51, vedro 21,4 °C i zalaskom 19:09; prizor Promet sa shemom tramvajske mreže i šest pločica linija: 6 Črnomerec – Sopot na vrijeme, 11 Črnomerec – Dubec kasni 3 min, 12 Ljubljanica – Dubrava na vrijeme, 13 Žitnjak – Kvaternikov trg rani 2 min, 14 Mihaljevac – Zapruđe na vrijeme, 17 Prečko – Borongaj kasni 5 min, s brojem vozila u blizini, traka Radovi u kvartu Vlaška ulica 2, još 3 linije, prvi od tri prizora; bočni stupac s pločicama Vozila u pokretu 275 (ZET, podaci od 19:51) i Zatvaranja 6 (najbliže Vlaška ulica, 400 m) te pozivnicom Skeniraj za 10 minuta grada s QR kodom, potpornom rečenicom, uputom ili upiši kod na zagreb.aningfilm.hr/s i kodom ABCD·EFG0 s trakom preostalog vremena; sigurnosna traka: Sigurnost, mirno, DHMZ · EMSC · 19:45, dežurna ljekarna Trg bana J. Jelačića 3, sljedeći prizor za 12 s, Sigurnost.">
+     Statična replika app/src/kiosk.ts (zaglavlje), kiosk/scenes.ts (polje: karta kroz sva tri prizora, oznaka prizora u kutu, tračnica pločica
+     uz donji rub karte s trakom radova i pločicama linija), kiosk/invitation.ts i frame.ts (bočni stupac, pozivnica, sigurnosna traka).
+     Razredi su aplikacijski, pravila u mocks.css uz tokens.css i signage.css; okvir od 1920 × 1080 CSS px skalira se na širinu spremnika (--mk-s),
+     bez upita spremnika ostaje 0,5. Shema i QR ulaze iz shema-tramvaji.svg i qr-s.svg kroz scripts/build-prijava-figures.mjs (oznake mk:svg).
+     Unutrašnjost je aria-hidden; slika govori kroz aria-label. -->
+<figure class="mk mk-kiosk" role="img" aria-label="Javni zaslon 1920 × 1080: zaglavlje s natpisom Kaj ima?, stanicom Trg bana J. Jelačića, datumom uto 15. 9., satom 19:51, vedro 21,4 °C i zalaskom 19:09; polje je karta, shema tramvajske mreže, kroz sva tri prizora, s oznakom prizora Promet, još 5 linija, prvi od tri prizora, u gornjem lijevom kutu i tračnicom pločica uz donji rub karte: traka Radovi u kvartu Vlaška ulica · 400 m, 2, te četiri pločice linija, 6 Črnomerec – Sopot na vrijeme, 11 Črnomerec – Dubec kasni 3 min, 12 Ljubljanica – Dubrava na vrijeme, 13 Žitnjak – Kvaternikov trg rani 2 min, svaka s brojem vozila u blizini; bočni stupac s pločicama Vozila u pokretu 275 (ZET, podaci od 19:51) i Zatvaranja 6 (najbliže Vlaška ulica, 400 m) te pozivnicom Skeniraj za 10 minuta grada s QR kodom, potpornom rečenicom, uputom ili upiši kod na zagreb.aningfilm.hr/s i kodom ABCD·EFG0 s trakom preostalog vremena; sigurnosna traka: Sigurnost, mirno, DHMZ · EMSC · 19:45, dežurna ljekarna Trg bana J. Jelačića 3, sljedeći prizor za 12 s, Sigurnost.">
   <div class="mk mk-kiosk-scale">
     <div class="mk-kiosk-frame" aria-hidden="true">
       <div class="kiosk" data-size="wide" data-mode="invitation">
@@ -1209,91 +1192,75 @@ strong { font-weight: var(--weight-bold); }
         </header>
         <div class="k-stage">
           <section class="k-invitation">
-            <section class="k-scene" data-scene="promet">
-              <header class="k-scene-head">
-                <h2 class="k-scene-title">Promet</h2>
-                <p class="k-scene-meta">još 3 linije</p>
-                <div class="k-scene-dots"><span class="k-dot" data-on="1"></span><span class="k-dot"></span><span class="k-dot"></span></div>
-              </header>
-              <div class="k-scene-body">
-                <div class="k-scene-item" data-scene="promet">
-                  <div class="k-scene-grid" data-works="1">
-                    <div class="k-map"><div class="k-map-host">
+            <section class="k-scene" data-map="1">
+              <div class="k-map">
+                <div class="k-map-host">
 <!-- mk:svg shema-tramvaji.svg -->
-<svg xmlns="http://www.w3.org/2000/svg" class="shm" viewBox="340 146 340 408" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="shm-title shm-desc">
+<svg xmlns="http://www.w3.org/2000/svg" class="shm" viewBox="260 203.3 500 333.3" preserveAspectRatio="xMidYMid slice" role="img" aria-labelledby="shm-title shm-desc">
   <title id="shm-title">Shema tramvajske mreže ZET-a oko Trga bana J. Jelačića</title>
   <desc id="shm-desc">Pojednostavljeni oktilinearni prikaz 18 tramvajskih linija iz GTFS podataka ZET-a (inačica 000395), izrezan oko središta mreže; bez pozadine i bez oznaka stanica. Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669</desc>
   <style>.shm path{vector-effect:non-scaling-stroke}</style>
-  <g fill="none" stroke="var(--tone-action-brand)" stroke-opacity="0.9" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
-    <path data-linija="2" d="M366 381.3L385.2 381.3 395.1 371.4 423.3 371.4 423.3 359.5 440.3 342.5 504.8 342.5 511.3 349 524.8 335.4 586.9 335.4 592.4 340.9 624.1 309.2 630 303.3 615.7 288.9M618.8 288.3L629.9 299.3 629.9 310.6 594.1 346.4 557.9 346.4 545.3 333.7 519.2 333.7 507.9 345.1 443 345.1 425.2 362.9 425.2 374.4 393.3 374.4 363.4 374.4M390.1 318.8L418.3 318.8 445.9 346.3 504.6 346.3 512.1 346.3 523.7 334.7 581.4 334.7 587.6 341 592.7 341 624.2 309.4 624.2 296.4 616.2 288.4M617.4 323.6L596.7 344.3 558.6 344.3 547.5 333.2 519.3 333.2 507.6 345 511.8 349.2 476.4 349.2 446.1 349.2 424.9 328 372.6 328"/>
-    <path data-linija="3" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435.2 341.2 440.6 335.9 432.4 327.7 435.7 324.4 545.2 324.4 553.7 332.9 582.1 332.9 591.7 342.4 624.4 309.7 624.4 296.4 616.3 288.3M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.2 343.9 441.8 337.4 436.7 337.4 425.8 326.5 405.6 326.5 398.2 319.1 373.7 319.1"/>
-    <path data-linija="4" d="M413.3 277.1L450.3 314.1 437.4 327 451.9 341.5 447 346.4 489.9 346.4 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 676 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 488.8 378 488.8 346.5 445.9 346.5 388.2 288.8M631.6 416.4L663 447.7 729.8 447.7"/>
-    <path data-linija="5" d="M561.5 393.9L523.5 393.9 523.5 377.8 506.3 360.6 528.7 338.1 519.9 329.3 435.7 329.3 398.3 291.8 411.9 278.2 401.3 278.2 393.1 286.4 368.4 286.4 362.4 280.4 332.5 280.4 317.6 295.2 287.5 295.2 275.8 306.9 260.3 306.9M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 409.1 279.3 446.2 316.4 438.1 324.5 515.1 324.5 515.1 342.4 515.1 357.6 515.1 378.6 524.4 378.6 572.1 378.6 572.1 398.4M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8"/>
-    <path data-linija="6" d="M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.9 512.2 345.9 525.2 332.9 525.2 289.9 541.3 289.9 541.3 275.3 533.6 267.6 533.6 248.2 492.1 248.2M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 506.1 348.3 475.7 348.3 475.7 373.1 396.8 373.1 370.5 373.1 370.5 381.1 364.3 381.1M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 504.7 345.6 530.3 371.2 522.1 379.4 594.5 379.4 624.5 409.4M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 489.3 378.2 489.3 370.6 396.8 370.6 369.7 370.6 360.7 379.6M497.7 246L536.1 246 536.1 261.5 536.1 289.7 536.1 332.5 512.5 356.1 529 372.6 522.4 379.3 594.6 379.3 624.6 409.3"/>
-    <path data-linija="7" d="M624.3 414.9L588.9 414.9 568.1 394.1 523.7 394.1 523.7 380.3 504.9 361.5 530.1 336.3 530.1 291.4 541.6 291.4 541.6 275.3 533.8 267.5 533.8 247.5 412.2 247.5 412.2 278.6 412.2 272.6M413.3 277.1L409.2 277.1 409.2 245.6 535.1 245.6 535.1 280.2 542.8 287.9 509.3 321.3 509.3 356.7 527 374.4 522.1 379.3 594.6 379.3 624.6 409.3"/>
-    <path data-linija="8" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 488.9 378.2 488.9 346.7 512.1 346.7 525.7 333.2 525.7 288.3 541.5 288.3 541.5 261.1 533.1 252.7M467.2 477.2L477.9 466.5 477.9 435.6 477.9 413 477.9 396.3 493.5 380.6 493.5 346.7 511.7 346.7 511.7 357.4 527.7 373.3 527.7 381.9 594 381.9 622.8 410.7M531.8 247.8L531.8 291.5 531.8 331.1 512.7 350.2 490.7 350.2 490.7 376.3 515.3 376.3 521.8 382.8 593.5 382.8 622.1 411.4"/>
-    <path data-linija="9" d="M499.7 360.7L496.5 363.9 496.5 345.6 448 345.6 427.3 324.8 405.7 324.8 398.8 317.9 373.7 317.9"/>
-    <path data-linija="11" d="M390.1 318.8L418.3 318.8 437.6 338.1 442.6 338.1 459.5 355 459.5 374.8 454.9 374.8 489.5 374.8 489.5 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 685.4 428.5 691.9 428.5 726.6 428.5M367 380.8L386 380.8 393.6 373.2 429.1 373.2 437.9 373.2 453 373.2 489.4 373.2 489.4 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 685.4 428.5 691.9 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 489.3 378 489.3 370.6 454.1 370.6 454.1 359.4 423.9 329.1 372.3 329.1M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 489.3 378.2 489.3 370.6 396.8 370.6 369.7 370.6 360.7 379.6M367 380.8L386 380.8 393.6 373.2 423.2 373.2 423.2 359.5 441.6 341.1 426.3 325.9 373 325.9M631.6 416.4L663 447.7 729.8 447.7"/>
-    <path data-linija="12" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435 341 443 341 457.9 355.9 457.9 374.7 489.5 374.7 489.5 376.7 515.3 376.7 521.7 383.1 593.4 383.1 624.8 414.5M624.4 414.8L588.9 414.8 568.2 394 523.7 394 523.7 378.1 489.3 378.1 489.3 370.6 454.1 370.6 454.1 359.4 423.9 329.1 372.3 329.1"/>
-    <path data-linija="13" d="M617.4 323.6L596.7 344.3 435.2 344.3 450.8 359.9 452.7 361.7 452.7 374.6 474.4 374.6 474.4 345.9 504.7 345.9 510.4 351.6 510.4 357.3 526.8 373.7 526.8 381.7 594 381.7 623 410.6M521.9 379.8L504 361.9 514.4 351.5 475.4 351.5 475.4 373 454.3 373 454.3 359.4 434.8 339.9 434.8 325.2 543.9 325.2 550.6 331.8 582.3 331.8 592.2 341.7 615.3 318.7M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 529.4 337.4 581.2 337.4 586.1 342.3 589.5 342.3 604.9 326.9 619.2 326.9"/>
-    <path data-linija="14" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M531.7 247.6L412.2 247.6 412.2 277.4 476.1 341.3 454.4 363 454.4 374.4 489.6 374.4 479.7 384.3 479.7 396.7 479.7 429.5 474.3 434.9 474.3 460.8 461.8 473.4M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 492.4 380 492.4 346.7 511.7 346.7 511.7 357.4 527.6 373.3 527.6 381.9 594 381.9 622.8 410.7M533.1 247.4L533.1 261.5 547.9 276.3 529.9 294.3 529.9 330.7 511.9 348.8 490.8 348.8 490.8 376.3 515.3 376.3 521.8 382.8 593.5 382.8 622.1 411.4M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 496.3 376.1 454.8 376.1 454.8 359.4 392.3 296.9 411.5 277.8 411.5 245.5 533.1 245.5"/>
-    <path data-linija="15" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 480.9M468.4 480.8L468.4 435.1 476.5 427 476.5 396.2 492.6 380.1 492.6 346.7 511.7 346.7 511.7 357.4 527.6 373.3 527.6 381.9 594 381.9 622.8 410.7M468.5 480.4L468.5 495.7 468.5 515.1 464.5 519.1 464.5 533.3 481.2 550"/>
-    <path data-linija="17" d="M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8M499.7 360.7L489.9 370.6 454.3 370.6 454.3 359.4 392 297.1 411.4 277.7 393.5 277.7 368 277.7 363.2 282.5 332.9 282.5 319 296.5 287.7 296.5 276.5 307.7 260.3 307.7M390.1 318.8L418.3 318.8 437.6 338.1 442.6 338.1 459.5 355 459.5 375.1 489.6 375.1 502 362.7M499.7 360.7L489.9 370.6 454.6 370.6 454.6 359.3 424.1 328.9 372.4 328.9"/>
-    <path data-linija="31" d="M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 512 345.6 524.9 332.7 524.9 289.8 541 289.8 541 279.2 530.9 269.2 536.4 263.7 536.4 247.4 412.2 247.4 412.2 278.6 412.2 272.6M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 530.4 336.4 530.4 291.5 541.7 291.5 541.7 275.3 533.8 267.4 533.8 247.5 412.2 247.5 412.2 278.6 412.2 272.6M367 380.8L386 380.8 393.6 373.2 429.1 373.2 438.4 373.2 444.4 373.2 473.8 373.2 473.8 345.6 504.7 345.6 530.3 371.2 522.1 379.4 594.5 379.4 624.5 409.4"/>
-    <path data-linija="32" d="M578.3 379.2L558.7 379.2 536.3 379.2 522 364.9 500.8 364.9 492 373.6 454.8 373.6 454.8 359.3 392.4 296.9 411.5 277.8 393.5 277.8 368 277.8 363.2 282.6 333 282.6 319 296.6 287.7 296.6 276.5 307.8 260.3 307.8M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 475.5 341.8 454.3 362.9 454.3 374.4 489.5 374.4 501.9 362 525 362 551 388 579.1 388M262.6 306.2L318.9 306.2 334.4 290.7 345.8 279.3 359.8 279.3 393.7 279.3 401.1 279.3 413 279.3 448.7 315 437 326.7 445.3 335 441.7 338.6 393.4 338.6 372.6 317.8"/>
-    <path data-linija="33" d="M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 378.2 488.8 378.2 488.8 346.5 446.1 346.5 437.4 337.8 437.4 324.7 544 324.7 552.9 333.6 587.5 333.6 587.5 342.6 615.6 314.5 627.1 314.5 627.1 301.7 614.8 289.5M467.8 476L467.8 434.9 476.2 426.4 476.2 396.2 492.4 380 492.4 347 446.1 347 437 338 437 324.7 544 324.7 552.9 333.6 587.5 333.6 587.5 342.6 615.6 314.5 627.1 314.5 627.1 301.7 614.8 289.5M602.2 407.4L573.6 407.4 560.8 394.5 523.2 394.5 523.2 377.8 506.1 360.7 515 351.8 490.4 351.8 490.4 376.7 481.6 385.4 481.6 429.6 475.4 435.7 475.4 460.9 462.6 473.7M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.3 343.9 446.1 343.9 446.1 346.1 490.7 346.1 490.7 376.7 481.8 385.6 481.8 429.6 475.6 435.8 475.6 460.9 462.7 473.8M618.8 288.3L629.9 299.3 629.9 310.6 596.6 343.9 435.3 343.9 446.1 343.9 446.1 346.1 489.9 346.1 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 621.9 411.6"/>
-    <path data-linija="34" d="M376.1 316.6L388.8 316.6 395.6 323.4 417.4 323.4 435 341 443 341 457.9 355.9 457.9 374.5 454.9 374.5 474.5 374.5 474.5 345.7 489.9 345.7 489.9 376.7 515.3 376.7 521.7 383.1 593.4 383.1 626 415.6 640 415.6 652.9 428.5 676 428.5 726.6 428.5M726.6 427.2L685 427.2 677.5 434.7 661.1 434.7 641.1 414.7 589.5 414.7 568.5 393.7 523.8 393.7 523.8 378 488.8 378 488.8 346.5 475.8 346.5 475.8 373.1 454.3 373.1 454.3 359.4 423.9 329.1 405.1 329.1 396.8 320.7 373.4 320.7"/>
+  <g fill="none" stroke="var(--tone-action-brand)" stroke-opacity="0.9" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path data-linija="2" d="M390.1 318.8L418.3 318.8 418.3 327.6 433.9 343.2 440.9 336.3 448.6 344.1 504.7 344.1 510.1 349.5 524.4 335.1 586.9 335.1 586.9 342.7 592.9 342.7 623.3 312.3 631.4 304.2 616 288.7M366 381.3L386.1 381.3 397 370.4 423.4 370.4 423.4 359.5 441.2 341.7 504.9 341.7 511.3 348.2 524.5 335 586.9 335 586.9 342.7 592.9 342.7 623.3 312.3 631.4 304.2 616 288.7M618.8 288.3L628.8 298.2 628.8 310.4 595.9 343.2 558.8 343.2 547.3 331.7 519.2 331.7 519.2 350.4 442.7 350.4 427.3 365.8 420.5 372.6 385.8 372.6 374.4 384.1 364.3 384.1M366 381.3L386.1 381.3 397 370.4 423.4 370.4 423.4 359.5 441.9 341 426.5 325.6 373.1 325.6"/>
+    <path data-linija="3" d="M376.1 316.6L418.4 316.6 439 337.3 441.7 337.3 432.3 327.9 435.8 324.4 519 324.4 519 330.6 587.5 330.6 587.5 342.4 592.8 342.4 623.2 312.1 631.2 304.1 615.9 288.7M618.8 288.3L628.8 298.2 628.8 310.4 595.9 343.2 558.8 343.2 547.3 331.7 436.1 331.7 441.8 337.4 436.7 337.4 425.8 326.5 405.6 326.5 398.1 319.1 373.6 319.1"/>
+    <path data-linija="4" d="M413.3 277.1L450.1 313.9 437.6 326.4 437.6 338.1 445.7 346.2 490 346.2 490 376.5 553 376.5 571 394.6 586.1 409.6 612.1 409.6 627 409.6 638.2 420.8 655.5 420.8 670.5 435.9 727.3 435.9M726.6 427.2L667.8 427.2 636.5 427.2 608.5 399.2 566.4 399.2 561.3 394.1 523.4 394.1 523.4 378.2 488.9 378.2 488.9 346.6 445.2 346.6 428.8 330.2 435.2 323.7 404.9 293.4 416.3 282 408.8 274.5M631.6 416.4L663 447.7 729.8 447.7"/>
+    <path data-linija="5" d="M262.6 306.2L274.8 306.2 282.8 298.3 318 298.3 329.9 286.3 349.3 286.3 357.7 277.9 368 288.2 394.8 288.2 407.2 275.8 446.9 315.4 437.1 325.2 519 325.2 519 350 511.8 350 511.8 358 527.3 373.5 522.7 378.1 544.8 400.2 568.7 400.2M561.5 393.9L523.5 393.9 523.5 378.7 505.7 360.9 528.7 337.9 519.9 329.1 436.6 329.1 402.4 295 415.8 281.6 413.3 279.1 402.6 279.1 394 287.7 368.3 287.7 361.7 281.1 332.6 281.1 318.1 295.7 287.6 295.7 276 307.2 260.3 307.2M390.1 318.8L418.3 318.8 418.3 327.6 436.1 345.4 436.1 325.2 436.1 324.8 404.9 293.6 416.4 282.1 407.4 273.1 393.7 286.7 368.4 286.7 362.2 280.6 332.5 280.6 317.7 295.3 287.5 295.3 275.8 307 260.3 307"/>
+    <path data-linija="6" d="M497.7 246L535.1 246 535.1 263.6 535.1 281.8 535.1 333.2 519.1 333.2 506.9 345.4 511.5 350 511.5 357.9 527.2 373.6 527.2 381.6 552.9 381.6 568.4 397.1 591.3 397.1 608.7 414.4 620.9 414.4M367 380.8L386 380.8 396.8 370 473.7 370 473.7 345.9 504.6 345.9 510.4 351.6 510.4 357.9 526.5 374 526.5 381.8 552.8 381.8 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 514.7 351.7 490.6 351.7 474.6 351.7 474.6 373.1 385.8 373.1 374.5 384.4 364.2 384.4M367 380.8L386 380.8 396.8 370 473.7 370 473.7 345.9 512.2 345.9 523.6 334.4 519.6 330.4 550 300 523.9 273.9 523.9 245.4 492.1 245.4M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 488.7 380.4 488.7 370.7 385.8 370.7 373.7 382.8 364.4 382.8"/>
+    <path data-linija="7" d="M413.3 277.1L409.2 277.1 409.2 245.3 535.1 245.3 535.1 263.6 535.1 281.8 535.1 333.2 519.1 333.2 506.9 345.4 511.5 350 511.5 357.9 527.2 373.6 527.2 381.9 552.8 381.9 568.2 397.3 591.3 397.3 608.5 414.6 620.9 414.6M624.3 414.9L600.9 414.9 573.1 387.1 563.6 396.6 522.7 396.6 522.7 378.7 505.2 361.2 528.6 337.9 520.3 329.6 550 300 523.9 273.9 523.9 245.4 412.2 245.4 412.2 279.2 412.2 272.6"/>
+    <path data-linija="8" d="M467.2 477.2L467.2 434.8 476.5 425.5 476.5 396.2 492.9 379.8 492.9 346.5 510.8 346.5 510.8 357.9 526.8 373.8 526.8 381.9 552.8 381.9 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5M531.8 247.8L535.7 247.8 535.7 263.7 535.7 281.6 535.7 333.4 519.1 333.4 507 345.5 490.7 345.5 490.7 376.5 553 376.5 571 394.6 586.1 409.7 612.1 409.7 621.3 409.7M531.8 247.8L535.7 247.8 535.7 263.7 535.7 281.6 535.7 333.4 519.1 333.4 507 345.5 490.7 345.5 490.7 370.8 490.7 401.7 469.3 423.1 479.4 433.2 479.4 461.4 465.4 475.4M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 514.7 351.7 490.6 351.7 490.6 370.8 490.6 401.6 469.2 423 479.4 433.2 479.4 461.4 465.4 475.4M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 378 488.9 378 488.9 346.9 512 346.9 524.1 334.7 519.7 330.3 550 300 523.9 273.9 542.4 255.5"/>
+    <path data-linija="9" d="M376.1 316.6L418.4 316.6 418.4 327.6 434 343.2 440.9 336.3 448.7 344.1 490 344.1 490 355.8 497.7 363.5M499.7 360.7L496.5 364 496.5 345.5 448 345.5 442 339.6 427.1 324.6 405.7 324.6 398.8 317.8 373.7 317.8"/>
+    <path data-linija="11" d="M390.1 318.8L418.3 318.8 437.8 338.3 442.5 338.3 459.3 355.1 459.3 375 489.6 375 489.6 376.6 552.9 376.6 571 394.6 586.1 409.7 612.1 409.7 627 409.7 638.2 420.8 655.4 420.8 670.5 435.9 727.3 435.9M367 380.8L386 380.8 396.8 370 422.4 370 447.2 370 452.4 375.2 489.5 375.2 489.5 376.6 552.9 376.6 571 394.6 586.1 409.7 612.1 409.7 627 409.7 638.2 420.8 655.4 420.8 670.5 435.9 727.3 435.9M726.6 427.2L667.8 427.2 636.5 427.2 608.5 399.2 566.4 399.2 561.3 394.1 523.4 394.1 523.4 378.2 488.9 378.2 488.9 370.7 454.4 370.7 454.4 359.4 442.3 347.3 442.3 338.7 427.4 323.9 373.3 323.9M390.1 318.8L418.3 318.8 418.3 327.6 441.1 350.4 426.7 364.8 419.4 372.1 385.7 372.1 374.2 383.7 364.3 383.7M631.6 416.4L663 447.7 729.8 447.7"/>
+    <path data-linija="12" d="M624.4 414.8L600.9 414.8 573.1 387 563.6 396.6 522.7 396.6 522.7 378.4 488.9 378.4 488.9 370.7 454.4 370.7 454.4 359.4 442.3 347.3 442.3 338.7 427.4 323.9 373.3 323.9M376.1 316.6L418.4 316.6 439 337.3 442.8 337.3 460.2 354.7 460.2 375.2 489.6 375.2 489.6 376.6 552.9 376.6 571 394.6 586.1 409.7 612.1 409.7 625.5 409.7"/>
+    <path data-linija="13" d="M617.4 323.6L596.7 344.3 558.5 344.3 546.7 332.4 436.4 332.4 441.6 337.6 448.2 344.2 448.2 360.4 459.1 371.3 474.2 371.3 474.2 345.9 504.6 345.9 510.4 351.6 510.4 357.9 526.5 374 526.5 381.8 552.8 381.8 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5M521.9 379.8L504 361.9 514.4 351.5 490.7 351.5 474.7 351.5 474.7 373.1 454.5 373.1 454.5 359.4 427.1 331.9 518.8 331.9 519.9 330.9 587.4 330.9 587.4 342.5 592.8 342.5 615.8 319.5M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 528.5 337.9 586.7 337.9 590.4 341.6 592.7 341.6 615.4 318.9"/>
+    <path data-linija="14" d="M467.8 476L467.8 434.9 476.8 425.9 476.8 396.2 496.8 376.2 454.2 376.2 454.2 359.4 442.2 347.4 442.2 337.4 432.5 327.8 435.8 324.5 404.9 293.5 416.4 282.1 410.3 276 410.3 245.4 533.2 245.4M533.1 247.4L533.1 263.7 546.5 277.1 504 319.6 517.5 333.1 517.5 349.9 511.8 349.9 511.8 358 527.3 373.5 527.3 382 552.8 382 568.2 397.3 591.3 397.3 608.5 414.6 620.9 414.6M531.6 247.7L412.2 247.7 412.2 278.1 448.7 314.6 437.3 326.1 437.3 338.2 456 356.9 456 374.5 489.5 374.5 489.5 376.5 553 376.5 571 394.6 586.1 409.7 612.1 409.7 621.3 409.7M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 514.7 351.7 490.6 351.7 490.6 376.7 474.2 393 474.2 417.4 474.2 460.9 461.7 473.3M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 528.5 337.9 520.3 329.7 550 300 540.6 290.6 540.6 246.7"/>
+    <path data-linija="15" d="M468.4 480.8L468.4 435.1 476.5 435.1 476.5 416.4 476.5 396.2 492.8 379.8 492.8 346.5 510.8 346.5 510.8 357.9 526.8 373.8 526.8 381.9 552.8 381.9 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 514.7 351.7 490.6 351.7 490.6 376.7 474.2 393 474.2 417.4 474.2 480.6M468.5 480.4L468.5 495.7 468.5 515.1 464.5 519.1 464.5 533.3 481.2 550"/>
+    <path data-linija="17" d="M499.7 360.7L489.8 370.6 454.4 370.6 454.4 359.4 442.3 347.3 442.3 337.4 432.6 327.7 435.8 324.5 404.9 293.5 416.4 282.1 407.4 273.1 393.7 286.7 368.4 286.7 362.2 280.6 332.5 280.6 317.7 295.3 287.5 295.3 275.8 307 260.3 307M390.1 318.8L418.3 318.8 418.3 327.6 436.1 345.4 436.1 325.2 436.1 324.8 404.9 293.6 416.4 282.1 407.4 273.1 393.7 286.7 368.4 286.7 362.2 280.6 332.5 280.6 317.7 295.3 287.5 295.3 275.8 307 260.3 307M262.6 306.2L274.8 306.2 282.8 298.3 318 298.3 329.9 286.3 349.3 286.3 357.7 277.9 368 288.2 394.8 288.2 407.2 275.8 446.9 315.4 436.8 325.5 436.8 339.5 425 327.7 372.7 327.7"/>
+    <path data-linija="31" d="M413.3 277.1L409.2 277.1 409.2 245.3 535.1 245.3 535.1 263.6 535.1 281.8 535.1 333.2 519.1 333.2 506.9 345.4 511.5 350 511.5 357.9 527.2 373.6 527.2 381.9 552.8 381.9 568.2 397.3 591.3 397.3 608.5 414.6 620.9 414.6M367 380.8L386 380.8 396.8 370 473.7 370 473.7 345.9 504.6 345.9 510.4 351.6 510.4 357.9 526.5 374 526.5 381.8 552.8 381.8 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 380.4 504.9 361.5 528.5 337.9 520.3 329.7 550 300 523.9 273.9 523.9 245.4 412.2 245.4 412.2 279.2 412.2 272.6"/>
+    <path data-linija="32" d="M578.3 379.2L558.7 379.2 536.3 379.2 522 364.9 500.7 364.9 492 373.6 454.6 373.6 454.6 359.4 442.4 347.2 442.4 337.4 432.7 327.7 435.9 324.5 404.9 293.5 416.4 282.1 407.4 273.1 393.7 286.7 368.4 286.7 362.2 280.6 332.5 280.6 317.7 295.3 287.5 295.3 275.8 307 260.3 307M390.1 318.8L418.3 318.8 418.3 327.6 436.1 345.4 436.1 325.2 436.1 324.8 404.9 293.6 416.4 282.1 407.4 273.1 393.7 286.7 368.4 286.7 362.2 280.6 332.5 280.6 317.7 295.3 287.5 295.3 275.8 307 260.3 307M262.6 306.2L274.8 306.2 282.8 298.3 318 298.3 329.9 286.3 349.3 286.3 357.7 277.9 368 288.2 394.8 288.2 407.2 275.8 446.9 315.4 436.8 325.5 436.8 339.5 425 327.7 372.7 327.7"/>
+    <path data-linija="33" d="M602.2 407.4L564.7 407.4 564.7 393.5 523.7 393.5 523.7 378 488.9 378 488.9 346.6 446 346.6 429.3 329.9 518.8 329.9 519.5 330.6 587.5 330.6 587.5 342.4 592.8 342.4 623.2 312.1 631.2 304.1 615.9 288.7M618.8 288.3L628.8 298.2 628.8 310.4 595.9 343.2 558.8 343.2 547.3 331.7 436.5 331.7 442 337.2 448.8 344 490 344 490 376.5 553 376.5 571 394.6 586.1 409.6 612.1 409.6 621.3 409.6M467.8 476L467.8 434.9 476.8 425.9 476.8 396.2 493.1 379.9 493.1 346.8 446 346.8 429.2 330 518.8 330 519.4 330.6 587.5 330.6 587.5 342.4 592.8 342.4 623.2 312.1 631.2 304.1 615.9 288.7M618.8 288.3L628.8 298.2 628.8 310.4 595.9 343.2 558.8 343.2 547.3 331.7 436.1 331.7 441.8 337.4 448.5 344.1 490.9 344.1 490.9 370.8 469.1 392.7 469.1 430.8 475 436.7 475 460.9 462.3 473.6M467.8 476L467.8 434.9 476.8 425.9 476.8 396.2 493.1 379.9 493.1 346.5 510.8 346.5 510.8 357.9 526.8 373.8 526.8 381.9 552.8 381.9 568.2 397.2 591.3 397.2 608.6 414.5 620.9 414.5"/>
+    <path data-linija="34" d="M726.6 427.2L667.8 427.2 636.5 427.2 608.5 399.2 566.4 399.2 561.3 394.1 523.4 394.1 523.4 378.2 488.9 378.2 488.9 346.6 475.8 346.6 475.8 373.1 454.6 373.1 454.6 359.4 442.4 347.2 442.4 338.6 427.5 323.7 405.6 323.7 396.3 323.7 372.7 323.7M376.1 316.6L418.4 316.6 439 337.3 442.8 337.3 460.2 354.7 460.2 375.2 473.9 375.2 473.9 346.6 490 346.6 490 376.5 553 376.5 571 394.6 586.1 409.6 612.1 409.6 627 409.6 638.2 420.8 655.5 420.8 670.5 435.9 727.3 435.9"/>
   </g>
 </svg>
 <!-- /mk:svg -->
-                    </div></div>
-                    <div class="k-scene-col">
-                      <ul class="k-scene-lines">
-                        <li class="tl k-tl-line" data-route="6" data-kind="tram" data-tone="ontime">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span></p>
-                          <p class="k-tl-name">Črnomerec – Sopot</p>
-                          <p class="tl-value">na vrijeme</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>4</span></p>
-                        </li>
-                        <li class="tl k-tl-line" data-route="11" data-kind="tram" data-tone="late">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">11</span></p>
-                          <p class="k-tl-name">Črnomerec – Dubec</p>
-                          <p class="tl-value">kasni 3 min</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>3</span></p>
-                        </li>
-                        <li class="tl k-tl-line" data-route="12" data-kind="tram" data-tone="ontime">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">12</span></p>
-                          <p class="k-tl-name">Ljubljanica – Dubrava</p>
-                          <p class="tl-value">na vrijeme</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>5</span></p>
-                        </li>
-                        <li class="tl k-tl-line" data-route="13" data-kind="tram" data-tone="early">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">13</span></p>
-                          <p class="k-tl-name">Žitnjak – Kvatern. trg</p>
-                          <p class="tl-value">rani 2 min</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>2</span></p>
-                        </li>
-                        <li class="tl k-tl-line" data-route="14" data-kind="tram" data-tone="ontime">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">14</span></p>
-                          <p class="k-tl-name">Mihaljevac – Zapruđe</p>
-                          <p class="tl-value">na vrijeme</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>4</span></p>
-                        </li>
-                        <li class="tl k-tl-line" data-route="17" data-kind="tram" data-tone="late">
-                          <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">17</span></p>
-                          <p class="k-tl-name">Prečko – Borongaj</p>
-                          <p class="tl-value">kasni 5 min</p>
-                          <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>3</span></p>
-                        </li>
-                      </ul>
-                      <div class="k-works">
-                        <div class="tl" data-variant="band" data-tone="komunalno" data-state="live">
-                          <svg class="icon k-glyph" viewBox="0 0 24 24"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>
-                          <div class="tl-main"><p class="tl-label">Radovi u kvartu</p><p class="tl-title">Vlaška ulica</p></div>
-                          <p class="tl-trail">2</p>
-                        </div>
-                      </div>
-                    </div>
+                </div>
+                <header class="k-scene-head">
+                  <h2 class="k-scene-title">Promet</h2>
+                  <p class="k-scene-meta">još 5 linija</p>
+                  <div class="k-scene-dots"><span class="k-dot" data-on="1"></span><span class="k-dot"></span><span class="k-dot"></span></div>
+                </header>
+                <div class="k-scene-body">
+                  <div class="k-scene-item" data-scene="promet">
+                    <ul class="k-rail" data-chapter="promet">
+                      <li class="tl" data-variant="band" data-tone="komunalno" data-state="live" data-span="2">
+                        <svg class="icon k-glyph" viewBox="0 0 24 24"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>
+                        <div class="tl-main"><p class="tl-label">Radovi u kvartu</p><p class="tl-title">Vlaška ulica · 400 m</p></div>
+                        <p class="tl-trail">2</p>
+                      </li>
+                      <li class="tl k-tl-line" data-route="6" data-kind="tram" data-tone="ontime">
+                        <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span></p>
+                        <p class="k-tl-name">Črnomerec – Sopot</p>
+                        <p class="tl-value">na vrijeme</p>
+                        <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>4</span></p>
+                      </li>
+                      <li class="tl k-tl-line" data-route="11" data-kind="tram" data-tone="late">
+                        <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">11</span></p>
+                        <p class="k-tl-name">Črnomerec – Dubec</p>
+                        <p class="tl-value">kasni 3 min</p>
+                        <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>3</span></p>
+                      </li>
+                      <li class="tl k-tl-line" data-route="12" data-kind="tram" data-tone="ontime">
+                        <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">12</span></p>
+                        <p class="k-tl-name">Ljubljanica – Dubrava</p>
+                        <p class="tl-value">na vrijeme</p>
+                        <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>5</span></p>
+                      </li>
+                      <li class="tl k-tl-line" data-route="13" data-kind="tram" data-tone="early">
+                        <p class="tl-label"><span class="k-line-badge line" data-kind="tram" data-size="k">13</span></p>
+                        <p class="k-tl-name">Žitnjak – Kvatern. trg</p>
+                        <p class="tl-value">rani 2 min</p>
+                        <p class="tl-context"><svg class="icon k-glyph" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></svg><span>2</span></p>
+                      </li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -1344,16 +1311,16 @@ strong { font-weight: var(--weight-bold); }
     </div>
   </div>
   
-</figure></div><figcaption>Javni zaslon u prostoru: nepovezan rotira tri prizora, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz: vozila u pokretu, vrijeme, sigurnost i vijest su snimka otvorenih izvora od 15. 9. 2026.; stanja linija, broj vozila, zatvaranja i radovi ilustrativni su.</figcaption></figure>
+</figure></div><figcaption>Javni zaslon u prostoru: karta stoji kroz sva tri prizora, prizor mijenja kadar i pločice uz donji rub karte, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz: vozila u pokretu, vrijeme i sigurnost su snimka otvorenih izvora od 15. 9. 2026.; stanja linija, broj vozila, zatvaranja i radovi ilustrativni su.</figcaption></figure>
 </section>
 <section class="sec sec-h3" id="1-3-otkljucani-pogled-ruka-na-telefonu-stol-na-radnoj-povrsini" aria-labelledby="1-3-otkljucani-pogled-ruka-na-telefonu-stol-na-radnoj-povrsini-h">
 <h3 id="1-3-otkljucani-pogled-ruka-na-telefonu-stol-na-radnoj-povrsini-h">1.3 Otključani pogled (Ruka na telefonu, Stol na radnoj površini)</h3>
-<p>Otključani pogled ima sedam područja (Sada, Promet, Vrijeme, Sigurnost, Grad, Događanja i Vijesti), svako s vremenom vlastitog podatka (opaženo, objavljeno ili dohvaćeno) u zaglavlju odjeljka, oznakom Referenca za Službeni glasnik i prostorne slojeve, oznakom zastarjelosti ili nedostupnosti kad izvor ne odgovara i atribucijom u podnožju svakog panela. Na telefonu su kartice Sada, Promet i Kvart, a Vrijeme, Sigurnost, Događanja, Grad i Vijesti su u imeniku Još; na radnoj površini statusna linija, vremenska traka i bočna ploča Kvart dijele jedan zaslon, a svih sedam područja otvara se iz iste linije.</p>
+<p>Otključani pogled ima šest područja (Sada, Promet, Vrijeme, Sigurnost, Grad i Događanja), svako s vremenom vlastitog podatka (opaženo, objavljeno ili dohvaćeno) u zaglavlju odjeljka, oznakom Referenca za Službeni glasnik i prostorne slojeve, oznakom zastarjelosti ili nedostupnosti kad izvor ne odgovara i atribucijom u podnožju svakog panela. Na telefonu su kartice Sada, Promet i Kvart, a Vrijeme, Sigurnost, Događanja i Grad su u imeniku Još; na radnoj površini statusna linija, vremenska traka i bočna ploča Kvart dijele jedan zaslon, a svih šest područja otvara se iz iste linije.</p>
 <figure class="fig" id="fig-m-telefon" data-kind="html"><div class="fig-body"><!-- Kaj ima? · prijava · slika: telefon 390 px, traka Sada u 19:51 (15. 9. 2026., noćni raspored: sada · noćas · sutra · tjedan).
      Statična replika app/src/experience/chrome.ts (statusna linija, kartice, gumb Na zaslon), timeband.ts (segmenti, glava, traka, Zatim) i
      tiles.ts (pločice), sa stanice Trg bana J. Jelačića (106_1) u četvrti Gornji grad – Medveščak. Razredi su aplikacijski; pravila su u
      mocks.css (uz tokens.css i signage.css). Glifovi su Lucide staze iz app/src/ui/icons.ts. Unutrašnjost je aria-hidden; slika govori kroz aria-label. -->
-<figure class="mk mk-phone" role="img" aria-label="Telefon: statusna linija s natpisom Kaj ima?, gumbom četvrti Gornji grad, pilulom sesije s preostalih 9:48 i štitom Sigurnosti; segmenti sada, noćas, sutra, tjedan; traka Sada u 19:51 uz vedro, 21,4 °C i zalazak 19:09: linija 6 Črnomerec – Sopot na vrijeme, linija 11 Črnomerec – Dubec kasni 3 min, zatvaranja u kvartu s Vlaškom ulicom, Sigurnost bez hitnih upozorenja potvrđeno 19:45, HRT vijest o prvom hibridnom vlaku; Zatim: 20:00 Antisezona: Antiprostorna i 09:00 sjednica Gradske skupštine, još 7 linija; gumb Na zaslon; kartice Sada, Promet, Kvart, Još.">
+<figure class="mk mk-phone" role="img" aria-label="Telefon: statusna linija s natpisom Kaj ima?, gumbom četvrti Gornji grad, pilulom sesije s preostalih 9:48 i štitom Sigurnosti; segmenti sada, noćas, sutra, tjedan; traka Sada u 19:51 uz vedro, 21,4 °C i zalazak 19:09: linija 6 Črnomerec – Sopot na vrijeme, linija 11 Črnomerec – Dubec kasni 3 min, zatvaranja u kvartu s Vlaškom ulicom, Sigurnost bez hitnih upozorenja potvrđeno 19:45, Službeni glasnik broj 29/2026 od 7. 9. sa 118 akata; Zatim: 20:00 Antisezona: Antiprostorna i 09:00 sjednica Gradske skupštine, još 7 linija; gumb Na zaslon; kartice Sada, Promet, Kvart, Još.">
   <div class="ki" data-fab="1" aria-hidden="true">
     <header class="ki-head">
       <span class="ki-wordmark"><span class="ki-wordmark-text">Kaj ima<span class="ki-wordmark-mark">?</span></span></span>
@@ -1399,10 +1366,10 @@ strong { font-weight: var(--weight-bold); }
               <span class="tl-main"><span class="tl-label kicker">Sigurnost</span><span class="tl-title">Nema hitnih upozorenja</span></span>
               <span class="tl-trail">potvrđeno 19:45</span>
             </span>
-            <span class="tl" data-variant="row" data-domain="news" data-key="hrt-news:lead">
-              <svg class="icon tl-glyph" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
-              <span class="tl-main"><span class="tl-title">Krenuo prvi hibridni elektrodizelski vlak</span></span>
-              <span class="tl-trail">HRT vijesti · prije 2 minute</span>
+            <span class="tl" data-variant="value" data-domain="civic" data-key="glasnik:issue">
+              <span class="tl-label"><span class="tl-label-title">Glasnik</span></span>
+              <span class="tl-value" data-size="xl">29/2026</span>
+              <span class="tl-context"><span class="tl-ctx-text">7. 9. · 118 akata</span></span>
             </span>
             <p class="tb-next kicker">Zatim</p>
             <span class="tl" data-variant="time" data-domain="events" data-compact="1" data-key="next:dogadanja:kulturpunkt:85612">
@@ -1432,15 +1399,14 @@ strong { font-weight: var(--weight-bold); }
       </ul>
     </nav>
   </div>
-</figure></div><figcaption>Telefon nakon skeniranja: jedna vremenska os, pločice u gramatici natpis · vrijednost · kontekst, vrijeme kao stanje uz sat, sigurnost jednim dodirom. Prikaz: stanja linija i najave ilustrativni su, vrijeme i vijest iz snimke od 15. 9. 2026.</figcaption></figure>
-<ul><li><strong>Sada</strong> je vremenska traka, ne popis područja: pet stupaca sada · poslijepodne · večeras · sutra · tjedan u koje svako područje upisuje svoje pločice. Pločica ima natpis, vrijednost i kontekst, jedan broj ili jednu riječ, nikad rečenicu: linija sa stajališta s oba kraja i riječju stanja (na vrijeme, kasni 4 min, rani 2 min, nema podataka), radovi u kvartu s najbližom zatvorenom ulicom, sljedeća sjednica Skupštine, akti Glasnika s datumom i brojem, večerašnja događanja s mjestom prije izvora, jedna vijest s izvorom, zadnji polazak po rasporedu sa stajališta zaslona za linije čiji zadnji polazak još slijedi danas ili večeras (statični GTFS ZET-a). Nakon 18 sati drugi stupac nosi natpis noćas; prije podneva natpis poslijepodne glasi danas. Opažanje s postaje Zagreb-Maksimir i zalazak sunca stoje uz sat u statusnoj liniji, kao stanje. Na telefonu je jedan stupac po zaslonu s prekidačem doba dana, a traka završava natpisom Zatim s dvjema sažetim pločicama iz sljedećih stupaca, pa prvi zaslon odgovara na sada i na sljedeće bez listanja. Peludni semafor <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span> i fotogram Trga bana Jelačića <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>.</li>
+</figure></div><figcaption>Telefon nakon skeniranja: jedna vremenska os, pločice u gramatici natpis · vrijednost · kontekst, vrijeme kao stanje uz sat, sigurnost jednim dodirom. Prikaz: stanja linija i najave ilustrativni su, vrijeme iz snimke od 15. 9. 2026., broj Glasnika prema API-ju Grada 16. 9. 2026.</figcaption></figure>
+<ul><li><strong>Sada</strong> je vremenska traka, ne popis područja: pet stupaca sada · poslijepodne · večeras · sutra · tjedan u koje svako područje upisuje svoje pločice. Pločica ima natpis, vrijednost i kontekst, jedan broj ili jednu riječ, nikad rečenicu: linija sa stajališta s oba kraja i riječju stanja (na vrijeme, kasni 4 min, rani 2 min, nema podataka), radovi u kvartu s najbližom zatvorenom ulicom, sljedeća sjednica Skupštine, akti Glasnika s datumom i brojem, večerašnja događanja s mjestom prije izvora, zadnji polazak po rasporedu sa stajališta zaslona za linije čiji zadnji polazak još slijedi danas ili večeras (statični GTFS ZET-a). Nakon 18 sati drugi stupac nosi natpis noćas; prije podneva natpis poslijepodne glasi danas. Opažanje s postaje Zagreb-Maksimir i zalazak sunca stoje uz sat u statusnoj liniji, kao stanje. Na telefonu je jedan stupac po zaslonu s prekidačem doba dana, a traka završava natpisom Zatim s dvjema sažetim pločicama iz sljedećih stupaca, pa prvi zaslon odgovara na sada i na sljedeće bez listanja. Peludni semafor <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span> i fotogram Trga bana Jelačića <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>.</li>
 <li><strong>Promet:</strong> karta ZET-ovih vozila u stvarnom vremenu s imenima linija i kašnjenjem linije, pretraga linija i stajališta (tekst pretrage ostaje na telefonu), zatvorene prometnice kao linije na karti; dolasci po stajalištu <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, polasci HŽPP-a prema voznom redu <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, tekst HAK-a s atribucijom <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>, BAJS ako se otvoreni GBFS izvor potvrdi <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>.</li>
 <li><strong>Kvart:</strong> izbor jedne od 17 gradskih četvrti ili stajališta zaslona, karta kvarta, radovi i zatvaranja u kvartu, spremljene linije i stajališta, koji ostaju samo u pregledniku i nikad se ne šalju na zaslon, i gumb Prebaci na zaslon.</li>
 <li><strong>Vrijeme:</strong> opažanje, dnevna prognoza, vjetar, vlaga, upozorenja, potresi u krugu od 1,5° u sedam dana, izlazak i zalazak sunca izračunati na uređaju; indeks kvalitete zraka po postaji <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, vodostaj Save <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>.</li>
 <li><strong>Sigurnost:</strong> isti sadržaj kao otvoreni sloj, u rasporedu sesije (pet najbližih zatvaranja s poveznicom na kartu, potresi u 72 sata, zborna mjesta po četvrtima, ljekarne od najbliže).</li>
 <li><strong>Grad:</strong> najnoviji akti Službenog glasnika Grada Zagreba s popravljenim dijakriticima i ispisom u PDF, plan komunalnih aktivnosti s fazama radova i navedenim iznosima, sljedeća sjednica Gradske skupštine s poveznicom na prijenos; najnovija izdanja Narodnih novina (ELI) <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, otvorena savjetovanja <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>.</li>
-<li><strong>Događanja:</strong> datirani raspored iz šest izvora s kategorijama, detaljem, izvornikom i atribucijom; nedatirane kvartovske obavijesti odvojeno; baština Zagreba iz Europeane i Digitalnih zbirki NSK <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, "na današnji dan" iz Wikidate <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, program HRT-a i radija kao tekst s poveznicom na njihov vlastiti reproduktor, nikad ugrađen, ako HRT pisano odobri <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>.</li>
-<li><strong>Vijesti:</strong> HRT i Radio Sljeme kao tekst s izvorom, stvarnim datumom objave i poveznicom; ostali portali samo naslov i poveznica <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>; HINA se ne preuzima.</li></ul>
+<li><strong>Događanja:</strong> datirani raspored iz šest izvora s kategorijama, detaljem, izvornikom i atribucijom; nedatirane kvartovske obavijesti odvojeno; baština Zagreba iz Europeane i Digitalnih zbirki NSK <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, "na današnji dan" iz Wikidate <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M2</span>, program HRT-a i radija kao tekst s poveznicom na njihov vlastiti reproduktor, nikad ugrađen, ako HRT pisano odobri <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M5</span>.</li></ul>
 <p>Slanje na zaslon je izričito: gumb Prebaci na zaslon u ploči Kvart ili plutajući gumb Na zaslon šalje trenutačni prikaz na upareni zaslon; zaslon ne zrcali telefon sam od sebe, a tekst pretrage i privatne koordinate nikad ne idu na zaslon. List Obavijesti nudi tri prekidača (kašnjenja dulja od 5 minuta na spremljenim linijama, radovi u kvartu, upozorenja DHMZ-a); četvrti, odvoz sutra, pripremljen je u kodu i skriven dok raspored odvoza nema otvoreni izvor. Prekidači danas samo ističu odgovarajuće pločice u ovom pregledniku; ništa se ne šalje nikamo i list to kaže. Web push obavijesti nisu dio ove prijave.</p>
 <figure class="fig" id="fig-f-vremenska-traka" data-kind="svg"><div class="fig-body" tabindex="0" role="group" aria-label="Vremenska traka: sada, poslijepodne, večeras, sutra, tjedan"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" role="img" aria-labelledby="f-vremenska-traka-t f-vremenska-traka-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
 <title id="f-vremenska-traka-t">Vremenska traka: sada, poslijepodne, večeras, sutra, tjedan</title>
@@ -1636,7 +1602,7 @@ strong { font-weight: var(--weight-bold); }
 </section>
 <section class="sec sec-h3" id="1-7-otvoreni-izvedeni-podaci-otvoreni-format-za-izdavace-i-sucelje" aria-labelledby="1-7-otvoreni-izvedeni-podaci-otvoreni-format-za-izdavace-i-sucelje-h">
 <h3 id="1-7-otvoreni-izvedeni-podaci-otvoreni-format-za-izdavace-i-sucelje-h">1.7 Otvoreni izvedeni podaci, otvoreni format za izdavače i sučelje</h3>
-<p>Ono što sustav izvede iz izvora otvorene razine objavljuje se na <code>/open/*.json</code> s katalogom DCAT-AP na <code>/open/catalog.json</code>: podaci Grada Zagreba i DHMZ-a (zatvorene prometnice kao GeoJSON, sažeci meteoroloških upozorenja, zborna mjesta i četvrti) pod Otvorenom dozvolom, a potresi EMSC-a uz navođenje izvora prema uvjetima EMSC-a, koji dopuštaju nekomercijalnu uporabu; stranica <code>/open/</code> uz svaki skup ispisuje njegov izvor i uvjet. U strojnom katalogu prototipa polje dct:license skupa EMSC-a još nosi Otvorenu dozvolu, koju nosi katalog kao cjelina; ispravak na uvjete EMSC-a i validacija kataloga DCAT-AP validatorom isporuka su faze M4 <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M4</span>, a ponuda Gradu za objavu na data.zagreb.hr odnosi se samo na skupove Grada i DHMZ-a. Dnevne snimke u R2 dodaju se u financiranom razdoblju <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M4</span>. Izvori razine sesije ne objavljuju se na <code>/open</code>: HRT, Službeni glasnik i događanja zato što njihovi uvjeti republikaciju ne dopuštaju u cjelini ili nisu objavljeni, a ZET-ovi položaji vozila te DHMZ-ova mjerenja i prognoza zato što su prikaz u stvarnom vremenu, a ne izvedeni skup, uz oznaku "samo za potrebe testiranja" na ZET-ovu izvoru; granicu provodi kod, ne dogovor. Javni zaslon prije skeniranja dobiva samo sažeti izvadak: opažanje, vozila oko stajališta, naslove HRT-a s poveznicom te obavijesti Grada i ZET-a (plan komunalnih aktivnosti pod Otvorenom dozvolom, Skupština i kvartovske novosti prema uvjetima korištenja zagreb.hr, ZET-ove obavijesti do odgovora ZET-a u fazi M2), svaku uz navod izvora i poveznicu. Stranica <code>/izvori</code> navodi svaki izvor, licencu i doslovni predložak atribucije; vrijeme posljednje promjene popunjava svaki panel, <code>/hitno</code> i izvoz iz samog podatka. <code>/privatnost</code> i <code>/pristupacnost</code> (izjava o pristupačnosti s deklariranim odstupanjem) dio su proizvoda.</p>
+<p>Ono što sustav izvede iz izvora otvorene razine objavljuje se na <code>/open/*.json</code> s katalogom DCAT-AP na <code>/open/catalog.json</code>: podaci Grada Zagreba i DHMZ-a (zatvorene prometnice kao GeoJSON, sažeci meteoroloških upozorenja, zborna mjesta i četvrti) pod Otvorenom dozvolom, a potresi EMSC-a uz navođenje izvora prema uvjetima EMSC-a, koji dopuštaju nekomercijalnu uporabu; stranica <code>/open/</code> uz svaki skup ispisuje njegov izvor i uvjet. U strojnom katalogu prototipa polje dct:license skupa EMSC-a još nosi Otvorenu dozvolu, koju nosi katalog kao cjelina; ispravak na uvjete EMSC-a i validacija kataloga DCAT-AP validatorom isporuka su faze M4 <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M4</span>, a ponuda Gradu za objavu na data.zagreb.hr odnosi se samo na skupove Grada i DHMZ-a. Dnevne snimke u R2 dodaju se u financiranom razdoblju <span class="plan" title="isporuka financiranog razdoblja, mjesec plana provedbe">plan: M4</span>. Izvori razine sesije ne objavljuju se na <code>/open</code>: Službeni glasnik i događanja zato što njihovi uvjeti republikaciju ne dopuštaju u cjelini ili nisu objavljeni, a ZET-ovi položaji vozila te DHMZ-ova mjerenja i prognoza zato što su prikaz u stvarnom vremenu, a ne izvedeni skup, uz oznaku "samo za potrebe testiranja" na ZET-ovu izvoru; granicu provodi kod, ne dogovor. Javni zaslon prije skeniranja dobiva samo sažeti izvadak: opažanje, vozila oko stajališta te obavijesti Grada i ZET-a (plan komunalnih aktivnosti pod Otvorenom dozvolom, Skupština i kvartovske novosti prema uvjetima korištenja zagreb.hr, ZET-ove obavijesti do odgovora ZET-a u fazi M2), svaku uz navod izvora i poveznicu. Stranica <code>/izvori</code> navodi svaki izvor, licencu i doslovni predložak atribucije; vrijeme posljednje promjene popunjava svaki panel, <code>/hitno</code> i izvoz iz samog podatka. <code>/privatnost</code> i <code>/pristupacnost</code> (izjava o pristupačnosti s deklariranim odstupanjem) dio su proizvoda.</p>
 <p>Kaj ima? otvorene podatke i stvara, ne samo koristi. Prototip već agregira najave iz šest izvora, među njima Kulturpunkt, dugogodišnjeg izdavača informacija o kulturi, kroz njegov otvoreni API; takvih izdavača u gradu ima mnogo više, a zajedno bi dali neusporedivo bogatiji i korisniji panel. Zato projekt objavljuje <strong>otvoreni format za izdavače (plan: M4)</strong>: javnu JSON shemu za najave događanja i obavijesti, s uputama i primjerom, koju svaki izdavač, kazalište, muzej, knjižnica, udruga, mjesni odbor ili kafić s programom, može objaviti na vlastitoj adresi; Kaj ima? provjerava shemu i uključuje izvor, s njegovim imenom i licencom na svakom zaslonu. Isti format može objavljivati i Grad. Promocija je dvosmjerna: izdavač daje podatak i dobiva doseg do svakog zaslona u mreži, a mreža dobiva sadržaj koji nijedan pojedinačni izvor ne bi mogao dati.</p>
 </section>
 <section class="sec sec-h3" id="1-8-podaci-za-grad-zagreb" aria-labelledby="1-8-podaci-za-grad-zagreb-h">
@@ -1919,7 +1885,7 @@ strong { font-weight: var(--weight-bold); }
 <p>Tehnički: jedan Cloudflare Worker sa statičkim datotekama, četiri Durable Object klase sa SQLite pohranom (zaslon, sesija, indeks kodova, brojači), KV za posljednju dobru kopiju svakog izvora, privatni R2 spremnik za kartografske pločice, WebSocket s hibernacijom za zaslone i sesije, HMAC tokeni bez stanja za podatke, MapLibre GL karta s vlastito posluženim otvorenim vektorskim pločicama (Protomaps na podacima OpenStreetMapa). Bez baze korisnika, bez kolačića, bez identifikatora uređaja. Arhitektura je na jednoj stranici u <code>docs/arhitektura.md</code>.</p>
 <figure class="fig" id="fig-f-arhitektura" data-kind="svg"><div class="fig-body" tabindex="0" role="group" aria-label="Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="f-arhitektura-t f-arhitektura-d" font-family="var(--font-sans)" style="font-family:var(--font-sans);color:var(--tone-text-primary)">
 <title id="f-arhitektura-t">Arhitektura: jedan Worker, četiri Durable Objecta, bez baze korisnika</title>
-<desc id="f-arhitektura-d">Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, HRT, Službeni glasnik i šest izvora događanja.</desc>
+<desc id="f-arhitektura-d">Tri uređaja (javni zaslon, telefon, radna površina) govore s jednim Cloudflare Workerom; Worker koristi četiri Durable Objecta (BeaconDO po zaslonu, RoomDO po sesiji, IndexDO i MetricsDO kao singletone), KV i R2, a podatke dohvaća iz otvorenih izvora: ZET, data.zagreb.hr, DHMZ, EMSC, Službeni glasnik i šest izvora događanja.</desc>
 <defs><marker id="f-arhitektura-arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.8 L10,5 L0,9.2 Z" style="fill:var(--tone-text-muted)"/></marker></defs>
 <text x="48" y="44" font-size="12" font-weight="700" style="fill:var(--tone-label)">Uređaji</text>
 <rect x="48" y="60" width="130" height="72" rx="14" style="fill:var(--tone-surface-1);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
@@ -1983,15 +1949,14 @@ strong { font-weight: var(--weight-bold); }
 <polyline points="476,449 536,449" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
 <text x="506" y="440" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">otvori</text>
 <text x="506" y="466" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">sobu</text>
-<rect x="736" y="40" width="200" height="210" rx="14" style="fill:var(--tone-surface-canvas);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
+<rect x="736" y="40" width="200" height="186" rx="14" style="fill:var(--tone-surface-canvas);stroke:var(--tone-stroke-strong);stroke-width:1.5"/>
 <text x="748" y="64" font-size="14" font-weight="700" style="fill:var(--tone-text-primary)">Otvoreni izvori</text>
 <text x="748" y="92" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">ZET GTFS-RT</text>
 <text x="748" y="116" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">data.zagreb.hr / ArcGIS</text>
 <text x="748" y="140" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">DHMZ XML + CAP</text>
 <text x="748" y="164" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">EMSC</text>
-<text x="748" y="188" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">HRT RSS</text>
-<text x="748" y="212" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">Službeni glasnik API</text>
-<text x="748" y="236" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">šest izvora događanja</text>
+<text x="748" y="188" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">Službeni glasnik API</text>
+<text x="748" y="212" font-size="14" font-weight="500" style="fill:var(--tone-text-primary)">šest izvora događanja</text>
 <polyline points="686,180 736,180" style="fill:none;stroke:var(--tone-text-muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" marker-end="url(#f-arhitektura-arr)"/>
 <text x="711" y="172" font-size="12" font-weight="500" text-anchor="middle" style="fill:var(--tone-text-muted)">dohvat</text>
 <text x="736" y="284" font-size="12" font-weight="700" style="fill:var(--tone-label)">Pohrana</text>
@@ -2125,11 +2090,11 @@ strong { font-weight: var(--weight-bold); }
       </tr>
       <tr>
         <th scope="row">HRT</th>
-        <td>RSS Vijesti i Radio Sljeme (naslov, sažetak, poveznica)</td>
-        <td>uvjeti korištenja HRT-a prema našem čitanju: tekst uz navođenje HRT-a i poveznicu na izvornu vijest; audio i video se ne prikazuju; pisana potvrda HRT-a planirana je za fazu M2</td>
-        <td class="fg-when">5 min</td>
+        <td>Program HRT-a i radija kao tekst s poveznicom na vlastiti reproduktor HRT-a, nikad ugrađen</td>
+        <td>samo uz pisano odobrenje HRT-a; audio i video se ne ugrađuju</td>
+        <td class="fg-when">dnevno</td>
         <td>sesija</td>
-        <td class="fg-stanje"><span class="fg-pill" data-state="live">u prototipu</span></td>
+        <td class="fg-stanje"><span class="fg-pill" data-state="plan">plan M5</span></td>
       </tr>
       <tr>
         <th scope="row">OpenStreetMap (Protomaps arhiv)</th>
@@ -2230,7 +2195,7 @@ strong { font-weight: var(--weight-bold); }
     </tbody>
   </table>
 </div></div><figcaption>Registar izvora podataka iz prijedloga projekta: licenca ili uvjet, osvježavanje, razina prikaza (otvorena: bez sesije, na /hitno i na zaslonu prije skeniranja; sesija: samo u otključanom pogledu) i stanje u prototipu ili planu provedbe.</figcaption></figure>
-<p>Izvori su ocijenjeni u registru izvora (<code>docs/izvori.md</code>) zeleno (otvorena licenca, strojno čitljivo, bez ključa), žuto (službeni HTML, uz oprez i oznaku "neslužbeni prikaz") i crveno (zatvoreno; prikazuje se samo poveznica dok pisano odobrenje ne stigne). U prototipu su zeleni izvori i šest označenih iznimaka koje se prikazuju uz navođenje izvora i poveznicu prema uvjetima korištenja: EMSC (samo nekomercijalna uporaba uz navod izvora), HRT (tekst uz navođenje i poveznicu, bez audija i videa), Službeni glasnik (API bez objavljenih uvjeta), Skupština i kvartovske novosti (uvjeti korištenja zagreb.hr), ZET-ove RSS obavijesti (uvjeti nisu objavljeni) i Etnografski muzej (bez licence, samo unutar sesije). Granicu između otvorene razine i razine sesije provodi kod: samo moduli otvorene razine ulaze u <code>/open</code>. Skupovi s data.zagreb.hr čitaju se izravno s adrese resursa, uz poštovanje robots.txt portala; CKAN API se ne poziva, a test to čuva. Pisma i upiti ZET-u (GTFS-RT i RSS), HRT-u (audio i video te potvrda prikaza naslova s poveznicom na javnim zaslonima), HAK-u (kamere), HŽPP-u (licenca), Gradskom uredu (Službeni glasnik, zagreb.hr) i Etnografskom muzeju dio su plana provedbe (faza M2).</p>
+<p>Izvori su ocijenjeni u registru izvora (<code>docs/izvori.md</code>) zeleno (otvorena licenca, strojno čitljivo, bez ključa), žuto (službeni HTML, uz oprez i oznaku "neslužbeni prikaz") i crveno (zatvoreno; prikazuje se samo poveznica dok pisano odobrenje ne stigne). U prototipu su zeleni izvori i pet označenih iznimaka koje se prikazuju uz navođenje izvora i poveznicu prema uvjetima korištenja: EMSC (samo nekomercijalna uporaba uz navod izvora), Službeni glasnik (API bez objavljenih uvjeta), Skupština i kvartovske novosti (uvjeti korištenja zagreb.hr), ZET-ove RSS obavijesti (uvjeti nisu objavljeni) i Etnografski muzej (bez licence, samo unutar sesije). Granicu između otvorene razine i razine sesije provodi kod: samo moduli otvorene razine ulaze u <code>/open</code>. Skupovi s data.zagreb.hr čitaju se izravno s adrese resursa, uz poštovanje robots.txt portala; CKAN API se ne poziva, a test to čuva. Pisma i upiti ZET-u (GTFS-RT i RSS), HRT-u (program te audio i video), HAK-u (kamere), HŽPP-u (licenca), Gradskom uredu (Službeni glasnik, zagreb.hr) i Etnografskom muzeju dio su plana provedbe (faza M2).</p>
 <p>Redak "Zagrebački događaji" sažima šest izvora čiji puni popis, s adresom i uvjetom svakog pojedinačno, čuva <code>docs/izvori.md</code> i stranica <code>/izvori</code>:</p>
 <ul><li><strong>Kulturpunkt</strong> (najave): <code><a href="https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&amp;per_page=40&amp;orderby=date&amp;order=desc">https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&amp;per_page=40&amp;orderby=date&amp;order=desc</a></code>, licenca CC BY-SA 3.0 HR</li>
 <li><strong>Skupština Grada Zagreba</strong> (rokovnik sjednica): <code><a href="https://skupstina.zagreb.hr/rokovnik-sjednica/76">https://skupstina.zagreb.hr/rokovnik-sjednica/76</a></code>, uvjeti korištenja zagreb.hr (navođenje izvora i poveznica)</li>
@@ -2247,13 +2212,13 @@ strong { font-weight: var(--weight-bold); }
 </section>
 <section class="sec sec-h3" id="6-2-kapacitet-prijavitelja-da-kvalitetno-provede-predlozeni-program" aria-labelledby="6-2-kapacitet-prijavitelja-da-kvalitetno-provede-predlozeni-program-h">
 <h3 id="6-2-kapacitet-prijavitelja-da-kvalitetno-provede-predlozeni-program-h">6.2 Kapacitet prijavitelja da kvalitetno provede predloženi program (0–10 bodova)</h3>
-<p>Prototip izrađen za potrebu ove prijave objavljen je na <a href="https://zagreb.aningfilm.hr">https://zagreb.aningfilm.hr</a> prije roka prijave i javno je dostupan: otvoreni sloj, javni zaslon s rotirajućim kodom koji svatko može postaviti, skeniranje, sesija s istekom i deset modula izvora u sedam područja. Primitivi koje projekt koristi rade u produkciji proizvoda koje direktor prijavitelja razvija i vodi: psh.lat (uparivanje uređaja QR kodom i WebSocket na Cloudflare Durable Objects, dvojezično sučelje bez okvira) i kompmajstor.eu (Cloudflare Workers s ograničivačima brzine i brojanjem posjeta bez kolačića, kroz povezano društvo KompMajstor). Oba su javno dostupna i mogu se provjeriti u trenutku ocjenjivanja; izvorni kod psh.lat javan je u cijelosti pod AGPL-3.0-or-later (github.com/matijarma/PushLatte), a za kompmajstor.eu javno je ogledalo izvornog koda bez produkcijskih podataka, za tehnički uvid (github.com/matijarma/KompMajstor.eu).</p>
+<p>Prototip izrađen za potrebu ove prijave objavljen je na <a href="https://zagreb.aningfilm.hr">https://zagreb.aningfilm.hr</a> prije roka prijave i javno je dostupan: otvoreni sloj, javni zaslon s rotirajućim kodom koji svatko može postaviti, skeniranje, sesija s istekom i devet modula izvora u šest područja. Primitivi koje projekt koristi rade u produkciji proizvoda koje direktor prijavitelja razvija i vodi: psh.lat (uparivanje uređaja QR kodom i WebSocket na Cloudflare Durable Objects, dvojezično sučelje bez okvira) i kompmajstor.eu (Cloudflare Workers s ograničivačima brzine i brojanjem posjeta bez kolačića, kroz povezano društvo KompMajstor). Oba su javno dostupna i mogu se provjeriti u trenutku ocjenjivanja; izvorni kod psh.lat javan je u cijelosti pod AGPL-3.0-or-later (github.com/matijarma/PushLatte), a za kompmajstor.eu javno je ogledalo izvornog koda bez produkcijskih podataka, za tehnički uvid (github.com/matijarma/KompMajstor.eu).</p>
 <p>Infrastruktura je plaćeni Cloudflare Workers račun s Durable Objects u produkciji. Suradnici po ulozi, satu ili zaslonu su u financijskom planu: drugi razvojni inženjer za integracije izvora i testove, revizor pristupačnosti koji testira s korisnicima s invaliditetom, UX i motion dizajner, pravni i privacy pregled, instalater zaslona. Otvorena licenca i paket za predaju koda u fazi M7 (kod, dokumentacija na hrvatskom, odluke na koje se kod poziva) smanjuju ovisnost o jednoj osobi. Repozitorij je javan od 15. rujna 2026.</p>
 </section>
 <section class="sec sec-h3" id="6-3-tehnicka-izvedivost-predlozenog-programa" aria-labelledby="6-3-tehnicka-izvedivost-predlozenog-programa-h">
 <h3 id="6-3-tehnicka-izvedivost-predlozenog-programa-h">6.3 Tehnička izvedivost predloženog programa (0–10 bodova)</h3>
 <p>Arhitektura je na jednoj stranici (<code>docs/arhitektura.md</code>): jedan Worker, četiri Durable Object klase, KV, R2, tri ograničivača brzine, bez baze korisnika. Protokol uparivanja slijedi provjerene obrasce (uzorak OAuth device flow, nasumični jednokratni kodovi u prozorima od 30 s, jednokratne ulaznice, 40 bita entropije), opisan je u <code>docs/arhitektura.md</code> i tipiziran u <code>worker/protocol.ts</code>. Svaki izvor ima ocjenu u registru izvora, rok dohvata od 6 sekundi, predmemoriju s TTL-om, posljednju dobru kopiju i status koji razlikuje živo, zastarjelo i nedostupno; stranica nikad nije prazna, a prazan uspješan odgovor razlikuje se od nedostupnog izvora.</p>
-<p>Izvedivost nije obećanje nego stanje na dan prijave (15. rujna 2026., <code>docs/kaj-verification.md</code>). Prototip ima 2.619 jediničnih testova u 165 datoteka (svaki parser prema spremljenim živim uzorcima, Durable Objects u izvršnom okruženju Workers) i 84 Playwright scenarija u dva preglednička projekta, stolnom i mobilnom, uključujući stvarno uparivanje u dva konteksta i istek sesije. Vizualna matrica od 89 prikaza prošla je bez nalaza, Lighthouse pristupačnost je 100 na pet javnih stranica, a obilazak stvarne instalacije sa 62 skupa mjerenja prošao je bez kršenja pravila geometrije, veličine teksta i ciljeva. Testovi dokumenata drže brojke u ovom prijedlogu jednakima konstantama u kodu. Postavljanje je <code>git push</code>; povratak na prethodnu inačicu je <code>git revert</code>. Poznati rizici imaju ugrađen odgovor: ZET-ov GTFS-RT izvor nosi oznaku "samo za testiranje", pa oznaka stoji uz panel do pisma ZET-u u fazi M2; izvor koji padne ostaje kao zastarjela kopija s vidljivom oznakom, nikad kao svjež podatak; ovisnost o jednoj osobi smanjuju suradnici po satu, otvoreni kod i paket za predaju.</p>
+<p>Izvedivost nije obećanje nego stanje na dan prijave (<code>docs/kaj-verification.md</code>, provjere 15. i 16. rujna 2026.). Prototip ima 2.564 jediničnih testova u 179 datoteka (svaki parser prema spremljenim živim uzorcima, Durable Objects u izvršnom okruženju Workers) i 88 Playwright scenarija u dva preglednička projekta, stolnom i mobilnom, uključujući stvarno uparivanje u dva konteksta i istek sesije. Vizualna matrica od 89 prikaza prošla je bez nalaza, Lighthouse pristupačnost je 100 na pet javnih stranica, a obilazak stvarne instalacije sa 62 skupa mjerenja prošao je bez kršenja pravila geometrije, veličine teksta i ciljeva. Testovi dokumenata drže brojke u ovom prijedlogu jednakima konstantama u kodu. Postavljanje je <code>git push</code>; povratak na prethodnu inačicu je <code>git revert</code>. Poznati rizici imaju ugrađen odgovor: ZET-ov GTFS-RT izvor nosi oznaku "samo za testiranje", pa oznaka stoji uz panel do pisma ZET-u u fazi M2; izvor koji padne ostaje kao zastarjela kopija s vidljivom oznakom, nikad kao svjež podatak; ovisnost o jednoj osobi smanjuju suradnici po satu, otvoreni kod i paket za predaju.</p>
 </section>
 <section class="sec sec-h3" id="6-4-drustvena-korist-predlozenog-programa" aria-labelledby="6-4-drustvena-korist-predlozenog-programa-h">
 <h3 id="6-4-drustvena-korist-predlozenog-programa-h">6.4 Društvena korist predloženog programa (0–30 bodova)</h3>
@@ -2271,7 +2236,7 @@ strong { font-weight: var(--weight-bold); }
 <section class="sec sec-h3" id="6-5-inovativnost-predlozenog-programa" aria-labelledby="6-5-inovativnost-predlozenog-programa-h">
 <h3 id="6-5-inovativnost-predlozenog-programa-h">6.5 Inovativnost predloženog programa (0–20 bodova)</h3>
 <p>Kaj ima? nije aplikacija za jedno područje gradskih podataka nego promjena pravila igre: sve otvorene izvore grada spaja u jedan pogled u stvarnom vremenu, a zatim taj pogled namjerno ograničava. Inovacija nije u tome što se sve vidi, nego u tome kako se do pogleda dolazi i kad on prestaje. Od dosadašnjih pristupa otvorenim podacima razlikuje se po kombinaciji šest stvari:</p>
-<ol><li>Jedan pogled na grad preko sedam područja u stvarnom vremenu, na jednoj vremenskoj osi umjesto sedam popisa.</li>
+<ol><li>Jedan pogled na grad preko šest područja u stvarnom vremenu, na jednoj vremenskoj osi umjesto šest popisa.</li>
 <li>Pristup bez računa, aplikacije i kolačića: pogled se otvara jednokratnim kodom sa zaslona u prostoru, s telefona druge osobe ili sa zaslona koji prostor sam postavi na <code>/kiosk/</code>, i sam se zatvara nakon deset minuta. Ograničenje trajanja je pravilo proizvoda, a ne kontrola pristupa.</li>
 <li>Javni zasloni koji su korisni i bez skeniranja i koje osoba s telefonom može voditi, na pametnim televizorima koje prostori već imaju.</li>
 <li>Anonimni skup o potražnji koji Grad dobiva pod licencom s pravom objave, i otvoreni format kroz koji svaki izdavač u gradu objavljuje jednom, za sve zaslone.</li>
@@ -2286,7 +2251,7 @@ strong { font-weight: var(--weight-bold); }
 <section class="sec sec-h3" id="6-7-kvaliteta-financijskog-plana-i-opravdanost-troskova" aria-labelledby="6-7-kvaliteta-financijskog-plana-i-opravdanost-troskova-h">
 <h3 id="6-7-kvaliteta-financijskog-plana-i-opravdanost-troskova-h">6.7 Kvaliteta financijskog plana i opravdanost troškova (0–10 bodova)</h3>
 <p>Financijski plan je u Obrascu 3 i u poglavlju 10 ovog dokumenta (<code>obrazac-3-financijski-plan.md</code>): 20.000,00 EUR bez PDV-a u pet redaka. Troškovi zaposlenih (500 sati voditelja projekta i glavnog razvoja) računaju se po satnici izvedenoj iz stvarne bruto plaće metodom godišnji trošak rada / 1.720 produktivnih sati (12,60 EUR) i dokazuju obračunom plaće i evidencijom sati po projektu; izračun je u Obrascu 3. Vanjski suradnici su navedeni po ulozi, satu i cijeni sata, a svaki ima isporuku u planu provedbe. Promidžba je 6 % ukupnog iznosa (propisano je najmanje 5 %) i konkretna: video o pilotu s titlovima, tiskani stalci i upute za prostore, prezentacija na ZGBitu, javno predstavljanje u pilot-kafiću. Licence (320,00 EUR) su Cloudflare Workers Paid za deset mjeseci s korištenjem Durable Objects, KV i R2 iznad uključenih kvota tijekom pilota na šest zaslona te razvojni alati koji se koriste samo u provedbi; nakon projekta ostaje samo račun Cloudflarea, ispod 100 EUR godišnje. Oprema (1.090,00 EUR) obuhvaća dvije nove postave na Raspberry Pi 5 po 245 EUR, oživljavanje četiriju doniranih uređaja po 95 EUR, rezervni Pi, dva utična mjerača potrošnje i sitni materijal: zajedno šest pilot-zaslona. Svaki euro ima isporuku i mjesec u planu provedbe.</p>
-<p>Vlastiti doprinos prijavitelja je prototip (M0): deset modula izvora, javni zaslon, protokol uparivanja, 2.619 jediničnih testova i dokumentacija izrađeni su prije prijave, bez javnih sredstava, i ne terete ovaj proračun; potpora financira samo ono što od prototipa čini javnu uslugu na zaslonima u prostorima. Sati voditelja iznad 500 ne fakturiraju se projektu.</p>
+<p>Vlastiti doprinos prijavitelja je prototip (M0): devet modula izvora, javni zaslon, protokol uparivanja, 2.564 jediničnih testova i dokumentacija izrađeni su prije prijave, bez javnih sredstava, i ne terete ovaj proračun; potpora financira samo ono što od prototipa čini javnu uslugu na zaslonima u prostorima. Sati voditelja iznad 500 ne fakturiraju se projektu.</p>
 </section>
 </section>
 <section class="sec sec-h2" id="7-kako-citamo-uvjet-rezultati-nenaplatno-dostupni-javnosti" aria-labelledby="7-kako-citamo-uvjet-rezultati-nenaplatno-dostupni-javnosti-h">
@@ -2408,7 +2373,7 @@ strong { font-weight: var(--weight-bold); }
 </svg></div><figcaption>Plan provedbe: M0 je gotov prije potpisa, M1 do M7 traju deset mjeseci nakon potpisa, a točke pokazuju u kojem mjesecu koja uloga sudjeluje; krajnji rok Programa je 31. 12. 2027.</figcaption></figure>
 <section class="sec sec-h3" id="m0-prototip-uzivo-javno-od-14-9-2026-izvorni-kod-od-15-9-2026-prije-potpisa" aria-labelledby="m0-prototip-uzivo-javno-od-14-9-2026-izvorni-kod-od-15-9-2026-prije-potpisa-h">
 <h3 id="m0-prototip-uzivo-javno-od-14-9-2026-izvorni-kod-od-15-9-2026-prije-potpisa-h">M0 Prototip uživo (javno od 14. 9. 2026., izvorni kod od 15. 9. 2026., prije potpisa)</h3>
-<p>Isporuke: javno dostupan prototip <a href="https://zagreb.aningfilm.hr">https://zagreb.aningfilm.hr</a> s brendom Kaj ima?, sigurnošću bez sesije (<code>/hitno</code>), privremenim stvarnim zaslonima koje svatko postavi na <code>/kiosk/</code> sa stajališnim kontekstom i rotirajućim kodom, uparivanjem na istoj i različitim mrežama, desetominutnim sesijama i petominutnim dijeljenjem. Sedam područja čita deset postojećih modula podataka; karte koriste vlastiti regionalni vektorski izvadak. Stranice <code>/izvori</code>, <code>/privatnost</code>, <code>/pristupacnost</code> i <code>/open/</code>, javni repozitorij izvornog koda (od 15. rujna 2026.) i pregled stvarno provedenih testova dio su prijavnog paketa. Mjera: Povjerenstvo može proći stvarno uparivanje i isprobati svako implementirano područje na telefonu, radnoj površini i zaslonu. Javna pilot-usluga na zaslonima u prostorima kreće samo uz financiranje; javno dostupan prototip nije neovisno javno lansiranje.</p>
+<p>Isporuke: javno dostupan prototip <a href="https://zagreb.aningfilm.hr">https://zagreb.aningfilm.hr</a> s brendom Kaj ima?, sigurnošću bez sesije (<code>/hitno</code>), privremenim stvarnim zaslonima koje svatko postavi na <code>/kiosk/</code> sa stajališnim kontekstom i rotirajućim kodom, uparivanjem na istoj i različitim mrežama, desetominutnim sesijama i petominutnim dijeljenjem. Šest područja čita devet postojećih modula podataka; karte koriste vlastiti regionalni vektorski izvadak. Stranice <code>/izvori</code>, <code>/privatnost</code>, <code>/pristupacnost</code> i <code>/open/</code>, javni repozitorij izvornog koda (od 15. rujna 2026.) i pregled stvarno provedenih testova dio su prijavnog paketa. Mjera: Povjerenstvo može proći stvarno uparivanje i isprobati svako implementirano područje na telefonu, radnoj površini i zaslonu. Javna pilot-usluga na zaslonima u prostorima kreće samo uz financiranje; javno dostupan prototip nije neovisno javno lansiranje.</p>
 </section>
 <section class="sec sec-h3" id="m1-ucvrscivanje-protokola-izjave-prva-revizija-pristupacnosti-mjeseci-1-do-2" aria-labelledby="m1-ucvrscivanje-protokola-izjave-prva-revizija-pristupacnosti-mjeseci-1-do-2-h">
 <h3 id="m1-ucvrscivanje-protokola-izjave-prva-revizija-pristupacnosti-mjeseci-1-do-2-h">M1 Učvršćivanje protokola, izjave, prva revizija pristupačnosti (mjeseci 1 do 2)</h3>
@@ -2420,7 +2385,7 @@ strong { font-weight: var(--weight-bold); }
 </section>
 <section class="sec sec-h3" id="m2-svi-zeleni-izvori-u-produkciji-pisma-vlasnicima-podataka-mjeseci-2-do-3" aria-labelledby="m2-svi-zeleni-izvori-u-produkciji-pisma-vlasnicima-podataka-mjeseci-2-do-3-h">
 <h3 id="m2-svi-zeleni-izvori-u-produkciji-pisma-vlasnicima-podataka-mjeseci-2-do-3-h">M2 Svi zeleni izvori u produkciji, pisma vlasnicima podataka (mjeseci 2 do 3)</h3>
-<p>Isporuke: hidrološki bilten (vodostaj Save), indeks zraka (INSPIRE WFS/WMS), dolasci po stajalištu iz GTFS-RT-a, HŽPP polasci prema voznom redu, Narodne novine (ELI), otvorena savjetovanja Grada, Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi, prostorni slojevi Grada (ljekarne, vatrogasci, policija, javni zdenci, javni zahodi, knjižnice, muzeji, parkovi, biciklističke staze); test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT izvoru i uvjeti RSS-a), HRT-u (audio i video te potvrda prikaza naslova s poveznicom na javnim zaslonima) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradskom uredu o uvjetima API-ja Službenog glasnika i uvjetima korištenja zagreb.hr, upit Etnografskom muzeju o licenci. Mjera: <code>/izvori</code> prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.</p>
+<p>Isporuke: hidrološki bilten (vodostaj Save), indeks zraka (INSPIRE WFS/WMS), dolasci po stajalištu iz GTFS-RT-a, HŽPP polasci prema voznom redu, Narodne novine (ELI), otvorena savjetovanja Grada, Europeana i NSK, Wikidata "na današnji dan", BAJS ako se GBFS izvor potvrdi, prostorni slojevi Grada (ljekarne, vatrogasci, policija, javni zdenci, javni zahodi, knjižnice, muzeji, parkovi, biciklističke staze); test za svaki parser prema spremljenom uzorku; pisma ZET-u (oznaka "samo za testiranje" na GTFS-RT izvoru i uvjeti RSS-a), HRT-u (program te audio i video) i HAK-u (kamere), upit HŽPP-u o licenci, upit Gradskom uredu o uvjetima API-ja Službenog glasnika i uvjetima korištenja zagreb.hr, upit Etnografskom muzeju o licenci. Mjera: <code>/izvori</code> prikazuje sve zelene izvore sa statusom živo; kopije pisama u dokumentaciji.</p>
 </section>
 <section class="sec sec-h3" id="m3-sest-zaslona-instalirano-administracija-zaslona-mjeseci-3-do-4" aria-labelledby="m3-sest-zaslona-instalirano-administracija-zaslona-mjeseci-3-do-4-h">
 <h3 id="m3-sest-zaslona-instalirano-administracija-zaslona-mjeseci-3-do-4-h">M3 Šest zaslona instalirano, administracija zaslona (mjeseci 3 do 4)</h3>
@@ -2535,7 +2500,7 @@ strong { font-weight: var(--weight-bold); }
 <p>Osam prigovora koje očekujemo, s odgovorom koji je ugrađen u proizvod, ne obećan.</p>
 <section class="sec sec-h3" id="1-jos-jedna-zet-aplikacija" aria-labelledby="1-jos-jedna-zet-aplikacija-h">
 <h3 id="1-jos-jedna-zet-aplikacija-h">1. "Još jedna ZET aplikacija."</h3>
-<p>ZET je jedan od izvora u sedam područja i ne pokušavamo ga zamijeniti: Promet prikazuje vozila i kašnjenja linija, a za planiranje putovanja upućuje na postojeće aplikacije. Vrijednost je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i vijest na istom mjestu, u istoj minuti, s istim standardom atribucije. Kaj ima? se od aplikacije za jedno područje razlikuje po tom spoju, po javnim zaslonima koje vodi telefon, po otvorenom formatu kroz koji svaki izdavač u gradu objavljuje za sve zaslone i po skupu podataka o potražnji koji se vraća Gradu.</p>
+<p>ZET je jedan od izvora u šest područja i ne pokušavamo ga zamijeniti: Promet prikazuje vozila i kašnjenja linija, a za planiranje putovanja upućuje na postojeće aplikacije. Vrijednost je u spoju: upozorenje DHMZ-a, zatvorena prometnica, potres, akt Službenog glasnika i vijest na istom mjestu, u istoj minuti, s istim standardom atribucije. Kaj ima? se od aplikacije za jedno područje razlikuje po tom spoju, po javnim zaslonima koje vodi telefon, po otvorenom formatu kroz koji svaki izdavač u gradu objavljuje za sve zaslone i po skupu podataka o potražnji koji se vraća Gradu.</p>
 </section>
 <section class="sec sec-h3" id="2-ogranicen-pristup-se-ne-slaze-s-uvjetom-rezultati-nenaplatno-dostupni-javnosti" aria-labelledby="2-ogranicen-pristup-se-ne-slaze-s-uvjetom-rezultati-nenaplatno-dostupni-javnosti-h">
 <h3 id="2-ogranicen-pristup-se-ne-slaze-s-uvjetom-rezultati-nenaplatno-dostupni-javnosti-h">2. "Ograničen pristup se ne slaže s uvjetom 'rezultati nenaplatno dostupni javnosti'."</h3>
@@ -2574,7 +2539,7 @@ strong { font-weight: var(--weight-bold); }
 </main>
 
 <footer class="doc-foot">
-  <p>Kaj ima? · Aning Film d.o.o. · Prijedlog projekta za Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026. · Izvorni kod pod licencom AGPL-3.0-or-later. Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom · Public dataset by ZET provided under Open license · DHMZ, Otvorena dozvola · Credit: EMSC/CSEM · HRT uz navođenje izvora.</p>
+  <p>Kaj ima? · Aning Film d.o.o. · Prijedlog projekta za Javni poziv Grada Zagreba za projekte korištenja otvorenih podataka 2026. · Izvorni kod pod licencom AGPL-3.0-or-later. Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom · Public dataset by ZET provided under Open license · DHMZ, Otvorena dozvola · Credit: EMSC/CSEM.</p>
 </footer>
 
 <script type="application/json" id="prijava-snapshot">{
@@ -2616,11 +2581,6 @@ strong { font-weight: var(--weight-bold); }
     "sourceUpdatedAt": "2026-09-15T05:56:32Z",
     "source": "DHMZ CAP",
     "confirmedAt": "2026-09-15T17:51:48Z"
-  },
-  "news": {
-    "title": "Krenuo prvi hibridni elektrodizelski vlak",
-    "at": "2026-09-15T17:49:13Z",
-    "source": "HRT vijesti"
   }
 }</script>
 <script type="module" src="./prijava.js"></script>

@@ -4,16 +4,16 @@
     "file": "m-telefon.html",
     "kind": "mock",
     "title": "Telefon: traka Sada",
-    "desc": "Statična replika telefonskog prikaza na 390 px u 19:51, 15. 9. 2026.: statusna linija (natpis, četvrt Gornji grad, pilula sesije s prstenom, štit), segmenti doba dana u noćnom rasporedu, glava Sada sa satom i vremenom kao stanjem, pločice linija 6 i 11 sa stanice Trg bana J. Jelačića, traka zatvaranja u kvartu, mirna sigurnosna traka, HRT vijest, podnožje Zatim s dvije sažete pločice, gumb Na zaslon i kartice Sada, Promet, Kvart, Još.",
-    "caption": "Telefon nakon skeniranja: jedna vremenska os, pločice u gramatici natpis · vrijednost · kontekst, vrijeme kao stanje uz sat, sigurnost jednim dodirom. Prikaz: stanja linija i najave ilustrativni su, vrijeme i vijest iz snimke od 15. 9. 2026."
+    "desc": "Statična replika telefonskog prikaza na 390 px u 19:51, 15. 9. 2026.: statusna linija (natpis, četvrt Gornji grad, pilula sesije s prstenom, štit), segmenti doba dana u noćnom rasporedu, glava Sada sa satom i vremenom kao stanjem, pločice linija 6 i 11 sa stanice Trg bana J. Jelačića, traka zatvaranja u kvartu, mirna sigurnosna traka, pločica Službenog glasnika (broj 29/2026, 118 akata), podnožje Zatim s dvije sažete pločice, gumb Na zaslon i kartice Sada, Promet, Kvart, Još.",
+    "caption": "Telefon nakon skeniranja: jedna vremenska os, pločice u gramatici natpis · vrijednost · kontekst, vrijeme kao stanje uz sat, sigurnost jednim dodirom. Prikaz: stanja linija i najave ilustrativni su, vrijeme iz snimke od 15. 9. 2026., broj Glasnika prema API-ju Grada 16. 9. 2026."
   },
   {
     "id": "m-kiosk",
     "file": "m-kiosk.html",
     "kind": "mock",
     "title": "Javni zaslon: prizor Promet",
-    "desc": "Statična replika javnog zaslona 1920 × 1080 u 19:51, 15. 9. 2026., stanica Trg bana J. Jelačića: zaglavlje sa satom i vremenom, prizor Promet sa shemom tramvajske mreže i šest pločica linija (oba kraja linije, riječ stanja, broj vozila), traka radova, bočne pločice vozila u pokretu i zatvaranja, pozivnica s pravim QR kodom za zagreb.aningfilm.hr/s i kodom ABCD·EFG0, sigurnosna traka s presudom mirno.",
-    "caption": "Javni zaslon u prostoru: nepovezan rotira tri prizora, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz: vozila u pokretu, vrijeme, sigurnost i vijest su snimka otvorenih izvora od 15. 9. 2026.; stanja linija, broj vozila, zatvaranja i radovi ilustrativni su."
+    "desc": "Statična replika javnog zaslona 1920 × 1080 u 19:51, 15. 9. 2026., stanica Trg bana J. Jelačića: zaglavlje sa satom i vremenom, karta kao cijelo polje (shema tramvajske mreže) s oznakom prizora Promet u gornjem lijevom kutu i tračnicom pločica uz donji rub karte: traka radova i četiri pločice linija (oba kraja linije, riječ stanja, broj vozila), bočne pločice vozila u pokretu i zatvaranja, pozivnica s pravim QR kodom za zagreb.aningfilm.hr/s i kodom ABCD·EFG0, sigurnosna traka s presudom mirno.",
+    "caption": "Javni zaslon u prostoru: karta stoji kroz sva tri prizora, prizor mijenja kadar i pločice uz donji rub karte, a pozivnica s QR kodom i osmeroslovnim kodom otključava deset minuta grada na telefonu. Prikaz: vozila u pokretu, vrijeme i sigurnost su snimka otvorenih izvora od 15. 9. 2026.; stanja linija, broj vozila, zatvaranja i radovi ilustrativni su."
   },
   {
     "id": "shema-tramvaji",

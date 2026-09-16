@@ -358,7 +358,7 @@ prolaze nad novim tekstom i nad `app/prijava/index.html`; `e2e/a11y.spec.ts` obu
 `/prijava/` na 390 i 1920 px u obje teme (jedan h1: replike zaslona spuštaju svoj h1 u
 odlomak pri izgradnji). Vrijednosti u traci "Sada u Zagrebu" i u replikama su snimka
 otvorenih izvora od 15. 9. 2026. u 19:51 (275 vozila, 39 zatvaranja, 21,4 °C, tri potresa u
-72 sata, DHMZ mirno, naslov HRT-a); stanja linija, broj vozila po liniji, najbliže zatvaranje
+72 sata, DHMZ mirno); stanja linija, broj vozila po liniji, najbliže zatvaranje
 i radovi u replikama ilustrativni su i tako potpisani. Na adresi `/prijava/` traka se pri
 otvaranju osvježava s `/api/teaser`.
 
@@ -510,3 +510,24 @@ prvog cijelog snimljenog dana; do tada scenarijski test `test/scripts/replay-twi
 kratkim sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`) dokazuje
 da jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
 vraća plan unatrag i pogađa 30 s unaprijed unutar 60 m pri p95.
+
+Dopuna 16. 9. 2026., drugi prolaz, nakon što je područje Vijesti izašlo iz proizvoda
+(`b8a6a19`) i karta postala cijelo polje javnog zaslona (`e60bbfc` do `c0c9867`): prijedlog,
+Obrazac 2.2, plan provedbe i pitanja Povjerenstva kažu šest područja i devet modula izvora;
+pločica vijesti nestala je iz trake Sada, imenika Još, prizora Grad i izvatka za zaslon prije
+skeniranja, a i iz naslovne trake "Sada u Zagrebu", njezine skripte i snimke; redak HRT-a u
+tablici izvora pretvoren je iz "u prototipu" u program HRT-a i radija kao plan M5 (pismo HRT-u
+u M2 traži program te audio i video), pa je označenih iznimaka pet. Replika javnog zaslona
+`m-kiosk.html` nacrtana je iznova prema novoj kompoziciji (karta kroz sva tri prizora, oznaka
+prizora u kutu, tračnica s trakom radova i četiri pločice linija uz donji rub karte; shema
+tramvaja u omjeru 3 : 2, čitač artefakta `zet-network.json` prihvaća i inačicu 2), replika
+telefona umjesto vijesti nosi pločicu Glasnika (broj 29/2026, 118 akata, prema API-ju Grada
+16. 9. 2026.), slika arhitekture ima šest izvora. Brojevi testova u §6.3, §6.7 i Obrascu 2.2
+osvježeni su iz istoga dana: Vitest 179 datoteka, 2.564 testova; Playwright 88 scenarija u 12
+datoteka. Provjere ponovljene s istim ishodom: bez pogrešaka u konzoli i bez mrežnih
+zahtjeva, bez prelijevanja na 390, 768 i 1440 px u obje teme, jedan h1, ispis u A4 41 stranica
+sa svakom slikom cijelom, parnost teksta (iste dvije ćelije tablice kao pilula i napomena),
+`test/docs` i čuvari kopije prolaze, `e2e/a11y.spec.ts` 20 scenarija prolazi nad `/prijava/`
+i ostalim javnim stranicama. Word datoteka ponovno je složena s 13 slika; snimke slika za nju
+rade se sa skrivenom ljepljivom statusnom linijom dokumenta, koja je dotad prekrivala vrh
+slika viših od prozora.
