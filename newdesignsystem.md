@@ -178,12 +178,13 @@ Add `footprints`, `bike`, `car-front`, `trash-2`, `cast`, `bell`, `star` to `ICO
 - Floating "Na zaslon" (48 px pill, accent, bottom-right, 16 px inset above the tab bar) only while a session has a screen. The lane's bottom padding is 80 px so no tile sits under it.
 - Safety = icon-only 40 px in the header (rose tint) on every width; the word lives in the tooltip and aria-label.
 
-### 4.8 Kiosk `kiosk.css`: fixed frame, rotating scene
+### 4.8 Kiosk `kiosk.css`: fixed frame, one field, no rotation
 
-- Frame (never changes): header 96 px (wordmark · kvart/stop chip in paper · date · 48 px clock · condition glyph + temp · sunset glyph + time); right column 600 px (two value tiles + the **invitation card**); safety strip 96 px (mirno/hitno word · sources · pharmacy · "next scene in N s" · /hitno pill).
-- Scene (left field, 1280 × 888 at wide): *Promet* (3 × 2 tiles: 5 lines from the stop + 1 works band) → *Večeras u kvartu* (3 time rows: 56 px time, 24 px label, 40 px title, context) → *Grad* (Skupština tile-ink with agenda count, a city notice, the newest quake). 20 s each; dots in the scene head show position. Out 180 / in 220 ms, disabled under `prefers-reduced-motion` and `lagano`. No scene rotation while a session is active: the paired composition (existing `paired.ts`) takes the field.
+- Frame (never changes): header 96 px (wordmark · kvart/stop chip in paper · date · 48 px clock · condition glyph + temp · sunset glyph + time); right column 520 px at wide, 440 px compact, holding at most three ranked statements above the **invitation card**; safety strip 96 px (mirno/hitno word · sources · pharmacy · /hitno pill, no countdown).
+- Field: edge to edge, no radius, no cards on it, the only overlay MapLibre's own attribution. It draws through the `prozor` basemap profile -- two landuse tones and hairline streets as ground texture that is never the figure, the tram network as the figure in wider ink/paper, trams as rounded plates and buses as capsules, the screen's stop a 9× symbol-scale ring carrying the biggest label on the map -- one fixed camera, north-up, no padding, 2.8 km across at wide/compact/portrait and 1.4 km on the handheld band; no rotation, no chip, no `?prizor=`.
+- Statement `.k-say`: three type tiers with hairline separators, no fill, no border -- label 24/18 px (uppercase kicker, optional line badges), value 40/28 px (≤ 2 lines, never ellipsised), context 26/20 px (muted, may ellipsise). A changed value crossfades on insertion through `data-replace`/`data-sig`, off under reduced motion and lagano; reduced motion otherwise only stops the vehicle plates' own movement crossfade on the field.
 - Invitation card: accent fill (dark theme: paper fill, night text), lead 40 px spanning the card, then 240 px QR beside the 26 px hint, then the 84 px code and 8 px progress bar. Code letter-spacing 0.04em; keep the `11.5cqi` cap.
-- Compact (1366 × 768): same frame with the compact tokens; scene tiles 2 × 2; invitation QR 240 → lead 28 px. Portrait: frame stacked, scene on top 55%, right column becomes a row.
+- Compact (1366 × 768): same frame with the compact tokens; column 440 px; invitation QR 240 → lead 28 px. Portrait: field on top, at least half the stage height, then statements and the card as one row, then the strip.
 
 ### 4.9 Notifications (bell)
 
@@ -197,7 +198,7 @@ Sheet (existing `dialog-sheet`): toggles for *kašnjenja > 5 min na spremljenim 
 | Time band | `grad-sada.ts` weather / safety / transit / agenda / news / civic blocks in three `.ov-col` | Each block becomes a *tile producer* returning `Tile[]` with `{at?, bucket?, domain, variant, label, value, context, selection}`; `timeband.ts` buckets and renders. Weather block → status line only. |
 | Kvart panel | — | New `experience/kvart.ts`; reuses `map-slots` for the thumbnail and `transport/detail.ts` selections. |
 | Phone tabs | `PHONE_TABS`, `MORE_LAYERS` | `['grad-sada','u-pokretu','kvart']`; `MORE_LAYERS` += `'kultura'`. |
-| Kiosk | `invitation.ts` map + side; `k-story` rotation | New `scenes.ts` replaces the map column with the scene field; map moves into the *Promet* scene as a 1/3-width slot or stays as the whole scene in `lagano`; story rotation logic reused for scenes. |
+| Kiosk | `scenes.ts` chapter rotation + two value tiles | `field.ts` (the fixed map field, mounted once) and `say.ts` (`rankStatements`, up to three ranked statements) replace `scenes.ts`; `invitation.ts` composes field + column instead of field + rail. |
 | Domain workspaces | `u-pokretu, zrak-i-nebo, kultura, uprava-i-pravo, sigurnost` | No layout change in phase 1; they inherit the palette, the `xs` badge and glyph rules. Phase 3: their heads become the same tile grammar. |
 
 ## 6. Data requirements (feature-flagged)

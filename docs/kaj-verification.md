@@ -531,3 +531,81 @@ sa svakom slikom cijelom, parnost teksta (iste dvije ćelije tablice kao pilula 
 i ostalim javnim stranicama. Word datoteka ponovno je složena s 13 slika; snimke slika za nju
 rade se sa skrivenom ljepljivom statusnom linijom dokumenta, koja je dotad prekrivala vrh
 slika viših od prozora.
+
+## Javni zaslon Prozor (16. 9. 2026.)
+
+Plan `C:/Users/MatijaRadeljak/.claude/plans/observe-the-layout-and-valiant-fiddle.md`, grana i
+radna stabla `kiosk-prozor` / `kp-P1`…`kp-P4`, odluke i tumačenja u
+`.superpowers/sdd/2026-09-16-kiosk-prozor/rulings.md` (R-KP1 do R-KP15). Val A gradi u
+četiri usporedna radna stabla; ovaj odjeljak opisuje protokol provjere koji vlasnik čita nakon
+spajanja (val B) -- brojke i snimke iz vala A same po sebi nisu dovoljne jer ni jedno radno
+stablo samo ne vidi cijeli sastavljen zaslon.
+
+### Matrica snimanja
+
+`review.local/kiosk-pass/capture.mjs <naziv>` (git-ignorirana lokalna alatka, pokreće se protiv
+`APP_URL`) snima nepovezani zaslon po veličini iz plana, svjetlo i tamno, jednom po veličini
+(nema više prizora kroz koje bi trebalo prolaziti -- polje je jedno):
+
+| Veličina | Zašto |
+|---|---|
+| 1920 × 1080 | nacrtana veličina |
+| 1366 × 768 | kompaktni nacrt |
+| 1080 × 1920 | portretni totem |
+| 2560 × 1440 | iznad Full HD: više grada, ne veća rupa |
+| 3840 × 2160 | 4K: znak mora prestati rasti |
+| 2560 × 1080 | ultra široki: zoom ostaje 1, višak ide polju |
+| 1920 × 1200 | viši od nacrta: višak ide polju |
+| 390 × 844 | telefon, koji je nekad dobivao zid |
+
+Za nacrtanu veličinu (1920 × 1080) alatka dodatno snima par „3m” (ista slika pri
+`deviceScaleFactor 0.25`, svjetlo i tamno) i, na istoj stranici bez ponovnog učitavanja, jedan
+snimak nakon 20 sati po zagrebačkom vremenu (sat je pomaknut unaprijed, `page.clock`, da zadnji
+polazak stigne na zaslon bez nove navigacije). `geometry.json` po veličini bilježi: udio polja
+(`[data-testid=kiosk-live]`) u pozornici, broj prikazanih `article.k-say`, prelijeva li ijedna
+`.k-say-value` (`scrollHeight > clientHeight + 1`), `data-major-labels` domaćina karte i okvir
+atribucijske kontrole.
+
+**Rezultat: popuniti u integraciji.**
+
+### Provjera na 3 metre
+
+`deviceScaleFactor 0.25` snimka 1920 × 1080 kadra oponaša 1080p ploču gledanu s četverostruke
+referentne udaljenosti -- jedina poštena provjera da znak čita se s tri metra. Na toj snimci
+čitljiv tekst smije biti samo: ime stajališta, imena četvrti, brojevi vozila na pločama/kapsulama
+i vrijednosti izjava u stupcu; ništa se drugo ne smije natjecati za pažnju (nema sitnog teksta
+karte, nema imena ulica ispod praga `roads_labels_major`).
+
+**Rezultat: popuniti u integraciji.**
+
+### Pravila slaganja
+
+Iz `e2e/kiosk-layout.spec.ts`'s `compositionIssues` (P3, val A): polje karte u pejzažu ≥ 0,60
+površine `.k-invitation`; jedino `.maplibregl-ctrl-attrib` smije sjeći okvir polja; `.k-column`
+nikad ne sječe polje; QR ≥ 240 px u oba smjera; svaka `.k-say-value` ima
+`scrollHeight ≤ clientHeight + 1`, bez `text-overflow: ellipsis`, najviše dva retka; zaglavlje i
+traka 96/72 × zoom; u portretu polje ≥ 0,5 visine pozornice, a izjave stoje lijevo od kartice;
+jedinstvena postavljena imena `roads_labels_major` ≤ 8 (mjereno preko `placedNames()` na
+`CityMapHandle`); bez preklapanja, bez prelijevanja, točno jedan `h1`, zastoj kod prekida izvora
+(`stale-feed-hold`), uparene kompozicije zadržavaju svoje čuvare. `?prizor=` više ne postoji ni
+kao ruta ni kao query -- njegovo odsustvo provjerava i `node scripts/audit-production.mjs`
+(pravilo `legacy-prizor-param`).
+
+**Rezultat: popuniti u integraciji.**
+
+### Oznake sadržaja za proizvodnju
+
+Testid-ovi koji preživljavaju spajanje (global-constraints.md, ugovor 8): `kiosk-live` (polje),
+`kiosk-map-host` (nosi `data-major-labels`), `kiosk-map`, `kiosk-lines` (redak crta prijevoza,
+i na izjavi i na laganoj ploči), `kiosk-says` (stupac), `kiosk-say` (svaki `article.k-say`),
+`kiosk-strip`, `kiosk-code`/`code-a`/`code-b`, QR testid-ovi, `kiosk-context`, `kiosk-clock`,
+`kiosk-weather`. Ukinuti: `kiosk-scene`, `kiosk-scene-meta`, `kiosk-scene-position`,
+`kiosk-tonight`, `kiosk-city`, `kiosk-works`, `tile-vehicles`, `tile-closures`, `k-city-ink`.
+Osam mogućih izjava u stupcu (`app/src/kiosk/say.ts`, P2): prometna presuda, potres, zatvaranje,
+zadnji polazak (od 20 sati), ZET-ova prometna obavijest, najava sjednice Skupštine, radovi i
+kvartovske novosti -- najviše tri istovremeno, poredane po važnosti sada. Radnički teaser
+(`/api/teaser`, ova radna cjelina): kutija vozila 3,8 km oko stajališta (`TEASER_BOX_HALF_M`
+1900 m), otvoreni redci `dogadanja` poredani (sjednice, ZET promet, pa ostatak) i ograničeni
+na 20.
+
+**Rezultat: popuniti u integraciji.**
