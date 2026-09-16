@@ -16,7 +16,7 @@ import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../ap
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, compassLabel, downPlaceholder, KIOSK_TEASER_MODULES, linesAtStop, nearestPharmacy, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf } from '../../app/src/kiosk/local';
-import { createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { CHAPTER_EMPHASIS, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -499,7 +499,7 @@ describe('the one map, through the additive adapter', () => {
     expect(setView).not.toHaveBeenCalled();
     requestKioskMap(maps, { ...input, selection: { kind: 'route', id: '6' } }, adapter);
     expect(setView).toHaveBeenCalledTimes(1);
-    expect(setView).toHaveBeenCalledWith({ zoom: KIOSK_MAP_ZOOM, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
+    expect(setView).toHaveBeenCalledWith({ zoom: KIOSK_MAP_ZOOM, emphasis: CHAPTER_EMPHASIS.promet, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
     expect(KIOSK_MAP_SLOT_ID).toBe('kiosk-map');
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();

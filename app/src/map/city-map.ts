@@ -433,6 +433,8 @@ export interface MapView {
   selectedRoute?: string;
   selectedStop?: string;
   follow?: boolean;
+  /** Which kinds of city point this chapter lights; null lights every one. */
+  emphasis?: readonly PlaceKind[] | null;
 }
 
 /** Sides of the viewport a fit must keep clear, CSS px; a missing side is 0. */
@@ -1228,6 +1230,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     });
   }
 
+  function setEmphasis(next: readonly PlaceKind[] | null): void {
+    if (JSON.stringify(next ?? null) === JSON.stringify(emphasis ?? null)) return;
+    emphasis = next;
+    applyOverlays();
+  }
+
   const move = (center: [number, number], zoom: number): void => {
     map?.easeTo({ center, zoom, offset: offsetFor(), duration: reduced ? 0 : CAMERA_MS });
   };
@@ -1268,6 +1276,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     following: () => following,
     setView(view) {
       if (view.padding) fitPadding = { ...view.padding };
+      if (view.emphasis !== undefined) setEmphasis(view.emphasis);
       const next = viewSelection(view.selectedRoute, view.selectedStop);
       if (next?.kind === 'stop') {
         const platform = net?.stops.find((s) => s.id === next.id);
@@ -1286,11 +1295,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       modes = next;
       applyOverlays();
     },
-    setEmphasis(next) {
-      if (JSON.stringify(next ?? null) === JSON.stringify(emphasis ?? null)) return;
-      emphasis = next;
-      applyOverlays();
-    },
+    setEmphasis,
     setClosuresVisible(visible) {
       closuresVisible = visible;
       applyOverlays();

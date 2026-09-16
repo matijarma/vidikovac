@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { KIOSK_KVART_ZOOM, KIOSK_MAP_WIDTH_PX, KIOSK_MAP_ZOOM, KIOSK_MAX_ZOOM, KIOSK_MIN_ZOOM, KVART_SPAN_M, chapterView, metresPerPixel } from '../../app/src/kiosk/mapview';
 import * as basemap from '../../app/src/map/basemap';
 import {
   createCityMap,
@@ -222,5 +223,53 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
     handle.setFitPadding!({ bottom: 370 }); // half: within the room, untouched
     handle.fit!('selection');
     expect(map.cameraCalls.at(-1)?.options.padding).toEqual({ top: 40, right: 40, bottom: 410, left: 40 });
+  });
+});
+// The whole chapter contract, with no map and no DOM: what the camera does,
+// what each chapter lights, and the one thing a chapter may not ask for.
+describe('two framings, three chapters', () => {
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6'], district: 'donji-grad' };
+  const route = { kind: 'route', id: '6' } as const;
+
+  it('holds the stop at street zoom in Promet and the quarter in the other two, lights a different subset in each, and refuses to follow outside Promet', () => {
+    const promet = chapterView('promet', { stop: STOP, selection: route });
+    expect(promet.zoom).toBe(KIOSK_MAP_ZOOM);
+    expect(promet.center).toEqual([STOP.lon, STOP.lat]);
+    expect(promet.follow).toBe(true);
+    expect(promet.outline).toBe(false);
+
+    // One framing for both kvart chapters: the quarter is the same quarter
+    // whichever of them is showing, so only the lit layers differ.
+    const veceras = chapterView('veceras', { stop: STOP, selection: route });
+    const grad = chapterView('grad', { stop: STOP, selection: route });
+    expect(veceras.zoom).toBe(KIOSK_KVART_ZOOM);
+    expect(grad.zoom).toBe(veceras.zoom);
+    expect(grad.center).toEqual(veceras.center);
+    expect(grad.outline && veceras.outline).toBe(true);
+    // Following a route's vehicles while framing a quarter is incoherent, and
+    // the two eases would fight; the phone's route never steers these two.
+    for (const view of [veceras, grad]) {
+      expect(view.follow).toBeUndefined();
+      expect(view.selectedRoute).toBeUndefined();
+      expect(view.selectedStop).toBe(STOP.id);
+    }
+    expect(new Set([promet.emphasis, veceras.emphasis, grad.emphasis].map((e) => JSON.stringify(e))).size).toBe(3);
+    // Safety marks are not a chapter's to switch off; the assembly points'
+    // own rule (only while urgent) is what keeps them off a calm screen.
+    for (const view of [promet, veceras, grad]) expect(view.emphasis).toContain('assembly');
+    expect(promet.emphasis).not.toContain('event'); // Promet is the network
+
+    // The kvart framing is about six kilometres of ground across the box, and
+    // stays inside the zooms the archive actually carries: fitting a raw
+    // district bounding box would put Sesvete and Brezovica below the floor.
+    expect(metresPerPixel(KIOSK_KVART_ZOOM, STOP.lat) * KIOSK_MAP_WIDTH_PX).toBeCloseTo(KVART_SPAN_M, -2);
+    for (const chapter of ['promet', 'veceras', 'grad'] as const) {
+      const { zoom } = chapterView(chapter, { stop: STOP, selection: null });
+      expect(zoom).toBeGreaterThanOrEqual(KIOSK_MIN_ZOOM);
+      expect(zoom).toBeLessThanOrEqual(KIOSK_MAX_ZOOM);
+    }
+    // Pure: same input, same answer, and a screen with no stop still frames.
+    expect(chapterView('grad', { stop: STOP, selection: null })).toEqual(chapterView('grad', { stop: STOP, selection: null }));
+    expect(chapterView('promet', { stop: null, selection: null }).center).toBeUndefined();
   });
 });

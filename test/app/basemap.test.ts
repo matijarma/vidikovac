@@ -32,7 +32,7 @@ import {
   textSizeAt,
 } from '../../app/src/map/basemap';
 import { overlayLayers } from '../../app/src/map/overlays';
-import { KIOSK_SYMBOL_SCALE } from '../../app/src/kiosk/mapview';
+import { KIOSK_KVART_ZOOM, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE } from '../../app/src/kiosk/mapview';
 import { deltaE, hexToLinear } from './oklab';
 
 const ORIGIN = 'https://zagreb.example';
@@ -203,7 +203,9 @@ describe('place labels on a thumbnail (kajimafix 01.8)', () => {
 // than shrunk. Checked at every zoom the archive covers, so it holds at any
 // camera either chapter can ask for, not only at the two it does ask for.
 describe('the sign basemap profile: readable at three metres, or not drawn', () => {
-  const ZOOMS: number[] = [];
+  // Every zoom the archive covers, so the floor holds at any camera either
+  // chapter could ask for -- and the two it actually asks for, named.
+  const ZOOMS: number[] = [KIOSK_MAP_ZOOM, KIOSK_KVART_ZOOM];
   for (let z = MAP_MIN_ZOOM; z <= MAP_MAX_ZOOM; z += 0.25) ZOOMS.push(Number(z.toFixed(2)));
 
   it('holds every promoted label between the ten-arcminute floor and the ceiling, at every zoom, with a halo the glyph renderer can draw', () => {
