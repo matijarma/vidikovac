@@ -42,13 +42,18 @@ export function routeType(routeId: string, routes: ZetRoutes): number | undefine
  *  Worker cannot import that file across the worker/app boundary, so the
  *  value is repeated here and the two test suites each pin it. */
 export const TEASER_BOX_CENTRE = { lon: 15.9769, lat: 45.813 } as const;
-/** Half the box side, in metres: the kiosk's default crop radius (900 m,
- *  schematic.ts DEFAULT_RADIUS_M) plus one inner-city stop spacing
- *  (~400-500 m), so a tram approaching the drawn circle has already given
- *  the motion model one interval of its own speed evidence by the time it
- *  enters -- otherwise every vehicle would appear at the rim standing
- *  still until its second fix. */
-export const TEASER_BOX_HALF_M = 1400;
+/** Half the box side, in metres, derived from the field the public screen
+ *  actually draws (plan D2): the map spans FIELD_SPAN_M = 2800 m across its
+ *  measured width (app/src/kiosk/mapview.ts once P3 lands, the Worker
+ *  cannot import it across the worker/app boundary), so half that field is
+ *  1400 m; add one inner-city stop spacing (~500 m) so a tram approaching
+ *  the edge has already given the motion model one interval of its own
+ *  speed evidence by the time it enters the picture -- otherwise every
+ *  vehicle would appear at the rim standing still until its second fix.
+ *  Wave B adds the cross-pin `TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400`
+ *  once both constants live together on `kiosk-prozor` (global constraints,
+ *  contract 6). */
+export const TEASER_BOX_HALF_M = 1900;
 const METRES_PER_DEG_LAT = 111_320;
 const HALF_LAT_DEG = TEASER_BOX_HALF_M / METRES_PER_DEG_LAT;
 const HALF_LON_DEG = TEASER_BOX_HALF_M / (METRES_PER_DEG_LAT * Math.cos((TEASER_BOX_CENTRE.lat * Math.PI) / 180));

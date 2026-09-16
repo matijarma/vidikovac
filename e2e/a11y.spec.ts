@@ -4,7 +4,7 @@
 // is exactly how a person without a phone meets them.
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
-import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { APP_URL, E2E_STOP_ID, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
 
 // The two sizes newdesignsystem.md and Vidikovac.dc.html were drawn at: kiosk 1080p
@@ -224,18 +224,23 @@ async function assertTextPath(page: Page, surface: string, interactiveTransport 
 test.describe('the moving map has a text path (R-F5)', () => {
   test('/kiosk/ has a readable route board beside its named map, and every interactive control has a name', async ({ page, request }) => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
-    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    // The screen's stop: the readable route board is the transit statement's badge row, which is the stop's own lines.
+    const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
     await page.setViewportSize(KIOSK);
-    // D13's pin: kiosk-map and kiosk-lines only exist while the Promet scene shows.
-    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
+    // One fixed window (R-KP1): the map and the column are there from the first paint, nothing rotates away.
+    await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
-    await expect(page.getByTestId('kiosk-lines')).toContainText('6');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
     await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
     // A public screen's route board is glanceable, not a hidden interactive
     // phone list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
+    // The readable route board beside the map is the transit statement's badge
+    // row (contract 4: data-testid="kiosk-lines" on it), written by say.ts once
+    // zet-rt has answered (R-KP16: absent, not "always", while it loads).
+    await expect(page.locator('[data-testid=kiosk-says] article.k-say:not([data-skeleton])').first()).toBeAttached({ timeout: 15_000 });
+    await expect(page.locator('[data-testid=kiosk-say][data-say=transit] [data-testid=kiosk-lines]')).toContainText('6');
   });
 
   test('/d/ in a session with U pokretu open: no nested-interactive violation, a name on every Tab stop (the map’s zoom buttons and the OpenStreetMap link included), and the vehicle list among them', async ({
@@ -247,6 +252,9 @@ test.describe('the moving map has a text path (R-F5)', () => {
     const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: KIOSK });
     const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
     try {
+      // A stopless screen, as this proof was written for: with the screen's stop known the phone's U pokretu sheet opens
+      // on a route of that stop rather than on the running-routes list, which is the phone's own behaviour to settle
+      // (task-WB-report.md, concerns), not what this text-path proof is about.
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       const kiosk = await kioskCtx.newPage();
       await kiosk.goto(kioskUrl);

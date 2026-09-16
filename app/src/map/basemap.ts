@@ -14,9 +14,10 @@
 // "house" pass that every surface gets (the POI palette collapsed onto the
 // product's two inks, a label halo as strong as the glyph renderer allows,
 // buildings, parks and water settled one step off the ground) and one
-// optional `profile: 'sign'` pass on top of it, for the surface that is read
-// from three metres (kiosk/mapview.ts). The phone and the kvart thumbnail
-// stay on 'default'.
+// optional `profile: 'prozor'` pass on top of it, for the public screen that
+// is read from three metres (kiosk/mapview.ts): a flavour override table
+// applied before upstream generates its layers, and a layer pass over what it
+// generated. The phone and the kvart thumbnail stay on 'default'.
 //
 // Pure: no DOM, no MapLibre import. The library that builds the layers is
 // 38 kB and only ever loaded through maplibre-entry.ts's dynamic import, so
@@ -27,10 +28,11 @@ import { MAP_CONFIG } from '../core/contracts';
 
 export type MapTheme = 'light' | 'dark';
 
-/** Which basemap the surface asks for: 'sign' is the one surface read from
- *  across a room (kiosk/mapview.ts); the phone (transport/workspace.ts) and
- *  the kvart thumbnail (experience/kvart.ts) stay on 'default'. */
-export type BasemapProfile = 'default' | 'sign';
+/** Which basemap the surface asks for: 'prozor' is the public screen's window
+ *  onto the kvart, read from across a room (kiosk/mapview.ts, plan D3); the
+ *  phone (transport/workspace.ts) and the kvart thumbnail (experience/kvart.ts)
+ *  stay on 'default'. */
+export type BasemapProfile = 'default' | 'prozor';
 
 /** The one vector source every basemap layer reads from. */
 export const BASEMAP_SOURCE = 'basemap';
@@ -105,10 +107,10 @@ export function spriteUrl(theme: MapTheme, origin?: string): string {
  *  survived every other colour decision in this file.
  *
  *  It collapses onto the two inks the product already has, on every surface
- *  (phone, desk and screen alike -- this is a correctness fix, not a sign
+ *  (phone, desk and screen alike -- this is a correctness fix, not a screen
  *  profile): full ink for what a person would walk to (nature, transport,
- *  civic, the sights) and muted ink for the commercial groups, which the sign
- *  profile drops entirely anyway. Measured: 15.40:1 and 6.85:1 by day,
+ *  civic, the sights) and muted ink for the commercial groups. The prozor
+ *  profile drops the layer entirely. Measured: 15.40:1 and 6.85:1 by day,
  *  15.50:1 and 9.23:1 by night. The eight keys are upstream's whole group;
  *  `red` and `turquoise` reach no layer but are set so no future upstream
  *  layer can reintroduce an unmeasured hue. */
@@ -127,7 +129,7 @@ const POI_INK_DARK = Object.freeze({
  *  canvas, labels in muted ink and full ink with the canvas as halo.
  *  Buildings, parks, woods and water sit one step off the canvas rather than
  *  a whisper away from it: at three metres a 1.05:1 fill is not a surface, it
- *  is noise, and the promoted labels of the sign profile need something to
+ *  is noise, and a promoted label needs something to
  *  sit on. Measured against the canvas: buildings 1.32:1, parks 1.34:1, woods
  *  1.57:1, water 1.44:1. Tunnels
  *  and the "other" road class recede to the canvas exactly -- unclassified
@@ -301,12 +303,104 @@ const DARK_OVERRIDES: Partial<Flavor> = {
   pois: POI_INK_DARK,
 };
 
-/** The upstream flavour for `theme` with the product palette over it and
- *  the three self-hosted fontstacks named, so no layer ever asks the glyph
- *  endpoint for a face it does not carry. */
-export function flavorFor(theme: MapTheme): Flavor {
+// --- The prozor ground (plan D3, D12; R-KP3) --------------------------------
+//
+// Under the figure the public screen draws over it (the tram rails, the
+// vehicles, the screen's stop: map/overlays.ts), the basemap is the ground and
+// nothing on it competes. Upstream paints landuse as eleven layers from twenty
+// flavour keys; here the whole of it collapses onto two tones -- one green for
+// everything planted, the canvas for everything else -- with the buildings
+// one step off the canvas as faint blocks. Applied over the house palette
+// BEFORE upstream generates its layers, so every fill takes the tone from
+// the same table, and the layer pass below only has to touch geometry, the
+// streets and the labels.
+//
+// Every literal is a hand-copy of ui/tokens.css (MapLibre paints literals;
+// the token is named beside each), except the two greens, which the token
+// sheet does not carry: each is its canvas pulled a step toward the success
+// role's hue and kept inside the canvas family (measured 1.08:1 by day and
+// 1.16:1 by night against the ground -- texture, not a surface).
+const PROZOR_LIGHT_GROUND = '#f4f2ec'; // --palette-light-canvas
+const PROZOR_LIGHT_GREEN = '#dfe4cf'; // the canvas toward --palette-light-success
+const PROZOR_DARK_GROUND = '#0b1150'; // --palette-dark-canvas
+const PROZOR_DARK_GREEN = '#12275c'; // the canvas toward --palette-dark-success
+
+const PROZOR_LIGHT: Partial<Flavor> = {
+  background: PROZOR_LIGHT_GROUND,
+  earth: PROZOR_LIGHT_GROUND,
+  // Blocks: --palette-light-surface-2, the sheet's own raised surface.
+  buildings: '#ebe8df',
+  // Planted: one green.
+  park_a: PROZOR_LIGHT_GREEN,
+  park_b: PROZOR_LIGHT_GREEN,
+  wood_a: PROZOR_LIGHT_GREEN,
+  wood_b: PROZOR_LIGHT_GREEN,
+  scrub_a: PROZOR_LIGHT_GREEN,
+  scrub_b: PROZOR_LIGHT_GREEN,
+  zoo: PROZOR_LIGHT_GREEN,
+  beach: PROZOR_LIGHT_GREEN,
+  sand: PROZOR_LIGHT_GREEN,
+  glacier: PROZOR_LIGHT_GREEN,
+  // Every other landuse is the ground: a hospital, a school, a factory yard
+  // are not figures on a screen about the tram.
+  hospital: PROZOR_LIGHT_GROUND,
+  school: PROZOR_LIGHT_GROUND,
+  industrial: PROZOR_LIGHT_GROUND,
+  pedestrian: PROZOR_LIGHT_GROUND,
+  pier: PROZOR_LIGHT_GROUND,
+  aerodrome: PROZOR_LIGHT_GROUND,
+  runway: PROZOR_LIGHT_GROUND,
+  military: PROZOR_LIGHT_GROUND,
+  // Water as on every surface: ultramarine at 12 % over the canvas.
+  water: '#c3cbe8',
+  // Neighbourhood names in the label role, street names in the muted tier, both haloed by the ground.
+  subplace_label: '#363d73', // --palette-light-label
+  subplace_label_halo: PROZOR_LIGHT_GROUND,
+  roads_label_major: '#4a5178', // --palette-light-text-muted
+  roads_label_major_halo: PROZOR_LIGHT_GROUND,
+};
+
+const PROZOR_DARK: Partial<Flavor> = {
+  background: PROZOR_DARK_GROUND,
+  earth: PROZOR_DARK_GROUND,
+  // Blocks: --palette-dark-surface-1.
+  buildings: '#121a63',
+  park_a: PROZOR_DARK_GREEN,
+  park_b: PROZOR_DARK_GREEN,
+  wood_a: PROZOR_DARK_GREEN,
+  wood_b: PROZOR_DARK_GREEN,
+  scrub_a: PROZOR_DARK_GREEN,
+  scrub_b: PROZOR_DARK_GREEN,
+  zoo: PROZOR_DARK_GREEN,
+  beach: PROZOR_DARK_GREEN,
+  sand: PROZOR_DARK_GREEN,
+  glacier: PROZOR_DARK_GREEN,
+  hospital: PROZOR_DARK_GROUND,
+  school: PROZOR_DARK_GROUND,
+  industrial: PROZOR_DARK_GROUND,
+  pedestrian: PROZOR_DARK_GROUND,
+  pier: PROZOR_DARK_GROUND,
+  aerodrome: PROZOR_DARK_GROUND,
+  runway: PROZOR_DARK_GROUND,
+  military: PROZOR_DARK_GROUND,
+  // Deeper than the ground (--palette-dark-canvas-deep is #080c40; the Sava
+  // needs one more step to read as a body of water and not a shadow).
+  water: '#060a3a',
+  subplace_label: '#b6bbe0', // --palette-dark-label
+  subplace_label_halo: PROZOR_DARK_GROUND,
+  roads_label_major: '#8f96c9', // --palette-dark-text-subtle
+  roads_label_major_halo: PROZOR_DARK_GROUND,
+};
+
+/** The upstream flavour for `theme` with the product palette over it, the
+ *  prozor ground over that when asked, and the three self-hosted fontstacks
+ *  named, so no layer ever asks the glyph endpoint for a face it does not
+ *  carry. */
+export function flavorFor(theme: MapTheme, profile: BasemapProfile = 'default'): Flavor {
   const base = namedFlavor(theme);
-  return { ...base, ...(theme === 'dark' ? DARK_OVERRIDES : LIGHT_OVERRIDES), regular: MAP_FONTS.regular, bold: MAP_FONTS.medium, italic: MAP_FONTS.italic };
+  const house = theme === 'dark' ? DARK_OVERRIDES : LIGHT_OVERRIDES;
+  const prozor = profile === 'prozor' ? (theme === 'dark' ? PROZOR_DARK : PROZOR_LIGHT) : {};
+  return { ...base, ...house, ...prozor, regular: MAP_FONTS.regular, bold: MAP_FONTS.medium, italic: MAP_FONTS.italic };
 }
 
 /** What sits on top of the basemap -- vehicles, the route network, stops,
@@ -321,6 +415,12 @@ export interface OverlayPalette {
   otherText: string;
   routeTram: string;
   routeBus: string;
+  /** The tram network as the public screen's figure (plan D4): the ink itself
+   *  by day, the muted paper tier by night, at `figureOpacity`; drawn only
+   *  under a ProzorOptions set. The pinned `routeTram` blue stays what every
+   *  other surface draws. */
+  figure: string;
+  figureOpacity: number;
   stopFill: string;
   stopStroke: string;
   label: string;
@@ -358,6 +458,8 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   otherText: '#fbfaf6',
   routeTram: '#03409c',
   routeBus: '#0c1250',
+  figure: '#0c1250', // --palette-light-text-primary, the ink
+  figureOpacity: 0.9,
   stopFill: '#f4f2ec',
   stopStroke: '#4a5178',
   label: '#0c1250',
@@ -381,6 +483,8 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   otherText: '#0b1150',
   routeTram: '#f4f2ec',
   routeBus: '#9fb4ff',
+  figure: '#b6bbe0', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
+  figureOpacity: 0.7,
   stopFill: '#0b1150',
   stopStroke: '#b6bbe0',
   label: '#f4f2ec',
@@ -436,15 +540,21 @@ export interface BasemapStyleOptions {
   origin?: string;
   /** false drops every `places_*` layer (city, region, country names): a kvart-sized thumbnail has no room for "Zagreb" over its streets. Default true. */
   placeLabels?: boolean;
-  /** 'sign' promotes the basemap for a screen read from three metres and cuts
-   *  what cannot reach the readability floor; 'default' (the phone, the desk,
-   *  the kvart thumbnail) is the house pass alone. */
+  /** 'prozor' draws the public screen's ground: two landuse tones, hairline
+   *  streets, faint blocks, the neighbourhood names promoted, and nothing that
+   *  cannot reach the readability floor; 'default' (the phone, the desk, the
+   *  kvart thumbnail) is the house pass alone. */
   profile?: BasemapProfile;
+  /** The prozor profile's collision padding around a major street name, in
+   *  tile pixels: PROZOR_LABEL_PADDING_PX unless the kiosk's option set widens
+   *  it for a field that shows more ground than the wall's
+   *  (overlays.ts ProzorOptions.labelPadding). */
+  labelPadding?: number;
 }
 
 // --- Reading a map from three metres ---------------------------------------
 //
-// Every size in the sign profile comes out of one stated viewing geometry,
+// Every size in the prozor profile comes out of one stated viewing geometry,
 // not out of taste, and the derivation lives here so there is one place to
 // argue with. A 55-inch 16:9 panel at 1920 x 1080 is 1218 mm of glass across,
 // so one CSS pixel is about 0.625 mm. Noto Sans' cap height is 0.71 em, so
@@ -461,18 +571,18 @@ export interface BasemapStyleOptions {
 // label that cannot reach the floor is DROPPED, never shrunk. An unreadable
 // label is noise wearing a halo, and worse than noise -- it takes a collision
 // slot a readable name would have had.
-export const SIGN_PANEL_PX_MM = 0.625;
-export const SIGN_VIEWING_MM = 3000;
-export const SIGN_CAP_HEIGHT_EM = 0.71;
-export const SIGN_ARCMIN_PER_PX = ((SIGN_CAP_HEIGHT_EM * SIGN_PANEL_PX_MM) / SIGN_VIEWING_MM) * (180 / Math.PI) * 60;
-export const SIGN_RECOGNITION_ARCMIN = 10;
+export const PROZOR_PANEL_PX_MM = 0.625;
+export const PROZOR_VIEWING_MM = 3000;
+export const PROZOR_CAP_HEIGHT_EM = 0.71;
+export const PROZOR_ARCMIN_PER_PX = ((PROZOR_CAP_HEIGHT_EM * PROZOR_PANEL_PX_MM) / PROZOR_VIEWING_MM) * (180 / Math.PI) * 60;
+export const PROZOR_RECOGNITION_ARCMIN = 10;
 /** 20 px, derived from the geometry above rather than typed in. */
-export const SIGN_TEXT_MIN_PX = Math.ceil(SIGN_RECOGNITION_ARCMIN / SIGN_ARCMIN_PER_PX);
+export const PROZOR_TEXT_MIN_PX = Math.ceil(PROZOR_RECOGNITION_ARCMIN / PROZOR_ARCMIN_PER_PX);
 /** 28 px, 14.2 arcminutes: the ceiling. */
-export const SIGN_TEXT_MAX_PX = 28;
-/** What a label of this many CSS px subtends at SIGN_VIEWING_MM, in arcminutes. */
-export function signArcminutes(textSizePx: number): number {
-  return textSizePx * SIGN_ARCMIN_PER_PX;
+export const PROZOR_TEXT_MAX_PX = 28;
+/** What a label of this many CSS px subtends at PROZOR_VIEWING_MM, in arcminutes. */
+export function prozorArcminutes(textSizePx: number): number {
+  return textSizePx * PROZOR_ARCMIN_PER_PX;
 }
 /** MapLibre's SDF glyph atlas carries a fixed spread, so a halo wider than an
  *  eighth of the text size clips against the edge of the field. Every halo in
@@ -575,43 +685,77 @@ function houseLayer(layer: StyleLayerLike): StyleLayerLike {
   return withHalo(layer.id === 'pois' ? boundPoiIcons(layer) : layer, HOUSE_HALO_PX);
 }
 
-// --- The sign profile ------------------------------------------------------
+// --- The prozor profile ----------------------------------------------------
 
-/** Layers the sign profile drops outright. A road shield and a one-way arrow
- *  are instructions to a driver; a house number needs z18, which this archive
- *  does not have; a region, a country and an island name answer a question
- *  nobody standing at a Zagreb tram stop is asking; no country border crosses
- *  this box. */
-export const SIGN_DROPPED_LAYERS: readonly string[] = Object.freeze([
-  'address_label', 'boundaries_country', 'earth_label_islands', 'places_country', 'places_region', 'roads_oneway', 'roads_shields',
+/** Layers the prozor profile drops outright, over and above every tunnel
+ *  layer and every `*_casing` layer (streets are hairlines with no casing,
+ *  R-KP3). A POI, a shield, a one-way arrow, a minor street name and a house
+ *  number are what a person zooms in for on a phone; a region, a country, an
+ *  island and the city's own name over its own streets orient nobody who is
+ *  already standing in Zagreb; no country border crosses this box; a service
+ *  road and a footpath are ground texture the figure does not need. */
+export const PROZOR_DROPPED_LAYERS: readonly string[] = Object.freeze([
+  'pois', 'roads_labels_minor', 'roads_shields', 'roads_oneway', 'address_label', 'boundaries', 'boundaries_country',
+  'places_locality', 'places_region', 'places_country', 'earth_label_islands', 'water_waterway_label', 'roads_other', 'roads_minor_service',
 ]);
-const SIGN_DROPPED = new Set<string>(SIGN_DROPPED_LAYERS);
+const PROZOR_DROPPED = new Set<string>(PROZOR_DROPPED_LAYERS);
+function prozorDrops(id: string): boolean {
+  return PROZOR_DROPPED.has(id) || id.startsWith('roads_tunnels_') || id.endsWith('_casing');
+}
 
-/** Rank 1: what you would tell a stranger to walk to. These win collision. */
-export const SIGN_POI_RANK1: readonly string[] = Object.freeze([
-  'hospital', 'university', 'library', 'museum', 'theatre', 'station', 'marketplace', 'stadium', 'park', 'cemetery',
-]);
-/** Rank 2: civic too, and worth a name once the camera is one zoom closer. */
-export const SIGN_POI_RANK2: readonly string[] = Object.freeze([
-  'school', 'post_office', 'townhall', 'zoo', 'garden', 'attraction', 'artwork', 'aerodrome', 'ferry_terminal', 'peak',
-]);
-export const SIGN_POI_KINDS: readonly string[] = Object.freeze([...SIGN_POI_RANK1, ...SIGN_POI_RANK2]);
-/** A filter's `["zoom"]` is evaluated at the tile's integer overscaledZ, so
- *  both thresholds are integers and rank 2 joins exactly one of them later. */
-export const SIGN_POI_RANK1_ZOOM = 12;
-export const SIGN_POI_RANK2_ZOOM = 13;
-/** From here the city's own name stops being an orientation cue and becomes a
- *  word printed across its own streets. */
-export const SIGN_LOCALITY_DROP_ZOOM = 12;
-export const SIGN_HOME_LOCALITY = 'Zagreb';
-/** The sign profile's halo, still capped per layer by haloCap(). */
-const SIGN_HALO_PX = 2;
+/** Of the major roads, the ones whose names a field of 2.8 km can afford:
+ *  the trunk of the hierarchy by OSM class. Tertiary and below stay drawn and
+ *  unnamed; the count of names placed is proven in e2e, never assumed. */
+export const PROZOR_MAJOR_ROAD_DETAILS: readonly string[] = Object.freeze(['motorway', 'trunk', 'primary', 'secondary']);
 
-type SignExpr = unknown[];
-const zoomSize = (...stops: number[]): SignExpr => ['interpolate', ['linear'], ['zoom'], ...stops];
+/** Collision padding around a major street name, in tile pixels at the
+ *  archive's z14 (R-KP17): measured on the 1920 x 1080 wall's field, where
+ *  the profile places two to three names around Jelačić beside the plates
+ *  and the hub names. The kiosk widens it for a field that shows more ground
+ *  than that wall's (BasemapStyleOptions.labelPadding, from kiosk/mapview.ts
+ *  labelPadding, which keeps its own copy of this literal because it stays
+ *  off this module's graph). */
+export const PROZOR_LABEL_PADDING_PX = 24;
 
-interface SignSpec {
-  size: SignExpr | number;
+/** Streets are ground texture, never the figure (plan D12, R-KP3), and the
+ *  two faces get there by opposite moves. By day the paper roads of the house
+ *  palette left 1.09:1 against the canvas, invisible at three metres, so the
+ *  streets are the ink itself let through thinly: --palette-light-text-primary
+ *  at the --palette-light-border tint for the minor ones (0.14 in the token
+ *  sheet, taken to 0.18 so a one-pixel hairline survives the panel), at
+ *  --palette-light-border-strong (0.34) for the majors. By night the minor
+ *  streets are --palette-dark-surface-2, a whisper over the canvas, and the
+ *  majors are the paper (--palette-dark-text-primary) at a quarter -- about
+ *  #454b86 composited, 2.5:1 -- so Ilica and Savska orient the eye without
+ *  competing with the rails drawn over them. */
+const PROZOR_STREETS: Readonly<Record<MapTheme, { minor: string; minorOpacity: number; major: string; majorOpacity: number }>> = Object.freeze({
+  light: { minor: '#0c1250', minorOpacity: 0.18, major: '#0c1250', majorOpacity: 0.34 },
+  dark: { minor: '#1a2373', minorOpacity: 1, major: '#f4f2ec', majorOpacity: 0.25 },
+});
+/** Which street layers take which of the two weights; a bridge draws exactly
+ *  as its surface road (the same table row), and the footbridge -- the one
+ *  `other` kind kept, because a bridge over the Sava is an orientation cue --
+ *  as a minor. */
+const PROZOR_MINOR_ROADS = new Set(['roads_minor', 'roads_link', 'roads_bridges_minor', 'roads_bridges_link', 'roads_bridges_other']);
+const PROZOR_MAJOR_ROADS = new Set(['roads_major', 'roads_bridges_major']);
+const PROZOR_HIGHWAYS = new Set(['roads_highway', 'roads_bridges_highway']);
+
+type ZoomExpr = unknown[];
+const zoomSize = (...stops: number[]): ZoomExpr => ['interpolate', ['linear'], ['zoom'], ...stops];
+
+/** Line widths in CSS px across the field's own zoom range (13.5…15.5, the
+ *  clamp of kiosk/mapview.ts's fieldZoom): a hairline, a line, a heavier
+ *  line. Under 1 px MapLibre still draws a crisp translucent hairline; above
+ *  it the majors stay thinner than the 3 to 5 px rails of the figure. */
+const PROZOR_MINOR_WIDTH = zoomSize(13.5, 0.8, 15.5, 1.2);
+const PROZOR_MAJOR_WIDTH = zoomSize(13.5, 1.6, 15.5, 2.4);
+const PROZOR_HIGHWAY_WIDTH = zoomSize(13.5, 2, 15.5, 3);
+
+/** The prozor profile's halo, still capped per layer by haloCap(). */
+const PROZOR_HALO_PX = 2;
+
+interface PromotedSpec {
+  size: ZoomExpr | number;
   font?: string;
   layout?: Record<string, unknown>;
   paint?: Record<string, unknown>;
@@ -621,14 +765,14 @@ interface SignSpec {
 
 /** One promoted label layer: the new size, the halo recomputed from it, and
  *  whatever else that layer needs. */
-function promoted(layer: StyleLayerLike, spec: SignSpec): StyleLayerLike {
+function promoted(layer: StyleLayerLike, spec: PromotedSpec): StyleLayerLike {
   const layout: Record<string, unknown> = { ...(layer.layout ?? {}), 'text-size': spec.size, ...(spec.layout ?? {}) };
   if (spec.font) layout['text-font'] = [spec.font];
   const min = minTextSize(spec.size);
   const paint: Record<string, unknown> = {
     ...(layer.paint ?? {}),
     ...(spec.paint ?? {}),
-    'text-halo-width': Math.min(SIGN_HALO_PX, haloCap(Number.isFinite(min) ? min : SIGN_TEXT_MIN_PX)),
+    'text-halo-width': Math.min(PROZOR_HALO_PX, haloCap(Number.isFinite(min) ? min : PROZOR_TEXT_MIN_PX)),
   };
   const out: StyleLayerLike = { ...layer, layout, paint };
   if (spec.filter !== undefined) out.filter = spec.filter;
@@ -636,89 +780,84 @@ function promoted(layer: StyleLayerLike, spec: SignSpec): StyleLayerLike {
   return out;
 }
 
+/** One street layer: a flat colour (upstream interpolates two tints for the
+ *  minor roads; here there is one), its face's opacity and its weight. */
+function street(layer: StyleLayerLike, color: string, opacity: number, width: ZoomExpr): StyleLayerLike {
+  return { ...layer, paint: { ...(layer.paint ?? {}), 'line-color': color, 'line-opacity': opacity, 'line-width': width } };
+}
+
 /**
- * One pure post-transform over the house pass, applied only for the screen.
+ * The layer pass over the house pass, applied only for the public screen,
+ * after flavorFor('prozor') has already collapsed the fills.
  *
- * In order of how much it changes the picture: the 224 neighbourhood names
- * the tiles already carry (Jarun, Knezija, Spansko, Sveti Duh, Kustosija,
- * Vrbani, Stara Tresnjevka) come up from about 15 px to sign sizes, which is
- * the single biggest "this is Zagreb, not a transit diagram" change and costs
- * nothing on the wire; the major street names follow, spaced wide enough that
- * Ilica does not print five times across one box; the water labels follow,
- * because the Sava is the best orientation cue this city has; and the POI
- * layer is cut from the 36 kinds upstream admits with no sort key at all --
- * about 90 of which compete in one viewport, and which of them survives is
- * feature order, so the set flickers as the camera moves -- down to a ranked
- * civic list that resolves collision by meaning.
+ * What it does, in order of how much it changes the picture: it drops the
+ * layers listed above, so no POI name, no shop and no minor street name
+ * competes with the figure; it draws every street as a hairline of one
+ * colour with no casing; it brings the 224 neighbourhood names the tiles carry
+ * (Jarun, Knezija, Spansko, Sveti Duh, Kustosija, Vrbani, Stara Tresnjevka)
+ * up to the largest words on the ground; it keeps only the trunk of the
+ * street hierarchy named, spaced so a field holds a handful of names and not
+ * Ilica five times; and it keeps the water labels at the promoted sizes,
+ * because the Sava is the best orientation cue this city has.
  */
-function signLayer(layer: StyleLayerLike, flavor: Flavor): StyleLayerLike | null {
-  if (SIGN_DROPPED.has(layer.id)) return null;
-  const rank1: SignExpr = ['in', ['get', 'kind'], ['literal', SIGN_POI_RANK1]];
-  const ready: SignExpr = ['>=', ['zoom'], ['+', ['get', 'min_zoom'], 0]];
-  const isLocality: SignExpr = ['==', ['get', 'kind'], 'locality'];
+function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number): StyleLayerLike | null {
+  if (prozorDrops(layer.id)) return null;
+  const streets = PROZOR_STREETS[theme];
+  if (PROZOR_MINOR_ROADS.has(layer.id)) return street(layer, streets.minor, streets.minorOpacity, PROZOR_MINOR_WIDTH);
+  if (PROZOR_MAJOR_ROADS.has(layer.id)) return street(layer, streets.major, streets.majorOpacity, PROZOR_MAJOR_WIDTH);
+  if (PROZOR_HIGHWAYS.has(layer.id)) return street(layer, streets.major, streets.majorOpacity, PROZOR_HIGHWAY_WIDTH);
   switch (layer.id) {
+    case 'landuse_park':
+      // Upstream paints a barracks, a naval base and an airfield from the zoo
+      // key, which this profile turns green; they are ground here, and the
+      // flavour's own `military` key, which no upstream layer reads, says so.
+      return {
+        ...layer,
+        paint: {
+          ...(layer.paint ?? {}),
+          'fill-color': ['case', ['in', ['get', 'kind'], ['literal', ['military', 'naval_base', 'airfield']]], flavor.military, layer.paint?.['fill-color']],
+        },
+      };
+    case 'landuse_urban_green':
+      // Allotments and playgrounds at upstream's 0.7 would be a third tone between the green and the ground.
+      return { ...layer, paint: { ...(layer.paint ?? {}), 'fill-opacity': 1 } };
     case 'places_subplace':
+      // 26 to 28 px across the field's zoom range: 13.2 to 14.2 arcminutes,
+      // under the ceiling, and the biggest words on the ground. The colour is
+      // the flavour's own (the label role), haloed by the ground; padding 12
+      // keeps two names a word apart, max-width 8 keeps "Stara Tresnjevka"
+      // on one line.
       return promoted(layer, {
-        size: zoomSize(11, 22, 14, 25, 18, SIGN_TEXT_MAX_PX),
+        size: zoomSize(13.5, 26, 15.5, 28),
         font: MAP_FONTS.medium,
-        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8, 'text-padding': 12 },
-      });
-    case 'places_locality':
-      return promoted(layer, {
-        size: zoomSize(10, 22, 13, 25, 18, SIGN_TEXT_MAX_PX),
-        font: MAP_FONTS.medium,
-        // Upstream's own filter rewritten as an expression: a legacy filter
-        // may not be nested inside one, and the step below has to nest it.
-        filter: [
-          'step',
-          ['zoom'],
-          isLocality,
-          SIGN_LOCALITY_DROP_ZOOM,
-          ['all', isLocality, ['!=', ['coalesce', ['get', 'name:hr'], ['get', 'name'], ''], SIGN_HOME_LOCALITY]],
-        ],
+        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8, 'text-padding': 12, 'text-transform': 'uppercase' },
       });
     case 'roads_labels_major':
-      // 250 px of symbol-spacing prints one street name about five times
-      // across a 1250 px box; 600 prints it twice, which is what a reader
-      // following a street actually needs.
-      return promoted(layer, { size: zoomSize(11, SIGN_TEXT_MIN_PX, 14, 21, 18, 22), font: MAP_FONTS.medium, layout: { 'symbol-spacing': 600 } });
-    case 'roads_labels_minor':
-      // At the floor, and upstream's own z15 keeps it to the stop camera alone.
-      return promoted(layer, { size: SIGN_TEXT_MIN_PX });
-    case 'water_waterway_label':
-      return promoted(layer, { size: zoomSize(11, SIGN_TEXT_MIN_PX, 14, 22, 18, 24), layout: { 'symbol-spacing': 700 }, minzoom: 11 });
+      // Upstream's legacy kind filter rewritten as an expression (a legacy
+      // filter may not nest), narrowed to the four classes above. MapLibre
+      // reads symbol-spacing and text-padding in TILE pixels at the tile's
+      // own zoom, and the archive stops at z14 (about 4.7 m per tile pixel
+      // here), so these are ground distances, not screen ones: 360 keeps
+      // consecutive anchors on one street about 1.7 km apart (a name at most
+      // twice across the 2.8 km field), 24 is about 40 screen px of padding
+      // at the field's z14.7 (R-KP17; the first drawing's 900 / 40 read as
+      // screen px and placed one name in the whole field). How many names a
+      // field holds is the padding's to set, not the spacing's: MapLibre
+      // anchors every road once per tile whatever the spacing (360, 473, 745
+      // and 1100 all placed 7 to 8 on the totem, 16 Sept 2026), so a field
+      // that shows more ground than the wall's gets a wider padding from the
+      // kiosk (PROZOR_LABEL_PADDING_PX, kiosk/mapview.ts labelPadding). 22 px
+      // flat: 11.2 arcminutes, over the floor and under the neighbourhood
+      // names, so the two tiers never read as one.
+      return promoted(layer, {
+        size: 22,
+        font: MAP_FONTS.medium,
+        layout: { 'symbol-spacing': 360, 'text-padding': labelPadding },
+        filter: ['all', ['in', ['get', 'kind'], ['literal', ['highway', 'major_road']]], ['in', ['get', 'kind_detail'], ['literal', PROZOR_MAJOR_ROAD_DETAILS]]],
+      });
     case 'water_label_lakes':
     case 'water_label_ocean':
-      return promoted(layer, { size: zoomSize(11, SIGN_TEXT_MIN_PX, 14, 22, 18, 24) });
-    case 'pois':
-      return promoted(layer, {
-        size: zoomSize(SIGN_POI_RANK1_ZOOM, SIGN_TEXT_MIN_PX, 15, 21, 18, 24),
-        layout: {
-          'text-max-width': 9,
-          // Edge guard: a name whose box does not fit inside the frame loses its
-          // slot instead of printing half of itself at the map's border.
-          'text-padding': 14,
-          'icon-size': 1.4,
-          'text-font': ['case', rank1, ['literal', [MAP_FONTS.medium]], ['literal', [MAP_FONTS.regular]]],
-          // A real sort key: meaning first, then the archive's own min_zoom
-          // within a rank, so which names survive a crowded viewport stops
-          // being an accident of feature order.
-          'symbol-sort-key': ['+', ['case', rank1, 0, 100], ['+', ['get', 'min_zoom'], 0]],
-        },
-        paint: {
-          'text-color': ['case', rank1, flavor.city_label, flavor.subplace_label],
-          'text-halo-color': flavor.city_label_halo,
-        },
-        filter: [
-          'step',
-          ['zoom'],
-          ['literal', false],
-          SIGN_POI_RANK1_ZOOM,
-          ['all', rank1, ready],
-          SIGN_POI_RANK2_ZOOM,
-          ['all', ['in', ['get', 'kind'], ['literal', SIGN_POI_KINDS]], ready],
-        ],
-      });
+      return promoted(layer, { size: zoomSize(11, PROZOR_TEXT_MIN_PX, 14, 22, 18, 24) });
     default:
       return layer;
   }
@@ -727,13 +866,13 @@ function signLayer(layer: StyleLayerLike, flavor: Flavor): StyleLayerLike | null
 /** The basemap layers alone for `theme`: what a live map diffs on a theme
  *  or locale change. */
 export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}): StyleLayerLike[] {
-  const flavor = flavorFor(theme);
+  const flavor = flavorFor(theme, options.profile);
   const upstream = protomapsLayers(BASEMAP_SOURCE, flavor, { lang: labelLanguage(options.locale) }) as unknown as StyleLayerLike[];
   const out: StyleLayerLike[] = [];
   for (const raw of upstream) {
     if (options.placeLabels === false && raw.id.startsWith('places_')) continue;
     const house = houseLayer(raw);
-    const layer = options.profile === 'sign' ? signLayer(house, flavor) : house;
+    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX) : house;
     if (layer) out.push(layer);
   }
   return out;
@@ -766,10 +905,11 @@ export function basemapStyle(theme: MapTheme, options: BasemapStyleOptions = {})
   };
 }
 
-/** One property change a live map applies to move from one face to another. */
+/** One property change a live map applies to move from one face to another;
+ *  a 'zoom' op carries the layer's [minzoom, maxzoom]. */
 export interface StyleOp {
   id: string;
-  kind: 'paint' | 'layout' | 'filter';
+  kind: 'paint' | 'layout' | 'filter' | 'zoom';
   key: string;
   value: unknown;
 }
@@ -778,12 +918,22 @@ function same(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** What an absent minzoom / maxzoom means, in the style spec's own numbers:
+ *  the range a `zoom` op hands setLayerZoomRange when a layer has no limit. */
+const ZOOM_RANGE_MIN = 0;
+const ZOOM_RANGE_MAX = 24;
+function zoomRange(layer: StyleLayerLike): [number, number] {
+  return [layer.minzoom ?? ZOOM_RANGE_MIN, layer.maxzoom ?? ZOOM_RANGE_MAX];
+}
+
 /**
- * Every paint, layout and filter difference between two layer lists that
- * share their ids, as the operations a live map applies through
- * setPaintProperty / setLayoutProperty / setFilter. Layers only one side
- * has are ignored: the two faces of this basemap share one layer list by
- * construction, and the overlays are not part of either.
+ * Every paint, layout, filter and zoom-range difference between two layer
+ * lists that share their ids, as the operations a live map applies through
+ * setPaintProperty / setLayoutProperty / setFilter / setLayerZoomRange.
+ * Layers only one side has are ignored: the two faces of this basemap share
+ * one layer list by construction, and the overlays are not part of either.
+ * A theme flip never moves a zoom range; the public screen's option set does
+ * (the noses and the stop names follow the field's own zoom, overlays.ts).
  */
 export function styleDiff(from: readonly StyleLayerLike[], to: readonly StyleLayerLike[]): StyleOp[] {
   const before = new Map(from.map((layer) => [layer.id, layer]));
@@ -799,6 +949,7 @@ export function styleDiff(from: readonly StyleLayerLike[], to: readonly StyleLay
       }
     }
     if (!same(previous.filter, layer.filter)) ops.push({ id: layer.id, kind: 'filter', key: 'filter', value: layer.filter });
+    if (!same(zoomRange(previous), zoomRange(layer))) ops.push({ id: layer.id, kind: 'zoom', key: 'range', value: zoomRange(layer) });
   }
   return ops;
 }

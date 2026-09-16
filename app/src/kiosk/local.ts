@@ -18,7 +18,10 @@ import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import { dist, toPlane } from '../../../shared/motion/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
-import { clock, dayTime, fmtNumber, fmtTemp, weekdayDayMonth } from './format';
+import { zagrebHour } from '../format';
+import type { LastRunSnapshot } from '../core/lastrun';
+import { lastDeparture } from '../core/lastrun';
+import { clock, dayTime, fmtNumber, fmtTemp, sameZagrebDay, weekdayDayMonth } from './format';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
@@ -509,4 +512,150 @@ export function quakeLine(quake: FeedItem, strings: KioskStrings, locale: string
 /** Nearby-lines count in words for a board caption; null before data. */
 export function nearbyCountLine(board: LinesBoard, strings: KioskStrings, locale: string): string {
   return board.moving === null ? '' : plural(locale, strings.lines.vehiclesMoving, board.moving);
+}
+
+// --- Moved from kiosk/scenes.ts (P3 deletes that file): say.ts's own readers
+// need eventsTonight, worksInKvart and nextSession, and the scene-contract
+// shape of closuresNear (renamed closuresNearby here, since this file
+// already exports a closuresNear of its own -- the wider read every other
+// caller keeps: essentials.ts, frame.ts, paired.ts and teaser.ts). Copied,
+// not imported (task P2's contract): scenes.ts keeps its own copies
+// unedited so both worktrees typecheck, and wave B deletes scenes.ts's. -----
+
+const startOf = (item: FeedItem): number => (item.at ? Date.parse(item.at) : NaN);
+
+/** A row dated by the happening itself: a publication time, a register change or an undated notice never puts a row into an evening. */
+const isDatedEvent = (item: FeedItem): boolean => item.dateBasis === 'event' && Number.isFinite(startOf(item));
+
+const hasEnded = (item: FeedItem, now: number): boolean => {
+  const end = item.until ? Date.parse(item.until) : NaN;
+  return Number.isFinite(end) && end < now;
+};
+
+/** Today's dated open-licence rows whose end has not passed, in start order; none before the source answers or while it is down. */
+export function eventsTonight(modules: readonly ModuleSnapshot[], now: number): FeedItem[] {
+  const dogadanja = byModule(modules).dogadanja;
+  if (!isLive(dogadanja)) return [];
+  return dogadanja.items
+    .filter((item) => isOpenLicenceEvent(item) && isDatedEvent(item) && sameZagrebDay(item.at!, now) && !hasEnded(item, now))
+    .sort((a, b) => startOf(a) - startOf(b));
+}
+
+export interface Nearest { title: string; distanceM: number | null }
+export interface WorksInKvart { state: SourceState; scope: 'kvart' | 'city'; count: number; nearest: Nearest | null }
+
+/** The register's phase for works one can see on the street (komunalne.ts's closed vocabulary). */
+const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
+
+/** The stop's district slug once area D stamps it (ScreenStop.district, D6); a stop stored before the field existed has none. */
+function stopDistrict(stop: ScreenStop | null): string {
+  const district = (stop as (ScreenStop & { district?: unknown }) | null)?.district;
+  return typeof district === 'string' ? district : '';
+}
+
+function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
+  if (!stop || item.geo?.type !== 'Point') return null;
+  const [lon, lat] = item.geo.coordinates as number[];
+  return typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat) ? stopDistanceM({ lon, lat }, stop) : null;
+}
+
+/** Komunalne works in progress in the stop's district, nearest first by geometry (D18); the whole city before the worker stamps districts or when the stop has none. */
+export function worksInKvart(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): WorksInKvart {
+  const dogadanja = byModule(modules).dogadanja;
+  const ongoing = (isLive(dogadanja) ? dogadanja.items : []).filter((item) =>
+    isOpenLicenceEvent(item) && dataText(item, 'source') === 'komunalne' && dataText(item, 'phase') === WORKS_ONGOING_PHASE && windowOf(item, now) !== 'expired');
+  // Kvart scope needs both halves of D6: a stop that knows its district and rows the worker has stamped. Live rows without a district
+  // prove the worker has not shipped them yet (a kvart count would be a false zero); with no row to judge by, the stop's district decides,
+  // so a district stop's band never flips its label while the source is down or loading.
+  const district = stopDistrict(stop);
+  const scope = district && (ongoing.length === 0 || ongoing.some((item) => dataText(item, 'district') !== '')) ? 'kvart' : 'city';
+  const counted = (scope === 'kvart' ? ongoing.filter((item) => dataText(item, 'district') === district) : ongoing)
+    .map((item) => ({ item, distanceM: pointDistance(item, stop) }))
+    .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity) || 0);
+  const first = counted[0];
+  return { state: sourceState(dogadanja), scope, count: counted.length, nearest: first ? { title: first.item.title, distanceM: first.distanceM } : null };
+}
+
+export interface ClosuresNearby { state: SourceState; count: number; nearest: Nearest | null }
+
+/** The scene-contract read of closuresNear (above) for a value tile or a
+ *  statement: the count within NEARBY_CLOSURE_M and the nearest only when it
+ *  is one of them; without a stop every open closure counts and the first is
+ *  nearest. */
+export function closuresNearby(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): ClosuresNearby {
+  const near = closuresNear(modules, stop, now);
+  const nearest = near.nearest;
+  const within = nearest !== null && (stop === null || (nearest.distanceM !== null && nearest.distanceM <= NEARBY_CLOSURE_M));
+  return { state: near.state, count: near.nearbyCount, nearest: within && nearest ? { title: nearest.title, distanceM: nearest.distanceM } : null };
+}
+
+/** The Assembly's next session that has not ended (its stated end, else its start), or null. */
+export function nextSession(modules: readonly ModuleSnapshot[], now: number): FeedItem | null {
+  const dogadanja = byModule(modules).dogadanja;
+  const sessions = (isLive(dogadanja) ? dogadanja.items : [])
+    .filter((item) => isOpenLicenceEvent(item) && dataText(item, 'source') === 'skupstina' && Number.isFinite(startOf(item)))
+    .filter((item) => {
+      const end = item.until ? Date.parse(item.until) : NaN;
+      return (Number.isFinite(end) ? end : startOf(item)) >= now;
+    })
+    .sort((a, b) => startOf(a) - startOf(b));
+  return sessions[0] ?? null;
+}
+
+// --- New for say.ts: the vehicle count within the field's own radius (never
+// the whole-box fleet count, R-KP12), the one kiosk quake rule (R-KP9) and
+// the last-departures-ahead board (R-KP6, R-KP14). --------------------------
+
+/**
+ * Vehicle pins within `radiusM` of the stop, from the feed's own pins that
+ * reach this screen -- never `zet-rt`'s whole-fleet count, which the old
+ * headline used to name and which R-KP12 retires: a rider outside this
+ * radius could never actually see one of those vehicles from here. Without a
+ * stop every pin the box carries counts (there is no point to measure from).
+ */
+export function nearbyVehicleCount(zet: ModuleSnapshot | undefined, stop: ScreenStop | null, radiusM = 1400): number {
+  const pins = (isLive(zet) ? zet.items : []).filter((item) => item.id.startsWith('vehicle:') && item.geo?.type === 'Point');
+  if (!stop) return pins.length;
+  return pins.filter((item) => {
+    const [lon, lat] = item.geo!.coordinates as number[];
+    return typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat) && stopDistanceM({ lon, lat }, stop) <= radiusM;
+  }).length;
+}
+
+/** R-KP9: one quake rule for the map and the statement -- magnitude >= 3.0
+ *  within the last 24 hours -- narrower than recentQuakes' own 72 h / 150 km
+ *  kept for the paired stories and the teaser (both still read every quake
+ *  that reaches the screen, not only the ones worth a headline). */
+export const KIOSK_QUAKE_MIN_MAG = 3.0;
+export const KIOSK_QUAKE_WINDOW_MS = 24 * 3_600_000;
+export function kioskQuakes(emsc: ModuleSnapshot | undefined, now: number): FeedItem[] {
+  return recentQuakes(emsc, now).filter((item) => {
+    const mag = dataNumber(item, 'mag');
+    const at = item.at ? Date.parse(item.at) : NaN;
+    return mag !== null && mag >= KIOSK_QUAKE_MIN_MAG && Number.isFinite(at) && now - at <= KIOSK_QUAKE_WINDOW_MS;
+  });
+}
+
+export interface Departure { routeId: string; at: number }
+
+/** R-KP6: a departure only reads as "soon enough to say" within 10 hours of now. */
+export const LAST_DEPARTURE_WINDOW_MS = 10 * 3_600_000;
+
+/**
+ * The stop's own routes' last departures still ahead of `now`, soonest first
+ * (R-KP14: the one a rider can still catch is the urgent one), at most `cap`.
+ * Empty outside the evening window (R-KP6: local hour >= 20 or < 4) and
+ * without a stop; `lastDeparture` already answers null for a down or expired
+ * table, so a stale or run-out schedule reads as honest absence here too.
+ */
+export function lastDeparturesAhead(lastRun: LastRunSnapshot | null, stop: ScreenStop | null, now: number, cap = 4): Departure[] {
+  const hour = zagrebHour(now);
+  if (hour === null || !(hour >= 20 || hour < 4)) return [];
+  if (!stop) return [];
+  const out: Departure[] = [];
+  for (const routeId of stop.routes) {
+    const departure = lastDeparture(lastRun, routeId, now);
+    if (departure && departure.at - now <= LAST_DEPARTURE_WINDOW_MS) out.push({ routeId, at: departure.at });
+  }
+  return out.sort((a, b) => a.at - b.at).slice(0, cap);
 }

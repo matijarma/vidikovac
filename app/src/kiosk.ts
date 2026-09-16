@@ -5,12 +5,20 @@
 // to the network directly: every dependency is injected and defaults to the
 // real client, so tests drive the same paths with fakes. The screen secret is
 // stored and handed to the beacon client; it is never rendered or logged.
+//
+// The invitation is one fixed window (R-KP1, R-KP11): no chapters, no
+// rotation, no countdown. Its camera follows the field's measured width
+// (R-KP2), its column is ranked on every poll and once a minute (the ZET time
+// in a context), and the stop's last-departure table is fetched on stop
+// change and again once it has expired (R-KP6).
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
+import { FLAGS } from './core/flags';
+import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/lastrun';
 import { createTemporaryScreen, loadStops as loadStopsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
@@ -26,26 +34,22 @@ import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '.
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
-import { countdownText, frameStrip, headerWeather, stripMarkup, weatherGroupMarkup, type RotationClock } from './kiosk/frame';
+import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
-import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
+import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { createKioskMapAdapter, feedStateOf, requestKioskMap } from './kiosk/mapview';
+import { createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
-import type { SceneId } from './kiosk/scenes';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
 import { DEFAULT_STOP_ID } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
-export { SCENE_ENTER_MS, SCENE_LEAVE_MS } from './kiosk/scenes';
 
-/** The scene, the clock line and the paired refresh all move on this tick; the strip counts down to it. */
-export const ROTATE_MS = 20_000;
-/** The previous name of the same tick, kept for its callers. */
-export const TEASER_ROTATE_MS = ROTATE_MS;
-/** The code's remaining-time bar and the clock repaint once a second. */
+/** The paired compositions refresh their layer's modules on this tick; nothing else moves on it. */
+export const REFRESH_MS = 20_000;
+/** The code's remaining-time bar and the clock repaint once a second; the column follows the minute. */
 export const CODE_TICK_MS = 1_000;
 /** How long the basics panel waits, untouched, before the invitation returns. */
 export const ESSENTIALS_IDLE_MS = 90_000;
@@ -53,6 +57,13 @@ export const ESSENTIALS_IDLE_MS = 90_000;
 export const PROGRESS_STEPS = 10;
 /** A slot change crossfades the code digits: the old ones fade out beside the new for this long. */
 export const CODE_SWAP_MS = 180;
+/** The MapLibre layer whose placed names the e2e counts (contract 3): the prozor profile keeps at most eight major street names in the field. */
+export const MAJOR_LABELS_LAYER = 'roads_labels_major';
+/** A down last-run answer is asked for again on the first paint this long
+ *  after it was fetched (R-KP23): a screen lives for months, and one bad
+ *  answer must not silence the statement until the stop changes; an hour
+ *  keeps a broken source from being hammered by the 10 s poll. */
+export const LASTRUN_DOWN_RETRY_MS = 3_600_000;
 
 export interface KioskDeps {
   i18n: I18n;
@@ -68,14 +79,14 @@ export interface KioskDeps {
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
-  /** D13: `?prizor=promet|veceras|grad` shows one scene and stops the rotation (a test, demo and operator hook); the entry parses it once and passes it down. */
-  pinScene?: SceneId | null;
   /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   loadNetwork?: () => Promise<Network | null>;
   fetchTeaser?: (stopId?: string) => Promise<TeaserResponse>;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
+  /** The stop's last-departure table (core/lastrun.ts); the real loader by default, behind FLAGS.FEED_LASTRUN. */
+  loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   /** One real POST /api/screens per press of the setup wizard's button. */
   createScreen?: (input: { area: string; stopId: string }) => Promise<CreateBeaconResponse>;
   loadStops?: () => Promise<ScreenStop[]>;
@@ -135,10 +146,10 @@ function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): s
 
 /** /kiosk/ on a phone, once a screen exists: the address that provisions the
  *  wall, as a footnote under the invitation the phone already shows. There is
- *  no separate handheld composition any more -- a phone gets the invitation
- *  every screen gets, drawn with the handheld tokens (kiosk.css) -- so this is
- *  an `aside` with an `h2` and the page's one `h1` stays the invitation's
- *  lead on every device (e2e/a11y.spec.ts). */
+ *  no separate handheld composition -- a phone gets the invitation every
+ *  screen gets, drawn with the handheld tokens (kiosk.css) -- so this is an
+ *  `aside` with an `h2` and the page's one `h1` stays the invitation's lead on
+ *  every device (e2e/a11y.spec.ts). */
 function provisionMarkup(i18n: I18n, url: string): string {
   return `<h2 class="k-provision-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h2>
     <a class="k-provision-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>`;
@@ -162,6 +173,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const reducedMotion = Boolean(deps.reducedMotion);
   const fetchTeaser = deps.fetchTeaser ?? ((stopId?: string) => fetchTeaserImpl(fetch, stopId));
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
+  const fetchLastRun = deps.loadLastRun ?? ((stopId: string) => loadLastRunImpl(stopId));
   const loadStops = deps.loadStops ?? (() => loadStopsImpl());
   const createScreen = deps.createScreen ?? ((input: { area: string; stopId: string }) => createTemporaryScreen(input));
   const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
@@ -205,10 +217,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** Set once the screen can issue no more codes; an open session runs on to its end. */
   let screenDead: 'expired' | 'revoked' | null = null;
   let teaser: ModuleSnapshot[] = [];
-  /** The scene field's rotation counter; advanced by the 20 s tick while rotation is allowed, kept across a session so the invitation returns where it left. */
-  let sceneIndex = 0;
-  /** The last 20 s tick, whatever phase it fell in: the strip counts down from it to the next scene (frameStrip's RotationClock). */
-  let lastRotateAt = now();
   let currentSlot: CodeSlot | null = null;
   let beacon: BeaconClient | null = null;
   let beaconWasLive = false;
@@ -231,6 +239,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let expiryTimer: unknown = null;
   let teaserTimer: unknown = null;
   let pollingStarted = false;
+  /** The minute the column was last painted for: the 1 s tick repaints it only when the minute turns. */
+  let paintedMinute = -1;
 
   // One network artefact and one map for the screen's whole life (R-54); the
   // lightweight path has neither: no factory, so map-slots hands out nothing.
@@ -261,16 +271,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.textContent = time;
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
-    // Only strip-next's own text and hidden state: the tick must never touch
-    // the rest of the strip, or the "Osnovno" button's focus would not survive it.
-    paintCountdown();
   }
   /** The header's weather group (D11): a condition glyph, the reading and the
    *  sunset-then-sunrise line, hidden while dhmz-now loads or is down -- the
    *  clock stands alone, never a dash. Shares the strip's module choice: the
    *  session's own copy once paired, the open teaser otherwise. The one
-   *  weather on the screen: the invitation's column carries the value tiles
-   *  and the card, never a weather block. */
+   *  weather on the screen: the column says what matters here, never the
+   *  weather. */
   function paintWeather(): void {
     const weather = headerWeather(currentSafetyModules(), s, locale, now());
     const markup = weatherGroupMarkup(weather, s);
@@ -284,27 +291,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  teaser otherwise -- the same choice paintStrip has always made. */
   function currentSafetyModules(): ModuleSnapshot[] {
     return phase === 'paired' ? Object.values(mergedSnapshots()).filter((m): m is ModuleSnapshot => Boolean(m)) : teaser;
-  }
-  /** D13: the field rotates only on a screen that may move (no reduced
-   *  motion, no lagano) and carries no `?prizor=` pin. */
-  function rotationAllowed(): boolean {
-    return !lightweight && !reducedMotion && !deps.pinScene;
-  }
-  /** The strip's RotationClock: rotating only while the invitation shows and
-   *  has more than one scene to move between, counting from the last tick. */
-  function rotationClock(): RotationClock {
-    const rotating = rotationAllowed() && phase === 'invitation' && (invitation?.scenes().order().length ?? 0) > 1;
-    return { rotating, lastRotateAt, period: ROTATE_MS };
-  }
-  /** Ticks the countdown alone, once a second: the strip itself is rebuilt
-   *  only by paintStrip, on a poll or a phase change. */
-  function paintCountdown(): void {
-    const nextEl = strip.querySelector<HTMLElement>('[data-testid=strip-next]');
-    if (!nextEl) return;
-    const { nextIn } = frameStrip(currentSafetyModules(), stop, i18n, s, now(), rotationClock());
-    const text = countdownText(nextIn, s);
-    if (nextEl.textContent !== text) nextEl.textContent = text;
-    nextEl.hidden = nextIn === null;
   }
   /** "Tema: po suncu": the header button's own label, always the controller's
    *  current word -- never guessed, never stale between its own clicks and a
@@ -355,19 +341,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // A session response may still confirm a source while the preview request
     // fails (and vice versa). All visible safety copy must use the same choice.
     const noBasics = phase === 'paired' || phase === 'setup';
-    const built = frameStrip(currentSafetyModules(), stop, i18n, s, now(), rotationClock());
+    const built = frameStrip(currentSafetyModules(), stop, i18n, s, now());
     strip.innerHTML = stripMarkup(built, s, { noBasics });
-    fitStrip();
-  }
-  /** One fixed-height row (--k-strip-h): when the three items do not fit
-   *  beside the verdict and the countdown, the countdown -- the least
-   *  essential word on the strip -- goes first and alone; the type never
-   *  steps down and nothing is clipped mid-word. */
-  function fitStrip(): void {
-    strip.classList.remove('k-strip--nonext');
-    const items = strip.querySelector<HTMLElement>('.k-strip-items');
-    if (!items || items.clientHeight === 0) return;
-    if (items.scrollHeight > items.clientHeight + 1) strip.classList.add('k-strip--nonext');
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
@@ -409,9 +384,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (phase === 'paired') return paired?.mapHost ?? null;
     return null;
   }
-  /** A phase without a map -- the wizard, a notice, a handheld, lagano -- keeps
-   *  the container alive, off screen and paused. A chapter change never parks
-   *  it: the map is the invitation's field, standing through all three. */
+  /** A phase without a map -- the wizard, a notice, lagano -- keeps the
+   *  container alive, off screen and paused. */
   function parkMap(): void {
     if (!mapContainer || mapContainer.parentElement === park) return;
     park.appendChild(mapContainer);
@@ -425,11 +399,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
   /** The map into the composition's host, or parked while none shows it. The
-   *  chapter's rail hangs over the map's foot, so the camera is told how much
-   *  of the picture that rail covers and centres the stop in what is left, and
-   *  which chapter is showing, which decides the camera's frame and which city
-   *  points it lights (kiosk/mapview.ts, chapterView). A paired screen is not a
-   *  chapter: it keeps the stop's own frame. */
+   *  invitation's camera is derived from the field's measured width -- the
+   *  composition's design width before anything is laid out -- so the picture
+   *  spans FIELD_SPAN_M of ground whatever the screen (R-KP2; a phone's band
+   *  spans half of it). A paired screen keeps the Promet contract (R-KP8). */
   function paintMap(): void {
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
@@ -437,14 +410,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // still reaches it: a map that returns mid-outage must already be holding,
     // never coasting on a state it heard before the outage.
     if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
-    const bottom = phase === 'invitation' ? (invitation?.railPad() ?? 0) : 0;
-    const chapter = phase === 'invitation' ? invitation?.scenes().current() : undefined;
+    const composition = compositionOf(layout);
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale,
+      phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,
-      ...(chapter ? { chapter } : {}),
+      widthPx: invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],
+      // With the width, the ground the field shows: the street names' padding follows it (mapview.ts labelPadding).
+      heightPx: invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
+      spanM: composition === 'handheld' ? HANDHELD_SPAN_M : FIELD_SPAN_M,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
-      ...(bottom > 0 ? { padding: { top: 0, right: 0, bottom, left: 0 } } : {}),
     }, mapAdapter);
     if (!container) return;
     mapContainer = container;
@@ -455,13 +430,67 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       resumeMap();
     }
     element.dataset.live = '1';
+    paintMajorLabels();
   }
+  /** Contract 3, R-KP19: how many distinct major street names the map has
+   *  placed, written on the field's map host for the e2e's proof (at most
+   *  eight in the prozor profile). MapLibre's idle event never fires while
+   *  vehicles are pushed at 12 Hz, so the count is sampled after each map
+   *  paint (the poll's beat) and once more when the map first reports itself
+   *  ready -- the 1 s tick polls status() only until then. A handle without
+   *  the seam writes nothing, and an empty answer before the style has
+   *  loaded is not a count of zero and is not written either. */
+  let majorLabelsSampledAtReady = false;
+  function paintMajorLabels(): void {
+    const handle = mapAdapter.handle();
+    if (!invitation || !handle?.placedNames || handle.status?.() !== 'ready') return;
+    invitation.setMajorLabels(new Set(handle.placedNames(MAJOR_LABELS_LAYER)).size);
+  }
+  function sampleMajorLabelsOnceReady(): void {
+    if (majorLabelsSampledAtReady || mapAdapter.handle()?.status?.() !== 'ready') return;
+    majorLabelsSampledAtReady = true;
+    paintMajorLabels();
+  }
+
+  // --- Last departures (R-KP6): the stop's table, on stop change and again once it expired ---
+  let lastRun: LastRunSnapshot | null = null;
+  let lastRunStop: string | null = null;
+  let lastRunFetch: 'none' | 'pending' | 'done' = 'none';
+  /** Behind FLAGS.FEED_LASTRUN (the dashboard's pattern): a new stop drops
+   *  the old table at once -- it must not pose as the new stop's until the
+   *  fetch answers -- and fetches its own; a live table past its validUntil
+   *  is asked for again (the loader evicts it too), so a screen that runs for
+   *  months does not lose the statement the day the table ends; a down
+   *  answer is asked for again an hour after it was fetched
+   *  (LASTRUN_DOWN_RETRY_MS; the loader never caches a down answer, so the
+   *  call reaches the wire). A missing table (null: the stop is not in the
+   *  generated set) stays until the stop changes. */
+  function ensureLastRun(): void {
+    if (!FLAGS.FEED_LASTRUN) return;
+    const id = stop?.id ?? null;
+    if (id !== lastRunStop) {
+      lastRunStop = id;
+      lastRun = null;
+      lastRunFetch = 'none';
+    }
+    if (!id || lastRunFetch === 'pending') return;
+    const expired = lastRun?.status === 'live' && now() >= Date.parse(lastRun.validUntil);
+    const downForAnHour = lastRun?.status === 'down' && now() - Date.parse(lastRun.fetchedAt) >= LASTRUN_DOWN_RETRY_MS;
+    if (lastRunFetch === 'done' && !expired && !downForAnHour) return;
+    lastRunFetch = 'pending';
+    fetchLastRun(id).then((snapshot) => {
+      if (disposed || lastRunStop !== id) return;
+      lastRunFetch = 'done';
+      lastRun = snapshot;
+      invitation?.update(invitationModel());
+    }, () => {
+      // The loader answers down itself; a rejection here is the injected dependency's, and the table stays absent until the stop changes.
+      if (!disposed && lastRunStop === id) lastRunFetch = 'done';
+    });
+  }
+
   function invitationModel(): InvitationModel {
-    return {
-      modules: teaser, stop, now: now(), sceneIndex, pinned: deps.pinScene ?? null, rotate: rotationAllowed(),
-      // The drawing's own rail width, used only before anything is laid out: the field measures its rail and asks for exactly what fits (kiosk/scenes.ts, kiosk/layout.ts's railColumns).
-      columns: lightweight ? 10 : layout.size === 'wide' ? 6 : layout.size === 'compact' ? 4 : 3, size: layout.size === 'wide' ? 'wide' : 'compact',
-    };
+    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout) };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -478,6 +507,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return out;
   }
   function paintLocal(): void {
+    ensureLastRun();
+    paintedMinute = Math.floor(now() / 60_000);
     invitation?.update(invitationModel());
     paired?.update(pairedContext());
     paintWeather();
@@ -486,11 +517,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (!basics.hidden) paintEssentials();
     fitAll();
   }
-  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a scene tile's title gets the lines its box has; the strip drops its countdown when two lines are not enough. Runs after every paint and once a second, so fonts arriving late and a resize are absorbed. */
+  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
   function fitAll(): void {
     invitation?.fit();
     if (paired) fitRows(paired.element, s.paired.coverage);
-    fitStrip();
   }
 
   // --- Codes: the rotation's slot into the QR and the readable code -------------
@@ -593,6 +623,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   function setPhase(next: KioskPhase): void {
     phase = next;
+    // The sheet reads the phase for the stage's room: the invitation is edge to edge, the wizard and the notices keep their padding.
     element.dataset.phase = next;
     element.dataset.mode = next === 'paired' ? 'unlocked' : 'teaser';
     clearStage();
@@ -600,8 +631,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
     else if (next === 'invitation') {
-      // Nothing is parked between chapters any more: the map is the field and stands through all three, and what crossfades is the chapter's rail.
-      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); } });
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase });
       // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
       if (layout.size === 'handheld' && credentials) mountProvision();
     }
@@ -702,8 +732,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     stop = screen.stop;
     paintContext();
     armExpiry();
+    // The screen follows its stop at once (the field's name, the camera, the last-run table dropped), then asks for that stop's own teaser.
+    paintLocal();
     if (stop?.id !== before) void loadTeaser();
-    else paintLocal();
   }
 
   // --- Expiry: past 24 h a temporary screen issues no codes; a session runs on ---
@@ -863,38 +894,41 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
 
   // A theme flip or a resize re-decides the composition; the content repaints
-  // only when the composition actually changed, and crossing the handheld
-  // bound in either direction swaps the invitation's composition outright.
+  // when the composition actually changed, and crossing the handheld bound in
+  // either direction swaps the invitation's composition outright. The same
+  // drawing in a different box still moves the camera (the field's measured
+  // width decides it, R-KP2) and re-fits the column.
   const stopRepaint = deps.onRepaint?.(() => {
     const next = applyLayout(element, deps.viewport ?? measureViewport(element));
-    const changed = next.size !== layout.size;
+    const changed = compositionOf(next) !== compositionOf(layout);
     const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
-    if (!changed) return;
-    if (crossed && phase === 'invitation') setPhase('invitation');
-    else paintLocal();
+    if (crossed && phase === 'invitation') { setPhase('invitation'); return; }
+    if (changed) { paintLocal(); return; }
+    paintMap();
+    fitAll();
   });
 
-  const codeTimer = setTimer(() => { paintClock(); paintProgress(); fitAll(); }, CODE_TICK_MS);
-  const rotateTimer = setTimer(() => {
-    // The tick is the scene clock in every phase: stamped before anything
-    // paints, so the countdown after a session or the wizard says the true
-    // seconds to the next scene rather than "0 s" until this tick comes round.
-    lastRotateAt = now();
+  const codeTimer = setTimer(() => {
     paintClock();
-    if (phase === 'paired') {
-      // The big screen is the one nobody touches: it moves itself, and if the
-      // room's clock ran out while the socket was down it returns on its own.
-      const live = session;
-      if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
-      else void refreshSessionData();
-    } else if (rotationAllowed()) {
-      // The whole local paint: the field swaps (parking the map first), the
-      // strip's countdown restarts, and the map is re-hosted or held parked.
-      sceneIndex += 1;
-      paintLocal();
+    paintProgress();
+    // The column names the ZET time in a context: it repaints when the minute turns, never every second.
+    const minute = Math.floor(now() / 60_000);
+    if (minute !== paintedMinute && invitation) {
+      paintedMinute = minute;
+      ensureLastRun();
+      invitation.update(invitationModel());
     }
-  }, ROTATE_MS);
+    sampleMajorLabelsOnceReady();
+  }, CODE_TICK_MS);
+  const refreshTimer = setTimer(() => {
+    if (phase !== 'paired') return;
+    // The big screen is the one nobody touches: it moves itself, and if the
+    // room's clock ran out while the socket was down it returns on its own.
+    const live = session;
+    if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
+    else void refreshSessionData();
+  }, REFRESH_MS);
 
   return {
     element,
@@ -902,7 +936,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     destroy() {
       disposed = true;
       rotation.stop();
-      clearTimer(rotateTimer);
+      clearTimer(refreshTimer);
       clearTimer(codeTimer);
       if (swapTimer !== null) { clearTimer(swapTimer); swapTimer = null; }
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }

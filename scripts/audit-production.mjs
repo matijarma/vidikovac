@@ -146,6 +146,11 @@ const METRICS_FN = ({ shellRoot }) => {
   const cr = canvas ? canvas.getBoundingClientRect() : null;
   const sess = document.querySelector('[data-testid=session-label]');
   const workspace = document.querySelector('[data-testid=transport-workspace]');
+  // The public kiosk screen (contract 8): the field is the picture, the
+  // column is the ranked statements. Only present on /kiosk/ captures, so
+  // this reads null everywhere else, the way `map` above does for the
+  // phone's own canvas.
+  const kioskField = document.querySelector('[data-testid=kiosk-live]');
   return {
     innerWidth, innerHeight, scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight,
     shell: Boolean(shell),
@@ -159,6 +164,14 @@ const METRICS_FN = ({ shellRoot }) => {
     stage: shell ? shell.getAttribute('data-stage') : null,
     sheet: workspace ? workspace.getAttribute('data-sheet') : null,
     map: canvas ? { status: canvas.getAttribute('data-map-status'), top: Math.round(cr.top), height: Math.round(cr.height), width: Math.round(cr.width), viewportShare: +(cr.height / innerHeight).toFixed(2), touchAction: getComputedStyle(canvas).touchAction, cooperative: Boolean(document.querySelector('.maplibregl-cooperative-gesture-screen')), markers: document.querySelectorAll('.maplibregl-marker').length } : null,
+    // Two elements carry kiosk-lines (R-KP8, contract 8): the lagano board inside the field and the transit statement's
+    // badge row in the column; each is read under its own parent, never bare, so a lagano capture with both never
+    // counts one for the other.
+    kiosk: kioskField ? {
+      sayCount: document.querySelectorAll('[data-testid=kiosk-says] article.k-say').length,
+      boardPresent: Boolean(document.querySelector('[data-testid=kiosk-live] [data-testid=kiosk-lines]')),
+      transitBadgesPresent: Boolean(document.querySelector('[data-say=transit] [data-testid=kiosk-lines]')),
+    } : null,
     title: document.title, lang: document.documentElement.lang, theme: document.documentElement.getAttribute('data-theme-resolved'), url: location.href.replace(/#.*/, '#…'),
   };
 };
@@ -178,9 +191,16 @@ async function metrics(page, name) {
     });
     const byRule = {};
     for (const v of violations) { byRule[v.rule] = (byRule[v.rule] || 0) + 1; result.violations.push({ capture: name, ...v }); }
+    // `?prizor=` named a kiosk chapter that no longer exists (D1, one fixed
+    // field, no rotation); a URL still carrying it anywhere is a regression,
+    // not a style nit, so it fails the run like any other rule.
+    if (m.url.includes('prizor=')) {
+      byRule['legacy-prizor-param'] = 1;
+      result.violations.push({ capture: name, rule: 'legacy-prizor-param', url: m.url });
+    }
     result.metrics[name] = { ...m, phoneClass, violations: byRule };
     writeFileSync(resolve(OUT, 'text', `${name}.txt`), await page.evaluate(() => document.body.innerText));
-    log(`metrics ${name}: overflow=${m.scrollWidth - m.innerWidth} loading=${m.loading} map=${m.map ? m.map.viewportShare : '-'} violations=${violations.length} ${JSON.stringify(byRule)}`);
+    log(`metrics ${name}: overflow=${m.scrollWidth - m.innerWidth} loading=${m.loading} map=${m.map ? m.map.viewportShare : '-'} kiosk=${m.kiosk ? `say×${m.kiosk.sayCount}` : '-'} violations=${violations.length} ${JSON.stringify(byRule)}`);
   } catch (e) { fail(`metrics ${name}`, e); }
 }
 

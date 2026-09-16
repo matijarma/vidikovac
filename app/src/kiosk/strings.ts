@@ -86,29 +86,25 @@ export interface KioskStrings {
     quakeBody: string;
     empty: string;
   };
-  /** The scene field (scenes.ts): the Večeras title (Promet and Grad are the
-   *  domain names, layers.*), the visually hidden position sentence, the works
-   *  band's two scopes (D18), the empty evening, the live-stream word and the
-   *  rows beyond the cap. */
-  scenes: {
-    tonight: string;
-    /** "prizor {index} od {count}", the reader's copy of the dots. */
-    position: string;
+  /** The column's kicker words and filler sentences (say.ts, contracts 4/5):
+   *  transit's three value states, its "N vozila u blizini" plural and its
+   *  zero, the other seven statements' kickers and the works plural, and
+   *  "danas"/"sutra" for the Assembly's context line. */
+  say: {
+    transit: string;
+    transitRegular: string;
+    transitNoData: string;
+    nearby: PluralForms;
+    nearbyNone: string;
+    quake: string;
+    closure: string;
+    zet: string;
+    kvart: string;
     worksKvart: string;
     worksCity: string;
-    tonightEmpty: string;
-    live: string;
-    moreEvents: PluralForms;
-  };
-  /** The right column's two value tiles (frame.ts's valueTiles): vehicles on
-   *  the network, closures within the 1.5 km nearby radius. */
-  tiles: {
-    vehicles: string;
-    closures: string;
-    /** "najbliže {street} · {distance}": the nearest closure, with a distance in hand. */
-    nearest: string;
-    /** "u krugu {radius}": no closure within the nearby radius. */
-    radius: string;
+    works: PluralForms;
+    today: string;
+    tomorrow: string;
   };
   safety: {
     label: string;
@@ -133,8 +129,6 @@ export interface KioskStrings {
     openBasics: string;
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
-    /** "sljedeći prizor za {seconds} s": the strip's countdown to the next scene, hidden when the field is not rotating. */
-    nextScene: string;
   };
   basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
   session: {
@@ -291,13 +285,13 @@ function build(code: SupportedLocale): KioskStrings {
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
-    scenes: {
-      ...group('scenes', ['tonight', 'position', 'worksKvart', 'worksCity', 'tonightEmpty', 'live']),
-      moreEvents: forms('scenes', 'moreEvents'),
+    say: {
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow']),
+      nearby: forms('say', 'nearby'),
+      works: forms('say', 'works'),
     },
-    tiles: group('tiles', ['vehicles', 'closures', 'nearest', 'radius']),
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics', 'nextScene']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),

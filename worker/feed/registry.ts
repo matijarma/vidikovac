@@ -170,10 +170,12 @@ export function clearFetcherOverrides(): void {
 // dogadanja is reduced by licence first and only then by size (teaserSubset below).
 export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja'];
 export const TEASER_EMSC_LIMIT = 10;
-// The kiosk shows one city row per card; ten leaves room for the card to grow
-// without shipping the whole register (40 komunalne rows with their activity
-// text) to every screen every 30 s.
-export const TEASER_EVENTS_LIMIT = 10;
+// R-KP10 / D14: the public screen's column shows only the top-ranked open
+// rows, but the cap must not be the thing that drops today's session or a
+// service notice on a busy day -- twenty (up from ten) leaves headroom below
+// the two ranked kinds without shipping the whole register (40 komunalne
+// rows with their activity text) to every screen every 30 s.
+export const TEASER_EVENTS_LIMIT = 20;
 
 function vozila(count: number): string {
   return count % 10 === 1 && count % 100 !== 11 ? `${count} vozilo` : `${count} vozila`;
@@ -191,6 +193,31 @@ export const DOGADANJA_OPEN_ATTRIBUTION: Attribution = {
   url: KOMUNALNE_URL,
   licence: OPEN_LICENCE,
 };
+
+/** R-KP10 / D14: within the open-licence dogadanja rows, an upcoming
+ *  Skupština session and a ZET promet notice matter to a kiosk reader more
+ *  than a routine kvart or komunalne row that happens to sit earlier in the
+ *  merge order -- so both move to the front, sessions soonest first (the
+ *  one a reader can still attend), ZET promet newest first, before the cap
+ *  that follows can drop either. A session already under way or in the
+ *  past keeps the plain merge-order slot: it is no longer the thing to
+ *  lead with. `fetchedAt`, not `Date.now()`, is "now" here so the function
+ *  stays pure and reproducible from a snapshot alone. */
+function rankDogadanjaTeaser(items: readonly FeedItem[], fetchedAt: string): FeedItem[] {
+  const now = Date.parse(fetchedAt);
+  const sessions: FeedItem[] = [];
+  const zetPromet: FeedItem[] = [];
+  const rest: FeedItem[] = [];
+  for (const item of items) {
+    const at = item.at ? Date.parse(item.at) : NaN;
+    if (item.data?.source === 'skupstina' && Number.isFinite(at) && at >= now) sessions.push(item);
+    else if (item.data?.source === 'zet-promet') zetPromet.push(item);
+    else rest.push(item);
+  }
+  sessions.sort((a, b) => Date.parse(a.at ?? '') - Date.parse(b.at ?? ''));
+  zetPromet.sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));
+  return [...sessions, ...zetPromet, ...rest];
+}
 
 export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; lat: number }): ModuleSnapshot {
   switch (snapshot.module) {
@@ -227,7 +254,8 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
       // `sourceCounts`, the module's own extra property, is deliberately not
       // carried: the open copy states nothing about the sources it may not show.
       const allowed = new Set<string>(OPEN_LICENCE_EVENT_SOURCES);
-      const items = openLicenceEvents(snapshot.items).slice(0, TEASER_EVENTS_LIMIT);
+      const open = openLicenceEvents(snapshot.items);
+      const items = rankDogadanjaTeaser(open, snapshot.fetchedAt).slice(0, TEASER_EVENTS_LIMIT);
       const sources = snapshot.sources
         ? Object.fromEntries(Object.entries(snapshot.sources).filter(([id]) => allowed.has(id)))
         : undefined;
@@ -248,7 +276,7 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
           : states.every((source) => source.status === 'down') ? 'down' : 'stale';
         if (result.status === 'live') delete result.staleSince;
       }
-      return limitedSnapshot(result, items, openLicenceEvents(snapshot.items).length);
+      return limitedSnapshot(result, items, open.length);
     }
     case 'emsc': {
       const newestFirst = [...snapshot.items].sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));

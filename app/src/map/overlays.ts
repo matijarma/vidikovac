@@ -9,10 +9,11 @@
 // Declutter is scale-aware (never a pile of squares): below PILL_ZOOM every
 // vehicle is a small dot in its mode's colour; from there numbered pills
 // join, thinned by MapLibre's collision pass with the dots still underneath
-// so no vehicle ever vanishes; from PILL_OVERLAP_ZOOM every pill and its nose
-// draw unconditionally. The selected or followed vehicle draws at every
-// zoom. Stop names come in by rank, the busiest corners first, one per
-// named stop, and yield to the vehicles above them.
+// so no vehicle ever vanishes; from PILL_OVERLAP_ZOOM (or the public screen's
+// own overlapZoom, ProzorOptions) every pill and its nose draw
+// unconditionally. The selected or followed vehicle draws at every zoom.
+// Stop names come in by rank, the busiest corners first, one per named stop,
+// and yield to the vehicles above them.
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -88,6 +89,11 @@ export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;
 
 export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
+/** The tram's plate on the public screen (plan D4, the badge rule: a tram is
+ *  a plate, a bus a capsule): the pill's box with the corners barely rounded,
+ *  one per label length like the pills. */
+export const PLATE_IMAGE_PREFIX = 'vehicle-plate-';
+export const PLATE_RADIUS_PX = 3;
 export const NOSE_IMAGE = 'vehicle-nose';
 export const RING_IMAGE = 'selection-ring';
 
@@ -128,11 +134,37 @@ export const QUAKE_RADIUS_PER_MAG_PX = 3;
 
 export interface OverlayImage { id: string; image: SdfImage }
 
+/** The public screen's overlay set (plan D4, R-KP4): present, the tram network
+ *  is the figure (the `figure` palette keys, 3 to 5 px), the bus lines and the
+ *  stops off the screen's routes step aside, trams draw as plates and buses as
+ *  the pills, the screen's stop is the largest mark on the map, the seat is
+ *  never lit, and the fixed 14.5 overlap zoom follows the field's own zoom
+ *  (R-KP2). Absent, every surface draws exactly as before. */
+export interface ProzorOptions {
+  /** Which network lines are drawn; the kiosk passes ['tram']. */
+  networkKinds: readonly ('tram' | 'bus')[];
+  /** Route ids whose stops are drawn; null draws every stop (today's behaviour). */
+  stopRoutes: readonly string[] | null;
+  /** Stops labelled only from this rank (kiosk 4; today's gate is rank 2 at the overlap zoom). */
+  stopLabelMinRank: number;
+  /** The zoom from which pills place unconditionally and noses draw (today's fixed 14.5). */
+  overlapZoom: number;
+  /** Collision padding around a major street name, in the tile pixels
+   *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
+   *  The kiosk raises it in step with the ground a field shows beyond the
+   *  wall's -- doubled on the totem (kiosk/mapview.ts labelPadding) -- so a
+   *  field of twice the ground still places at most eight names (contract 3);
+   *  symbol-spacing is no lever for that count and stays the ruling's. */
+  labelPadding: number;
+}
+
 /** Every SDF image the overlays reference, generated once per map. */
 export function overlayImages(): OverlayImage[] {
   const pills = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PILL_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
+  const plates = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PLATE_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PLATE_RADIUS_PX) }));
   return [
     ...pills,
+    ...plates,
     { id: NOSE_IMAGE, image: sdfTriangle(NOSE_LENGTH_PX, NOSE_WIDTH_PX) },
     { id: RING_IMAGE, image: sdfRing(RING_DIAMETER_PX, RING_STROKE_PX) },
     { id: PLACE_SQUARE_IMAGE, image: sdfRoundedRect(PLACE_SQUARE_PX, PLACE_SQUARE_PX, 0) },
@@ -153,6 +185,8 @@ const zoomInterpolate = (...stops: number[]): Expr => ['interpolate', ['linear']
 /** The label length clamped to the pill sizes: '' (route unknown) takes the smallest pill. */
 const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS, ['max', 1, ['length', ['get', 'short']]]];
 const PILL_IMAGE: Expr = ['concat', PILL_IMAGE_PREFIX, ['to-string', PILL_CHARS]];
+/** The public screen's mark: a tram takes the plate of its label's length, anything else the pill. */
+const PLATE_OR_PILL_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
 const NOSE_OFFSET: Expr = ['match', PILL_CHARS, ...NOSE_OFFSETS_PX.slice(0, -1).flatMap((px, i) => [i + 1, ['literal', [px, 0]]]), ['literal', [NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1], 0]]];
 /** Trams over buses over unknown: the draw and placement order pills use. */
 const SORT_KEY: Expr = ['-', 10, ['get', 'sort']];
@@ -194,9 +228,18 @@ export function stopFilter(modes: ReadonlySet<number> | null | undefined): Expr 
 export const STOP_LABEL_ZOOM = 13.5;
 
 /** One label per named stop (`label`), by rank. `zoom` may only drive a filter through a top-level step. */
-function stopLabelFilter(modes: ReadonlySet<number> | null | undefined): Expr {
-  const base: Expr = ['all', stopFilter(modes), ['get', 'label']];
+function stopLabelFilter(stops: Expr): Expr {
+  const base: Expr = ['all', stops, ['get', 'label']];
   return ['step', ['zoom'], ['all', base, ['>=', ['get', 'rank'], 4]], STOP_LABEL_ZOOM + 1, ['all', base, ['>=', ['get', 'rank'], 2]], STOP_LABEL_ZOOM + 2, base];
+}
+
+/** Stops called at by one of `routes` (the features carry their route ids);
+ *  null is every stop, an empty list none. */
+export function routeStopsFilter(modes: ReadonlySet<number> | null | undefined, routes: readonly string[] | null): Expr {
+  const byMode = stopFilter(modes);
+  if (routes === null) return byMode;
+  if (routes.length === 0) return NEVER;
+  return ['all', byMode, ['any', ...routes.map((id): Expr => ['in', id, ['get', 'routes']])]];
 }
 
 /** A closure's width, the selected one three pixels heavier. */
@@ -255,14 +298,21 @@ export interface OverlayOptions {
   modes?: ReadonlySet<number> | null;
   closuresVisible?: boolean;
   selection?: MapSelection | null;
-  /** Which kinds of city point this chapter lights. null, the default, lights
-   *  every one -- the phone and the desk have no chapters. An unlit kind is
+  /** Which kinds of city point this map lights (the kiosk passes its own
+   *  set, kiosk/mapview.ts KIOSK_EMPHASIS, R-KP9). null, the default, lights
+   *  every one -- the phone and the desk light everything. An unlit kind is
    *  hidden, not dimmed: a mark a reader cannot act on is not a quieter mark,
    *  it is a mark that should not be there. */
   emphasis?: readonly PlaceKind[] | null;
+  /** The public screen's overlay set; null or absent draws every surface as before. */
+  prozor?: ProzorOptions | null;
+  /** The screen's own stop id: under prozor the hub-label tier never names it,
+   *  because the 30 px anchor label already does and the two stacked at
+   *  Jelačić (R-KP25). */
+  screenStopId?: string | null;
 }
 
-function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks): StyleLayerLike {
+function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks, image: Expr): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -270,7 +320,7 @@ function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: n
     ...(minzoom > 0 ? { minzoom } : {}),
     filter,
     layout: {
-      'icon-image': PILL_IMAGE,
+      'icon-image': image,
       'icon-size': s,
       'icon-rotation-alignment': 'viewport',
       'icon-allow-overlap': overlap,
@@ -372,6 +422,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const s = options.scale ?? 1;
   const modes = options.modes ?? null;
   const sel = options.selection ?? null;
+  const prozor = options.prozor ?? null;
+  const screenStopId = options.screenStopId ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
   const selectedRoute = sel?.kind === 'route' ? sel.id : null;
@@ -382,19 +434,32 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const round = { 'line-cap': 'round', 'line-join': 'round' };
   const visible = (on: boolean): Record<string, unknown> => ({ visibility: on ? 'visible' : 'none' });
   const closures = visible(options.closuresVisible !== false);
-  const networkOpacity = sel?.kind === 'route' ? NETWORK_OPACITY_DIMMED : NETWORK_OPACITY;
-  const overlap: Expr = ['step', ['zoom'], false, PILL_OVERLAP_ZOOM, true];
-  const network = (id: string, kind: 'tram' | 'bus', color: string, width: Expr): StyleLayerLike => ({
+  const dimmed = sel?.kind === 'route';
+  // The public screen's thresholds follow the field's own zoom (R-KP2); every other surface keeps the fixed one.
+  const overlapZoom = prozor?.overlapZoom ?? PILL_OVERLAP_ZOOM;
+  const overlap: Expr = ['step', ['zoom'], false, overlapZoom, true];
+  const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
+  /** A network is drawn for its mode when the modes admit it and, on the public screen, when the option set names it. */
+  const drawn = (kind: 'tram' | 'bus'): boolean => kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));
+  const network = (id: string, kind: 'tram' | 'bus', color: string, width: Expr, opacity: Expr | number = NETWORK_OPACITY): StyleLayerLike => ({
     id,
     type: 'line',
     source: SOURCES.network,
     filter: ['==', ['get', 'kind'], kind],
-    layout: { ...round, ...visible(kinds.includes(kind)) },
-    paint: { 'line-color': color, 'line-width': width, 'line-opacity': networkOpacity },
+    layout: { ...round, ...visible(drawn(kind)) },
+    paint: { 'line-color': color, 'line-width': width, 'line-opacity': dimmed ? NETWORK_OPACITY_DIMMED : opacity },
   });
+  // The tram rails as the figure (plan D4): the ink itself, 3 to 5 px across
+  // the field's zoom, over hairline streets. Elsewhere the pinned tram blue at
+  // the network's own weight and opacity, as always.
+  const tramNetwork = prozor
+    ? network(LAYERS.networkTram, 'tram', p.figure, zoomInterpolate(14, 3, 15, 5, 16, 6), p.figureOpacity)
+    : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 1, 13, 1.8, 16, 4.5));
+  const stops = routeStopsFilter(modes, prozor ? prozor.stopRoutes : null);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
-  const lit = (kind: PlaceKind): boolean => options.emphasis == null || options.emphasis.includes(kind);
+  // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.
+  const lit = (kind: PlaceKind): boolean => (kind !== 'seat' || prozor === null) && (options.emphasis == null || options.emphasis.includes(kind));
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the
@@ -442,7 +507,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { 'line-color': p.other, 'line-width': OUTLINE_WIDTH_PX * s, 'line-dasharray': [...OUTLINE_DASH], 'line-opacity': 0.8 },
     },
     network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.7, 13, 1.4, 16, 3.5)),
-    network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 1, 13, 1.8, 16, 4.5)),
+    tramNetwork,
     { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelectedCasing], layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },
     { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelected], layout: round, paint: { 'line-color': ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other], 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
@@ -466,21 +531,35 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       { filter: PLACE_FILTERS[LAYERS.placeQuakes]!, layout: visible(lit('quake')) },
     ),
     circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5 }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
+    // On the public screen the stops of the screen's own routes are filled
+    // dots in the figure colour, no stroke: beads on the rails, not rings
+    // competing with the screen's stop. Elsewhere the hollow ring as always.
     circle(
       LAYERS.stops,
       SOURCES.stops,
-      {
-        'circle-radius': zoomInterpolate(STOP_ZOOM, 1.5 * s, 14, 2.6 * s, 16, 4.5 * s),
-        'circle-color': p.stopFill,
-        'circle-stroke-color': p.stopStroke,
-        'circle-stroke-width': zoomInterpolate(STOP_ZOOM, 0.8, 16, 1.6),
-        'circle-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
-        'circle-stroke-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
-      },
-      { minzoom: STOP_ZOOM, filter: stopFilter(modes) },
+      prozor
+        ? {
+            'circle-radius': 3 * s,
+            'circle-color': p.figure,
+            'circle-stroke-color': p.figure,
+            'circle-stroke-width': 0,
+            'circle-opacity': p.figureOpacity,
+            'circle-stroke-opacity': 0,
+          }
+        : {
+            'circle-radius': zoomInterpolate(STOP_ZOOM, 1.5 * s, 14, 2.6 * s, 16, 4.5 * s),
+            'circle-color': p.stopFill,
+            'circle-stroke-color': p.stopStroke,
+            'circle-stroke-width': zoomInterpolate(STOP_ZOOM, 0.8, 16, 1.6),
+            'circle-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
+            'circle-stroke-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
+          },
+      { minzoom: STOP_ZOOM, filter: stops },
     ),
     circle(LAYERS.stopsSelected, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 6 * s, 16, 11 * s), 'circle-color': p.selection, 'circle-opacity': 0, 'circle-stroke-color': p.selection, 'circle-stroke-width': 3 }, { filter: filters[LAYERS.stopsSelected] }),
-    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': 7 * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': 2 }),
+    // The screen's own stop: on the public screen the largest ring on the map
+    // (R-KP4: 9 x s, a 2 x s halo), the anchor the whole picture is about.
+    circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': (prozor ? 9 : 7) * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': prozor ? 2 * s : 2 }),
     circle(
       LAYERS.vehicleDots,
       SOURCES.vehicles,
@@ -494,18 +573,24 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: kindFilter(modes) },
     ),
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), PILL_OVERLAP_ZOOM, s, alpha),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, inks),
+    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), overlapZoom, s, alpha),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, inks, mark),
+    // Stop names: on the public screen the hubs alone (rank from the option
+    // set), from the field's zoom and never below it -- as the layer's own
+    // minzoom, which MapLibre reads against the camera's fractional zoom,
+    // where a `zoom` step inside the filter would be read at the tile's
+    // integer zoom and arrive one whole level late. Elsewhere the ranked
+    // steps as always.
     {
       id: LAYERS.stopLabels,
       type: 'symbol',
       source: SOURCES.stops,
-      minzoom: STOP_LABEL_ZOOM,
-      filter: stopLabelFilter(modes),
+      minzoom: prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM,
+      filter: prozor ? ['all', stops, ['get', 'label'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank], ['!=', ['get', 'id'], screenStopId ?? '']] : stopLabelFilter(stops),
       layout: {
         'text-field': ['get', 'name'],
         'text-font': [MAP_FONTS.medium],
-        'text-size': zoomInterpolate(STOP_LABEL_ZOOM, 11 * s, 16, 13 * s),
+        'text-size': prozor ? 11 * s : zoomInterpolate(STOP_LABEL_ZOOM, 11 * s, 16, 13 * s),
         'text-anchor': 'top',
         'text-offset': [0, 0.7],
         'text-max-width': 9,
@@ -543,15 +628,17 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       paint: { 'text-color': p.place, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
     },
+    // The screen's stop's name: on the public screen the biggest name on the
+    // map (15 x s = 30 px at the screen's scale), always placed.
     {
       id: LAYERS.screenStopLabel,
       type: 'symbol',
       source: SOURCES.screenStop,
-      layout: { 'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': 13 * s, 'text-anchor': 'top', 'text-offset': [0, 0.9], 'text-max-width': 9, 'text-allow-overlap': true, 'text-ignore-placement': true },
+      layout: { 'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, 'text-anchor': 'top', 'text-offset': [0, 0.9], 'text-max-width': 9, 'text-allow-overlap': true, 'text-ignore-placement': true },
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
     noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s, alpha),
-    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, pillInks(p, null)),
+    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, pillInks(p, null), mark),
     {
       id: LAYERS.selectionRing,
       type: 'symbol',

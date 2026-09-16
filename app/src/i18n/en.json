@@ -784,21 +784,23 @@
       "quakeBody": "Magnitude {mag} · {region} · depth {depth} km",
       "empty": "No new notices right now."
     },
-    "scenes": {
-      "tonight": "Tonight",
-      "position": "scene {index} of {count}",
+    "say": {
+      "transit": "Transit",
+      "transitRegular": "All lines running on schedule",
+      "transitNoData": "No delay data",
+      "nearby_one": "{count} vehicle nearby",
+      "nearby_other": "{count} vehicles nearby",
+      "nearbyNone": "no vehicles nearby",
+      "quake": "Earthquake",
+      "closure": "Closed",
+      "zet": "ZET notice",
+      "kvart": "Neighbourhood",
       "worksKvart": "Works in the district",
       "worksCity": "Works in the city",
-      "tonightEmpty": "No events announced in the district tonight.",
-      "live": "live stream",
-      "moreEvents_one": "{count} more event",
-      "moreEvents_other": "{count} more events"
-    },
-    "tiles": {
-      "vehicles": "Vehicles moving",
-      "closures": "Closures",
-      "nearest": "nearest {street} · {distance}",
-      "radius": "within {radius}"
+      "works_one": "{count} project under way",
+      "works_other": "{count} projects under way",
+      "today": "today",
+      "tomorrow": "tomorrow"
     },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
@@ -817,8 +819,7 @@
         "urgent": "warning",
         "calm": "calm",
         "unknown": "unconfirmed"
-      },
-      "nextScene": "next scene in {seconds} s"
+      }
     },
     "basics": {
       "title": "Essentials, no scan needed",

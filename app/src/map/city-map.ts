@@ -24,7 +24,7 @@ import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
-import type { OverlayOptions } from './overlays';
+import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 
 // --- Kept for callers: the first basemap was the OpenStreetMap community
@@ -503,10 +503,13 @@ export interface CityMapOptions {
   attributionCompact?: boolean;
   /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
   placeLabels?: boolean;
-  /** Which basemap this surface reads: 'sign' for the public screen, whose
-   *  labels are sized from a stated viewing geometry and whose POI list is cut
-   *  to a ranked civic one (map/basemap.ts). Default 'default'. */
+  /** Which basemap this surface reads: 'prozor' for the public screen, whose
+   *  ground is two landuse tones under hairline streets with the neighbourhood
+   *  names promoted and every label sized from a stated viewing geometry
+   *  (map/basemap.ts). Default 'default'. */
   basemapProfile?: BasemapProfile;
+  /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. Changed live with setProzor. */
+  prozor?: ProzorOptions;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -561,6 +564,14 @@ export interface CityMapHandle {
   network?(): Network | null;
   /** The vehicles as the model draws them right now. */
   vehicles?(): VehicleInfo[];
+  /** The public screen's overlay set, changed live: the stop's routes when the
+   *  stop changes, the field's zoom when it is re-measured (one map lives for
+   *  the screen's life, R-54). null draws every surface as before. */
+  setProzor?(prozor: ProzorOptions | null): void;
+  /** Unique `name` values of the symbols MapLibre actually placed for a layer
+   *  (the e2e's proof that the prozor profile places few street names);
+   *  [] before the style loads or for a layer the style does not carry. */
+  placedNames?(layerId: string): string[];
 }
 
 export type MapFactory = (options: CityMapOptions) => CityMapHandle;
@@ -608,6 +619,8 @@ interface MapApi {
   setPaintProperty(id: string, key: string, value: unknown): void;
   setLayoutProperty(id: string, key: string, value: unknown): void;
   setFilter(id: string, filter: unknown): void;
+  setLayerZoomRange?(id: string, minzoom: number, maxzoom: number): void;
+  getLayer?(id: string): unknown;
   setSprite?(url: string): void;
   queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): { layer: { id: string }; properties: Record<string, unknown> }[];
   easeTo(options: Record<string, unknown>): void;
@@ -723,6 +736,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let routeFollowAt = -Infinity;
   let modes: ReadonlySet<number> | null = options.modes ?? null;
   let emphasis: readonly PlaceKind[] | null = options.emphasis ?? null;
+  let prozor: ProzorOptions | null = options.prozor ?? null;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
   let outline: MapOutline | null = options.outline ?? null;
@@ -757,7 +771,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function overlayOptions(): OverlayOptions {
-    return { scale, modes, closuresVisible, selection, emphasis };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null };
   }
 
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
@@ -1080,11 +1094,31 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       try {
         if (op.kind === 'paint') m.setPaintProperty(op.id, op.key, op.value);
         else if (op.kind === 'layout') m.setLayoutProperty(op.id, op.key, op.value);
-        else m.setFilter(op.id, op.value);
+        else if (op.kind === 'filter') m.setFilter(op.id, op.value);
+        else {
+          const [minzoom, maxzoom] = op.value as [number, number];
+          m.setLayerZoomRange?.(op.id, minzoom, maxzoom);
+        }
       } catch {
         /* a layer id the style does not carry */
       }
     }
+  }
+
+  /** The names MapLibre actually placed for one layer, once each: what the
+   *  collision pass let through, not what the tiles carry. Nothing before the
+   *  style is up, and nothing for a layer the style does not carry (asking
+   *  MapLibre about one would fire an error event, which onMapError logs as a
+   *  bug). */
+  function placedNames(layerId: string): string[] {
+    const m = map;
+    if (!m || !styled || (m.getLayer && !m.getLayer(layerId))) return [];
+    const names = new Set<string>();
+    for (const feature of m.queryRenderedFeatures(undefined, { layers: [layerId] })) {
+      const name = feature.properties.name;
+      if (typeof name === 'string' && name) names.add(name);
+    }
+    return [...names];
   }
 
   /** Re-derives the overlays for the current state and applies what changed: paint on a theme flip, filters and visibility for a selection or a mode toggle. */
@@ -1147,9 +1181,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** Every option the basemap is built from, in one place. A theme or locale
    *  flip rebuilds the layer list, and before this builder existed both sites
    *  wrote the object out by hand and dropped anything not in that literal --
-   *  a silent regression on the surface that flips theme twice a day. */
+   *  a silent regression on the surface that flips theme twice a day. The
+   *  kiosk set's street-name padding rides along (basemap.ts roads_labels_major). */
   function basemapOptions(): BasemapStyleOptions {
-    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile };
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding } : {}) };
+  }
+
+  /** Re-derives the basemap for the current theme and options and applies what moved: a face flip, a locale switch, a changed prozor set. */
+  function applyBasemap(): void {
+    const l = lib;
+    if (!map || !styled || !l) return;
+    const nextBasemap = l.basemapLayers(theme, basemapOptions());
+    applyOps(map, l.styleDiff(basemap, nextBasemap));
+    basemap = nextBasemap;
   }
 
   function setTheme(next: MapTheme): void {
@@ -1157,9 +1201,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     theme = next;
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(next, basemapOptions());
-    applyOps(map, l.styleDiff(basemap, nextBasemap));
-    basemap = nextBasemap;
+    applyBasemap();
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
   }
@@ -1167,11 +1209,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function setLocale(next: string): void {
     if (next === locale) return;
     locale = next;
-    const l = lib;
-    if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(theme, basemapOptions());
-    applyOps(map, l.styleDiff(basemap, nextBasemap));
-    basemap = nextBasemap;
+    if (!map || !styled || !lib) return;
+    applyBasemap();
     relabelControls();
   }
 
@@ -1340,5 +1379,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     status: () => status,
     network: () => net,
     vehicles,
+    setProzor(next) {
+      if (JSON.stringify(next) === JSON.stringify(prozor)) return;
+      prozor = next;
+      // The set's street-name padding lives on a basemap layer; the rest on the overlays.
+      applyBasemap();
+      applyOverlays();
+    },
+    placedNames,
   };
 }

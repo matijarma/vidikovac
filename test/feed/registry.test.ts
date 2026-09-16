@@ -147,12 +147,14 @@ describe('teaserSubset', () => {
   it('cuts dogadanja to its Otvorena dozvola rows and restates the attribution without Kulturpunkt (E8: the kiosk is the open tier)', () => {
     const merged = snapshot('dogadanja', [
       item({ id: 'kulturpunkt:1', kind: 'event', title: 'Izložba', module: 'dogadanja', data: { source: 'kulturpunkt' } }),
-      item({ id: 'skupstina:1', kind: 'event', title: '13. sjednica', module: 'dogadanja', data: { source: 'skupstina' } }),
+      item({ id: 'skupstina:1', kind: 'event', title: '13. sjednica', module: 'dogadanja', at: '2026-09-11T12:00:00.000Z', data: { source: 'skupstina' } }),
       item({ id: 'etnografski:1', kind: 'event', title: 'Radionica', module: 'dogadanja', data: { source: 'etnografski' } }),
       item({ id: 'zet-promet:1', kind: 'event', title: 'Obilazak', module: 'dogadanja', data: { source: 'zet-promet' } }),
       item({ id: 'kvartovske:1', kind: 'event', title: 'Kvart', module: 'dogadanja', data: { source: 'kvartovske' } }),
       item({ id: 'komunalne:1', kind: 'event', title: 'Ulica', module: 'dogadanja', data: { source: 'komunalne' } }),
     ]);
+    // R-KP10: skupstina:1's session is still ahead (fetchedAt 10:00, its
+    // session at 12:00), so ranking, not merge order, is what keeps it first.
     const reduced = teaserSubset(merged);
     expect(reduced.items.map((i) => i.id)).toEqual(['skupstina:1', 'zet-promet:1', 'kvartovske:1', 'komunalne:1']);
     expect(reduced.status).toBe('live');
@@ -166,14 +168,37 @@ describe('teaserSubset', () => {
     expect('sourceCounts' in reduced).toBe(false);
   });
 
-  it('filters dogadanja by licence before cutting it to ten rows, so the cap never eats an open row', () => {
-    expect(TEASER_EVENTS_LIMIT).toBe(10);
-    const rows = Array.from({ length: 30 }, (_, n) =>
+  it('filters dogadanja by licence before cutting it to twenty rows, so the cap never eats an open row (D14: cap rises from 10 to 20)', () => {
+    expect(TEASER_EVENTS_LIMIT).toBe(20);
+    const rows = Array.from({ length: 50 }, (_, n) =>
       item({ id: `r${n}`, kind: 'event', title: `Red ${n}`, module: 'dogadanja', data: { source: n % 2 ? 'kulturpunkt' : 'skupstina' } }),
     );
     const reduced = teaserSubset(snapshot('dogadanja', rows));
-    expect(reduced.items).toHaveLength(10);
-    expect(reduced.items.map((i) => i.id)).toEqual(Array.from({ length: 10 }, (_, n) => `r${2 * n}`));
+    expect(reduced.items).toHaveLength(20);
+    expect(reduced.items.map((i) => i.id)).toEqual(Array.from({ length: 20 }, (_, n) => `r${2 * n}`));
+  });
+
+  // R-KP10 / D14: an upcoming skupstina session and a zet-promet notice sit
+  // deep in a busy day's merge order (positions 12 and 15 of 25 open rows);
+  // ranking moves both to the front, ahead of the plain kvart/komunalne
+  // rows around them, before the cap -- so a reader glances at slot one or
+  // two, not thirteen, to see them.
+  it('ranks an open session and a ZET promet notice ahead of the merge order before the cap', () => {
+    const now = '2026-09-11T10:00:00.000Z'; // snapshot()'s fetchedAt
+    const rows = Array.from({ length: 25 }, (_, n) =>
+      item({ id: `r${n}`, kind: 'event', title: `Red ${n}`, module: 'dogadanja', data: { source: 'komunalne' } }),
+    );
+    rows[12] = item({ id: 'r12', kind: 'event', title: 'Sjednica', module: 'dogadanja', at: '2026-09-11T12:00:00.000Z', data: { source: 'skupstina' } });
+    rows[15] = item({ id: 'r15', kind: 'event', title: 'Obilazak', module: 'dogadanja', at: '2026-09-11T09:00:00.000Z', data: { source: 'zet-promet' } });
+    const reduced = teaserSubset({ ...snapshot('dogadanja', rows), fetchedAt: now });
+    expect(reduced.items).toHaveLength(20);
+    expect(reduced.items[0].id).toBe('r12');
+    expect(reduced.items[1].id).toBe('r15');
+    expect(reduced.items.map((i) => i.id)).toContain('r12');
+    expect(reduced.items.map((i) => i.id)).toContain('r15');
+    // The rest keep the original merge order, r12 and r15 pulled out, cut at 20.
+    const rest = rows.filter((r) => r.id !== 'r12' && r.id !== 'r15').map((r) => r.id);
+    expect(reduced.items.slice(2).map((i) => i.id)).toEqual(rest.slice(0, 18));
   });
 
   it('keeps open module data intact and describes the displayed coverage', () => {

@@ -36,13 +36,23 @@ the kiosk drives:
   and fades on its own. A map created during an outage is told before its
   first frame.
 
-The lines board lies over the lower part of the map column (under half of its
-height). The map API has no camera padding, so the kiosk moves the camera
-centre south by half the board's height (`boardCentre`), which puts the stop in
-the middle of the uncovered part. A `padding` option on `setView` would let the
-kiosk keep the true centre instead; nothing else is pending on the map side.
-The kiosk never calls the factory twice for one screen and never reaches into
-MapLibre itself.
+The field (`field.ts`) replaces the old scene rotation (`scenes.ts`, deleted)
+and the ranked statements column (`say.ts`) replaces the two value tiles: the
+field renders edge to edge with no overlay on it, the statements sit beside
+it in their own column, never over it, so the camera needs none of the old
+board-height offset (`boardCentre`) a lines-board-over-map arrangement
+needed; `padding` on `setView` stays unused. Lagano is the one place the
+lines board still lies over the map area, as `kiosk-lines`'s own contract
+below says. The kiosk never calls the factory twice for one screen and never
+reaches into MapLibre itself.
+
+Contract testids across this hand-off (global constraints, contract 8):
+`kiosk-live` names the field's section; `kiosk-map-host` and `kiosk-map` name
+the map container inside it, and `kiosk-map-host` carries
+`data-major-labels="<count>"` once the style idles. `kiosk-says` is the
+statements column, `kiosk-say` each rendered `article.k-say`, and
+`kiosk-lines` the transit statement's line-badge row (also the lagano
+board's, unchanged).
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn

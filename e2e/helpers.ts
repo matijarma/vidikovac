@@ -7,6 +7,10 @@ import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protoc
 import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
 
 export const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
+/** The stop the Prozor proofs give their screen (DEFAULT_STOP_ID on both sides of the wire, the wizard's preselection):
+ *  Trg bana J. Jelačića, platform 1. The id is a literal here because Playwright's own loader cannot follow either
+ *  module's JSON imports. */
+export const E2E_STOP_ID = '106_1';
 /** Server running with SESSION_MINUTES=0.2; undefined when pointed at a hosted target without one. */
 export const SHORT_URL: string | undefined = process.env.E2E_NO_WEBSERVER
   ? process.env.E2E_SHORT_URL
@@ -36,6 +40,13 @@ export function adminBypassToken(): string | undefined {
 export async function provisionKiosk(
   request: APIRequestContext,
   base: string,
+  /** The admin route provisions a screen without a stop unless one is named, which no café screen is (the wizard always
+   *  picks one): the Prozor proofs pass `{ stopId: E2E_STOP_ID }`, since the transit statement, the stop ring, the
+   *  stop-scoped teaser and the lines board all follow from the stop. The phone-session proofs (a11y, motion) and the
+   *  box-scoped lagano board proofs were written against the stopless screen and keep it -- a stop-bearing screen opens
+   *  the phone's U pokretu sheet on a route of that stop, which is the phone's own behaviour to settle
+   *  (task-WB-report.md, concerns), and the stopless board lists the box, which those specs' teaser stubs feed. */
+  options: { stopId?: string } = {},
 ): Promise<{ kioskUrl: string; beaconId: string }> {
   const preset = process.env.E2E_KIOSK_URL;
   if (preset) {
@@ -47,7 +58,7 @@ export async function provisionKiosk(
       'No E2E_KIOSK_URL and no E2E_ADMIN_BYPASS (env or .dev.vars): cannot provision a test screen. See docs/kiosk.md, section "Testni zaslon".',
     );
   }
-  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon' };
+  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon', ...(options.stopId ? { stopId: options.stopId } : {}) };
   const res = await request.post(`${base}/api/admin/beacons`, { headers: { 'x-e2e-admin-bypass': token }, data: body });
   expect([200, 201], `POST /api/admin/beacons answered ${res.status()}: ${await res.text()}`).toContain(res.status());
   const json = (await res.json()) as CreateBeaconResponse;

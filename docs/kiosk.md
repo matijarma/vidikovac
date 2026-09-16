@@ -30,25 +30,37 @@ pokreće izričitom radnjom, ne automatskom petljom.
 
 ## Što zaslon prikazuje
 
-Nepovezan zaslon rotira tri prizora svakih 20 sekundi: Promet (lokalna
-vektorska karta, linije odabranog stajališta i radovi u tijeku), Večeras
-(današnja događanja, dok ih otvoreni izvor ima) i Grad (najava sljedeće
-sjednice Gradske skupštine, gradske obavijesti i najnoviji potres). Bočni stupac uz prizor nosi
-dvije brojčane pločice (vozila u pogonu na mreži, zatvaranja u blizini
-stajališta) i stalnu pozivnicu s QR-om i kodom. Zaglavlje nosi sat i, kad
-DHMZ odgovara, vrijeme kao stanje uz sat, nikad kao pločicu. Sigurnosna
-traka nosi presudu, tri stavke i odbrojavanje do sljedećeg prizora. Nema
-panorame ni meandra. Rasporedi za 1920 × 1080 i 1366 × 768 namjerno su
-različiti; QR u oba mora biti najmanje 240 CSS piksela.
+Nepovezan zaslon je jedna nepomična slika kvarta oko stajališta, ne
+rotacija prizora: polje karte razapeto na 2,8 km širine, sjever gore,
+tramvajske pruge i vozila na njima, stajalište, zatvaranja, radovi i
+obris kvarta. Nema drugog prizora na koji bi se prešlo, pa nema ni
+odbrojavanja. Desno od polja stoji stupac od najviše tri izjave (naslov ·
+vrijednost · kontekst), koliko stupac drži cijelih: izjava koja ne stane
+cijela skriva se, nikad se ne reže ni ne skraćuje trotočkom, pa na 1920 × 1080
+stoje najmanje dvije (tri kad je svaka vrijednost u jednom retku), na
+1366 × 768 najmanje jedna (dvije kad je prometna vrijednost u jednom retku),
+a na portretnom totemu tri. Poredane su po tome što je upravo sada
+najvažnije, od osam mogućih: prometna presuda, potres, zatvaranje u blizini, zadnji
+polazak (od 20 sati, po rasporedu ZET-a, nikad kao procjena dolaska),
+ZET-ova prometna obavijest, najava sjednice Gradske skupštine, radovi u
+kvartu ili gradu i kvartovske novosti. Ispod stupca stoji stalna pozivnica:
+QR uz poziv i uputu, kod preko cijele širine. Dežurna ljekarna na karti
+nosi prsten i svoju adresu; kad leži unutar 150 m od stajališta zaslona,
+adresa se s karte ispušta (ležala bi preko imena stajališta), a prsten
+ostaje i sigurnosna je traka i dalje imenuje u cijelosti. Zaglavlje nosi
+sat i, kad DHMZ odgovara, vrijeme kao
+stanje uz sat, nikad kao pločicu. Sigurnosna traka nosi presudu i tri
+stavke, bez odbrojavanja. Rasporedi za 1920 × 1080 i 1366 × 768 namjerno
+su različiti; QR u oba mora biti najmanje 240 CSS piksela.
 
 Radovi u tijeku broje se za gradsku četvrt stajališta kad je poznata i
-prizor to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
+izjava to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
 tek uveden, broje cijeli grad i kažu to izričito („Radovi u gradu”).
-Adresa `/kiosk/` s dodatkom `?prizor=promet`, `?prizor=veceras` ili
-`?prizor=grad` prikazuje samo taj prizor i zaustavlja rotaciju; koristi se
-za testiranje, demonstraciju ili kad operater svjesno želi zadržati jedan
-prizor na zaslonu. Aplikacija poštuje i sustavnu postavku smanjenog
-pokreta preglednika: uz nju rotacija također staje, na prvome prizoru.
+Adresa `/kiosk/` više ne prima dodatak `?prizor=`: nema više odabira
+prizora jer postoji samo jedan. Aplikacija i dalje poštuje sustavnu
+postavku smanjenog pokreta preglednika, ali sada zaustavlja samo glatki
+prijelaz pri pomicanju vozila na karti; podaci se i dalje osvježavaju kao
+i inače.
 
 Povezan zaslon preuzima javni izbor s telefona: područje, liniju, stajalište
 ili stavku. Sedam područja ima raspored za gledanje s udaljenosti, ne
@@ -90,6 +102,7 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   Aplikacija ne traži korisnikovu geolokaciju.
 - Kvaliteta zraka, arhivska građa, HŽ i dolasci po stajalištu nisu
   implementirane integracije ovog prototipa.
+- Zadnji polazak je polazak po rasporedu ZET-a, nikad dolazak.
 
 ## Lagani prikaz
 

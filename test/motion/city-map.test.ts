@@ -24,6 +24,7 @@ class FakeMap {
   readonly paint: Record<string, Record<string, unknown>> = {};
   readonly layout: Record<string, Record<string, unknown>> = {};
   readonly filters: Record<string, unknown> = {};
+  readonly zoomRanges: Record<string, [number, number]> = {};
   readonly cameraCalls: { kind: string; options: Record<string, unknown> }[] = [];
   center = { lng: 15.98, lat: 45.815 };
   zoom = 12.6;
@@ -71,6 +72,8 @@ class FakeMap {
   setPaintProperty(id: string, key: string, value: unknown): void { (this.paint[id] ??= {})[key] = value; }
   setLayoutProperty(id: string, key: string, value: unknown): void { (this.layout[id] ??= {})[key] = value; }
   setFilter(id: string, filter: unknown): void { this.filters[id] = filter; }
+  setLayerZoomRange(id: string, min: number, max: number): void { this.zoomRanges[id] = [min, max]; }
+  getLayer(id: string): unknown { return this.layers.find((l) => l.id === id); }
   setSprite(url: string): void { this.sprite = url; }
   queryRenderedFeatures(_geometry: unknown, options?: { layers?: string[] }) { return this.rendered.filter((f) => !options?.layers || options.layers.includes(f.layer.id)); }
   easeTo(options: Record<string, unknown>): void { this.cameraCalls.push({ kind: 'easeTo', options }); this.apply(options); }
@@ -322,7 +325,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
     map.fire('styleimagemissing', { id: 'townhall' });
     expect(map.images.get('townhall')).toBe(image);
     map.fire('styleimagemissing', {});
-    expect(map.images.size).toBe(10); // the nine overlay images and the one stand-in
+    expect(map.images.size).toBe(14); // the thirteen overlay images and the one stand-in
   });
 });
 
@@ -340,9 +343,55 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('closures')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
     expect(ids[ids.length - 1]).toBe('selection-ring');
-    expect([...map.images.keys()]).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
+    expect([...map.images.keys()]).toEqual([
+      'vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4',
+      'vehicle-plate-1', 'vehicle-plate-2', 'vehicle-plate-3', 'vehicle-plate-4',
+      'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
+    ]);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
+    expect(map.images.get('vehicle-plate-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
+  });
+
+  it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint, zoom ranges and the street names’ padding), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
+    const prozor: overlays.ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 30 };
+    const { map, handle } = await harness({ load: false, extra: { basemapProfile: 'prozor', prozor, interactive: false, symbolScale: 2 } });
+    expect(handle.placedNames!('roads_labels_major')).toEqual([]);
+    map.fire('load');
+    const layer = (id: string) => map.layers.find((l) => l.id === id) as { layout?: Record<string, unknown>; minzoom?: number; filter?: unknown } | undefined;
+    expect(layer('pois')).toBeUndefined(); // the prozor basemap
+    expect(layer('network-bus')!.layout!.visibility).toBe('none');
+    expect(layer('vehicle-noses')!.minzoom).toBe(14.6);
+    expect(layer('stop-labels')!.minzoom).toBe(14.6);
+    expect(JSON.stringify(layer('stops')!.filter)).toContain('"6"');
+    expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('vehicle-plate-');
+    expect(layer('roads_labels_major')!.layout!['text-padding']).toBe(30); // the set's padding reaches the basemap's names layer
+    // The names MapLibre actually placed, once each: the e2e's proof that few street names survive the field.
+    map.rendered = [
+      { layer: { id: 'roads_labels_major' }, properties: { name: 'Ilica' } },
+      { layer: { id: 'roads_labels_major' }, properties: { name: 'Ilica' } },
+      { layer: { id: 'roads_labels_major' }, properties: { name: 'Savska cesta' } },
+      { layer: { id: 'places_subplace' }, properties: { name: 'Trešnjevka' } },
+    ];
+    expect(handle.placedNames!('roads_labels_major')).toEqual(['Ilica', 'Savska cesta']);
+    expect(handle.placedNames!('places_subplace')).toEqual(['Trešnjevka']);
+    expect(handle.placedNames!('no-such-layer')).toEqual([]);
+    // The screen's stop changes, or the field is re-measured: the dots, the labels, the noses and the street names' padding follow without a new map.
+    handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1, labelPadding: 48 });
+    expect(JSON.stringify(map.filters['stops'])).toContain('"17"');
+    expect(JSON.stringify(map.filters['stops'])).not.toContain('"6"');
+    expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, 24]);
+    expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
+    expect(map.layout['vehicles']?.['icon-allow-overlap']).toEqual(['step', ['zoom'], false, 15.1, true]);
+    expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
+    // Back to no option set: today's drawing, thresholds and the profile's own padding included.
+    handle.setProzor!(null);
+    expect(map.layout['network-bus']?.visibility).toBe('visible');
+    expect(map.zoomRanges['vehicle-noses']).toEqual([overlays.PILL_OVERLAP_ZOOM, 24]);
+    expect(map.zoomRanges['stop-labels']).toEqual([overlays.STOP_LABEL_ZOOM, 24]);
+    expect(map.layout['roads_labels_major']?.['text-padding']).toBe(basemap.PROZOR_LABEL_PADDING_PX);
+    handle.destroy();
+    expect(handle.placedNames!('roads_labels_major')).toEqual([]);
   });
 
   it('flips theme through paint properties and the sprite, never a setStyle, and follows <html data-theme-resolved> live', async () => {

@@ -22,7 +22,13 @@
 // one. Measured as the compact landscape it would shrink to 0.8 and put the
 // credit line under the 13 px floor and the QR under 240 px on a wall that
 // has the room.
+//
+// The invitation's column is composed per drawing too (plan "The column",
+// R-KP5): the tables at the foot say how many statements each composition
+// shows, how many line badges it lets the transit statement carry, and how
+// long a title it lets the composer keep before shortening it at a word.
 import { KIOSK_HANDHELD_MAX_PX, KIOSK_WIDE_MIN_PX } from '../core/breakpoints';
+import { SAY_KINDS } from './say-kinds';
 
 export type KioskSize = 'wide' | 'compact' | 'handheld';
 
@@ -48,18 +54,6 @@ export interface LayoutDecision {
    *  the totem's rules, which hide the date and lay the basics in two columns
    *  for a 1080 x 1920 wall. */
   totem: boolean;
-}
-
-/** How many members `repeat(auto-fit, minmax(min, 1fr))` actually puts in one
- *  row `width` px wide with `gap` between them: n members need
- *  n*min + (n-1)*gap. The engine's own arithmetic, so a rail asks for exactly
- *  the number of tiles it has room to draw instead of a number drawn once for
- *  1920 and kept at every other size. Zero means nothing has been laid out yet
- *  (a pre-paint mount, happy-dom), and the caller falls back to the drawing's
- *  own count; one member always fits. */
-export function railColumns(width: number, min: number, gap: number): number {
-  if (!(width > 0) || !(min > 0)) return 0;
-  return Math.max(1, Math.floor((width + gap) / (min + gap)));
 }
 
 export function decideLayout(viewport: Viewport): LayoutDecision {
@@ -100,3 +94,68 @@ export function measureViewport(root: HTMLElement, win: { innerWidth?: number; i
   const height = rect?.height || win.innerHeight || WIDE.height;
   return { width, height };
 }
+
+// --- The invitation's four compositions ----------------------------------------
+
+/** The four drawings the invitation is composed for: the two landscape sizes, the totem and a phone. */
+export type Composition = 'wide' | 'compact' | 'portrait' | 'handheld';
+
+/** Which of the four a layout decision is: the totem is the compact size stood up, a phone its own drawing. */
+export function compositionOf(decision: Pick<LayoutDecision, 'size' | 'totem'>): Composition {
+  if (decision.size === 'handheld') return 'handheld';
+  return decision.totem ? 'portrait' : decision.size;
+}
+
+/** The field's width in CSS px at each composition's design size, the camera's
+ *  input before anything is laid out (kiosk/mapview.ts fieldZoom); the map
+ *  host's measured width replaces it from the first paint after layout. Wide:
+ *  1920 less the 520 px column. Compact: 1366 less the 440 px column. Portrait:
+ *  the totem's whole 1080. Handheld: 390 less the stage's 16 px padding on
+ *  both sides. Being out by a hundred pixels moves the derived zoom by about a
+ *  tenth, which is why the measurement, not this table, wins once it exists. */
+export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.freeze({ wide: 1400, compact: 926, portrait: 1080, handheld: 358 });
+
+/** The field's height in CSS px at each composition's design size, beside the
+ *  width: together they say how much ground the field shows, which sets the
+ *  street names' collision padding (kiosk/mapview.ts labelPadding) before the
+ *  map host is measured. Wide: 1080 less the 96 px header and strip. Compact:
+ *  768 less 72 and 72. Portrait: the totem's 1920 less 72 and 72 and the
+ *  column's row under the field (411 px with R-KP21's card, measured 16 Sept
+ *  2026). Handheld: the 280 px map band (kiosk.css --k-map-band). As with the
+ *  width, the measurement wins once it exists. */
+export const FIELD_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = Object.freeze({ wide: 888, compact: 624, portrait: 1365, handheld: 280 });
+
+/** How many statements each composition asks the ranker for (R-KP5): three
+ *  on a wide wall and on the totem's row, two on the compact wall, and every
+ *  candidate on a phone, which scrolls -- "all" is say.ts's own list of kinds
+ *  (SAY_KINDS, kiosk/say-kinds.ts), read rather than copied, so a ninth kind reaches the phone
+ *  without an edit here and without an infinity the composer would have to
+ *  guard against. These are ceilings the ranker offers; the room decides the
+ *  rest (R-KP22): a statement the column does not hold whole is hidden by
+ *  measurement (kiosk/invitation.ts), never clipped, and the e2e pins floors
+ *  (kiosk.css "The column" carries the measured budget). */
+export const SAY_SLOTS: Readonly<Record<Composition, number>> = Object.freeze({ wide: 3, compact: 2, portrait: 3, handheld: SAY_KINDS.length });
+
+/** Line badges before the transit statement says "+N". The kicker sits on
+ *  the first badge row (kiosk.css .k-say-label), so the badges have the
+ *  column's width less the kicker ("PROMET", about 105 / 79 / 79 / 60 px)
+ *  and its gap; a k-size badge is --k-badge wide (60 / 46 / 46 / 36 px, up
+ *  to ten more for three digits) plus its 0.3-gap, and the "+N" tail about
+ *  46 / 34 / 34 / 30 px. The cap is what the rows the budget allows hold
+ *  with the tail at any digit count, so a transit statement's height is
+ *  known before it is measured (kiosk.css, "The column"): wide, two rows
+ *  (356 px: five two-digit or four three-digit badges a row, so seven and
+ *  the tail); compact, one row (318 px: four and the tail; five three-digit
+ *  badges overflow it); the totem's left half, eight (405 px: eight
+ *  two-digit badges on one row, or two rows with the tail, and its 388 px
+ *  of room holds three statements either way); a phone, six on the 292 px
+ *  it has (a phone scrolls; the cap keeps the row a glance). */
+export const SAY_BADGE_CAP: Readonly<Record<Composition, number>> = Object.freeze({ wide: 7, compact: 4, portrait: 8, handheld: 6 });
+
+/** A title's shortening budget in characters (a notice, a session, a work),
+ *  cut at a word boundary with "..." by the composer (R-KP14), never by CSS:
+ *  about two lines of the main tier on each column -- 40 px bold across 472
+ *  px, 28 px across 368 px, and the totem's and the phone's widths at the
+ *  compact tier. The measured two-line clamp in kiosk/invitation.ts catches a
+ *  title of wide glyphs the count let through. */
+export const SAY_VALUE_CHARS: Readonly<Record<Composition, number>> = Object.freeze({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
