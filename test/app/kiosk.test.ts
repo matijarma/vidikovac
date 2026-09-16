@@ -259,7 +259,8 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
     expect(text(q(rows[0]!, '.k-fr-sub'))).toBe('kasni 2 min · 1 vozilo u blizini');
     expect(rows[0]!.dataset.tone).toBe('late');
-    expect(text(q(promet, '.k-panel-meta'))).toBe('1 vozilo u blizini · ZET 14:31 · još 1 linija');
+    expect(text(q(promet, '.k-panel-meta'))).toBe('1 vozilo u blizini · još 1 linija');
+    expect(text(q(promet, '.k-panel-credit'))).toContain('ZET 14:31');
     // The city panel names the Assembly's next session with its day; the surroundings the closure by distance; the forecast and the gazette, not in this teaser, say so honestly.
     expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-title'))).toBe('13. sjednica Gradske skupštine');
     expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-day'))).toBe('čet 17. 9.');
@@ -1054,6 +1055,10 @@ describe('the field, the column and the one map', () => {
     expect(rows.every((el) => !el.hidden)).toBe(true); // the tick measures nothing
     k.repaint();
     expect(rows.map((el) => el.hidden)).toEqual([false, false, false, false, false, true, true, true]);
+    // A box that holds no row at all hides every row and keeps the kicker and the credit.
+    height = 30;
+    k.repaint();
+    expect(rows.every((el) => el.hidden)).toBe(true);
     // The box grows (a resize): every row comes back.
     height = 600;
     k.repaint();

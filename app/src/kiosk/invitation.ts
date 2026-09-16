@@ -96,17 +96,20 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   const lastHtml: Partial<Record<PanelId, string>> = {};
   let disposed = false;
 
-  /** Every row whole or not at all: the ones a panel's box does not hold are hidden from the foot up. */
+  /** Every row whole or not at all: the ones a panel's box does not hold are
+   *  hidden from the foot up, then the forecast's sentence; the kicker, the
+   *  figure and the credit always stand. A box of no height (a pre-paint
+   *  mount, a phone's auto-height panel) hides nothing. */
   function fit(): void {
     for (const id of PANEL_IDS) {
       const panel = panels[id];
-      const rows = [...panel.querySelectorAll<HTMLElement>('.k-fr')];
-      for (const row of rows) row.hidden = false;
+      const yielding = [...panel.querySelectorAll<HTMLElement>('.k-fr'), ...panel.querySelectorAll<HTMLElement>('.k-panel-text')];
+      for (const el of yielding) el.hidden = false;
       if (panel.clientHeight === 0) continue;
-      let shown = rows;
-      while (shown.length > 1 && panel.scrollHeight > panel.clientHeight + 1) {
-        shown[shown.length - 1]!.hidden = true;
-        shown = shown.slice(0, -1);
+      let left = yielding;
+      while (left.length > 0 && panel.scrollHeight > panel.clientHeight + 1) {
+        left[left.length - 1]!.hidden = true;
+        left = left.slice(0, -1);
       }
     }
   }

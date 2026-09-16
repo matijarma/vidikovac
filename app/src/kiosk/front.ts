@@ -196,7 +196,7 @@ export function weatherPanel(input: FrontInput): FrontPanel {
     meta: dateWord,
     rows,
     figureMarkup: figure,
-    credit: `DHMZ · ${s.paired.forecast.toLowerCase()}`,
+    credit: 'DHMZ',
     state,
   };
 }
@@ -287,8 +287,9 @@ export function prometPanel(input: FrontInput): FrontPanel {
     : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
   const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
+  // The count near the stop and the lines beyond the cap; the ZET time goes with the credit, where the source is named.
   const meta = state === 'live' || state === 'stale'
-    ? [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), time ? `ZET ${time}` : '', board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ')
+    ? [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ')
     : '';
   const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : !stop ? s.lines.noStop : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
   return {
@@ -298,7 +299,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
     rows,
     note: input.lightweight && rows.length === 0 ? undefined : note,
     footMarkup: foot,
-    credit: `${s.lines.modelNote} · ZET${state === 'stale' ? ` · ${s.paired.stale}` : ''}`,
+    credit: [time ? `ZET ${time}` : 'ZET', state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
     state,
   };
 }
@@ -362,7 +363,7 @@ function rowMarkup(row: FrontRow): string {
 export function panelMarkup(panel: FrontPanel): string {
   const head = `<header class="k-panel-head"><h2 class="k-panel-kicker">${escapeHtml(panel.kicker)}</h2>${panel.meta ? `<p class="k-panel-meta">${escapeHtml(panel.meta)}</p>` : ''}</header>`;
   const rowsId = panel.id === 'promet' ? ' data-testid="kiosk-lines"' : '';
-  const body = panel.rows.length > 0 ? `<ul class="k-rows"${rowsId}>${panel.rows.map(rowMarkup).join('')}</ul>` : '';
+  const body = panel.rows.length > 0 ? `<ul class="k-panel-rows"${rowsId}>${panel.rows.map(rowMarkup).join('')}</ul>` : '';
   const note = panel.note ? `<p class="k-panel-note"${panel.state === 'down' ? ' data-state="down"' : ''}>${escapeHtml(panel.note)}</p>` : '';
   const credit = panel.credit ? `<p class="k-panel-credit">${escapeHtml(panel.credit)}</p>` : '';
   return `${head}${panel.figureMarkup ?? ''}${body}${note}${panel.footMarkup ?? ''}${credit}`;

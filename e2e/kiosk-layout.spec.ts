@@ -57,7 +57,7 @@ function geometryIssues(page: Page): Promise<string[]> {
     const shown = (sel: string): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null);
     const tag = (el: HTMLElement): string => `${el.className.split(' ')[0]}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`;
     // A panel, the field, a row, the card or a paired block clips its children when a row does not fit.
-    for (const el of shown('.k-field, .k-panel, .k-rows, .k-fr, .k-invite, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
+    for (const el of shown('.k-field, .k-panel, .k-rows, .k-panel-rows, .k-fr, .k-invite, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
       if (el.scrollHeight > el.clientHeight + 1) out.push(`overflow-y ${tag(el)} ${el.scrollHeight}>${el.clientHeight}`);
       if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     }

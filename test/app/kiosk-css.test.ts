@@ -283,7 +283,7 @@ describe('the invitation: one field, one column', () => {
     expect(bottom.gap).toBe('1px');
     const column = decls('.k-column');
     expect(column['grid-row']).toBe('1 / span 2');
-    expect(column['grid-template-rows']).toBe('auto minmax(0, 1fr) auto');
+    expect(column['grid-template-rows']).toBe('minmax(0, 1fr) minmax(0, 1fr) auto');
     expect(decls('.k-panel--card')['align-content']).toBe('end');
     // The old column of statements and its side tiles are gone.
     for (const dead of ['.k-says', '.k-say ', '.k-say-value', '.k-invitation', '.k-side-tiles']) expect(BARE, dead).not.toContain(dead);
@@ -299,11 +299,11 @@ describe('the invitation: one field, one column', () => {
     for (const [id, colour] of [['tonight', '--k-violet'], ['weather', '--k-amber'], ['city', '--k-action'], ['promet', '--k-action'], ['around', '--k-amber']]) {
       expect(decls(`.k-panel[data-panel='${id}'] .k-panel-kicker`).color, id).toBe(`var(${colour})`);
     }
-    expect(decls(".k-panel[data-panel='tonight'] .k-rows")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
+    expect(decls(".k-panel[data-panel='tonight'] .k-panel-rows")['grid-template-columns']).toBe('repeat(2, minmax(0, 1fr))');
     const row = decls('.k-fr');
     expect(row['border-top']).toBe('1px solid var(--k-line)');
     expect(row['grid-template-columns']).toBe('auto minmax(0, 1fr)');
-    expect(decls('.k-rows > .k-fr:first-child')['border-top']).toBe('0');
+    expect(decls('.k-panel-rows > .k-fr:first-child')['border-top']).toBe('0');
     const title = decls('.k-fr-title');
     expect(title['-webkit-line-clamp']).toBe('2');
     expect(title['overflow-wrap']).toBe('anywhere');
@@ -315,7 +315,8 @@ describe('the invitation: one field, one column', () => {
     }
     expect(decls('.k-panel-credit')['margin-top']).toBe('auto');
     expect(decls('.k-panel-note[data-state=\'down\']').color).toBe('var(--k-rose)');
-    expect(decls('.k-panel-text')['-webkit-line-clamp']).toBe('3');
+    expect(decls('.k-panel-text')['-webkit-line-clamp']).toBe('2');
+    expect(decls('.k-panel-rows').flex).toBe('none');
   });
   it('the code crossfade is the one animation, by a keyframe and no timer; off under reduced motion and lagano', () => {
     expect(BARE).not.toContain('k-say-in');
@@ -390,11 +391,11 @@ describe('the portrait composition', () => {
   it('stacks the front page: tonight on top, the bottom row of three at a third each with the field at least 340 px, the column as a row at the foot with the forecast over the city beside the card', () => {
     const front = decls(`${P} .k-front`);
     expect(front['grid-template-columns']).toBe('minmax(0, 1fr)');
-    expect(front['grid-template-rows']).toBe('minmax(0, 1fr) auto auto');
+    expect(front['grid-template-rows']).toBe('minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.95fr)');
     expect(decls(`${P} .k-bottom .k-field`)['min-height']).toBe('calc(340px * var(--k-zoom))');
     const column = decls(`${P} .k-column`);
     expect(column['grid-template-columns']).toBe('minmax(0, 1fr) minmax(0, 1.1fr)');
-    expect(column['grid-template-rows']).toBe('auto auto');
+    expect(column['grid-template-rows']).toBe('auto minmax(0, 1fr)');
     expect(decls(`${P} .k-column > .k-panel--card`)['grid-row']).toBe('1 / span 2');
     // The paired compositions keep their portrait stack as before.
     expect(decls(`${P} .k-paired`)['grid-template-rows']).toBe('minmax(55%, 1fr) minmax(0, auto)');
@@ -424,7 +425,7 @@ describe('the handheld composition', () => {
     const panel = decls(`${H} .k-panel`);
     expect(panel.overflow).toBe('visible');
     expect(panel['border-radius']).toBe('var(--k-radius)');
-    expect(decls(`${H} .k-panel[data-panel='tonight'] .k-rows`)['grid-template-columns']).toBe('minmax(0, 1fr)');
+    expect(decls(`${H} .k-panel[data-panel='tonight'] .k-panel-rows`)['grid-template-columns']).toBe('minmax(0, 1fr)');
     expect(decls(`${H} .k-invite`)['margin-top']).toBe('var(--k-gap)');
   });
 });
