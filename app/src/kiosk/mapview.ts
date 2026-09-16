@@ -18,6 +18,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
+import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapPoint } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import { vehicleFixes } from '../motion/fixes';
@@ -25,8 +26,21 @@ import { vehicleFixes } from '../motion/fixes';
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** Street level around one stop: named streets, the stop, the vehicles near it. */
 export const KIOSK_MAP_ZOOM = 15;
-/** Symbols on a screen read from steps away: larger than on a phone or a desk. */
-export const KIOSK_SYMBOL_SCALE = 1.5;
+/** Symbols on a screen read from three metres, not from steps away. At 1.5
+ *  the number on a vehicle pill was 18 CSS px, which on a 55-inch 1080p panel
+ *  subtends 9.2 arcminutes -- under the ten-arcminute floor the basemap's sign
+ *  profile derives (map/basemap.ts), so the one mark the whole transport
+ *  chapter is about was the one mark that could not be read. At 2 it is 24 px
+ *  (12.2'), and 2 is also exactly the SDF images' own pixel ratio, so the
+ *  overlay rasters draw pixel for pixel on a 1x television instead of being
+ *  resampled. */
+export const KIOSK_SYMBOL_SCALE = 2;
+
+/** The screen is the one surface read from three metres, so it is the one
+ *  surface on the sign basemap: promoted neighbourhood, street and water
+ *  names, a ranked civic POI list, and nothing that cannot reach the
+ *  readability floor (map/basemap.ts). */
+export const KIOSK_BASEMAP_PROFILE: BasemapProfile = 'sign';
 
 export type FeedState = 'live' | 'stale' | 'down';
 
@@ -52,12 +66,14 @@ export interface KioskMapRequest extends MapSlotOptions {
   interactive?: boolean;
   symbolScale?: number;
   locale?: string;
+  /** The screen reads its basemap from three metres: the sign profile. */
+  basemapProfile?: BasemapProfile;
 }
 
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'padding'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -89,7 +105,7 @@ export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMap
   let view: KioskMapView = { zoom: KIOSK_MAP_ZOOM };
   let pushed = '';
   let feed: FeedState = 'down';
-  let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE };
+  let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE };
   let current: KioskMapHandle | null = null;
   const wrapped: MapFactory | undefined = factory && ((options) => {
     const merged: CityMapOptions = { ...options, ...extras, ...view };
@@ -196,6 +212,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     stop: input.stop,
     interactive: false,
     symbolScale: KIOSK_SYMBOL_SCALE,
+    basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
   };
   if (input.padding) request.padding = input.padding;
@@ -210,7 +227,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     request.selectedStop = input.selection.id;
   }
   // The view is set before the slot call so a map created by it starts there.
-  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, locale: input.locale });
+  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale });
   adapter?.setView(viewOf(request));
   const container = maps.slot(request);
   // An outage is no evidence of motion: the map holds until the feed is live again.

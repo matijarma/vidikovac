@@ -23,7 +23,7 @@ import { createModel, type Drawn, type Fix, type Model } from '../motion/model';
 import type { Network } from '../motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
-import type { BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
+import type { BasemapProfile, BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 
@@ -433,6 +433,10 @@ export interface CityMapOptions {
   attributionCompact?: boolean;
   /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
   placeLabels?: boolean;
+  /** Which basemap this surface reads: 'sign' for the public screen, whose
+   *  labels are sized from a stated viewing geometry and whose POI list is cut
+   *  to a ranked civic one (map/basemap.ts). Default 'default'. */
+  basemapProfile?: BasemapProfile;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -1063,7 +1067,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  wrote the object out by hand and dropped anything not in that literal --
    *  a silent regression on the surface that flips theme twice a day. */
   function basemapOptions(): BasemapStyleOptions {
-    return { locale, origin: deps.origin, placeLabels: options.placeLabels };
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile };
   }
 
   function setTheme(next: MapTheme): void {
