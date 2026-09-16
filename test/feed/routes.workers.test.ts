@@ -57,7 +57,7 @@ describe('readDataToken', () => {
 });
 
 describe('GET /api/teaser', () => {
-  it('serves the open modules whole and the session modules reduced, cacheable for 30 s', async () => {
+  it('serves the open modules whole and the session modules reduced, cacheable for 5 s', async () => {
     const response = await call('/api/teaser');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe(TEASER_CACHE_CONTROL);

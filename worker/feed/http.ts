@@ -43,7 +43,8 @@ export async function upstreamFetchConditional(url: string, etag: string | null,
   return response;
 }
 
-/** The only FetchContext modules ever see: identified, time-boxed, injectable clock. */
-export function makeFetchContext(now: () => Date = () => new Date()): FetchContext {
-  return { fetch: (url, init) => upstreamFetch(url, init), now };
+/** The only FetchContext modules ever see: identified, time-boxed, injectable
+ *  clock, and, for the module the twin feeds, the twin's payload (R-TE8). */
+export function makeFetchContext(now: () => Date = () => new Date(), twin?: FetchContext['twin']): FetchContext {
+  return { fetch: (url, init) => upstreamFetch(url, init), now, ...(twin ? { twin } : {}) };
 }

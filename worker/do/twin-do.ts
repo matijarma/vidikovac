@@ -46,7 +46,9 @@ import { buildPayload, type TripJoin } from '../twin/publish';
 import { recordFrame, type RecordOutcome } from '../twin/record';
 import { twinIndexSource, twinUpstream } from '../twin/seams';
 
-export const TWIN_DO_NAME = 'zet';
+import { TWIN_DO_NAME } from '../twin/twin-name';
+
+export { TWIN_DO_NAME };
 
 /** Above this share of tracked vehicles whose trip the index does not know,
  *  the static feed has moved on (ZET published a new timetable and the

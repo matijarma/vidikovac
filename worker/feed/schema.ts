@@ -4,6 +4,7 @@
 // shape. Nothing in this file knows about any particular source.
 
 import type { VehicleMotion } from '../../shared/motion/wire';
+import type { FeedPayload } from './payload';
 
 export type ModuleId =
   | 'zet-rt'
@@ -95,6 +96,10 @@ export interface ModuleSnapshot {
   sourceUpdatedAt?: string;
   /** Set when status is 'stale': the moment the live fetch first failed. */
   staleSince?: string;
+  /** When the producer knows its next change (the twin's next tick, R-TE4);
+   *  the cache layer keeps the snapshot until then and a client may align
+   *  its next poll to it. */
+  validUntil?: string;
   attribution: Attribution;
   items: FeedItem[];
   /** Independent source health, including successful empty responses. */
@@ -107,6 +112,10 @@ export interface FetchContext {
   /** Fetch with the project's User-Agent and a 6 s timeout already applied. */
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
   now: () => Date;
+  /** The twin's current payload, injected by the cache layer for a module
+   *  the twin feeds (`ModuleSpec.twin`, R-TE2/R-TE8); absent in a fixture
+   *  context, where the module fetches its source directly. */
+  twin?: () => Promise<FeedPayload>;
 }
 
 export interface ModuleSpec {
@@ -119,6 +128,14 @@ export interface ModuleSpec {
   attribution: Attribution;
   /** Fetch and normalise. Must throw on any upstream failure. */
   fetcher: (ctx: FetchContext) => Promise<Omit<ModuleSnapshot, 'status' | 'staleSince'>>;
+  /** The module is served by the twin Durable Object, which the cache layer
+   *  offers through `FetchContext.twin` (R-TE8). */
+  twin?: boolean;
+  /** Whether a non-live entry in `sources` makes the whole snapshot stale
+   *  (the default for composite modules whose sub-sources fail one at a
+   *  time). False for the twin's module: its snapshot `status` is the twin's
+   *  health, and ZET's own silence is told by `sources.zet` (R-TE5). */
+  degradeOnSources?: boolean;
 }
 
 /**

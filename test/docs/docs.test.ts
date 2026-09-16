@@ -40,7 +40,7 @@ describe('docs/izvori.md', () => {
     expect(emsc.split('|').map((cell) => cell.trim())[4]).toBe(MODULES.emsc.attribution.licence);
   });
   it('states TTL and maxStale for the nine modules exactly as the plan does', () => {
-    for (const pair of ['30 / 300', '180 / 1800', '60 / 3600', '300 / 7200', '600 / 7200', '1800 / 86400', '3600 / 604800', '86400 / 2592000']) {
+    for (const pair of ['10 / 300', '180 / 1800', '60 / 3600', '300 / 7200', '600 / 7200', '1800 / 86400', '3600 / 604800', '86400 / 2592000']) {
       expect(izvori, `missing TTL pair ${pair}`).toContain(pair);
     }
   });

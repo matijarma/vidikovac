@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { TEASER_BOX_CENTRE, TEASER_BOX_HALF_M, ZET_RT_URL, delayWords, inTeaserBox, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
+import { TEASER_BOX_CENTRE, TEASER_BOX_HALF_M, ZET_RT_URL, delayWords, fetchZetRt, inTeaserBox, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
+import type { FeedPayload } from '../../worker/feed/payload';
 
 const bytes = new Uint8Array(readFileSync(new URL('../fixtures/zet-rt.pb', import.meta.url)));
 const routes = { '12': { shortName: '12', longName: 'Ljubljanica - Dubec', type: 0 } };
@@ -110,5 +111,43 @@ describe('inTeaserBox', () => {
     expect(inTeaserBox(16.06, 45.83)).toBe(false); // Dubrava, ~6.5 km east
     expect(inTeaserBox(15.94, 45.813)).toBe(false); // Črnomerec, ~2.9 km west
     expect(inTeaserBox(15.9769, 45.83)).toBe(false); // ~1.9 km north
+  });
+});
+
+// A4 (R-TE2, R-TE8): the module no longer talks to ZET itself when the cache
+// layer offers the twin; the direct fetch stays as the fixture path and as
+// the fallback for a context without a twin.
+describe('fetchZetRt through the twin', () => {
+  const twinPayload = {
+    items: [{ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 6', motion: { history: [[-5, 15.97, 45.81]] } }],
+    sourceUpdatedAt: '2026-09-16T00:00:00.000Z',
+    validUntil: '2026-09-16T00:00:11.500Z',
+  } as FeedPayload;
+
+  it('returns the twin payload untouched and never fetches ZET when the context has a twin', async () => {
+    let fetched = 0;
+    const payload = await fetchZetRt({
+      now: () => new Date('2026-09-16T00:00:02.000Z'),
+      fetch: async () => {
+        fetched += 1;
+        return new Response(bytes);
+      },
+      twin: async () => twinPayload,
+    });
+    expect(payload).toBe(twinPayload);
+    expect(fetched).toBe(0);
+  });
+
+  it('fetches and parses ZET directly when the context has no twin', async () => {
+    let fetched = 0;
+    const payload = await fetchZetRt({
+      now: () => new Date('2026-09-16T00:00:02.000Z'),
+      fetch: async () => {
+        fetched += 1;
+        return new Response(bytes);
+      },
+    });
+    expect(fetched).toBe(1);
+    expect(payload.items.filter((item) => item.id.startsWith('vehicle:')).length).toBe(332);
   });
 });

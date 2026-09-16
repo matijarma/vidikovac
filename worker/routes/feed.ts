@@ -21,7 +21,10 @@ export interface FeedDeps {
   now?: () => Date;
 }
 
-export const TEASER_CACHE_CONTROL = 'public, s-maxage=30';
+/** The teaser carries zet-rt, which turns over every 10 s (R-TE4): five
+ *  seconds at the edge keeps a kiosk within one tick of the twin without
+ *  costing more than one origin render per colo per tick. */
+export const TEASER_CACHE_CONTROL = 'public, s-maxage=5';
 
 export function readDataToken(request: Request, url: URL): string {
   const query = url.searchParams.get('token');
