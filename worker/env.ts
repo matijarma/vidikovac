@@ -9,10 +9,13 @@ export interface Env {
   ROOM_DO: DurableObjectNamespace;
   INDEX_DO: DurableObjectNamespace;
   METRICS_DO: DurableObjectNamespace;
+  TWIN_DO: DurableObjectNamespace;
   RL_SCAN: RateLimiter;
   RL_DATA: RateLimiter;
   RL_OPEN: RateLimiter;
   MAPS?: R2Bucket;
+  /** Raw ZET realtime frames for replay (worker/twin/record.ts); absent in a worktree without the bucket. */
+  RECORDINGS?: R2Bucket;
   /** Unset means production. Test bypasses require exactly "test". */
   APP_ENV?: string;
   // Runtime values, all optional: code falls back to the defaults in config.ts.

@@ -10,6 +10,8 @@ import { handleStats } from './routes/stats';
 import { handleScreens } from './routes/screens';
 import { handleMaps } from './routes/maps';
 import { warmFeeds } from './feed/cache';
+import { twinStub } from './do/twin-do';
+import { logError } from './log';
 
 // Durable Object classes are re-exported from the entry module so the migration
 // in wrangler.jsonc can bind them. Storage survives because the class names
@@ -18,6 +20,7 @@ export { BeaconDO } from './do/beacon-do';
 export { RoomDO } from './do/room-do';
 export { IndexDO } from './do/index-do';
 export { MetricsDO } from './metrics-do';
+export { TwinDO } from './do/twin-do';
 export { json } from './http';
 
 export type RouteHandler = (
@@ -52,6 +55,8 @@ export default {
     return withoutEdgeTransforms(await env.ASSETS.fetch(request));
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    await warmFeeds(env, ctx);
+    // The twin's alarm chain is self-rearming; the five-minute cron is only
+    // its watchdog, restarting a chain an isolate reset may have dropped.
+    await Promise.all([warmFeeds(env, ctx), twinStub(env).ensureRunning().catch((error) => logError('twin_watchdog_failed', error))]);
   },
 } satisfies ExportedHandler<Env>;

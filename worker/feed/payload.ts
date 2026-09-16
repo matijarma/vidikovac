@@ -12,6 +12,10 @@ export interface FeedPayload {
   sourceUpdatedAt?: string;
   sources?: Record<string, SourceAvailability>;
   coverage?: ModuleSnapshot['coverage'];
+  /** When the producer knows the next change (the twin's next tick, R-TE4):
+   *  the cache layer keeps the snapshot until then instead of a fixed ttl,
+   *  so every colo turns over on the same beat. ISO 8601. */
+  validUntil?: string;
 }
 
 /** A total is known only when every requested source supplied one. */
