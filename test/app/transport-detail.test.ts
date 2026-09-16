@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { VehicleInfo } from '../../app/src/map/city-map';
-import { decodeNetwork } from '../../app/src/motion/network';
+import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 

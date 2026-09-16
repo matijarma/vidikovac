@@ -25,6 +25,15 @@ const ROWS: MetricsDailyRow[] = [
   row('2026-09-10', 13, 'export', 'sigurnost', 'ics', 4),
   row('2026-09-10', 13, 'over_cap', '', '', 1),
   row('2026-09-11', 9, 'session_start', 'kiosk', 'donji-grad', 5),
+  row('2026-09-11', 9, 'twin_tick', 'ok', 'warm', 800),
+  row('2026-09-11', 9, 'twin_tick', 'unchanged', 'warm', 60),
+  row('2026-09-11', 9, 'twin_tick', 'error', 'cold', 3),
+  row('2026-09-11', 10, 'static_watch', 'newer', '', 2),
+  row('2026-09-11', 10, 'static_watch', 'current', '', 21),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt25', 80),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt50', 15),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt100', 4),
+  row('2026-09-11', 11, 'twin_hindsight', '30s', 'ge200', 1),
 ];
 
 const VIEW = { days: 7, since: '2026-09-05', today: '2026-09-11', rows: ROWS };
@@ -98,5 +107,25 @@ describe('renderStatsPage', () => {
   it('exports the window constants the route clamps against', () => {
     expect(DEFAULT_DAYS).toBe(30);
     expect(MAX_DAYS).toBe(365);
+  });
+});
+
+// A7 (R-TE3, R-TE18): the twin's health on the operator page and the static-feed drift with its runbook.
+describe('renderStatsPage: the twin', () => {
+  it('leads with the share of good ticks, tabulates ticks by outcome and start, and names the static-feed drift', () => {
+    const html = renderStatsPage(VIEW);
+    expect(html).toContain('<div class="vital-k">Blizanac u redu</div>');
+    expect(html).toContain('<div class="vital-v">99,7 %</div>'); // (800 + 60) / 863 ticks, hr-HR
+    expect(html).toContain('863 otkucaja');
+    expect(html).toContain('<h2>Blizanac</h2>');
+    expect(html).toContain('>800<');
+    expect(html).toContain('>unchanged<');
+    expect(html).toContain('>cold<');
+    expect(html).toContain('2 od 23 provjera');
+    expect(html).toContain('npm run build:network &amp;&amp; npm run build:trips');
+    // Hindsight: the histogram and the percentiles stated against the bucket bounds (80 % under 25 m, 95 % under 50 m).
+    expect(html).toContain('<h3>Ocjena unatrag</h3>');
+    expect(html).toContain('>lt25<');
+    expect(html).toContain('30 s: p50 ispod 25 m, p95 ispod 50 m');
   });
 });

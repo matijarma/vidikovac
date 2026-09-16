@@ -16,7 +16,7 @@ import type { I18n } from './i18n/i18n';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
-import { loadNetwork, type Network } from './motion/network';
+import { loadNetwork, type Network } from '../../shared/motion/network';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
@@ -796,7 +796,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(teaserTimer); // the injected pair is interval-shaped
       teaserTimer = null;
       continuePoll(loadTeaser(), armTeaserPoll, 'kiosk teaser');
-    }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now()));
+    }, nextPollDelay(byModule(teaser)['zet-rt']?.sourceUpdatedAt, now(), byModule(teaser)['zet-rt']?.validUntil));
   }
   let teaserSeq = 0;
   async function loadTeaser(): Promise<void> {

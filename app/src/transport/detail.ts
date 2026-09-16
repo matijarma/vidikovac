@@ -10,7 +10,7 @@ import type { I18n } from '../i18n/i18n';
 import { summariseRoutes, type RouteSummaryRow } from '../layers/route-summary';
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import type { VehicleInfo } from '../map/city-map';
-import type { Network } from '../motion/network';
+import type { Network } from '../../../shared/motion/network';
 import { compassKey } from '../motion/vehicle-card';
 import type { StopGroup } from './search';
 
@@ -77,10 +77,18 @@ export function headingFromBearing(bearing: number): { x: number; y: number } {
  * model has no heading (decision 5), never a guess.
  */
 export function vehicleDirection(i18n: I18n, net: Network | null, v: VehicleInfo): string {
+  if (v.headsign) return i18n.t('motion.direction', { towards: v.headsign });
   if (v.bearing === null) return i18n.t('motion.directionUnknown');
   const terminus = net && v.onShape !== null ? terminusName(net, v.onShape) : null;
   const towards = terminus ?? i18n.t(`motion.compass.${compassKey(headingFromBearing(v.bearing))}`);
   return i18n.t('motion.direction', { towards });
+}
+
+/** "sljedeće stajalište X" when the twin names a next stop the network knows, else null. */
+export function vehicleNextStop(i18n: I18n, net: Network | null, v: VehicleInfo): string | null {
+  if (!net || v.nextStopId === undefined) return null;
+  const name = net.stops.find((s) => s.id === v.nextStopId)?.name;
+  return name ? i18n.t('motion.nextStop', { stop: name }) : null;
 }
 
 /** The two ZET feeds inside the events module (worker/feed/modules/dogadanja/zet-rss.ts). */

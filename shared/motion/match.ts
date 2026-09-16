@@ -1,0 +1,332 @@
+// Map matching for the twin: where on the rail graph (a tram) or on its
+// route's polylines (a bus) a reported fix puts the vehicle. The trip's own
+// path is the prior; geometry only decides where the prior is silent or has
+// been proven wrong twice. Nothing here draws anything: the match is the
+// planner's anchor (plan.ts) and the ordering law's frame (laws.ts).
+//
+// Rules (plan "Engine core", R-TE22, the reviewer's A10):
+//   - candidates come from the edges within NEAR_M of the fix, on-path first;
+//   - a fix off its path by more than NEAR_M once is noise and stays on the
+//     path; twice in a row it is a detour, and the path is re-derived from
+//     the edge the vehicle is actually on;
+//   - two fixes further than OFF_GRAPH_M from every edge put the vehicle off
+//     the graph (a balloon loop, a depot track, a works detour no shape
+//     draws), a fix within NEAR_M of an edge brings it back;
+//   - a bus never touches a rail edge: it matches its route's bus shapes with
+//     model.ts's own hysteresis, or rides the free plane.
+
+import { dist, type XY } from './geo';
+import type { GraphNetwork } from './network';
+import { project, tangent } from './polyline';
+import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
+import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
+
+/** A fix within this of an edge is on it: ZET's GPS scatters up to about
+ *  30 m around the track it is on (the side of the street reads right in
+ *  the probe of 16 Sept), and twice that admits the rare wide fix without
+ *  admitting a parallel street. */
+export const NEAR_M = 60;
+/** A candidate whose direction of travel disagrees with the vehicle's own
+ *  last movement is probably the other track of the line; 60 m swings the
+ *  choice without overriding a genuinely large gap in distance (model.ts). */
+export const DIRECTION_PENALTY_M = 60;
+/** A candidate the vehicle could not have reached since its last fix at the
+ *  fleet's top speed, plus a fix's worth of slack, is probably a stray. */
+export const REACH_PENALTY_M = 60;
+export const REACH_SLACK_M = 50;
+/** A match already past the stop ZET says is next is suspect, but not
+ *  wrong: the update can be a tick stale. */
+export const PAST_NEXT_STOP_PENALTY_M = 40;
+/** Off-path fixes in a row before the path is re-derived: one is noise. */
+export const OFF_PATH_FIXES = 2;
+/** Beyond this from every edge the vehicle is not "a bit off", it is
+ *  somewhere the graph does not go (model.ts's DISCREPANCY_LIMIT_M). */
+export const OFF_GRAPH_M = 150;
+export const OFF_GRAPH_FIXES = 2;
+/** A bus keeps its shape unless a sibling beats it by this (model.ts). */
+export const BUS_HYSTERESIS_M = 25;
+
+export interface Prior {
+  /** The rail path the trip runs, or null for a shapeless pattern without a synthetic path (and for buses). */
+  pathIdx: number | null;
+  /** The bus shape the trip runs, or null for trams and unknown trips. */
+  shapeIdx: number | null;
+  routeId: string;
+  direction: 0 | 1 | null;
+}
+
+export interface Matcher {
+  priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior;
+  /** Pushes the fix into the track and matches it; returns the new match. */
+  matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null): Match;
+  /** Stops strictly between two arcs of a geometry key (`p<path>` or `b<shape>`), for the speed estimate. */
+  stopsBetween(key: string, fromS: number, toS: number): number;
+}
+
+interface Candidate {
+  edge: number;
+  pathIdx: number;
+  s: number;
+  d: number;
+  score: number;
+}
+
+export function createMatcher(net: GraphNetwork): Matcher {
+  const shapeIndexById = new Map<string, number>(net.shapes.map((shape, idx) => [shape.id, idx] as const));
+  const pathsByEdge = new Map<number, number[]>();
+  net.paths.forEach((path, pathIdx) => {
+    for (const e of path.edges) {
+      const list = pathsByEdge.get(e);
+      if (list) list.push(pathIdx);
+      else pathsByEdge.set(e, [pathIdx]);
+    }
+  });
+  const pathsByRoute = new Map<string, number[]>();
+  net.paths.forEach((path, pathIdx) => {
+    const list = pathsByRoute.get(path.route);
+    if (list) list.push(pathIdx);
+    else pathsByRoute.set(path.route, [pathIdx]);
+  });
+  const stopArcCache = new Map<number, Map<string, number>>();
+
+  function stopArc(pathIdx: number, stopId: string): number | null {
+    let byId = stopArcCache.get(pathIdx);
+    if (!byId) {
+      byId = new Map();
+      for (const entry of net.stopsOnPath(pathIdx)) if (!byId.has(entry.stop.id)) byId.set(entry.stop.id, entry.s);
+      stopArcCache.set(pathIdx, byId);
+    }
+    return byId.get(stopId) ?? null;
+  }
+
+  /** The index of the edge under arc `s` of a path. */
+  function edgeIndexAt(pathIdx: number, s: number): number {
+    const path = net.paths[pathIdx];
+    let k = 0;
+    while (k + 1 < path.edges.length && path.offsets[k + 1] <= s) k++;
+    return k;
+  }
+
+  function edgeTangentAgrees(edge: number, sOnEdge: number, dir: XY | null): boolean {
+    if (!dir) return true;
+    const e = net.edges[edge];
+    const tan = tangent(e.pts, e.cum, sOnEdge);
+    return tan.x * dir.x + tan.y * dir.y >= 0;
+  }
+
+  function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior {
+    if (shapeId !== null) {
+      const shapeIdx = shapeIndexById.get(shapeId);
+      if (shapeIdx !== undefined) {
+        const pathIdx = net.pathOfShape(shapeIdx);
+        const shapeDir = net.shapes[shapeIdx].direction;
+        return { pathIdx, shapeIdx, routeId, direction: shapeDir === 0 || shapeDir === 1 ? shapeDir : direction };
+      }
+    }
+    if (direction !== null) {
+      const synthetic = net.paths.findIndex((p) => p.shape === null && p.route === routeId && p.direction === direction);
+      if (synthetic >= 0) return { pathIdx: synthetic, shapeIdx: null, routeId, direction };
+    }
+    return { pathIdx: null, shapeIdx: null, routeId, direction };
+  }
+
+  /** The path to adopt for a vehicle found on `edge`: the route's own path
+   *  running the edge the way the vehicle moves, else any path of the route
+   *  on the edge, else any path at all (a diversion over another line's
+   *  rails), preferring the direction of movement throughout. */
+  function adoptPath(edge: number, sOnEdge: number, routeId: string, dir: XY | null): number | null {
+    const candidates = pathsByEdge.get(edge) ?? [];
+    if (candidates.length === 0) return null;
+    const agrees = edgeTangentAgrees(edge, sOnEdge, dir);
+    const own = candidates.filter((p) => net.paths[p].route === routeId);
+    const pool = own.length > 0 ? own : candidates;
+    // Every path runs the edge in the edge's own direction (edges are
+    // directed), so direction agreement is a property of the edge, not the
+    // path; among the pool prefer a path whose GTFS direction matches the
+    // movement sign when the edge itself disagrees with the movement, there is
+    // no better path on this edge anyway.
+    void agrees;
+    return pool[0];
+  }
+
+  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, routeId: string, restrictToRoute: boolean, nextStopId: string | null): Candidate[] {
+    const hits = net.edgesNear(p, NEAR_M);
+    const routeEdges = new Set<number>();
+    if (restrictToRoute) for (const pathIdx of pathsByRoute.get(routeId) ?? []) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
+    const out: Candidate[] = [];
+    for (const hit of hits) {
+      if (restrictToRoute && routeEdges.size > 0 && !routeEdges.has(hit.edge)) continue;
+      const pathIdx = adoptPath(hit.edge, hit.s, routeId, dir);
+      if (pathIdx === null) continue;
+      const path = net.paths[pathIdx];
+      const k = path.edges.indexOf(hit.edge);
+      const s = path.offsets[k] + hit.s;
+      let score = hit.d;
+      if (!edgeTangentAgrees(hit.edge, hit.s, dir)) score += DIRECTION_PENALTY_M;
+      if (track.match.pathIdx === pathIdx && dtSec > 0 && Math.abs(s - track.match.s) > MAX_SPEED_MS * dtSec + REACH_SLACK_M) score += REACH_PENALTY_M;
+      if (nextStopId !== null) {
+        const sNext = stopArc(pathIdx, nextStopId);
+        if (sNext !== null && s > sNext + PAST_NEXT_STOP_PENALTY_M) score += PAST_NEXT_STOP_PENALTY_M;
+      }
+      out.push({ edge: hit.edge, pathIdx, s, d: hit.d, score });
+    }
+    out.sort((a, b) => a.score - b.score || a.d - b.d);
+    return out;
+  }
+
+  function onPathMatch(pathIdx: number, p: XY): Match {
+    const proj = net.projectOntoPath(pathIdx, p);
+    const path = net.paths[pathIdx];
+    return { pathIdx, shapeIdx: path.shape, edge: path.edges[edgeIndexAt(pathIdx, proj.s)] ?? null, s: proj.s, residual: proj.d };
+  }
+
+  function matchTram(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null, prev: PlaneFix | null): Match {
+    const p = { x: fix.x, y: fix.y };
+    const moved = prev !== null && dist(prev, p) >= DEAD_ZONE_M;
+    const dir: XY | null = moved && prev ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
+    const dtSec = prev ? fix.atSec - prev.atSec : 0;
+
+    // A new prior (a new trip, or the twin re-deriving from the index) starts
+    // the vehicle over on that path; the ordering memory goes with the old one.
+    if (prior.pathIdx !== track.priorPath) {
+      track.priorPath = prior.pathIdx;
+      track.match = noMatch();
+      track.offPathCount = 0;
+      resetOrder(track);
+    }
+
+    // Off the graph entirely?
+    const anyNear = net.edgesNear(p, OFF_GRAPH_M);
+    if (anyNear.length === 0) {
+      track.offGraphCount++;
+      if (track.offGraphCount >= OFF_GRAPH_FIXES) {
+        track.offGraph = true;
+        track.match = noMatch();
+        resetOrder(track);
+      }
+      return track.match;
+    }
+    track.offGraphCount = 0;
+    const within = anyNear[0].d <= NEAR_M;
+    if (track.offGraph && !within) return track.match; // between the bands: still off, until a fix lands on an edge
+    if (track.offGraph && within) track.offGraph = false;
+
+    const working = track.match.pathIdx ?? prior.pathIdx;
+    if (working !== null) {
+      const onPath = onPathMatch(working, p);
+      if (onPath.residual <= NEAR_M) {
+        track.offPathCount = 0;
+        track.match = onPath;
+        return track.match;
+      }
+      track.offPathCount++;
+      if (track.offPathCount < OFF_PATH_FIXES) {
+        // One stray fix: noise. The vehicle stays on its path, at the projection.
+        track.match = onPath;
+        return track.match;
+      }
+      // A detour: the path is re-derived from the edge the vehicle is on.
+      const best = candidatesFor(track, p, dir, dtSec, prior.routeId, false, nextStopId)[0];
+      track.offPathCount = 0;
+      if (!best) {
+        track.match = { ...onPath }; // nothing within reach: keep the projection, the residual says how far off
+        return track.match;
+      }
+      if (best.pathIdx !== track.match.pathIdx) resetOrder(track);
+      track.match = { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d };
+      return track.match;
+    }
+
+    // No path known (R-TE22): the route's own edges decide, then any edge.
+    let best = candidatesFor(track, p, dir, dtSec, prior.routeId, true, nextStopId)[0];
+    if (!best) best = candidatesFor(track, p, dir, dtSec, prior.routeId, false, nextStopId)[0];
+    if (!best) {
+      // Between NEAR_M and OFF_GRAPH_M of every edge with no path to stand on: the free plane, not yet off-graph.
+      track.match = { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
+      return track.match;
+    }
+    track.match = { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d };
+    return track.match;
+  }
+
+  function matchBus(track: Track, fix: PlaneFix, prior: Prior, prev: PlaneFix | null): Match {
+    const p = { x: fix.x, y: fix.y };
+    const moved = prev !== null && dist(prev, p) >= DEAD_ZONE_M;
+    const dir: XY | null = moved && prev ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
+    const route = net.routes.get(prior.routeId);
+    const shapes = (route?.shapes ?? []).filter((idx) => !net.shapes[idx].edges);
+    const pool = prior.shapeIdx !== null && !net.shapes[prior.shapeIdx].edges ? [prior.shapeIdx] : shapes;
+    if (pool.length === 0) {
+      track.match = noMatch();
+      return track.match;
+    }
+    const scored = pool.map((shapeIdx) => {
+      const shape = net.shapes[shapeIdx];
+      const proj = project(shape.pts, shape.cum, p);
+      let score = proj.d;
+      if (dir) {
+        const tan = tangent(shape.pts, shape.cum, proj.s);
+        if (tan.x * dir.x + tan.y * dir.y < 0) score += DIRECTION_PENALTY_M;
+      }
+      return { shapeIdx, s: proj.s, d: proj.d, score };
+    });
+    let best = scored[0];
+    for (const c of scored) if (c.score < best.score) best = c;
+    const current = track.match.shapeIdx !== null ? scored.find((c) => c.shapeIdx === track.match.shapeIdx) : undefined;
+    if (current && current.d <= OFF_GRAPH_M && !(best.shapeIdx !== current.shapeIdx && best.score + BUS_HYSTERESIS_M < current.score && best.d <= OFF_GRAPH_M)) {
+      best = current;
+    }
+    if (best.d > OFF_GRAPH_M) {
+      track.match = noMatch();
+      return track.match;
+    }
+    track.match = { pathIdx: null, shapeIdx: best.shapeIdx, edge: null, s: best.s, residual: best.d };
+    return track.match;
+  }
+
+  /** Records on the fix where it was matched, for the speed estimate. */
+  function annotate(fix: PlaneFix, match: Match): void {
+    if (match.pathIdx !== null) {
+      const nearStop = net.stopsOnPath(match.pathIdx).some((entry) => Math.abs(entry.s - match.s) <= STOP_ZONE_M);
+      fix.arc = { key: `p${match.pathIdx}`, s: match.s, atStop: nearStop };
+    } else if (match.shapeIdx !== null) {
+      const before = net.nextStop(match.shapeIdx, match.s - STOP_ZONE_M);
+      const nearStop = before !== null && Math.abs(before.s - match.s) <= STOP_ZONE_M;
+      fix.arc = { key: `b${match.shapeIdx}`, s: match.s, atStop: nearStop };
+    } else {
+      delete fix.arc;
+    }
+  }
+
+  function stopsBetween(key: string, fromS: number, toS: number): number {
+    const idx = Number(key.slice(1));
+    if (!Number.isFinite(idx)) return 0;
+    if (key.startsWith('p')) return net.stopsOnPath(idx).filter((entry) => entry.s > fromS && entry.s < toS).length;
+    let count = 0;
+    let cursor = fromS;
+    for (;;) {
+      const next = net.nextStop(idx, cursor);
+      if (!next || next.s >= toS) break;
+      count++;
+      cursor = next.s;
+    }
+    return count;
+  }
+
+  return {
+    priorFor,
+    stopsBetween,
+    matchFix(track, fix, prior, nextStopId) {
+      const prev = lastFix(track);
+      if (!pushFix(track, fix)) return track.match;
+      const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev);
+      annotate(fix, match);
+      return match;
+    },
+  };
+}
+
+function normalise(v: XY): XY {
+  const len = Math.hypot(v.x, v.y);
+  return len > 0 ? { x: v.x / len, y: v.y / len } : { x: 0, y: 0 };
+}

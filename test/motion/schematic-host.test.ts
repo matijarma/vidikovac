@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { toPlane } from '../../app/src/motion/geo';
-import type { Fix } from '../../app/src/motion/model';
-import type { Network, Shape } from '../../app/src/motion/network';
-import { cumulative } from '../../app/src/motion/polyline';
+import { toPlane } from '../../shared/motion/geo';
+import type { Fix } from '../../app/src/motion/integrator';
+import type { Network, Shape } from '../../shared/motion/network';
+import { cumulative } from '../../shared/motion/polyline';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
 import { createSchematicHost, HONESTY_NOTE_HR, TRAMS_ONLY } from '../../app/src/motion/schematic-host';
 
@@ -68,7 +68,7 @@ describe('createSchematicHost', () => {
     root.appendChild(h.mount());
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     expect(root.querySelector('[data-testid=schematic-note]')!.textContent).toBe(HONESTY_NOTE_HR);
-    expect(HONESTY_NOTE_HR).toBe('Položaj je izračunat iz vlastitih očitanja svakog vozila i geometrije linije; ZET ne objavljuje smjer ni brzinu.');
+    expect(HONESTY_NOTE_HR).toBe('Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.');
     expect(root.querySelector('[data-testid=schematic-loading]')!.textContent).toBe('učitavanje podataka');
     expect(root.querySelector('[data-testid=schematic]')).toBeNull();
     await flush();

@@ -27,7 +27,7 @@ describe('module registry', () => {
   it('carries all nine modules with the refresh windows the plan fixes', () => {
     expect(MODULE_IDS).toHaveLength(9);
     const windows: Record<ModuleId, [number, number]> = {
-      'zet-rt': [30, 300],
+      'zet-rt': [10, 300], // R-TE4: the twin's tick; the Cache API entry actually lasts until validUntil
       prometnice: [180, 1800],
       emsc: [60, 3600],
       'dhmz-cap': [300, 7200],

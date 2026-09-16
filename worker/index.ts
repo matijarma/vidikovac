@@ -10,6 +10,9 @@ import { handleStats } from './routes/stats';
 import { handleScreens } from './routes/screens';
 import { handleMaps } from './routes/maps';
 import { warmFeeds } from './feed/cache';
+import { twinStub } from './do/twin-do';
+import { staticWatchDeps, watchStaticFeed } from './feed/static-watch';
+import { logError } from './log';
 
 // Durable Object classes are re-exported from the entry module so the migration
 // in wrangler.jsonc can bind them. Storage survives because the class names
@@ -18,6 +21,7 @@ export { BeaconDO } from './do/beacon-do';
 export { RoomDO } from './do/room-do';
 export { IndexDO } from './do/index-do';
 export { MetricsDO } from './metrics-do';
+export { TwinDO } from './do/twin-do';
 export { json } from './http';
 
 export type RouteHandler = (
@@ -52,6 +56,13 @@ export default {
     return withoutEdgeTransforms(await env.ASSETS.fetch(request));
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    await warmFeeds(env, ctx);
+    // The twin's alarm chain is self-rearming; the five-minute cron is only
+    // its watchdog, restarting a chain an isolate reset may have dropped.
+    await Promise.all([
+      warmFeeds(env, ctx),
+      twinStub(env).ensureRunning().catch((error) => logError('twin_watchdog_failed', error)),
+      // Once an hour (its own clock in KV): has ZET published a static GTFS newer than our artefacts?
+      watchStaticFeed(staticWatchDeps(env)).catch((error) => logError('static_watch_failed', error)),
+    ]);
   },
 } satisfies ExportedHandler<Env>;

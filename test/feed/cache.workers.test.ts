@@ -1,5 +1,9 @@
-import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createExecutionContext, env, runInDurableObject, waitOnExecutionContext } from 'cloudflare:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TwinDO, twinStub } from '../../worker/do/twin-do';
+import { FEED_TICK_MS, TICK_CUSHION_MS, nextTickAt } from '../../worker/twin/clock';
+import { setTwinIndexSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
+import { frame, v } from '../twin/frames';
 import type { Env } from '../../worker/env';
 import type { ServerEvent } from '../../worker/protocol';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
@@ -315,5 +319,63 @@ describe('dogadanja honest failure (R-X1)', () => {
     expect(result.status).toBe('down');
     expect(result.items).toEqual([]);
     expect(events).toEqual([['source_fetch', 'dogadanja', 'error']]);
+  });
+});
+
+// A4 (R-TE4, R-TE5): zet-rt is served from the twin. The Cache API entry
+// lasts until the twin's next tick, not a fixed ttl, so every colo turns over
+// on the same beat; and a silent ZET makes the source stale, never the
+// snapshot, whose status is the twin's health.
+describe('the twin-fed zet-rt module', () => {
+  // A day ahead of the real clock, so the alarms the twin arms never fire on their own.
+  const T = Math.floor(Date.now() / 1000) + 86_400;
+
+  afterEach(() => {
+    setTwinUpstreamForTest(null);
+    setTwinIndexSourceForTest(null);
+  });
+
+  async function twinAt(nowMs: number, headerTs: number): Promise<{ now: () => Date; recordMetric: typeof sink }> {
+    setTwinIndexSourceForTest(async () => null);
+    setTwinUpstreamForTest(
+      async () => new Response(frame(headerTs, [v('a', headerTs - 5, 15.97, 45.81, 't6', '6')]), { status: 200, headers: { etag: 'W/"cache-test"' } }),
+    );
+    await runInDurableObject(twinStub(testEnv), (instance: TwinDO) => {
+      instance.forgetForTest();
+      vi.spyOn(instance, 'now').mockReturnValue(nowMs);
+    });
+    return { now: () => new Date(nowMs), recordMetric: sink };
+  }
+
+  it('serves the twin payload with its plan and caches it until the next tick', async () => {
+    const nowMs = T * 1000 + 2_000;
+    const twinDeps = await twinAt(nowMs, T);
+    const ctx = createExecutionContext();
+    const snapshot = await getModule(testEnv, ctx, 'zet-rt', twinDeps);
+    await waitOnExecutionContext(ctx);
+    expect(snapshot.status).toBe('live');
+    expect(snapshot.sources?.zet.status).toBe('live');
+    // Phase B: the pin carries the twin's plan (a path plan when the network artefact is served, a free plan otherwise), never a history.
+    const motion = snapshot.items.find((item) => item.id === 'vehicle:a')?.motion as { plan?: unknown; history?: unknown } | undefined;
+    expect(motion).toBeDefined();
+    expect(motion).not.toHaveProperty('history');
+    expect(Array.isArray(motion?.plan)).toBe(true);
+    const cached = await caches.default.match(new Request(cacheKey('zet-rt')));
+    const untilNextTick = Math.ceil((T * 1000 + FEED_TICK_MS + TICK_CUSHION_MS - nowMs) / 1000);
+    expect(cached?.headers.get('cache-control')).toBe('s-maxage=' + untilNextTick);
+    expect(events).toContainEqual(['source_fetch', 'zet-rt', 'ok']);
+  });
+
+  it('keeps the snapshot live when only ZET has gone quiet, and still caches to the next tick', async () => {
+    const nowMs = T * 1000 + 40_000; // four ticks after the last header: the source is stale, the twin is fine
+    const twinDeps = await twinAt(nowMs, T);
+    const ctx = createExecutionContext();
+    const snapshot = await getModule(testEnv, ctx, 'zet-rt', twinDeps);
+    await waitOnExecutionContext(ctx);
+    expect(snapshot.status).toBe('live');
+    expect(snapshot.sources?.zet.status).toBe('stale');
+    expect(snapshot.items.some((item) => item.id === 'vehicle:a')).toBe(true);
+    const cached = await caches.default.match(new Request(cacheKey('zet-rt')));
+    expect(cached?.headers.get('cache-control')).toBe('s-maxage=' + Math.ceil((nextTickAt(T, nowMs) - nowMs) / 1000));
   });
 });

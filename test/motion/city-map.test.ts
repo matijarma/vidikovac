@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
-import { toPlane } from '../../app/src/motion/geo';
-import type { Drawn } from '../../app/src/motion/model';
-import { decodeNetwork } from '../../app/src/motion/network';
+import { toPlane } from '../../shared/motion/geo';
+import type { Drawn } from '../../app/src/motion/integrator';
+import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -448,13 +448,16 @@ describe('without WebGL, following, the kiosk view and an outage', () => {
     expect(map.cameraCalls.slice(before).some((c) => c.kind === 'fitBounds' || c.kind === 'easeTo')).toBe(true);
   });
 
-  it('a stale or down feed holds every vehicle where it is; live again, the motion resumes', async () => {
+  it('a stale copy keeps the motion going (R-TE5); only a down feed holds every vehicle where it is, and live again the motion resumes', async () => {
     const { handle, frame, pending, container } = await harness();
     handle.update([B], [CLOSURE]);
     frame();
     handle.setFeedState!('stale');
-    expect(pending()).toBe(0);
     expect(container.dataset.feed).toBe('stale');
+    expect(pending()).toBe(1); // the loop is still armed: a last-good copy is evidence with its own confidence
+    handle.setFeedState!('down');
+    expect(pending()).toBe(0);
+    expect(container.dataset.feed).toBe('down');
     const heldAt = container.dataset.frames;
     frame(); frame();
     expect(container.dataset.frames).toBe(heldAt);

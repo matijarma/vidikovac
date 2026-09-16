@@ -289,32 +289,27 @@ describe('createLoop', () => {
 });
 
 describe('nextPollDelay', () => {
-  it('aligns to the feed tick plus the cushion when sourceUpdatedAt is known', () => {
+  // R-TE4: ZET republishes every 10 s and the twin publishes one tick plus
+  // its cushion after each header; the client lands after both.
+  it("rides the feed's 10 s phase with the cushion, waits for the next tick on that phase when the target has passed, never beyond one tick plus the cushion", () => {
+    expect(nextPollDelay(new Date(1_000_000).toISOString(), 1_005_000)).toBe(8_500); // target = source + 10 s + 3.5 s
+    const at0 = new Date(0).toISOString(); // targets at 13.5 s, 23.5 s, ...
+    expect(nextPollDelay(at0, 14_000)).toBe(9_500);
+    expect(nextPollDelay(at0, 1_000_000)).toBe(3_500);
+    expect(nextPollDelay(at0, 1_003_500)).toBe(10_000);
+    expect(nextPollDelay(new Date(10_000_000).toISOString(), 0)).toBe(13_500);
+  });
+
+  it("prefers the snapshot's own validUntil plus a short cushion while it is ahead, falls back to the phase once it has passed, never past the cap", () => {
     const sourceUpdatedAt = new Date(1_000_000).toISOString();
-    const now = 1_000_000 + 5_000; // 5s after the source's own timestamp
-    // target = sourceUpdatedAt + 30s tick + 2s cushion = 1_032_000
-    expect(nextPollDelay(sourceUpdatedAt, now)).toBe(27_000);
+    const validUntil = new Date(1_011_500).toISOString();
+    expect(nextPollDelay(sourceUpdatedAt, 1_002_000, validUntil)).toBe(11_000);
+    expect(nextPollDelay(sourceUpdatedAt, 1_014_000, validUntil)).toBe(9_500);
+    expect(nextPollDelay(sourceUpdatedAt, 1_002_000, new Date(9_000_000).toISOString())).toBe(13_500);
   });
 
-  it("when the aligned target has already passed it waits for the next tick on the feed's own phase, never polling at once or in a tight loop", () => {
-    // Source timestamp at 0; aligned targets at 32 s, 62 s, 92 s, ... A feed
-    // that is late (or down) must not be polled "now" on every pass.
-    const sourceUpdatedAt = new Date(0).toISOString();
-    expect(nextPollDelay(sourceUpdatedAt, 33_000)).toBe(29_000); // one second past the 32 s target: the 62 s one
-    expect(nextPollDelay(sourceUpdatedAt, 1_000_000)).toBe(22_000); // the next target on that phase is 1_022_000
-    expect(nextPollDelay(sourceUpdatedAt, 1_022_000)).toBe(30_000); // exactly on a target: the one after it
-  });
-
-  it('never waits longer than one tick plus the cushion, whatever the timestamp claims', () => {
-    const future = new Date(10_000_000).toISOString();
-    expect(nextPollDelay(future, 0)).toBe(32_000);
-  });
-
-  it('falls back to the fixed cadence when sourceUpdatedAt is missing', () => {
+  it('falls back to the feed rate without a usable sourceUpdatedAt', () => {
     expect(nextPollDelay(undefined, 0)).toBe(POLL_FALLBACK_MS);
-  });
-
-  it('falls back to the fixed cadence when sourceUpdatedAt cannot be parsed', () => {
     expect(nextPollDelay('not-a-date', 0)).toBe(POLL_FALLBACK_MS);
   });
 });

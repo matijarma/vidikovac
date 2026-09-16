@@ -239,40 +239,59 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
 
 // --- The tick-aligned poller ---
 
-/** The realtime feed's own cadence (probe, 12 September): a `VehiclePosition`
- *  ticks about every 30s. */
-const FEED_TICK_MS = 30_000;
-/** Absorbs ordinary network and processing jitter around that tick without
- *  polling early enough to catch the same still-stale snapshot twice. */
-const POLL_CUSHION_MS = 2_000;
-/** The previous fixed cadence (20 s on both surfaces), kept as the
- *  fallback for a snapshot that carries no `sourceUpdatedAt` yet -- a cold
- *  start, or a source that is down -- so a poll with no timestamp evidence
- *  to align to still retries at a sane rate instead of guessing at a tick
- *  it cannot see. */
-export const POLL_FALLBACK_MS = 20_000;
+/** The realtime feed's own cadence (probe, 16 September 2026, 80 s sample):
+ *  ZET republishes every 10 s, the header timestamp stepping +10 each time;
+ *  the twin ticks on the same beat (worker/twin/clock.ts, R-TE4). */
+const FEED_TICK_MS = 10_000;
+/** What must have happened between the feed's header time and a poll that
+ *  finds the new frame at the edge: the twin's own cushion (1.5 s), its
+ *  alarm's jitter and fetch (about a second), and the Cache API turning over
+ *  on the twin's validUntil (about a second). 3.5 s covers all three without
+ *  catching the previous frame twice. */
+const POLL_CUSHION_MS = 3_500;
+/** After the snapshot's own validUntil (the twin's next tick, when it names
+ *  one) the edge has the new frame within about a second; 1.5 s leaves room
+ *  for the alarm to run a little late. */
+const VALID_UNTIL_CUSHION_MS = 1_500;
+/** The fallback for a snapshot that carries no `sourceUpdatedAt` yet -- a
+ *  cold start, or a source that is down -- so a poll with no timestamp
+ *  evidence to align to still retries at the feed's own rate instead of
+ *  guessing at a tick it cannot see. */
+export const POLL_FALLBACK_MS = 10_000;
 
 /**
  * How long to wait before polling again, aligned to the feed's own tick
  * instead of a fixed offset: `sourceUpdatedAt` plus the tick plus the
- * cushion, minus `now`. Given a working timestamp this halves wasted
- * requests against a feed that changes twice a minute (the "redundant
+ * cushion, minus `now`, or the snapshot's own `validUntil` plus a shorter
+ * cushion when the producer names its next change. Given a working timestamp
+ * this never polls a frame the twin has not yet published (the "redundant
  * traffic" objection Matija has raised); without one it falls back to the
- * previous fixed delay. An aligned target already in the past (a slow poll,
+ * feed's own rate. An aligned target already in the past (a slow poll,
  * a backgrounded tab, a feed that is late or down) means the *next* tick on
  * the feed's own phase, never "poll now": the poll is a self-rearming chain,
  * and "now" against a feed that has stopped ticking would be a tight loop
  * of requests. And never longer than one tick plus the cushion, whatever a
  * timestamp from the future might claim.
  */
-export function nextPollDelay(sourceUpdatedAt: string | undefined, now: number): number {
+export function nextPollDelay(sourceUpdatedAt: string | undefined, now: number, validUntil?: string): number {
+  const cap = FEED_TICK_MS + POLL_CUSHION_MS;
+  // The producer's own word on when it changes next beats any arithmetic on
+  // the source time (R-TE4); one already behind us (the twin's alarm ran
+  // late) falls through to the tick phase below.
+  if (validUntil !== undefined) {
+    const until = Date.parse(validUntil);
+    if (Number.isFinite(until)) {
+      const delay = until + VALID_UNTIL_CUSHION_MS - now;
+      if (delay > 0) return Math.min(delay, cap);
+    }
+  }
   if (sourceUpdatedAt !== undefined) {
     const at = Date.parse(sourceUpdatedAt);
     if (Number.isFinite(at)) {
       const target = at + FEED_TICK_MS + POLL_CUSHION_MS;
       let delay = target - now;
       if (delay <= 0) delay = FEED_TICK_MS - ((now - target) % FEED_TICK_MS);
-      return Math.min(delay, FEED_TICK_MS + POLL_CUSHION_MS);
+      return Math.min(delay, cap);
     }
   }
   return POLL_FALLBACK_MS;

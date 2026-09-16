@@ -428,15 +428,30 @@ describe('polling on the feed store', () => {
     await flush();
     expect(fetchData).toHaveBeenCalledTimes(1);
   });
-  it('polls on the 20 s fallback without a feed timestamp and 2 s after the feed’s next tick with one', async () => {
-    const { session, armed } = mount();
+  it('polls transit on its own beat (fallback, source phase or validUntil) and everything else every 30 s, refreshing only the due lane (R-TE4)', async () => {
+    const { session, armed, fetchData, ticks } = mount();
     session.join();
     await flush();
-    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS]);
+    // Whatever the active domain's modules are today, the slow lane is all of them but transit.
+    const active = [...new Set(fetchData.mock.calls.map((c) => c[0]))];
+    expect(armed()).toEqual([1_000, POLL_FALLBACK_MS, 30_000]);
+    fetchData.mockClear();
+    ticks.find((t) => !t.cleared && t.ms === POLL_FALLBACK_MS)!.fn();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['zet-rt']);
+    fetchData.mockClear();
+    ticks.find((t) => !t.cleared && t.ms === 30_000)!.fn();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(active.filter((m) => m !== 'zet-rt').sort());
+
     const aligned = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
     aligned.session.join();
     await flush();
-    expect(aligned.armed()).toEqual([1_000, 27_000]);
+    expect(aligned.armed()).toEqual([1_000, 8_500, 30_000]);
+    const twin = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString(), validUntil: new Date(NOW + 6_500).toISOString() } : {}) }) });
+    twin.session.join();
+    await flush();
+    expect(twin.armed()).toEqual([1_000, 8_000, 30_000]);
   });
 });
 

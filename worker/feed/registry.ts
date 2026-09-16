@@ -76,6 +76,8 @@ interface ModuleDefinition {
   /** Seconds a KV last-good copy may still be served as 'stale'. */
   maxStale: number;
   load: (ctx: FetchContext) => Promise<FeedPayload>;
+  twin?: boolean;
+  degradeOnSources?: boolean;
 }
 
 function defineModule(def: ModuleDefinition): ModuleSpec {
@@ -86,6 +88,8 @@ function defineModule(def: ModuleDefinition): ModuleSpec {
     ttl: def.ttl,
     maxStale: def.maxStale,
     attribution,
+    ...(def.twin ? { twin: true } : {}),
+    ...(def.degradeOnSources === false ? { degradeOnSources: false } : {}),
     fetcher: async (ctx) => {
       const payload = await def.load(ctx);
       return {
@@ -93,6 +97,7 @@ function defineModule(def: ModuleDefinition): ModuleSpec {
         tier: def.tier,
         fetchedAt: ctx.now().toISOString(),
         ...(payload.sourceUpdatedAt ? { sourceUpdatedAt: payload.sourceUpdatedAt } : {}),
+        ...(payload.validUntil ? { validUntil: payload.validUntil } : {}),
         ...(payload.sources ? { sources: payload.sources } : {}),
         ...(payload.coverage ? { coverage: payload.coverage } : {}),
         attribution,
@@ -103,7 +108,11 @@ function defineModule(def: ModuleDefinition): ModuleSpec {
 }
 
 export const MODULES: Record<ModuleId, ModuleSpec> = {
-  'zet-rt': defineModule({ id: 'zet-rt', tier: 'session', ttl: 30, maxStale: 300, load: fetchZetRt }),
+  // Served by the twin (R-TE8): ttl 10 matches ZET's own republish, and the
+  // Cache API entry actually lasts until the twin's validUntil (cache.ts).
+  // ZET going quiet is told by sources.zet, never by degrading the snapshot
+  // (R-TE5).
+  'zet-rt': defineModule({ id: 'zet-rt', tier: 'session', ttl: 10, maxStale: 300, load: fetchZetRt, twin: true, degradeOnSources: false }),
   prometnice: defineModule({ id: 'prometnice', tier: 'open', ttl: 180, maxStale: 1800, load: fetchPrometnice }),
   'dhmz-now': defineModule({ id: 'dhmz-now', tier: 'session', ttl: 600, maxStale: 7200, load: fetchDhmzNow }),
   'dhmz-forecast': defineModule({ id: 'dhmz-forecast', tier: 'session', ttl: 1800, maxStale: 86400, load: fetchDhmzForecast }),

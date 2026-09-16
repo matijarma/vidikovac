@@ -33,7 +33,7 @@ import type { ExportKind, LayerContext } from './layers/types';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
-import { loadNetwork, type Network } from './motion/network';
+import { loadNetwork, type Network } from '../../shared/motion/network';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
@@ -205,6 +205,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let warned60 = false;
   let warned20 = false;
   let timer: unknown = null;
+  /** The lane for every module but transit: they keep the cadence they had
+   *  before the twin's 10 s beat, so the faster transit poll triples nothing
+   *  but the one request that carries new evidence (R-TE4). */
+  const SLOW_POLL_MS = 30_000;
+  let slowTimer: unknown = null;
   let tickTimer: unknown = null;
   let disposed = false;
   let shareDenied = false;
@@ -635,14 +640,23 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     }
   }
   // --- data ----------------------------------------------------------------
-  function pollAnchor(): string | undefined {
-    return activeModules().includes('zet-rt') ? store.snapshot().snapshots['zet-rt']?.sourceUpdatedAt : undefined;
+  /** The transit snapshot's own timing, when transit is on screen: the poll
+   *  lane rides the twin's validUntil, else its source time (motion/loop.ts). */
+  function pollAnchor(): { sourceUpdatedAt?: string; validUntil?: string } | undefined {
+    if (!activeModules().includes('zet-rt')) return undefined;
+    const zet = store.snapshot().snapshots['zet-rt'];
+    return zet ? { sourceUpdatedAt: zet.sourceUpdatedAt, validUntil: zet.validUntil } : undefined;
   }
 
-  async function refresh(): Promise<void> {
+  type Lane = 'all' | 'transit' | 'rest';
+
+  async function refresh(lane: Lane = 'all'): Promise<void> {
     if (frozen || paused || disposed || !session.snapshot().dataToken) return;
-    store.setModules(activeModules());
-    await store.refresh();
+    const active = activeModules();
+    store.setModules(active);
+    const ids = lane === 'all' ? active : active.filter((id) => (id === 'zet-rt') === (lane === 'transit'));
+    if (ids.length === 0) return;
+    await store.refresh(ids);
     if (frozen || disposed) return;
     lastRefresh = now();
     // A rejected data token means the session is over for this device; a refused
@@ -658,20 +672,40 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     return session.snapshot().expiresAt !== null && session.secondsLeft() === 0;
   }
 
-  /** The poll, aligned to the feed's own tick (motion/loop.ts) and re-armed after each refresh. */
+  /** The transit lane: aligned to the twin's own tick (motion/loop.ts) and
+   *  re-armed after each refresh; not armed at all on a screen without transit. */
   function armPoll(): void {
     if (frozen || disposed || timer !== null) return;
+    const anchor = pollAnchor();
+    if (!anchor && !activeModules().includes('zet-rt')) return;
     timer = setTimer(() => {
       clearTimer(timer);
       timer = null;
       if (expiredByClock()) { freeze(); return; }
-      continuePoll(refresh(), armPoll, 'dashboard refresh');
-    }, nextPollDelay(pollAnchor(), now()));
+      continuePoll(refresh('transit'), armPoll, 'dashboard transit refresh');
+    }, nextPollDelay(anchor?.sourceUpdatedAt, now(), anchor?.validUntil));
+  }
+
+  /** The lane for everything else, on the cadence those modules always had. */
+  function armSlowPoll(): void {
+    if (frozen || disposed || slowTimer !== null) return;
+    slowTimer = setTimer(() => {
+      clearTimer(slowTimer);
+      slowTimer = null;
+      if (expiredByClock()) { freeze(); return; }
+      continuePoll(refresh('rest'), armSlowPoll, 'dashboard refresh');
+    }, SLOW_POLL_MS);
+  }
+
+  function stopPolls(): void {
+    if (timer !== null) { clearTimer(timer); timer = null; }
+    if (slowTimer !== null) { clearTimer(slowTimer); slowTimer = null; }
   }
 
   function rearmPoll(): void {
-    if (timer !== null) { clearTimer(timer); timer = null; }
+    stopPolls();
     armPoll();
+    armSlowPoll();
   }
 
   /**
@@ -806,7 +840,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     schematic.pause();
     maps.pause();
     store.pause(true);
-    if (timer !== null) { clearTimer(timer); timer = null; }
+    stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
     if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
     // The closing card (role=alert) takes over from the notice and the assertive region.
@@ -858,7 +892,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       schematic.pause();
       maps.pause();
       closeShare();
-      if (timer !== null) { clearTimer(timer); timer = null; }
+      stopPolls();
       paintShell();
     }
   });
@@ -985,6 +1019,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   updateTitle();
   paintShell();
   armPoll();
+  armSlowPoll();
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
@@ -999,7 +1034,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     restore: restoreView,
     destroy() {
       disposed = true;
-      if (timer !== null) { clearTimer(timer); timer = null; }
+      stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
       if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
       stopView();

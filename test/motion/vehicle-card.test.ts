@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import type { XY } from '../../app/src/motion/geo';
-import type { Drawn } from '../../app/src/motion/model';
-import type { Network, Shape, Stop } from '../../app/src/motion/network';
-import { cumulative } from '../../app/src/motion/polyline';
+import type { XY } from '../../shared/motion/geo';
+import type { Drawn } from '../../app/src/motion/integrator';
+import type { Network, Shape, Stop } from '../../shared/motion/network';
+import { cumulative } from '../../shared/motion/polyline';
 import { compassKey, describeVehicle } from '../../app/src/motion/vehicle-card';
 
 function shapeOf(id: string, route: string, pts: XY[]): Shape {
@@ -69,5 +69,16 @@ describe('compassKey', () => {
     expect(compassKey({ x: -1, y: -1 })).toBe('SW');
     expect(compassKey({ x: -1, y: 0 })).toBe('W');
     expect(compassKey({ x: -1, y: 1 })).toBe('NW');
+  });
+});
+
+// A6: the twin's static join names the direction outright, at a standstill or over a known heading.
+describe('describeVehicle with the twin join', () => {
+  it('reads "smjer <headsign>" whatever the mark is doing, and names the next stop when the wire carries one the network knows', () => {
+    expect(describeVehicle(i18n, net(), drawn({ id: 'v1', heading: null, headsign: 'Črnomerec' }), new Map()).direction).toBe('smjer Črnomerec');
+    const card = describeVehicle(i18n, net(), drawn({ id: 'v1', heading: { x: 1, y: 0 }, headsign: 'Črnomerec', nextStopId: 'B' }), new Map());
+    expect(card.direction).toBe('smjer Črnomerec');
+    expect(card.nextStop).toBe('sljedeće stajalište Trg bana Jelačića');
+    expect(describeVehicle(i18n, net(), drawn({ id: 'v1', nextStopId: 'nowhere' }), new Map()).nextStop).toBeUndefined();
   });
 });

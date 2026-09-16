@@ -1,5 +1,6 @@
 // Nearest-point projection and arc-length sampling on a simplified route
-// shape (an array of XY in the local plane from geo.ts). Every vehicle's
+// shape (an array of XY in the local plane from geo.ts). Shared by the app
+// and the Worker (the twin, R-TE15), so it stays DOM-free. Every vehicle's
 // drawn position comes from here: a raw fix projects onto the shape, the
 // motion model works forward in arc length from that point on, and `at`
 // samples back out to a drawable XY, with `tangent` giving the heading to

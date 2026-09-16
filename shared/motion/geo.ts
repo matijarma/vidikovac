@@ -1,5 +1,6 @@
 // A local metre-space plane and its inverse, for polyline projection and
-// arc-length work (polyline.ts and the motion model built on it). Zagreb
+// arc-length work (polyline.ts and the motion engine built on it). Shared
+// by the app and the Worker (the twin, R-TE15), so it stays DOM-free. Zagreb
 // sits at ~45.8N; a single cos(lat) equirectangular factor around that
 // latitude is accurate to a few centimetres across the whole city and
 // needs no projection library. scripts/gtfs-shapes.mjs makes the same

@@ -170,7 +170,10 @@ export function parseZetRt(bytes: Uint8Array, routes: ZetRoutes): FeedPayload {
   };
 }
 
+/** The twin's payload when the cache layer offers one (production, R-TE8);
+ *  a direct fetch and parse otherwise (fixtures, a context without a twin). */
 export async function fetchZetRt(ctx: FetchContext): Promise<FeedPayload> {
+  if (ctx.twin) return ctx.twin();
   const [response, routes] = await Promise.all([ctx.fetch(ZET_RT_URL), loadZetRoutes()]);
   return parseZetRt(new Uint8Array(await response.arrayBuffer()), routes);
 }

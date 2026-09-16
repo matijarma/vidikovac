@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { dist, toPlane, type XY } from '../../app/src/motion/geo';
-import { cumulative } from '../../app/src/motion/polyline';
-import type { Network, Shape, Stop } from '../../app/src/motion/network';
-import type { Drawn } from '../../app/src/motion/model';
+import { dist, toPlane, type XY } from '../../shared/motion/geo';
+import { cumulative } from '../../shared/motion/polyline';
+import type { Network, Shape, Stop } from '../../shared/motion/network';
+import type { Drawn } from '../../app/src/motion/integrator';
 import {
   BUS_SIDE_PX,
   clipToCircle,

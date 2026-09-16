@@ -1,6 +1,9 @@
 import type { Env } from '../env';
+import type { TwinDO } from '../do/twin-do';
 import type { ServerEvent } from '../protocol';
+import type { FeedPayload } from './payload';
 import type { ModuleId, ModuleSnapshot, ModuleSpec } from './schema';
+import { TWIN_DO_NAME } from '../twin/twin-name';
 import { MODULES, WARM_MODULES, moduleSpec } from './registry';
 import { makeFetchContext } from './http';
 import { recordMetric } from '../metrics';
@@ -17,6 +20,10 @@ export const CACHE_ORIGIN = 'https://feed.vidikovac.internal';
 export const KV_PREFIX = 'feed:';
 /** How long a degraded answer is cached, so a dead source is not called per request. */
 export const DEGRADED_CACHE_SECONDS = 60;
+/** The longest a producer's own `validUntil` may hold a Cache API entry: the
+ *  twin's next tick is at most 12 s away (clock.ts), so anything past a
+ *  minute is a skewed clock, and a colo must not sit on one frame for long. */
+export const VALID_UNTIL_CAP_SECONDS = 60;
 
 export function cacheKey(id: ModuleId): string {
   return `${CACHE_ORIGIN}/${id}`;
@@ -43,6 +50,26 @@ function withoutSyntheticNoticeDates(snapshot: ModuleSnapshot): ModuleSnapshot {
       return { ...notice, dateBasis: 'unknown', data };
     }),
   };
+}
+
+/** The twin's payload, for the module it feeds (R-TE8). A type-only import
+ *  of the class keeps 'cloudflare:workers' out of this module's graph. */
+function twinPublish(env: Env): () => Promise<FeedPayload> {
+  return () => {
+    const namespace = env.TWIN_DO as DurableObjectNamespace<TwinDO>;
+    // The RPC stub's inferred return type widens the wire's tuples (HistoryFix,
+    // PathKnot) to plain arrays; the payload the twin builds is a FeedPayload
+    // and is serialised as one, so the cast restores what serialisation kept.
+    return namespace.get(namespace.idFromName(TWIN_DO_NAME)).publish() as unknown as Promise<FeedPayload>;
+  };
+}
+
+/** Seconds a live snapshot stays in the Cache API: until the producer's own
+ *  `validUntil` when it names one (R-TE4), capped, else the module's ttl. */
+function liveCacheSeconds(spec: ModuleSpec, snapshot: ModuleSnapshot, nowMs: number): number {
+  const until = snapshot.validUntil ? Date.parse(snapshot.validUntil) : Number.NaN;
+  if (!Number.isFinite(until)) return spec.ttl;
+  return Math.min(VALID_UNTIL_CAP_SECONDS, Math.max(1, Math.ceil((until - nowMs) / 1000)));
 }
 
 export interface FeedCacheDeps {
@@ -103,8 +130,10 @@ async function refresh(
   const now = clock();
 
   try {
-    const fresh = await spec.fetcher(makeFetchContext(clock));
-    const partial = Object.values(fresh.sources ?? {}).some((source) => source.status !== 'live');
+    const fresh = await spec.fetcher(makeFetchContext(clock, spec.twin ? twinPublish(env) : undefined));
+    // A composite module is stale when one of its sources is; the twin's module
+    // is not (R-TE5): its status is the twin's, its source's silence its own.
+    const partial = spec.degradeOnSources !== false && Object.values(fresh.sources ?? {}).some((source) => source.status !== 'live');
     let snapshot: ModuleSnapshot = {
       ...fresh,
       status: partial ? 'stale' : 'live',
@@ -115,7 +144,7 @@ async function refresh(
       snapshot = recoverPartialSources(snapshot, previous ? withoutSyntheticNoticeDates(previous) : null, now.getTime(), spec.maxStale);
     }
     const body = JSON.stringify(snapshot);
-    ctx.waitUntil(store(spec.id, body, partial ? DEGRADED_CACHE_SECONDS : spec.ttl));
+    ctx.waitUntil(store(spec.id, body, partial ? Math.min(DEGRADED_CACHE_SECONDS, spec.ttl) : liveCacheSeconds(spec, snapshot, now.getTime())));
     ctx.waitUntil(env.FEED.put(kvKey(spec.id), body, { expirationTtl: Math.max(60, spec.maxStale) }));
     metric(env, 'source_fetch', spec.id, partial ? 'partial' : 'ok');
     return snapshot;

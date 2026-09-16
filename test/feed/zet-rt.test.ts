@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { TEASER_BOX_CENTRE, TEASER_BOX_HALF_M, ZET_RT_URL, delayWords, inTeaserBox, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
+import { TEASER_BOX_CENTRE, TEASER_BOX_HALF_M, ZET_RT_URL, delayWords, fetchZetRt, inTeaserBox, parseZetRt, routeLabel } from '../../worker/feed/modules/zet-rt';
+import type { FeedPayload } from '../../worker/feed/payload';
 
 const bytes = new Uint8Array(readFileSync(new URL('../fixtures/zet-rt.pb', import.meta.url)));
 const routes = { '12': { shortName: '12', longName: 'Ljubljanica - Dubec', type: 0 } };
@@ -110,5 +111,24 @@ describe('inTeaserBox', () => {
     expect(inTeaserBox(16.06, 45.83)).toBe(false); // Dubrava, ~6.5 km east
     expect(inTeaserBox(15.94, 45.813)).toBe(false); // Črnomerec, ~2.9 km west
     expect(inTeaserBox(15.9769, 45.83)).toBe(false); // ~1.9 km north
+  });
+});
+
+// A4 (R-TE8): the module returns the twin's payload when the cache layer
+// offers one and fetches ZET itself only without a twin (fixtures, fallback).
+describe('fetchZetRt through the twin', () => {
+  it('prefers the twin and never fetches ZET beside it; fetches and parses directly without one', async () => {
+    const twinPayload = { items: [{ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 6', motion: { history: [[-5, 15.97, 45.81]] } }], sourceUpdatedAt: '2026-09-16T00:00:00.000Z' } as FeedPayload;
+    let fetched = 0;
+    const fetch = async () => {
+      fetched += 1;
+      return new Response(bytes);
+    };
+    const now = () => new Date('2026-09-16T00:00:02.000Z');
+    expect(await fetchZetRt({ now, fetch, twin: async () => twinPayload })).toBe(twinPayload);
+    expect(fetched).toBe(0);
+    const direct = await fetchZetRt({ now, fetch });
+    expect(fetched).toBe(1);
+    expect(direct.items.filter((item) => item.id.startsWith('vehicle:')).length).toBe(332);
   });
 });

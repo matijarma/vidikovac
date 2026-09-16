@@ -15,7 +15,7 @@ import type { I18n } from '../i18n/i18n';
 import { cityTeaserAttribution } from '../layers/grad-teaser';
 import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../layers/route-summary';
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
-import { dist, toPlane } from '../motion/geo';
+import { dist, toPlane } from '../../../shared/motion/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
 import { clock, dayTime, fmtNumber, fmtTemp, weekdayDayMonth } from './format';

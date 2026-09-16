@@ -5,9 +5,9 @@
 //
 // The rule of area T holds here exactly as it does on the schematic (R-P2):
 // a reported vehicle position is evidence, never output. A vehicle point
-// handed to this map goes into the motion model as a Fix; what the GeoJSON
-// source receives is the model's own estimate, stepped at the screen's
-// refresh rate and pushed to MapLibre at 12 Hz. Nothing in this file ever
+// handed to this map goes into the integrator as a Fix with the twin's plan;
+// what the GeoJSON source receives is the integrator's own estimate, stepped
+// at the screen's refresh rate and pushed to MapLibre at 12 Hz. Nothing in this file ever
 // writes a reported vehicle coordinate into a source.
 //
 // One MapLibre context per slot for the page's life (map-slots.ts): a poll
@@ -17,10 +17,10 @@
 // lightweight path never loads either (R-L2).
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
-import { toLonLat } from '../motion/geo';
+import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
-import { createModel, type Drawn, type Fix, type Model } from '../motion/model';
-import type { Network } from '../motion/network';
+import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
+import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
@@ -89,20 +89,14 @@ export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat';
  *  expressible as a filter, not as a comment. */
 export type PointProp = string | number | boolean;
 
-export interface MapPoint {
-  id: string;
-  lon: number;
-  lat: number;
+/** A vehicle as the wire reports it (a Fix with a title), or a place. A
+ *  point that carries `at` is a vehicle: evidence for the integrator (R-P2),
+ *  with the twin's plan and scalars riding along, never drawn where
+ *  reported. A point without one is a place (a quake epicentre) and is
+ *  drawn where given. */
+export interface MapPoint extends Omit<Fix, 'at'> {
   title: string;
-  routeId?: string;
-  /** Epoch ms of the report. A point that carries `at` is a vehicle's
-   *  reported position: evidence for the motion model (R-P2), never drawn
-   *  where reported. A point without one is a place (a quake epicentre)
-   *  and is drawn where given. */
   at?: number;
-  tripId?: string;
-  /** GTFS route_type off the wire (zet-rt.ts's routeType). */
-  type?: number;
   /** Absent: the plain place circle, exactly as before. */
   place?: PlaceKind;
   props?: Readonly<Record<string, PointProp>>;
@@ -240,7 +234,8 @@ export function pointsToFixes(points: readonly MapPoint[]): Fix[] {
   const fixes: Fix[] = [];
   for (const p of points) {
     if (p.at === undefined || !Number.isFinite(p.lon) || !Number.isFinite(p.lat)) continue;
-    fixes.push({ id: p.id, lon: p.lon, lat: p.lat, at: p.at, tripId: p.tripId, routeId: p.routeId, type: p.type });
+    const { title: _title, ...fix } = p;
+    fixes.push({ ...fix, at: p.at });
   }
   return fixes;
 }
@@ -412,6 +407,10 @@ export interface VehicleInfo {
   confidence: number;
   held: boolean;
   onShape: number | null;
+  /** The trip's headsign from the twin's join, when known (R-TE2). */
+  headsign?: string;
+  /** The next stop's id from the twin, when known. */
+  nextStopId?: string;
 }
 
 export interface MapCamera {
@@ -842,7 +841,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     ]);
     if (disposed) return;
     net = network;
-    model = createModel(net);
+    model = createIntegrator(net);
     model.update(pointsToFixes(points), now());
     options.onNetwork?.(net);
     if (!loaded) {
@@ -1231,6 +1230,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         confidence: v.confidence,
         held: v.held === true,
         onShape: v.onShape,
+        ...(v.headsign !== undefined ? { headsign: v.headsign } : {}),
+        ...(v.nextStopId !== undefined ? { nextStopId: v.nextStopId } : {}),
       };
     });
   }
@@ -1306,7 +1307,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setFeedState(state) {
-      const next = state !== 'live';
+      // R-TE5: the snapshot's status is the twin's health. `stale` is the
+      // twin's last-good copy, whose vehicles carry their own history and
+      // confidence, so the motion keeps integrating and fades on its own;
+      // only `down` (nothing at all) holds every mark where it is.
+      const next = state === 'down';
       container.dataset.feed = state;
       if (next === held) return;
       held = next;

@@ -6,7 +6,7 @@ Owner-approved full overhaul, implemented jointly by Codex and Claude Fable.
 
 - Codex: `app/src/core/*`, Worker/protocol/security/provisioning, feed correctness, app dependencies/config, map hosting, exports, integration and end-to-end verification.
 - Fable UI: dashboard/session presentation, app entry integration, all layers except transport, shared UI CSS/tokens/graphics, landing/scan/static presentation and locale copy.
-- Fable map: `app/src/map/*`, new `app/src/transport/*`, `app/src/layers/u-pokretu.ts`, map CSS and map tests. Do not change motion-model constants without review.
+- Fable map: `app/src/map/*`, new `app/src/transport/*`, `app/src/layers/u-pokretu.ts`, map CSS and map tests. Do not change engine constants without review: the motion engine lives in the twin (`worker/twin/*`, `shared/motion/*`) and the client integrator (`app/src/motion/integrator.ts`); every constant carries its reason beside it (`docs/arhitektura.md` §"Model kretanja vozila").
 - Fable kiosk: kiosk presentation after shared visuals land; preserve real BeaconClient and SessionClient.
 - No pushes from contributor worktrees. No overlapping writes. Commit each bounded slice locally, with a short evidence report. Codex integrates; Fable reviews Codex's security/data changes.
 
