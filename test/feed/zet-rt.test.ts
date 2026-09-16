@@ -101,16 +101,19 @@ describe('parseZetRt', () => {
 // R-P1: teaserSubset keeps the vehicles "inside that box" around the
 // default screen centre (Trg bana Jelačića), not the whole fleet.
 describe('inTeaserBox', () => {
-  it('is centred on Trg bana Jelačića with a half-side that covers the default crop plus one stop spacing', () => {
+  it('is centred on Trg bana Jelačića with a half-side that covers half the field span plus one stop spacing', () => {
     expect(TEASER_BOX_CENTRE).toEqual({ lon: 15.9769, lat: 45.813 });
-    expect(TEASER_BOX_HALF_M).toBe(1400);
+    expect(TEASER_BOX_HALF_M).toBe(1900);
   });
   it('keeps the square itself and a point 1 km east, and drops Dubrava and Črnomerec', () => {
     expect(inTeaserBox(15.9769, 45.813)).toBe(true);
     expect(inTeaserBox(15.9898, 45.813)).toBe(true); // ~1.0 km east
     expect(inTeaserBox(16.06, 45.83)).toBe(false); // Dubrava, ~6.5 km east
     expect(inTeaserBox(15.94, 45.813)).toBe(false); // Črnomerec, ~2.9 km west
-    expect(inTeaserBox(15.9769, 45.83)).toBe(false); // ~1.9 km north
+    // 45.83 sits 1,892 m north of the centre -- inside the box now that the
+    // half-side is 1900 m, so the "outside, due north" fixture point moves
+    // out to 45.832 (~2.1 km) to stay outside.
+    expect(inTeaserBox(15.9769, 45.832)).toBe(false); // ~2.1 km north
   });
 });
 
