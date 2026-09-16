@@ -85,7 +85,7 @@ export const KIOSK_SYMBOL_SCALE = 2;
  *  surface on the sign basemap: promoted neighbourhood, street and water
  *  names, a ranked civic POI list, and nothing that cannot reach the
  *  readability floor (map/basemap.ts). */
-export const KIOSK_BASEMAP_PROFILE: BasemapProfile = 'sign';
+export const KIOSK_BASEMAP_PROFILE: BasemapProfile = 'prozor';
 
 export type FeedState = 'live' | 'stale' | 'down';
 
