@@ -306,6 +306,10 @@ export interface OverlayOptions {
   emphasis?: readonly PlaceKind[] | null;
   /** The public screen's overlay set; null or absent draws every surface as before. */
   prozor?: ProzorOptions | null;
+  /** The screen's own stop id: under prozor the hub-label tier never names it,
+   *  because the 30 px anchor label already does and the two stacked at
+   *  Jelačić (R-KP25). */
+  screenStopId?: string | null;
 }
 
 function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks, image: Expr): StyleLayerLike {
@@ -419,6 +423,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const modes = options.modes ?? null;
   const sel = options.selection ?? null;
   const prozor = options.prozor ?? null;
+  const screenStopId = options.screenStopId ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
   const selectedRoute = sel?.kind === 'route' ? sel.id : null;
@@ -581,7 +586,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       type: 'symbol',
       source: SOURCES.stops,
       minzoom: prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM,
-      filter: prozor ? ['all', stops, ['get', 'label'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank]] : stopLabelFilter(stops),
+      filter: prozor ? ['all', stops, ['get', 'label'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank], ['!=', ['get', 'id'], screenStopId ?? '']] : stopLabelFilter(stops),
       layout: {
         'text-field': ['get', 'name'],
         'text-font': [MAP_FONTS.medium],

@@ -265,8 +265,12 @@ function lastrunCandidate(input: SayInput): Statement | null {
   const valueMarkup = pairs
     .map((p) => `<span class="k-say-pair">${kBadge(p.routeId, routeKind(p.routeId), routeAria(p.routeId, input.strings))}<time datetime="${escapeAttribute(p.iso)}">${escapeHtml(p.time)}</time></span>`)
     .join(' · ');
+  // 92 (R-KP24): in its window the last departure outranks the closure (90) and
+  // yields only to a quake and the verdict itself; at 20:30 a two-line transit
+  // value on a 1080p wall had hidden it behind the closure, and in the evening
+  // the last tram is the fact a person at the stop needs first.
   return {
-    key: 'say:lastrun', domain: 'transit', say: 'lastrun', weight: 85,
+    key: 'say:lastrun', domain: 'transit', say: 'lastrun', weight: 92,
     label, valueMarkup, value, context,
     aria: aria(label, value, context),
   };

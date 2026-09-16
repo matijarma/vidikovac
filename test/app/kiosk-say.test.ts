@@ -130,6 +130,8 @@ describe('rankStatements: 22:30, last departures', () => {
     const keys = keysOf(slots);
     expect(keys).toContain('say:lastrun');
     expect(keys.indexOf('say:lastrun')).toBeLessThan(keys.indexOf('say:zet'));
+    // R-KP24: in its window the last departure outranks the closure too, so a wall with a two-line transit value still shows it.
+    expect(keys.indexOf('say:lastrun')).toBeLessThan(keys.indexOf('say:closure'));
     const lastrun = statementOf(slots, 'lastrun')!;
     expect(lastrun.value).toBe('11\u00a000:05 · 6\u00a000:15 · 14\u00a000:30 · 13\u00a001:00');
     expect(lastrun.valueMarkup!.match(/class="k-say-pair"/g)).toHaveLength(4);

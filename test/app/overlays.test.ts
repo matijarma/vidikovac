@@ -91,6 +91,11 @@ describe('the overlay layer list', () => {
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
 
+  it('never labels the screen’s own stop from the hub tier: its anchor label already names it (R-KP25)', () => {
+    const labels = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1' }).find((l) => l.id === LAYERS.stopLabels)!;
+    expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');
+  });
+
   it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, trams as plates and buses as pills, the screen\u2019s stop as the largest mark, and no seat', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
       const layers = overlayLayers(p, { scale: 2, prozor: PROZOR });

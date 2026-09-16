@@ -654,7 +654,7 @@ crvenih koji su svi imali isti uzrok (zaslon za e2e dobio je stajalište, pa su 
 zaslon bez stajališta -- telefonska sesija u a11y i motion, ploča lagano u lagano i motion -- i
 čekanje na pozitivan broj imena ulica na 1366 × 768 pali); popravak u `e2e/helpers.ts`
 (stajalište dobivaju samo Prozorovi dokazi) i `e2e/kiosk-layout.spec.ts` (brojanje nakon jednog
-ciklusa dohvata), a četiri pogođene specifikacije ponovno su zelene protiv istog poslužitelja
+ciklusa dohvata), a četiri pogođene specifikacije ponovno su prošle protiv istog poslužitelja, uz jednu iznimku koju treba znati: `paired at 1366 by 768, light` u dva od tri samostalna ponavljanja nije dočekala preslikani sloj `zrak-i-nebo` dok je lokalni Worker bilježio `twin_fetch_failed` (istek dohvata prema ZET-u) i "Network connection lost"; treće ponavljanje i sam gate bili su zeleni, pa je uzrok mreža razvojnog Workera, ne kompozicija
 (`task-WB-report.md`); `review:visual` 77 površina, 0 nalaza; Lighthouse pristupačnost 100 na
 `/`, `/hitno`, `/kiosk/`, `/s/`, `/d/` i `/prijava/`.
 

@@ -771,7 +771,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function overlayOptions(): OverlayOptions {
-    return { scale, modes, closuresVisible, selection, emphasis, prozor };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null };
   }
 
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
