@@ -6,48 +6,49 @@ import { FEED_TICK_MS, TICK_CUSHION_MS, TICK_MIN_DELAY_MS, nextTickAt } from '..
 import { setTwinIndexSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { recordingKey } from '../../worker/twin/record';
 import { HISTORY_FIXES } from '../../shared/motion/wire';
+import type { TripIndex, TripPattern, TripRecord } from '../../shared/motion/trips';
 import { frame, v } from './frames';
 
 const testEnv = env as unknown as Env;
 
-// The trip index as scripts/gtfs-trips.mjs (task A1) writes it: columnar,
-// dictionary-coded. Two patterns the tests join against; anything else is an
-// unknown trip.
-const WIRE_INDEX = {
-  version: 1,
-  feedVersion: '000395',
-  builtAt: '2026-09-16T00:00:00.000Z',
-  source: 'ZET GTFS',
-  headsigns: ['Črnomerec', 'Savišće'],
-  patterns: {
-    route: ['6', '33'],
-    direction: [1, 0],
-    shape: ['6_12', '33_28'],
-    headsign: [0, 1],
-    stops: [
-      ['264_2', '222_2', '197_2', '231_2'],
-      ['177_4', '175_4', '128_4', '266_4'],
-    ],
-    sched: [
-      Array.from({ length: 24 }, () => [91, 157, 72]),
-      Array.from({ length: 24 }, () => [108, 105, 2382]),
-    ],
-    dwell: [
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-    ],
-    trips: [2, 1],
-  },
-  trips: {
-    id: ['t33', 't6', 't6b'],
-    pattern: [1, 0, 0],
-    block: [1, 0, 0],
-    start: [89154, 14400, 15000],
-    service: [1, 0, 0],
-  },
-  blocks: { id: ['601', '3302'], trips: [[1, 2], [0]] },
-  services: { id: ['0_20', '0_23'] },
-};
+// The trip index as shared/motion/trips.ts decodes it (task A1): two
+// patterns the tests join against; any other trip id is unknown.
+function fixtureIndex(): TripIndex {
+  const patterns: TripPattern[] = [
+    {
+      route: '6',
+      direction: 1,
+      shape: '6_12',
+      headsign: 'Črnomerec',
+      stops: ['264_2', '222_2', '197_2', '231_2'],
+      sched: Array.from({ length: 24 }, () => [91, 157, 72]),
+      dwell: [0, 0, 0, 0],
+      trips: 2,
+    },
+    {
+      route: '33',
+      direction: 0,
+      shape: '33_28',
+      headsign: 'Savišće',
+      stops: ['177_4', '175_4', '128_4', '266_4'],
+      sched: Array.from({ length: 24 }, () => [108, 105, 2382]),
+      dwell: [0, 0, 0, 0],
+      trips: 1,
+    },
+  ];
+  const tripsById = new Map<string, TripRecord>([
+    ['t33', { pattern: 1, block: '3302', start: 89154, service: '0_23' }],
+    ['t6', { pattern: 0, block: '601', start: 14400, service: '0_20' }],
+    ['t6b', { pattern: 0, block: '601', start: 15000, service: '0_20' }],
+  ]);
+  return {
+    feedVersion: '000395',
+    patterns,
+    tripsById,
+    blocks: new Map([['601', ['t6', 't6b']], ['3302', ['t33']]]),
+    schedSeconds: (patternIdx, fromStopIdx, hourBand) => patterns[patternIdx].sched[hourBand][fromStopIdx],
+  };
+}
 
 // A day ahead of the real clock: the alarms the twin arms around T0 are then
 // always in the future, so miniflare never fires one on its own mid-test;
@@ -83,7 +84,7 @@ async function pinClock(stub: DurableObjectStub<TwinDO>, ms: number): Promise<vo
 }
 
 beforeEach(() => {
-  setTwinIndexSourceForTest(async () => WIRE_INDEX);
+  setTwinIndexSourceForTest(async () => fixtureIndex());
 });
 
 afterEach(() => {

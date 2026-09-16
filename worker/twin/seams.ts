@@ -5,17 +5,18 @@
 // runs in the same isolate as the Durable Object, so a module-level override
 // here is what the object sees.
 
+import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
 import { upstreamFetchConditional } from '../feed/http';
 import { ZET_RT_URL } from '../feed/modules/zet-rt';
-import { fetchTripIndexRaw } from './index-load';
+import { fetchTripIndex } from './index-load';
 
 /** Fetches the feed, sending `If-None-Match` when an ETag is known; resolves
  *  to a 200 with bytes or a 304, throws on anything else. */
 export type TwinUpstream = (etag: string | null) => Promise<Response>;
 
-/** Resolves to the parsed index asset, or null when it cannot be read. */
-export type TwinIndexSource = () => Promise<unknown | null>;
+/** Resolves to the decoded trip index, or null when it cannot be read. */
+export type TwinIndexSource = () => Promise<TripIndex | null>;
 
 let upstreamOverride: TwinUpstream | null = null;
 let indexOverride: TwinIndexSource | null = null;
@@ -33,5 +34,5 @@ export function twinUpstream(): TwinUpstream {
 }
 
 export function twinIndexSource(env: Env): TwinIndexSource {
-  return indexOverride ?? (() => fetchTripIndexRaw(env));
+  return indexOverride ?? (() => fetchTripIndex(env));
 }

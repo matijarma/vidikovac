@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { FEED_VERSION } from '../../app/src/motion/network-meta';
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -346,5 +348,23 @@ describe('main', () => {
   it('fails on a non-2xx download', async () => {
     const fetchImpl = async () => new Response('nope', { status: 503 });
     await expect(main({ fetchImpl, log: () => {} })).rejects.toThrow(/HTTP 503/);
+  });
+});
+
+// R-TE16: the committed artefact is pinned the way test/scripts/gtfs-shapes.test.ts
+// pins the network artefact: the gzip reading is what the twin fetches once per
+// cold start and what the plan budgeted (under 250 KB), the raw reading guards
+// the repo footprint, and the feed version must be the one the network artefact
+// was cut from, because the twin joins realtime trip ids against this index and
+// the client draws them on that network: two static feeds would be two cities.
+describe('the committed artefact', () => {
+  const raw = readFileSync(new URL('../../app/public/data/zet-trips.json', import.meta.url));
+  it('stays under 256 KiB gzip and 3 MiB raw', () => {
+    expect(gzipSync(raw, { level: 6 }).byteLength).toBeLessThan(256 * 1024);
+    expect(raw.byteLength).toBeLessThan(3 * 1024 * 1024);
+  });
+  it('was cut from the same static feed as the network artefact', () => {
+    const parsed = JSON.parse(raw.toString('utf8')) as { feedVersion: string };
+    expect(parsed.feedVersion).toBe(FEED_VERSION);
   });
 });

@@ -28,7 +28,7 @@ import { recordMetric } from '../metrics';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { decodeFeed } from '../twin/feed-decode';
 import { emptyState, foldFeed, type TwinState } from '../twin/history';
-import { indexRowsFromWire } from '../twin/index-load';
+import { indexRowsFromIndex } from '../twin/index-load';
 import {
   INDEX_RECHECK_MS,
   STATE_RETENTION_MS,
@@ -252,9 +252,9 @@ export class TwinDO extends DurableObject<Env> {
     const stored = indexFeedVersion(sql);
     const checked = indexCheckedAt(sql);
     if (stored !== null && checked !== null && now - checked < INDEX_RECHECK_MS) return true;
-    const raw = await twinIndexSource(this.env)();
-    if (raw === null) return stored !== null;
-    const rows = indexRowsFromWire(raw);
+    const index = await twinIndexSource(this.env)();
+    if (index === null) return stored !== null;
+    const rows = indexRowsFromIndex(index);
     if (rows.feedVersion !== stored) replaceIndex(this.ctx.storage, rows);
     markIndexChecked(sql, now);
     return true;
