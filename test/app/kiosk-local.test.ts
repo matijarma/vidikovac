@@ -18,7 +18,7 @@ import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, metresPerPixel, PAIRED_ZOOM, requestKioskMap } from '../../app/src/kiosk/mapview';
-import { weatherMarkup } from '../../app/src/kiosk/invitation';
+import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';

@@ -18,7 +18,7 @@ import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
-import { kBadge } from './invitation';
+import { kBadge } from './markup';
 import {
   byModule, closuresByDistance, isLive, kioskQuakes, lastDeparturesAhead, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
   routeDelays, sourceState, worksInKvart,

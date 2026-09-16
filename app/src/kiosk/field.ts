@@ -16,7 +16,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
-import { linesMarkup } from './invitation';
+import { linesMarkup } from './markup';
 import { linesAtStop } from './local';
 import type { KioskStrings } from './strings';
 
