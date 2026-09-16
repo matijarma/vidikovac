@@ -429,35 +429,28 @@ describe('polling on the feed store', () => {
     await flush();
     expect(fetchData).toHaveBeenCalledTimes(1);
   });
-  it('polls transit on the 10 s fallback without a feed timestamp, 3.5 s after the feed’s next tick with one, and everything else every 30 s', async () => {
-    const { session, armed } = mount();
+  it('polls transit on its own beat (fallback, source phase or validUntil) and everything else every 30 s, refreshing only the due lane (R-TE4)', async () => {
+    const { session, armed, fetchData, ticks } = mount();
     session.join();
     await flush();
     expect(armed()).toEqual([1_000, POLL_FALLBACK_MS, 30_000]);
+    fetchData.mockClear();
+    ticks.find((t) => !t.cleared && t.ms === POLL_FALLBACK_MS)!.fn();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['zet-rt']);
+    fetchData.mockClear();
+    ticks.find((t) => !t.cleared && t.ms === 30_000)!.fn();
+    await flush();
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hrt-news', 'prometnice']);
+
     const aligned = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
     aligned.session.join();
     await flush();
     expect(aligned.armed()).toEqual([1_000, 8_500, 30_000]);
-    // With the twin's own validUntil on the snapshot, the transit lane lands 1.5 s after it.
     const twin = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString(), validUntil: new Date(NOW + 6_500).toISOString() } : {}) }) });
     twin.session.join();
     await flush();
     expect(twin.armed()).toEqual([1_000, 8_000, 30_000]);
-  });
-  it('refreshes only the transit module on its own beat, the other modules on theirs (R-TE4)', async () => {
-    const { session, fetchData, ticks } = mount();
-    session.join();
-    await flush();
-    fetchData.mockClear();
-    const fast = ticks.find((t) => !t.cleared && t.ms === POLL_FALLBACK_MS)!;
-    fast.fn();
-    await flush();
-    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['zet-rt']);
-    fetchData.mockClear();
-    const slow = ticks.find((t) => !t.cleared && t.ms === 30_000)!;
-    slow.fn();
-    await flush();
-    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hrt-news', 'prometnice']);
   });
 });
 

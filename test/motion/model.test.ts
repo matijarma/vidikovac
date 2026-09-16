@@ -1027,7 +1027,7 @@ describe('a vehicle whose first update carries its history', () => {
     expect(drawn.heading!.y).toBeGreaterThan(0.99);
   });
 
-  it('keeps the shape the wire names even when the opposite track is geometrically closer', () => {
+  it('keeps the shape the wire names even when the opposite track is geometrically closer, and carries the headsign', () => {
     // Two directional shapes of one line, 8 m apart: northbound at x = 0,
     // southbound at x = 8. A fix at x = 6 is nearer the southbound track.
     const net = buildNetwork(
@@ -1048,11 +1048,9 @@ describe('a vehicle whose first update carries its history', () => {
     const free = createModel(net);
     free.update([fixAt('v2', { x: 6, y: 500 }, T0)], T0);
     expect(free.step(T0)[0].onShape).toBe(1);
-  });
-
-  it('carries the headsign from the wire onto what is drawn', () => {
-    const model = createModel(straightNetwork());
-    model.update([fixAt('v1', { x: 0, y: 100 }, T0, { headsign: 'Sopot', direction: 0 })], T0);
-    expect(model.step(T0)[0].headsign).toBe('Sopot');
+    // And the wire's headsign rides onto what is drawn.
+    const named = createModel(straightNetwork());
+    named.update([fixAt('v3', { x: 0, y: 100 }, T0, { headsign: 'Sopot', direction: 0 })], T0);
+    expect(named.step(T0)[0].headsign).toBe('Sopot');
   });
 });

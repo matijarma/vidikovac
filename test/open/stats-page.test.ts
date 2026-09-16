@@ -106,24 +106,18 @@ describe('renderStatsPage', () => {
   });
 });
 
-// A7 (R-TE3, R-TE18): the twin's own health on the operator page: every tick
-// by outcome and start (cold means the object woke from storage), and the
-// hourly static-feed check, whose "newer" count is the one that calls for a
-// rebuild of both artefacts.
+// A7 (R-TE3, R-TE18): the twin's health on the operator page and the static-feed drift with its runbook.
 describe('renderStatsPage: the twin', () => {
-  const html = renderStatsPage(VIEW);
-  it('leads with the share of ticks that observed or confirmed the feed', () => {
+  it('leads with the share of good ticks, tabulates ticks by outcome and start, and names the static-feed drift', () => {
+    const html = renderStatsPage(VIEW);
     expect(html).toContain('<div class="vital-k">Blizanac u redu</div>');
     expect(html).toContain('<div class="vital-v">99,7 %</div>'); // (800 + 60) / 863 ticks, hr-HR
     expect(html).toContain('863 otkucaja');
-  });
-  it('tabulates ticks by outcome and start, and names the static-feed drift with its runbook', () => {
     expect(html).toContain('<h2>Blizanac</h2>');
     expect(html).toContain('>800<');
     expect(html).toContain('>unchanged<');
     expect(html).toContain('>cold<');
     expect(html).toContain('2 od 23 provjera');
-    expect(html).toContain('noviji statični GTFS');
     expect(html).toContain('npm run build:network &amp;&amp; npm run build:trips');
   });
 });

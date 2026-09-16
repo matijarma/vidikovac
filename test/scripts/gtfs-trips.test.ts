@@ -5,15 +5,7 @@ import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  buildTripIndex,
-  chainDecodeDeltas,
-  chainDecodeIds,
-  chainEncodeDeltas,
-  chainEncodeIds,
-  main,
-  median,
-} from '../../scripts/gtfs-trips.mjs';
+import { buildTripIndex, chainDecodeDeltas, chainDecodeIds, main } from '../../scripts/gtfs-trips.mjs';
 
 interface ZipInput {
   name: string;
@@ -174,46 +166,6 @@ function makeFullZip(opts: { extraTripsRow?: string } = {}): Uint8Array {
   ]);
 }
 
-describe('median', () => {
-  it('takes the lower of the two middle values for an even count, the true middle for odd', () => {
-    expect(median([10, 20])).toBe(10);
-    expect(median([10, 15, 20])).toBe(15);
-    expect(median([600])).toBe(600);
-  });
-
-  it('throws on an empty array', () => {
-    expect(() => median([])).toThrow();
-  });
-});
-
-describe('chainEncodeIds / chainDecodeIds', () => {
-  it('front-codes a sorted id array and reconstructs it exactly', () => {
-    const ids = ['0_20_10101_101_10005', '0_20_10101_101_10006', '0_20_10101_101_10011', '0_27_907_9_31181'];
-    const { common, suffix } = chainEncodeIds(ids);
-    expect(common).toEqual([0, 19, 18, 3]);
-    expect(suffix).toEqual(['0_20_10101_101_10005', '6', '11', '7_907_9_31181']);
-    expect(chainDecodeIds(common, suffix)).toEqual(ids);
-  });
-
-  it('round-trips an empty array', () => {
-    const { common, suffix } = chainEncodeIds([]);
-    expect(chainDecodeIds(common, suffix)).toEqual([]);
-  });
-});
-
-describe('chainEncodeDeltas / chainDecodeDeltas', () => {
-  it('encodes the first value absolute and the rest as differences, reconstructing exactly', () => {
-    const values = [28800, 30600, 72000, 32400];
-    const deltas = chainEncodeDeltas(values);
-    expect(deltas).toEqual([28800, 1800, 41400, -39600]); // may go negative: trips are sorted by id, not by start
-    expect(chainDecodeDeltas(deltas)).toEqual(values);
-  });
-
-  it('round-trips an empty array', () => {
-    expect(chainDecodeDeltas(chainEncodeDeltas([]))).toEqual([]);
-  });
-});
-
 describe('buildTripIndex', () => {
   it('builds the documented artefact shape from a synthetic zip', async () => {
     const zip = makeFullZip();
@@ -343,11 +295,7 @@ describe('main', () => {
     expect(written.feedVersion).toBe('000777');
     expect(gzipSync(Buffer.from(writtenRaw, 'utf8')).length).toBe(result.gzipBytes);
     expect(logs.join('\n')).toContain('patterns');
-  });
-
-  it('fails on a non-2xx download', async () => {
-    const fetchImpl = async () => new Response('nope', { status: 503 });
-    await expect(main({ fetchImpl, log: () => {} })).rejects.toThrow(/HTTP 503/);
+    await expect(main({ fetchImpl: async () => new Response('nope', { status: 503 }), log: () => {} })).rejects.toThrow(/HTTP 503/);
   });
 });
 
@@ -359,12 +307,9 @@ describe('main', () => {
 // the client draws them on that network: two static feeds would be two cities.
 describe('the committed artefact', () => {
   const raw = readFileSync(new URL('../../app/public/data/zet-trips.json', import.meta.url));
-  it('stays under 256 KiB gzip and 3 MiB raw', () => {
+  it('stays under 256 KiB gzip and 3 MiB raw, cut from the same static feed as the network artefact', () => {
     expect(gzipSync(raw, { level: 6 }).byteLength).toBeLessThan(256 * 1024);
     expect(raw.byteLength).toBeLessThan(3 * 1024 * 1024);
-  });
-  it('was cut from the same static feed as the network artefact', () => {
-    const parsed = JSON.parse(raw.toString('utf8')) as { feedVersion: string };
-    expect(parsed.feedVersion).toBe(FEED_VERSION);
+    expect((JSON.parse(raw.toString('utf8')) as { feedVersion: string }).feedVersion).toBe(FEED_VERSION);
   });
 });

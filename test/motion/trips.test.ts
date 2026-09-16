@@ -167,9 +167,8 @@ describe('decodeTripIndex', () => {
     // blocks: trip ids (not indices), in departure order.
     expect(index.blocks.get('B1')).toEqual(['tA', 'tB']);
     expect(index.blocks.get('B2')).toEqual(['tC']);
-  });
 
-  it('rejects a wrong version', () => {
+    // A stale artefact of another version fails loudly, never decodes as this one.
     expect(() => decodeTripIndex({ version: SUPPORTED_VERSION + 1 })).toThrow(TripIndexVersionError);
     expect(() => decodeTripIndex({})).toThrow(TripIndexVersionError);
     expect(() => decodeTripIndex(null)).toThrow(TripIndexVersionError);

@@ -72,16 +72,10 @@ describe('compassKey', () => {
   });
 });
 
-// A6: the twin's static join names the direction outright; the model's own
-// heading and the shape terminus are the fallback for a vehicle whose trip
-// the index does not know.
+// A6: the twin's static join names the direction outright, at a standstill or over a known heading.
 describe('describeVehicle with the twin headsign', () => {
-  it('reads "smjer <headsign>" from the wire even at a standstill', () => {
-    const card = describeVehicle(i18n, net(), drawn({ id: 'v1', heading: null, headsign: 'Črnomerec' }), new Map());
-    expect(card.direction).toBe('smjer Črnomerec');
-  });
-  it('prefers the headsign over the shape terminus when both are known', () => {
-    const card = describeVehicle(i18n, net(), drawn({ id: 'v1', heading: { x: 1, y: 0 }, headsign: 'Črnomerec' }), new Map());
-    expect(card.direction).toBe('smjer Črnomerec');
+  it('reads "smjer <headsign>" from the wire whatever the mark is doing', () => {
+    expect(describeVehicle(i18n, net(), drawn({ id: 'v1', heading: null, headsign: 'Črnomerec' }), new Map()).direction).toBe('smjer Črnomerec');
+    expect(describeVehicle(i18n, net(), drawn({ id: 'v1', heading: { x: 1, y: 0 }, headsign: 'Črnomerec' }), new Map()).direction).toBe('smjer Črnomerec');
   });
 });

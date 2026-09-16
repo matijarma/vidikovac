@@ -114,40 +114,21 @@ describe('inTeaserBox', () => {
   });
 });
 
-// A4 (R-TE2, R-TE8): the module no longer talks to ZET itself when the cache
-// layer offers the twin; the direct fetch stays as the fixture path and as
-// the fallback for a context without a twin.
+// A4 (R-TE8): the module returns the twin's payload when the cache layer
+// offers one and fetches ZET itself only without a twin (fixtures, fallback).
 describe('fetchZetRt through the twin', () => {
-  const twinPayload = {
-    items: [{ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 6', motion: { history: [[-5, 15.97, 45.81]] } }],
-    sourceUpdatedAt: '2026-09-16T00:00:00.000Z',
-    validUntil: '2026-09-16T00:00:11.500Z',
-  } as FeedPayload;
-
-  it('returns the twin payload untouched and never fetches ZET when the context has a twin', async () => {
+  it('prefers the twin and never fetches ZET beside it; fetches and parses directly without one', async () => {
+    const twinPayload = { items: [{ id: 'vehicle:1', kind: 'vehicle', title: 'Linija 6', motion: { history: [[-5, 15.97, 45.81]] } }], sourceUpdatedAt: '2026-09-16T00:00:00.000Z' } as FeedPayload;
     let fetched = 0;
-    const payload = await fetchZetRt({
-      now: () => new Date('2026-09-16T00:00:02.000Z'),
-      fetch: async () => {
-        fetched += 1;
-        return new Response(bytes);
-      },
-      twin: async () => twinPayload,
-    });
-    expect(payload).toBe(twinPayload);
+    const fetch = async () => {
+      fetched += 1;
+      return new Response(bytes);
+    };
+    const now = () => new Date('2026-09-16T00:00:02.000Z');
+    expect(await fetchZetRt({ now, fetch, twin: async () => twinPayload })).toBe(twinPayload);
     expect(fetched).toBe(0);
-  });
-
-  it('fetches and parses ZET directly when the context has no twin', async () => {
-    let fetched = 0;
-    const payload = await fetchZetRt({
-      now: () => new Date('2026-09-16T00:00:02.000Z'),
-      fetch: async () => {
-        fetched += 1;
-        return new Response(bytes);
-      },
-    });
+    const direct = await fetchZetRt({ now, fetch });
     expect(fetched).toBe(1);
-    expect(payload.items.filter((item) => item.id.startsWith('vehicle:')).length).toBe(332);
+    expect(direct.items.filter((item) => item.id.startsWith('vehicle:')).length).toBe(332);
   });
 });
