@@ -625,32 +625,40 @@ export function createModel(net: Network | null): Model {
 
   return {
     update(fixes, now) {
-      const created = new Set<string>();
+      // Vehicles born in this update, with the fix before their latest one:
+      // the twin hands over a vehicle's recent history in one go (R-TE2).
+      const created = new Map<string, { prev: Fix | null; last: Fix }>();
       for (const fix of fixes) {
         const v = vehicles.get(fix.id);
         if (!v) {
           vehicles.set(fix.id, initVehicle(fix, now));
-          created.add(fix.id);
+          created.set(fix.id, { prev: null, last: fix });
         } else {
           applyFix(v, fix, now);
+          const born = created.get(fix.id);
+          if (born) created.set(fix.id, { prev: born.last, last: fix });
         }
       }
-      // A vehicle born in this update from a run of history (the twin hands
-      // over its last fixes in one go, R-TE2) is seeded at its latest
-      // evidence, not its oldest: nothing has been drawn yet, so this is no
-      // jump (R-P2 concerns a mark already on screen), and the alternative is
-      // a mark two minutes behind racing to catch up on the first frames.
-      for (const id of created) {
+      // Seeding a vehicle born from a run of history. Nothing has been drawn
+      // yet, so this is no jump (R-P2 concerns a mark already on screen); the
+      // alternative is a mark two minutes behind racing to catch up on the
+      // first frames. On a shape the mark starts at the latest evidence and
+      // dead reckoning carries it on at the speed the history gave. In the
+      // free plane there is nothing to reckon along, so the mark replays only
+      // the last interval: from the fix before the latest to the latest,
+      // over that interval's own duration, then holds until the next poll.
+      for (const [id, { prev, last }] of created) {
         const v = vehicles.get(id);
-        if (!v || v.intervals.length === 0) continue;
+        if (!v || prev === null) continue;
         if (v.shapeIdx !== null && net) {
           v.s = v.targetS;
           const shape = net.shapes[v.shapeIdx];
           v.p = at(shape.pts, shape.cum, v.s);
         } else {
-          v.p = v.freeToP;
-          v.freeFromP = v.freeToP;
-          v.freeFromAt = v.freeToAt;
+          v.freeFromP = toPlane(prev.lon, prev.lat);
+          v.p = v.freeFromP;
+          v.freeFromAt = now;
+          v.freeToAt = now + Math.max(0, last.at - prev.at);
         }
       }
       evict(now);
