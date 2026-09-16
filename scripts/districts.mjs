@@ -18,7 +18,16 @@
 // `node scripts/districts.mjs --tolerance 20` overrides the starting
 // Douglas-Peucker epsilon in metres; if the result still exceeds the byte
 // budget the script keeps escalating by 5 m up to 40 m, then exits 1.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+//
+// The same run also writes one file per district under
+// app/public/data/kvart/<slug>.json, beside the stop catalogue and the
+// per-stop last-run tables that already live there (scripts/gtfs-lastrun.mjs).
+// Same geometry, same tolerance, same rounding -- the split is only so a
+// surface that wants to DRAW one district's outline can fetch that one
+// district, instead of the whole 17-district table. See the header of
+// worker/feed/geo/districts.ts for why this does not reopen the decision that
+// keeps that table worker-side.
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -31,6 +40,8 @@ export const ARCGIS_CETVRTI_URL =
 
 export const FIXTURE_PATH = 'test/fixtures/gradske_cetvrti.geojson';
 export const OUTPUT_PATH = 'worker/data/gradske-cetvrti.json';
+/** One file per district, for a surface that draws one outline at runtime. */
+export const OUTLINE_DIR = 'app/public/data/kvart';
 export const MAX_BYTES = 61_440;
 export const BASE_TOLERANCE_M = 15;
 export const MAX_TOLERANCE_M = 40;
@@ -260,6 +271,37 @@ export function buildTable(geojson, epsilonM) {
   return { source: ARCGIS_CETVRTI_URL, sourceFixture: FIXTURE_PATH, toleranceM: epsilonM, districts };
 }
 
+/**
+ * One file per district under OUTLINE_DIR, from the very same simplified
+ * table: `{ slug, name, bbox, polygons }`, byte for byte the entry the worker
+ * table carries. Nothing is recomputed here, so the two outputs cannot drift.
+ * The directory mirrors the table exactly: a district the table no longer
+ * lists leaves no file behind.
+ */
+export async function writeOutlines(table, { cwd = process.cwd(), out = OUTLINE_DIR, log = console.log } = {}) {
+  const dir = resolve(cwd, out);
+  await mkdir(dir, { recursive: true });
+  const sizes = [];
+  const keep = new Set();
+  for (const district of table.districts) {
+    const json = `${JSON.stringify({ slug: district.slug, name: district.name, bbox: district.bbox, polygons: district.polygons })}\n`;
+    await writeFile(resolve(dir, `${district.slug}.json`), json, 'utf8');
+    keep.add(`${district.slug}.json`);
+    sizes.push(Buffer.byteLength(json, 'utf8'));
+  }
+  let removed = 0;
+  for (const name of await readdir(dir)) {
+    if (!name.endsWith('.json') || keep.has(name)) continue;
+    await unlink(resolve(dir, name));
+    removed += 1;
+  }
+  const total = sizes.reduce((a, b) => a + b, 0);
+  const sorted = [...sizes].sort((a, b) => a - b);
+  const median = sorted.length === 0 ? 0 : sorted[Math.floor(sorted.length / 2)];
+  log(`${sizes.length} outlines -> ${out} (${total} bytes total, ${sorted[0] ?? 0} smallest, ${median} median, ${sorted[sorted.length - 1] ?? 0} largest, ${removed} stale files removed)`);
+  return { written: sizes.length, removed, bytes: total, median, target: dir };
+}
+
 export async function fetchFixture({ fetchImpl = fetch, url = ARCGIS_CETVRTI_URL, cwd = process.cwd(), log = console.log } = {}) {
   log(`Fetching ${url}`);
   const response = await fetchImpl(url, {
@@ -323,7 +365,8 @@ export async function main({ argv = process.argv.slice(2), cwd = process.cwd(), 
 
   for (const district of table.districts) log(`${district.slug}: ${vertexCount(district.polygons)} vertices`);
   log(`${bytes} bytes, ε=${epsilonM} m -> ${OUTPUT_PATH}`);
-  return { bytes, epsilonM, written: true };
+  const outlines = await writeOutlines(table, { cwd, log });
+  return { bytes, epsilonM, written: true, outlines };
 }
 
 const invokedDirectly =

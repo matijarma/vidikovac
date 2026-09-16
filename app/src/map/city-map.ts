@@ -114,6 +114,32 @@ export interface MapLine {
   coordinates: [number, number][];
 }
 
+/** One district's boundary, as the closed rings of its polygons ([outer,
+ *  ...holes] per polygon, [lon, lat]). Drawn as lines, and dashed: the rings
+ *  are a build-time Douglas-Peucker simplification of the City's own polygons,
+ *  so a solid hairline would claim a precision they do not have -- and at this
+ *  weight it would read as one more closed road beside the closure red. */
+export interface MapOutline {
+  id: string;
+  polygons: [number, number][][][];
+}
+
+export interface LineStringFeatureCollection {
+  type: 'FeatureCollection';
+  features: { type: 'Feature'; geometry: { type: 'MultiLineString'; coordinates: [number, number][][] }; properties: { id: string } }[];
+}
+
+/** Every ring of every polygon as one multi-line feature; an outline with no
+ *  ring produces an empty collection rather than a feature with no geometry. */
+export function outlineToGeoJson(outline: MapOutline | null): LineStringFeatureCollection {
+  const rings: [number, number][][] = [];
+  for (const polygon of outline?.polygons ?? []) {
+    for (const ring of polygon) if (ring.length >= 4) rings.push(ring);
+  }
+  if (!outline || rings.length === 0) return { type: 'FeatureCollection', features: [] };
+  return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'MultiLineString', coordinates: rings }, properties: { id: outline.id } }] };
+}
+
 export interface PointProperties {
   id: string;
   title: string;
@@ -455,6 +481,8 @@ export interface CityMapOptions {
   follow?: string | boolean | null;
   /** The screen's own stop: marked and named on the map. */
   stop?: ScreenStop | null;
+  /** The district outline to draw, dashed; null draws none. */
+  outline?: MapOutline | null;
   /** GTFS route types drawn (0 trams, 3 buses); null, the default, is every type. */
   modes?: ReadonlySet<number> | null;
   /** Which kinds of city point are lit. null, the default, lights every one;
@@ -521,6 +549,8 @@ export interface CityMapHandle {
   /** The feed's own state: anything but 'live' holds every vehicle where it is (an outage is no evidence of motion) until the feed is live again. */
   setFeedState?(state: 'live' | 'stale' | 'down'): void;
   setStop?(stop: ScreenStop | null): void;
+  /** The district outline to draw, dashed; null clears it. */
+  setOutline?(outline: MapOutline | null): void;
   /** The inner city, the current selection, or the screen's stop. */
   fit?(target: 'city' | 'selection' | 'stop'): void;
   /** The covered part of the viewport every later fit keeps clear (the sheet's height on the phone stage). */
@@ -694,6 +724,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let emphasis: readonly PlaceKind[] | null = options.emphasis ?? null;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
+  let outline: MapOutline | null = options.outline ?? null;
   let status: MapStatus = 'loading';
   /** A basemap asset has failed since the last tile that loaded; reported as tiles-failed once the style is up. */
   let basemapFailing = false;
@@ -913,6 +944,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points)));
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
+    created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
     overlays = l.overlayLayers(l.overlayPalette(theme), overlayOptions());
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
@@ -1274,6 +1306,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setStop(next) {
       stop = next;
       if (styled && lib) setData(lib.SOURCES.screenStop, screenStopGeoJson());
+    },
+    setOutline(next) {
+      if (next?.id === outline?.id) return;
+      outline = next;
+      if (styled && lib) setData(lib.SOURCES.outline, outlineToGeoJson(outline));
     },
     fit(target) {
       if (!map || !lib) return;

@@ -327,7 +327,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
 });
 
 describe('the basemap and the overlays on it', () => {
-  it('builds the same-origin vector style for the document\u2019s theme at the opening zoom, puts the network and closures under the first label layer and everything else on top, one SDF image set, six sources', async () => {
+  it('builds the same-origin vector style for the document\u2019s theme at the opening zoom, puts the network and closures under the first label layer and everything else on top, one SDF image set, seven sources', async () => {
     document.documentElement.setAttribute('data-theme-resolved', 'dark');
     const { map } = await harness();
     const style = map.options.style as { sources: Record<string, { tiles: string[] }>; name: string };
@@ -342,7 +342,7 @@ describe('the basemap and the overlays on it', () => {
     expect(ids[ids.length - 1]).toBe('selection-ring');
     expect([...map.images.keys()]).toEqual(['vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
-    expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'places', 'screen-stop', 'stops', 'vehicles']);
+    expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
   });
 
   it('flips theme through paint properties and the sprite, never a setStyle, and follows <html data-theme-resolved> live', async () => {

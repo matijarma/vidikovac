@@ -21,7 +21,7 @@ import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contrac
 import { routeName } from '../data/routes';
 import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
-import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapPoint } from '../map/city-map';
+import type { CityMapHandle, CityMapOptions, FitPadding, MapFactory, MapLine, MapOutline, MapPoint } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import { vehicleFixes } from '../motion/fixes';
 import { dataNumber, dataText } from '../panels/panel';
@@ -71,6 +71,8 @@ export interface KioskMapRequest extends MapSlotOptions {
   stop?: ScreenStop | null;
   /** A public screen: no pointer or keyboard handling and no controls. */
   interactive?: boolean;
+  /** The stop's own gradska cetvrt, dashed; null draws none. */
+  outline?: MapOutline | null;
   symbolScale?: number;
   locale?: string;
   /** The screen reads its basemap from three metres: the sign profile. */
@@ -80,7 +82,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'padding'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -319,6 +321,79 @@ export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, no
   ];
 }
 
+// --- The kvart outline ------------------------------------------------------
+//
+// One district's boundary, fetched at runtime from
+// app/public/data/kvart/<slug>.json (scripts/districts.mjs writes it beside
+// the stop catalogue and the per-stop last-run tables that already live
+// there). Between 234 B and 2.7 kB gzipped, median about 700 B.
+//
+// This does not reopen the decision that keeps the district table
+// worker-side (worker/feed/geo/districts.ts): that decision is about shipping
+// all 17 districts to a phone so it can answer "which cetvrt is this point
+// in", on a graph budgeted at 200 kB for one lookup per session. This is one
+// district, fetched once, for DRAWING, on a surface that has already loaded
+// the whole map library. Under lagano there is no map at all, and the fetch
+// below never happens, because it is reached only once map-slots has handed
+// back a container -- which it does only when the page gave it a map factory.
+
+/** Where a district's drawable outline lives. */
+export const KVART_OUTLINE_PATH = '/data/kvart';
+
+const outlinePending = new Map<string, Promise<MapOutline | null>>();
+const outlineReady = new Map<string, MapOutline | null>();
+
+function parseOutline(slug: string, body: unknown): MapOutline | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const polygons = (body as { polygons?: unknown }).polygons;
+  if (!Array.isArray(polygons)) return null;
+  const rings: [number, number][][][] = [];
+  for (const polygon of polygons) {
+    if (!Array.isArray(polygon)) return null;
+    const out: [number, number][][] = [];
+    for (const ring of polygon) {
+      if (!Array.isArray(ring) || ring.length < 4) return null;
+      const points: [number, number][] = [];
+      for (const point of ring) {
+        if (!Array.isArray(point) || typeof point[0] !== 'number' || typeof point[1] !== 'number') return null;
+        points.push([point[0], point[1]]);
+      }
+      out.push(points);
+    }
+    rings.push(out);
+  }
+  return rings.length === 0 ? null : { id: slug, polygons: rings };
+}
+
+/** The district's outline, fetched once per screen life and remembered --
+ *  including a failure, which is remembered as "no outline" rather than
+ *  retried on every 30-second poll. A screen is a long-lived thing: a flood of
+ *  retries for a decoration would cost more than the decoration is worth. */
+export function loadKvartOutline(slug: string, fetchImpl: typeof fetch = fetch): Promise<MapOutline | null> {
+  const cached = outlinePending.get(slug);
+  if (cached) return cached;
+  const pending = (async () => {
+    try {
+      const response = await fetchImpl(`${KVART_OUTLINE_PATH}/${encodeURIComponent(slug)}.json`);
+      if (!response.ok) return null;
+      return parseOutline(slug, await response.json());
+    } catch {
+      return null;
+    }
+  })().then((outline) => {
+    outlineReady.set(slug, outline);
+    return outline;
+  });
+  outlinePending.set(slug, pending);
+  return pending;
+}
+
+/** The outline already in hand for `slug`, so a map created on a later render
+ *  starts with it instead of waiting for another fetch. */
+export function kvartOutline(slug: string | null | undefined): MapOutline | null {
+  return slug ? outlineReady.get(slug) ?? null : null;
+}
+
 /** Metres per CSS pixel at a zoom and latitude (512 px tiles, as MapLibre counts). */
 export function metresPerPixel(zoom: number, lat: number): number {
   return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
@@ -333,6 +408,8 @@ export interface KioskMapInput {
   selection: PublicSelection | null;
   ariaLabel: string;
   reducedMotion?: boolean;
+  /** Injected in tests; the page's own fetch otherwise. */
+  fetchImpl?: typeof fetch;
   /** Sides of the map the composition draws its own cards over, CSS px: the
    *  kiosk measures its rail, the map centres inside what is left. Replaces
    *  the latitude shift boardCentre used to fake. */
@@ -361,6 +438,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     symbolScale: KIOSK_SYMBOL_SCALE,
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
+    outline: kvartOutline(input.stop?.district),
   };
   if (input.padding) request.padding = input.padding;
   if (input.stop) {
@@ -374,10 +452,18 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     request.selectedStop = input.selection.id;
   }
   // The view is set before the slot call so a map created by it starts there.
-  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale });
+  adapter?.setExtras({ stop: input.stop, interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, locale: input.locale, outline: request.outline });
   adapter?.setView(viewOf(request));
   const container = maps.slot(request);
   // An outage is no evidence of motion: the map holds until the feed is live again.
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
+  // A container means the page gave map-slots a factory, which lagano never
+  // does: the outline is fetched only where there is a map to draw it on.
+  const district = input.stop?.district;
+  if (container && district && !request.outline) {
+    void loadKvartOutline(district, input.fetchImpl).then((outline) => {
+      if (outline) adapter?.handle()?.setOutline?.(outline);
+    });
+  }
   return container;
 }

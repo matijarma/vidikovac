@@ -25,9 +25,11 @@ export const SOURCES = Object.freeze({
   places: 'places',
   vehicles: 'vehicles',
   screenStop: 'screen-stop',
+  outline: 'outline',
 });
 
 export const LAYERS = Object.freeze({
+  outline: 'kvart-outline',
   networkBus: 'network-bus',
   networkTram: 'network-tram',
   networkSelectedCasing: 'network-selected-casing',
@@ -58,8 +60,15 @@ export const LAYERS = Object.freeze({
 
 /** Layers drawn under the basemap's own labels, so street names still read over the network. */
 export const BELOW_LABELS: ReadonlySet<string> = new Set([
-  LAYERS.networkBus, LAYERS.networkTram, LAYERS.networkSelectedCasing, LAYERS.networkSelected, LAYERS.closuresCasing, LAYERS.closures,
+  LAYERS.outline, LAYERS.networkBus, LAYERS.networkTram, LAYERS.networkSelectedCasing, LAYERS.networkSelected, LAYERS.closuresCasing, LAYERS.closures,
 ]);
+
+/** The district outline, in multiples of its own line width. Dashed because
+ *  the rings are a build-time simplification of the City's polygons, and an
+ *  approximation should look like one; solid at this weight it would read as
+ *  one more closed road beside the closure red. */
+export const OUTLINE_DASH: readonly number[] = Object.freeze([3, 3]);
+export const OUTLINE_WIDTH_PX = 2;
 
 /** Pills appear (dots alone below): just under basemap.ts's CITY_ZOOM, so the opening view and one step out still read numbers. */
 export const PILL_ZOOM = 12.5;
@@ -422,6 +431,13 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     },
   });
   return [
+    {
+      id: LAYERS.outline,
+      type: 'line',
+      source: SOURCES.outline,
+      layout: round,
+      paint: { 'line-color': p.other, 'line-width': OUTLINE_WIDTH_PX * s, 'line-dasharray': [...OUTLINE_DASH], 'line-opacity': 0.8 },
+    },
     network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.7, 13, 1.4, 16, 3.5)),
     network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 1, 13, 1.8, 16, 4.5)),
     { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelectedCasing], layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },

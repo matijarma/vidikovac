@@ -6,6 +6,16 @@
 // screen stops so the client never needs the polygons itself (R-DG6): the
 // table alone would cost about 25 kB gzip on a `/d/` graph budgeted at
 // 200 kB for one lookup per session.
+//
+// The public screen does draw one district's boundary, from a separate
+// per-district file the same build step writes (app/public/data/kvart/<slug>
+// .json, scripts/districts.mjs). That does not reopen the decision above and
+// is not an argument for shipping this table: R-DG6 is about sending all 17
+// districts to a lightweight graph so a phone can ANSWER a lookup. The screen
+// fetches one district, once, between 234 B and 2.7 kB gzipped, to DRAW it,
+// on a surface that has already loaded MapLibre and the whole basemap. Under
+// lagano there is no map, and nothing fetches it. Both outputs come from the
+// same simplified geometry in one run, so they cannot drift apart.
 import table from '../../data/gradske-cetvrti.json' with { type: 'json' };
 import type { AreaSlug } from '../../pairing/areas';
 import type { Geo } from '../schema';
