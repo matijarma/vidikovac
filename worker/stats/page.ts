@@ -266,6 +266,10 @@ export function renderStatsPage(view: StatsView): string {
   const overCap = sum(rows, (r) => r.event === 'over_cap');
   const panelOpens = sum(rows, (r) => r.event === 'panel_open');
   const exportsN = sum(rows, (r) => r.event === 'export');
+  const ticks = sum(rows, (r) => r.event === 'twin_tick');
+  const ticksGood = sum(rows, (r) => r.event === 'twin_tick' && (r.dim1 === 'ok' || r.dim1 === 'unchanged'));
+  const watches = sum(rows, (r) => r.event === 'static_watch');
+  const watchesNewer = sum(rows, (r) => r.event === 'static_watch' && r.dim1 === 'newer');
 
   const vitals: { k: string; v: string; s: string }[] = [
     { k: 'Sesije', v: fmt(sessions), s: `${fmt(ended)} završenih` },
@@ -274,6 +278,7 @@ export function renderStatsPage(view: StatsView): string {
     { k: 'Zasloni online', v: fmt(kiosks), s: 'dnevnih prijava zaslona' },
     { k: 'Dohvati izvora u redu', v: pct(fetchesOk, fetches), s: `${fmt(fetches)} dohvata` },
     { k: 'Paneli i izvozi', v: fmt(panelOpens), s: `${fmt(exportsN)} izvoza` },
+    { k: 'Blizanac u redu', v: pct(ticksGood, ticks), s: `${fmt(ticks)} otkucaja` },
   ];
 
   const body =
@@ -299,6 +304,10 @@ export function renderStatsPage(view: StatsView): string {
     `<section><h2>Izvori</h2><p class="lede">Dohvati po izvoru i ishodu. Stupac <em>error</em> je onaj koji treba gledati; <em>stale</em> znači da je poslužena zadnja dobra kopija.</p>` +
     matrixTable('Dohvati izvora po ishodu', 'Izvor', pivot(rows, 'source_fetch', 'dim1', 'dim2'), 'još nema dohvata') +
     matrixTable('Zasloni online po četvrti', 'Četvrt', pivot(rows, 'kiosk_online', 'dim1', null), 'nijedan zaslon se još nije prijavio') +
+    `</section>` +
+    `<section><h2>Blizanac</h2><p class="lede">Promatrač ZET-ova feeda u stvarnom vremenu, jedan otkucaj svakih 10 s: <em>ok</em> je novi okvir, <em>unchanged</em> isti okvir ili 304, <em>error</em> izvor koji nije odgovorio, <em>stale_index</em> okvir čije vožnje ugrađeni statični GTFS većinom ne poznaje; <em>cold</em> znači da se objekt probudio iz pohrane.</p>` +
+    matrixTable('Otkucaji blizanca po ishodu i startu', 'Ishod', pivot(rows, 'twin_tick', 'dim1', 'dim2'), 'blizanac se još nije oglasio') +
+    `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
     `</section>` +
     `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +
     matrixTable('Aktivnosti privremenih zaslona', 'Aktivnost', pivot(rows, 'evaluation', 'dim1', 'dim2'), 'još nema evaluacijskih aktivnosti') +

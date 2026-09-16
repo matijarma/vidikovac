@@ -225,6 +225,9 @@ export const SERVER_EVENTS = [
   // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
   'twin_tick',
   'twin_hindsight',
+  // R-TE18: the hourly HEAD of ZET's static GTFS against the artefacts' build
+  // time (dim1 current|newer|unknown|error); "newer" is the call to rebuild.
+  'static_watch',
 ] as const;
 export type ServerEvent = (typeof SERVER_EVENTS)[number];
 
