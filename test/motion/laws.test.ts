@@ -67,12 +67,13 @@ describe('enforceOrder', () => {
     expect(monotone(A)).toBe(true);
     expect(B.order.contradictions.A).toBe(1);
 
-    // Fresh leader, older follower: C's fresh fix at 1100 m, D's 10 s older
-    // fix at 950 m but fast, so D's plan would run into C's dwell at T1200.
-    // The newer evidence is C's: D is held behind.
+    // Fresh leader, older follower: C's fresh fix at 1150 m, D's 10 s older
+    // fix at 950 m but fast (1070 m by the header at its own 12 m/s), so D's
+    // plan would run into C's dwell at T1200. The newer evidence is C's: D
+    // is held behind.
     const C = newTrack('C', '1', 'trip-C', 'tram');
     const D = newTrack('D', '1', 'trip-D', 'tram');
-    tram(C, [[1050, 2000], [1100, 2010]], 2010); // 5 m/s
+    tram(C, [[1100, 2000], [1150, 2010]], 2010); // 5 m/s
     tram(D, [[830, 1990], [950, 2000]], 2010); // 12 m/s, last fix older
     report = enforceOrder([C, D], net, 2012, 2010);
     expect(D.order.behind).toEqual(['C']);
@@ -98,7 +99,10 @@ describe('enforceOrder', () => {
     expect(F.order.behind).toEqual([]);
 
     // A silent leader (no fix for 52 s) constrains nobody: G's plan stands
-    // even though it runs past H's stale one.
+    // even though it runs past H's stale one. G's fresh fix lies 430 m past
+    // H's, more than a swap: the stale relation is dropped (R-TE52) and the
+    // plans put G ahead; H, silent, can still be moved, and its continued
+    // plan (which had run past G) is held behind G.
     const G = newTrack('G', '1', 'trip-G', 'tram');
     const H = newTrack('H', '1', 'trip-H', 'tram');
     tram(H, [[700, 1950], [720, 1960]], 1960); // 2 m/s between stops, then silent
@@ -108,10 +112,14 @@ describe('enforceOrder', () => {
     tram(G, [[1150, 2010]], 2010);
     buildPlan(H, net, times, null, 2012, 2010, BANDS);
     expect(ordered(H, G, 2010)).toBe(false);
-    const gKnots = JSON.stringify(G.plan);
+    const gBefore = [2010, 2030, 2060].map((t) => s(G, t, 2010));
     report = enforceOrder([G, H], net, 2012, 2010);
-    expect(report.holds).toBe(0);
-    expect(JSON.stringify(G.plan)).toBe(gKnots);
+    expect(report.holds).toBe(1);
+    expect([2010, 2030, 2060].map((t) => s(G, t, 2010))).toEqual(gBefore);
+    expect(G.order.behind).toEqual([]);
+    expect(H.order.behind).toEqual(['G']);
+    expect(ordered(G, H, 2010)).toBe(true);
+    expect(monotone(H)).toBe(true);
 
     // Concession: B keeps landing ahead of A. On the third contradicting fix,
     // with A's last fix within 40 m of stop T1200, the order is conceded and
@@ -135,5 +143,44 @@ describe('enforceOrder', () => {
     matcher.matchFix(A, fix(1400, 2040), matcher.priorFor('1_1', '1', 1), null);
     expect(A.tripId).toBe('trip-A');
     expect(A.order.behind).toEqual([]);
+  });
+});
+
+// R-TE52: an established order the two fixes themselves contradict by more
+// than two stop spacings is a stale relation (the leader began its next trip
+// at a circuit's start, a fold flipped), dropped rather than enforced; and a
+// hold never places a follower behind its own fix.
+describe('enforceOrder against stale relations', () => {
+  it('drops a relation the fixes contradict by more than two stop spacings, and never holds a follower behind its own fix', () => {
+    // P leads at 1000 m, Q follows at 600 m: established.
+    const P = newTrack('P', '1', 'trip-P', 'tram');
+    const Q = newTrack('Q', '1', 'trip-Q', 'tram');
+    tram(P, [[950, 1975], [1000, 1985]], 1990);
+    tram(Q, [[500, 1980], [600, 1990]], 1990);
+    enforceOrder([P, Q], net, 1992, 1990);
+    expect(Q.order.behind).toEqual(['P']);
+    // P reports afresh from the path's start (its next trip), 450 m behind Q's
+    // own fix: Q's plan is not dragged there; the relation goes, and the plans
+    // establish the new order the other way round.
+    tram(P, [[100, 2000], [150, 2010]], 2010);
+    const qBefore = [2010, 2030, 2060].map((t) => s(Q, t, 2010));
+    const report = enforceOrder([P, Q], net, 2012, 2010);
+    expect(report).toEqual({ pushes: 0, holds: 0, concessions: 0 });
+    expect([2010, 2030, 2060].map((t) => s(Q, t, 2010))).toEqual(qBefore);
+    expect(Q.order.behind).toEqual([]);
+    expect(P.order.behind).toEqual(['Q']);
+
+    // R's fresh fix lands 20 m ahead of S's older one: the headway would put S
+    // behind its own fix, so S is held at that fix, never behind it.
+    const R = newTrack('R', '1', 'trip-R', 'tram');
+    const S = newTrack('S', '1', 'trip-S', 'tram');
+    tram(R, [[970, 2000], [1020, 2010]], 2010); // 5 m/s
+    tram(S, [[880, 1990], [1000, 2000]], 2010); // 12 m/s, older
+    S.order.behind = ['R'];
+    S.order.contradictions = { R: 0 };
+    const held = enforceOrder([R, S], net, 2012, 2010);
+    expect(held.holds).toBe(1);
+    expect(s(S, 2000, 2010)).toBeCloseTo(1000, 0);
+    expect(monotone(S)).toBe(true);
   });
 });

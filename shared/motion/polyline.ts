@@ -268,3 +268,36 @@ export function tangent(points: readonly XY[], cum: readonly number[], s: number
   if (len === 0) return { x: 1, y: 0 }; // every point in the shape is identical
   return { x: dx / len, y: dy / len };
 }
+
+/**
+ * Every local minimum of the distance from q to the polyline within the arc
+ * window [sFrom, sTo] and within maxD, nearest arc first. A polyline that
+ * passes itself (a circuit's two rails, a balloon loop) has several: the
+ * caller decides between them by what it knows of the vehicle, where a
+ * single nearest point would decide by centimetres of GPS scatter. A local
+ * minimum is the best projection of a run of consecutive segments whose
+ * projections all lie within maxD; two runs separated by a segment farther
+ * than that are two candidates.
+ */
+export function projectionsWithin(points: readonly XY[], cum: readonly number[], q: XY, sFrom: number, sTo: number, maxD: number): Projection[] {
+  const n = points.length;
+  if (n < 2) return n === 1 && dist(q, points[0]) <= maxD ? [{ idx: 0, t: 0, s: 0, d: dist(q, points[0]), p: points[0] }] : [];
+  const segCount = n - 1;
+  let first = 0;
+  while (first + 1 < segCount && cum[first + 1] <= sFrom) first++;
+  let last = segCount - 1;
+  while (last > 0 && cum[last] >= sTo) last--;
+  const out: Projection[] = [];
+  let run: Projection | null = null;
+  for (let i = first; i <= last; i++) {
+    const cand = projectSegment(points, cum, i, q);
+    if (cand.d <= maxD) {
+      if (!run || cand.d < run.d) run = cand;
+    } else if (run) {
+      out.push(canonical(run, segCount));
+      run = null;
+    }
+  }
+  if (run) out.push(canonical(run, segCount));
+  return out;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMatcher } from '../../shared/motion/match';
 import { newTrack, type PlaneFix } from '../../shared/motion/track';
-import { corridorSpec, lonLatOf, syntheticNetwork } from './synthetic-network';
+import { corridorSpec, lonLatOf, straight, syntheticNetwork, type SynthSpec, type SynthStop } from './synthetic-network';
 
 const net = syntheticNetwork(corridorSpec());
 const matcher = createMatcher(net);
@@ -87,5 +87,79 @@ describe('matchFix on the corridor', () => {
     matcher.matchFix(bus, fix(600, -400, 1020), busPrior, null);
     expect(bus.match.shapeIdx).toBeNull(); // 370 m off its shape: the free plane, not a rail
     expect(bus.match.edge).toBeNull();
+  });
+});
+
+// A circuit: out along y = 0, a U-turn, back along y = 6, the two rails as
+// close as ZET's are. The nearest point on such a path is ambiguous at every
+// metre, so placement must come from the next stop and from movement, and a
+// vehicle already placed must stay on its fold (R-TE45).
+function circuitSpec(): SynthSpec {
+  const stops: SynthStop[] = [];
+  for (let s = 300; s < 1500; s += 300) stops.push({ id: `O${s}`, edge: 0, s });
+  for (let s = 300; s < 1500; s += 300) stops.push({ id: `R${s}`, edge: 2, s });
+  return {
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1500) },
+      { from: 1, to: 2, pts: [{ x: 1500, y: 0 }, { x: 1515, y: 3 }, { x: 1500, y: 6 }] },
+      { from: 2, to: 3, pts: [{ x: 1500, y: 6 }, { x: 0, y: 6 }] },
+    ],
+    routes: [
+      { id: '17', type: 0, paths: [{ id: 'path:17:0:loop', direction: 0, edges: [0, 1, 2], synthetic: true }] },
+      { id: '207', type: 3, busShapes: [{ id: 'B207', pts: [{ x: 0, y: -30 }, { x: 2700, y: -30 }, { x: 2700, y: -36 }, { x: 0, y: -36 }] }] },
+    ],
+    stops,
+  };
+}
+
+describe('matchFix on a circuit', () => {
+  it('places by the next stop, keeps a placed vehicle on its fold, finds a wrong fold out by the backward arc it implies, and holds a bus on the leg of its loop', () => {
+    const loop = syntheticNetwork(circuitSpec());
+    const m = createMatcher(loop);
+    const pathIdx = loop.paths.findIndex((p) => p.id === 'path:17:0:loop');
+    const returnLegAt = (x: number) => loop.paths[pathIdx].offsets[2] + (1500 - x);
+    const prior = m.priorFor(null, '17', 0);
+    expect(prior.pathIdx).toBe(pathIdx);
+
+    // Between the rails, heading for a return platform: the return fold.
+    const a = newTrack('a', '17', 'trip-a', 'tram');
+    m.matchFix(a, fix(1200, 3, 1000), prior, 'R600');
+    expect(a.match.s).toBeCloseTo(returnLegAt(1200), 0);
+    // Nearer the outbound rail now (1 m against 5 m): continuity keeps the fold.
+    m.matchFix(a, fix(1100, 1, 1010), prior, 'R600');
+    expect(a.match.s).toBeCloseTo(returnLegAt(1100), 0);
+    m.matchFix(a, fix(1000, 5, 1020), prior, 'R600');
+    expect(a.match.s).toBeCloseTo(returnLegAt(1000), 0);
+    for (let i = 1; i < a.fixes.length; i++) expect(a.fixes[i].arc!.s).toBeGreaterThan(a.fixes[i - 1].arc!.s);
+
+    // No next stop, no movement yet: the first fold is a guess. Westward
+    // movement would read as 100 m backward on the outbound fold, which a
+    // tram cannot do: the guess is corrected to the fold that runs west.
+    const b = newTrack('b', '17', 'trip-b', 'tram');
+    m.matchFix(b, fix(1200, 3, 1000), prior, null);
+    m.matchFix(b, fix(1100, 3, 1010), prior, null);
+    expect(b.match.s).toBeCloseTo(returnLegAt(1100), 0);
+    m.matchFix(b, fix(1000, 3, 1020), prior, null);
+    expect(b.match.s).toBeCloseTo(returnLegAt(1000), 0);
+
+    // A stray first fix, 64 m from the return rail and 70 m from the outbound
+    // one (outside the near band on both): the fold of the next stop wins,
+    // not the nearer rail, and the residual still says the fix is a stray.
+    const d = newTrack('d', '17', 'trip-d', 'tram');
+    m.matchFix(d, fix(750, 70, 1000), prior, 'O900');
+    expect(d.match.s).toBeCloseTo(750, 0);
+    expect(d.match.residual).toBeCloseTo(70, 0);
+    expect(d.offPathCount).toBe(1);
+
+    // A bus on the return leg of its loop, its fixes scattered between the
+    // two legs: the arc keeps growing along the leg it is on.
+    const c = newTrack('c', '207', 'trip-c', 'bus');
+    const busPrior = m.priorFor('B207', '207', 0);
+    m.matchFix(c, fix(2000, -34, 1000), busPrior, null);
+    m.matchFix(c, fix(1900, -33, 1010), busPrior, null);
+    m.matchFix(c, fix(1800, -35, 1020), busPrior, null);
+    const shape = loop.shapes[c.match.shapeIdx!];
+    expect(shape.id).toBe('B207');
+    expect(c.fixes.map((f) => f.arc!.s)).toEqual([expect.closeTo(2706 + 700, 0), expect.closeTo(2706 + 800, 0), expect.closeTo(2706 + 900, 0)]);
   });
 });

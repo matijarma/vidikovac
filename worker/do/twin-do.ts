@@ -341,7 +341,7 @@ export class TwinDO extends DurableObject<Env> {
         if (!record) continue;
         const pattern = this.index.patterns[record.pattern];
         if (!pattern) continue;
-        out.set(id, { direction: pattern.direction === 1 ? 1 : 0, headsign: pattern.headsign, shapeId: pattern.shape === '' ? null : pattern.shape });
+        out.set(id, { direction: pattern.direction === 1 ? 1 : 0, headsign: pattern.headsign, shapeId: pattern.shape === '' ? null : pattern.shape, startSec: record.start });
       }
       return out;
     }

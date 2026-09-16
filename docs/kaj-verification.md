@@ -395,7 +395,7 @@ Provjere na grani (obje kapije prošle u cijelosti; ništa nije preskočeno ni s
 | B (faza B: graf pruge, motor, planovi na žici, integrator) | `8e19313` | čisto | 157 / 2430 | 20 / 148 | čisto | 70/70 (motion.spec prepisan za planove, prvi prolaz) | 18/18 | 89 / 0 | 100 × 6 |
 | Spojeno stablo (`twin-engine` u `main`, prije objave) | `6f73559` | čisto | 158 / 2412 | 21 / 149 | čisto | 70/70 | 18/18 | 77 / 0 | 100 × 6 |
 
-Motorova vlastita kapija (R-TE30, `test/motion/engine-envelope.test.ts`): šest tramvaja na dijeljenom koridoru kroz 20 simuliranih minuta, šum GPS-a 8 m, 2 od 3 osvježenja po otkucaju, kašnjenje 2 do 25 s: 0 pretjecanja, 0 vožnji unatrag, smjer poznat nakon prvog očitanja, svaki prvi plan u pokretu, ocjena unatrag na 30 s p95 32,2 m. Na živom feedu (probom kroz `wrangler dev` 16. rujna oko 05:10): 38 vozila u kvadratu zaslona, sva s planom na stvarnoj stazi grafa, hladno dekodiranje artefakata 46 ms (mreža) + 195 ms (indeks).
+Motorova vlastita kapija (R-TE30, `test/motion/engine-envelope.test.ts`): šest tramvaja na dijeljenom koridoru kroz 20 simuliranih minuta, šum GPS-a 8 m, 2 od 3 osvježenja po otkucaju, kašnjenje 2 do 25 s: 0 pretjecanja, 0 vožnji unatrag, smjer poznat nakon prvog očitanja, svaki prvi plan u pokretu, ocjena unatrag na 30 s p95 32,2 m (41,0 m poslije kruga E, odjeljak niže). Na živom feedu (probom kroz `wrangler dev` 16. rujna oko 05:10): 38 vozila u kvadratu zaslona, sva s planom na stvarnoj stazi grafa, hladno dekodiranje artefakata 46 ms (mreža) + 195 ms (indeks).
 
 Kako se kapija vozi u radnom stablu: vlastita dva `wrangler dev` poslužitelja na 8797 i 8798 (8787 i 8788 pripadaju drugim sesijama), pokrenuta jedan za drugim (oba pri startu vrte `npm run build` i sudaraju se ako krenu istodobno), nikad `npm run build` dok rade (poslužitelj čuva staru kartu imovine i sve pada); zatim `E2E_NO_WEBSERVER=1 E2E_APP_URL=http://localhost:8797 E2E_SHORT_URL=http://localhost:8798 npx playwright test --project=chromium` pa `--project=mobile`, `REVIEW_APP_URL=http://127.0.0.1:8797 npm run review:visual`, `E2E_APP_URL=http://127.0.0.1:8797 node scripts/lighthouse-a11y.mjs`. Radno stablo treba kopiju `.wrangler/state` glavnog stabla (arhiva pločica) i `.dev.vars`.
 
@@ -408,7 +408,7 @@ dvanaest minuta nakon objave; to je prvi pogled, a ne mjerenje od 24 h koje redc
 |---|---|---|
 | Objava | Workers Builds na `git push` u `main` | uspješno: gradnja `9b37f978`, inačica `225e2715`, objavljena 04:28 UTC; `/api/health` odgovara `{"ok":true}` |
 | Blizanac otkucava | `/stats`: `twin_tick` po ishodu (`ok`, `unchanged`, `error`, `stale_index`) i startu (`cold`/`warm`) nakon 24 h; udio hladnih startova govori koliko se objekt izbacuje između alarma | prvih 12 min: 117 otkucaja, 65 `ok` i 52 `unchanged`, 0 `error`, 0 `stale_index`; 1 hladan i 116 toplih, dakle objekt ostaje u memoriji i lanac alarma ne prekida se. **Mjerenje od 24 h još predstoji.** |
-| Ocjena unatrag | `/stats`: `twin_hindsight` p50/p95 po horizontu 10/30/60 s nakon 24 h; prag iz koridora je p95 < 60 m na 30 s | prvih 12 min, 52.708 ocjena: na 10 s 45,6 % ispod 50 m i 10,2 % na 200 m ili više; na 30 s 34,3 % ispod 50 m i 20,0 % na 200 m ili više; na 60 s 25,2 % ispod 50 m i 34,6 % na 200 m ili više. **Znatno lošije od koridora (p95 32 m na 30 s) i prag p95 < 60 m nije postignut.** Prvih dvanaest minuta blizanac nema ni jednu naučenu vrijednost ni povijest ijednog vozila, a koridor mjeri samo tramvaje u pokretu; sud se donosi tek na mjerenju od 24 h. |
+| Ocjena unatrag | `/stats`: `twin_hindsight` p50/p95 po horizontu 10/30/60 s nakon 24 h; prag iz koridora je p95 < 60 m na 30 s | prvih 12 min, 52.708 ocjena: na 10 s 45,6 % ispod 50 m i 10,2 % na 200 m ili više; na 30 s 34,3 % ispod 50 m i 20,0 % na 200 m ili više; na 60 s 25,2 % ispod 50 m i 34,6 % na 200 m ili više. **Znatno lošije od koridora (p95 32 m na 30 s) i prag p95 < 60 m nije postignut.** Uzroci su nađeni istog dana ponavljanjem snimljenog feeda i popravljeni u krugu E (odjeljak niže); nakon objave kruga E mjerenje od 24 h na `/stats` ponovno je mjera. |
 | Snimanje u R2 | okviri pod `zet-rt/GGGG/MM/DD/` u spremniku `vidikovac-feed`, pravilo isteka od 7 dana | tri okvira dohvaćena po točnom ključu kroz cijeli prozor: `042840-1789532920.pb` (101.664 B), `042913-1789532953.pb` (101.827 B), `044014-1789533614.pb` (104.206 B). `wrangler r2 bucket info` u istom trenutku još pokazuje `object_count: 0`: ta brojka kasni, objekti postoje. |
 | Planovi na žici | `/api/teaser`: stavke `zet-rt` nose `motion.plan`, `motion.path` i `data.headsign` | 66 vozila u kvadratu, svih 66 s planom, stazom i odredištem; 54 tramvaja i 12 autobusa; `status` modula `live`, `sources.zet` `live` |
 | Statični GTFS | `/stats`: `static_watch` `newer` = 0, inače `npm run build:network && npm run build:trips`, commit, push | 0 od 1 provjere zatekle noviji statični GTFS |
@@ -418,6 +418,30 @@ dvanaest minuta nakon objave; to je prvi pogled, a ne mjerenje od 24 h koje redc
 | Linija 1 | tramvaj na pruzi (sintetička staza), ne u slobodnoj ravnini | oba tramvaja linije 1 u kvadratu voze po sintetičkim stazama grafa (`path:1:0:...`, `path:1:1:...`), ne u slobodnoj ravnini |
 | Autobus na obilasku | glatko u slobodnoj ravnini, bez skoka | nije provedeno: pogledom, vlasnik |
 | Ponavljanje snimljenog dana | `scripts/replay-twin.mjs` nad okvirima iz R2, pragovi upisani ispod | još nema cijelog snimljenog dana; snimanje radi (redak gore) |
+
+### Krug E: dijagnoza ocjene unatrag i popravci motora (16. rujna 2026, grana `twin-hindsight`)
+
+Dva snimka živog feeda po 25 minuta (134 okvira svaki, 07:00 i 09:35 po zagrebačkom vremenu, oko 330 vozila, 38 do 40 tisuća ocijenjenih svježih očitanja po snimku) ponovljena su kroz pravi `runTick` s ocjenjivačem koji greške dijeli po vrsti vozila, ostvarenom kretanju u posljednjem razmaku (stoji, sporo, brzo, luk unatrag), situaciji (na peronu, izvan perona, vožnja nije počela, uz kraj staze, hladno) i predznaku (plan ispred ili iza vozila). Nađeno, redom po masi greške:
+
+1. **Preklopi staze.** Većina tramvajskih vožnji vozi po sintetičkim stazama, a ZET linije 9 i 17 (i dio 6) piše kao krugove: izlazni i povratni kolosijek leže metrima jedan od drugoga, pa je najbliža točka staze dvosmislena na svakom metru; kružni autobusi (141, 207, 211, 228…) isto. Projekcija bez pamćenja preskakivala je luk za kilometre (p95 tramvaja na 10 s bio je 644 m). Popravak R-TE45: smještanje među lokalnim minimumima udaljenosti u dosegu posljednjeg luka, prvo smještanje po smjeru i idućem stajalištu.
+2. **Zastarjeli odnos u zakonu redoslijeda.** Kad vođa pod istim brojem vozila počne iduću vožnju na početku kruga, sljedbenik šest kilometara dalje bio je zadržavan na luku nula minutama, jer ustupanje traži vođu uz stajalište. Popravak R-TE52: odnos koji sama očitanja proturječe za više od 300 m odbacuje se i uspostavlja iznova; zadržavanje nikad iza vlastitog očitanja. Sam ovaj popravak spustio je p95 tramvaja na 10 s s 325 na 193 m.
+3. **Planer slijep za stanje vozila.** Vozilo u pokretu planirano je prosjekom voznog reda (4,2 m/s naspram ostvarenih 11,3 m/s), vozilo koje stoji planirano je u pokretu 59 % vremena, vozilo na okretištu odlazilo je odmah krstarećom brzinom (hladni autobus na 30 s: p50 476 m, 93 % ispred). Popravci R-TE46 do R-TE49 (vlastita brzina 15 s, stajanje izvan perona, produženo stajanje na peronu, čekanje reda polaska iz indeksa jer ZET-ov `TripUpdate` na okretištu ne nosi buduće vrijeme).
+4. **Procjena brzine.** Terećenje stajanja od 20 s na razmaku od 11 s čitalo je autobuse na 22 m/s; gustoća stajališta u središtu ostavljala je tramvaje na "0,0 m/s" minutama u vožnji. Popravci R-TE50, R-TE51.
+
+Izmjereno stajanje na peronu iz istih snimaka (raspon između prvog i posljednjeg očitanja na peronu, stvarno stajanje do jednog razmaka dulje): tramvaj p50 15 s, p75 23 s, p90 37 s; autobus p50 11 s, p75 15 s; od 11.631 tramvajskog stajanja samo 9 prolazaka pokraj stajališta bez očitanja u zoni. Zadanih 20 s stajanja ostaje.
+
+Ocjena unatrag prije i poslije, isti snimci, isti ocjenjivač (bez ocjena preko promjene vožnje, kao u proizvodnji):
+
+| Snimak | Horizont | Prije: p50 / p95 / udio ≥ 200 m | Poslije: p50 / p95 / udio ≥ 200 m |
+|---|---|---|---|
+| 07:00 | 10 s | 56 m / 380 m / 11 % | 45 m / 211 m / 6 % |
+| 07:00 | 30 s | 84 m / 515 m / 21 % | 70 m / 326 m / 15 % |
+| 07:00 | 60 s | 128 m / 703 m / 34 % | 108 m / 486 m / 29 % |
+| 09:35 | 10 s | 57 m / 340 m / 10 % | 45 m / 211 m / 6 % |
+| 09:35 | 30 s | 85 m / 488 m / 20 % | 71 m / 324 m / 15 % |
+| 09:35 | 60 s | 122 m / 672 m / 33 % | 105 m / 479 m / 27 % |
+
+Tramvaji sami, snimak 07:00, 10 s: p50 52 → 41 m, p95 644 → 195 m, udio ≥ 200 m 11 → 5 %. Autobusi koji stoje, 10 s: p50 76 → 12 m. Što ostaje: vozila u pokretu (p50 oko 50 m, plan iza brzog tramvaja u tri četvrtine slučajeva) i autobusi bez voznog reda na svojim polilinijama (dionice iza vlastite brzine voze zadanih 8 m/s); sljedeći krug je vozni red za autobusne oblike. Koridor (R-TE30) poslije kruga E: p95 41 m na 30 s (32 m prije), jer simulator vozi točno po redu.
 
 ## Ponavljanje snimljenih okvira (B8)
 

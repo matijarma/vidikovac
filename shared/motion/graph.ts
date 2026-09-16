@@ -6,7 +6,7 @@
 // its stops in arc order, and arc <-> point on a path. DOM-free (R-TE15).
 
 import type { XY } from './geo';
-import { at, project } from './polyline';
+import { at, project, projectionsWithin } from './polyline';
 import type { Edge, Path, Stop } from './network';
 
 export interface EdgeHit {
@@ -32,6 +32,11 @@ export interface GraphMethods {
   toPathPoint(pathIdx: number, s: number): XY;
   /** The arc along the path nearest to `p`, and how far off the path `p` is. */
   projectOntoPath(pathIdx: number, p: XY): { s: number; d: number };
+  /** Every local minimum of the distance from `p` to the path within the arc
+   *  window and within `maxD`, nearest arc first (polyline.ts
+   *  projectionsWithin): a circuit or a loop offers several, and the matcher
+   *  chooses among them (R-TE45). */
+  projectionsOntoPath(pathIdx: number, p: XY, sFrom: number, sTo: number, maxD: number): { s: number; d: number }[];
 }
 
 /** Spatial grid cell for edgesNear: 250 m is about one inner-city stop
@@ -160,6 +165,10 @@ export function graphMethods(edges: readonly Edge[], paths: readonly Path[], sto
       const geo = pathGeometry(pathIdx);
       const proj = project(geo.pts, geo.cum, p);
       return { s: proj.s, d: proj.d };
+    },
+    projectionsOntoPath(pathIdx, p, sFrom, sTo, maxD) {
+      const geo = pathGeometry(pathIdx);
+      return projectionsWithin(geo.pts, geo.cum, p, sFrom, sTo, maxD).map((proj) => ({ s: proj.s, d: proj.d }));
     },
   };
 }

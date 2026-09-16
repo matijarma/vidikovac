@@ -39,6 +39,13 @@ export const DWELL_CHARGE_S = 20;
  *  interval cannot make a tram look three times faster than it is (R-F10). */
 const MOVING_SHARE_FLOOR = 1 / 3;
 
+/** An interval shorter than this cannot hide a dwell (R-TE50): at ZET's
+ *  10 s tick a vehicle that stood at the platform would have been reported
+ *  there, and that interval is skipped as platform-touching above; a stop
+ *  passed within two ticks was passed, not dwelt at. Charging it read
+ *  buses at 15 to 22 m/s on the live feed (recording of 16 Sept). */
+export const CHARGEABLE_INTERVAL_S = 25;
+
 export interface SpeedContext {
   /** How many stops lie strictly between two arcs on the geometry `key`. */
   stopsBetween(key: string, fromS: number, toS: number): number;
@@ -58,16 +65,25 @@ function median(values: number[]): number {
 export function estimateSpeed(fixes: readonly PlaneFix[], ctx?: SpeedContext): number {
   const dwell = ctx?.dwellSec ?? DWELL_CHARGE_S;
   const ratios: number[] = [];
+  // Where the platforms are so dense that no interval is clear of a stop
+  // zone (the inner city at ZET's 10 s tick), the vehicle's own recent pace
+  // over its moving intervals, standing time and all, still says more about
+  // the next quarter minute than the timetable's average does (R-TE51). Each
+  // such pace is a lower bound on the cruise (the interval may hold a stand),
+  // so the tightest of the recent ones speaks, never a guess dressed as a
+  // measurement.
+  const pace: number[] = [];
   for (let i = 1; i < fixes.length; i++) {
     const a = fixes[i - 1];
     const b = fixes[i];
-    if (a.arc?.atStop || b.arc?.atStop) continue;
     const sameGeometry = a.arc !== undefined && b.arc !== undefined && a.arc.key === b.arc.key;
     const ds = sameGeometry ? Math.abs(b.arc!.s - a.arc!.s) : dist(a, b);
     const dt = b.atSec - a.atSec;
     if (ds < DEAD_ZONE_M || dt <= 0) continue;
+    pace.push(ds / dt);
+    if (a.arc?.atStop || b.arc?.atStop) continue;
     let charged = 0;
-    if (sameGeometry && ctx) {
+    if (sameGeometry && ctx && dt >= CHARGEABLE_INTERVAL_S) {
       const lo = Math.min(a.arc!.s, b.arc!.s) + DEAD_ZONE_M;
       const hi = Math.max(a.arc!.s, b.arc!.s) - DEAD_ZONE_M;
       if (hi > lo) charged += ctx.stopsBetween(a.arc!.key, lo, hi) * dwell;
@@ -76,6 +92,8 @@ export function estimateSpeed(fixes: readonly PlaneFix[], ctx?: SpeedContext): n
     ratios.push(ds / moving);
   }
   const recent = ratios.slice(-SPEED_INTERVALS);
-  if (recent.length === 0) return 0;
-  return Math.min(median(recent), MAX_SPEED_MS);
+  if (recent.length > 0) return Math.min(median(recent), MAX_SPEED_MS);
+  const recentPace = pace.slice(-SPEED_INTERVALS);
+  if (recentPace.length === 0) return 0;
+  return Math.min(Math.max(...recentPace), MAX_SPEED_MS);
 }

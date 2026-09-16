@@ -238,15 +238,15 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[]): Map<st
   for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
     const chunk = unique.slice(i, i + LOOKUP_CHUNK);
     const rows = sql
-      .exec<{ trip_id: string; pattern: number; block: string; direction: number; shape: string | null; headsign: string }>(
-        `SELECT t.trip_id, t.pattern, t.block, p.direction, p.shape, p.headsign
+      .exec<{ trip_id: string; pattern: number; block: string; start: number; direction: number; shape: string | null; headsign: string }>(
+        `SELECT t.trip_id, t.pattern, t.block, t.start, p.direction, p.shape, p.headsign
            FROM trips t JOIN patterns p ON p.idx = t.pattern
           WHERE t.trip_id IN (${chunk.map(() => '?').join(', ')})`,
         ...chunk,
       )
       .toArray();
     for (const row of rows) {
-      out.set(row.trip_id, { direction: row.direction === 1 ? 1 : 0, headsign: row.headsign, shapeId: row.shape, pattern: row.pattern, block: row.block });
+      out.set(row.trip_id, { direction: row.direction === 1 ? 1 : 0, headsign: row.headsign, shapeId: row.shape, startSec: row.start, pattern: row.pattern, block: row.block });
     }
   }
   return out;
