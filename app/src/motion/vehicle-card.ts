@@ -9,9 +9,9 @@
 import { routeName } from '../data/routes';
 import type { I18n } from '../i18n/i18n';
 import { delayWord } from '../layers/shared';
-import type { XY } from './geo';
+import type { XY } from '../../../shared/motion/geo';
 import type { Drawn } from './integrator';
-import type { Network } from './network';
+import type { Network } from '../../../shared/motion/network';
 
 export interface VehicleCard {
   line: string;

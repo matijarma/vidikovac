@@ -6,8 +6,8 @@
 // have loaded one. Pure: no DOM, no fetching.
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
-import { toLonLat } from '../motion/geo';
-import type { Network } from '../motion/network';
+import { toLonLat } from '../../../shared/motion/geo';
+import type { Network } from '../../../shared/motion/network';
 import { compareRouteShort, sortRoutes, type RouteEntry, type StopGroup } from './search';
 
 let routes: RouteEntry[] | null = null;

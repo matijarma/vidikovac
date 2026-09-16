@@ -4,7 +4,7 @@
 // here, and the Worker validates the id again on creation.
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
-import { dist, toPlane, type XY } from '../motion/geo';
+import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 
 export const DEFAULT_STOP_ID = '106_1';
 

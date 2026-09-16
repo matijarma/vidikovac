@@ -23,7 +23,7 @@ import { loadStops } from '../core/screens';
 import type { LayerContext } from '../layers/types';
 import type { CityMapHandle, FitPadding, MapCamera, MapLine, MapPoint, MapSelection, MapStatus, VehicleInfo } from '../map/city-map';
 import { routeDelayMap } from '../motion/fixes';
-import type { Network } from '../motion/network';
+import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { statusText } from '../panels/panel';
 import { escapeHtml as esc } from '../ui/dom/escape';

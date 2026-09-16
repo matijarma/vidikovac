@@ -18,7 +18,7 @@
 // statement of R-P2, on both surfaces, not optional.
 import type { I18n } from '../i18n/i18n';
 import { escapeHtml } from '../ui/dom/escape';
-import { loadNetwork, type Network } from './network';
+import { loadNetwork, type Network } from '../../../shared/motion/network';
 import { DEFAULT_CROP, ROUTE_TYPE_TRAM, wholeNetworkCrop, type Crop } from './schematic';
 import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } from './schematic-view';
 

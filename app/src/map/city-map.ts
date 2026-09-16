@@ -17,10 +17,10 @@
 // lightweight path never loads either (R-L2).
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
-import { toLonLat } from '../motion/geo';
+import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
-import type { Network } from '../motion/network';
+import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
 import type { MapTheme, StyleLayerLike, StyleOp } from './basemap';

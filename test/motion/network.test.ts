@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { toPlane } from '../../shared/motion/geo';
 import { cumulative } from '../../shared/motion/polyline';
 import { decodeNetwork, loadNetwork, NetworkVersionError } from '../../shared/motion/network';
-import * as shim from '../../app/src/motion/network';
 
 import { B1_LONLAT, E0_LONLAT, E1_LONLAT, rawArtefactV2, unitLonLat } from './network-fixture';
 
@@ -49,7 +48,6 @@ describe('decodeNetwork', () => {
     (stale as { version: number }).version = 1;
     expect(() => decodeNetwork(stale)).toThrow(NetworkVersionError);
     expect(() => decodeNetwork(null)).toThrow(NetworkVersionError);
-    expect(shim.decodeNetwork).toBe(decodeNetwork); // the app-side path is a shim (R-TE15)
 
     const fetchSpy = vi.fn(async (url: string) => {
       expect(url).toBe('/data/zet-network.json');

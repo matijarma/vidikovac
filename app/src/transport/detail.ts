@@ -10,7 +10,7 @@ import type { I18n } from '../i18n/i18n';
 import { summariseRoutes, type RouteSummaryRow } from '../layers/route-summary';
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import type { VehicleInfo } from '../map/city-map';
-import type { Network } from '../motion/network';
+import type { Network } from '../../../shared/motion/network';
 import { compassKey } from '../motion/vehicle-card';
 import type { StopGroup } from './search';
 

@@ -14,9 +14,9 @@
 // something on real geometry. The `Drawn.p` this receives is the model's
 // own estimate; a reported fix never reaches this file (R-P2).
 
-import { dist, toPlane, type XY } from './geo';
+import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 import type { Drawn } from './integrator';
-import type { Network } from './network';
+import type { Network } from '../../../shared/motion/network';
 
 /** The narrow stroke/path/clip surface a canvas 2D context exposes,
  *  structurally a subset of CanvasRenderingContext2D so a recording test

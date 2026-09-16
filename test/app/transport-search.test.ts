@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { decodeNetwork } from '../../app/src/motion/network';
+import { decodeNetwork } from '../../shared/motion/network';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from '../../app/src/transport/catalogue';
 import { compareRouteShort, fold, searchTransport, type StopGroup } from '../../app/src/transport/search';
 import { tr, trPlural } from '../../app/src/transport/strings';

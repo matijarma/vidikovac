@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import type { XY } from '../../app/src/motion/geo';
+import type { XY } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
-import type { Network, Shape, Stop } from '../../app/src/motion/network';
-import { cumulative } from '../../app/src/motion/polyline';
+import type { Network, Shape, Stop } from '../../shared/motion/network';
+import { cumulative } from '../../shared/motion/polyline';
 import { compassKey, describeVehicle } from '../../app/src/motion/vehicle-card';
 
 function shapeOf(id: string, route: string, pts: XY[]): Shape {

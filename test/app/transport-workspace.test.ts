@@ -11,7 +11,7 @@ import { renderLayer } from '../../app/src/layers';
 import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapHandle, CityMapOptions, MapSelection, MapStatus, VehicleInfo } from '../../app/src/map/city-map';
 import { createMapSlots, type MapSlots } from '../../app/src/map/map-slots';
-import { decodeNetwork, type Network } from '../../app/src/motion/network';
+import { decodeNetwork, type Network } from '../../shared/motion/network';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
 import { text } from './helpers';
 

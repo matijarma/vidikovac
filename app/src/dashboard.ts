@@ -33,7 +33,7 @@ import type { ExportKind, LayerContext } from './layers/types';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
-import { loadNetwork, type Network } from './motion/network';
+import { loadNetwork, type Network } from '../../shared/motion/network';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';

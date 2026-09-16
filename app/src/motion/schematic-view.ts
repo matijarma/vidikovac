@@ -18,10 +18,10 @@
 // what they pass in: a `crop`/`types` pair (the whole network for a session,
 // the screen's own centre and trams only for a locked kiosk, R-P1) and the
 // resolved `Network` once network.ts's loadNetwork() has settled.
-import { dist, type XY } from './geo';
+import { dist, type XY } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from './loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from './integrator';
-import type { Network } from './network';
+import type { Network } from '../../../shared/motion/network';
 import {
   DEFAULT_CROP,
   hitVehicle,
