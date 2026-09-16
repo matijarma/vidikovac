@@ -192,9 +192,8 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     const gate = deferred();
     const teaser = await stubTeaser(page, () => zetSnapshot('e2e-kiosk-1', 0), gate.promise);
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
-    // D13's pin: kiosk-map only exists while the Promet scene shows, and this
-    // test's own waits can outlast the 20 s scene tick on a loaded CI box.
-    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
+    // One fixed window (R-KP1): the map stands for the screen's life, so no wait can outlast it.
+    await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
     // Load the real tiles and worker before starting the five-second ease.
     // Otherwise map startup can consume the entire interpolation window.
@@ -233,8 +232,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     // this must be set before the page (and its first script) ever loads.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
-    // D13's pin, alongside reduced motion's own hold on the field.
-    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
+    await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
     const schematicSel = '[data-testid=kiosk-map]';
@@ -308,8 +306,9 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     await page.goto(lightweightUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
 
-    await expect(page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]')).toBeVisible();
-    await expect(page.getByTestId('kiosk-lines')).toContainText(ROUTE_ID);
+    const board = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
+    await expect(board).toBeVisible();
+    await expect(board).toContainText(ROUTE_ID);
     expect(await page.locator('canvas').count(), 'no canvas of any kind on a lightweight page (R-L2)').toBe(0);
   });
 });

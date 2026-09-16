@@ -78,11 +78,13 @@ export function codeHost(codeBase: string = CODE_URL_BASE): string {
   return `${codeBase.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/[/?#].*$/, '')}/s`;
 }
 
-/** The address with a break opportunity after every dot and before the path,
- *  so beside a 240 px QR it wraps at its own joints ("zagreb." / "aningfilm.hr/s")
- *  rather than being ellipsised: a typed address is useless in half. */
+/** The address with a break opportunity before every dot and before the path,
+ *  so beside a 240 px QR it wraps at its own joints ("zagreb" / ".aningfilm" /
+ *  ".hr/s": the punctuation opens the next line, so no line ends like a
+ *  sentence and "/s" never stands alone) rather than being ellipsised: a
+ *  typed address is useless in half. */
 function hostMarkup(host: string): string {
-  return host.split(/(?<=\.)|(?=\/)/).map(escapeHtml).join('<wbr>');
+  return host.split(/(?=[./])/).map(escapeHtml).join('<wbr>');
 }
 
 /** "ili upiši kod na" and, on its own line, the address. */
