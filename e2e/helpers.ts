@@ -7,6 +7,8 @@ import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protoc
 import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
 
 export const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
+/** The stop every e2e-provisioned screen is about (DEFAULT_STOP_ID on both sides of the wire): Trg bana J. Jelačića, platform 1. */
+export const E2E_STOP_ID = '106_1';
 /** Server running with SESSION_MINUTES=0.2; undefined when pointed at a hosted target without one. */
 export const SHORT_URL: string | undefined = process.env.E2E_NO_WEBSERVER
   ? process.env.E2E_SHORT_URL
@@ -47,7 +49,12 @@ export async function provisionKiosk(
       'No E2E_KIOSK_URL and no E2E_ADMIN_BYPASS (env or .dev.vars): cannot provision a test screen. See docs/kiosk.md, section "Testni zaslon".',
     );
   }
-  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon' };
+  // The screen is provisioned with a stop, as the wizard always does (it preselects this one: app/src/kiosk/stops.ts and
+  // worker/pairing/stops.ts DEFAULT_STOP_ID, Trg bana J. Jelačića): the Prozor screen is a window around its stop -- the
+  // transit statement, the stop ring, the stop-scoped teaser and the lines board all follow from it -- so a stopless
+  // screen would prove a composition no café ever sees. The id is a literal here because Playwright's own loader cannot
+  // follow either module's JSON imports.
+  const body: CreateBeaconRequest = { venueType: 'kafic', area: 'Donji grad', operatorLabel: 'E2E testni zaslon', stopId: E2E_STOP_ID };
   const res = await request.post(`${base}/api/admin/beacons`, { headers: { 'x-e2e-admin-bypass': token }, data: body });
   expect([200, 201], `POST /api/admin/beacons answered ${res.status()}: ${await res.text()}`).toContain(res.status());
   const json = (await res.json()) as CreateBeaconResponse;

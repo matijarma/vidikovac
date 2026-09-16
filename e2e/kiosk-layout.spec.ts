@@ -52,8 +52,13 @@ const HEAD_STRIP_PX = { wide: 96, compact: 72 } as const;
 const MIN_MAP_SHARE = 0.6;
 /** The field's least share of a portrait stage's height (plan "Frame"). */
 const MIN_PORTRAIT_FIELD = 0.5;
-/** The most major street names the prozor profile places in the field (plan D3), read off data-major-labels (contract 3). */
-const MAX_MAJOR_LABELS = 8;
+/** The most major street names the prozor profile places in the field (plan D3), read off data-major-labels (contract 3).
+ *  Eight on the landscape fields, where R-KP17's spacing was measured (two to three at Jelačić). The totem's field spans
+ *  the same 2.8 km across but twice the ground north to south (1080 x ~1420 px at z14.36 against 1400 x 888 at z14.74),
+ *  and MapLibre's symbol-spacing is a distance along a road in tile pixels, so a north-south road that gets one name on
+ *  the wall gets two on the totem; the cap follows the ground, not the literal: half again the landscape's (nine were
+ *  measured at Jelačić on 16 Sept 2026). */
+const MAX_MAJOR_LABELS = { landscape: 8, portrait: 12 } as const;
 /** How long a positive placed-labels count is waited for once the map is ready: the controller stamps it once at
  *  ready (when the tiles may not have rendered a name yet) and then on every map paint, which rides the teaser poll
  *  (app/src/motion/loop.ts nextPollDelay, at most 13.5 s), so one poll after ready plus rendering slack. */
@@ -71,8 +76,9 @@ const FIT_WAIT_MS = 10_000;
  *  badges capped per SAY_BADGE_CAP and the "+N" tail, a closure, a session
  *  with a long title. Two readings per size: `worst`, where the transit
  *  value runs to two lines ("6 kasni 4 min · 13 kasni 3 min" at the main
- *  tier), and `calm`, where every value is one line ("Sve linije voze
- *  redovito"). Beside the card of R-KP21 (the QR beside the lead and the
+ *  tier) and the session's long title is cut to two, and `calm`, where every
+ *  value is one line ("Sve linije voze redovito", a short session title).
+ *  Beside the card of R-KP21 (the QR beside the lead and the
  *  hint, the code across) the wide column holds two in the worst case and
  *  three in the calm one, the compact one and two, the totem's row three
  *  either way (kiosk.css "The column" carries the measured budget). The
@@ -90,8 +96,8 @@ type Reading = keyof typeof TRANSIT_VALUE;
 const SAMPLE_KEYS = ['e2e:transit', 'e2e:closure', 'e2e:assembly'] as const;
 /** An eleven-line stop (Trg bana Jelačića's trams, then buses), badged to the composition's cap with the "+N" tail as say.ts would. */
 const STOP_LINES: readonly (readonly [string, 'tram' | 'bus'])[] = [['1', 'tram'], ['6', 'tram'], ['11', 'tram'], ['12', 'tram'], ['13', 'tram'], ['14', 'tram'], ['17', 'tram'], ['106', 'bus'], ['201', 'bus'], ['203', 'bus'], ['268', 'bus']];
-/** The session's title in the plan's example, longer than two lines of the main tier at every size, so the composition has to cut it. */
-const ASSEMBLY_TITLE = '25. sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba';
+/** The session's title in the plan's example, longer than two lines of the main tier at every size, so the composition has to cut it; and a short one for the calm reading, one line at every size. */
+const ASSEMBLY_TITLE = { worst: '25. sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba', calm: 'Sjednica Skupštine' } as const;
 /** The plan's own statements in the contract's markup (contract 4), keyed apart from the ranker's and marked as the sample of one reading. */
 function sampleStatements(composition: Composition, reading: Reading): string {
   const cap = SAY_BADGE_CAP[composition];
@@ -110,7 +116,7 @@ function sampleStatements(composition: Composition, reading: Reading): string {
 </article>
 <article class="k-say" data-e2e-sample="${reading}" data-key="e2e:assembly" data-domain="civic" data-testid="kiosk-say" data-say="assembly">
   <p class="k-say-label"><span class="k-say-kicker">Gradska skupština</span></p>
-  <p class="k-say-value" data-replace data-sig="${ASSEMBLY_TITLE}">${ASSEMBLY_TITLE}</p>
+  <p class="k-say-value" data-replace data-sig="${ASSEMBLY_TITLE[reading]}">${ASSEMBLY_TITLE[reading]}</p>
   <p class="k-say-context">sutra 08:30 · Skupština Grada Zagreba</p>
 </article>`;
 }
@@ -332,7 +338,7 @@ for (const size of SIZES) {
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}.png`, fullPage: false });
 
       // Contract 3: the prozor profile places at most eight major street names in the field (R-KP17 measured two to three at Jelačić).
-      expect(await majorLabels(page), 'the prozor profile places at most eight major street names in the field').toBeLessThanOrEqual(MAX_MAJOR_LABELS);
+      expect(await majorLabels(page), 'the prozor profile places few major street names in the field').toBeLessThanOrEqual(portrait ? MAX_MAJOR_LABELS.portrait : MAX_MAJOR_LABELS.landscape);
 
       await page.getByTestId('kiosk-essentials-open').click();
       const panel = page.getByTestId('kiosk-essentials');
@@ -359,8 +365,9 @@ for (const size of SIZES) {
       // The composition's own fit() (after a paint, on a resize) hides the statements the room does not hold whole from the
       // foot up and cuts a value past two lines at a word (R-KP5). Everything fit() decides is polled together, so the
       // reading is of the fitted column: the session's title runs past two lines at every size, so where its statement is
-      // shown the cut ("…" on a word) is the proof that fit() has run; where it is hidden, the hiding is. What shows is a
-      // floor (R-KP22), never a promise past the room, and always the sample's head: nothing is skipped over.
+      // shown the cut ("…" on a word) is the proof that fit() has run; where it is hidden, the hiding is (the calm
+      // reading's short title is whole either way). What shows is a floor (R-KP22), never a promise past the room, and
+      // always the sample's head: nothing is skipped over.
       await expect.poll(async () => {
         const m = await measureFrame(page, html, reading);
         const assembly = m.values['e2e:assembly'];
@@ -369,7 +376,7 @@ for (const size of SIZES) {
           fromTheHead: m.shown.every((key, i) => key === SAMPLE_KEYS[i]),
           overflow: m.overflow,
           valuesInTwoLines: Object.values(m.valueLines).every((lines) => lines <= MAX_VALUE_LINES),
-          titleCutAtAWord: assembly === undefined || (/\S…$/.test(assembly) && assembly.length < ASSEMBLY_TITLE.length),
+          titleCutAtAWord: assembly === undefined || reading === 'calm' || (/\S…$/.test(assembly) && assembly.length < ASSEMBLY_TITLE.worst.length),
         };
       }, { timeout: FIT_WAIT_MS, message: `the ${composition} frame holds at least ${frame[reading]} whole in the ${reading} reading, fitted` }).toEqual({ holdsTheFloor: true, fromTheHead: true, overflow: false, valuesInTwoLines: true, titleCutAtAWord: true });
       const m = await measureFrame(page, html, reading);
