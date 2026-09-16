@@ -164,9 +164,13 @@ const METRICS_FN = ({ shellRoot }) => {
     stage: shell ? shell.getAttribute('data-stage') : null,
     sheet: workspace ? workspace.getAttribute('data-sheet') : null,
     map: canvas ? { status: canvas.getAttribute('data-map-status'), top: Math.round(cr.top), height: Math.round(cr.height), width: Math.round(cr.width), viewportShare: +(cr.height / innerHeight).toFixed(2), touchAction: getComputedStyle(canvas).touchAction, cooperative: Boolean(document.querySelector('.maplibregl-cooperative-gesture-screen')), markers: document.querySelectorAll('.maplibregl-marker').length } : null,
+    // Two elements carry kiosk-lines (R-KP8, contract 8): the lagano board inside the field and the transit statement's
+    // badge row in the column; each is read under its own parent, never bare, so a lagano capture with both never
+    // counts one for the other.
     kiosk: kioskField ? {
       sayCount: document.querySelectorAll('[data-testid=kiosk-says] article.k-say').length,
-      linesPresent: Boolean(document.querySelector('[data-testid=kiosk-lines]')),
+      boardPresent: Boolean(document.querySelector('[data-testid=kiosk-live] [data-testid=kiosk-lines]')),
+      transitBadgesPresent: Boolean(document.querySelector('[data-say=transit] [data-testid=kiosk-lines]')),
     } : null,
     title: document.title, lang: document.documentElement.lang, theme: document.documentElement.getAttribute('data-theme-resolved'), url: location.href.replace(/#.*/, '#…'),
   };

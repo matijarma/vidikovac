@@ -55,9 +55,11 @@
 
    Older engines: 100vh before 100dvh, `grid-gap` before `gap`. State is
    read off data attributes the controller writes (data-phase, data-mode,
-   data-size, data-live); the two exceptions are the code's column cap (a
-   container query) and the handheld body (a :has), both with a safe
-   fallback. */
+   data-size, data-live); the exceptions are the code's column cap (a
+   container query) and the sheet's two :has uses -- the handheld body,
+   which owns the page scroll, and .k-say-label:has(.k-say-badges), which
+   seats a kicker beside its badges -- each with a safe fallback (the body
+   simply does not scroll; the label stays a wrapping row). */
 
 .kiosk-body { margin: 0; overflow: hidden; background: var(--tone-surface-canvas); }
 

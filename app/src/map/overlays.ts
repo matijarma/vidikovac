@@ -291,8 +291,9 @@ export interface OverlayOptions {
   modes?: ReadonlySet<number> | null;
   closuresVisible?: boolean;
   selection?: MapSelection | null;
-  /** Which kinds of city point this chapter lights. null, the default, lights
-   *  every one -- the phone and the desk have no chapters. An unlit kind is
+  /** Which kinds of city point this map lights (the kiosk passes its own
+   *  set, kiosk/mapview.ts KIOSK_EMPHASIS, R-KP9). null, the default, lights
+   *  every one -- the phone and the desk light everything. An unlit kind is
    *  hidden, not dimmed: a mark a reader cannot act on is not a quieter mark,
    *  it is a mark that should not be there. */
   emphasis?: readonly PlaceKind[] | null;
