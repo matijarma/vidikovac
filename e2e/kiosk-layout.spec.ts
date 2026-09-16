@@ -16,6 +16,10 @@
 //     more with the statements left of the card under it;
 //   - every statement value fits its box in at most two lines and is never
 //     ellipsised (R-KP5: the composer shortens by rule and by measurement);
+//   - the frame holds its statements: with the plan's own three statements
+//     in the column, both landscape sizes show two whole over the card and
+//     the totem's row three, the transit label within the rows its badge
+//     cap budgets, a long title cut at a word (kiosk.css "The column");
 //   - the prozor profile places at most eight major street names in the
 //     field, read off data-major-labels (contract 3) once the map is ready;
 //     while the map handle is the R-KP15 stub the attribute never appears,
@@ -28,6 +32,7 @@
 // A screenshot per size and face lands in test-results/kiosk-<w>-<face>.png,
 // and one per paired composition in kiosk-<w>-<face>-paired-<layer>.png.
 import { expect, test, type Page } from '@playwright/test';
+import { SAY_BADGE_CAP, type Composition } from '../app/src/kiosk/layout';
 import { APP_URL, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { KIOSK_WIDE_MIN_PX } from './lib';
 
@@ -51,6 +56,86 @@ const MAX_MAJOR_LABELS = 8;
 const MAJOR_LABELS_WAIT_MS = 8_000;
 /** A statement value is at most this many lines (R-KP5). */
 const MAX_VALUE_LINES = 2;
+/** The 1 s tick fits the column (kiosk.ts fitAll); a sample put into it is measured within this. */
+const FIT_WAIT_MS = 10_000;
+
+/** What the frame holds at each design size, measured with the plan's own
+ *  three statements (plan "The column": the transit verdict with the stop's
+ *  line badges and a two-line worst case, a closure, a session with a long
+ *  title) put into the live column and fitted by the composition
+ *  (kiosk/invitation.ts fit()). Full HD holds two whole statements over the
+ *  card at both landscape sizes -- a third needs about 400 px where the
+ *  520 px column has 373 beside the 240 px QR card with its two-line lead
+ *  (kiosk.css "The column") -- and the totem's row holds three. The label
+ *  rows are the badge cap's budget (kiosk/layout.ts SAY_BADGE_CAP): two at
+ *  wide, one at compact; the totem's eight badges take one or two. */
+const FRAME: Record<Exclude<Composition, 'handheld'>, { shown: readonly string[]; labelRowsAtMost: number }> = {
+  wide: { shown: ['e2e:transit', 'e2e:closure'], labelRowsAtMost: 2 },
+  compact: { shown: ['e2e:transit', 'e2e:closure'], labelRowsAtMost: 1 },
+  portrait: { shown: ['e2e:transit', 'e2e:closure', 'e2e:assembly'], labelRowsAtMost: 2 },
+};
+/** An eleven-line stop (Trg bana Jelačića's trams, then buses), badged to the composition's cap with the "+N" tail as say.ts would. */
+const STOP_LINES: readonly (readonly [string, 'tram' | 'bus'])[] = [['1', 'tram'], ['6', 'tram'], ['11', 'tram'], ['12', 'tram'], ['13', 'tram'], ['14', 'tram'], ['17', 'tram'], ['106', 'bus'], ['201', 'bus'], ['203', 'bus'], ['268', 'bus']];
+/** The session's title in the plan's example, longer than two lines of the main tier at every size, so the composition has to cut it. */
+const ASSEMBLY_TITLE = '25. sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba';
+/** The plan's own statements in the contract's markup (contract 4), keyed apart from the ranker's and marked as the sample. */
+function sampleStatements(composition: Composition): string {
+  const cap = SAY_BADGE_CAP[composition];
+  const badges = STOP_LINES.slice(0, cap).map(([n, kind]) => `<span class="k-line-badge line" data-kind="${kind}" data-size="k" aria-label="${kind === 'tram' ? 'Tramvaj' : 'Autobus'} ${n}">${n}</span>`).join('');
+  const more = STOP_LINES.length > cap ? `<span class="k-say-more">+${STOP_LINES.length - cap}</span>` : '';
+  return `<article class="k-say" data-e2e-sample data-key="e2e:transit" data-domain="transit" data-tone="late" data-testid="kiosk-say" data-say="transit">
+  <p class="k-say-label"><span class="k-say-kicker">Promet</span><span class="k-say-badges">${badges}${more}</span></p>
+  <p class="k-say-value" data-replace data-sig="6 kasni 4 min · 13 kasni 3 min">6 kasni 4 min · 13 kasni 3 min</p>
+  <p class="k-say-context">23 vozila u blizini · ZET 14:34</p>
+</article>
+<article class="k-say" data-e2e-sample data-key="e2e:closure" data-domain="komunalno" data-tone="komunalno" data-testid="kiosk-say" data-say="closure">
+  <p class="k-say-label"><span class="k-say-kicker">Zatvoreno</span></p>
+  <p class="k-say-value" data-replace data-sig="Amruševa">Amruševa</p>
+  <p class="k-say-context">350 m · oba smjera · do 18:00</p>
+</article>
+<article class="k-say" data-e2e-sample data-key="e2e:assembly" data-domain="civic" data-testid="kiosk-say" data-say="assembly">
+  <p class="k-say-label"><span class="k-say-kicker">Gradska skupština</span></p>
+  <p class="k-say-value" data-replace data-sig="${ASSEMBLY_TITLE}">${ASSEMBLY_TITLE}</p>
+  <p class="k-say-context">sutra 08:30 · Skupština Grada Zagreba</p>
+</article>`;
+}
+
+interface FrameMeasure {
+  /** The sample statements the composition left shown, in order. */
+  shown: string[];
+  /** The column's box holds everything shown (nothing is clipped). */
+  overflow: boolean;
+  /** Lines per shown value: the box's height over its line-height. */
+  valueLines: Record<string, number>;
+  /** The shown values' text, to see a cut title end in an ellipsis. */
+  values: Record<string, string>;
+  /** Distinct rows the transit label's badges and tail stand on. */
+  labelRows: number;
+}
+/** Puts the sample into the live column (again, if a paint since replaced it) and reads what the composition made of it. */
+function measureFrame(page: Page, html: string): Promise<FrameMeasure> {
+  return page.evaluate((sample) => {
+    const says = document.querySelector<HTMLElement>('[data-testid=kiosk-says]')!;
+    if (!says.querySelector('[data-e2e-sample]')) says.innerHTML = sample;
+    const items = [...says.querySelectorAll<HTMLElement>('article[data-e2e-sample]')];
+    const shownItems = items.filter((el) => el.offsetParent !== null);
+    const valueLines: Record<string, number> = {};
+    const values: Record<string, string> = {};
+    for (const el of shownItems) {
+      const value = el.querySelector<HTMLElement>('.k-say-value')!;
+      const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
+      valueLines[el.dataset.key!] = Math.round(value.clientHeight / lineHeight);
+      values[el.dataset.key!] = value.textContent ?? '';
+    }
+    // A row is a cluster of vertically overlapping boxes: the "+N" tail is shorter than a badge and centred on its row.
+    const rows: { top: number; bottom: number }[] = [];
+    for (const box of [...says.querySelectorAll<HTMLElement>('[data-key="e2e:transit"] .k-say-badges > *')].map((b) => b.getBoundingClientRect())) {
+      const row = rows.find((r) => box.top < r.bottom - 1 && box.bottom > r.top + 1);
+      if (row) { row.top = Math.min(row.top, box.top); row.bottom = Math.max(row.bottom, box.bottom); } else rows.push({ top: box.top, bottom: box.bottom });
+    }
+    return { shown: shownItems.map((el) => el.dataset.key!), overflow: says.scrollHeight > says.clientHeight + 1, valueLines, values, labelRows: rows.length };
+  }, html);
+}
 
 /** Every geometry rule in one page-side pass; an empty list is the proof. */
 function geometryIssues(page: Page): Promise<string[]> {
@@ -252,6 +337,38 @@ for (const size of SIZES) {
       await expect(panel).toBeHidden();
     });
   }
+}
+
+for (const size of SIZES) {
+  const portrait = size.height > size.width;
+  const composition: Exclude<Composition, 'handheld'> = portrait ? 'portrait' : size.width >= KIOSK_WIDE_MIN_PX ? 'wide' : 'compact';
+  const frame = FRAME[composition];
+  test(`the frame at ${size.width} by ${size.height} holds ${frame.shown.length} of the plan's statements whole over the card, the transit label in ${frame.labelRowsAtMost} row(s) at most, every value in two lines, a long title cut at a word`, async ({ page, request }) => {
+    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    await openInvitation(page, 'light', size, kioskUrl);
+    await expect(page.getByTestId('kiosk')).toHaveAttribute('data-phase', 'invitation');
+    const html = sampleStatements(composition);
+    // The composition's own fit() runs on the 1 s tick: the statements the room does not hold whole are hidden from the
+    // foot up and a value past two lines is cut at a word (R-KP5). Everything fit() decides is polled together, so the
+    // reading is of the fitted column: the session's title runs past two lines at every size, so where its statement
+    // is shown the cut ("…" on a word) is the proof that fit() has run; where it is hidden, the hiding is.
+    await expect.poll(async () => {
+      const m = await measureFrame(page, html);
+      const assembly = m.values['e2e:assembly'];
+      return {
+        shown: m.shown,
+        overflow: m.overflow,
+        valuesInTwoLines: Object.values(m.valueLines).every((lines) => lines <= MAX_VALUE_LINES),
+        titleCutAtAWord: assembly === undefined || (/\S…$/.test(assembly) && assembly.length < ASSEMBLY_TITLE.length),
+      };
+    }, { timeout: FIT_WAIT_MS, message: `the ${composition} frame holds ${frame.shown.join(', ')} whole, fitted` }).toEqual({ shown: [...frame.shown], overflow: false, valuesInTwoLines: true, titleCutAtAWord: true });
+    // The label's rows are the sheet's and the cap's, not fit()'s: read once the column is fitted.
+    const m = await measureFrame(page, html);
+    expect(m.labelRows, 'the transit label stays within the rows its badge cap budgets').toBeLessThanOrEqual(frame.labelRowsAtMost);
+    expect(await geometryIssues(page)).toEqual([]);
+    expect(await compositionIssues(page, portrait, MAX_VALUE_LINES, MIN_MAP_SHARE, MIN_PORTRAIT_FIELD)).toEqual([]);
+    await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-frame.png`, fullPage: false });
+  });
 }
 
 for (const size of SIZES) {

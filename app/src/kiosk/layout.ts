@@ -119,14 +119,27 @@ export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.
  *  candidate on a phone, which scrolls -- eight is every kind say.ts knows
  *  (SayKind), so it is "all" without an infinity the composer would have to
  *  guard against. The room decides the rest: a statement the column does not
- *  hold whole is hidden by measurement (kiosk/invitation.ts), never clipped. */
+ *  hold whole is hidden by measurement (kiosk/invitation.ts), never clipped.
+ *  At wide that room is 373 px at 1920 x 1080 (kiosk.css, "The column"):
+ *  two statements whole, the third shown where the type outgrows the card,
+ *  on a wall above Full HD. */
 export const SAY_SLOTS: Readonly<Record<Composition, number>> = Object.freeze({ wide: 3, compact: 2, portrait: 3, handheld: 8 });
 
-/** Line badges before the transit statement says "+N": two rows of six on
- *  the 472 px wide column (a k-size badge is 60 px plus its gap), one row on
- *  the compact column's 368 px and on a phone, eight across the totem row's
- *  wider left half. */
-export const SAY_BADGE_CAP: Readonly<Record<Composition, number>> = Object.freeze({ wide: 12, compact: 6, portrait: 8, handheld: 6 });
+/** Line badges before the transit statement says "+N". The kicker sits on
+ *  the first badge row (kiosk.css .k-say-label), so the badges have the
+ *  column's width less the kicker ("PROMET", about 105 / 79 / 79 / 60 px)
+ *  and its gap; a k-size badge is --k-badge wide (60 / 46 / 46 / 36 px, up
+ *  to ten more for three digits) plus its 0.3-gap, and the "+N" tail about
+ *  46 / 34 / 34 / 30 px. The cap is what the rows the budget allows hold
+ *  with the tail at any digit count, so a transit statement's height is
+ *  known before it is measured (kiosk.css, "The column"): wide, two rows
+ *  (356 px: five two-digit or four three-digit badges a row, so seven and
+ *  the tail); compact, one row (318 px: four and the tail; five three-digit
+ *  badges overflow it); the totem's left half, eight (405 px: eight
+ *  two-digit badges on one row, or two rows with the tail, and its 388 px
+ *  of room holds three statements either way); a phone, six on the 292 px
+ *  it has (a phone scrolls; the cap keeps the row a glance). */
+export const SAY_BADGE_CAP: Readonly<Record<Composition, number>> = Object.freeze({ wide: 7, compact: 4, portrait: 8, handheld: 6 });
 
 /** A title's shortening budget in characters (a notice, a session, a work),
  *  cut at a word boundary with "..." by the composer (R-KP14), never by CSS:

@@ -264,14 +264,14 @@ describe('the invitation: one field, one column', () => {
     expect(BARE).not.toContain('.maplibregl-ctrl-bottom-right');
     expect(decls(':root[data-lagano=\'1\'] .k-field').background).toBe('var(--k-surface)');
   });
-  it('the column is a surface panel: the statements over the card, a hairline on its left, the composition padding, a gap before the card', () => {
+  it('the column is a surface panel on a budget: the statements over the card, a hairline on its left, a gap of block padding and the composition inline padding, half a gap before the card (two statements whole at 1920 x 1080 and 1366 x 768; kiosk.css "The column")', () => {
     const column = decls('.k-column');
     expect(column.display).toBe('grid');
     expect(column['grid-template-rows']).toBe('minmax(0, 1fr) auto');
     expect(column.background).toBe('var(--k-surface)');
     expect(column['border-left']).toBe('1px solid var(--k-line)');
-    expect(column.padding).toBe('var(--k-pad)');
-    expect(column['row-gap']).toBe('var(--k-gap)');
+    expect(column.padding).toBe('var(--k-gap) var(--k-pad)');
+    expect(column['row-gap']).toBe('calc(var(--k-gap) * 0.5)');
     const says = decls('.k-says');
     expect(says.display).toBe('flex');
     expect(says['flex-direction']).toBe('column');
@@ -282,10 +282,10 @@ describe('the invitation: one field, one column', () => {
     expect(BARE).not.toContain('.k-invitation .k-side');
     expect(BARE).not.toContain('.k-side-tiles');
   });
-  it('a statement is label, value and context on hairlines with no box: the label uppercase at the label tier in the domain colour, the value at the main tier never ellipsised or clamped, the context one line at the hint tier', () => {
+  it('a statement is label, value and context on hairlines with no box, 0.6 of a gap above and below: the label uppercase at the label tier in the domain colour, the value at the main tier never ellipsised or clamped, the context one line at the hint tier with its own line-height', () => {
     const say = decls('.k-say');
     expect(say['border-top']).toBe('1px solid var(--k-line)');
-    expect(say['padding-block']).toBe('calc(var(--k-gap) * 0.9)');
+    expect(say['padding-block']).toBe('calc(var(--k-gap) * 0.6)');
     expect(say.background).toBeUndefined();
     expect(say['border-radius']).toBeUndefined();
     expect(say.border).toBeUndefined();
@@ -311,6 +311,7 @@ describe('the invitation: one field, one column', () => {
     expect(BARE).not.toMatch(/\.k-say-value[^{]*\{[^}]*(text-overflow|line-clamp)/);
     const context = decls('.k-say-context');
     expect(context['font-size']).toBe('var(--k-hint-size)');
+    expect(context['line-height']).toBe('1.2');
     expect(context.color).toBe('var(--k-ink-2)');
     expect(context['white-space']).toBe('nowrap');
     expect(context.overflow).toBe('hidden');
@@ -354,12 +355,13 @@ describe('the invitation: one field, one column', () => {
     for (const dead of ['k-scene-in', 'k-scene-out', '.k-story-item', 'k-story-in', 'k-story-out']) expect(BARE, dead).not.toContain(dead);
     expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
   });
-  it('the card is accent-filled with a lead, a QR-hint row and a code row spanning the width; the address beside the QR wraps at its own joints and never ellipsises', () => {
+  it('the card is accent-filled with a lead, a QR-hint row and a code row spanning the width, padded by a gap with its rows 0.6 of a gap apart; the address beside the QR wraps at its own joints and never ellipsises', () => {
     const card = decls('.k-invite');
     expect(card['grid-template-areas']).toBe("'lead lead' 'qr hint' 'code code'");
     expect(card.background).toBe('var(--k-action)');
     expect(card.color).toBe('var(--k-action-ink)');
     expect(card.padding).toBe('var(--k-gap)');
+    expect(card['row-gap']).toBe('calc(var(--k-gap) * 0.6)');
     expect(decls('.k-invite > .k-hint')['align-self']).toBe('end');
     const host = decls('.k-hint-host');
     expect(host.display).toBe('block');

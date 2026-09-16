@@ -1073,7 +1073,7 @@ describe('the field, the column and the one map', () => {
     expect(third!.hidden).toBe(true);
   });
 
-  it('each composition hands the ranker its own tables (R-KP5): wide 3/12/56, compact 2/6/44, portrait 3/8/48, handheld all/6/40, with the stop, the modules and the moment', async () => {
+  it('each composition hands the ranker its own tables (R-KP5): wide 3/7/56, compact 2/4/44, portrait 3/8/48, handheld all/6/40, with the stop, the modules and the moment', async () => {
     const cases: [string, { width: number; height: number }, keyof typeof SAY_SLOTS][] = [
       ['wide', { width: 1920, height: 1080 }, 'wide'], ['compact', { width: 1366, height: 768 }, 'compact'],
       ['portrait', { width: 1080, height: 1920 }, 'portrait'], ['handheld', { width: 390, height: 844 }, 'handheld'],
@@ -1089,7 +1089,8 @@ describe('the field, the column and the one map', () => {
       expect(input.lastRun, name).toBeNull();
     }
     expect([SAY_SLOTS.wide, SAY_SLOTS.compact, SAY_SLOTS.portrait]).toEqual([3, 2, 3]);
-    expect(SAY_BADGE_CAP).toEqual({ wide: 12, compact: 6, portrait: 8, handheld: 6 });
+    // The badge caps are what the label row holds beside the kicker with its "+N" tail (kiosk/layout.ts): two rows at wide, one at compact.
+    expect(SAY_BADGE_CAP).toEqual({ wide: 7, compact: 4, portrait: 8, handheld: 6 });
     expect(SAY_VALUE_CHARS).toEqual({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
     // A phone shows every candidate: eight is every kind say.ts knows.
     expect(SAY_SLOTS.handheld).toBe(8);

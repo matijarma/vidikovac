@@ -257,11 +257,32 @@
    statements take what the card leaves. kiosk/invitation.ts paints the
    statements through ui/dom/reconcile.ts and then measures: a value past
    two lines is shortened at a word, a statement the room does not hold is
-   hidden whole -- never clipped, never ellipsised (R-KP5). */
-.k-column { display: grid; grid-template-rows: minmax(0, 1fr) auto; row-gap: var(--k-gap); box-sizing: border-box; min-width: 0; min-height: 0; background: var(--k-surface); border-left: 1px solid var(--k-line); padding: var(--k-pad); }
+   hidden whole -- never clipped, never ellipsised (R-KP5).
+
+   The vertical budget at the design sizes, the numbers the composition is
+   held to (e2e/kiosk-layout.spec.ts measures them with the plan's own three
+   statements): the column is 888 px tall at 1920 x 1080 and 624 at
+   1366 x 768. The card takes 465 / 380 px -- its --k-gap padding, the lead
+   (two lines of the main tier at wide, one at compact: the copy and the
+   tier are the design system's), the 240 px QR, the code at 15cqi of the
+   card with its 8 px bar, two row gaps of 0.6 gap. This panel's block
+   padding takes two gaps and the gap before the card half a gap. What is
+   left, 373 / 209 px, holds two statements whole at each size: at wide a
+   transit statement of two badge rows and a two-line value (222 px) over a
+   one-line statement (137 px); at compact a one-badge-row transit statement
+   (99 px) over a one-line statement (99 px), the caps in kiosk/layout.ts
+   keeping that badge row single. A third statement would need about 400 px
+   at wide, so Full HD shows two, and the third the ranker offers appears
+   where the type outgrows the card: a 4K wall scales the type by 2 and the
+   card by 1.35 and leaves about 946 px. The block padding is --k-gap, the
+   card's own padding, so the column reads as one rhythm; the inline padding
+   stays --k-pad so the column's content aligns with the header's and the
+   strip's. */
+.k-column { display: grid; grid-template-rows: minmax(0, 1fr) auto; row-gap: calc(var(--k-gap) * 0.5); box-sizing: border-box; min-width: 0; min-height: 0; background: var(--k-surface); border-left: 1px solid var(--k-line); padding: var(--k-gap) var(--k-pad); }
 .k-says { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-/* A statement: label, value, context, separated from the next by a hairline; no fill, no border, no radius. */
-.k-say { display: grid; gap: calc(var(--k-gap) * 0.25); min-width: 0; padding-block: calc(var(--k-gap) * 0.9); border-top: 1px solid var(--k-line); }
+/* A statement: label, value, context, separated from the next by a hairline; no fill, no border, no radius.
+   0.6 of the gap above and below the hairline (12 / 8 px) is the air the budget above affords two statements. */
+.k-say { display: grid; gap: calc(var(--k-gap) * 0.25); min-width: 0; padding-block: calc(var(--k-gap) * 0.6); border-top: 1px solid var(--k-line); }
 .k-say:first-child { border-top: 0; padding-top: 0; }
 /* The kicker in the domain's colour, with the transit statement's line badges beside it and a "+N" when the cap cuts them.
    With badges the label is two columns -- the kicker, then the badges wrapping in the rest of the width -- so a second
@@ -286,8 +307,8 @@
 @keyframes k-say-in { from { opacity: 0; } }
 /* A last-departure pair: the line badge and its time, as many across as the value holds. */
 .k-say-pair { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.35); margin-right: var(--k-gap); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* The context: one line, the source and its time; it may ellipsise, the value never. */
-.k-say-context { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
+/* The context: one line, the source and its time; it may ellipsise, the value never. Its own line-height, so the row is a known height in the budget. */
+.k-say-context { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); line-height: 1.2; color: var(--k-ink-2); }
 /* A stale source marks its context in the strip's stale colour; its badge word (base.css .badge[data-tone='stale']) is sized to the hint tier as the paired rows' .k-badge is. */
 .k-say[data-state='stale'] .k-say-context { color: var(--k-amber); }
 .k-say .badge { min-height: 0; padding: 0.1em 0.5em; gap: 0.35em; font-size: var(--k-hint-size); letter-spacing: 0; line-height: 1.2; vertical-align: baseline; }
@@ -305,8 +326,9 @@
 .k-say-sk-value { inline-size: 85%; block-size: calc(var(--k-main-size) * 1.1); }
 .k-say-sk-context { inline-size: 55%; block-size: var(--k-hint-size); }
 
-/* --- The invitation card: QR, lead, hint, code, remaining time ------------ */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.8); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+/* --- The invitation card: QR, lead, hint, code, remaining time ------------
+   Padded by a gap, its rows 0.6 of a gap apart: the card's height is part of the column's budget (above). */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
