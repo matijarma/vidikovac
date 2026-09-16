@@ -62,13 +62,17 @@ export interface InvitationHandle {
   destroy(): void;
 }
 
-/** The column (contract 4): the statements, then the card whose QR and code the rotation paints. The lead is the page's one h1. */
+/** The column (contract 4): the statements, then the card whose QR and code
+ *  the rotation paints (R-KP21): the lead over the hint in one side wrapper
+ *  the QR stands beside on a wall (kiosk.css lays the totem's and the
+ *  phone's card out of the same pieces), then the code and its bar across.
+ *  Reading order is the lead, the hint, the QR, the code; the lead is the
+ *  page's one h1. */
 function columnMarkup(s: KioskStrings, codeBase?: string): string {
   return `<div class="k-says" data-testid="kiosk-says" aria-live="off"></div>
     <article class="k-invite" data-testid="kiosk-invite">
-      <h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>
+      <div class="k-invite-side"><h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>${hintMarkup(s, codeBase)}</div>
       <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
-      ${hintMarkup(s, codeBase)}
       ${codeBlockMarkup(s)}
     </article>`;
 }

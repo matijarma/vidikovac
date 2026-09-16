@@ -804,7 +804,7 @@ describe('alerts, polling, the first tap and disposal', () => {
 // The invitation composed (plan "Frame", R-KP1, R-KP5): one field, one column
 // of statements over the card, the header's weather group, the strip.
 describe('the invitation composition: the card, the header group, the strip', () => {
-  it('orders the column statements then card; the header carries the weather group with the condition icon, the reading and the sun time; the card is lead, QR, hint, code', async () => {
+  it('orders the column statements then card; the header carries the weather group with the condition icon, the reading and the sun time; the card is the lead over the hint beside the QR, then the code (R-KP21)', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const column = q(k.root, '[data-testid=kiosk-invitation] .k-column')!;
@@ -826,8 +826,9 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect(text(q(card, '.k-hint-host'))).toBe('zagreb.aningfilm.hr/s');
     expect(q(card, '.k-hint-host')!.querySelectorAll('wbr').length).toBeGreaterThan(0);
     expect(text(q(card, '.k-hint'))).toBe('ili upiši kod na zagreb.aningfilm.hr/s');
-    // The card's four areas in order: the lead across, the QR beside the hint, the code and its bar across.
-    expect([...card.children].map((el) => el.className)).toEqual(['k-lead', 'k-qr', 'k-hint', 'k-invite-code']);
+    // The card's pieces in reading order: the lead and the hint together (the side the QR stands beside on a wall), the QR, the code and its bar across.
+    expect([...card.children].map((el) => el.className)).toEqual(['k-invite-side', 'k-qr', 'k-invite-code']);
+    expect([...q(card, '.k-invite-side')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint']);
     expect(q(card, '.k-invite-code [data-testid=pair-code]')).not.toBeNull();
     expect(q(card, '.k-invite-code [data-testid=code-progress] .k-progress-bar')).not.toBeNull();
     // One h1 on the screen (the card's lead); the field is a labelled section, not a headed one.

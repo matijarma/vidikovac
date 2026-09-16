@@ -326,16 +326,24 @@
 .k-say-sk-value { inline-size: 85%; block-size: calc(var(--k-main-size) * 1.1); }
 .k-say-sk-context { inline-size: 55%; block-size: var(--k-hint-size); }
 
-/* --- The invitation card: QR, lead, hint, code, remaining time ------------
-   Padded by a gap, its rows 0.6 of a gap apart: the card's height is part of the column's budget (above). */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
-.k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
+/* --- The invitation card: the QR beside the lead and the hint, the code spanning (R-KP21) ---
+   Two rows: the 240 px QR in the first column with the lead over the hint
+   beside it, then the code with its bar across both. The first row is at
+   least the QR's height and grows if the side column outgrows it: the card
+   never clips. Padded by a gap, its rows 0.6 of a gap apart: the card's
+   height is part of the column's budget (above). The lead sits at the
+   supporting tier, weight 800, wrapping freely beside the QR: at the main
+   tier across the card it took two lines and cost the column a statement. */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: minmax(var(--k-qr), auto) auto; grid-template-areas: 'qr side' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
+/* The lead and the hint share the side column: the lead at its head, the hint at its foot, over the QR's own height. */
+.k-invite-side { grid-area: side; display: grid; align-content: space-between; min-width: 0; }
+.k-lead { font-size: var(--k-sup-size); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
-.k-invite > .k-hint { grid-area: hint; align-self: end; min-width: 0; font-size: var(--k-hint-size); line-height: 1.3; }
+.k-hint { min-width: 0; font-size: var(--k-hint-size); line-height: 1.3; }
 /* The typed address, whole: beside a 240 px QR it wraps at the break points
    the markup gives it (after each dot, before the path) and, as the last
    resort, anywhere -- a typed address is useless ellipsised. */
@@ -355,9 +363,9 @@
 .k-code-dash { margin: 0 0.15em; opacity: 0.4; }
 .k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
-/* The same card, stood up: the lead, the QR, the hint, the code, one under the other. */
+/* The same card, stood up: the lead, the QR, the hint, the code, one under the other (the side wrapper dissolves; see the portrait section). */
 .kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; margin-top: var(--k-gap); background: var(--k-surface); color: var(--k-ink); }
-.kiosk[data-size='handheld'] .k-invite > .k-hint { align-self: start; color: var(--k-ink-2); }
+.kiosk[data-size='handheld'] .k-invite .k-hint { align-self: start; color: var(--k-ink-2); }
 .kiosk[data-size='handheld'] .k-code { color: var(--k-action); }
 .kiosk[data-size='handheld'] .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
@@ -598,6 +606,15 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
 .kiosk[data-portrait='1'] .k-basics-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .kiosk[data-portrait='1'] .k-column { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, auto); column-gap: var(--k-gap); border-left: 0; border-top: 1px solid var(--k-line); }
+/* The totem's card keeps the lead across the card over the QR-hint row: beside the statements its height IS their room (the
+   column's one row is as tall as the card), so the taller drawing holds the three statements the totem shows, where the
+   wall's two-row card (above) would cost one. A phone stands the same pieces up. In both the side wrapper dissolves
+   (display: contents) and the lead and the hint take their own areas; the lead keeps the wall's tier. */
+.kiosk[data-portrait='1'] .k-invite { grid-template-rows: auto minmax(var(--k-qr), auto) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; }
+.kiosk[data-portrait='1'] .k-invite-side, .kiosk[data-size='handheld'] .k-invite-side { display: contents; }
+.kiosk[data-portrait='1'] .k-lead, .kiosk[data-size='handheld'] .k-lead { grid-area: lead; }
+.kiosk[data-portrait='1'] .k-hint, .kiosk[data-size='handheld'] .k-hint { grid-area: hint; }
+.kiosk[data-portrait='1'] .k-hint { align-self: end; }
 /* The portrait header is 1044 px wide: the date and the sub-brand leave in every mode and the chip narrows, so the
    clock group keeps its sunset time on screen. */
 .kiosk[data-portrait='1'] .k-date { display: none; }

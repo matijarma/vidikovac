@@ -161,7 +161,7 @@ describe('seven type tiers per composition, each a token times --k-zoom', () => 
     expect(decls('.k-say-value')['font-size']).toBe('var(--k-main-size)');
     expect(decls('.k-say-label')['font-size']).toBe('var(--k-label-size)');
     expect(decls('.k-say-context')['font-size']).toBe('var(--k-hint-size)');
-    expect(decls('.k-invite > .k-hint')['font-size']).toBe('var(--k-hint-size)');
+    expect(decls('.k-hint')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-date')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-strip')['font-size']).toBe('var(--k-hint-size)');
   });
@@ -355,14 +355,26 @@ describe('the invitation: one field, one column', () => {
     for (const dead of ['k-scene-in', 'k-scene-out', '.k-story-item', 'k-story-in', 'k-story-out']) expect(BARE, dead).not.toContain(dead);
     expect(decls('.k-progress-bar').transition).toBe('width 1s linear');
   });
-  it('the card is accent-filled with a lead, a QR-hint row and a code row spanning the width, padded by a gap with its rows 0.6 of a gap apart; the address beside the QR wraps at its own joints and never ellipsises', () => {
+  it('the card is the QR beside the lead over the hint, then the code spanning (R-KP21): accent-filled, padded by a gap with its rows 0.6 of a gap apart, the QR row at least the QR tall and free to grow (the card never clips), the lead at the supporting tier and weight 800, the address wrapping at its own joints and never ellipsised', () => {
     const card = decls('.k-invite');
-    expect(card['grid-template-areas']).toBe("'lead lead' 'qr hint' 'code code'");
+    expect(card['grid-template-columns']).toBe('var(--k-qr) minmax(0, 1fr)');
+    expect(card['grid-template-rows']).toBe('minmax(var(--k-qr), auto) auto');
+    expect(card['grid-template-areas']).toBe("'qr side' 'code code'");
+    expect(card.overflow).toBeUndefined();
     expect(card.background).toBe('var(--k-action)');
     expect(card.color).toBe('var(--k-action-ink)');
     expect(card.padding).toBe('var(--k-gap)');
     expect(card['row-gap']).toBe('calc(var(--k-gap) * 0.6)');
-    expect(decls('.k-invite > .k-hint')['align-self']).toBe('end');
+    const side = decls('.k-invite-side');
+    expect(side['grid-area']).toBe('side');
+    expect(side.display).toBe('grid');
+    expect(side['align-content']).toBe('space-between');
+    expect(side['min-width']).toBe('0');
+    const lead = decls('.k-lead');
+    expect(lead['font-size']).toBe('var(--k-sup-size)');
+    expect(lead['font-weight']).toBe('800');
+    expect(lead['line-height']).toBe('1.15');
+    expect(rulesUsing('--k-main-size')).not.toContain('.k-lead');
     const host = decls('.k-hint-host');
     expect(host.display).toBe('block');
     expect(host['overflow-wrap']).toBe('anywhere');
@@ -370,9 +382,15 @@ describe('the invitation: one field, one column', () => {
     expect(host['white-space']).toBeUndefined();
     expect(host.overflow).toBeUndefined();
   });
-  it('draws the one card at every size: a phone stands the same four areas up, with no wrapper of its own', () => {
-    expect(BARE).not.toContain('.k-invite-text');
+  it('the totem keeps the lead across the card over the QR-hint row (its card\u2019s height is the statements\u2019 room beside it) and a phone stands the four pieces up; in both the side wrapper dissolves and the lead and the hint take their own areas, at the same lead tier', () => {
+    expect(decls(".kiosk[data-portrait='1'] .k-invite")['grid-template-areas']).toBe("'lead lead' 'qr hint' 'code code'");
+    expect(decls(".kiosk[data-portrait='1'] .k-invite")['grid-template-rows']).toBe('auto minmax(var(--k-qr), auto) auto');
     expect(decls(".kiosk[data-size='handheld'] .k-invite")['grid-template-areas']).toBe("'lead' 'qr' 'hint' 'code'");
+    expect(decls(".kiosk[data-portrait='1'] .k-invite-side, .kiosk[data-size='handheld'] .k-invite-side").display).toBe('contents');
+    expect(decls(".kiosk[data-portrait='1'] .k-lead, .kiosk[data-size='handheld'] .k-lead")['grid-area']).toBe('lead');
+    expect(decls(".kiosk[data-portrait='1'] .k-hint, .kiosk[data-size='handheld'] .k-hint")['grid-area']).toBe('hint');
+    expect(decls(".kiosk[data-portrait='1'] .k-hint")['align-self']).toBe('end');
+    expect(BARE).not.toContain('.k-invite-text');
     expect(decls(".kiosk[data-size='handheld'] .k-invite").background).toBe('var(--k-surface)');
     expect(decls(".kiosk[data-size='handheld'] .k-qr").width).toBe('min(var(--k-qr), 100%)');
   });
