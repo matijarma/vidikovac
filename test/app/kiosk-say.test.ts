@@ -125,8 +125,11 @@ describe('SAY_KINDS: the handheld\u2019s "all" is every kind a candidate can pro
 });
 
 describe('rankStatements: 22:30, last departures', () => {
-  it('lastrun enters above zet with four pairs, soonest first', () => {
-    const slots = rankStatements(input({ now: EVENING, lastRun: LAST_RUN, slots: 8 }), []);
+  it('lastrun enters above zet and above a still-open closure with four pairs, soonest first', () => {
+    // The day's closure ends at 18:00; this one runs into the night so the evening order can be read against it (R-KP24).
+    const openClosure = withModule(MODULES, 'prometnice', { items: [{ ...CLOSURE.items[0]!, until: '2026-09-11T22:00:00Z' }] });
+    const slots = rankStatements(input({ now: EVENING, lastRun: LAST_RUN, slots: 8, modules: openClosure }), []);
+    expect(keysOf(slots)).toContain('say:closure');
     const keys = keysOf(slots);
     expect(keys).toContain('say:lastrun');
     expect(keys.indexOf('say:lastrun')).toBeLessThan(keys.indexOf('say:zet'));
