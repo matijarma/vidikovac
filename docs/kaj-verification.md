@@ -383,6 +383,37 @@ slika `f-krajolik` uklonjene su iz svih dokumenata. Provjere ponovljene s istim 
 bez pogrešaka u konzoli, bez mrežnih zahtjeva, bez prelijevanja, axe bez nalaza, jedan h1,
 `e2e/a11y.spec.ts` nad `/prijava/`, parnost teksta (dvije ćelije tablice kao pilula i napomena).
 
+## Blizanac: motor kretanja na poslužitelju, 16. rujna 2026.
+
+Grana `twin-engine` (radno stablo `D:/scratch/kajima-wt/twin-engine`, glavno stablo netaknuto dok vlasnik ne spoji), plan `C:/Users/MatijaRadeljak/.claude/plans/i-want-us-to-tingly-rain.md`, odluke R-TE1 do R-TE38 u `.superpowers/sdd/2026-09-16-twin-engine/rulings.md`. Što je izgrađeno opisuje `docs/arhitektura.md` §"Model kretanja vozila".
+
+Provjere na grani (obje kapije prošle u cijelosti; ništa nije preskočeno ni skraćeno):
+
+| Kapija | Glava | typecheck | vitest unit | vitest workers | build | Playwright chromium | Playwright mobile | review:visual | Lighthouse (a11y) |
+|---|---|---|---|---|---|---|---|---|---|
+| A (faza A: blizanac, indeks vožnji, klijent s poviješću) | `bb8539c` → `0edb503` | čisto | 153 datoteke / 2502 | 20 / 149 | čisto | 69/70, jedini crveni (`motion.spec` klizanje u slobodnoj ravnini) popravljen u `0edb503` i četiri motion specifikacije ponovno zelene | 18/18 | 89 površina / 0 nalaza | 100 × 6 stranica |
+| B (faza B: graf pruge, motor, planovi na žici, integrator) | `8e19313` | čisto | 157 / 2430 | 20 / 148 | čisto | 70/70 (motion.spec prepisan za planove, prvi prolaz) | 18/18 | 89 / 0 | 100 × 6 |
+
+Motorova vlastita kapija (R-TE30, `test/motion/engine-envelope.test.ts`): šest tramvaja na dijeljenom koridoru kroz 20 simuliranih minuta, šum GPS-a 8 m, 2 od 3 osvježenja po otkucaju, kašnjenje 2 do 25 s: 0 pretjecanja, 0 vožnji unatrag, smjer poznat nakon prvog očitanja, svaki prvi plan u pokretu, ocjena unatrag na 30 s p95 32,2 m. Na živom feedu (probom kroz `wrangler dev` 16. rujna oko 05:10): 38 vozila u kvadratu zaslona, sva s planom na stvarnoj stazi grafa, hladno dekodiranje artefakata 46 ms (mreža) + 195 ms (indeks).
+
+Kako se kapija vozi u radnom stablu: vlastita dva `wrangler dev` poslužitelja na 8797 i 8798 (8787 i 8788 pripadaju drugim sesijama), pokrenuta jedan za drugim (oba pri startu vrte `npm run build` i sudaraju se ako krenu istodobno), nikad `npm run build` dok rade (poslužitelj čuva staru kartu imovine i sve pada); zatim `E2E_NO_WEBSERVER=1 E2E_APP_URL=http://localhost:8797 E2E_SHORT_URL=http://localhost:8798 npx playwright test --project=chromium` pa `--project=mobile`, `REVIEW_APP_URL=http://127.0.0.1:8797 npm run review:visual`, `E2E_APP_URL=http://127.0.0.1:8797 node scripts/lighthouse-a11y.mjs`. Radno stablo treba kopiju `.wrangler/state` glavnog stabla (arhiva pločica) i `.dev.vars`.
+
+Prije spajanja u `main`: R2 spremnik `vidikovac-feed` s pravilom isteka od sedam dana mora postojati (objava pada na nepoznatom spremniku). Spajanje rješava poznato preklapanje s uklanjanjem HRT-a, Sljemena i vijesti na `main` (`worker/feed/schema.ts`, `registry.ts`, `test/docs/docs.test.ts`, `docs/izvori.md`, `test/feed/cache.workers.test.ts`; popis u `progress.md` radnog prostora).
+
+Nakon objave, provjera u proizvodnji (upisati ovdje):
+
+| Provjera | Kako | Rezultat |
+|---|---|---|
+| Blizanac otkucava | `/stats`: `twin_tick` po ishodu (`ok`, `unchanged`, `error`, `stale_index`) i startu (`cold`/`warm`) nakon 24 h; udio hladnih startova govori koliko se objekt izbacuje između alarma | |
+| Ocjena unatrag | `/stats`: `twin_hindsight` p50/p95 po horizontu 10/30/60 s nakon 24 h; prag iz koridora je p95 < 60 m na 30 s | |
+| Statični GTFS | `/stats`: `static_watch` `newer` = 0, inače `npm run build:network && npm run build:trips`, commit, push | |
+| Ilica, Črnomerec do Trga, 10 min u vršnom satu | pogledom: nema pretjecanja na istom kolosijeku, nema vožnje unatrag, tramvaji staju na stajalištima, kartice pišu odredište i sljedeće stajalište | |
+| Hladno učitavanje kioska | vozila se gibaju u prvoj sekundi, smjer poznat | |
+| Hladno učitavanje telefona (sesija) | isto, puna karta | |
+| Linija 1 | tramvaj na pruzi (sintetička staza), ne u slobodnoj ravnini | |
+| Autobus na obilasku | glatko u slobodnoj ravnini, bez skoka | |
+| Ponavljanje snimljenog dana | `scripts/replay-twin.mjs` nad okvirima iz R2, pragovi upisani ispod | |
+
 ## Ponavljanje snimljenih okvira (B8)
 
 Blizanac svaki novi ZET okvir sprema u R2, u `vidikovac-feed` pod `zet-rt/GGGG/MM/DD/`
