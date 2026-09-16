@@ -34,8 +34,6 @@ export interface InvitationDeps {
   codeBase?: string;
   /** Runs `fn` once after `ms` and returns its cancel: the controller's clock, so the leaving scene goes on the timers the tests drive and destroy() leaves nothing armed. */
   defer?: (fn: () => void, ms: number) => () => void;
-  /** Runs before a scene swap, so the controller parks the map before the fading item carries it away. */
-  onBeforeSwap?: (leaving: SceneId, entering: SceneId) => void;
 }
 
 export interface InvitationModel {
@@ -55,12 +53,14 @@ export interface InvitationModel {
 
 export interface InvitationHandle {
   element: HTMLElement;
-  /** The map host of the scene on show; null while another scene shows, so the page keeps the map parked. Never used in lightweight mode. */
+  /** The field's own map host: the map is the field and stands through every chapter, so this is null only in lightweight mode, which has no map. */
   readonly mapHost: HTMLElement | null;
   update(model: InvitationModel): void;
   scenes(): ScenesHandle;
   /** Re-measures the field's titled tiles; called after every update and on the clock tick. */
   fit(): void;
+  /** The rail's measured height where it hangs over the map, for the map's own bottom padding. */
+  railPad(): number;
   destroy(): void;
 }
 
@@ -121,6 +121,12 @@ function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale:
     </li>`;
 }
 
+/** The board's rows alone: the lagano board's grammar, which the scene rail
+ *  stands its own members up in when the room holds only one column. */
+export function lineRows(board: LinesBoard, strings: KioskStrings, locale: string): string {
+  return board.rows.map((row) => lineRow(row, strings, locale)).join('');
+}
+
 /** The lines board (the lagano Promet scene, D12, and paired Promet): one row per route at the stop, delay in words, vehicles near. */
 export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings: KioskStrings, locale: string): string {
   const title = stop ? strings.lines.title : strings.lines.nearbyTitle;
@@ -130,7 +136,7 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(stop ? strings.lines.noneNearby : strings.lines.noStop)}</p>`;
   const more = board.more > 0 ? `<p class="k-line-more">${escapeHtml(plural(locale, strings.lines.more, board.more))}</p>` : '';
   const stale = board.state === 'stale' ? ` · ${strings.paired.stale}` : '';
-  return `${head}<ul class="k-line-list">${board.rows.map((row) => lineRow(row, strings, locale)).join('')}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
+  return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
 }
 
 /** The side column: the two value tiles, then the card whose QR and code the rotation paints (C.3). The lead is the page's one h1. */
@@ -175,6 +181,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     },
     scenes: () => field,
     fit: () => field.fit(),
+    railPad: () => field.railPad(),
     destroy() {
       field.destroy();
       element.remove();

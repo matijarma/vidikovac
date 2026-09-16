@@ -604,7 +604,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
     expect(q(k.root, '[data-testid=tile-closures]')!.dataset.state).toBe('down');
     expect(text(q(k.root, '[data-testid=kiosk-lines] .k-board-note[data-state=down]'))).toBe('ZET trenutačno ne odgovara.');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl')).toHaveLength(0);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(0);
     // The clock stands alone (D11): no sentence and no dash where the reading was.
     expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
     const closures = q(k.root, '[data-testid=tile-closures]')!;
@@ -947,34 +947,35 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
 });
 
 // C.5: the scene field on the controller's clock. The 20 s tick advances the
-// scene and stamps the countdown; before a swap the map is parked so the
-// fading item never carries it away, and it keeps hearing the feed state
-// while another scene shows; reduced motion, lagano and the ?prizor= pin hold
-// one scene (D13) with the dots and the countdown hidden; a session parks the
-// field and the invitation returns on the scene the counter says.
-describe('scenes: rotation, the parked map, reduced motion, lagano and the pin', () => {
+// scene and stamps the countdown; the map is the field itself, so it stands
+// through every chapter -- what a swap moves is the chapter's rail -- and is
+// parked only when the phase changes away from the invitation; reduced
+// motion, lagano and the ?prizor= pin hold one scene (D13) with the dots and
+// the countdown hidden; a session parks the field and the invitation returns
+// on the scene the counter says.
+describe('scenes: rotation, the standing map, reduced motion, lagano and the pin', () => {
   function spyMap() {
     const calls: string[] = [];
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
     return { factory: vi.fn(() => handle), handle, calls };
   }
-  it('a parked map still receives the feed state: stale after a failing poll while Grad shows; back on Promet it is re-hosted, resized and resumed', async () => {
+  it('the map stands through a chapter change, is never parked or rebuilt by one, and keeps hearing the feed state', async () => {
     let fail = false;
     const map = spyMap();
     const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
     await flush();
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
-    expect(container.parentElement).toBe(q(k.root, '[data-testid=kiosk-map-host]'));
+    const picture = q(k.root, '[data-testid=kiosk-map-host]')!;
+    expect(container.parentElement).toBe(picture);
     const before = map.calls.length;
     k.tick(ROTATE_MS);
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
-    // Parked before the Promet item started fading, then told the feed state from the same paint.
-    expect(map.calls.slice(before)).toEqual(['pause', 'feed:live']);
-    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    // Nothing is parked for a chapter: the map is the field, and only the feed state is re-asserted on the paint.
+    expect(map.calls.slice(before)).toEqual(['feed:live']);
+    expect(container.parentElement).toBe(picture);
     k.tick(SCENE_LEAVE_MS);
-    expect(q(k.root, '[data-testid=kiosk-map-host]')).toBeNull();
-    expect(container.isConnected).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-map-host]')).toBe(picture);
     expect(map.handle.destroy).not.toHaveBeenCalled();
     await flush(); // the poll the 20 s tick also fired settles (live), and re-arms
     fail = true;
@@ -982,12 +983,17 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     await flush();
     expect(map.calls.at(-1)).toBe('feed:stale');
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
-    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    expect(container.parentElement).toBe(picture);
     k.tick(ROTATE_MS);
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
-    expect(container.parentElement).toBe(q(k.root, '.k-scene-item:not([data-leaving]) [data-testid=kiosk-map-host]'));
-    expect(map.calls.slice(-3)).toEqual(['resize', 'resume', 'feed:stale']);
+    expect(container.parentElement).toBe(picture);
     expect(map.factory).toHaveBeenCalledTimes(1);
+    // A phase without a map still parks it, and the hold survives the return.
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    expect(map.calls).toContain('pause');
   });
   it('the countdown counts the seconds to the next scene on the 1 s tick without rebuilding the strip, and restarts on the rotation', async () => {
     let now = NOW;
@@ -1035,7 +1041,7 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     expect(k.root.querySelectorAll('.k-dot')).toHaveLength(0);
     expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
   });
-  it('?prizor=grad boots on Grad without rotation: no dots, no countdown, and no map is ever built for a scene without one', async () => {
+  it('?prizor=grad boots on Grad without rotation: no dots, no countdown, and the map is the field there as in every chapter', async () => {
     const map = spyMap();
     const k = mount({ stored: STORED, pinScene: 'grad', mapFactory: map.factory as never });
     await flush();
@@ -1050,8 +1056,8 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     k.tick(ROTATE_MS);
     expect(scene.dataset.scene).toBe('grad');
     expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
-    expect(map.factory).not.toHaveBeenCalled();
-    expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    expect(q(k.root, '[data-testid=kiosk-map]')!.parentElement).toBe(q(k.root, '[data-testid=kiosk-map-host]'));
     // The pin reaches the empty Večeras too (D13).
     const pinned = mount({ stored: STORED, pinScene: 'veceras' });
     await flush();

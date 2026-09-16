@@ -419,7 +419,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (phase === 'paired') return paired?.mapHost ?? null;
     return null;
   }
-  /** A composition without a map keeps the container alive, off screen and paused. */
+  /** A phase without a map -- the wizard, a notice, a handheld, lagano -- keeps
+   *  the container alive, off screen and paused. A chapter change never parks
+   *  it: the map is the invitation's field, standing through all three. */
   function parkMap(): void {
     if (!mapContainer || mapContainer.parentElement === park) return;
     park.appendChild(mapContainer);
@@ -432,21 +434,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     handle.resume();
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
-  /** The map into the composition's host, or parked while none shows it. No
-   *  board lies over the map's foot any more (the line tiles stand beside it),
-   *  so the camera keeps the stop's true centre. */
+  /** The map into the composition's host, or parked while none shows it. The
+   *  chapter's rail hangs over the map's foot, so the camera is told how much
+   *  of the picture that rail covers and centres the stop in what is left. */
   function paintMap(): void {
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
-    // A scene without a map (Večeras, Grad) or a composition without one keeps
-    // the container parked, and the feed state still reaches it: a map that
-    // returns mid-outage must already be holding, never coasting on a state
-    // it heard before the outage.
+    // A phase without a map keeps the container parked, and the feed state
+    // still reaches it: a map that returns mid-outage must already be holding,
+    // never coasting on a state it heard before the outage.
     if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
+    const bottom = phase === 'invitation' ? (invitation?.railPad() ?? 0) : 0;
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale,
       selection: phase === 'paired' ? selection : null,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
+      ...(bottom > 0 ? { padding: { top: 0, right: 0, bottom, left: 0 } } : {}),
     }, mapAdapter);
     if (!container) return;
     mapContainer = container;
@@ -603,8 +606,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (next === 'setup') mountSetupPhase();
     else if (next === 'invitation' && layout.size === 'handheld') mountHandheld();
     else if (next === 'invitation') {
-      // The field parks the map before a scene swap, so the fading item never carries the container away; paintLocal re-hosts it after the update.
-      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); }, onBeforeSwap: () => parkMap() });
+      // Nothing is parked between chapters any more: the map is the field and stands through all three, and what crossfades is the chapter's rail.
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); } });
     }
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
     else mountNotice(next);

@@ -39,10 +39,13 @@
    shield label, the safetyState verdict pill, the three items, the
    rotation's countdown and the /hitno link.
 
-   The invitation's stage (kiosk/scenes.ts, kiosk/invitation.ts) is a
-   rotating scene field beside a side column of two value tiles and the
-   QR-bound invitation card; every content tile in every scene and column
-   is one member of the shared `.tl` family (ui/signage.css's tile grammar,
+   The invitation's stage (kiosk/scenes.ts, kiosk/invitation.ts) is the
+   map beside a side column of two value tiles and the QR-bound invitation
+   card. The map is the field, not a panel inside it: the three chapters
+   (Promet, Večeras, Grad) change a chip on the picture's top-left corner
+   and a rail of tiles hanging from its foot, never the whole screen. Every
+   content tile in every chapter and column is one member of the shared
+   `.tl` family (ui/signage.css's tile grammar,
    A.4), the kiosk overriding its sizes through tokens alone -- no colour
    outside `--k-*`, no rem size surviving from the signage sheet. The
    paired compositions (kiosk/paired.ts) are untouched this wave and keep
@@ -117,6 +120,10 @@
   --k-side-w: calc(600px * var(--k-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-zoom));
+  --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
+  --k-row-min: max(280px, calc(280px * var(--k-zoom)));
+  --k-time-min: max(280px, calc(280px * var(--k-zoom)));
+  --k-ink-w: max(360px, calc(360px * var(--k-zoom)));
   --k-display-size: calc(84px * var(--k-zoom));
   --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
@@ -142,6 +149,10 @@
   --k-side-w: calc(520px * var(--k-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-zoom));
+  --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
+  --k-row-min: max(240px, calc(240px * var(--k-zoom)));
+  --k-time-min: max(240px, calc(240px * var(--k-zoom)));
+  --k-ink-w: max(260px, calc(260px * var(--k-zoom)));
   --k-display-size: calc(64px * var(--k-zoom));
   --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
@@ -251,9 +262,25 @@
 .k-chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; font-size: var(--k-sup-size); font-weight: 600; }
 .k-chip--stale { background: var(--k-amber-soft); color: var(--k-amber); }
 
-/* --- Scene field: one rotating field, its head and its grids -------------- */
+/* --- Scene field: the map is the field, the chapter is a chip and a rail ---
+   A scene with a map (data-map='1', kiosk/scenes.ts builds the map into the
+   field once) is a single-cell stack whose cell is the map: the chapter's
+   name sits on the map's top-left corner as an opaque chip and the chapter's
+   members hang from the map's foot as one rail, so the picture is the stage
+   and a chapter change moves the rail, not the whole screen. Both the chip
+   and the rail are children of the map, which is what makes "nothing paints
+   over anything by accident" still checkable in e2e/kiosk-layout.spec.ts: a
+   pair of boxes overlaps unless one contains the other.
+
+   Without a map (lagano, D12) the field is what it always was: a head row
+   over a body row, the lines board filling the body. */
 .k-scene { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: calc(var(--k-gap) * 0.6); min-width: 0; min-height: 0; }
+.k-scene[data-map='1'] { grid-template-areas: 'stack'; grid-template-rows: minmax(0, 1fr); row-gap: 0; }
+.k-scene[data-map='1'] > .k-map { grid-area: stack; }
 .k-scene-head { display: flex; align-items: baseline; gap: var(--k-gap); min-width: 0; }
+/* The chapter chip: an opaque card on the picture, never a wash over it (--k-glass keeps its one user, the paired overlay). */
+.k-scene[data-map='1'] .k-scene-head { position: absolute; top: var(--k-gap); left: var(--k-gap); align-items: center; box-sizing: border-box; max-width: calc(100% - var(--k-gap) * 2); padding: calc(var(--k-gap) * 0.45) var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface); box-shadow: var(--k-shadow); }
+.k-scene[data-map='1'] .k-scene-body { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
 .k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
 .k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
@@ -262,27 +289,53 @@
 .k-dot[data-on='1'] { border-color: var(--k-ink); background: var(--k-ink); }
 .k-scene-body { position: relative; min-height: 0; }
 .k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; animation: k-scene-in 220ms var(--ease-enter) both; }
+/* Over a map the item is its rail's height, never the map's: the picture is covered only where the rail actually is. */
+.k-scene[data-map='1'] .k-scene-item { top: auto; right: 0; bottom: 0; left: 0; }
 .k-scene-item[data-leaving] { pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
 @keyframes k-scene-in { from { opacity: 0; transform: translateY(calc(6px * var(--k-zoom))); } }
 @keyframes k-scene-out { to { opacity: 0; } }
 @keyframes k-code-in { from { opacity: 0; } }
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
-.k-scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); grid-template-rows: minmax(0, 1fr); gap: var(--k-tile-gap); min-height: 0; }
-.k-scene-grid > .k-map { grid-column: 1; grid-row: 1 / -1; }
-/* The lines and the works band stack from the top of their column at their own height (kajimafix 03.3): a tile is its content, never a box stretched to the field. Three across at wide (six lines), two at compact (four). */
-.k-scene-col { grid-column: 2; grid-row: 1; display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--k-tile-gap); min-width: 0; min-height: 0; }
-.k-scene-lines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: max-content; gap: var(--k-tile-gap); min-width: 0; }
-.k-works:empty { display: none; }
-.kiosk[data-size='compact'] .k-scene-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
-.kiosk[data-size='compact'] .k-scene-lines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.k-scene-grid[data-board='1'] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+/* The lagano field (D12): no map, so the lines board is the whole field --
+   one column, one row, the form this sheet has always given it. */
+.k-scene-grid[data-board='1'] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .k-scene-grid[data-board='1'] > .k-map { grid-row: 1; }
-/* The evening's rows (concept 04): hairline-separated rows at their own height from the top, not boxes stretched to the field; the next event's rule takes the events tone. */
-.k-scene-rows { display: grid; grid-auto-rows: max-content; align-content: start; min-height: 0; }
-.kiosk .k-scene-rows .tl[data-variant='time'] { border: 0; border-top: 1px solid var(--k-line); border-radius: 0; background: transparent; padding-inline: 0; }
-.kiosk .k-scene-rows .tl[data-variant='time'][data-tint='events'] { border-top: 2px solid var(--k-violet); }
-.k-scene-grad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--k-tile-gap); min-height: 0; }
-.k-scene-grad > .tl[data-variant='ink'] { grid-column: 1; grid-row: 1 / -1; }
+
+/* --- The rail: one row of a chapter's members over the map's foot ---------
+   One grammar for all three chapters, so a chapter is what its members say
+   and not a grid of its own. `auto-fit` asks the room how many members fit
+   and kiosk/layout.ts's railColumns asks it the same question in JS, so the
+   markup writes exactly the number the engine will lay out; a member the
+   room turns out not to hold is hidden by fitRail and counted in the chip.
+   `align-content: end` keeps the rail hanging from the foot whatever it
+   holds. The per-chapter minimum is the only thing that differs: a line tile
+   at the design system's 168 px floor, an evening's tile or a city row
+   wider, and Grad's ink tile a lead track of its own. */
+.k-rail { --k-rail-min: var(--k-tile-min); display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); grid-auto-rows: max-content; align-content: end; box-sizing: border-box; min-width: 0; grid-gap: var(--k-tile-gap); gap: var(--k-tile-gap); padding: var(--k-tile-gap); }
+.k-rail[data-chapter='veceras'] { --k-rail-min: var(--k-time-min); }
+.k-rail[data-chapter='grad'] { --k-rail-min: var(--k-row-min); grid-template-columns: minmax(var(--k-ink-w), 1.2fr) repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); }
+/* A sentence in place of a chapter's members (an empty evening, a source that does not answer) takes the rail's width after the chapter's lead member, whose track collapses when there is no lead. */
+.k-rail > .tl[data-level], .k-rail > .k-board-note { grid-column: 2 / -1; }
+.k-rail[data-chapter='veceras'] > .tl[data-level] { grid-column: 1 / -1; }
+/* At one column the rail stands its members up as rows (kiosk/scenes.ts draws the lagano board's own li.k-line there rather than inventing a grammar). */
+.k-rail[data-rows='1'] { grid-template-columns: minmax(0, 1fr); }
+.k-rail[data-chapter='promet'][data-rows='1'] { row-gap: 0; }
+.k-rail[data-rows='1'] > .tl[data-level], .k-rail[data-rows='1'] > .k-board-note { grid-column: auto; }
+/* A rail member is a strip's tile, not a column's card: tighter padding, the
+   supporting tier for a title and a line's state word, and a long street
+   broken rather than allowed to run out of its box. */
+.kiosk .k-rail .tl { padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
+.kiosk .k-rail .tl-title { font-size: var(--k-sup-size); overflow-wrap: break-word; }
+.kiosk .k-rail .tl[data-variant='band'], .kiosk .k-rail .tl[data-variant='row'] { grid-template-columns: auto minmax(0, 1fr); align-content: start; min-height: 0; padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
+.kiosk .k-rail .tl[data-variant='band'] > .tl-trail, .kiosk .k-rail .tl[data-variant='row'] > .tl-trail { grid-column: 1 / -1; }
+/* A row's credit is a line of its own under the title, at the supporting tier and wrapping: a publisher and a date are words, and a strip's tile is narrower than the column this used to be. */
+.kiosk .k-rail .tl-trail { font-size: var(--k-sup-size); white-space: normal; overflow-wrap: break-word; }
+.kiosk .k-rail .tl[data-variant='band'] .tl-label { white-space: normal; }
+.kiosk .k-rail .tl[data-variant='time'] { grid-template-columns: minmax(0, 1fr); align-content: start; }
+/* The evening's next tile keeps the events tone as an inset rule, so the tinted tile is the same box as its neighbours. */
+.kiosk .k-rail .tl[data-variant='time'][data-tint='events'] { box-shadow: inset 0 0 0 2px var(--k-violet); }
+/* The line's state word at the supporting tier, wrapping rather than running out of a narrow tile (the 168 px floor is a floor, and a 1fr track is usually wider). */
+.kiosk .k-rail .k-tl-line .tl-value { font-size: var(--k-sup-size); white-space: normal; }
 
 /* --- The shared `.tl` family (ui/signage.css, A.4), sized by tokens alone --
    The kiosk sets sizes only through --k-* tokens and overrides the signage
@@ -322,7 +375,6 @@
 .kiosk .k-tl-line .k-line-badge { height: var(--k-control); min-width: calc(var(--k-control) * 1.6); font-size: var(--k-main-size); }
 /* The line's ends wrap to two lines rather than cut: on a sign a name is read whole. */
 .kiosk .k-tl-name { display: -webkit-box; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
-.kiosk .k-tl-line .tl-value { font-size: var(--k-main-size); }
 /* A line badge mentioned inside a context (an event's lines) at the kiosk's scale (kajimafix 04). */
 .kiosk .line[data-size='xs'] { block-size: calc(28px * var(--k-zoom)); min-inline-size: calc(40px * var(--k-zoom)); padding: 0 0.3em; border-radius: calc(5px * var(--k-zoom)); font-size: var(--k-hint-size); }
 .kiosk .tl[data-state='down'] .tl-value { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-3); white-space: normal; }
@@ -601,17 +653,9 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-portrait='1'] .k-date { display: none; }
 .kiosk[data-portrait='1'] .k-context { max-width: 30vw; }
 .kiosk[data-portrait='1'][data-mode='unlocked'] .k-context { max-width: 22vw; }
-/* A portrait scene field is tall and narrow (1044 by about 1300): the compact landscape grids stretched three line
-   tiles to 400 px and the Grad ink tile to the whole field. Stood up, Promet stacks: the map takes the room, the
-   line tiles sit in one row at their own height, the works band under them; Večeras and Grad lay their tiles from
-   the top at their own height, the ink tile first. */
-.kiosk[data-portrait='1'] .k-scene-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-.kiosk[data-portrait='1'] .k-scene-grid > .k-map { grid-column: 1; grid-row: 1; }
-.kiosk[data-portrait='1'] .k-scene-col { grid-column: 1; grid-row: 2; }
-.kiosk[data-portrait='1'] .k-scene-lines { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.kiosk[data-portrait='1'] .k-scene-grid[data-board='1'] { grid-template-rows: minmax(0, 1fr); }
-.kiosk[data-portrait='1'] .k-scene-rows, .kiosk[data-portrait='1'] .k-scene-grad { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto; align-content: start; }
-.kiosk[data-portrait='1'] .k-scene-grad > .tl[data-variant='ink'] { grid-column: 1; grid-row: auto; }
+/* The scene field needs no portrait rule of its own any more: the map is the
+   field at every size and the rail asks the room how many members it holds,
+   so a totem's tall, narrow picture simply carries a shorter rail. */
 
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
