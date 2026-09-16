@@ -139,8 +139,18 @@ describe('buildPlan', () => {
     expect(times.segmentSeconds(p, 150, 450, 12, 0)).toBe(35); // half of 30 plus half of 40
     expect(times.segmentSeconds(p, 600, 900, 12, 0)).toBeNull(); // beyond the pattern's last stop: unknown
     expect(times.dwellSeconds('T300', 12, 0)).toBe(15);
-    expect(times.dwellSeconds('T0', 12, 0)).toBe(0);
+    expect(times.dwellSeconds('T0', 12, 0)).toBeNull(); // R-TE34: a timetable dwell of 0 is unknown, not zero
     expect(times.dwellSeconds('nowhere', 12, 0)).toBeNull();
     expect(times.segmentSeconds(pathIdx('2_0'), 0, 300, 12, 0)).toBeNull(); // no pattern on that path
+
+    // R-TE34: ZET writes arrival = departure at intermediate stops, so the
+    // stop's real standing time hides inside the segment that arrives at it.
+    // The planner's default dwell is booked out of that segment (never below a
+    // third of it) and the stop reads as unknown; a terminus is left alone.
+    const folded = scheduleTimes(net, { ...index, patterns: [{ ...patterns[0], dwell: [0, 0, 0] }] });
+    expect(folded.segmentSeconds(p, 0, 300, 12, 0)).toBe(10); // 30 - 20
+    expect(folded.segmentSeconds(p, 0, 300, 7, 0)).toBe(25); // 45 - 20
+    expect(folded.segmentSeconds(p, 300, 600, 12, 0)).toBe(40); // into the terminus: untouched
+    expect(folded.dwellSeconds('T300', 12, 0)).toBeNull();
   });
 });

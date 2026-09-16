@@ -6,6 +6,7 @@
 // once per path here.
 
 import type { GraphNetwork } from './network';
+import { DWELL_DEFAULT_S } from './plan';
 import type { TripIndex } from './trips';
 
 /** 0 Monday to Friday, 1 Saturday, Sunday and holidays: the two shapes a
@@ -82,7 +83,18 @@ export function scheduleTimes(net: GraphNetwork, index: TripIndex): TimesProvide
         ok = false;
         break;
       }
-      const seconds = Array.from({ length: 24 }, (_, band) => pattern.sched[band]?.[i] ?? pattern.sched[0]?.[i] ?? 0);
+      // R-TE34: ZET's stop_times give arrival = departure at intermediate
+      // stops, so a timetable dwell of 0 there is unknown, not zero, and the
+      // stop's real standing time is folded into the seconds of the segment
+      // that arrives at it. The planner's default dwell is booked out of that
+      // segment, never below a third of it (R-F10's floor), so the timetable's
+      // stop-to-stop time stays whole. The last stop is a terminus and is left
+      // alone: the planner holds there until the trip changes.
+      const arrivalUnknown = i + 1 < pattern.stops.length - 1 && pattern.dwell[i + 1] === 0;
+      const seconds = Array.from({ length: 24 }, (_, band) => {
+        const scheduled = pattern.sched[band]?.[i] ?? pattern.sched[0]?.[i] ?? 0;
+        return arrivalUnknown ? Math.max(scheduled / 3, scheduled - DWELL_DEFAULT_S) : scheduled;
+      });
       segments.push({ fromS, toS, seconds });
     }
     if (!ok || segments.length === 0) continue;
@@ -107,7 +119,10 @@ export function scheduleTimes(net: GraphNetwork, index: TripIndex): TimesProvide
     },
     dwellSeconds(stopId) {
       const samples = dwellSamples.get(stopId);
-      return samples && samples.length > 0 ? median(samples) : null;
+      if (!samples || samples.length === 0) return null;
+      // R-TE34: a timetable that says 0 says nothing; the planner's default stands in.
+      const value = median(samples);
+      return value > 0 ? value : null;
     },
   };
 }
