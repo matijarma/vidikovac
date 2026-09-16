@@ -1198,7 +1198,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setFeedState(state) {
-      const next = state !== 'live';
+      // R-TE5: the snapshot's status is the twin's health. `stale` is the
+      // twin's last-good copy, whose vehicles carry their own history and
+      // confidence, so the motion keeps integrating and fades on its own;
+      // only `down` (nothing at all) holds every mark where it is.
+      const next = state === 'down';
       container.dataset.feed = state;
       if (next === held) return;
       held = next;

@@ -29,10 +29,12 @@ the kiosk drives:
 - `resize()` right after the container is re-appended -- the kiosk parks the
   one container in a hidden holder while a layer without a map is shown;
 - `setFeedState(state)` from the ZET snapshot's own status on every paint, and
-  again right after every `resume()` (a reparent, the basics panel closing), so
-  a stale or down feed holds every vehicle where it is and nothing animates
-  through an outage. A map created during an outage is told before its first
-  frame.
+  again right after every `resume()` (a reparent, the basics panel closing). A
+  `down` feed holds every vehicle where it is, so nothing animates through an
+  outage; a `stale` snapshot is the twin's last-good copy (R-TE5), whose
+  vehicles carry their own history and confidence, so the motion keeps going
+  and fades on its own. A map created during an outage is told before its
+  first frame.
 
 The lines board lies over the lower part of the map column (under half of its
 height). The map API has no camera padding, so the kiosk moves the camera
