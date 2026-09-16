@@ -382,3 +382,26 @@ pametnim televizorima koje prostori već imaju; usporedba s ranije financiranim 
 slika `f-krajolik` uklonjene su iz svih dokumenata. Provjere ponovljene s istim ishodom:
 bez pogrešaka u konzoli, bez mrežnih zahtjeva, bez prelijevanja, axe bez nalaza, jedan h1,
 `e2e/a11y.spec.ts` nad `/prijava/`, parnost teksta (dvije ćelije tablice kao pilula i napomena).
+
+## Ponavljanje snimljenih okvira (B8)
+
+Blizanac svaki novi ZET okvir sprema u R2, u `vidikovac-feed` pod `zet-rt/GGGG/MM/DD/`
+(`worker/twin/record.ts`), sedam dana. `scripts/replay-twin.mjs` provodi te snimljene okvire
+kroz isti čisti otkucaj kroz koji prolazi svaki pravi otkucaj blizanca (`worker/twin/tick.ts`),
+učitan nad dvije objavljene datoteke pod `app/public/data/` (mrežu i indeks putovanja), i
+ispisuje jednu tablicu: hindsight p50/p95 po horizontu (10, 30 i 60 s, po razredima iz
+`shared/motion/hindsight.ts`), broj preticanja i vožnji unatrag (oboje mora biti 0), broj
+ustupaka, udio vozila s poznatim smjerom, vrijeme do prvog planiranog kretanja po vozilu
+(p50/p95), udio putovanja koje indeks ne prepoznaje, broj obrađenih okvira i vozila, i vrijeme
+obrade po otkucaju. Okviri se čitaju iz direktorija i slažu po vlastitom vremenu zaglavlja, ne
+po imenu datoteke, tako da propušteno objavljivanje jednostavno znači da je sljedeći okvir na
+redu.
+
+Pokretanje: `node scripts/replay-twin.mjs <direktorij-okvira> [--limit N]`. Nijedan dan još nije
+snimljen (blizanac još nije objavljen, D3), pa direktorij dolazi iz R2-a alatom wrangler,
+objekt po objekt (naredba je zapisana u zaglavlju skripte, `npx wrangler r2 object get
+vidikovac-feed/zet-rt/GGGG/MM/DD/...`). Pragovi za tablicu bit će zabilježeni ovdje tek nakon
+prvog cijelog snimljenog dana; do tada scenarijski test `test/scripts/replay-twin.test.ts` nad
+kratkim sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`) dokazuje
+da jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
+vraća plan unatrag i pogađa 30 s unaprijed unutar 60 m pri p95.
