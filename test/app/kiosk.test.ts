@@ -16,7 +16,7 @@ import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
+import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { FIELD_DESIGN_WIDTH, SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS } from '../../app/src/kiosk/layout';
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS } from '../../app/src/kiosk/mapview';
 import type { SayInput, Slot, Statement } from '../../app/src/kiosk/say';
@@ -1043,37 +1043,66 @@ describe('the field, the column and the one map', () => {
     expect(q(says, '[data-skeleton]')).toBeNull();
   });
 
-  it('the column fits by measurement (R-KP5): a value past two lines is cut at a word with "…" while its signature stays whole, a value of pairs is left alone, and a statement the room does not hold is hidden whole', async () => {
+  it('the column fits by measurement (R-KP5) after a paint, on a resize and once after the fonts arrive, never on the 1 s tick: a value past two lines is cut at a word with "…" while its signature stays whole and is then left alone until its text or its width changes, a value of pairs is left alone, and a statement the room does not hold is hidden whole', async () => {
     const long = 'Dvadeset peta sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba u velikoj vijećnici';
     const pairs = '<span class="k-say-pair"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span><time>23:58</time></span>';
     say.rank.mockImplementation(() => [statement('say:assembly', long), statement('say:lastrun', '23:58', { say: 'lastrun' }), statement('say:kvart', 'Novi park u Trnju', { say: 'kvart' })]);
     say.markup.mockImplementation((slots: readonly Slot[]) => sayHtml(slots).replace('data-replace data-sig="23:58">23:58', `data-replace data-sig="23:58">${pairs}`));
-    const k = mount({ stored: STORED });
-    await flush();
-    const says = q(k.root, '[data-testid=kiosk-says]')!;
-    const [first, second, third] = [...says.children] as HTMLElement[];
-    const value = q(first!, '.k-say-value')!;
-    // A line every 30 characters at a 44 px line box, and a column that holds two statements of three.
-    for (const el of [first!, second!, third!]) Object.defineProperty(el, 'getBoundingClientRect', { value: () => ({ height: 120 }) });
-    Object.defineProperty(value, 'clientHeight', { get: () => Math.ceil((value.textContent ?? '').length / 30) * 44 });
-    value.style.lineHeight = '44px';
-    Object.defineProperty(says, 'clientHeight', { get: () => 300 });
-    Object.defineProperty(says, 'scrollHeight', { get: () => [...says.children].filter((el) => !(el as HTMLElement).hidden).length * 120 });
-    k.tick(CODE_TICK_MS);
-    const cut = value.textContent ?? '';
-    expect(cut.endsWith('…')).toBe(true);
-    expect(cut.length).toBeLessThanOrEqual(61);
-    expect(cut).toMatch(/^Dvadeset peta sjednica Odbora za Statut, Poslovnik/);
-    expect(cut).not.toMatch(/\s…$/); // cut at a word boundary, the space with it
-    expect(value.dataset.sig).toBe(long); // the whole text stays the reconciler's signature
-    expect(q(second!, '.k-say-value')!.innerHTML).toContain('<time>23:58</time>'); // pairs are not text to cut
-    expect([first!.hidden, second!.hidden, third!.hidden]).toEqual([false, false, true]);
-    // A poll with the same answer keeps the clamp and the hiding (the reconciler kept the nodes, fit ran again).
-    k.poll();
-    await flush();
-    expect(q(says, 'article[data-key="say:assembly"]')).toBe(first);
-    expect((q(first!, '.k-say-value')!.textContent ?? '').endsWith('…')).toBe(true);
-    expect(third!.hidden).toBe(true);
+    // The fonts arrive when this test says so (document.fonts.ready), as a late web font does on a cold screen.
+    let fontsReady: () => void = () => {};
+    const fontsDescriptor = Object.getOwnPropertyDescriptor(document, 'fonts');
+    Object.defineProperty(document, 'fonts', { value: { ready: new Promise<void>((resolve) => { fontsReady = resolve; }) }, configurable: true });
+    try {
+      const k = mount({ stored: STORED });
+      await flush();
+      const says = q(k.root, '[data-testid=kiosk-says]')!;
+      const [first, second, third] = [...says.children] as HTMLElement[];
+      const value = q(first!, '.k-say-value')!;
+      // A line every `perLine` characters at a 44 px line box, a value box `width` wide, and a column that holds two statements of three.
+      let perLine = 30;
+      let width = 472;
+      for (const el of [first!, second!, third!]) Object.defineProperty(el, 'getBoundingClientRect', { value: () => ({ height: 120 }) });
+      Object.defineProperty(value, 'clientHeight', { get: () => Math.ceil((value.textContent ?? '').length / perLine) * 44 });
+      Object.defineProperty(value, 'clientWidth', { get: () => width });
+      value.style.lineHeight = '44px';
+      Object.defineProperty(says, 'clientHeight', { get: () => 300 });
+      Object.defineProperty(says, 'scrollHeight', { get: () => [...says.children].filter((el) => !(el as HTMLElement).hidden).length * 120 });
+      // The 1 s tick paints the clock and the code's bar; it measures nothing (the column is fitted where it changes).
+      k.tick(CODE_TICK_MS);
+      expect(value.textContent).toBe(long);
+      expect(third!.hidden).toBe(false);
+      // A resize re-fits (kiosk.ts's repaint path).
+      k.repaint();
+      const cut = value.textContent ?? '';
+      expect(cut.endsWith('…')).toBe(true);
+      expect(cut.length).toBeLessThanOrEqual(61);
+      expect(cut).toMatch(/^Dvadeset peta sjednica Odbora za Statut, Poslovnik/);
+      expect(cut).not.toMatch(/\s…$/); // cut at a word boundary, the space with it
+      expect(value.dataset.sig).toBe(long); // the whole text stays the reconciler's signature
+      expect(q(second!, '.k-say-value')!.innerHTML).toContain('<time>23:58</time>'); // pairs are not text to cut
+      expect([first!.hidden, second!.hidden, third!.hidden]).toEqual([false, false, true]);
+      // A poll with the same answer keeps the nodes, the clamp and the hiding -- and re-measures nothing: the value's text and width are what they were at the cut, so even a changed geometry is not read.
+      perLine = 20;
+      k.poll();
+      await flush();
+      expect(q(says, 'article[data-key="say:assembly"]')).toBe(first);
+      expect(value.textContent).toBe(cut);
+      expect(third!.hidden).toBe(true);
+      // A narrower box is a new measurement: the cut follows it.
+      width = 400;
+      k.repaint();
+      const narrower = value.textContent ?? '';
+      expect(narrower.endsWith('…')).toBe(true);
+      expect(narrower.length).toBeLessThan(cut.length);
+      // The fonts arriving late re-measure everything once, whatever the memo says: the glyphs changed under the same text and width.
+      perLine = 30;
+      fontsReady();
+      await flush();
+      expect(value.textContent).toBe(cut);
+    } finally {
+      if (fontsDescriptor) Object.defineProperty(document, 'fonts', fontsDescriptor);
+      else delete (document as { fonts?: unknown }).fonts;
+    }
   });
 
   it('each composition hands the ranker its own tables (R-KP5): wide 3/7/56, compact 2/4/44, portrait 3/8/48, handheld all/6/40, with the stop, the modules and the moment', async () => {
@@ -1141,6 +1170,32 @@ describe('the field, the column and the one map', () => {
     expect(loadLastRun).toHaveBeenLastCalledWith('200_1');
   });
 
+  it('a down last-run answer is asked for again on the first paint an hour after it was fetched (R-KP23), not on the polls before; a live answer then stands for its validity', async () => {
+    let now = NOW;
+    const down: LastRunSnapshot = { status: 'down', fetchedAt: new Date(NOW).toISOString() };
+    const live: LastRunSnapshot = { status: 'live', fetchedAt: new Date(NOW + LASTRUN_DOWN_RETRY_MS).toISOString(), sourceUpdatedAt: '2026-09-15T00:00:00Z', validUntil: new Date(NOW + 30 * 24 * 3_600_000).toISOString(), routes: { '6': { '2026-09-11': '23:58' } } };
+    const loadLastRun = vi.fn(async () => down);
+    const k = mount({ stored: STORED, now: () => now, loadLastRun });
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(1);
+    expect(lastInput().lastRun).toEqual(down);
+    now = NOW + LASTRUN_DOWN_RETRY_MS - 60_000;
+    k.poll();
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(1); // one bad answer is not hammered
+    now = NOW + LASTRUN_DOWN_RETRY_MS;
+    loadLastRun.mockResolvedValue(live);
+    k.poll();
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(2);
+    expect(lastInput().lastRun).toEqual(live);
+    now = NOW + 5 * LASTRUN_DOWN_RETRY_MS;
+    k.poll();
+    await flush();
+    expect(loadLastRun).toHaveBeenCalledTimes(2); // a live table inside its validity is never asked for again
+    expect(LASTRUN_DOWN_RETRY_MS).toBe(3_600_000);
+  });
+
   it('statements repaint on every poll and, on the 1 s tick, only when the minute turns (the ZET time in a context)', async () => {
     let now = NOW;
     const k = mount({ stored: STORED, now: () => now });
@@ -1160,21 +1215,32 @@ describe('the field, the column and the one map', () => {
     expect(say.rank.mock.calls.length).toBe(painted + 2);
   });
 
-  it('the placed-labels seam (contract 3): a handle that exposes placedNames stamps data-major-labels on the map host once the map is ready; a stub stamps nothing, which the e2e reads as "not yet"', async () => {
+  it('the placed-labels seam (contract 3, R-KP19): the count is stamped on the map host after each map paint and once when the map first reports ready; the 1 s tick polls readiness only until then; a stub stamps nothing', async () => {
     const stub = spyMap();
     const k = mount({ stored: STORED, mapFactory: stub.factory as never });
     await flush();
     k.tick(CODE_TICK_MS);
     expect(q(k.root, '[data-testid=kiosk-map-host]')!.dataset.majorLabels).toBeUndefined();
     let status = 'loading';
-    const real = spyMap({ status: () => status, placedNames: (layer: string) => (layer === 'roads_labels_major' ? ['Ilica', 'Savska cesta', 'Ilica'] : []) });
+    let names = ['Ilica', 'Savska cesta', 'Ilica'];
+    const real = spyMap({ status: () => status, placedNames: (layer: string) => (layer === 'roads_labels_major' ? names : []) });
     const seam = mount({ stored: STORED, mapFactory: real.factory as never });
     await flush();
     const host = q(seam.root, '[data-testid=kiosk-map-host]')!;
+    seam.tick(CODE_TICK_MS);
     expect(host.dataset.majorLabels).toBeUndefined(); // [] before the style loads is not a count of zero
     status = 'ready';
     seam.tick(CODE_TICK_MS);
-    expect(host.dataset.majorLabels).toBe('2');
+    expect(host.dataset.majorLabels).toBe('2'); // the one sample the tick takes, when ready first reads true
+    names = ['Ilica'];
+    seam.tick(CODE_TICK_MS);
+    expect(host.dataset.majorLabels).toBe('2'); // the tick is done polling; the count follows the paints
+    seam.poll();
+    await flush();
+    expect(host.dataset.majorLabels).toBe('1');
+    names = ['Ilica', 'Vlaška ulica', 'Savska cesta'];
+    seam.repaint();
+    expect(host.dataset.majorLabels).toBe('3');
   });
 
   it('lightweight: no map factory, no fetch for the quarter, the field is the board and the column still ranks', async () => {

@@ -113,11 +113,12 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
     const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     expect(await loadLastRun('400_4', asFetch(offline))).toMatchObject({ status: 'down' });
   });
-  it('recovers after a down answer: the next call fetches again and caches the live file', async () => {
+  it('recovers after a down answer: the next call fetches again (the kiosk asks an hour later, R-KP23) and caches the live file', async () => {
     const fetchImpl = vi.fn(answer(503, ''));
-    expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'down' });
+    const fetched = at('2026-09-11T12:00:00Z');
+    expect(await loadLastRun('500_1', asFetch(fetchImpl), fetched)).toMatchObject({ status: 'down' });
     fetchImpl.mockImplementation(answer(200));
-    expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
+    expect(await loadLastRun('500_1', asFetch(fetchImpl), fetched + 3_600_000)).toMatchObject({ status: 'live' });
     expect(await loadLastRun('500_1', asFetch(fetchImpl))).toMatchObject({ status: 'live' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });

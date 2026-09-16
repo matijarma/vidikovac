@@ -59,6 +59,11 @@ export const PROGRESS_STEPS = 10;
 export const CODE_SWAP_MS = 180;
 /** The MapLibre layer whose placed names the e2e counts (contract 3): the prozor profile keeps at most eight major street names in the field. */
 export const MAJOR_LABELS_LAYER = 'roads_labels_major';
+/** A down last-run answer is asked for again on the first paint this long
+ *  after it was fetched (R-KP23): a screen lives for months, and one bad
+ *  answer must not silence the statement until the stop changes; an hour
+ *  keeps a broken source from being hammered by the 10 s poll. */
+export const LASTRUN_DOWN_RETRY_MS = 3_600_000;
 
 export interface KioskDeps {
   i18n: I18n;
@@ -423,18 +428,26 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       resumeMap();
     }
     element.dataset.live = '1';
+    paintMajorLabels();
   }
-  /** Contract 3: how many distinct major street names the map has placed,
-   *  written on the field's map host for the e2e's proof (at most eight in
-   *  the prozor profile). The handle exposes no idle event, so this samples
-   *  after each paint and on the 1 s tick while the map reports itself
-   *  ready; a handle without the seam (the R-KP15 stub) writes nothing, which
-   *  the e2e reads as "not yet". An empty answer before the style has loaded
-   *  is not a count of zero and is not written either. */
+  /** Contract 3, R-KP19: how many distinct major street names the map has
+   *  placed, written on the field's map host for the e2e's proof (at most
+   *  eight in the prozor profile). MapLibre's idle event never fires while
+   *  vehicles are pushed at 12 Hz, so the count is sampled after each map
+   *  paint (the poll's beat) and once more when the map first reports itself
+   *  ready -- the 1 s tick polls status() only until then. A handle without
+   *  the seam writes nothing, and an empty answer before the style has
+   *  loaded is not a count of zero and is not written either. */
+  let majorLabelsSampledAtReady = false;
   function paintMajorLabels(): void {
     const handle = mapAdapter.handle();
     if (!invitation || !handle?.placedNames || handle.status?.() !== 'ready') return;
     invitation.setMajorLabels(new Set(handle.placedNames(MAJOR_LABELS_LAYER)).size);
+  }
+  function sampleMajorLabelsOnceReady(): void {
+    if (majorLabelsSampledAtReady || mapAdapter.handle()?.status?.() !== 'ready') return;
+    majorLabelsSampledAtReady = true;
+    paintMajorLabels();
   }
 
   // --- Last departures (R-KP6): the stop's table, on stop change and again once it expired ---
@@ -444,10 +457,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** Behind FLAGS.FEED_LASTRUN (the dashboard's pattern): a new stop drops
    *  the old table at once -- it must not pose as the new stop's until the
    *  fetch answers -- and fetches its own; a live table past its validUntil
-   *  is asked for again, so a screen that runs for months does not lose the
-   *  statement the day the table ends (the loader refetches past the date
-   *  once P2 lands; until then it hands back its cache, one call per paint at
-   *  most). A down answer stays until the stop changes. */
+   *  is asked for again (the loader evicts it too), so a screen that runs for
+   *  months does not lose the statement the day the table ends; a down
+   *  answer is asked for again an hour after it was fetched
+   *  (LASTRUN_DOWN_RETRY_MS; the loader never caches a down answer, so the
+   *  call reaches the wire). A missing table (null: the stop is not in the
+   *  generated set) stays until the stop changes. */
   function ensureLastRun(): void {
     if (!FLAGS.FEED_LASTRUN) return;
     const id = stop?.id ?? null;
@@ -458,7 +473,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     if (!id || lastRunFetch === 'pending') return;
     const expired = lastRun?.status === 'live' && now() >= Date.parse(lastRun.validUntil);
-    if (lastRunFetch === 'done' && !expired) return;
+    const downForAnHour = lastRun?.status === 'down' && now() - Date.parse(lastRun.fetchedAt) >= LASTRUN_DOWN_RETRY_MS;
+    if (lastRunFetch === 'done' && !expired && !downForAnHour) return;
     lastRunFetch = 'pending';
     fetchLastRun(id).then((snapshot) => {
       if (disposed || lastRunStop !== id) return;
@@ -496,11 +512,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintWeather();
     paintStrip();
     paintMap();
-    paintMajorLabels();
     if (!basics.hidden) paintEssentials();
     fitAll();
   }
-  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and once a second, so fonts arriving late and a resize are absorbed. */
+  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
   function fitAll(): void {
     invitation?.fit();
     if (paired) fitRows(paired.element, s.paired.coverage);
@@ -902,8 +917,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       ensureLastRun();
       invitation.update(invitationModel());
     }
-    fitAll();
-    paintMajorLabels();
+    sampleMajorLabelsOnceReady();
   }, CODE_TICK_MS);
   const refreshTimer = setTimer(() => {
     if (phase !== 'paired') return;

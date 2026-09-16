@@ -535,10 +535,10 @@ export function pairedView(input: PairedInput): KioskView {
 /** The prozor overlay set for this screen (contract 2). The overlap zoom is
  *  the FIELD's derived zoom less a tenth in both phases: the paired camera
  *  (z15) is always above it, so the noses and the unconditional pills the
- *  invitation gets, the paired views keep. The map is created once, so the
- *  set is read from the first request; the design width it is derived from
- *  lies within a few hundredths of a zoom of the measured one at every
- *  design size (test/app/map.test.ts). */
+ *  invitation gets, the paired views keep. The map is created once with the
+ *  first request's set and hears every later one through setProzor
+ *  (R-KP19), so the stop's routes and the measured field's threshold reach
+ *  the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number): ProzorOptions {
   return { networkKinds: ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN };
 }
@@ -605,6 +605,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
   // The quarter is always drawn (R-KP9); the handle ignores an unchanged outline.
   adapter?.handle()?.setOutline?.(request.outline ?? null);
+  // The overlay set follows the request on the one live map (R-KP19): a stop
+  // change (the DO's applyScreen) moves the drawn stops to the new stop's
+  // routes and a re-measured field moves the overlap threshold, where the
+  // creation-time options alone would leave stale dots for the screen's life.
+  adapter?.handle()?.setProzor?.(extras.prozor ?? null);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   const district = input.stop?.district;

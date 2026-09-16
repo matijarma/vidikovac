@@ -156,7 +156,9 @@ export function lastRunExpired(snapshot: LastRunSnapshot | null, now: number): b
 /**
  * The stop's table, fetched once per stop and kept in memory: a live file and
  * a missing one (null: the stop is not in the generated set) are remembered,
- * a down answer is not, so the next caller may try again. A live table is
+ * a down answer is not, so the next caller may try again (the kiosk does, an
+ * hour after the down answer it holds was fetched: kiosk.ts
+ * LASTRUN_DOWN_RETRY_MS). A live table is
  * remembered only until its own `validUntil`: past that instant this drops
  * the cache entry and fetches a fresh one, the same way a down answer already
  * lets the next call retry, rather than serving a table that has run out for

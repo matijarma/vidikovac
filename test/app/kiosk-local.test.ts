@@ -579,9 +579,10 @@ describe('the one map, through the additive adapter', () => {
     const staleWeather = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { data: { temp: 11.2, weather: '-' } })], 'stale') : m));
     expect(essentialsRows(staleWeather, i18n, hr, 'hr', STOP, NOW).find((r) => r.id === 'weather')).toMatchObject({ value: '11,2 °C · zastarjelo', detail: undefined });
   });
-  it('hands the factory the stop as centre at the field zoom with the prozor options, no selection and no padding (R-KP11), keeps the handle, and pushes a changed view only', () => {
+  it('hands the factory the stop as centre at the field zoom with the prozor options, no selection and no padding (R-KP11), keeps the handle, pushes a changed view only, and pushes the prozor set on every request so a stop change moves the drawn stops (R-KP19)', () => {
     const setView = vi.fn();
-    const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView }));
+    const setProzor = vi.fn();
+    const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView, setProzor }));
     const adapter = createKioskMapAdapter(factory);
     const maps = createMapSlots(adapter.factory);
     const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1400, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
@@ -599,6 +600,9 @@ describe('the one map, through the additive adapter', () => {
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
     // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2).
     expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1 });
+    // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
+    expect(setProzor).toHaveBeenCalledTimes(1);
+    expect(setProzor).toHaveBeenLastCalledWith(options.prozor);
     // Every pin is a dated report (one without its own time takes the
     // snapshot's), the stop is an undated place, closures are lines.
     const points = options.points as { id: string; at?: number }[];
@@ -612,9 +616,14 @@ describe('the one map, through the additive adapter', () => {
     requestKioskMap(maps, { ...input, phase: 'paired', selection: { kind: 'route', id: '6' } }, adapter);
     expect(setView).toHaveBeenCalledTimes(1);
     expect(setView).toHaveBeenCalledWith({ zoom: PAIRED_ZOOM, emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
-    // Back on the invitation a wider field asks for a closer camera, on the same map.
+    // Back on the invitation a wider field asks for a closer camera, on the same map, and the overlap threshold follows it.
     requestKioskMap(maps, { ...input, widthPx: 1800 }, adapter);
     expect(setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
+    expect(setProzor).toHaveBeenCalledTimes(4);
+    expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ overlapZoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M) - 0.1 }));
+    // The DO's applyScreen moves the stop: the dots follow its routes on the same map.
+    requestKioskMap(maps, { ...input, stop: { ...STOP, id: '200_1', routes: ['7', '109'] } }, adapter);
+    expect(setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopRoutes: ['7', '109'] }));
     expect(factory).toHaveBeenCalledTimes(1);
     expect(KIOSK_MAP_SLOT_ID).toBe('kiosk-map');
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();

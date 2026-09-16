@@ -21,9 +21,9 @@
 //     the totem's row three, the transit label within the rows its badge
 //     cap budgets, a long title cut at a word (kiosk.css "The column");
 //   - the prozor profile places at most eight major street names in the
-//     field, read off data-major-labels (contract 3) once the map is ready;
-//     while the map handle is the R-KP15 stub the attribute never appears,
-//     which is reported as a note, never passed silently;
+//     field, read off data-major-labels (contract 3, R-KP19) once the map is
+//     ready and a paint has counted them (Jelačić always has named roads in
+//     view, so the count is a positive number);
 //   - the basics panel fits its rows without a scroller;
 //   - once a phone unlocks the screen, each of the six paired compositions
 //     obeys the same clip and overlap rules, the header names the mirrored
@@ -52,8 +52,10 @@ const MIN_MAP_SHARE = 0.6;
 const MIN_PORTRAIT_FIELD = 0.5;
 /** The most major street names the prozor profile places in the field (plan D3), read off data-major-labels (contract 3). */
 const MAX_MAJOR_LABELS = 8;
-/** How long the placed-labels attribute is waited for once the map is ready; the stub never writes it. */
-const MAJOR_LABELS_WAIT_MS = 8_000;
+/** How long a positive placed-labels count is waited for once the map is ready: the controller stamps it once at
+ *  ready (when the tiles may not have rendered a name yet) and then on every map paint, which rides the teaser poll
+ *  (app/src/motion/loop.ts nextPollDelay, at most 13.5 s), so one poll after ready plus rendering slack. */
+const MAJOR_LABELS_WAIT_MS = 20_000;
 /** A statement value is at most this many lines (R-KP5). */
 const MAX_VALUE_LINES = 2;
 /** The 1 s tick fits the column (kiosk.ts fitAll); a sample put into it is measured within this. */
@@ -264,26 +266,15 @@ async function openInvitation(page: Page, face: Face, size: { width: number; hei
   await page.waitForTimeout(1500);
 }
 
-/** Contract 3: how many distinct major street names the map placed, as the
- *  controller stamped it on the map host once the map was ready; null when
- *  the attribute never came -- the map handle is the R-KP15 stub without
- *  placedNames until area P1 lands -- which the caller reports as a note. */
-async function majorLabels(page: Page): Promise<number | null> {
+/** Contract 3, R-KP19: how many distinct major street names the map placed,
+ *  as the controller stamped it on the map host after a paint once the map
+ *  was ready. A positive count is waited for: Trg bana Jelačića always has
+ *  named roads in view, so zero is "not counted yet", never an answer. */
+async function majorLabels(page: Page): Promise<number> {
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
   const host = page.getByTestId('kiosk-map-host');
-  try {
-    await expect(host).toHaveAttribute('data-major-labels', /^\d+$/, { timeout: MAJOR_LABELS_WAIT_MS });
-  } catch {
-    return null;
-  }
+  await expect(host).toHaveAttribute('data-major-labels', /^[1-9]\d*$/, { timeout: MAJOR_LABELS_WAIT_MS });
   return Number(await host.getAttribute('data-major-labels'));
-}
-
-/** A stub-dependent proof that cannot run yet is written down, never passed in silence. */
-function noteStub(what: string): void {
-  const description = `${what}; see task-P3-report.md (R-KP15 stubs)`;
-  test.info().annotations.push({ type: 'stub', description });
-  console.log(`[kiosk-layout] ${description}`);
 }
 
 for (const size of SIZES) {
@@ -322,10 +313,8 @@ for (const size of SIZES) {
       expect(await compositionIssues(page, portrait, MAX_VALUE_LINES, MIN_MAP_SHARE, MIN_PORTRAIT_FIELD), 'the map is the field').toEqual([]);
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}.png`, fullPage: false });
 
-      // Contract 3: the prozor profile places at most eight major street names in the field.
-      const labels = await majorLabels(page);
-      if (labels === null) noteStub('data-major-labels never appeared: CityMapHandle.placedNames is the R-KP15 stub until area P1 lands, so the eight-names proof waits');
-      else expect(labels, 'the prozor profile places at most eight major street names in the field').toBeLessThanOrEqual(MAX_MAJOR_LABELS);
+      // Contract 3: the prozor profile places at most eight major street names in the field (R-KP17 measured two to three at Jelačić).
+      expect(await majorLabels(page), 'the prozor profile places at most eight major street names in the field').toBeLessThanOrEqual(MAX_MAJOR_LABELS);
 
       await page.getByTestId('kiosk-essentials-open').click();
       const panel = page.getByTestId('kiosk-essentials');
@@ -429,10 +418,8 @@ test('a stale ZET feed holds the map: the screen tells the map the feed state an
   await openInvitation(page, 'light', SIZES[0], kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-feed', 'stale', { timeout: 15_000 });
-  // The transit statement says so too (contract 4: data-state on the article), once say.ts writes statements at all.
-  const transit = page.locator('[data-testid=kiosk-say][data-say=transit]');
-  if ((await transit.count()) > 0) await expect(transit).toHaveAttribute('data-state', 'stale');
-  else noteStub('no transit statement to carry data-state=stale: say.ts is the R-KP15 stub until area P2 lands');
+  // The transit statement says so too (contract 4: data-state on the article): a stale source keeps its statement with the honest word (R-KP16).
+  await expect(page.locator('[data-testid=kiosk-say][data-say=transit]')).toHaveAttribute('data-state', 'stale', { timeout: 15_000 });
   // The basics panel pauses and resumes the map; the hold survives the resume.
   await page.getByTestId('kiosk-essentials-open').click();
   await page.keyboard.press('Escape');

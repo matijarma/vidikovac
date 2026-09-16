@@ -57,7 +57,7 @@ export interface InvitationHandle {
   measureWidth(): number;
   /** Contract 3: the map's placed major street names, counted, onto the map host. */
   setMajorLabels(count: number): void;
-  /** Re-measures the column: a value past two lines is shortened at a word, a statement the room does not hold is hidden whole (R-KP5); called after every update and on the 1 s tick, so fonts arriving late and a resize are absorbed. */
+  /** Re-measures the column: a value past two lines is shortened at a word, a statement the room does not hold is hidden whole (R-KP5). Runs after every update, when the controller says the box changed (a resize) and once by itself when the fonts arrive; a value whose text and width are unchanged since its last cut is left as it is. */
   fit(): void;
   destroy(): void;
 }
@@ -92,6 +92,13 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   /** The ranker's own last answer, handed back for hysteresis (contract 5). */
   let previous: Slot[] = [];
   let lastSays = '';
+  let disposed = false;
+  /** What each value node was last measured at: its whole text and its box's
+   *  width. The same text in the same width was already cut right, so a fit
+   *  after a poll reads nothing and writes nothing for it (no restore-and-cut
+   *  under a reader's eyes); a swapped node, a new text or a new width is
+   *  measured afresh, and the fonts arriving late re-measure everything once. */
+  const measured = new WeakMap<HTMLElement, string>();
 
   /** A value made of words is cut at a word boundary with "…" until it fits
    *  VALUE_LINES of its own line-height; its data-sig is the whole text, so
@@ -101,10 +108,12 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
    *  Lines are the box's height over its line-height, never its scrollHeight:
    *  a 1.1 line box lets the face's ascenders and descenders paint a few
    *  pixels past it, which is ink, not a line. */
-  function clampValue(article: HTMLElement): void {
+  function clampValue(article: HTMLElement, remeasure: boolean): void {
     const value = article.querySelector<HTMLElement>('.k-say-value');
     if (!value || value.children.length > 0 || value.clientHeight === 0) return;
     const whole = value.dataset.sig ?? value.textContent ?? '';
+    const key = `${whole}\u0000${value.clientWidth}`;
+    if (!remeasure && measured.get(value) === key) return;
     if (value.textContent !== whole) value.textContent = whole;
     const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
     if (!(lineHeight > 0)) return;
@@ -116,18 +125,20 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       text = `${text.slice(0, cut).trimEnd()}…`;
       value.textContent = text;
     }
+    measured.set(value, key);
   }
 
   /** Every statement whole or not at all: the ones the column's box does not
    *  hold are hidden from the foot up and counted by nobody -- a half-shown
    *  statement is the hole a fixed frame reads as a fault. The column's slot
    *  count (kiosk/layout.ts SAY_SLOTS) is the most the ranker offers; the
-   *  room decides the rest. */
-  function fit(): void {
+   *  room decides the rest (R-KP22). `remeasure` re-reads every value even
+   *  where its text and width are unchanged: the fonts arriving late. */
+  function fit(remeasure = false): void {
     const items = [...says.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
     for (const item of items) {
       item.hidden = false;
-      clampValue(item);
+      clampValue(item, remeasure);
     }
     if (says.clientHeight === 0) return;
     let shown = items;
@@ -153,6 +164,12 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     fit();
   }
 
+  // A cold screen paints its first column in the fallback face; the web font
+  // arriving changes every wrap under the same text and width, so the column
+  // is measured once more when the fonts are ready (and never on a timer).
+  const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts;
+  void fonts?.ready?.then(() => { if (!disposed) fit(true); });
+
   return {
     element,
     get mapHost() { return field.mapHost; },
@@ -162,8 +179,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     },
     measureWidth: () => field.measureWidth(),
     setMajorLabels: (count) => field.setMajorLabels(count),
-    fit,
+    fit: () => fit(),
     destroy() {
+      disposed = true;
       field.destroy();
       element.remove();
     },
