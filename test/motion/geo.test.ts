@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dist, toLonLat, toPlane } from '../../app/src/motion/geo';
+import { dist, toLonLat, toPlane } from '../../shared/motion/geo';
 
 // Independent cross-check of the projection's scale, duplicated from
 // well-known WGS84 geodesy rather than imported from the module under

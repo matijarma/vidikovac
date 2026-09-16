@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { XY } from '../../app/src/motion/geo';
-import { at, cumulative, project, tangent } from '../../app/src/motion/polyline';
+import type { XY } from '../../shared/motion/geo';
+import { at, cumulative, project, tangent } from '../../shared/motion/polyline';
 
 // A small seeded PRNG so the thousand-query hint-equivalence test is
 // deterministic across runs (a real failure must reproduce, not flicker).
