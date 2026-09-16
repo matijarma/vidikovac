@@ -5,13 +5,13 @@
 // timetable speaks in stop pairs, so the mapping from stops to arcs is done
 // once per path here.
 
+import { type DayType, zagrebBands } from './bands';
+import { edgeKey, histogramCount, histogramMedian, stopKey, type Histogram, type LearnedAggregates } from './learn';
 import type { GraphNetwork } from './network';
 import { DWELL_DEFAULT_S } from './plan';
 import type { TripIndex } from './trips';
 
-/** 0 Monday to Friday, 1 Saturday, Sunday and holidays: the two shapes a
- *  Zagreb timetable and a Zagreb street have. */
-export type DayType = 0 | 1;
+export { zagrebBands, type DayType };
 
 export interface TimesProvider {
   /** Expected seconds to travel from arc `fromS` to arc `toS` on the path,
@@ -26,17 +26,6 @@ interface Segment {
   toS: number;
   /** Seconds by hour band 0..23. */
   seconds: number[];
-}
-
-const ZAGREB_BANDS = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Zagreb', hour: '2-digit', hourCycle: 'h23', weekday: 'short' });
-
-/** The hour band and day type of an instant, Zagreb wall clock. */
-export function zagrebBands(epochSec: number): { hourBand: number; dayType: DayType } {
-  const parts: Record<string, string> = {};
-  for (const part of ZAGREB_BANDS.formatToParts(new Date(epochSec * 1000))) parts[part.type] = part.value;
-  const hourBand = Number(parts.hour) % 24;
-  const dayType: DayType = parts.weekday === 'Sat' || parts.weekday === 'Sun' ? 1 : 0;
-  return { hourBand, dayType };
 }
 
 function median(values: number[]): number {
@@ -123,6 +112,80 @@ export function scheduleTimes(net: GraphNetwork, index: TripIndex): TimesProvide
       // R-TE34: a timetable that says 0 says nothing; the planner's default stands in.
       const value = median(samples);
       return value > 0 ? value : null;
+    },
+  };
+}
+
+/** Samples a cell needs before its median speaks for a stretch or a stop:
+ *  ten traversals separate a rush-hour edge from a quiet one and still fill
+ *  within a morning on any line that runs every ten minutes; fewer would let
+ *  one stuck tram write the timetable of an hour. */
+export const LEARN_MIN_SAMPLES = 10;
+
+/** The neighbouring hour bands a thin cell borrows from before falling
+ *  through to the schedule: the same band on the other day type first (a
+ *  Saturday noon is more like a Tuesday noon than like a Tuesday dawn), then
+ *  one band either side, then two. */
+const BAND_REACH = 2;
+
+function borrowOrder(hourBand: number, dayType: DayType): [number, DayType][] {
+  const other: DayType = dayType === 0 ? 1 : 0;
+  const order: [number, DayType][] = [[hourBand, dayType], [hourBand, other]];
+  for (let reach = 1; reach <= BAND_REACH; reach++) {
+    for (const band of [hourBand - reach, hourBand + reach]) {
+      order.push([(band + 24) % 24, dayType]);
+    }
+    for (const band of [hourBand - reach, hourBand + reach]) {
+      order.push([(band + 24) % 24, other]);
+    }
+  }
+  return order;
+}
+
+function lookup(table: Record<string, Histogram>, keyFor: (band: number, day: DayType) => string, hourBand: number, dayType: DayType, minSamples: number): number | null {
+  for (const [band, day] of borrowOrder(hourBand, dayType)) {
+    const h = table[keyFor(band, day)];
+    if (h && histogramCount(h) >= minSamples) return histogramMedian(h);
+  }
+  return null;
+}
+
+/**
+ * The learned medians in front of the schedule (C1): a stretch is summed
+ * edge by edge over the covered arc shares, each edge answering from its
+ * learned cell when it holds `minSamples` or more (borrowing from the same
+ * band on the other day type and from neighbouring bands first), and from the
+ * schedule otherwise; a stop's dwell the same way. The aggregates are read
+ * live, so what the twin learns this minute shapes its next plan.
+ */
+export function learnedTimes(schedule: TimesProvider, aggregates: LearnedAggregates, net: GraphNetwork, minSamples = LEARN_MIN_SAMPLES): TimesProvider {
+  return {
+    segmentSeconds(pathIdx, fromS, toS, hourBand, dayType) {
+      if (toS <= fromS) return 0;
+      const path = net.paths[pathIdx];
+      if (!path) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+      let total = 0;
+      for (let k = 0; k < path.edges.length; k++) {
+        const start = path.offsets[k];
+        const end = k + 1 < path.edges.length ? path.offsets[k + 1] : path.len;
+        const lo = Math.max(fromS, start);
+        const hi = Math.min(toS, end);
+        if (hi <= lo) continue;
+        const learned = lookup(aggregates.edges, (band, day) => edgeKey(path.edges[k], band, day), hourBand, dayType, minSamples);
+        if (learned !== null && end > start) {
+          total += (learned * (hi - lo)) / (end - start);
+          continue;
+        }
+        const scheduled = schedule.segmentSeconds(pathIdx, lo, hi, hourBand, dayType);
+        if (scheduled === null) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+        total += scheduled;
+      }
+      // Anything beyond the path's edges is the schedule's to answer.
+      if (toS > path.len + 1e-6 || fromS < -1e-6) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+      return total;
+    },
+    dwellSeconds(stopId, hourBand, dayType) {
+      return lookup(aggregates.stops, (band, day) => stopKey(stopId, band, day), hourBand, dayType, minSamples) ?? schedule.dwellSeconds(stopId, hourBand, dayType);
     },
   };
 }

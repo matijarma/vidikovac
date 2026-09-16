@@ -5,9 +5,10 @@
 // loaded and rebuilds it when either changes; a tick without an engine
 // (no geometry loaded) still publishes free-plane plans (tick.ts).
 
+import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import { createMatcher, type Matcher } from '../../shared/motion/match';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { scheduleTimes, type TimesProvider } from '../../shared/motion/times';
+import { learnedTimes, scheduleTimes, type TimesProvider } from '../../shared/motion/times';
 import type { VehicleKind } from '../../shared/motion/track';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
@@ -15,12 +16,25 @@ import type { ZetRoutes } from '../feed/modules/zet-routes';
 export interface Engine {
   net: GraphNetwork;
   index: TripIndex;
+  /** The timetable, as the fallback the learned wrapper falls through to. */
+  schedule: TimesProvider;
+  /** What the planner asks: learned medians where thick, the schedule elsewhere (C1). */
   times: TimesProvider;
+  /** Learned medians only, null where a band is thin: what prices the travel inside a dwell sample. */
+  learnedOnly: TimesProvider;
+  /** The live aggregates `times` reads; the twin adds every tick's evidence here. */
+  learned: LearnedAggregates;
   matcher: Matcher;
 }
 
-export function createEngine(net: GraphNetwork, index: TripIndex): Engine {
-  return { net, index, times: scheduleTimes(net, index), matcher: createMatcher(net) };
+/** A timetable that knows nothing: under the learned wrapper it leaves null
+ *  wherever no band is thick, so the learner never prices a dwell sample's
+ *  travel off a schedule that may be as wrong as what it is trying to learn. */
+const NO_TIMES: TimesProvider = { segmentSeconds: () => null, dwellSeconds: () => null };
+
+export function createEngine(net: GraphNetwork, index: TripIndex, learned: LearnedAggregates = emptyAggregates()): Engine {
+  const schedule = scheduleTimes(net, index);
+  return { net, index, schedule, times: learnedTimes(schedule, learned, net), learnedOnly: learnedTimes(NO_TIMES, learned, net), learned, matcher: createMatcher(net) };
 }
 
 /** Tram or bus, from the network's route table first (the same static GTFS

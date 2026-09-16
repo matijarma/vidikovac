@@ -5,6 +5,7 @@
 // the storage the Durable Object hands in; no Cloudflare import.
 
 import { toPlane } from '../../shared/motion/geo';
+import { emptyAggregates, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
 import type { PlaneFix, Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
@@ -18,6 +19,12 @@ export const STATE_ROWS_KEPT = 3;
  *  deploy: the assets change only on a push, and a push restarts the
  *  isolate anyway, so an hourly check is a safety net, not the mechanism. */
 export const INDEX_RECHECK_MS = 60 * 60 * 1000;
+
+/** How often the learned aggregates reach SQLite (C1): once a minute, in
+ *  one transaction, so a day of learning is about 1,400 batched writes over a
+ *  few hundred rows rather than a row write per traversal (the plan's
+ *  row-write budget); the state row carries the unflushed minute meanwhile. */
+export const LEARN_FLUSH_MS = 60_000;
 
 /** Rows per multi-row INSERT: 20 trips × 4 columns keeps a statement at 80
  *  bound parameters, comfortably under SQLite's conservative limits. */
@@ -91,6 +98,27 @@ export function ensureSchema(sql: SqlStorage): void {
      )`,
   );
   sql.exec('CREATE TABLE IF NOT EXISTS blocks (block TEXT PRIMARY KEY, trips TEXT NOT NULL)');
+  // C1: one histogram per (edge, hour band, day type) and per (stop, hour band, day type).
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS edge_time (
+       edge INTEGER NOT NULL,
+       band INTEGER NOT NULL,
+       daytype INTEGER NOT NULL,
+       hist TEXT NOT NULL,
+       n INTEGER NOT NULL,
+       PRIMARY KEY (edge, band, daytype)
+     )`,
+  );
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS stop_dwell (
+       stop TEXT NOT NULL,
+       band INTEGER NOT NULL,
+       daytype INTEGER NOT NULL,
+       hist TEXT NOT NULL,
+       n INTEGER NOT NULL,
+       PRIMARY KEY (stop, band, daytype)
+     )`,
+  );
 }
 
 // ---- tick state -------------------------------------------------------------
@@ -129,7 +157,7 @@ export function deserializeState(body: string): TwinState {
       }),
     };
   }
-  return { ...stored, tracks, published: stored.published ?? {} };
+  return { ...stored, tracks, published: stored.published ?? {}, learnedUpTo: stored.learnedUpTo ?? {}, pendingLearned: stored.pendingLearned ?? emptyAggregates() };
 }
 
 /** Writes the tick's state and keeps only the newest STATE_ROWS_KEPT rows. */
@@ -222,4 +250,55 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[]): Map<st
     }
   }
   return out;
+}
+
+// ---- the learned aggregates (C1) --------------------------------------------------
+
+export function learnFlushedAt(sql: SqlStorage): number | null {
+  const value = metaGet(sql, 'learn_flushed_at');
+  const parsed = value === null ? Number.NaN : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function markLearnFlushed(sql: SqlStorage, atMs: number): void {
+  metaSet(sql, 'learn_flushed_at', String(atMs));
+}
+
+/** Every learned histogram the tables hold. */
+export function loadLearned(sql: SqlStorage): LearnedAggregates {
+  const agg = emptyAggregates();
+  for (const row of sql.exec<{ edge: number; band: number; daytype: number; hist: string }>('SELECT edge, band, daytype, hist FROM edge_time').toArray()) {
+    agg.edges[`${row.edge}|${row.band}|${row.daytype}`] = parseHistogram(row.hist);
+  }
+  for (const row of sql.exec<{ stop: string; band: number; daytype: number; hist: string }>('SELECT stop, band, daytype, hist FROM stop_dwell').toArray()) {
+    agg.stops[`${row.stop}|${row.band}|${row.daytype}`] = parseHistogram(row.hist);
+  }
+  return agg;
+}
+
+/** Merges the pending aggregates into the tables in one transaction; returns the rows written. */
+export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggregates): number {
+  if (isEmptyAggregates(pending)) return 0;
+  const sql = storage.sql;
+  let rows = 0;
+  storage.transactionSync(() => {
+    for (const [key, h] of Object.entries(pending.edges)) {
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      const edge = Number(parsed.id);
+      const existing = sql.exec<{ hist: string }>('SELECT hist FROM edge_time WHERE edge = ? AND band = ? AND daytype = ?', edge, parsed.hourBand, parsed.dayType).toArray()[0];
+      const merged = existing ? mergeHistograms(parseHistogram(existing.hist), h) : h;
+      sql.exec('INSERT OR REPLACE INTO edge_time (edge, band, daytype, hist, n) VALUES (?, ?, ?, ?, ?)', edge, parsed.hourBand, parsed.dayType, serializeHistogram(merged), histogramCount(merged));
+      rows++;
+    }
+    for (const [key, h] of Object.entries(pending.stops)) {
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      const existing = sql.exec<{ hist: string }>('SELECT hist FROM stop_dwell WHERE stop = ? AND band = ? AND daytype = ?', parsed.id, parsed.hourBand, parsed.dayType).toArray()[0];
+      const merged = existing ? mergeHistograms(parseHistogram(existing.hist), h) : h;
+      sql.exec('INSERT OR REPLACE INTO stop_dwell (stop, band, daytype, hist, n) VALUES (?, ?, ?, ?, ?)', parsed.id, parsed.hourBand, parsed.dayType, serializeHistogram(merged), histogramCount(merged));
+      rows++;
+    }
+  });
+  return rows;
 }

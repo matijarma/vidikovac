@@ -15,7 +15,8 @@
 import { toPlane } from '../../shared/motion/geo';
 import { countGrades, emptyCounts, gradeFix, rememberPlan, type HindsightCounts } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/laws';
-import { buildPlan, CONFIDENCE_FREE_CAP, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
+import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
+import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
 import { zagrebBands } from '../../shared/motion/times';
 import { lastFix, newTrack, pushFix, type FreeKnot, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -48,6 +49,8 @@ export interface TickResult {
   evicted: number;
   order: OrderReport | null;
   hindsight: HindsightCounts;
+  /** The evidence this tick mined from the fresh fixes (C1), already counted into the state's pending aggregates. */
+  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[] };
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -87,6 +90,9 @@ export function runTick(input: TickInput): TickResult {
   const nowSec = Math.floor(nowMs / 1000);
   const tracks: Record<string, Track> = { ...input.state.tracks };
   const published = { ...input.state.published };
+  const learnedUpTo = { ...input.state.learnedUpTo };
+  const pendingLearned = { edges: { ...input.state.pendingLearned.edges }, stops: { ...input.state.pendingLearned.stops } };
+  const learned: TickResult['learned'] = { edges: [], dwells: [] };
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
@@ -104,7 +110,10 @@ export function runTick(input: TickInput): TickResult {
       if (!track || tripChanged) {
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
         tracks[raw.vehicleId] = track;
-        if (tripChanged) delete published[raw.vehicleId];
+        if (tripChanged) {
+          delete published[raw.vehicleId];
+          delete learnedUpTo[raw.vehicleId];
+        }
       } else {
         track.routeId = routeId;
         if (tripId !== null) track.tripId = tripId;
@@ -132,6 +141,7 @@ export function runTick(input: TickInput): TickResult {
     if (!last || last.atSec < nowSec - TRACK_STALE_S) {
       delete tracks[id];
       delete published[id];
+      delete learnedUpTo[id];
       evicted++;
     }
   }
@@ -148,6 +158,23 @@ export function runTick(input: TickInput): TickResult {
       buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands);
     }
     order = enforceOrder(all, engine.net, nowSec, headerSec);
+    // What this tick's fresh fixes teach (C1): cruise per edge, standing per
+    // stop, each traversal or dwell once, counted into the pending aggregates
+    // the Durable Object flushes once a minute.
+    const dwellOf = (stopId: string): number => engine.times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
+    const travelOf = (pathIdx: number, fromS: number, toS: number, atSec: number): number | null => {
+      const at = zagrebBands(atSec);
+      return engine.learnedOnly.segmentSeconds(pathIdx, fromS, toS, at.hourBand, at.dayType);
+    };
+    for (const id of fresh) {
+      const track = tracks[id];
+      if (!track) continue;
+      const evidence = extractEvidence(engine.net, track, learnedUpTo[id] ?? 0, dwellOf, travelOf);
+      learned.edges.push(...evidence.edges);
+      learned.dwells.push(...evidence.dwells);
+      learnedUpTo[id] = evidence.upTo;
+    }
+    recordEvidence(pendingLearned, learned);
     // Grade this tick's fresh fixes against what was published before, then
     // remember this tick's plans for the fixes still to come.
     for (const id of fresh) {
@@ -167,7 +194,7 @@ export function runTick(input: TickInput): TickResult {
     published[track.id] = ring;
   }
 
-  const state: TwinState = { headerTs, etag: input.state.etag, tickAtMs: nowMs, tracks, tripUpdates, published };
+  const state: TwinState = { headerTs, etag: input.state.etag, tickAtMs: nowMs, tracks, tripUpdates, published, learnedUpTo, pendingLearned };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight };
+  return { state, payload, newFixes, evicted, order, hindsight, learned };
 }

@@ -34,8 +34,24 @@ import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { createEngine, type Engine } from '../twin/engine';
 import { decodeFeed } from '../twin/feed-decode';
 import { BUCKETS, horizonKey, type HindsightCounts, HORIZONS_S } from '../../shared/motion/hindsight';
+import { emptyAggregates, emptyHistogram, histogramMedian, isEmptyAggregates, mergeAggregates, mergeHistograms, parseKey, recordEvidence, type LearnedAggregates } from '../../shared/motion/learn';
 import { indexRowsFromIndex } from '../twin/index-load';
-import { INDEX_RECHECK_MS, ensureSchema, indexCheckedAt, indexFeedVersion, loadLatestState, lookupTrips, markIndexChecked, replaceIndex, saveState } from '../twin/persist';
+import {
+  INDEX_RECHECK_MS,
+  LEARN_FLUSH_MS,
+  ensureSchema,
+  flushLearned,
+  indexCheckedAt,
+  indexFeedVersion,
+  learnFlushedAt,
+  loadLatestState,
+  loadLearned,
+  lookupTrips,
+  markIndexChecked,
+  markLearnFlushed,
+  replaceIndex,
+  saveState,
+} from '../twin/persist';
 import { buildPayload, type TripJoin } from '../twin/publish';
 import { recordFrame, type RecordOutcome } from '../twin/record';
 import { twinIndexSource, twinNetworkSource, twinUpstream } from '../twin/seams';
@@ -71,6 +87,10 @@ export interface TickReport {
   hindsightSamples: number;
   /** Bytes of the state row written this tick. */
   stateBytes: number;
+  /** Evidence mined this tick (C1): cruise samples per edge, standing samples per stop. */
+  learned: { edges: number; dwells: number };
+  /** True when this tick flushed the pending aggregates into SQLite (once a minute). */
+  learnedFlushed: boolean;
 }
 
 /** What the cold start cost: decoding the two static assets, in milliseconds. */
@@ -110,6 +130,9 @@ export class TwinDO extends DurableObject<Env> {
   private net: GraphNetwork | null = null;
   private engine: Engine | null = null;
   private coldLoad: ColdLoad | null = null;
+  /** Everything learned so far: the tables plus the unflushed minute; the engine's times read it live (C1). */
+  private learned: LearnedAggregates = emptyAggregates();
+  private learnedLoaded = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -181,6 +204,8 @@ export class TwinDO extends DurableObject<Env> {
       order: null,
       hindsightSamples: 0,
       stateBytes: 0,
+      learned: { edges: 0, dwells: 0 },
+      learnedFlushed: false,
     });
 
     // A retried or early alarm inside the floor: no second fetch (R-TE8).
@@ -203,7 +228,7 @@ export class TwinDO extends DurableObject<Env> {
       // Nothing new from ZET: the plans still move on (D2), validUntil moves.
       const result = this.advance(prev, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes });
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed });
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
@@ -213,7 +238,7 @@ export class TwinDO extends DurableObject<Env> {
       // The same frame again (the cushion beat ZET's publish): nothing new.
       const result = this.advance({ ...prev, etag }, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes });
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed });
     }
 
     const result = this.advance({ ...prev, etag }, decoded, now, routes);
@@ -234,12 +259,19 @@ export class TwinDO extends DurableObject<Env> {
       order: result.order,
       hindsightSamples: result.hindsightSamples,
       stateBytes: result.stateBytes,
+      learned: result.learned,
+      learnedFlushed: result.learnedFlushed,
     });
   }
 
   /** Runs the engine's tick over a frame (or none), publishes, persists,
    *  counts the hindsight. The one path every observation goes through. */
-  private advance(prev: TwinState, feed: ReturnType<typeof decodeFeed> | null, nowMs: number, routes: ZetRoutes): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number } {
+  private advance(
+    prev: TwinState,
+    feed: ReturnType<typeof decodeFeed> | null,
+    nowMs: number,
+    routes: ZetRoutes,
+  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: { edges: number; dwells: number }; learnedFlushed: boolean } {
     const headerTs = feed?.headerTs ?? prev.headerTs;
     // The joins for every trip in view: the frame's trips plus the tracks already followed.
     const tripIds = new Set<string>();
@@ -249,6 +281,11 @@ export class TwinDO extends DurableObject<Env> {
     const unknownTrips = [...tripIds].filter((id) => !joins.has(id)).length;
 
     const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs) });
+    // What the tick learned joins the live aggregates the planner reads now,
+    // and the pending minute in the state row; once a minute the pending
+    // minute reaches the tables in one transaction and the row starts over.
+    recordEvidence(this.learned, result.learned);
+    const learnedFlushed = this.flushLearnedIfDue(result.state, nowMs);
     this.state = result.state;
     this.payload = result.payload;
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
@@ -262,7 +299,36 @@ export class TwinDO extends DurableObject<Env> {
         .recordMany(entries)
         .catch((error: unknown) => logError('twin_hindsight_failed', error));
     }
-    return { state: result.state, newFixes: result.newFixes, evicted: result.evicted, order: result.order, unknownTrips, tripIds: tripIds.size, hindsightSamples, stateBytes };
+    return {
+      state: result.state,
+      newFixes: result.newFixes,
+      evicted: result.evicted,
+      order: result.order,
+      unknownTrips,
+      tripIds: tripIds.size,
+      hindsightSamples,
+      stateBytes,
+      learned: { edges: result.learned.edges.length, dwells: result.learned.dwells.length },
+      learnedFlushed,
+    };
+  }
+
+  /** The minute's evidence into SQLite, once a minute, in one transaction
+   *  (LEARN_FLUSH_MS): the clock lives in the meta table so an eviction does
+   *  not reset it, and the unflushed minute lives in the state row so an
+   *  eviction does not lose it. */
+  private flushLearnedIfDue(state: TwinState, nowMs: number): boolean {
+    const sql = this.ctx.storage.sql;
+    const flushedAt = learnFlushedAt(sql);
+    if (flushedAt === null) {
+      markLearnFlushed(sql, nowMs);
+      return false;
+    }
+    if (nowMs - flushedAt < LEARN_FLUSH_MS || isEmptyAggregates(state.pendingLearned)) return false;
+    flushLearned(this.ctx.storage, state.pendingLearned);
+    state.pendingLearned = emptyAggregates();
+    markLearnFlushed(sql, nowMs);
+    return true;
   }
 
   /** The static join per trip id: from the decoded index in memory when it
@@ -289,6 +355,9 @@ export class TwinDO extends DurableObject<Env> {
     if (!saved) return;
     const now = this.now();
     await this.ensureAssets(now);
+    // The minute the last life had not flushed yet is knowledge too.
+    this.loadLearnedOnce();
+    mergeAggregates(this.learned, saved.pendingLearned);
     this.advance(saved, null, now, await loadZetRoutes());
   }
 
@@ -327,10 +396,22 @@ export class TwinDO extends DurableObject<Env> {
       cold.networkMs = Date.now() - t0;
     }
     if (this.net && this.index && !this.engine) {
-      this.engine = createEngine(this.net, this.index);
+      this.loadLearnedOnce();
+      this.engine = createEngine(this.net, this.index, this.learned);
       this.coldLoad = cold;
       logInfo('twin_assets_loaded', { networkMs: cold.networkMs, indexMs: cold.indexMs, edges: this.net.edges.length, trips: this.index.tripsById.size });
     }
+  }
+
+  /** The learned tables into memory, once per life; later ticks add to it in place. */
+  private loadLearnedOnce(): void {
+    if (this.learnedLoaded) return;
+    const fromTables = loadLearned(this.ctx.storage.sql);
+    // Anything already counted this life (a tick before the assets arrived) stays.
+    mergeAggregates(fromTables, this.learned);
+    this.learned.edges = fromTables.edges;
+    this.learned.stops = fromTables.stops;
+    this.learnedLoaded = true;
   }
 
   // ---- test seams ------------------------------------------------------------
@@ -348,6 +429,26 @@ export class TwinDO extends DurableObject<Env> {
     this.net = null;
     this.engine = null;
     this.coldLoad = null;
+    this.learned = emptyAggregates();
+    this.learnedLoaded = false;
+  }
+
+  /** What the twin has learned, for a test: cells per table and the median
+   *  edge time per edge over every band and day type. */
+  learnedForTest(): { edgeKeys: number; stopKeys: number; edgeMedians: Record<number, number> } {
+    const perEdge = new Map<number, number[]>();
+    for (const [key, h] of Object.entries(this.learned.edges)) {
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      const edge = Number(parsed.id);
+      perEdge.set(edge, mergeHistograms(perEdge.get(edge) ?? emptyHistogram(), h));
+    }
+    const edgeMedians: Record<number, number> = {};
+    for (const [edge, h] of perEdge) {
+      const median = histogramMedian(h);
+      if (median !== null) edgeMedians[edge] = median;
+    }
+    return { edgeKeys: Object.keys(this.learned.edges).length, stopKeys: Object.keys(this.learned.stops).length, edgeMedians };
   }
 
   lastReportForTest(): TickReport | null {
