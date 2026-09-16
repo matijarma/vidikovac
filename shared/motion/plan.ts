@@ -38,10 +38,26 @@ export const MIN_OWN_SPEED_MS = 0.5;
  *  twice the kinematic estimate: inside that band it is better evidence
  *  than a two-interval speed; outside it is a stale update or a bad clock. */
 export const ETA_BAND = [0.5, 2] as const;
-/** Own speed and timetable share the first stretch equally: the speed is two
- *  intervals of the vehicle's own evidence, the timetable the long-run
- *  truth of the stretch, and neither deserves to silence the other. */
-export const OWN_SPEED_WEIGHT = 0.5;
+/** Own speed is evidence about now and holds for this long from the anchor
+ *  before the stretch's usual speed takes over (R-TE46): on the live feed
+ *  a cruising tram kept its speed over the next interval far more often
+ *  than it fell to the timetable's average, which folds in every signal and
+ *  platform of the stretch (planned 4.2 m/s against a realised 11.3 m/s at
+ *  a 16 s look-ahead, recording of 16 Sept). */
+export const OWN_SPEED_HOLD_S = 15;
+/** A vehicle standing off any platform (a signal, a queue, a layover track)
+ *  is expected to stand about as long again as it already has, between one
+ *  tick and a signal cycle (R-TE47): on the live feed the plan drove off
+ *  while the vehicle stood 59 % of the time. */
+export const STAND_HOLD_MIN_S = 10;
+export const STAND_HOLD_MAX_S = 40;
+/** A stand at a platform already past its dwell ends a tick from now, not
+ *  this instant (R-TE48): the error of "leaving now" repeated every tick
+ *  grows with the look-ahead, the error of a tick's delay does not. */
+export const STAND_EXTEND_S = 12;
+/** A trip's scheduled first departure is believed up to this far ahead
+ *  (R-TE49); beyond it the start date or the join is wrong. */
+export const TRIP_START_MAX_AHEAD_S = 45 * 60;
 /** How far a TripUpdate's implied departure may stray from the dwell window
  *  the history allows and still be believed: a tick's worth of latency
  *  between the fix and the update. */
@@ -216,6 +232,12 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
   knots.push([rel(t), round1(s)]);
   let nextStop: NextStop | null = null;
   const first = true;
+  // The stand the history shows: how long the fixes have sat within the dead
+  // zone of the latest one. A standing vehicle's speed estimate is its last
+  // cruise, stale evidence about now.
+  let stoodSec = 0;
+  for (let i = track.fixes.length - 2; i >= 0 && dist(track.fixes[i], last) < DEAD_ZONE_M; i--) stoodSec = last.atSec - track.fixes[i].atSec;
+  const standing = stoodSec > 0;
 
   // At a platform: when the tram moves on decides everything after. The
   // history says how long it has stood (dwellRemaining); ZET's ETA for the
@@ -246,7 +268,8 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
     const approachSpeed = ownSpeed ?? (Math.min(here.s, 300) > 0 ? Math.min(here.s, 300) / segmentTime(Math.max(0, here.s - 300), here.s) : DEFAULT_CRUISE_MS);
     const remaining = dwellRemaining(track, here, dwellHere, approachSpeed);
     if (remaining !== null) {
-      let departure = t + remaining;
+      // The dwell that is left; a stand already past it ends a tick from now (R-TE48).
+      let departure = t + (remaining > 0 ? remaining : STAND_EXTEND_S);
       if (beyond && next?.timeSec !== null && next?.timeSec !== undefined) {
         // ZET's arrival time at the stop beyond, less the travel to it (with
         // the dwells at every platform in between), is when the tram leaves here.
@@ -262,6 +285,9 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
         const latest = last ? headerSec - travelTo(last.s) - dwellOf(last.stopId) : headerSec;
         departure = Math.min(departure, Math.max(t, latest));
       }
+      // A trip that has not started does not leave its first platform (R-TE49).
+      const scheduledStart = tripStartAfter(track, next, t);
+      if (scheduledStart !== null) departure = Math.max(departure, scheduledStart);
       if (s < here.s) {
         const arrive = Math.min(departure, t + (here.s - s) / approachSpeed);
         knots.push([rel(arrive), round1(here.s)]);
@@ -274,6 +300,14 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
         t = departure;
       }
     }
+  } else if (standing) {
+    // Standing off any platform: about as long again, within bounds (R-TE47),
+    // and never before a trip that has not started (R-TE49).
+    let hold = Math.min(Math.max(stoodSec, STAND_HOLD_MIN_S), STAND_HOLD_MAX_S);
+    const scheduledStart = tripStartAfter(track, next, t);
+    if (scheduledStart !== null) hold = Math.max(hold, scheduledStart - t);
+    knots.push([rel(t + hold), round1(s)]);
+    t += hold;
   }
 
   const stops = geometry.stopsAhead(s);
@@ -289,18 +323,24 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
     }
     const scheduled = geometry.timesPath !== null ? times.segmentSeconds(geometry.timesPath, s, target, bands.hourBand, bands.dayType) : null;
     const scheduledSpeed = scheduled !== null && scheduled > 0 ? (target - s) / scheduled : null;
-    let speed: number;
-    // Own speed weighs on the first stretch only (it is evidence about now);
-    // the stretches beyond run on what the stretch usually takes.
-    const firstStretch = first && knots.length <= 2;
-    if (firstStretch && ownSpeed !== null && scheduledSpeed !== null) speed = OWN_SPEED_WEIGHT * ownSpeed + (1 - OWN_SPEED_WEIGHT) * scheduledSpeed;
-    else speed = (firstStretch ? ownSpeed ?? scheduledSpeed : scheduledSpeed ?? ownSpeed) ?? DEFAULT_CRUISE_MS;
-    const kinematic = (target - s) / speed;
+    // Own speed is evidence about now: a moving vehicle's first stretch runs
+    // at it for OWN_SPEED_HOLD_S, then at what the stretch usually takes
+    // (R-TE46); a standing vehicle's own speed is its last cruise, not now.
+    const firstStretch = first && knots.length <= 2 && !standing;
+    const own = firstStretch ? ownSpeed : null;
+    const cruise = scheduledSpeed ?? ownSpeed ?? DEFAULT_CRUISE_MS;
+    const ownLeg = own !== null ? Math.min(target - s, own * OWN_SPEED_HOLD_S) : 0;
+    const kinematic = (own !== null ? ownLeg / own : 0) + (target - s - ownLeg) / cruise;
     let arrive = t + kinematic;
+    let viaEta = false;
     if (stopIdx === 0 && stop && next && next.stopId === stop.stopId && next.timeSec !== null) {
       const eta = next.timeSec - t;
-      if (eta >= ETA_BAND[0] * kinematic && eta <= ETA_BAND[1] * kinematic) arrive = next.timeSec;
+      if (eta >= ETA_BAND[0] * kinematic && eta <= ETA_BAND[1] * kinematic) {
+        arrive = next.timeSec;
+        viaEta = true;
+      }
     }
+    if (own !== null && !viaEta && ownLeg > 0.5 && ownLeg < target - s - 0.5) knots.push([rel(t + ownLeg / own), round1(s + ownLeg)]);
     knots.push([rel(arrive), round1(target)]);
     if (!stop) {
       // The end of the path is a terminus: hold until the trip changes.
@@ -326,6 +366,15 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
   track.next = nextStop;
   const base = track.fixes.length >= 2 ? CONFIDENCE_ON_GEOMETRY : CONFIDENCE_SINGLE_FIX;
   track.confidence = base * decay;
+}
+
+/** The trip's scheduled first departure with ZET's delay added, when it is
+ *  still ahead by less than TRIP_START_MAX_AHEAD_S (R-TE49); null otherwise.
+ *  A negative delay is a vehicle waiting early, not a trip leaving early. */
+function tripStartAfter(track: Track, next: NextStopUpdate | null, tSec: number): number | null {
+  if (track.tripStartSec === null) return null;
+  const start = track.tripStartSec + Math.max(0, next?.delaySec ?? 0);
+  return start > tSec && start - tSec <= TRIP_START_MAX_AHEAD_S ? start : null;
 }
 
 function round1(value: number): number {

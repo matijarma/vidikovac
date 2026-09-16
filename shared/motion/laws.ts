@@ -25,6 +25,13 @@ export const SILENT_AFTER_S = 20;
 export const CONCESSION_FIXES = 3;
 /** How near a stop or the path end the leader must be for a swap to be physically possible. */
 export const CONCESSION_NEAR_STOP_M = 40;
+/** Two stop spacings: fixes that contradict an established order by more
+ *  than this are not a swap on single track but a relation that has stopped
+ *  meaning anything (the leader began its next trip at a circuit's start, a
+ *  fold flipped, a vehicle id changed hands), and it is dropped rather than
+ *  enforced (R-TE52). On the live feed a follower six kilometres on was held
+ *  at arc zero for minutes this way (recording of 16 Sept). */
+export const SWAP_LIMIT_M = 300;
 
 export interface OrderReport {
   pushes: number;
@@ -116,6 +123,17 @@ export function enforceOrder(tracks: Track[], net: GraphNetwork, nowSec: number,
       const bOnA = a.path.edges.includes(b.track.match.edge!);
       if (!aOnB && !bOnA) continue;
 
+      /** The order the two plans read at the header give, in a's frame; null within a headway. */
+      const establish = (): [leader: Framed, follower: Framed] | null => {
+        const sa = evalPathPlan(a.knots, 0);
+        const sb = evalOn(b, 0, a.path);
+        if (sb === null || Math.abs(sa - sb) <= HEADWAY_M) return null;
+        const pair: [Framed, Framed] = sa > sb ? [a, b] : [b, a];
+        pair[1].track.order.behind.push(pair[0].track.id);
+        pair[1].track.order.contradictions[pair[0].track.id] = 0;
+        return pair;
+      };
+
       let leader: Framed;
       let follower: Framed;
       if (a.track.order.behind.includes(b.track.id)) {
@@ -125,19 +143,21 @@ export function enforceOrder(tracks: Track[], net: GraphNetwork, nowSec: number,
         leader = a;
         follower = b;
       } else {
-        // Establish from the two plans read at the header, in a's frame.
-        const sa = evalPathPlan(a.knots, 0);
-        const sb = evalOn(b, 0, a.path);
-        if (sb === null || Math.abs(sa - sb) <= HEADWAY_M) continue;
-        if (sa > sb) {
-          leader = a;
-          follower = b;
-        } else {
-          leader = b;
-          follower = a;
-        }
-        follower.track.order.behind.push(leader.track.id);
-        follower.track.order.contradictions[leader.track.id] = 0;
+        const pair = establish();
+        if (!pair) continue;
+        [leader, follower] = pair;
+      }
+
+      // The two fixes themselves disagree with the order by more than a swap
+      // could: the relation is stale, not the evidence (R-TE52). It is dropped
+      // and the plans establish the order afresh, this same pass.
+      const followerFixOnLeaderNow = mapArc(follower.path, follower.track.match.s, leader.path);
+      if (followerFixOnLeaderNow !== null && followerFixOnLeaderNow - leader.track.match.s > SWAP_LIMIT_M) {
+        follower.track.order.behind = follower.track.order.behind.filter((id) => id !== leader.track.id);
+        delete follower.track.order.contradictions[leader.track.id];
+        const pair = establish();
+        if (!pair) continue;
+        [leader, follower] = pair;
       }
 
       // Contradiction: the follower's own fix lies ahead of where the leader's plan puts the leader at that moment.
@@ -184,7 +204,9 @@ export function enforceOrder(tracks: Track[], net: GraphNetwork, nowSec: number,
         for (const knot of follower.knots) {
           const ahead = evalOn(leader, knot[0], follower.path);
           if (ahead === null) continue;
-          const ceiling = ahead - HEADWAY_M;
+          // Never behind the follower's own fix: that fix is evidence (R-P2), and
+          // a contradiction it makes is counted above, not overwritten (R-TE52).
+          const ceiling = Math.max(ahead - HEADWAY_M, follower.track.match.s);
           if (knot[1] > ceiling) {
             knot[1] = Math.max(0, ceiling);
             changed = true;

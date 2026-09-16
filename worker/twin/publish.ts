@@ -28,6 +28,9 @@ export interface TripJoin {
   headsign: string;
   /** The GTFS shape id, or null for a pattern whose trips carry none (line 1). */
   shapeId: string | null;
+  /** The trip's first scheduled departure, seconds past service midnight
+   *  (R-TE49); absent where the join comes from a source without it. */
+  startSec?: number;
 }
 
 /** ZET reads as stale once three republishes have gone by without a new

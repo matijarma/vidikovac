@@ -13,11 +13,18 @@
 //     the graph (a balloon loop, a depot track, a works detour no shape
 //     draws), a fix within NEAR_M of an edge brings it back;
 //   - a bus never touches a rail edge: it matches its route's bus shapes with
-//     model.ts's own hysteresis, or rides the free plane.
+//     model.ts's own hysteresis, or rides the free plane;
+//   - (R-TE45) a geometry that passes itself (a circuit's two rails metres
+//     apart, a balloon loop) offers several nearest points; a placed vehicle
+//     chooses among those within reach of its last arc, by residual and by
+//     how far the arc lies from where its own speed puts it, and a first
+//     placement by residual, direction of movement and the stop ZET names
+//     next; a vehicle found moving against the rail it stands on is on the
+//     wrong fold and is placed afresh.
 
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
-import { project, tangent } from './polyline';
+import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
 
@@ -45,6 +52,21 @@ export const OFF_GRAPH_M = 150;
 export const OFF_GRAPH_FIXES = 2;
 /** A bus keeps its shape unless a sibling beats it by this (model.ts). */
 export const BUS_HYSTERESIS_M = 25;
+/** How far back along its geometry a placed vehicle may be read: platform
+ *  scatter and the dead zone, never a reversal (R-TE45). */
+export const BACK_WINDOW_M = 60;
+/** Metres of residual one metre of arc away from the expected arc (the last
+ *  arc plus own speed times the interval) is worth when choosing among the
+ *  folds within reach: a fold 200 m from expectation costs a 100 m residual,
+ *  so scatter of a few metres never flips a standing tram to the other rail. */
+export const ARC_PRIOR_WEIGHT = 0.5;
+/** Metres of residual one metre of arc before the next stop is worth at a
+ *  first placement: the fold whose platform is the next one wins over the
+ *  fold a whole circuit earlier, and nothing else changes. */
+export const NEXT_STOP_DISTANCE_WEIGHT = 0.01;
+/** Ground movement in one interval that is motion, not scatter: a vehicle
+ *  that moved this far against its rail's direction is on the wrong fold. */
+export const FOLD_MOVE_M = 50;
 
 export interface Prior {
   /** The rail path the trip runs, or null for a shapeless pattern without a synthetic path (and for buses). */
@@ -174,17 +196,100 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return out;
   }
 
-  function onPathMatch(pathIdx: number, p: XY): Match {
-    const proj = net.projectOntoPath(pathIdx, p);
+  interface Placement {
+    s: number;
+    d: number;
+  }
+
+  /** What the vehicle's last interval says about where it is now. */
+  interface Motion {
+    /** Unit direction of the ground movement, null under the dead zone. */
+    dir: XY | null;
+    /** Metres moved on the ground since the previous fix. */
+    groundM: number;
+    dtSec: number;
+    /** The speed estimate carried on the track, m/s. */
+    speed: number;
+  }
+
+  /**
+   * Places a fix on one geometry (R-TE45). Continuing on it: the folds within
+   * reach of the last arc, scored by residual plus the arc prior; a choice
+   * that has the vehicle moving against the rail is a wrong fold and falls to
+   * a first placement. First placement: every fold within the near band,
+   * scored by residual, direction of movement and the stop named next. With
+   * no fold within the near band, the plain nearest point (its residual tells
+   * the caller it is a stray or a detour).
+   */
+  function place(pts: readonly XY[], cum: readonly number[], len: number, p: XY, motion: Motion, prevS: number | null, sNext: number | null): Placement {
+    const agrees = (s: number): boolean => motion.dir === null || dot(tangent(pts, cum, s), motion.dir) >= 0;
+    if (prevS !== null) {
+      const dt = Math.max(motion.dtSec, 0);
+      const window = projectionsWithin(pts, cum, p, prevS - BACK_WINDOW_M, prevS + MAX_SPEED_MS * dt + REACH_SLACK_M, OFF_GRAPH_M);
+      if (window.length > 0) {
+        const expected = prevS + Math.min(Math.max(motion.speed, 0), MAX_SPEED_MS) * dt;
+        let best = window[0];
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const c of window) {
+          const score = c.d + ARC_PRIOR_WEIGHT * Math.abs(c.s - expected);
+          if (score < bestScore) {
+            best = c;
+            bestScore = score;
+          }
+        }
+        const against = motion.dir !== null && motion.groundM >= FOLD_MOVE_M && !agrees(best.s);
+        if (!against) return { s: best.s, d: best.d };
+      }
+    }
+    // Every fold within the off-graph band, the residual weighing itself in
+    // the score: at a circuit's terminus the arrival platform is the path's
+    // end and the departure platform, a hundred metres on, its start, and a
+    // vehicle whose next stop is the first one belongs at the start even
+    // while it still stands at the end. Failing any fold that close, the
+    // plain nearest point, whose residual says the vehicle is far off.
+    const all = projectionsWithin(pts, cum, p, 0, len, OFF_GRAPH_M);
+    if (all.length === 0) {
+      const proj = project(pts, cum, p);
+      return { s: proj.s, d: proj.d };
+    }
+    let best = all[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const c of all) {
+      let score = c.d;
+      if (!agrees(c.s)) score += DIRECTION_PENALTY_M;
+      if (sNext !== null) {
+        if (c.s > sNext + PAST_NEXT_STOP_PENALTY_M) score += PAST_NEXT_STOP_PENALTY_M;
+        score += NEXT_STOP_DISTANCE_WEIGHT * Math.max(0, sNext - c.s);
+      }
+      if (score < bestScore) {
+        best = c;
+        bestScore = score;
+      }
+    }
+    return { s: best.s, d: best.d };
+  }
+
+  function onPathMatch(track: Track, pathIdx: number, p: XY, motion: Motion, nextStopId: string | null): Match {
     const path = net.paths[pathIdx];
-    return { pathIdx, shapeIdx: path.shape, edge: path.edges[edgeIndexAt(pathIdx, proj.s)] ?? null, s: proj.s, residual: proj.d };
+    const geo = net.pathGeometry(pathIdx);
+    const prevS = track.match.pathIdx === pathIdx ? track.match.s : null;
+    const sNext = nextStopId !== null ? stopArc(pathIdx, nextStopId) : null;
+    const placed = place(geo.pts, geo.cum, path.len, p, motion, prevS, sNext);
+    return { pathIdx, shapeIdx: path.shape, edge: path.edges[edgeIndexAt(pathIdx, placed.s)] ?? null, s: placed.s, residual: placed.d };
+  }
+
+  function motionOf(track: Track, fix: PlaneFix, prev: PlaneFix | null): Motion {
+    const p = { x: fix.x, y: fix.y };
+    const groundM = prev ? dist(prev, p) : 0;
+    const dir: XY | null = prev && groundM >= DEAD_ZONE_M ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
+    return { dir, groundM, dtSec: prev ? fix.atSec - prev.atSec : 0, speed: track.speed };
   }
 
   function matchTram(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null, prev: PlaneFix | null): Match {
     const p = { x: fix.x, y: fix.y };
-    const moved = prev !== null && dist(prev, p) >= DEAD_ZONE_M;
-    const dir: XY | null = moved && prev ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
-    const dtSec = prev ? fix.atSec - prev.atSec : 0;
+    const motion = motionOf(track, fix, prev);
+    const dir = motion.dir;
+    const dtSec = motion.dtSec;
 
     // A new prior (a new trip, or the twin re-deriving from the index) starts
     // the vehicle over on that path; the ordering memory goes with the old one.
@@ -213,7 +318,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
 
     const working = track.match.pathIdx ?? prior.pathIdx;
     if (working !== null) {
-      const onPath = onPathMatch(working, p);
+      const onPath = onPathMatch(track, working, p, motion, nextStopId);
       if (onPath.residual <= NEAR_M) {
         track.offPathCount = 0;
         track.match = onPath;
@@ -251,8 +356,8 @@ export function createMatcher(net: GraphNetwork): Matcher {
 
   function matchBus(track: Track, fix: PlaneFix, prior: Prior, prev: PlaneFix | null): Match {
     const p = { x: fix.x, y: fix.y };
-    const moved = prev !== null && dist(prev, p) >= DEAD_ZONE_M;
-    const dir: XY | null = moved && prev ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
+    const motion = motionOf(track, fix, prev);
+    const dir = motion.dir;
     const route = net.routes.get(prior.routeId);
     const shapes = (route?.shapes ?? []).filter((idx) => !net.shapes[idx].edges);
     const pool = prior.shapeIdx !== null && !net.shapes[prior.shapeIdx].edges ? [prior.shapeIdx] : shapes;
@@ -262,13 +367,14 @@ export function createMatcher(net: GraphNetwork): Matcher {
     }
     const scored = pool.map((shapeIdx) => {
       const shape = net.shapes[shapeIdx];
-      const proj = project(shape.pts, shape.cum, p);
-      let score = proj.d;
+      const prevS = track.match.shapeIdx === shapeIdx ? track.match.s : null;
+      const placed = place(shape.pts, shape.cum, shape.len, p, motion, prevS, null);
+      let score = placed.d;
       if (dir) {
-        const tan = tangent(shape.pts, shape.cum, proj.s);
+        const tan = tangent(shape.pts, shape.cum, placed.s);
         if (tan.x * dir.x + tan.y * dir.y < 0) score += DIRECTION_PENALTY_M;
       }
-      return { shapeIdx, s: proj.s, d: proj.d, score };
+      return { shapeIdx, s: placed.s, d: placed.d, score };
     });
     let best = scored[0];
     for (const c of scored) if (c.score < best.score) best = c;
@@ -329,4 +435,8 @@ export function createMatcher(net: GraphNetwork): Matcher {
 function normalise(v: XY): XY {
   const len = Math.hypot(v.x, v.y);
   return len > 0 ? { x: v.x / len, y: v.y / len } : { x: 0, y: 0 };
+}
+
+function dot(a: XY, b: XY): number {
+  return a.x * b.x + a.y * b.y;
 }

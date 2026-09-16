@@ -84,6 +84,9 @@ export interface Track {
   plan: Plan | null;
   next: NextStop | null;
   order: OrderState;
+  /** The trip's scheduled first departure in epoch seconds, when the join and
+   *  the realtime start date give it (R-TE49); null when unknown. */
+  tripStartSec: number | null;
 }
 
 /** As many fixes as the wire's history carries (wire.ts): about three
@@ -112,6 +115,7 @@ export function newTrack(id: string, routeId: string, tripId: string | null, kin
     plan: null,
     next: null,
     order: { behind: [], contradictions: {} },
+    tripStartSec: null,
   };
 }
 

@@ -18,6 +18,7 @@ import { enforceOrder, type OrderReport } from '../../shared/motion/laws';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
 import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
+import { serviceDayStartSec } from '../../shared/motion/bands';
 import { zagrebBands } from '../../shared/motion/times';
 import { lastFix, newTrack, pushFix, type FreeKnot, type PlaneFix, type Track } from '../../shared/motion/track';
 import type { FeedPayload } from '../feed/payload';
@@ -62,6 +63,14 @@ function dedupe(vehicles: readonly RawFix[], fallbackAt: number): Map<string, Ra
     if (!current || dated.atSec > current.atSec) byId.set(raw.vehicleId, dated);
   }
   return byId;
+}
+
+/** The trip's first departure in epoch seconds (R-TE49): the index's start
+ *  on the service day the realtime start date names; null without either. */
+function tripStartOf(join: TripJoin | undefined, startDate: string | undefined): number | null {
+  if (!join || join.startSec === undefined || !startDate) return null;
+  const day = serviceDayStartSec(startDate);
+  return day === null ? null : day + join.startSec;
 }
 
 /** The plan a vehicle gets with no geometry loaded at all: a straight line
@@ -121,8 +130,9 @@ export function runTick(input: TickInput): TickResult {
       const plane = toPlane(raw.lon, raw.lat);
       const fix: PlaneFix = { x: plane.x, y: plane.y, lon: raw.lon, lat: raw.lat, atSec: raw.atSec };
       const before = lastFix(track)?.atSec ?? null;
+      const join = tripId !== null ? joins.get(tripId) : undefined;
+      track.tripStartSec = tripStartOf(join, raw.startDate);
       if (engine) {
-        const join = tripId !== null ? joins.get(tripId) : undefined;
         const prior = engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null);
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null);
       } else {

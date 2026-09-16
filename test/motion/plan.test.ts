@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMatcher } from '../../shared/motion/match';
 import { buildPlan, evalFreePlan, evalPathPlan, silenceDecay } from '../../shared/motion/plan';
+import { serviceDayStartSec } from '../../shared/motion/bands';
 import { estimateSpeed } from '../../shared/motion/speed';
 import { scheduleTimes, type TimesProvider } from '../../shared/motion/times';
 import { newTrack, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -65,10 +66,10 @@ describe('buildPlan', () => {
     expect(tram.next).toMatchObject({ stopId: 'T300', s: 300, etaSec: 1020 });
     expect(tram.confidence).toBeGreaterThan(0.5);
 
-    // An implausible ETA (5 s for 100 m at 10 m/s) is ignored for the kinematic arrival.
+    // An implausible ETA (4 s for 100 m at 10 m/s, outside the [0.5x, 2x] band) is ignored for the kinematic arrival.
     const rushed = tramOn1('b', [[100, 1000], [200, 1010]]);
-    buildPlan(rushed, net, eightMs, { stopId: 'T300', timeSec: 1015, delaySec: 0 }, nowSec, headerSec, BANDS);
-    expect(at(rushed, 1015, headerSec)).toBeLessThan(260);
+    buildPlan(rushed, net, eightMs, { stopId: 'T300', timeSec: 1014, delaySec: 0 }, nowSec, headerSec, BANDS);
+    expect(at(rushed, 1014, headerSec)).toBeLessThan(260);
     expect(at(rushed, 1022, headerSec)).toBeCloseTo(300, 0);
 
     // Stale evidence (D2): the last fix is 102 s old; the plan still moves on
@@ -152,5 +153,47 @@ describe('buildPlan', () => {
     expect(folded.segmentSeconds(p, 0, 300, 7, 0)).toBe(25); // 45 - 20
     expect(folded.segmentSeconds(p, 300, 600, 12, 0)).toBe(40); // into the terminus: untouched
     expect(folded.dwellSeconds('T300', 12, 0)).toBeNull();
+  });
+});
+
+// The vehicle's own state decides the first stretch (R-TE46 to R-TE49): a
+// cruising tram keeps its speed before the timetable takes over, a tram
+// standing off any platform is expected to stand a while longer, a stand
+// already past the dwell ends a tick from now rather than this instant, and
+// a trip that has not started waits for its first departure.
+describe('buildPlan reads the vehicle state', () => {
+  it('holds own speed on the first stretch, holds a stand away from stops, extends a stand past the dwell, and waits for the trip start', () => {
+    // (a) 10 m/s between T300 and T600 (both fixes clear of the stop zones): the next 10 s run at that speed, not at the timetable's 8 m/s.
+    const cruising = tramOn1('cr', [[350, 1000], [450, 1010]]);
+    buildPlan(cruising, net, eightMs, null, 1012, 1012, BANDS);
+    expect(at(cruising, 1020, 1012) - at(cruising, 1010, 1012)).toBeGreaterThanOrEqual(98);
+
+    // (a') both fixes inside T300's stop zone and 40 m apart in 10 s: no clean
+    // interval, so the vehicle's own pace (4 m/s) runs the first stretch, not the timetable's 8.
+    const pacing = tramOn1('pc', [[280, 1000], [320, 1010]]);
+    expect(pacing.speed).toBeCloseTo(4, 1);
+    buildPlan(pacing, net, eightMs, null, 1012, 1012, BANDS);
+    expect(Math.abs(at(pacing, 1020, 1012) - 360)).toBeLessThan(3);
+
+    // (b) 20 s standing at x = 450, no platform within 40 m: it stands as long again before moving.
+    const standing = tramOn1('st', [[450, 1000], [450, 1010], [450, 1020]]);
+    buildPlan(standing, net, eightMs, null, 1022, 1022, BANDS);
+    expect(at(standing, 1039, 1022)).toBeCloseTo(450, 0);
+    expect(at(standing, 1080, 1022)).toBeGreaterThan(450);
+
+    // (c) at platform T600 for 40 s, twice the dwell: departure is a tick away, not now.
+    const held = tramOn1('hd', [[600, 1000], [600, 1010], [600, 1020], [600, 1030], [600, 1040]]);
+    buildPlan(held, net, eightMs, null, 1042, 1042, BANDS);
+    expect(at(held, 1050, 1042)).toBeCloseTo(600, 0);
+    expect(at(held, 1075, 1042)).toBeGreaterThan(600);
+
+    // (d) at the terminus T0 with a trip scheduled to start at 1060 and 30 s late: the plan waits until 1090.
+    const early = tramOn1('ea', [[0, 1000], [0, 1010]]);
+    early.tripStartSec = 1060;
+    buildPlan(early, net, eightMs, { stopId: 'T0', timeSec: null, delaySec: 30 }, 1012, 1012, BANDS);
+    expect(at(early, 1085, 1012)).toBeCloseTo(0, 0);
+    expect(at(early, 1101, 1012)).toBeGreaterThan(50);
+    // The service day a realtime startDate names begins at Zagreb midnight (CEST on this date).
+    expect(serviceDayStartSec('20260916')).toBe(Date.UTC(2026, 8, 15, 22) / 1000);
   });
 });
