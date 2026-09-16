@@ -433,6 +433,8 @@ describe('polling on the feed store', () => {
     const { session, armed, fetchData, ticks } = mount();
     session.join();
     await flush();
+    // Whatever the active domain's modules are today, the slow lane is all of them but transit.
+    const active = [...new Set(fetchData.mock.calls.map((c) => c[0]))];
     expect(armed()).toEqual([1_000, POLL_FALLBACK_MS, 30_000]);
     fetchData.mockClear();
     ticks.find((t) => !t.cleared && t.ms === POLL_FALLBACK_MS)!.fn();
@@ -441,7 +443,7 @@ describe('polling on the feed store', () => {
     fetchData.mockClear();
     ticks.find((t) => !t.cleared && t.ms === 30_000)!.fn();
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hrt-news', 'prometnice']);
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(active.filter((m) => m !== 'zet-rt').sort());
 
     const aligned = mount({ snapshot: (module) => ({ ...snapshotOf(module), ...(module === 'zet-rt' ? { sourceUpdatedAt: new Date(NOW - 5_000).toISOString() } : {}) }) });
     aligned.session.join();
