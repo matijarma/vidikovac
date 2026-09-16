@@ -604,7 +604,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
     expect(q(k.root, '[data-testid=tile-closures]')!.dataset.state).toBe('down');
     expect(text(q(k.root, '[data-testid=kiosk-lines] .k-board-note[data-state=down]'))).toBe('ZET trenutačno ne odgovara.');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl')).toHaveLength(0);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-lines] .tl[data-route]')).toHaveLength(0);
     // The clock stands alone (D11): no sentence and no dash where the reading was.
     expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
     const closures = q(k.root, '[data-testid=tile-closures]')!;
@@ -947,34 +947,35 @@ describe('T5.2: the city first, icons, one badge, named boards, a quiet rotation
 });
 
 // C.5: the scene field on the controller's clock. The 20 s tick advances the
-// scene and stamps the countdown; before a swap the map is parked so the
-// fading item never carries it away, and it keeps hearing the feed state
-// while another scene shows; reduced motion, lagano and the ?prizor= pin hold
-// one scene (D13) with the dots and the countdown hidden; a session parks the
-// field and the invitation returns on the scene the counter says.
-describe('scenes: rotation, the parked map, reduced motion, lagano and the pin', () => {
+// scene and stamps the countdown; the map is the field itself, so it stands
+// through every chapter -- what a swap moves is the chapter's rail -- and is
+// parked only when the phase changes away from the invitation; reduced
+// motion, lagano and the ?prizor= pin hold one scene (D13) with the dots and
+// the countdown hidden; a session parks the field and the invitation returns
+// on the scene the counter says.
+describe('scenes: rotation, the standing map, reduced motion, lagano and the pin', () => {
   function spyMap() {
     const calls: string[] = [];
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
     return { factory: vi.fn(() => handle), handle, calls };
   }
-  it('a parked map still receives the feed state: stale after a failing poll while Grad shows; back on Promet it is re-hosted, resized and resumed', async () => {
+  it('the map stands through a chapter change, is never parked or rebuilt by one, and keeps hearing the feed state', async () => {
     let fail = false;
     const map = spyMap();
     const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => { if (fail) throw new TypeError('Failed to fetch'); return { modules: MODULES }; } });
     await flush();
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
-    expect(container.parentElement).toBe(q(k.root, '[data-testid=kiosk-map-host]'));
+    const picture = q(k.root, '[data-testid=kiosk-map-host]')!;
+    expect(container.parentElement).toBe(picture);
     const before = map.calls.length;
     k.tick(ROTATE_MS);
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
-    // Parked before the Promet item started fading, then told the feed state from the same paint.
-    expect(map.calls.slice(before)).toEqual(['pause', 'feed:live']);
-    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    // Nothing is parked for a chapter: the map is the field, and only the feed state is re-asserted on the paint.
+    expect(map.calls.slice(before)).toEqual(['feed:live']);
+    expect(container.parentElement).toBe(picture);
     k.tick(SCENE_LEAVE_MS);
-    expect(q(k.root, '[data-testid=kiosk-map-host]')).toBeNull();
-    expect(container.isConnected).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-map-host]')).toBe(picture);
     expect(map.handle.destroy).not.toHaveBeenCalled();
     await flush(); // the poll the 20 s tick also fired settles (live), and re-arms
     fail = true;
@@ -982,12 +983,17 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     await flush();
     expect(map.calls.at(-1)).toBe('feed:stale');
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('grad');
-    expect(container.parentElement).toBe(q(k.root, '.k-park'));
+    expect(container.parentElement).toBe(picture);
     k.tick(ROTATE_MS);
     expect(q(k.root, '[data-testid=kiosk-scene]')!.dataset.scene).toBe('promet');
-    expect(container.parentElement).toBe(q(k.root, '.k-scene-item:not([data-leaving]) [data-testid=kiosk-map-host]'));
-    expect(map.calls.slice(-3)).toEqual(['resize', 'resume', 'feed:stale']);
+    expect(container.parentElement).toBe(picture);
     expect(map.factory).toHaveBeenCalledTimes(1);
+    // A phase without a map still parks it, and the hold survives the return.
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    expect(map.calls).toContain('pause');
   });
   it('the countdown counts the seconds to the next scene on the 1 s tick without rebuilding the strip, and restarts on the rotation', async () => {
     let now = NOW;
@@ -1035,7 +1041,7 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     expect(k.root.querySelectorAll('.k-dot')).toHaveLength(0);
     expect(q(k.root, '[data-testid=strip-next]')!.hidden).toBe(true);
   });
-  it('?prizor=grad boots on Grad without rotation: no dots, no countdown, and no map is ever built for a scene without one', async () => {
+  it('?prizor=grad boots on Grad without rotation: no dots, no countdown, and the map is the field there as in every chapter', async () => {
     const map = spyMap();
     const k = mount({ stored: STORED, pinScene: 'grad', mapFactory: map.factory as never });
     await flush();
@@ -1050,8 +1056,8 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
     k.tick(ROTATE_MS);
     expect(scene.dataset.scene).toBe('grad');
     expect(scene.querySelectorAll('.k-scene-item')).toHaveLength(1);
-    expect(map.factory).not.toHaveBeenCalled();
-    expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    expect(q(k.root, '[data-testid=kiosk-map]')!.parentElement).toBe(q(k.root, '[data-testid=kiosk-map-host]'));
     // The pin reaches the empty Večeras too (D13).
     const pinned = mount({ stored: STORED, pinScene: 'veceras' });
     await flush();
@@ -1084,10 +1090,11 @@ describe('scenes: rotation, the parked map, reduced motion, lagano and the pin',
 });
 
 // T4.4: /kiosk/ opened on a phone. A handheld (kiosk/layout.ts, below
-// core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) is the hand that sets a screen
-// up, not the screen: no fullscreen, no wake lock, the wizard scrolls, and
-// after creation the stage carries the provisioning link to open on a wide
-// screen and the code card the same rotation paints, nothing else.
+// core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) still asks for no fullscreen and
+// no wake lock and still scrolls its wizard -- but there is no separate
+// handheld composition any more: after creation a phone gets the same
+// invitation a wall gets, drawn with the handheld tokens, and the address that
+// provisions the wall is a footnote under it rather than the page's subject.
 describe('handheld: the kiosk on a phone', () => {
   const PHONE = { width: 390, height: 844 };
   it('lays out as handheld and never asks for fullscreen or a wake lock, however often it is tapped', () => {
@@ -1105,8 +1112,13 @@ describe('handheld: the kiosk on a phone', () => {
     expect(css).toContain(".kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }");
     expect(css).toContain(".kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }");
     expect(css).not.toContain('data-kiosk-size');
+    // No separate handheld composition: the phone draws the invitation with a map band under the chapter chip, the rail in flow beneath it.
+    expect(css).toContain('--k-map-band: 280px;');
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-scene[data-map='1'] > .k-map { display: grid; grid-template-rows: var(--k-map-band) auto; height: auto; }");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-invitation { grid-template-columns: minmax(0, 1fr); }");
+    for (const dead of ['.k-handheld', '.k-invite-text', '.k-support']) expect(css, dead).not.toContain(dead);
   });
-  it('after creation shows the provisioning link block with the handheld sentence and the code card, nothing else', async () => {
+  it('after creation gives a phone the whole invitation, with the provisioning address as a footnote under it', async () => {
     const k = mount({ viewport: PHONE });
     expect(k.handle.phase()).toBe('setup');
     q(k.root, '[data-testid=setup-next]')!.click();
@@ -1115,26 +1127,29 @@ describe('handheld: the kiosk on a phone', () => {
     await flush();
     expect(k.handle.phase()).toBe('invitation');
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
-    const block = q(k.root, '[data-testid=kiosk-handheld]');
+    // The same composition a wall gets: the field with its map host, the chapter's rail, the two value tiles and the card.
+    for (const present of ['kiosk-invitation', 'kiosk-scene', 'kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-tiles', 'kiosk-invite']) {
+      expect(q(k.root, `[data-testid=${present}]`), present).not.toBeNull();
+    }
+    // The address that provisions the wall is an aside with an h2, so the page's one h1 is the invitation's lead here as everywhere.
+    const block = q(k.root, '[data-testid=handheld-link-block]')!;
     expect(block).not.toBeNull();
-    expect(text(q(block!, 'h1'))).toBe('Otvori ovu adresu na zaslonu širem od 900 px.');
-    const link = q(block!, '[data-testid=handheld-link]') as HTMLAnchorElement;
+    expect(block.tagName).toBe('ASIDE');
+    expect(text(q(block, 'h2'))).toBe('Ovu adresu otvori na zaslonu koji postavljaš.');
+    const link = q(block, '[data-testid=handheld-link]') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
     expect(text(link)).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
+    expect(text(q(k.root, 'h1.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     // The code card is the same one the rotation paints on a wall.
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
-    for (const absent of ['kiosk-live', 'kiosk-map-host', 'kiosk-lines', 'kiosk-scene', 'kiosk-tiles', 'kiosk-invitation']) {
-      expect(q(k.root, `[data-testid=${absent}]`), absent).toBeNull();
-    }
     // The header's weather group paints on a handheld too (C.3), the only weather there.
     expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
     expect(text(q(k.root, '.k-head [data-testid=kiosk-weather]'))).toContain('21 °C');
-    expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
   });
   it('a stored screen opened on a phone rebuilds the link from its credentials on the code base', () => {
     const k = mount({ stored: STORED, viewport: PHONE });
@@ -1142,23 +1157,24 @@ describe('handheld: the kiosk on a phone', () => {
   });
   it('speaks English when the page does', () => {
     const k = mount({ stored: STORED, viewport: PHONE, i18n: createDefaultI18n('en'), locale: 'en' });
-    expect(text(q(k.root, '[data-testid=kiosk-handheld] h1'))).toBe('Open this address on a screen wider than 900 px.');
+    expect(text(q(k.root, '[data-testid=handheld-link-block] h2'))).toBe('Open this address on the screen you are setting up.');
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
   });
-  it('crossing the handheld bound re-composes the invitation both ways: the map column appears at 1366, the block returns at 390', () => {
+  it('crossing the handheld bound keeps the invitation both ways: only the provisioning footnote comes and goes', () => {
     const viewport = { ...PHONE };
     const k = mount({ stored: STORED, viewport });
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     viewport.width = 1366; viewport.height = 768;
     k.repaint();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     viewport.width = 390; viewport.height = 844;
     k.repaint();
-    expect(q(k.root, '[data-testid=kiosk-handheld]')).not.toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-live]')).toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(k.handle.phase()).toBe('invitation');
   });
 });

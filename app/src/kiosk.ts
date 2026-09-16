@@ -27,7 +27,7 @@ import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase
 import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { countdownText, frameStrip, headerWeather, stripMarkup, weatherGroupMarkup, type RotationClock } from './kiosk/frame';
-import { codeBlockMarkup, hintMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { createKioskMapAdapter, feedStateOf, requestKioskMap } from './kiosk/mapview';
@@ -133,26 +133,15 @@ function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): s
   return `${base.replace(/\/$/, '')}/kiosk/#${creds.beaconId}.${creds.secret}`;
 }
 
-/** /kiosk/ on a handheld, once a screen exists: the provisioning link to open
- *  on a wide screen (the sentence from the shared catalogue, so the phone
- *  speaks the page's language) and the code card the rotation paints through
- *  the same testids the wall's invitation carries. No scene field, no tiles,
- *  no map: those are drawn for a wall (kiosk/invitation.ts); the header's
- *  weather group paints here as everywhere. */
-function handheldMarkup(s: KioskStrings, i18n: I18n, url: string, codeBase?: string): string {
-  return `<div class="k-handheld-link" data-testid="handheld-link-block">
-      <h1 class="k-handheld-title" id="k-handheld-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h1>
-      <a class="k-handheld-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>
-    </div>
-    <article class="k-invite" data-testid="kiosk-invite">
-      <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
-      <div class="k-invite-text">
-        <p class="k-lead">${escapeHtml(s.invitation.lead)}</p>
-        <p class="k-support">${escapeHtml(s.invitation.support)}</p>
-        ${hintMarkup(s, codeBase)}
-      </div>
-      ${codeBlockMarkup(s)}
-    </article>`;
+/** /kiosk/ on a phone, once a screen exists: the address that provisions the
+ *  wall, as a footnote under the invitation the phone already shows. There is
+ *  no separate handheld composition any more -- a phone gets the invitation
+ *  every screen gets, drawn with the handheld tokens (kiosk.css) -- so this is
+ *  an `aside` with an `h2` and the page's one `h1` stays the invitation's
+ *  lead on every device (e2e/a11y.spec.ts). */
+function provisionMarkup(i18n: I18n, url: string): string {
+  return `<h2 class="k-provision-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h2>
+    <a class="k-provision-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>`;
 }
 
 function noticeMarkup(kind: 'expired' | 'revoked', s: KioskStrings): string {
@@ -233,7 +222,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let swapTimer: unknown = null;
   let setup: SetupHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  let handheld: HTMLElement | null = null;
+  /** The provisioning footnote a phone carries under the invitation. */
+  let provision: HTMLElement | null = null;
   let paired: PairedHandle | null = null;
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
@@ -419,7 +409,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (phase === 'paired') return paired?.mapHost ?? null;
     return null;
   }
-  /** A composition without a map keeps the container alive, off screen and paused. */
+  /** A phase without a map -- the wizard, a notice, a handheld, lagano -- keeps
+   *  the container alive, off screen and paused. A chapter change never parks
+   *  it: the map is the invitation's field, standing through all three. */
   function parkMap(): void {
     if (!mapContainer || mapContainer.parentElement === park) return;
     park.appendChild(mapContainer);
@@ -432,21 +424,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     handle.resume();
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
-  /** The map into the composition's host, or parked while none shows it. No
-   *  board lies over the map's foot any more (the line tiles stand beside it),
-   *  so the camera keeps the stop's true centre. */
+  /** The map into the composition's host, or parked while none shows it. The
+   *  chapter's rail hangs over the map's foot, so the camera is told how much
+   *  of the picture that rail covers and centres the stop in what is left. */
   function paintMap(): void {
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
-    // A scene without a map (Večeras, Grad) or a composition without one keeps
-    // the container parked, and the feed state still reaches it: a map that
-    // returns mid-outage must already be holding, never coasting on a state
-    // it heard before the outage.
+    // A phase without a map keeps the container parked, and the feed state
+    // still reaches it: a map that returns mid-outage must already be holding,
+    // never coasting on a state it heard before the outage.
     if (!host) { parkMap(); mapAdapter.setFeedState(feedStateOf(snapshots['zet-rt'])); return; }
+    const bottom = phase === 'invitation' ? (invitation?.railPad() ?? 0) : 0;
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale,
       selection: phase === 'paired' ? selection : null,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
+      ...(bottom > 0 ? { padding: { top: 0, right: 0, bottom, left: 0 } } : {}),
     }, mapAdapter);
     if (!container) return;
     mapContainer = container;
@@ -461,8 +454,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function invitationModel(): InvitationModel {
     return {
       modules: teaser, stop, now: now(), sceneIndex, pinned: deps.pinScene ?? null, rotate: rotationAllowed(),
-      // Six line tiles in the wide 3 × 2 field, four in the compact 2 × 2 (spec §4.8; kajimafix 03.3).
-      lineCap: lightweight ? 10 : layout.size === 'wide' ? 6 : 4, size: layout.size === 'wide' ? 'wide' : 'compact',
+      // The drawing's own rail width, used only before anything is laid out: the field measures its rail and asks for exactly what fits (kiosk/scenes.ts, kiosk/layout.ts's railColumns).
+      columns: lightweight ? 10 : layout.size === 'wide' ? 6 : layout.size === 'compact' ? 4 : 3, size: layout.size === 'wide' ? 'wide' : 'compact',
     };
   }
   function pairedContext(): PairedContext {
@@ -589,7 +582,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     parkMap();
     setup?.destroy(); setup = null;
     invitation?.destroy(); invitation = null;
-    handheld?.remove(); handheld = null;
+    provision?.remove(); provision = null;
     paired?.destroy(); paired = null;
     notice?.remove(); notice = null;
   }
@@ -601,10 +594,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (next === 'paired') closeEssentials(false);
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
-    else if (next === 'invitation' && layout.size === 'handheld') mountHandheld();
     else if (next === 'invitation') {
-      // The field parks the map before a scene swap, so the fading item never carries the container away; paintLocal re-hosts it after the update.
-      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); }, onBeforeSwap: () => parkMap() });
+      // Nothing is parked between chapters any more: the map is the field and stands through all three, and what crossfades is the chapter's rail.
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, defer: (fn, ms) => { const handle = oneShot(fn, ms); return () => clearTimer(handle); } });
+      // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
+      if (layout.size === 'handheld' && credentials) mountProvision();
     }
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
     else mountNotice(next);
@@ -612,15 +606,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintLocal();
     paintCode();
   }
-  /** The handheld's invitation: the link block and the code card (handheldMarkup). */
-  function mountHandheld(): void {
+  /** The provisioning address at the foot of a phone's stage (provisionMarkup). */
+  function mountProvision(): void {
     if (!credentials) return;
-    handheld = document.createElement('section');
-    handheld.className = 'k-handheld';
-    handheld.dataset.testid = 'kiosk-handheld';
-    handheld.setAttribute('aria-labelledby', 'k-handheld-title');
-    handheld.innerHTML = handheldMarkup(s, i18n, provisionUrl(credentials, deps.codeBase), deps.codeBase);
-    stage.appendChild(handheld);
+    provision = document.createElement('aside');
+    provision.className = 'k-provision';
+    provision.dataset.testid = 'handheld-link-block';
+    provision.innerHTML = provisionMarkup(i18n, provisionUrl(credentials, deps.codeBase));
+    stage.appendChild(provision);
   }
   function mountNotice(kind: 'expired' | 'revoked'): void {
     notice = document.createElement('section');

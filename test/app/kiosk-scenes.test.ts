@@ -8,8 +8,8 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { NEARBY_CLOSURE_M } from '../../app/src/kiosk/local';
 import {
-  closuresNear, currentScene, eventsTonight, GRAD_ROW_CAP, gradRows, mountScenes, nextSession, parsePinnedScene, SCENE_ENTER_MS,
-  SCENE_LEAVE_MS, SCENE_ORDER, sceneHeadMarkup, sceneMarkup, sceneOrder, TONIGHT_ROW_CAP, WORKS_RADIUS_M, worksInKvart,
+  closuresNear, currentScene, eventsTonight, GRAD_ROW_FLOOR, gradRows, mountScenes, nextSession, parsePinnedScene, SCENE_ENTER_MS,
+  SCENE_LEAVE_MS, SCENE_ORDER, sceneHeadMarkup, sceneMarkup, sceneOrder, TONIGHT_ROW_FLOOR, WORKS_RADIUS_M, worksInKvart,
   type SceneContext, type SceneModel,
 } from '../../app/src/kiosk/scenes';
 import { routeLongName } from '../../app/src/kiosk/stops';
@@ -72,7 +72,11 @@ const without = (modules: readonly ModuleSnapshot[], id: ModuleId): ModuleSnapsh
 const TONIGHT_MODULES = withModule(MODULES, 'dogadanja', { items: [SESSION_TONIGHT, SESSION_ENDED, KULTURPUNKT, ...CITY_ROWS] });
 
 function ctx(over: Partial<SceneContext> = {}): SceneContext {
-  return { modules: MODULES, stop: KVART_STOP, now: NOW, strings: s, i18n, locale: 'hr', lightweight: false, size: 'wide', lineCap: 4, ...over };
+  return { modules: MODULES, stop: KVART_STOP, now: NOW, strings: s, i18n, locale: 'hr', lightweight: false, size: 'compact', columns: 4, ...over };
+}
+/** The wide drawing's rail: six members across where the compact one holds four. */
+function wide(over: Partial<SceneContext> = {}): SceneContext {
+  return ctx({ size: 'wide', columns: 6, ...over });
 }
 function model(over: Partial<SceneModel> = {}): SceneModel {
   return { ...ctx(), index: 0, pinned: null, rotate: true, ...over };
@@ -83,12 +87,12 @@ const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelec
 const qa = (root: ParentNode, sel: string): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(sel)];
 
 describe('the constants the CSS and the controller pin', () => {
-  it('names the three scenes in order, the two fade durations and the caps', () => {
+  it('names the three scenes in order, the two fade durations and the floors', () => {
     expect(SCENE_ORDER).toEqual(['promet', 'veceras', 'grad']);
     expect(SCENE_LEAVE_MS).toBe(180);
     expect(SCENE_ENTER_MS).toBe(220);
-    expect(TONIGHT_ROW_CAP).toBe(3);
-    expect(GRAD_ROW_CAP).toBe(3);
+    expect(TONIGHT_ROW_FLOOR).toBe(3);
+    expect(GRAD_ROW_FLOOR).toBe(3);
     expect(WORKS_RADIUS_M).toBe(1500);
     expect(WORKS_RADIUS_M).toBe(NEARBY_CLOSURE_M);
   });
@@ -177,9 +181,11 @@ describe('closuresNear, nextSession, gradRows', () => {
     expect(nextSession(TONIGHT_MODULES, NOW)!.id).toBe('skupstina:14');
     expect(nextSession(withModule(MODULES, 'dogadanja', { items: [KVARTOVSKE, ...WORKS] }), NOW)).toBeNull();
   });
-  it('takes the stories minus the Assembly, at most three, never a gazette issue', () => {
+  it('takes the stories minus the Assembly, as many as the rail holds beside the ink tile, never a gazette issue', () => {
     const rows = gradRows(ctx());
-    expect(rows.length).toBeLessThanOrEqual(GRAD_ROW_CAP);
+    expect(rows).toHaveLength(GRAD_ROW_FLOOR);
+    // A wider rail carries more of them beside the ink tile; the floor is what a narrow one still asks for.
+    expect(gradRows(wide()).length).toBeGreaterThan(rows.length);
     expect(rows.map((r) => r.id)).toEqual(['quake:q1', 'city:kvartovske:1', 'city:zet-promet:1']);
     for (const row of rows) {
       expect(row.id).not.toMatch(/^city:skupstina:/);
@@ -192,7 +198,7 @@ describe('sceneHeadMarkup', () => {
   it('names the scene, says the lines beyond the cap once, and shows the dots with the position only when asked', () => {
     const head = dom(sceneHeadMarkup('promet', ctx(), { index: 0, count: 3 }, true));
     expect(text(q(head, 'h2.k-scene-title#k-scene-title'))).toBe('Promet');
-    expect(text(q(head, '[data-testid=kiosk-scene-meta]'))).toBe('još 5 linija');
+    expect(text(q(head, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
     expect(qa(head, '.k-scene-dots .k-dot')).toHaveLength(3);
     expect(qa(head, '.k-dot[data-on="1"]')).toHaveLength(1);
     expect(q(head, '.k-dot')!.dataset.on).toBe('1');
@@ -207,16 +213,20 @@ describe('sceneHeadMarkup', () => {
 });
 
 describe('sceneMarkup: Promet', () => {
-  it('lays four line tiles in stop order with k badges, the state word in its tone, and the vehicles-near glyph', () => {
+  it('fills the rail with the works band and the lines the room has left, in stop order with k badges and the state word in its tone', () => {
     const markup = sceneMarkup('promet', ctx());
     const body = dom(markup.body);
-    expect(q(body, '.k-scene-grid')!.dataset.works).toBe('1');
-    expect(q(body, '.k-map[data-testid=kiosk-live] .k-map-host[data-testid=kiosk-map-host]')).not.toBeNull();
-    expect(q(body, '[data-testid=kiosk-map-host]')!.hasAttribute('hidden')).toBe(false);
+    // No map in the scene any more: the map is the field mountScenes builds once.
+    expect(q(body, '.k-map')).toBeNull();
+    const rail = q(body, 'ul.k-rail[data-chapter=promet][data-testid=kiosk-lines]')!;
+    expect(rail).not.toBeNull();
+    expect(rail.hasAttribute('data-rows')).toBe(false);
+    // The works band is the rail's lead member, and the lines take the rest of the four the compact rail holds.
+    expect(rail.firstElementChild!.getAttribute('data-testid')).toBe('kiosk-works');
     const tiles = qa(body, '[data-testid=kiosk-lines] .tl[data-route]');
-    expect(tiles.map((t) => t.dataset.route)).toEqual(['6', '11', '12', '13']);
-    expect(tiles.map((t) => t.dataset.tone)).toEqual(['late', 'ontime', 'early', 'unknown']);
-    expect(tiles.map((t) => text(q(t, '.tl-value')))).toEqual(['kasni 2 min', 'na vrijeme', 'rani 2 min', 'nema podataka']);
+    expect(tiles.map((t) => t.dataset.route)).toEqual(['6', '11', '12']);
+    expect(tiles.map((t) => t.dataset.tone)).toEqual(['late', 'ontime', 'early']);
+    expect(tiles.map((t) => text(q(t, '.tl-value')))).toEqual(['kasni 2 min', 'na vrijeme', 'rani 2 min']);
     for (const tile of tiles) {
       expect(tile.classList.contains('k-tl-line')).toBe(true);
       expect(q(tile, '.tl-label .k-line-badge.line[data-size=k]')).not.toBeNull();
@@ -229,22 +239,33 @@ describe('sceneMarkup: Promet', () => {
     // The line's two ends on their own line under the badge, one spelling whatever GTFS wrote (kajimafix 03.3).
     expect(text(q(six, '.k-tl-name'))).toBe(routeEnds(routeLongName('6')));
     expect(q(six, '.tl-label .k-tl-name')).toBeNull();
-    expect(q(body, '.k-scene-col > [data-testid=kiosk-lines] + [data-testid=kiosk-works]')).not.toBeNull();
     expect(text(q(six, '.tl-context > span[aria-hidden=true]'))).toBe('1');
     expect(text(q(six, '.tl-context .k-visually-hidden'))).toBe('1 vozilo u blizini');
     expect(text(q(tiles[1]!, '.tl-context .k-visually-hidden'))).toBe('nijedno vozilo u blizini');
-    expect(markup.regions['kiosk-scene-meta']).toBe('još 5 linija');
-    expect(Object.keys(markup.regions).sort()).toEqual(['kiosk-lines', 'kiosk-scene-meta', 'kiosk-works']);
-    expect(dom(markup.regions['kiosk-lines']!).querySelectorAll('.tl[data-route]')).toHaveLength(4);
-  });
-  it('gives the compact field three tiles and says the rest once in the meta', () => {
-    const markup = sceneMarkup('promet', ctx({ size: 'compact', lineCap: 3 }));
-    expect(qa(dom(markup.body), '.tl[data-route]')).toHaveLength(3);
     expect(markup.regions['kiosk-scene-meta']).toBe('još 6 linija');
+    // The rail is one region: the works band and the lines are rewritten together, and the map is never among them.
+    expect(Object.keys(markup.regions).sort()).toEqual(['kiosk-lines', 'kiosk-scene-meta']);
+    expect(dom(markup.regions['kiosk-lines']!).querySelectorAll('.tl[data-route]')).toHaveLength(3);
+  });
+  it('gives a wider rail more lines and a narrower one fewer, saying the rest once in the meta', () => {
+    expect(qa(dom(sceneMarkup('promet', wide()).body), '.tl[data-route]')).toHaveLength(5);
+    expect(sceneMarkup('promet', wide()).regions['kiosk-scene-meta']).toBe('još 4 linije');
+    const narrow = sceneMarkup('promet', ctx({ columns: 3 }));
+    expect(qa(dom(narrow.body), '.tl[data-route]')).toHaveLength(2);
+    expect(narrow.regions['kiosk-scene-meta']).toBe('još 7 linija');
+  });
+  it('stands the rail up as rows at one column, in the lagano board\'s own grammar', () => {
+    const markup = sceneMarkup('promet', ctx({ columns: 1 }));
+    const body = dom(markup.body);
+    const rail = q(body, 'ul.k-rail[data-chapter=promet][data-rows="1"]')!;
+    expect(rail).not.toBeNull();
+    expect(qa(rail, 'li.k-line')).toHaveLength(2);
+    expect(qa(rail, '.tl[data-route]')).toHaveLength(0);
+    expect(q(rail, 'li.k-line .k-line-badge.line[data-size=k]')).not.toBeNull();
   });
   it('draws the works band for the kvart with the nearest work and its distance, and the count as the trail', () => {
     const body = dom(sceneMarkup('promet', ctx()).body);
-    const band = q(body, '[data-testid=kiosk-works] .tl[data-variant=band][data-tone=komunalno]')!;
+    const band = q(body, 'li.tl[data-variant=band][data-tone=komunalno][data-testid=kiosk-works]')!;
     expect(band).not.toBeNull();
     expect(q(band, '.k-glyph use')!.getAttribute('href')).toBe('#icon-hard-hat');
     expect(text(q(band, '.tl-main .tl-label'))).toBe('Radovi u kvartu');
@@ -255,32 +276,30 @@ describe('sceneMarkup: Promet', () => {
     const city = dom(sceneMarkup('promet', ctx({ stop: STOP })).body);
     expect(text(q(city, '[data-testid=kiosk-works] .tl-label'))).toBe('Radovi u gradu');
     expect(text(q(city, '[data-testid=kiosk-works] .tl-trail'))).toBe('2');
+    // Nothing ongoing leaves the rail entirely, and the lines take the member it would have had.
     const quiet = sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'dogadanja', { items: [SESSION_NEXT_WEEK, KVARTOVSKE] }) }));
-    expect(q(dom(quiet.body), '.k-scene-grid')!.dataset.works).toBe('0');
-    expect(quiet.regions['kiosk-works']).toBe('');
-    expect(text(q(dom(quiet.body), '[data-testid=kiosk-works]'))).toBe('');
-    // A stale zero collapses too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
+    expect(q(dom(quiet.body), '[data-testid=kiosk-works]')).toBeNull();
+    expect(qa(dom(quiet.body), '.tl[data-route]')).toHaveLength(4);
+    // A stale zero goes too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
     const staleQuiet = sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'stale', items: [SESSION_NEXT_WEEK, KVARTOVSKE] }) }));
-    expect(q(dom(staleQuiet.body), '.k-scene-grid')!.dataset.works).toBe('0');
-    expect(staleQuiet.regions['kiosk-works']).toBe('');
+    expect(q(dom(staleQuiet.body), '[data-testid=kiosk-works]')).toBeNull();
   });
   it('keeps the works band in place with the honest word when the source is down, and as bars while it loads', () => {
     const down = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'down', items: [] }) })).body);
-    expect(q(down, '.k-scene-grid')!.dataset.works).toBe('1');
-    const band = q(down, '[data-testid=kiosk-works] .tl[data-variant=band][data-state=down]')!;
+    const band = q(down, 'li.tl[data-variant=band][data-state=down][data-testid=kiosk-works]')!;
     expect(text(band)).toContain('Izvor trenutačno ne odgovara');
     expect(text(band)).toContain('Radovi u kvartu');
     const downCity = dom(sceneMarkup('promet', ctx({ stop: STOP, modules: withModule(MODULES, 'dogadanja', { status: 'down', items: [] }) })).body);
     expect(text(q(downCity, '[data-testid=kiosk-works] .tl-label'))).toBe('Radovi u gradu');
     const loading = dom(sceneMarkup('promet', ctx({ modules: without(MODULES, 'dogadanja') })).body);
-    expect(qa(loading, '[data-testid=kiosk-works] .tl[data-skeleton] .sk').length).toBeGreaterThanOrEqual(2);
-    expect(q(loading, '[data-testid=kiosk-works] .tl')!.getAttribute('aria-hidden')).toBe('true');
+    expect(qa(loading, '[data-testid=kiosk-works][data-skeleton] .sk').length).toBeGreaterThanOrEqual(2);
+    expect(q(loading, '[data-testid=kiosk-works]')!.getAttribute('aria-hidden')).toBe('true');
   });
   it('is three bars per tile while ZET loads, one down note when it does not answer, and the stale badge on each last-good tile', () => {
     const loading = sceneMarkup('promet', ctx({ modules: without(MODULES, 'zet-rt') }));
     const lines = dom(loading.body).querySelector('[data-testid=kiosk-lines]')!;
-    expect(lines.querySelectorAll('.tl[data-skeleton]')).toHaveLength(4);
-    expect(lines.querySelectorAll('.sk')).toHaveLength(12);
+    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid])')).toHaveLength(3);
+    expect(lines.querySelectorAll('.tl[data-skeleton]:not([data-testid]) .sk')).toHaveLength(9);
     expect(lines.querySelectorAll('.tl[data-route]')).toHaveLength(0);
     expect(loading.regions['kiosk-scene-meta']).toBe('');
     const down = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'zet-rt', { status: 'down', items: [] }) })).body);
@@ -289,12 +308,12 @@ describe('sceneMarkup: Promet', () => {
     expect(qa(down, '.tl[data-route]')).toHaveLength(0);
     expect(qa(down, '[data-testid=kiosk-lines] .k-board-note')).toHaveLength(1);
     const stale = dom(sceneMarkup('promet', ctx({ modules: withModule(MODULES, 'zet-rt', { status: 'stale' }) })).body);
-    expect(qa(stale, '.tl[data-route] .badge[data-tone=stale]')).toHaveLength(4);
+    expect(qa(stale, '.tl[data-route] .badge[data-tone=stale]')).toHaveLength(3);
     expect(text(q(stale, '.tl[data-route="6"] .tl-value'))).toBe('kasni 2 min');
   });
   it('under lagano the lines board is the whole scene: ten rows, the rest said once, the map host hidden', () => {
     const stop = { ...STOP, routes: [...STOP.routes, '106', '109'] };
-    const markup = sceneMarkup('promet', ctx({ lightweight: true, lineCap: 10, stop }));
+    const markup = sceneMarkup('promet', ctx({ lightweight: true, columns: 10, stop }));
     const body = dom(markup.body);
     expect(q(body, '.k-scene-grid')!.dataset.board).toBe('1');
     expect(q(body, '.k-map[data-testid=kiosk-live] > [data-testid=kiosk-map-host][hidden]')).not.toBeNull();
@@ -311,7 +330,7 @@ describe('sceneMarkup: Promet', () => {
 describe('sceneMarkup: Večeras', () => {
   it('lists one time tile for today\'s session with its label, title and the venue line, the next one tinted', () => {
     const markup = sceneMarkup('veceras', ctx({ modules: TONIGHT_MODULES }));
-    const rows = dom(markup.body).querySelector('.k-scene-rows[data-testid=kiosk-tonight]')!;
+    const rows = dom(markup.body).querySelector('.k-rail[data-chapter=veceras][data-testid=kiosk-tonight]')!;
     const tiles = rows.querySelectorAll<HTMLElement>('.tl[data-variant=time]');
     expect(tiles).toHaveLength(1);
     const tile = tiles[0]!;
@@ -328,10 +347,15 @@ describe('sceneMarkup: Večeras', () => {
   it('caps the rows at three and counts the rest in the meta; a day-precision row says "cijeli dan"', () => {
     const more = ['15', '16', '17', '18'].map((n) => item('dogadanja', `skupstina:${n}`, 'event', `${n}. sjednica`, { at: `2026-09-11T${n}:00:00Z`, dateBasis: 'event', data: { ...SESSION_DATA } }));
     const allDay = item('dogadanja', 'skupstina:19', 'event', 'Dan otvorenih vrata', { at: '2026-09-10T22:00:00Z', dateBasis: 'event', data: { source: 'skupstina', category: 'sjednica-odbora', precision: 'day' } });
-    const markup = sceneMarkup('veceras', ctx({ modules: withModule(MODULES, 'dogadanja', { items: [allDay, ...more] }) }));
+    const narrow = ctx({ columns: 3, modules: withModule(MODULES, 'dogadanja', { items: [allDay, ...more] }) });
+    const markup = sceneMarkup('veceras', narrow);
     const body = dom(markup.body);
-    expect(qa(body, '.tl[data-variant=time]')).toHaveLength(TONIGHT_ROW_CAP);
+    expect(qa(body, '.tl[data-variant=time]')).toHaveLength(TONIGHT_ROW_FLOOR);
     expect(markup.regions['kiosk-scene-meta']).toBe('još 2 događanja');
+    // A wider rail shows one more of the same five and says one fewer is left.
+    const wider = sceneMarkup('veceras', wide({ modules: narrow.modules }));
+    expect(qa(dom(wider.body), '.tl[data-variant=time]')).toHaveLength(5);
+    expect(wider.regions['kiosk-scene-meta']).toBe('');
     const first = q(body, '.tl[data-variant=time]')!;
     expect(text(q(first, '.tl-time'))).toBe('cijeli dan');
     expect(q(first, '.tl-time')!.hasAttribute('data-allday')).toBe(true);
@@ -343,7 +367,7 @@ describe('sceneMarkup: Večeras', () => {
     expect(text(band)).toBe('Večeras nema najavljenih događanja u kvartu.');
     expect(qa(empty, '.tl[data-variant=time]')).toHaveLength(0);
     const loading = dom(sceneMarkup('veceras', ctx({ modules: without(MODULES, 'dogadanja') })).body);
-    expect(qa(loading, '[data-testid=kiosk-tonight] .sk-row')).toHaveLength(3);
+    expect(qa(loading, '[data-testid=kiosk-tonight] .sk-row')).toHaveLength(4);
     expect(qa(loading, '.tl')).toHaveLength(0);
     const down = dom(sceneMarkup('veceras', ctx({ modules: withModule(MODULES, 'dogadanja', { status: 'down', items: [] }) })).body);
     const unknown = q(down, '[data-testid=kiosk-tonight] .tl[data-variant=band][data-level=unknown]')!;
@@ -365,7 +389,7 @@ describe('sceneMarkup: Večeras', () => {
 describe('sceneMarkup: Grad', () => {
   it('puts exactly one ink tile on the screen: the next session with its time, the dated label, the title and the venue line', () => {
     const markup = sceneMarkup('grad', ctx());
-    const city = dom(markup.body).querySelector('.k-scene-grad[data-testid=kiosk-city]')!;
+    const city = dom(markup.body).querySelector('.k-rail[data-chapter=grad][data-testid=kiosk-city]')!;
     const inks = city.querySelectorAll<HTMLElement>('.tl[data-variant=ink]');
     expect(inks).toHaveLength(1);
     const ink = inks[0]!;
@@ -393,6 +417,9 @@ describe('sceneMarkup: Grad', () => {
     const rows = qa(body, '.tl[data-variant=row]');
     expect(rows).toHaveLength(3);
     expect(rows.map((r) => r.dataset.kind)).toEqual(['quake', 'city', 'city']);
+    // The wide drawing's rail holds every story the city has beside the same one ink tile.
+    expect(qa(dom(sceneMarkup('grad', wide()).body), '.tl[data-variant=row]')).toHaveLength(4);
+    expect(qa(dom(sceneMarkup('grad', wide()).body), '.tl[data-variant=ink]')).toHaveLength(1);
     expect(rows.map((r) => q(r, '.k-glyph use')!.getAttribute('href'))).toEqual(['#icon-activity', '#icon-landmark', '#icon-tram-front']);
     expect(text(q(rows[0]!, '.tl-trail'))).toBe('EMSC · 12:11');
     expect(text(q(rows[1]!, '.tl-title'))).toBe('Novi park u Trnju');
@@ -440,6 +467,7 @@ describe('sceneMarkup: Grad', () => {
     const loading = dom(sceneMarkup('grad', ctx({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body);
     expect(qa(loading, '.tl[data-variant=ink][data-skeleton]')).toHaveLength(1);
     expect(qa(loading, '.tl[data-variant=row][data-skeleton]')).toHaveLength(3);
+    expect(qa(dom(sceneMarkup('grad', wide({ modules: MODULES.filter((m) => !['dogadanja', 'emsc'].includes(m.module)) })).body), '.tl[data-variant=row][data-skeleton]')).toHaveLength(5);
     expect(qa(loading, '.tl[data-variant=ink]')).toHaveLength(1);
     const down = MODULES.map((m) => (['dogadanja', 'emsc'].includes(m.module) ? { ...m, status: 'down' as const, items: [] } : m));
     const body = dom(sceneMarkup('grad', ctx({ modules: down })).body);
@@ -469,16 +497,20 @@ describe('mountScenes', () => {
     document.body.replaceChildren(host);
     const timers: Timer[] = [];
     const defer = (fn: () => void, ms: number): (() => void) => { const t: Timer = { fn, ms, cancelled: false }; timers.push(t); return () => { t.cancelled = true; }; };
-    const onBeforeSwap = vi.fn();
-    const handle = mountScenes(host, { defer, onBeforeSwap });
-    return { host, handle, timers, onBeforeSwap, run: () => { for (const t of timers.splice(0)) if (!t.cancelled) t.fn(); } };
+    const handle = mountScenes(host, { defer });
+    return { host, handle, timers, run: () => { for (const t of timers.splice(0)) if (!t.cancelled) t.fn(); } };
   }
   const items = (root: ParentNode): HTMLElement[] => qa(root, '.k-scene-item');
 
-  it('builds the field, shows one item, and reports the map host of the scene on show', () => {
+  it('builds the map into the field once and reports its host, before any chapter has been drawn', () => {
     const f = mountField();
-    const section = q(f.host, 'section.k-scene[data-testid=kiosk-scene]')!;
+    const section = q(f.host, 'section.k-scene[data-map="1"][data-testid=kiosk-scene]')!;
     expect(section.getAttribute('aria-labelledby')).toBe('k-scene-title');
+    // The chip and the rail are the map's own children, so nothing the rail draws can be said to paint over the picture by accident.
+    expect(q(section, '.k-map[data-testid=kiosk-live] > [data-testid=kiosk-map-host]')).not.toBeNull();
+    expect(q(section, '.k-map > .k-scene-head')).not.toBeNull();
+    expect(q(section, '.k-map > .k-scene-body')).not.toBeNull();
+    expect(f.handle.mapHost).toBe(q(section, '[data-testid=kiosk-map-host]'));
     f.handle.update(model());
     expect(section.dataset.scene).toBe('promet');
     expect(f.handle.current()).toBe('promet');
@@ -489,20 +521,20 @@ describe('mountScenes', () => {
     expect(f.handle.mapHost).toBe(q(section, '[data-testid=kiosk-map-host]'));
     expect(f.handle.element).toBe(section);
   });
-  it('leaves the previous item under data-leaving for SCENE_LEAVE_MS, telling the controller first so it parks the map', () => {
+  it('leaves the previous item under data-leaving for SCENE_LEAVE_MS while the map stands still under both', () => {
     const f = mountField();
     f.handle.update(model());
+    const picture = f.handle.mapHost;
     f.handle.update(model({ index: 1 }));
     expect(f.handle.current()).toBe('grad');
-    expect(f.onBeforeSwap).toHaveBeenCalledTimes(1);
-    expect(f.onBeforeSwap).toHaveBeenCalledWith('promet', 'grad');
     const all = items(f.host);
     expect(all).toHaveLength(2);
     expect(all[0]!.dataset.leaving).toBe('1');
     expect(all[0]!.dataset.scene).toBe('promet');
     expect(all[1]!.dataset.scene).toBe('grad');
     expect(all[1]!.hasAttribute('data-leaving')).toBe(false);
-    expect(f.handle.mapHost).toBeNull();
+    // The map is the field, not a panel one chapter owns: it is the same element through the swap and after it.
+    expect(f.handle.mapHost).toBe(picture);
     expect(f.handle.element.dataset.scene).toBe('grad');
     expect(f.timers.map((t) => t.ms)).toEqual([SCENE_LEAVE_MS]);
     f.run();
@@ -518,7 +550,6 @@ describe('mountScenes', () => {
     expect(all.map((el) => el.dataset.scene)).toEqual(['grad', 'promet']);
     expect(all[0]!.dataset.leaving).toBe('1');
     expect(f.timers[0]!.cancelled).toBe(true);
-    expect(f.onBeforeSwap).toHaveBeenLastCalledWith('grad', 'promet');
     f.run();
     expect(items(f.host).map((el) => el.dataset.scene)).toEqual(['promet']);
   });
@@ -529,7 +560,6 @@ describe('mountScenes', () => {
     f.handle.update(model({ rotate: false, index: 2 }));
     expect(f.handle.current()).toBe('promet');
     expect(items(f.host)).toHaveLength(1);
-    expect(f.onBeforeSwap).not.toHaveBeenCalled();
     expect(qa(f.host, '.k-dot')).toHaveLength(0);
     expect(q(f.host, '[data-testid=kiosk-scene-position]')).toBeNull();
   });
@@ -539,7 +569,6 @@ describe('mountScenes', () => {
     expect(f.handle.current()).toBe('grad');
     expect(items(f.host)[0]!.dataset.scene).toBe('grad');
     expect(qa(f.host, '.k-dot')).toHaveLength(0);
-    expect(f.onBeforeSwap).not.toHaveBeenCalled();
     f.handle.update(model({ pinned: 'veceras', rotate: false }));
     expect(f.handle.current()).toBe('veceras');
     expect(text(q(f.host, '[data-testid=kiosk-tonight] .tl[data-level=calm]'))).toBe('Večeras nema najavljenih događanja u kvartu.');
@@ -565,31 +594,27 @@ describe('mountScenes', () => {
     const map = q(f.host, '.k-map')!;
     const host = q(f.host, '[data-testid=kiosk-map-host]')!;
     const lines = q(f.host, '[data-testid=kiosk-lines]')!;
-    const works = q(f.host, '[data-testid=kiosk-works]')!;
-    const worksHtml = works.innerHTML;
+    const worksHtml = q(f.host, '[data-testid=kiosk-works]')!.outerHTML;
     const slower = withModule(MODULES, 'zet-rt', { items: ZET.items.map((it) => (it.id === 'route:6' ? { ...it, data: { ...it.data, medianDelaySeconds: 400 } } : it)) });
     f.handle.update(model({ modules: slower }));
     expect(items(f.host)).toHaveLength(1);
-    expect(f.onBeforeSwap).not.toHaveBeenCalled();
     expect(q(f.host, '.k-map')).toBe(map);
     expect(q(f.host, '[data-testid=kiosk-map-host]')).toBe(host);
     expect(q(f.host, '[data-testid=kiosk-lines]')).toBe(lines);
     expect(text(q(lines, '.tl[data-route="6"] .tl-value'))).toBe('kasni 7 min');
-    expect(works.innerHTML).toBe(worksHtml);
+    expect(q(f.host, '[data-testid=kiosk-works]')!.outerHTML).toBe(worksHtml);
     const quiet = withModule(slower, 'dogadanja', { items: [SESSION_NEXT_WEEK, KVARTOVSKE] });
     f.handle.update(model({ modules: quiet }));
     expect(q(f.host, '.k-map')).toBe(map);
-    expect(q(f.host, '.k-scene-grid')!.dataset.works).toBe('0');
-    expect(works.innerHTML).toBe('');
+    expect(q(f.host, '[data-testid=kiosk-works]')).toBeNull();
     f.handle.update(model({ modules: slower }));
-    expect(q(f.host, '.k-scene-grid')!.dataset.works).toBe('1');
-    expect(works.innerHTML).toBe(worksHtml);
+    expect(q(f.host, '[data-testid=kiosk-works]')!.outerHTML).toBe(worksHtml);
     expect(q(f.host, '.k-map')).toBe(map);
   });
   it('the meta follows the poll without a swap', () => {
     const f = mountField();
     f.handle.update(model());
-    expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('još 5 linija');
+    expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('još 6 linija');
     f.handle.update(model({ stop: { ...KVART_STOP, routes: ['6', '11'] } }));
     expect(text(q(f.host, '[data-testid=kiosk-scene-meta]'))).toBe('');
     expect(items(f.host)).toHaveLength(1);

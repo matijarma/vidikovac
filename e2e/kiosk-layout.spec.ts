@@ -12,6 +12,10 @@
 //     (compact, portrait) row, scaled by the kiosk's own zoom;
 //   - the scene field is the stage's dominant element in landscape and, in
 //     portrait, at least 55% of the stage's height and nearly its full width;
+//   - the map is the stage, not a panel on it: at least 0.55 of the stage by
+//     area in landscape, with the chapter's chip on its upper quarter, the
+//     chapter's rail inside it and below its middle, and the sign column
+//     never crossing it;
 //   - a portrait screen stacks the invitation (plan, Kiosk (i)): the scene on
 //     top, the two value tiles and the invitation card side by side under it
 //     with the card to the right, the two tiles sharing a row of their own;
@@ -48,8 +52,8 @@ function geometryIssues(page: Page): Promise<string[]> {
     const out: string[] = [];
     const shown = (sel: string): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null);
     const tag = (el: HTMLElement): string => `${el.className.split(' ')[0]}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`;
-    // A tile, the scene field or the side column's block box clips its children when a row or a title does not fit.
-    for (const el of shown('.tl, .k-scene, .k-scene-body, .k-invite, .k-side, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
+    // A tile, the scene field, the chapter's rail or the side column's block box clips its children when a row or a title does not fit.
+    for (const el of shown('.tl, .k-scene, .k-scene-body, .k-rail, .k-scene-head, .k-invite, .k-side, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
       if (el.scrollHeight > el.clientHeight + 1) out.push(`overflow-y ${tag(el)} ${el.scrollHeight}>${el.clientHeight}`);
       if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     }
@@ -73,11 +77,16 @@ function geometryIssues(page: Page): Promise<string[]> {
       if (title.textContent!.trim() !== '' && title.clientHeight === 0) out.push(`${tag(tile)} title has no height`);
     }
     // The header's three groups are boxes too: a session pill that paints over the chip or the date is an overlap like any other.
-    const boxes = shown('.k-stage .tl, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-block, .k-stage .k-join, .k-head-brand, .k-head-mid, .k-head-when').map((el) => [tag(el), el.getBoundingClientRect()] as const);
+    // The rule the map's own composition needed restating, not loosening (R-K7): two boxes may share a patch of screen
+    // only when one CONTAINS the other, which is how the chapter's chip and rail may sit on the map -- they are the map's
+    // own children -- while any other pair painting over each other is still a fault. The chip is a box here now too.
+    const boxes = shown('.k-stage .tl, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-scene-head, .k-stage .k-block, .k-stage .k-join, .k-head-brand, .k-head-mid, .k-head-when')
+      .map((el) => [tag(el), el, el.getBoundingClientRect()] as const);
     for (let i = 0; i < boxes.length; i += 1) {
       for (let j = i + 1; j < boxes.length; j += 1) {
-        const [ta, a] = boxes[i]!;
-        const [tb, b] = boxes[j]!;
+        const [ta, ea, a] = boxes[i]!;
+        const [tb, eb, b] = boxes[j]!;
+        if (ea.contains(eb) || eb.contains(ea)) continue;
         if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(`overlap ${ta}/${tb}`);
       }
     }
@@ -86,6 +95,49 @@ function geometryIssues(page: Page): Promise<string[]> {
     for (const el of shown('.k-strip-item')) if (el.scrollWidth > el.clientWidth + 1) out.push(`strip clipped ${el.dataset.testid}`);
     return out;
   });
+}
+
+/** What the invitation's own composition claims, measured rather than assumed:
+ *  the map IS the stage, the chapter's chip and rail live on it without taking
+ *  it, and the sign column stands beside it and never over it. The map's share
+ *  of the stage is the rule .superpowers/sdd/2026-09-15-dan-grada/task-T2.11-report.md
+ *  deleted when the measurement of the day fell to 0.2156; the map is the field
+ *  now, so it is a rule again. */
+function compositionIssues(page: Page, portrait: boolean): Promise<string[]> {
+  return page.evaluate((isPortrait) => {
+    const out: string[] = [];
+    // The composition's own box: the stage inside its frame, which is the room
+    // the map and the sign column actually divide (the stage's padding belongs
+    // to neither of them).
+    const stage = document.querySelector<HTMLElement>('.k-invitation');
+    const map = document.querySelector<HTMLElement>('.k-invitation .k-map');
+    if (!stage || !map || map.offsetParent === null) return ['the invitation has no map on its stage'];
+    const s = stage.getBoundingClientRect();
+    const m = map.getBoundingClientRect();
+    // Landscape: the map is the stage's subject, not one panel of three.
+    const share = (m.width * m.height) / (s.width * s.height);
+    if (!isPortrait && share < 0.55) out.push(`the map is ${share.toFixed(4)} of the stage`);
+    const rail = map.querySelector<HTMLElement>('.k-rail');
+    if (!rail) out.push('no chapter rail on the map');
+    else {
+      const r = rail.getBoundingClientRect();
+      if (r.left < m.left - 0.5 || r.right > m.right + 0.5 || r.top < m.top - 0.5 || r.bottom > m.bottom + 0.5) out.push('the rail is not inside the map');
+      if (r.top < m.top + m.height / 2) out.push(`the rail crosses the map's middle by ${(m.top + m.height / 2 - r.top).toFixed(1)} px`);
+    }
+    const chip = map.querySelector<HTMLElement>('.k-scene-head');
+    if (!chip) out.push('no chapter chip on the map');
+    else {
+      const c = chip.getBoundingClientRect();
+      if (c.bottom > m.top + m.height / 4) out.push(`the chip crosses the map's upper quarter by ${(c.bottom - m.top - m.height / 4).toFixed(1)} px`);
+    }
+    const sign = document.querySelector<HTMLElement>('.k-invitation .k-side');
+    if (!sign) out.push('no sign column');
+    else {
+      const g = sign.getBoundingClientRect();
+      if (g.left < m.right - 1 && m.left < g.right - 1 && g.top < m.bottom - 1 && m.top < g.bottom - 1) out.push('the sign column crosses the map');
+    }
+    return out;
+  }, portrait);
 }
 
 /** kiosk/layout.ts's zoom, read off the root: 1 at every design size in SIZES, whatever it is elsewhere. */
@@ -152,6 +204,7 @@ for (const size of SIZES) {
         expect(scene.width / stage.width, 'the scene field is the stage’s dominant element').toBeGreaterThanOrEqual(0.58);
       }
       expect(await geometryIssues(page)).toEqual([]);
+      expect(await compositionIssues(page, portrait), 'the map is the stage').toEqual([]);
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}.png`, fullPage: false });
 
       await page.getByTestId('kiosk-essentials-open').click();
@@ -167,6 +220,7 @@ for (const size of SIZES) {
       for (const other of OTHER_SCENES) {
         await openInvitation(page, face, size, kioskUrl, other);
         expect(await geometryIssues(page), other).toEqual([]);
+        expect(await compositionIssues(page, portrait), other).toEqual([]);
         await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}-${other}.png`, fullPage: false });
       }
     });

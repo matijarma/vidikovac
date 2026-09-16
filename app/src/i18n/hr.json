@@ -946,7 +946,7 @@
       "endsAfterSession": "Otvorena sesija traje do svog kraja; zaslon zatim prestaje izdavati kodove."
     },
     "setup": {
-      "handheld": "Otvori ovu adresu na zaslonu širem od 900 px.",
+      "handheld": "Ovu adresu otvori na zaslonu koji postavljaš.",
       "title": "Postavi privremeni zaslon",
       "intro": "Za ocjenjivanje: odaberi gradsku četvrt i stanicu. Zaslon vrijedi 24 sata i koristi ista stvarna uparivanja i podatke kao zasloni u prostorima.",
       "step1": "Korak 1 od 2",

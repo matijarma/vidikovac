@@ -1,8 +1,10 @@
-// The kiosk's scene field: the three scenes the invitation's left column
-// rotates through (Promet with the map and the line tiles, Večeras with
-// today's dated events, Grad with the next session and the city rows), the
-// pure readers behind them, each scene's markup with its diffable regions,
-// and the mounted field that swaps between them on the controller's clock.
+// The kiosk's scene field: the map, and the three chapters the invitation
+// rotates through over it (Promet with the line tiles, Večeras with today's
+// dated events, Grad with the next session and the city rows), the pure
+// readers behind them, each chapter's markup with its diffable regions, and
+// the mounted field that swaps between them on the controller's clock. The
+// map is built into the field once and stands through all three: what a swap
+// changes is the chip on the picture's corner and the rail on its foot.
 //
 // Order: Promet and Grad always; Večeras only while eventsTonight() has a row
 // (C.7: the open tier rarely has one, so the scene fills the day an
@@ -26,7 +28,8 @@ import { routeEnds } from '../transport/catalogue';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { clock, dayTime, fmtDistance, sameZagrebDay, weekdayDayMonth } from './format';
-import { kBadge, linesMarkup } from './invitation';
+import { kBadge, lineRows, linesMarkup } from './invitation';
+import { railColumns } from './layout';
 import {
   byModule, cityKicker, closuresNear as closuresNearby, isLive, linesAtStop, NEARBY_CLOSURE_M, routeDelays, sourceState, stories, windowOf,
   type LineRow, type LinesBoard, type SourceState, type Story,
@@ -42,8 +45,18 @@ export const SCENE_LEAVE_MS = 180;
 export const SCENE_ENTER_MS = 220;
 /** Closures "u blizini" for the right column's value tile: local.ts's nearby radius under the scene contract's name. */
 export const WORKS_RADIUS_M = NEARBY_CLOSURE_M;
-export const TONIGHT_ROW_CAP = 3;
-export const GRAD_ROW_CAP = 3;
+/** The fewest members a chapter asks its rail for, however little room it
+ *  has: at one column the rail stands them up as rows, and three of those is
+ *  the least a chapter says. The room decides the rest, and fitRail hides
+ *  what it turns out not to hold. */
+export const TONIGHT_ROW_FLOOR = 3;
+export const GRAD_ROW_FLOOR = 3;
+const LINE_TILE_FLOOR = 3;
+/** Promet fills the rail with the works band and its lines, Večeras with the
+ *  evening's tiles, Grad with the ink tile and the city's rows. */
+const prometMembers = (columns: number): number => Math.max(LINE_TILE_FLOOR, columns);
+const tonightRows = (columns: number): number => Math.max(TONIGHT_ROW_FLOOR, columns);
+const gradRowCap = (columns: number): number => Math.max(GRAD_ROW_FLOOR, columns - 1);
 /** The register's phase for works one can see on the street (komunalne.ts's closed vocabulary). */
 const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
 
@@ -56,8 +69,11 @@ export interface SceneContext {
   locale: string;
   lightweight: boolean;
   size: 'wide' | 'compact';
-  /** Line tiles before the meta says the rest: 4 wide, 3 compact, 10 lightweight. */
-  lineCap: number;
+  /** Members this chapter's rail has room for: the columns its own minimum
+   *  buys in the rail's measured width (mountScenes asks kiosk/layout.ts's
+   *  railColumns), or the drawing's own count before anything is laid out --
+   *  6 wide, 4 compact, 3 handheld, 10 lightweight. */
+  columns: number;
 }
 
 export interface SceneModel extends SceneContext {
@@ -70,19 +86,21 @@ export interface SceneModel extends SceneContext {
 export interface ScenesDeps {
   /** Runs `fn` once after `ms` and returns its cancel: the controller's clock, so the leaving item goes on the timers the tests drive and destroy() leaves nothing armed. */
   defer?: (fn: () => void, ms: number) => () => void;
-  /** Runs before a swap, so the controller parks the map before the fading item carries it away. */
-  onBeforeSwap?: (leaving: SceneId, entering: SceneId) => void;
+  /** D12: no map under lagano, so the field is a head over the lines board rather than a chip and a rail over a picture. */
+  lightweight?: boolean;
 }
 
 export interface ScenesHandle {
   element: HTMLElement;
-  /** The map host of the scene on show; null while another scene shows (the map stays parked). */
+  /** The field's own map host: the map is the field, so it stands through every chapter and is null only under lagano, which has no map at all. */
   readonly mapHost: HTMLElement | null;
   update(model: SceneModel): void;
   current(): SceneId;
   order(): readonly SceneId[];
   /** Re-measures every titled tile and gives its title one line when two overflow; called after every update and on the 1 s tick. */
   fit(): void;
+  /** The rail's measured height where it hangs over the map, for the map's own bottom padding; 0 when nothing is laid out or the rail stands under the picture rather than on it. */
+  railPad(): number;
   destroy(): void;
 }
 
@@ -178,9 +196,9 @@ export function nextSession(modules: readonly ModuleSnapshot[], now: number): Fe
   return sessions[0] ?? null;
 }
 
-/** stories() minus the Assembly (the ink tile says it), at most GRAD_ROW_CAP; the gazette is session tier and never among them. */
+/** stories() minus the Assembly (the ink tile says it), at most what the rail has room for beside that tile; the gazette is session tier and never among them. */
 export function gradRows(ctx: SceneContext): Story[] {
-  return stories(ctx.modules, ctx.strings, ctx.locale, ctx.now).filter((story) => !story.id.startsWith('city:skupstina:')).slice(0, GRAD_ROW_CAP);
+  return stories(ctx.modules, ctx.strings, ctx.locale, ctx.now).filter((story) => !story.id.startsWith('city:skupstina:')).slice(0, gradRowCap(ctx.columns));
 }
 
 // --- Markup -------------------------------------------------------------------
@@ -222,7 +240,13 @@ function emptyBand(state: SourceState, glyphName: IconName, label: string, empty
   return noteBand('calm', glyphName, label, empty);
 }
 
-interface BuiltScene { body: string; regions: Record<string, string>; meta: string }
+interface BuiltScene {
+  body: string;
+  regions: Record<string, string>;
+  meta: string;
+  /** The chip's "još N" once fitRail has hidden `hidden` members it turns out the room does not hold; `meta` is this at zero. */
+  more(hidden: number): string;
+}
 
 // Promet: the map spanning the rows of column 1, the line tiles, the works band.
 
@@ -242,50 +266,59 @@ function lineTile(row: LineRow, delay: number | undefined, state: SourceState, c
     + `<p class="tl-value">${escapeHtml(row.word || delayWord(i18n, undefined))}</p>${context}</li>`;
 }
 
-function linesInner(board: LinesBoard, ctx: SceneContext): string {
+/** The board's rows as the rail's members: tiles across, or -- where the room
+ *  holds one column -- the lagano board's own `li.k-line` rows stood up. */
+function linesInner(board: LinesBoard, ctx: SceneContext, cap: number, stood: boolean): string {
   const s = ctx.strings;
   if (board.state === 'loading') {
-    const tiles = Array.from({ length: ctx.lineCap }, () => `<li class="tl k-tl-line" data-skeleton aria-hidden="true">${bar('label')}${bar('value')}${bar('context')}</li>`);
+    const tiles = Array.from({ length: cap }, () => `<li class="tl k-tl-line" data-skeleton aria-hidden="true">${bar('label')}${bar('value')}${bar('context')}</li>`);
     return `<li class="k-visually-hidden">${escapeHtml(s.lines.loading)}</li>${tiles.join('')}`;
   }
   if (board.state === 'down') return `<li class="k-board-note" data-state="down">${escapeHtml(s.lines.unavailable)}</li>`;
   if (board.rows.length === 0) return `<li class="k-board-note">${escapeHtml(ctx.stop ? s.lines.noneNearby : s.lines.noStop)}</li>`;
+  if (stood) return lineRows(board, s, ctx.locale);
   const delays = routeDelays(byModule(ctx.modules)['zet-rt']);
   return board.rows.map((row) => lineTile(row, delays.get(row.routeId), board.state, ctx)).join('');
 }
 
 /** The lines beyond the cap, said once here; nothing while the board is not a board yet. */
-function linesMeta(board: LinesBoard, ctx: SceneContext): string {
-  return (board.state === 'live' || board.state === 'stale') && board.more > 0 ? plural(ctx.locale, ctx.strings.lines.more, board.more) : '';
+function linesMeta(board: LinesBoard, ctx: SceneContext, hidden = 0): string {
+  const rest = board.more + hidden;
+  return (board.state === 'live' || board.state === 'stale') && rest > 0 ? plural(ctx.locale, ctx.strings.lines.more, rest) : '';
 }
 
+/** The works band as the rail's lead member; nothing at all when nothing is ongoing. */
 function worksBand(works: WorksInKvart, ctx: SceneContext): string {
   const s = ctx.strings;
   const label = works.scope === 'kvart' ? s.scenes.worksKvart : s.scenes.worksCity;
-  if (works.state === 'loading') return `<div class="tl" data-variant="band" data-tone="komunalno" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('label')}${bar('title1')}</span></div>`;
-  if (works.state === 'down') return `<div class="tl" data-variant="band" data-tone="komunalno" data-state="down">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p><p class="tl-title">${escapeHtml(s.paired.sourceDown)}</p></div></div>`;
-  // A zero collapses the row (data-works="0" on the grid), a stale one too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
+  const open = '<li class="tl" data-variant="band" data-tone="komunalno" data-testid="kiosk-works"';
+  if (works.state === 'loading') return `${open} data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('label')}${bar('title1')}</span></li>`;
+  if (works.state === 'down') return `${open} data-state="down">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p><p class="tl-title">${escapeHtml(s.paired.sourceDown)}</p></div></li>`;
+  // A zero leaves the rail entirely, a stale one too (kajimafix 03.3): "0 · zastarjelo" is a hole dressed as a fact.
   if (works.count === 0) return '';
   const title = works.nearest ? [works.nearest.title, works.nearest.distanceM === null ? '' : fmtDistance(ctx.locale, works.nearest.distanceM)].filter(Boolean).join(' · ') : '';
-  return `<div class="tl" data-variant="band" data-tone="komunalno" data-state="${works.state}">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p>`
-    + `${title ? `<p class="tl-title">${escapeHtml(title)}</p>` : ''}${works.state === 'stale' ? staleBadge(s) : ''}</div><p class="tl-trail">${works.count}</p></div>`;
+  return `${open} data-state="${works.state}">${glyph('hard-hat')}<div class="tl-main"><p class="tl-label">${escapeHtml(label)}</p>`
+    + `${title ? `<p class="tl-title">${escapeHtml(title)}</p>` : ''}${works.state === 'stale' ? staleBadge(s) : ''}</div><p class="tl-trail">${works.count}</p></li>`;
 }
 
 function promet(ctx: SceneContext): BuiltScene {
-  const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, ctx.lineCap);
   if (ctx.lightweight) {
-    // D12: no map under lagano, so the lines board is the whole scene, exactly today's left column (li.k-line × cap and .k-line-more,
+    // D12: no map under lagano, so the lines board is the whole field, exactly today's left column (li.k-line × cap and .k-line-more,
     // e2e/lagano.spec.ts's contract); the board says its own overflow, so the meta stays quiet.
+    const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, ctx.columns);
     const lines = linesMarkup(board, ctx.stop, ctx.strings, ctx.locale);
     const body = `<div class="k-scene-grid" data-board="1"><div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host" hidden></div><div class="k-lines k-lines--board" data-testid="kiosk-lines">${lines}</div></div></div>`;
-    return { body, regions: { 'kiosk-lines': lines }, meta: '' };
+    return { body, regions: { 'kiosk-lines': lines }, meta: '', more: () => '' };
   }
-  const lines = linesInner(board, ctx);
+  // The works band is one member of the rail like any other, so the lines take what the rail has left.
   const works = worksBand(worksInKvart(ctx.modules, ctx.stop, ctx.now), ctx);
-  // The lines and the works band share one column that stacks from the top at its own height (kajimafix 03.3).
-  const body = `<div class="k-scene-grid" data-works="${works === '' ? '0' : '1'}"><div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host"></div></div>`
-    + `<div class="k-scene-col"><ul class="k-scene-lines" data-testid="kiosk-lines">${lines}</ul><div class="k-works" data-testid="kiosk-works">${works}</div></div></div>`;
-  return { body, regions: { 'kiosk-lines': lines, 'kiosk-works': works }, meta: linesMeta(board, ctx) };
+  const stood = ctx.columns <= 1;
+  const cap = Math.max(1, prometMembers(ctx.columns) - (works === '' ? 0 : 1));
+  const board = linesAtStop(ctx.modules, ctx.stop, ctx.i18n, cap);
+  const inner = `${works}${linesInner(board, ctx, cap, stood)}`;
+  const body = `<ul class="k-rail" data-chapter="promet" data-testid="kiosk-lines"${stood ? ' data-rows="1"' : ''}>${inner}</ul>`;
+  const more = (hidden: number): string => linesMeta(board, ctx, hidden);
+  return { body, regions: { 'kiosk-lines': inner }, meta: more(0), more };
 }
 
 // Večeras: up to three time tiles, the next one tinted.
@@ -302,22 +335,26 @@ function eventRow(item: FeedItem, state: SourceState, next: boolean, ctx: SceneC
     + `<div class="tl-main"><p class="tl-label">${escapeHtml(cityKicker(source, s))}</p><p class="tl-title">${escapeHtml(item.title)}</p>${tail}</div></div>`;
 }
 
-function tonightMeta(rows: readonly FeedItem[], ctx: SceneContext): string {
-  return rows.length > TONIGHT_ROW_CAP ? plural(ctx.locale, ctx.strings.scenes.moreEvents, rows.length - TONIGHT_ROW_CAP) : '';
+function tonightMeta(rows: readonly FeedItem[], ctx: SceneContext, hidden = 0): string {
+  const shown = Math.max(0, Math.min(rows.length, tonightRows(ctx.columns)) - hidden);
+  return rows.length > shown ? plural(ctx.locale, ctx.strings.scenes.moreEvents, rows.length - shown) : '';
 }
 
 function veceras(ctx: SceneContext): BuiltScene {
   const s = ctx.strings;
   const state = sourceState(byModule(ctx.modules).dogadanja);
   const rows = eventsTonight(ctx.modules, ctx.now);
+  const cap = tonightRows(ctx.columns);
   let inner: string;
-  if (state === 'loading') inner = `${hidden(ctx.i18n.t('status.loading'))}${'<div class="sk sk-row" aria-hidden="true"></div>'.repeat(TONIGHT_ROW_CAP)}`;
+  if (state === 'loading') inner = `${hidden(ctx.i18n.t('status.loading'))}${'<div class="sk sk-row" aria-hidden="true"></div>'.repeat(cap)}`;
   else if (rows.length === 0) inner = emptyBand(state, 'calendar-days', state === 'live' ? '' : s.scenes.tonight, s.scenes.tonightEmpty, s);
   else {
     const next = rows.findIndex((row) => startOf(row) >= ctx.now);
-    inner = rows.slice(0, TONIGHT_ROW_CAP).map((row, i) => eventRow(row, state, i === next, ctx)).join('');
+    inner = rows.slice(0, cap).map((row, i) => eventRow(row, state, i === next, ctx)).join('');
   }
-  return { body: `<div class="k-scene-rows" data-testid="kiosk-tonight">${inner}</div>`, regions: { 'kiosk-tonight': inner }, meta: tonightMeta(rows, ctx) };
+  const stood = ctx.columns <= 1 ? ' data-rows="1"' : '';
+  const more = (hidden: number): string => tonightMeta(rows, ctx, hidden);
+  return { body: `<div class="k-rail" data-chapter="veceras" data-testid="kiosk-tonight"${stood}>${inner}</div>`, regions: { 'kiosk-tonight': inner }, meta: more(0), more };
 }
 
 // Grad: the one ink tile spanning the rows of column 1, then up to three rows.
@@ -388,7 +425,7 @@ function grad(ctx: SceneContext): BuiltScene {
   let rowsHtml: string;
   if (rows.length > 0) rowsHtml = rows.map((story) => gradRow(story, ctx)).join('');
   else if (sources.every((snapshot) => snapshot === undefined)) {
-    rowsHtml = `${hidden(ctx.i18n.t('status.loading'))}${`<div class="tl" data-variant="row" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('title1')}</span>${bar('context')}</div>`.repeat(GRAD_ROW_CAP)}`;
+    rowsHtml = `${hidden(ctx.i18n.t('status.loading'))}${`<div class="tl" data-variant="row" data-skeleton aria-hidden="true">${bar('glyph')}<span class="tl-main">${bar('title1')}</span>${bar('context')}</div>`.repeat(gradRowCap(ctx.columns))}`;
   } else {
     // Only an answering source with nothing new is "nothing new": every source down is said so, a stale one among them is unconfirmed.
     const state: SourceState = sources.every((snapshot) => snapshot === undefined || snapshot.status === 'down') ? 'down'
@@ -396,18 +433,18 @@ function grad(ctx: SceneContext): BuiltScene {
     rowsHtml = emptyBand(state, 'landmark', s.story.city, s.story.empty, s);
   }
   const inner = `${ink}${rowsHtml}`;
-  return { body: `<div class="k-scene-grad" data-testid="kiosk-city">${inner}</div>`, regions: { 'kiosk-city': inner }, meta: '' };
+  const stood = ctx.columns <= 1 ? ' data-rows="1"' : '';
+  // Grad never counted the rows it left out; the rail hides one the room cannot hold exactly as the old cap of three did.
+  return { body: `<div class="k-rail" data-chapter="grad" data-testid="kiosk-city"${stood}>${inner}</div>`, regions: { 'kiosk-city': inner }, meta: '', more: () => '' };
 }
 
 function buildScene(id: SceneId, ctx: SceneContext): BuiltScene {
   return id === 'promet' ? promet(ctx) : id === 'veceras' ? veceras(ctx) : grad(ctx);
 }
 
-/** The head's own meta without building the body: the lines beyond the cap, the rows beyond the cap, nothing for Grad. */
+/** The head's own meta: the lines beyond the rail, the evening's rows beyond it, nothing for Grad. Each chapter's cap is the rail's own arithmetic, so it is read off the built scene rather than guessed at a second time. */
 function sceneMeta(id: SceneId, ctx: SceneContext): string {
-  if (id === 'promet') return ctx.lightweight ? '' : linesMeta(linesAtStop(ctx.modules, ctx.stop, ctx.i18n, ctx.lineCap), ctx);
-  if (id === 'veceras') return tonightMeta(eventsTonight(ctx.modules, ctx.now), ctx);
-  return '';
+  return buildScene(id, ctx).meta;
 }
 
 function headMarkup(id: SceneId, s: KioskStrings, meta: string, position: { index: number; count: number } | null): string {
@@ -444,25 +481,39 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
   element.className = 'k-scene';
   element.dataset.testid = 'kiosk-scene';
   element.setAttribute('aria-labelledby', 'k-scene-title');
-  element.innerHTML = '<header class="k-scene-head"></header><div class="k-scene-body"></div>';
+  // The map is the field, built once and standing through every chapter (D12:
+  // under lagano there is no map at all, and the field is a head over the
+  // lines board as it always was). The chip and the rail are its children,
+  // which is what lets e2e/kiosk-layout.spec.ts keep proving that nothing
+  // paints over anything by accident: a pair overlaps unless one contains
+  // the other.
+  const inner = '<header class="k-scene-head"></header><div class="k-scene-body"></div>';
+  if (deps.lightweight) element.innerHTML = inner;
+  else {
+    element.dataset.map = '1';
+    element.innerHTML = `<div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host"></div>${inner}</div>`;
+  }
   host.appendChild(element);
   const head = element.querySelector<HTMLElement>('.k-scene-head')!;
   const body = element.querySelector<HTMLElement>('.k-scene-body')!;
+  // Read while the body is still empty, so it is the field's own host and never a lagano scene's.
+  const mapHostEl = element.querySelector<HTMLElement>('[data-testid=kiosk-map-host]');
   let currentId: SceneId | null = null;
   // Before the first update no row exists, so Večeras is not in the order.
   let order: readonly SceneId[] = SCENE_ORDER.filter((id) => id !== 'veceras');
   let lastHead = '';
   let lastRegions: Record<string, string> = {};
+  /** The chapter's own "još N" for a given number of hidden members; fitRail writes it into the chip. */
+  let moreText: (hidden: number) => string = () => '';
 
   const currentItem = (): HTMLElement | null => body.querySelector<HTMLElement>('.k-scene-item:not([data-leaving])');
 
-  /** The item on show leaves under data-leaving (absolute, so the body never moves) while the next enters; the body keeps one item afterwards. */
+  /** The item on show leaves under data-leaving (absolute, so the body never moves) while the next enters; the body keeps one item afterwards. Nothing is parked first: what leaves is the chapter's rail, and the map it hangs on stands still. */
   function swap(next: SceneId, html: string): void {
     // A change faster than the fade: the copy already leaving goes at once, its timer with it.
     for (const [stale, cancel] of leaving) { cancel(); stale.remove(); }
     leaving.clear();
     const previous = currentItem();
-    if (previous && currentId) deps.onBeforeSwap?.(currentId, next);
     const item = document.createElement('div');
     item.className = 'k-scene-item';
     item.dataset.scene = next;
@@ -474,8 +525,71 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
     body.appendChild(item);
   }
 
+  /** The rail on show, whichever chapter built it. */
+  const railBox = (): HTMLElement | null => currentItem()?.querySelector<HTMLElement>('.k-rail') ?? null;
+
+  /** How many members a chapter's rail has room for, measured off the rail on
+   *  show: its width is the map's whatever chapter drew it, and kiosk.css
+   *  registers the four minima as lengths so they resolve here. Zero before
+   *  anything is laid out (a pre-paint mount, happy-dom), and the caller
+   *  falls back to the drawing's own count. */
+  function measuredColumns(id: SceneId): number {
+    const rail = railBox();
+    if (!rail) return 0;
+    const style = getComputedStyle(rail);
+    const gap = Number.parseFloat(style.columnGap);
+    const px = (token: string): number => Number.parseFloat(style.getPropertyValue(token));
+    // clientWidth counts the rail's own padding; the tracks are laid in what is left of it, a hair under to survive a fractional box.
+    const width = rail.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight) - 1;
+    if (!(gap >= 0)) return 0;
+    // One column of the narrowest member any rail holds: the rail stands its members up as rows and every chapter asks for its floor.
+    const across = railColumns(width, px('--k-tile-min'), gap);
+    if (across <= 1) return across;
+    if (id === 'promet') return across;
+    if (id === 'veceras') return railColumns(width, px('--k-time-min'), gap);
+    // Grad's ink tile has a lead track of its own; the city's rows fill what is left of the rail.
+    return railColumns(width - px('--k-ink-w') - gap, px('--k-row-min'), gap) + 1;
+  }
+
+  /** The rail is one row over the map's foot: a member the room turns out not
+   *  to hold is hidden and counted in the chip rather than allowed to open a
+   *  second row over the picture. Where the rail stands under the picture
+   *  instead (a handheld's map band) there is nothing to keep it out of, and
+   *  a DOM without layout measures nothing and changes nothing. */
+  function fitRail(): void {
+    const rail = railBox();
+    if (!rail) return;
+    const members = [...rail.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
+    for (const member of members) member.hidden = false;
+    let trimmed = 0;
+    if (members.length > 1 && rail.clientHeight > 0) {
+      const stood = rail.dataset.rows === '1';
+      const limit = railLimit(rail);
+      let shown = members.filter((m) => !m.hidden);
+      while (shown.length > 1) {
+        const wrapped = !stood && shown[shown.length - 1]!.offsetTop > shown[0]!.offsetTop + 1;
+        if (!wrapped && !(rail.getBoundingClientRect().height > limit + 1)) break;
+        shown[shown.length - 1]!.hidden = true;
+        trimmed += 1;
+        shown = shown.slice(0, -1);
+      }
+    }
+    const meta = element.querySelector<HTMLElement>('[data-testid=kiosk-scene-meta]');
+    const text = moreText(trimmed);
+    if (meta && meta.textContent !== text) meta.textContent = text;
+  }
+
+  /** The tallest the rail may be: half the picture where it hangs over one, unbounded where it stands beneath it. */
+  function railLimit(rail: HTMLElement): number {
+    if (!mapHostEl) return Infinity;
+    const picture = mapHostEl.getBoundingClientRect();
+    if (!(picture.height > 0)) return Infinity;
+    return rail.getBoundingClientRect().top < picture.bottom - 1 ? picture.height / 2 : Infinity;
+  }
+
   /** Every titled tile drops data-lines, then gets it back when two lines overflow; a DOM without layout measures nothing and changes nothing. */
   function fit(): void {
+    fitRail();
     for (const tile of element.querySelectorAll<HTMLElement>('.k-scene-item:not([data-leaving]) .tl')) {
       if (tile.clientHeight === 0 || !tile.querySelector('.tl-title')) continue;
       delete tile.dataset.lines;
@@ -483,15 +597,28 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
     }
   }
 
+  /** The rail's height where it hangs over the map; 0 when nothing is laid out (happy-dom) or the rail stands under the picture rather than on it (a handheld's map band). */
+  function railPad(): number {
+    const rail = railBox();
+    if (!rail || !mapHostEl) return 0;
+    const box = rail.getBoundingClientRect();
+    const picture = mapHostEl.getBoundingClientRect();
+    if (!(box.height > 0) || box.top >= picture.bottom - 1) return 0;
+    return Math.round(box.height);
+  }
+
   return {
     element,
     get mapHost() {
-      return currentItem()?.querySelector<HTMLElement>('[data-testid=kiosk-map-host]') ?? null;
+      return mapHostEl;
     },
     update(model) {
       order = sceneOrder(model);
       const id = currentScene(model);
-      const built = buildScene(id, model);
+      // The room the rail actually has, asked of the engine's own arithmetic; the model's count stands before the first paint.
+      const ctx: SceneModel = { ...model, columns: measuredColumns(id) || model.columns };
+      const built = buildScene(id, ctx);
+      moreText = built.more;
       const headHtml = headMarkup(id, model.strings, built.meta, model.rotate && order.length > 1 ? { index: Math.max(0, order.indexOf(id)), count: order.length } : null);
       if (headHtml !== lastHead) { head.innerHTML = headHtml; lastHead = headHtml; }
       if (id !== currentId) {
@@ -506,9 +633,13 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
           const region = item?.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
           if (region) region.innerHTML = html;
         }
-        const works = built.regions['kiosk-works'];
-        const grid = works === undefined ? null : item?.querySelector<HTMLElement>('.k-scene-grid[data-works]');
-        if (grid) grid.dataset.works = works === '' ? '0' : '1';
+        // The rail's own form is on the rail, which is body markup a poll never rewrites: a room that has
+        // since narrowed to one column stands the members up, and the rail has to be told so too.
+        const rail = item?.querySelector<HTMLElement>('.k-rail');
+        if (rail) {
+          if (ctx.columns <= 1) rail.dataset.rows = '1';
+          else delete rail.dataset.rows;
+        }
       }
       lastRegions = built.regions;
       fit();
@@ -516,6 +647,7 @@ export function mountScenes(host: HTMLElement, deps: ScenesDeps): ScenesHandle {
     current: () => currentId ?? order[0]!,
     order: () => order,
     fit,
+    railPad,
     destroy() {
       for (const cancel of leaving.values()) cancel();
       leaving.clear();
