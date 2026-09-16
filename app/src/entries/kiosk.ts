@@ -8,7 +8,6 @@
 // never re-provisions from history.
 import { bootPage } from '../boot';
 import { mountKiosk } from '../kiosk';
-import { parsePinnedScene } from '../kiosk/scenes';
 import { createCityMap } from '../map/city-map';
 import { repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
@@ -68,22 +67,15 @@ markLagano(document.documentElement, lightweight);
 // stack kiosk.css already names.
 if (!lightweight) void import('../ui/fonts.css');
 
-// D13: ?prizor=promet|veceras|grad pins one scene and stops the rotation (a
-// test, demo and operator hook), read once here like ?tema= and passed down.
-const pinScene = parsePinnedScene(location.search);
-
 mountKiosk(root, {
   i18n,
   hash: location.hash,
   theme,
   reducedMotion,
   lightweight,
-  pinScene,
   onRepaint: repaintOn(theme),
   mapFactory: createCityMap,
 });
 // The secret is in localStorage now, and ?tema= only ever needed to land
 // once: keep both out of the address bar and history, the same way as before.
-// The pin is the screen's standing choice, not a one-time landing: it stays
-// in the address so a reload keeps the scene an operator asked for.
-if (location.hash || temaParam) history.replaceState(null, '', pinScene ? `/kiosk/?prizor=${pinScene}` : '/kiosk/');
+if (location.hash || temaParam) history.replaceState(null, '', '/kiosk/');

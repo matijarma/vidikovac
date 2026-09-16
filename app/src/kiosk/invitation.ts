@@ -1,29 +1,34 @@
-// The unpaired composition (C.3): the scene field on the left, which
-// kiosk/scenes.ts rotates through Promet, Večeras and Grad on the controller's
-// clock, and the side column on the right: the two value tiles (vehicles
-// moving on the network, closures within 1.5 km of the stop; frame.ts's
-// valueTiles, D18) over the fixed, accent-filled invitation card with the
-// rotating QR, the lead, the hint and the readable code. Built once; update()
-// hands the field its model and rewrites the tiles only when their markup
-// changed, so the map container the page moved in and the code the rotation
-// paints are never touched by a poll.
+// The unpaired composition (plan "Frame", R-KP1): the field on the left, the
+// window onto the kvart (kiosk/field.ts), and the column on the right -- a
+// headless stack of at most a few ranked statements in words (label, value,
+// context; say.ts ranks and writes them, R-KP5) over the fixed, accent-filled
+// invitation card with the rotating QR, the lead, the hint and the readable
+// code. Built once; update() hands the field its model and paints the column
+// through ui/dom/reconcile.ts, so only the nodes whose content changed are
+// touched, a changed value swaps its own node (data-replace by data-sig: the
+// k-say-in keyframe replays on insertion, with no timer), and the map
+// container the controller hosts and the code the rotation paints are never
+// rewritten by a poll.
 //
 // The header carries the weather (D11) and the strip the safety words, so
 // nothing here says either. This file also keeps the shared markup helpers
-// the lagano board, the scene tiles and the paired compositions draw with
+// the lagano board, the statements and the paired compositions draw with
 // (kBadge, kicker, lineRows, linesMarkup, weatherMarkup) and the card's own
 // pieces (codeHost, hintMarkup, codeBlockMarkup). A phone gets this same
 // composition at the handheld tokens; there is no second one for it.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { CODE_URL_BASE } from '../code';
 import type { ScreenStop } from '../core/contracts';
+import type { LastRunSnapshot } from '../core/lastrun';
 import { weatherIcon } from '../experience/weather-icon';
 import type { I18n } from '../i18n/i18n';
+import { reconcile } from '../ui/dom/reconcile';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
-import { tileMarkup, valueTiles } from './frame';
-import { nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
-import { mountScenes, type SceneId, type ScenesHandle } from './scenes';
+import { mountField, type FieldHandle } from './field';
+import { SAY_BADGE_CAP, SAY_SLOTS, SAY_VALUE_CHARS, type Composition } from './layout';
+import { byModule, nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
+import { rankStatements, sayMarkup, type Slot } from './say';
 import { plural, type KioskStrings } from './strings';
 
 export interface InvitationDeps {
@@ -33,35 +38,29 @@ export interface InvitationDeps {
   lightweight: boolean;
   /** The origin the QR points at; the hint names its hostname. Production when absent. */
   codeBase?: string;
-  /** Runs `fn` once after `ms` and returns its cancel: the controller's clock, so the leaving scene goes on the timers the tests drive and destroy() leaves nothing armed. */
-  defer?: (fn: () => void, ms: number) => () => void;
 }
 
 export interface InvitationModel {
   modules: readonly ModuleSnapshot[];
   stop: ScreenStop | null;
   now: number;
-  /** The controller's rotation counter; the scene on show is `order[sceneIndex % order.length]` while rotating. */
-  sceneIndex: number;
-  /** `?prizor=` (D13): one scene, no rotation. */
-  pinned: SceneId | null;
-  /** False under reduced motion, lagano and the pin: the field holds Promet (or the pinned scene). */
-  rotate: boolean;
-  /** Members a chapter's rail asks for before it has been measured: the drawing's own count (6 wide, 4 compact, 3 handheld, 10 lightweight). */
-  columns: number;
-  size: 'wide' | 'compact';
+  /** The stop's last-departure table (R-KP6), null until it answers or without one. */
+  lastRun: LastRunSnapshot | null;
+  /** Which of the four drawings this is: decides how many statements the column asks for and how long a title it keeps (kiosk/layout.ts). */
+  composition: Composition;
 }
 
 export interface InvitationHandle {
   element: HTMLElement;
-  /** The field's own map host: the map is the field and stands through every chapter, so this is null only in lightweight mode, which has no map. */
+  /** The field's map host, the box the controller hosts the one map in; null under lagano, which has no map. */
   readonly mapHost: HTMLElement | null;
   update(model: InvitationModel): void;
-  scenes(): ScenesHandle;
-  /** Re-measures the field's titled tiles; called after every update and on the clock tick. */
+  /** The field's laid-out width for the camera (kiosk/field.ts); 0 before layout. */
+  measureWidth(): number;
+  /** Contract 3: the map's placed major street names, counted, onto the map host. */
+  setMajorLabels(count: number): void;
+  /** Re-measures the column: a value past two lines is shortened at a word, a statement the room does not hold is hidden whole (R-KP5); called after every update and on the 1 s tick, so fonts arriving late and a resize are absorbed. */
   fit(): void;
-  /** The rail's measured height where it hangs over the map, for the map's own bottom padding. */
-  railPad(): number;
   destroy(): void;
 }
 
@@ -79,10 +78,19 @@ export function codeHost(codeBase: string = CODE_URL_BASE): string {
   return `${codeBase.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/[/?#].*$/, '')}/s`;
 }
 
-/** "ili upiši kod na" and, on its own never-wrapping line, the address. */
+/** The address with a break opportunity before every dot and before the path,
+ *  so beside a 240 px QR it wraps at its own joints ("zagreb" / ".aningfilm" /
+ *  ".hr/s": the punctuation opens the next line, so no line ends like a
+ *  sentence and "/s" never stands alone) rather than being ellipsised: a
+ *  typed address is useless in half. */
+function hostMarkup(host: string): string {
+  return host.split(/(?=[./])/).map(escapeHtml).join('<wbr>');
+}
+
+/** "ili upiši kod na" and, on its own line, the address. */
 export function hintMarkup(strings: KioskStrings, codeBase?: string): string {
   const [before = '', after = ''] = strings.invitation.typeCode.split('{host}');
-  return `<p class="k-hint">${escapeHtml(before)}<span class="k-hint-host">${escapeHtml(codeHost(codeBase))}</span>${escapeHtml(after)}</p>`;
+  return `<p class="k-hint">${escapeHtml(before)}<span class="k-hint-host">${hostMarkup(codeHost(codeBase))}</span>${escapeHtml(after)}</p>`;
 }
 
 /** The code, its payload link (hidden, for the scanner-less) and the remaining-time bar; the controller paints all three. */
@@ -122,13 +130,12 @@ function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale:
     </li>`;
 }
 
-/** The board's rows alone: the lagano board's grammar, which the scene rail
- *  stands its own members up in when the room holds only one column. */
+/** The board's rows alone: the lagano board's grammar. */
 export function lineRows(board: LinesBoard, strings: KioskStrings, locale: string): string {
   return board.rows.map((row) => lineRow(row, strings, locale)).join('');
 }
 
-/** The lines board (the lagano Promet scene, D12, and paired Promet): one row per route at the stop, delay in words, vehicles near. */
+/** The lines board (the lagano field, R-L2, and paired Promet): one row per route at the stop, delay in words, vehicles near. */
 export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings: KioskStrings, locale: string): string {
   const title = stop ? strings.lines.title : strings.lines.nearbyTitle;
   const head = kicker(title, nearbyCountLine(board, strings, locale));
@@ -140,9 +147,9 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
 }
 
-/** The side column: the two value tiles, then the card whose QR and code the rotation paints (C.3). The lead is the page's one h1. */
-function sideMarkup(s: KioskStrings, codeBase?: string): string {
-  return `<div class="k-side-tiles" data-testid="kiosk-tiles"></div>
+/** The column (contract 4): the statements, then the card whose QR and code the rotation paints. The lead is the page's one h1. */
+function columnMarkup(s: KioskStrings, codeBase?: string): string {
+  return `<div class="k-says" data-testid="kiosk-says" aria-live="off"></div>
     <article class="k-invite" data-testid="kiosk-invite">
       <h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>
       <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
@@ -151,38 +158,102 @@ function sideMarkup(s: KioskStrings, codeBase?: string): string {
     </article>`;
 }
 
+/** A loading slot in the contract's shape (contract 4): what the column shows
+ *  while zet-rt has not answered and say.ts has nothing to write yet, so a cold
+ *  screen is never a blank column. Once say.ts renders its own skeleton this
+ *  never shows. */
+const SKELETON = '<article class="k-say" data-skeleton aria-hidden="true"><span class="sk k-say-sk-label"></span><span class="sk k-say-sk-value"></span><span class="sk k-say-sk-context"></span></article>';
+
+/** A value is at most this many lines of the main tier (R-KP5); a longer one is shortened at a word by measurement, never ellipsised by CSS. */
+export const VALUE_LINES = 2;
+
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const { strings: s, i18n, locale, lightweight } = deps;
   const element = document.createElement('section');
   element.className = 'k-invitation';
   element.dataset.testid = 'kiosk-invitation';
   host.appendChild(element);
-  // The field takes the grid's first column, the side column the second.
-  const field = mountScenes(element, deps);
-  const side = document.createElement('aside');
-  side.className = 'k-side';
-  side.innerHTML = sideMarkup(s, deps.codeBase);
-  element.appendChild(side);
-  const tilesBox = side.querySelector<HTMLElement>('[data-testid=kiosk-tiles]')!;
-  // The tiles are rewritten only when their markup changed: a poll that
-  // brought the same numbers repaints nothing, and a reader mid-glance is
-  // never interrupted by an identical re-render.
-  let lastTiles = '';
+  // The field takes the grid's first column, the column the second.
+  const field: FieldHandle = mountField(element, { lightweight });
+  const column = document.createElement('aside');
+  column.className = 'k-column';
+  column.innerHTML = columnMarkup(s, deps.codeBase);
+  element.appendChild(column);
+  const says = column.querySelector<HTMLElement>('[data-testid=kiosk-says]')!;
+  /** The ranker's own last answer, handed back for hysteresis (contract 5). */
+  let previous: Slot[] = [];
+  let lastSays = '';
+
+  /** A value made of words is cut at a word boundary with "…" until it fits
+   *  VALUE_LINES of its own line-height; its data-sig is the whole text, so
+   *  the next reconcile keeps the node and this runs again on it. A value
+   *  made of pairs (the last departures' badges and times) wraps as its
+   *  badges dictate and is left alone. A DOM without layout measures nothing.
+   *  Lines are the box's height over its line-height, never its scrollHeight:
+   *  a 1.1 line box lets the face's ascenders and descenders paint a few
+   *  pixels past it, which is ink, not a line. */
+  function clampValue(article: HTMLElement): void {
+    const value = article.querySelector<HTMLElement>('.k-say-value');
+    if (!value || value.children.length > 0 || value.clientHeight === 0) return;
+    const whole = value.dataset.sig ?? value.textContent ?? '';
+    if (value.textContent !== whole) value.textContent = whole;
+    const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
+    if (!(lineHeight > 0)) return;
+    const lines = (): number => Math.round(value.clientHeight / lineHeight);
+    let text = whole;
+    while (lines() > VALUE_LINES) {
+      const cut = text.replace(/…$/, '').trimEnd().lastIndexOf(' ');
+      if (cut <= 0) break;
+      text = `${text.slice(0, cut).trimEnd()}…`;
+      value.textContent = text;
+    }
+  }
+
+  /** Every statement whole or not at all: the ones the column's box does not
+   *  hold are hidden from the foot up and counted by nobody -- a half-shown
+   *  statement is the hole a fixed frame reads as a fault. The column's slot
+   *  count (kiosk/layout.ts SAY_SLOTS) is the most the ranker offers; the
+   *  room decides the rest. */
+  function fit(): void {
+    const items = [...says.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
+    for (const item of items) {
+      item.hidden = false;
+      clampValue(item);
+    }
+    if (says.clientHeight === 0) return;
+    let shown = items;
+    while (shown.length > 1 && says.scrollHeight > says.clientHeight + 1) {
+      shown[shown.length - 1]!.hidden = true;
+      shown = shown.slice(0, -1);
+    }
+  }
+
+  function paintSays(model: InvitationModel): void {
+    previous = rankStatements({
+      modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
+      slots: SAY_SLOTS[model.composition], badgeCap: SAY_BADGE_CAP[model.composition], valueChars: SAY_VALUE_CHARS[model.composition],
+    }, previous);
+    // Loading is zet-rt not having answered at all; a down or stale source is an answer and say.ts words it.
+    const loading = byModule(model.modules)['zet-rt'] === undefined;
+    const html = sayMarkup(previous, { strings: s, locale, loading }) || (loading ? SKELETON : '');
+    if (html === lastSays) return;
+    lastSays = html;
+    const next = document.createElement('div');
+    next.innerHTML = html;
+    reconcile(says, next);
+    fit();
+  }
 
   return {
     element,
     get mapHost() { return field.mapHost; },
     update(model) {
-      field.update({
-        modules: model.modules, stop: model.stop, now: model.now, strings: s, i18n, locale, lightweight,
-        size: model.size, columns: model.columns, index: model.sceneIndex, pinned: model.pinned, rotate: model.rotate,
-      });
-      const tiles = valueTiles(model.modules, model.stop, i18n, s, locale, model.now).map((tile) => tileMarkup(tile, s)).join('');
-      if (tiles !== lastTiles) { tilesBox.innerHTML = tiles; lastTiles = tiles; }
+      field.update({ modules: model.modules, stop: model.stop, strings: s, i18n, locale });
+      paintSays(model);
     },
-    scenes: () => field,
-    fit: () => field.fit(),
-    railPad: () => field.railPad(),
+    measureWidth: () => field.measureWidth(),
+    setMajorLabels: (count) => field.setMajorLabels(count),
+    fit,
     destroy() {
       field.destroy();
       element.remove();

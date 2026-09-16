@@ -25,11 +25,8 @@ test('a failed teaser request marks the last copy stale, holds the map, and reco
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules }) });
   });
   const { kioskUrl } = await provisionKiosk(request, APP_URL);
-  // D13's pin, so the field never rotates away from Promet mid-test: the
-  // teaser poll and the scene tick share the same 20 s period, and the two
-  // page.clock.runFor(21_000) calls below would otherwise carry the field
-  // to Večeras or Grad right as the map assertions run.
-  await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
+  // One fixed window (R-KP1): nothing rotates, so the clock can run through two polls with the map in place.
+  await page.goto(kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
   await expect(map).toHaveAttribute('data-feed', 'live');

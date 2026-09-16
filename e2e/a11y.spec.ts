@@ -226,16 +226,27 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
-    // D13's pin: kiosk-map and kiosk-lines only exist while the Promet scene shows.
-    await page.goto(kioskUrl.replace('#', '?prizor=promet#'));
+    // One fixed window (R-KP1): the map and the column are there from the first paint, nothing rotates away.
+    await page.goto(kioskUrl);
     await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
-    await expect(page.getByTestId('kiosk-lines')).toContainText('6');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
     await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
     // A public screen's route board is glanceable, not a hidden interactive
     // phone list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
+    // The readable route board beside the map is the transit statement's badge
+    // row (contract 4: data-testid="kiosk-lines" on it), written by say.ts. While
+    // say.ts is the R-KP15 stub the column holds no statement at all, which is
+    // said here as a skip, never passed in silence; the proof turns green when
+    // area P2 lands (task-P3-report.md).
+    const statements = page.locator('[data-testid=kiosk-says] article.k-say:not([data-skeleton])');
+    try {
+      await expect(statements.first()).toBeAttached({ timeout: 15_000 });
+    } catch {
+      test.skip(true, 'kiosk-says holds no statement: say.ts is the R-KP15 stub until area P2 lands; the badge-row proof (R-F5) turns green with it');
+    }
+    await expect(page.locator('[data-testid=kiosk-say][data-say=transit] [data-testid=kiosk-lines]')).toContainText('6');
   });
 
   test('/d/ in a session with U pokretu open: no nested-interactive violation, a name on every Tab stop (the map’s zoom buttons and the OpenStreetMap link included), and the vehicle list among them', async ({

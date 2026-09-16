@@ -17,7 +17,7 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { CHAPTER_EMPHASIS, createKioskMapAdapter, KIOSK_MAP_SLOT_ID, KIOSK_MAP_ZOOM, KIOSK_SYMBOL_SCALE, metresPerPixel, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, metresPerPixel, PAIRED_ZOOM, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { weatherMarkup } from '../../app/src/kiosk/invitation';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -579,19 +579,26 @@ describe('the one map, through the additive adapter', () => {
     const staleWeather = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { data: { temp: 11.2, weather: '-' } })], 'stale') : m));
     expect(essentialsRows(staleWeather, i18n, hr, 'hr', STOP, NOW).find((r) => r.id === 'weather')).toMatchObject({ value: '11,2 °C · zastarjelo', detail: undefined });
   });
-  it('hands the factory the stop as centre with street zoom, keeps the handle, and pushes a changed view only', () => {
+  it('hands the factory the stop as centre at the field zoom with the prozor options, no selection and no padding (R-KP11), keeps the handle, and pushes a changed view only', () => {
     const setView = vi.fn();
     const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView }));
     const adapter = createKioskMapAdapter(factory);
     const maps = createMapSlots(adapter.factory);
-    const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, ariaLabel: 'karta' };
+    const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1400, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
     const container = requestKioskMap(maps, input, adapter)!;
     expect(container.dataset.testid).toBe('kiosk-map');
     expect(factory).toHaveBeenCalledTimes(1);
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    const zoom = fieldZoom(1400, STOP.lat, FIELD_SPAN_M);
     expect(options.center).toEqual([STOP.lon, STOP.lat]);
-    expect(options.zoom).toBe(KIOSK_MAP_ZOOM);
-    expect(options.selectedStop).toBe('106_1');
+    expect(options.zoom).toBe(zoom);
+    // The enlarged screen-stop ring is the anchor: no second ring, no padding, the kiosk emphasis, the quarter drawn.
+    expect(options.selectedStop).toBeUndefined();
+    expect(options.padding).toBeUndefined();
+    expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
+    expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
+    // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2).
+    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1 });
     // Every pin is a dated report (one without its own time takes the
     // snapshot's), the stop is an undated place, closures are lines.
     const points = options.points as { id: string; at?: number }[];
@@ -599,38 +606,49 @@ describe('the one map, through the additive adapter', () => {
     expect(points.filter((p) => p.at !== undefined).map((p) => p.id)).toEqual(['vehicle:1', 'vehicle:2']);
     expect((options.lines as unknown[]).length).toBe(1);
     expect(adapter.handle()?.setView).toBe(setView);
-    // The same view again is not pushed; a route selection is, once.
+    // The same view again is not pushed; the paired phase with a relayed route is, once, on the Promet contract (R-KP8).
     expect(requestKioskMap(maps, input, adapter)).toBe(container);
     expect(setView).not.toHaveBeenCalled();
-    requestKioskMap(maps, { ...input, selection: { kind: 'route', id: '6' } }, adapter);
+    requestKioskMap(maps, { ...input, phase: 'paired', selection: { kind: 'route', id: '6' } }, adapter);
     expect(setView).toHaveBeenCalledTimes(1);
-    expect(setView).toHaveBeenCalledWith({ zoom: KIOSK_MAP_ZOOM, emphasis: CHAPTER_EMPHASIS.promet, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
+    expect(setView).toHaveBeenCalledWith({ zoom: PAIRED_ZOOM, emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
+    // Back on the invitation a wider field asks for a closer camera, on the same map.
+    requestKioskMap(maps, { ...input, widthPx: 1800 }, adapter);
+    expect(setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
+    expect(factory).toHaveBeenCalledTimes(1);
     expect(KIOSK_MAP_SLOT_ID).toBe('kiosk-map');
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
   });
-  it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and centres inside the padding the composition gives it', () => {
+  it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and lights only the kiosk quake rule (R-KP9)', () => {
     const setFeedState = vi.fn();
-    const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
+    const update = vi.fn();
+    const factory = vi.fn(() => ({ update, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
     const adapter = createKioskMapAdapter(factory);
     adapter.setFeedState('stale');
     expect(adapter.feedState()).toBe('stale');
     const maps = createMapSlots(adapter.factory);
     const zet = MODULES.find((m) => m.module === 'zet-rt')!;
-    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': { ...zet, status: 'stale' } }, now: NOW, selection: null, ariaLabel: 'karta', padding: { bottom: 300 } }, adapter);
+    const base = { stop: STOP, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 926, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+    requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': { ...zet, status: 'stale' } } }, adapter);
     expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
-    requestKioskMap(maps, { stop: STOP, snapshots: {}, now: NOW, selection: null, ariaLabel: 'karta' }, adapter);
+    requestKioskMap(maps, { ...base, snapshots: {} }, adapter);
     expect(setFeedState).toHaveBeenLastCalledWith('down'); // no snapshot is no evidence of motion
-    requestKioskMap(maps, { stop: STOP, snapshots: { 'zet-rt': zet }, now: NOW, selection: null, ariaLabel: 'karta' }, adapter);
+    requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': zet } }, adapter);
     expect(setFeedState).toHaveBeenLastCalledWith('live');
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
     expect(options.interactive).toBe(false);
     expect(options.symbolScale).toBe(KIOSK_SYMBOL_SCALE);
     expect(options.stop).toEqual(STOP);
-    // The centre is the stop itself: the map, not the caller, keeps it clear
-    // of the rail, through the padding the request carries.
     expect(options.center).toEqual([STOP.lon, STOP.lat]);
-    expect(options.padding).toEqual({ bottom: 300 });
+    expect(options.zoom).toBe(fieldZoom(926, STOP.lat, FIELD_SPAN_M));
+    // One quake rule for the map and the statement: magnitude 3.0 or more, within the last 24 hours (recentQuakes keeps 72 h for the paired stories).
+    const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
+    const quake = (id: string, hours: number, mag: number | null) => item('emsc', id, 'quake', 'Q ' + id, { at: at(hours), geo: { type: 'Point', coordinates: [16.0, 45.9] }, data: mag === null ? { region: 'CROATIA' } : { mag, depth: 10, region: 'CROATIA' } });
+    const emsc = snap('emsc', [quake('small', -1, 1.6), quake('old', -30, 3.4), quake('big', -2, 3.2), quake('nomag', -1, null), quake('edge', -23, 3)]);
+    requestKioskMap(maps, { ...base, snapshots: { emsc } }, adapter);
+    const drawn = update.mock.calls.at(-1)![0] as { id: string }[];
+    expect(drawn.filter((p) => p.id.startsWith('quake:')).map((p) => p.id).sort()).toEqual(['quake:big', 'quake:edge']);
     expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
   });
 });

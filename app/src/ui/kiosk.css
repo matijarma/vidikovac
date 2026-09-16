@@ -8,7 +8,7 @@
    slightly smaller than 1366 x 768 (down to 0.8, no further). A portrait
    screen (data-portrait='1', kiosk/layout.ts) is a third drawing on the
    compact tokens, designed for a 1080 x 1920 totem and scaled from that
-   size the same way: one column, the map (or the paired main region) on
+   size the same way: one column, the field (or the paired main region) on
    top (the portrait section).
 
    Palette: every `--k-*` colour is an alias of a shared `--tone-*` role
@@ -19,54 +19,45 @@
    not a theme (test/app/kiosk-css.test.ts forbids any other literal;
    test/app/contrast.test.ts holds the pairs the kiosk draws to AA).
 
-   Type: a fixed 96/72 px header and strip (auto on a handheld) and eleven
+   Type: a fixed 96/72 px header and strip (auto on a handheld) and seven
    tiers per composition, each a token times --k-zoom -- display (84/64) for
    exactly two things, the pairing code (capped to its column) and nothing
-   else; clock (48/36); main (40/28) for heads, scene titles and card
-   titles; supporting (28/22, unchanged) for the paired compositions'
-   own rows and the basics/setup panels, which this wave leaves untouched;
-   hint (26/20) for dates, the strip, the context chip and every `.tl-context`;
-   scene-time (56/40) for a `.tl-time` reading; label (24/18) for `.tl-label`
-   uppercase kickers; tile (32/24) for `.tl-value`/`.tl-trail`; credit (20/16)
+   else; clock (48/36); main (40/28) for a statement's value, the card's
+   lead and the paired heads; supporting (28/22, unchanged) for the paired
+   compositions' own rows, the lagano board and the basics/setup panels;
+   hint (26/20) for a statement's context, dates, the strip, the context
+   chip; label (24/18) for a statement's uppercase kicker; credit (20/16)
    for attribution lines alone (.k-meta). Nothing on the sheet is set below
    the credit tier.
 
-   Frame: the header carries the brand, the accent-filled stop chip, the
-   date, the theme button, the clock and -- when `dhmz-now` answers -- the
-   weather group beside it (glyph, temperature, sunset-then-sunrise; D11:
-   weather is status, never a tile, and the clock stands alone while it
-   loads or is down). The strip is one fixed row: the basics button, the
-   shield label, the safetyState verdict pill, the three items, the
-   rotation's countdown and the /hitno link.
-
-   The invitation's stage (kiosk/scenes.ts, kiosk/invitation.ts) is the
-   map beside a side column of two value tiles and the QR-bound invitation
-   card. The map is the field, not a panel inside it: the three chapters
-   (Promet, Večeras, Grad) change a chip on the picture's top-left corner
-   and a rail of tiles hanging from its foot, never the whole screen. Every
-   content tile in every chapter and column is one member of the shared
-   `.tl` family (ui/signage.css's tile grammar,
-   A.4), the kiosk overriding its sizes through tokens alone -- no colour
-   outside `--k-*`, no rem size surviving from the signage sheet. The
-   paired compositions (kiosk/paired.ts) are untouched this wave and keep
-   their own block/row/story grammar and the token names that always meant
-   28/20 px (--k-sup-size, --k-credit-size) so their type is unaffected;
-   only their side width (--k-paired-side-w, its own token now) and the
-   shared colour/radius/icon tokens move with the rest of the sheet.
+   Frame (plan "Frame", R-KP1): the header carries the brand, the ink stop
+   chip, the date, the theme button, the clock and -- when `dhmz-now`
+   answers -- the weather group beside it (D11: weather is status, never a
+   tile). The strip is one fixed row: the shield label, the safetyState
+   verdict pill, the trail, the pharmacy and the /hitno link; nothing counts
+   down any more. Between them the invitation's stage has no padding: the
+   field (kiosk/field.ts) is the map edge to edge, no radius, nothing on the
+   picture but MapLibre's own attribution, and the column (kiosk/invitation.ts)
+   is a surface panel of at most a few ranked statements in words -- label,
+   value, context on hairlines, no boxes (R-KP5) -- over the accent-filled,
+   QR-bound invitation card. The paired compositions (kiosk/paired.ts) keep
+   their own block/row/story grammar and the stage's padding.
 
    Icons: the Lucide sprite base.css draws as .icon; --k-icon-size (28/22)
    sizes an inline glyph, --k-icon-lg (48/36) the header's condition icon
    and the paired weather block's. One badge: signage.css's .line paints
-   the mode, .k-line-badge keeps the kiosk's own geometry over it, at every
-   scale a scene or a board draws it. Motion reports a fact: a scene swap
-   (out 180 ms, in 220 ms on --ease-enter) and the code's crossfade (180 ms)
-   stop under prefers-reduced-motion and lightweight, the remaining-time bar
-   keeps its one-second linear fill and steps under both.
+   the mode, .k-line-badge keeps the kiosk's own geometry over it, in the
+   lagano board and in a statement's badge row alike. Motion reports a fact:
+   a statement's changed value fades in (180 ms, a keyframe on insertion, no
+   timer) and the code's crossfade (180 ms) stop under prefers-reduced-motion
+   and lightweight; the remaining-time bar keeps its one-second linear fill
+   and steps under both.
 
    Older engines: 100vh before 100dvh, `grid-gap` before `gap`. State is
-   read off data attributes the controller writes (data-mode, data-size,
-   data-live); the two exceptions are the code's column cap (a container
-   query) and the handheld body (a :has), both with a safe fallback. */
+   read off data attributes the controller writes (data-phase, data-mode,
+   data-size, data-live); the two exceptions are the code's column cap (a
+   container query) and the handheld body (a :has), both with a safe
+   fallback. */
 
 .kiosk-body { margin: 0; overflow: hidden; background: var(--tone-surface-canvas); }
 
@@ -75,8 +66,8 @@
   /* The invitation card is a thing a person walks up to and scans, not a
      picture to be read across a room: above Full HD it stops growing with the
      screen, so the extra pixels go to the city rather than to a bigger QR.
-     1 at both design sizes, so the filed drawing (600 / 520 / 240 px) is
-     untouched; at 3840 x 2160 the card is 1.35 rather than 2. */
+     1 at both design sizes, so the drawing (520 / 440 / 240 px) is untouched;
+     at 3840 x 2160 the column is 1.35 rather than 2. */
   --k-sign-zoom: min(var(--k-zoom), 1.35);
   --k-canvas: var(--tone-surface-canvas);
   --k-surface: var(--tone-surface-1);
@@ -116,39 +107,21 @@
   line-height: 1.25;
 }
 
-/* The rail's four minima are registered as lengths so they compute to real
-   pixels: kiosk/scenes.ts reads them off the field and asks kiosk/layout.ts's
-   railColumns how many members that leaves room for, rather than repeating
-   these numbers in JS where they could drift from the sheet. An engine
-   without @property hands back the unresolved token, railColumns answers 0,
-   and the drawing's own count stands. */
-@property --k-tile-min { syntax: '<length>'; inherits: true; initial-value: 168px; }
-@property --k-row-min { syntax: '<length>'; inherits: true; initial-value: 240px; }
-@property --k-time-min { syntax: '<length>'; inherits: true; initial-value: 240px; }
-@property --k-ink-w { syntax: '<length>'; inherits: true; initial-value: 260px; }
-
 /* --- Per-composition tokens: every size is a token times --k-zoom -------- */
 .kiosk[data-size='wide'] {
   --k-head-h: calc(96px * var(--k-zoom));
   --k-strip-h: calc(96px * var(--k-zoom));
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
-  --k-tile-gap: calc(10px * var(--k-zoom));
-  --k-side-w: calc(600px * var(--k-sign-zoom));
+  --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
-  --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
-  --k-row-min: max(280px, calc(280px * var(--k-zoom)));
-  --k-time-min: max(280px, calc(280px * var(--k-zoom)));
-  --k-ink-w: max(360px, calc(360px * var(--k-zoom)));
   --k-display-size: calc(84px * var(--k-zoom));
   --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
   --k-sup-size: calc(28px * var(--k-zoom));
   --k-hint-size: calc(26px * var(--k-zoom));
-  --k-scene-time-size: calc(56px * var(--k-zoom));
   --k-label-size: calc(24px * var(--k-zoom));
-  --k-tile-size: calc(32px * var(--k-zoom));
   --k-credit-size: calc(20px * var(--k-zoom));
   --k-badge: calc(60px * var(--k-zoom));
   --k-icon-size: calc(28px * var(--k-zoom));
@@ -162,22 +135,15 @@
   --k-strip-h: calc(72px * var(--k-zoom));
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
-  --k-tile-gap: calc(8px * var(--k-zoom));
-  --k-side-w: calc(520px * var(--k-sign-zoom));
+  --k-side-w: calc(440px * var(--k-sign-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
-  --k-tile-min: max(168px, calc(168px * var(--k-zoom)));
-  --k-row-min: max(240px, calc(240px * var(--k-zoom)));
-  --k-time-min: max(240px, calc(240px * var(--k-zoom)));
-  --k-ink-w: max(260px, calc(260px * var(--k-zoom)));
   --k-display-size: calc(64px * var(--k-zoom));
   --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
   --k-sup-size: calc(22px * var(--k-zoom));
   --k-hint-size: calc(20px * var(--k-zoom));
-  --k-scene-time-size: calc(40px * var(--k-zoom));
   --k-label-size: calc(18px * var(--k-zoom));
-  --k-tile-size: calc(24px * var(--k-zoom));
   --k-credit-size: calc(16px * var(--k-zoom));
   --k-badge: calc(46px * var(--k-zoom));
   --k-icon-size: calc(22px * var(--k-zoom));
@@ -193,11 +159,10 @@
 .kiosk ul { padding: 0; list-style: none; }
 .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .k-park { display: none; }
-/* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label, a scene's context glyph). */
+/* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label). */
 .kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
 
 .k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
-/* The brand and its chip never shrink under the clock group; the session label in the middle gives way instead. */
 /* The brand group is the header's yielding part: the wordmark never shrinks, the chip ellipsises; the session pill keeps its own width (a flex item's automatic minimum), so it can never be squeezed under a neighbour. */
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
@@ -233,28 +198,33 @@
 
 .k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
+/* The invitation is a window in the wall, not a widget: no room around the
+   field, the column's own hairline and padding are its frame. The wizard,
+   the notices and the paired compositions keep the stage's padding
+   (kiosk.ts writes data-phase on the root). */
+.kiosk[data-phase='invitation'] .k-stage { padding: 0; }
 
-/* --- Compositions: the scene/main column and the side column -------------- */
-.k-invitation { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); gap: var(--k-gap); }
+/* --- Compositions: the field and the column, the paired main and side ---- */
+.k-invitation { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); }
 .k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-paired-side-w); gap: var(--k-gap); }
 .k-side { display: flex; flex-direction: column; min-height: 0; }
 .k-side > * + * { margin-top: var(--k-gap); }
-/* The invitation's column is two rows: the two value tiles, then the QR-bound
-   card taking whatever remains (D18, C.7: vehicles moving, closures nearby). */
-.k-invitation .k-side { display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: var(--k-gap); min-height: 0; }
-.k-side-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--k-tile-gap); }
 .k-side-blocks { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .k-side-blocks:empty { display: none; }
 .k-side-blocks > * + * { margin-top: var(--k-gap); }
 
-/* --- The map, the lagano lines board (unchanged: lagano.spec.ts, D12) ----- */
-.k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
+/* --- The field: the map edge to edge, or the lagano board (R-L2) ----------
+   One cell. The map host is out of flow over the whole field and hosts the
+   one map container; under lagano the board is the field's only in-flow
+   child and takes the cell. No radius, no padding: the picture meets the
+   header, the strip and the column on hairlines. MapLibre's compact
+   attribution stays in its own bottom-right corner, the one thing allowed on
+   the picture. */
+.k-field { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--k-surface-2); }
 .k-map-host { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
-.k-map-host[hidden] { display: none; }
 .k-map-canvas { width: 100%; height: 100%; }
-/* The rail owns the map's foot; the credit takes the corner the chip leaves
-   free, so it is never drawn behind a tile. */
-.kiosk .k-map-canvas .maplibregl-ctrl-bottom-right { top: 0; bottom: auto; }
+/* The paired transit view's map: a panel among the paired blocks, with their radius. */
+.k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
 .k-lines--overlay { position: absolute; right: var(--k-gap); bottom: var(--k-gap); left: var(--k-gap); padding: var(--k-gap) calc(var(--k-gap) * 1.25); border-radius: var(--k-radius-s); background: var(--k-glass); box-shadow: var(--k-shadow); }
 .k-lines--board { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: var(--k-pad); }
 .k-lines--board .k-line-list { flex: 1; }
@@ -264,7 +234,7 @@
 .k-line:first-child { border-top: 0; }
 /* The line badge is signage.css's .line (tram a rounded rectangle in peacock,
    bus a capsule in the transit blue, other a plain rectangle); the kiosk only
-   sizes it, at the same geometry in the lagano board and in a scene's rows. */
+   sizes it, at the same geometry in the lagano board and in a statement's row. */
 .kiosk .k-line-badge { min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; font-size: var(--k-sup-size); }
 .k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
 .k-line-word { flex: none; margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
@@ -282,142 +252,101 @@
 .k-chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; font-size: var(--k-sup-size); font-weight: 600; }
 .k-chip--stale { background: var(--k-amber-soft); color: var(--k-amber); }
 
-/* --- Scene field: the map is the field, the chapter is a chip and a rail ---
-   A scene with a map (data-map='1', kiosk/scenes.ts builds the map into the
-   field once) is a single-cell stack whose cell is the map: the chapter's
-   name sits on the map's top-left corner as an opaque chip and the chapter's
-   members hang from the map's foot as one rail, so the picture is the stage
-   and a chapter change moves the rail, not the whole screen. Both the chip
-   and the rail are children of the map, which is what makes "nothing paints
-   over anything by accident" still checkable in e2e/kiosk-layout.spec.ts: a
-   pair of boxes overlaps unless one contains the other.
+/* --- The column: statements over the card (plan "The column", R-KP5) -----
+   A surface panel with a hairline against the field. Two rows: the
+   statements take what the card leaves. kiosk/invitation.ts paints the
+   statements through ui/dom/reconcile.ts and then measures: a value past
+   two lines is shortened at a word, a statement the room does not hold is
+   hidden whole -- never clipped, never ellipsised (R-KP5).
 
-   Without a map (lagano, D12) the field is what it always was: a head row
-   over a body row, the lines board filling the body. */
-.k-scene { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: calc(var(--k-gap) * 0.6); min-width: 0; min-height: 0; }
-.k-scene[data-map='1'] { grid-template-areas: 'stack'; grid-template-rows: minmax(0, 1fr); row-gap: 0; }
-.k-scene[data-map='1'] > .k-map { grid-area: stack; }
-.k-scene-head { display: flex; align-items: baseline; gap: var(--k-gap); min-width: 0; }
-/* The chapter chip: an opaque card on the picture, never a wash over it (--k-glass keeps its one user, the paired overlay). */
-.k-scene[data-map='1'] .k-scene-head { position: absolute; top: var(--k-gap); left: var(--k-gap); align-items: center; box-sizing: border-box; max-width: calc(100% - var(--k-gap) * 2); padding: calc(var(--k-gap) * 0.45) var(--k-gap); border-radius: var(--k-radius-s); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.k-scene[data-map='1'] .k-scene-body { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
-.k-scene-title { font-size: var(--k-main-size); font-weight: 800; letter-spacing: -0.015em; line-height: 1.1; white-space: nowrap; }
-.k-scene-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); color: var(--k-ink-2); }
-.k-scene-dots { display: flex; gap: calc(var(--k-gap) * 0.4); margin-left: auto; align-self: center; }
-/* Scene dots (kajimafix 03.2): 10 px, the current one ink, the others a stroke. */
-.k-dot { box-sizing: border-box; width: calc(10px * var(--k-zoom)); height: calc(10px * var(--k-zoom)); border: 2px solid var(--k-line); border-radius: 999px; background: transparent; }
-.k-dot[data-on='1'] { border-color: var(--k-ink); background: var(--k-ink); }
-.k-scene-body { position: relative; min-height: 0; }
-.k-scene-item { position: absolute; inset: 0; display: grid; min-height: 0; animation: k-scene-in 220ms var(--ease-enter) both; }
-/* Over a map the item is its rail's height, never the map's: the picture is covered only where the rail actually is. */
-.k-scene[data-map='1'] .k-scene-item { top: auto; right: 0; bottom: 0; left: 0; }
-.k-scene-item[data-leaving] { pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
-@keyframes k-scene-in { from { opacity: 0; transform: translateY(calc(6px * var(--k-zoom))); } }
-@keyframes k-scene-out { to { opacity: 0; } }
-@keyframes k-code-in { from { opacity: 0; } }
-.k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-scene-out 180ms var(--ease-exit) both; }
-/* The lagano field (D12): no map, so the lines board is the whole field --
-   one column, one row, the form this sheet has always given it. */
-.k-scene-grid[data-board='1'] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
-.k-scene-grid[data-board='1'] > .k-map { grid-row: 1; }
+   The vertical budget at the design sizes, the numbers the composition is
+   held to (e2e/kiosk-layout.spec.ts measures them with the plan's own three
+   statements): the column is 888 px tall at 1920 x 1080 and 624 at
+   1366 x 768. The card takes 465 / 380 px -- its --k-gap padding, the lead
+   (two lines of the main tier at wide, one at compact: the copy and the
+   tier are the design system's), the 240 px QR, the code at 15cqi of the
+   card with its 8 px bar, two row gaps of 0.6 gap. This panel's block
+   padding takes two gaps and the gap before the card half a gap. What is
+   left, 373 / 209 px, holds two statements whole at each size: at wide a
+   transit statement of two badge rows and a two-line value (222 px) over a
+   one-line statement (137 px); at compact a one-badge-row transit statement
+   (99 px) over a one-line statement (99 px), the caps in kiosk/layout.ts
+   keeping that badge row single. A third statement would need about 400 px
+   at wide, so Full HD shows two, and the third the ranker offers appears
+   where the type outgrows the card: a 4K wall scales the type by 2 and the
+   card by 1.35 and leaves about 946 px. The block padding is --k-gap, the
+   card's own padding, so the column reads as one rhythm; the inline padding
+   stays --k-pad so the column's content aligns with the header's and the
+   strip's. */
+.k-column { display: grid; grid-template-rows: minmax(0, 1fr) auto; row-gap: calc(var(--k-gap) * 0.5); box-sizing: border-box; min-width: 0; min-height: 0; background: var(--k-surface); border-left: 1px solid var(--k-line); padding: var(--k-gap) var(--k-pad); }
+.k-says { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+/* A statement: label, value, context, separated from the next by a hairline; no fill, no border, no radius.
+   0.6 of the gap above and below the hairline (12 / 8 px) is the air the budget above affords two statements. */
+.k-say { display: grid; gap: calc(var(--k-gap) * 0.25); min-width: 0; padding-block: calc(var(--k-gap) * 0.6); border-top: 1px solid var(--k-line); }
+.k-say:first-child { border-top: 0; padding-top: 0; }
+/* The kicker in the domain's colour, with the transit statement's line badges beside it and a "+N" when the cap cuts them.
+   With badges the label is two columns -- the kicker, then the badges wrapping in the rest of the width -- so a second
+   row of badges opens under the first, never under the kicker (plan "Frame": "PROMET  [1][6][11]… +8" on one line). */
+.k-say-label { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5); min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
+.k-say-label:has(.k-say-badges) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+/* Beside badges the kicker takes a badge's height, so its word sits on the first badge row's centre line. */
+.k-say-label:has(.k-say-badges) .k-say-kicker { line-height: calc(var(--k-badge) * 0.62); }
+.k-say[data-domain='transit'] .k-say-label { color: var(--k-action); }
+.k-say[data-domain='komunalno'] .k-say-label { color: var(--k-amber); }
+.k-say[data-domain='safety'] .k-say-label { color: var(--k-rose); }
+.k-say[data-domain='events'] .k-say-label { color: var(--k-violet); }
+.k-say[data-domain='civic'] .k-say-label, .k-say[data-domain='mobility'] .k-say-label { color: var(--k-ink-3); }
+.k-say-kicker { flex: none; }
+.k-say-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.3); min-width: 0; }
+.k-say-more { font-size: var(--k-hint-size); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--k-ink-2); }
+/* The value: the sentence a person reads from three metres. It wraps and is
+   never ellipsised or clamped by this sheet; the composer shortens by rule
+   and by measurement. */
+.k-say-value { font-size: var(--k-main-size); font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; overflow-wrap: anywhere; color: var(--k-ink); }
+.k-say-value[data-replace] { animation: k-say-in 180ms var(--ease-enter) both; }
+@keyframes k-say-in { from { opacity: 0; } }
+/* A last-departure pair: the line badge and its time, as many across as the value holds. */
+.k-say-pair { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.35); margin-right: var(--k-gap); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The context: one line, the source and its time; it may ellipsise, the value never. Its own line-height, so the row is a known height in the budget. */
+.k-say-context { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); line-height: 1.2; color: var(--k-ink-2); }
+/* A stale source marks its context in the strip's stale colour; its badge word (base.css .badge[data-tone='stale']) is sized to the hint tier as the paired rows' .k-badge is. */
+.k-say[data-state='stale'] .k-say-context { color: var(--k-amber); }
+.k-say .badge { min-height: 0; padding: 0.1em 0.5em; gap: 0.35em; font-size: var(--k-hint-size); letter-spacing: 0; line-height: 1.2; vertical-align: baseline; }
+.k-say .badge::before { inline-size: 0.5em; block-size: 0.5em; }
+/* A down source keeps its place with the honest word in the third ink. */
+.k-say[data-state='down'] .k-say-value { color: var(--k-ink-3); font-weight: 600; }
+/* The transit value in its state's colour (late rose, early amber, ontime green, unknown third ink), as the line words had. */
+.k-say[data-tone='late'] .k-say-value { color: var(--k-rose); }
+.k-say[data-tone='early'] .k-say-value { color: var(--k-amber); }
+.k-say[data-tone='ontime'] .k-say-value { color: var(--k-green); }
+.k-say[data-tone='unknown'] .k-say-value { color: var(--k-ink-3); }
+/* The loading slot: three bars in the three tiers (signage.css .sk shimmers them, and stops under reduced motion and lagano). */
+.k-say[data-skeleton] { gap: calc(var(--k-gap) * 0.4); }
+.k-say-sk-label { inline-size: 30%; block-size: var(--k-label-size); }
+.k-say-sk-value { inline-size: 85%; block-size: calc(var(--k-main-size) * 1.1); }
+.k-say-sk-context { inline-size: 55%; block-size: var(--k-hint-size); }
 
-/* --- The rail: one row of a chapter's members over the map's foot ---------
-   One grammar for all three chapters, so a chapter is what its members say
-   and not a grid of its own. `auto-fit` asks the room how many members fit
-   and kiosk/layout.ts's railColumns asks it the same question in JS, so the
-   markup writes exactly the number the engine will lay out; a member the
-   room turns out not to hold is hidden by fitRail and counted in the chip.
-   `align-content: end` keeps the rail hanging from the foot whatever it
-   holds. The per-chapter minimum is the only thing that differs: a line tile
-   at the design system's 168 px floor, an evening's tile or a city row
-   wider, and Grad's ink tile a lead track of its own. */
-/* `.kiosk ul` zeroes a list's padding, so the rail claims its own inset back at a specificity that beats it: the members float on the picture rather than butting against the map's rounded corners. */
-.kiosk .k-rail { --k-rail-min: var(--k-tile-min); display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); grid-auto-rows: max-content; align-content: end; box-sizing: border-box; min-width: 0; grid-gap: var(--k-tile-gap); gap: var(--k-tile-gap); padding: var(--k-tile-gap); }
-.k-rail[data-chapter='veceras'] { --k-rail-min: var(--k-time-min); }
-.k-rail[data-chapter='grad'] { --k-rail-min: var(--k-row-min); grid-template-columns: minmax(var(--k-ink-w), 1.2fr) repeat(auto-fit, minmax(var(--k-rail-min), 1fr)); }
-/* A sentence in place of a chapter's members (an empty evening, a source that does not answer) takes the rail's width after the chapter's lead member, whose track collapses when there is no lead. */
-.k-rail > .tl[data-level], .k-rail > .k-board-note { grid-column: 2 / -1; }
-/* A band names a street where a line tile names a number, so it takes two of
-   the rail's tracks wherever the rail has two to give. */
-.k-rail > [data-span='2'] { grid-column: span 2; }
-.kiosk .k-rail .tl-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.k-rail[data-chapter='veceras'] > .tl[data-level] { grid-column: 1 / -1; }
-/* At one column the rail stands its members up as rows (kiosk/scenes.ts draws the lagano board's own li.k-line there rather than inventing a grammar). */
-.k-rail[data-rows='1'] { grid-template-columns: minmax(0, 1fr); }
-.k-rail[data-chapter='promet'][data-rows='1'] { row-gap: 0; }
-.k-rail[data-rows='1'] > .tl[data-level], .k-rail[data-rows='1'] > .k-board-note { grid-column: auto; }
-/* A rail member is a strip's tile, not a column's card: tighter padding, the
-   supporting tier for a title and a line's state word, and a long street
-   broken rather than allowed to run out of its box. */
-.kiosk .k-rail .tl { padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
-.kiosk .k-rail .tl-title { font-size: var(--k-sup-size); overflow-wrap: break-word; }
-.kiosk .k-rail .tl[data-variant='band'], .kiosk .k-rail .tl[data-variant='row'] { grid-template-columns: auto minmax(0, 1fr); align-content: start; min-height: 0; padding: calc(var(--k-gap) * 0.5) calc(var(--k-gap) * 0.7); }
-.kiosk .k-rail .tl[data-variant='band'] > .tl-trail, .kiosk .k-rail .tl[data-variant='row'] > .tl-trail { grid-column: 1 / -1; }
-/* A row's credit is a line of its own under the title, at the supporting tier and wrapping: a publisher and a date are words, and a strip's tile is narrower than the column this used to be. */
-.kiosk .k-rail .tl-trail { font-size: var(--k-sup-size); white-space: normal; overflow-wrap: break-word; }
-.kiosk .k-rail .tl[data-variant='band'] .tl-label { white-space: normal; }
-.kiosk .k-rail .tl[data-variant='time'] { grid-template-columns: minmax(0, 1fr); align-content: start; }
-/* The evening's next tile keeps the events tone as an inset rule, so the tinted tile is the same box as its neighbours. */
-.kiosk .k-rail .tl[data-variant='time'][data-tint='events'] { box-shadow: inset 0 0 0 2px var(--k-violet); }
-/* The line's state word at the supporting tier, wrapping rather than running out of a narrow tile (the 168 px floor is a floor, and a 1fr track is usually wider). */
-.kiosk .k-rail .k-tl-line .tl-value { font-size: var(--k-sup-size); white-space: normal; }
-
-/* --- The shared `.tl` family (ui/signage.css, A.4), sized by tokens alone --
-   The kiosk sets sizes only through --k-* tokens and overrides the signage
-   sheet's rem sizes; no colour outside --k-*. Draft names the plan drew this
-   from: .tl-band is .tl[data-variant='band'], .tl-row is .tl[data-variant='row'],
-   .tl-ink is .tl[data-variant='ink'], the time-tile class .tl-time (as a
-   whole) is .tl[data-variant='time'], and its own time reading is the real
-   child class .tl-time; the kiosk's extra classes (k-tl-line, k-tile,
-   k-glyph, k-line-badge) stay as written. */
-.kiosk .tl { display: grid; gap: calc(var(--k-gap) * 0.3); align-content: space-between; box-sizing: border-box; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.8) var(--k-gap); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); overflow: hidden; }
-.kiosk .tl-label { display: flex; align-items: center; gap: 0.5em; min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* A text-only label (the two value tiles, the time tiles) is a block, so its ellipsis mark renders: a flex container's own overflowing text clips without one (T2.11 finding 2). Line tiles keep the flex row for badge + name. */
-.kiosk .k-tile .tl-label, .kiosk .tl[data-variant='time'] .tl-label { display: block; }
-.kiosk .k-tile .tl-context, .kiosk .tl[data-variant='time'] .tl-context { display: block; }
-.kiosk .tl-value { display: flex; align-items: center; gap: 0.3em; font-size: var(--k-tile-size); font-weight: 700; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.kiosk .tl-context { font-size: var(--k-hint-size); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kiosk .tl-title { display: -webkit-box; font-size: var(--k-main-size); font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.kiosk .tl[data-lines='1'] .tl-title, .kiosk .tl[data-variant='row'][data-lines='1'] .tl-title { -webkit-line-clamp: 1; }
-.kiosk .tl[data-variant='time'] { grid-template-columns: auto minmax(0, 1fr); column-gap: var(--k-gap); align-items: center; }
-.kiosk .tl-time { font-size: var(--k-scene-time-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.kiosk .tl[data-variant='band'], .kiosk .tl[data-variant='row'] { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--k-gap); box-sizing: border-box; min-height: calc(72px * var(--k-zoom)); padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: var(--k-radius-s); }
-.kiosk .tl[data-variant='band'][data-tone='komunalno'] { background: var(--k-amber-soft); }
-.kiosk .tl[data-variant='band'][data-level='calm'] { border: 1.5px solid var(--k-line); }
-.kiosk .tl[data-variant='band'][data-level='unknown'] { background: var(--k-amber-soft); }
-.kiosk .tl[data-variant='row'] { border: 1px solid var(--k-line); background: var(--k-surface); }
-.kiosk .tl-trail { font-size: var(--k-tile-size); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--k-ink-2); }
-.kiosk .tl[data-variant='ink'] { border-color: transparent; background: var(--k-ink); color: var(--k-canvas); }
-.kiosk .tl[data-variant='ink'] .tl-label, .kiosk .tl[data-variant='ink'] .tl-context { color: var(--k-canvas); }
-.kiosk .k-glyph { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; color: var(--k-ink-2); }
-/* The line's state word in its role colour (late rose, early amber, ontime green, unknown ink-3). */
-.kiosk .k-tl-line[data-tone='late'] .tl-value { color: var(--k-rose); }
-.kiosk .k-tl-line[data-tone='early'] .tl-value { color: var(--k-amber); }
-.kiosk .k-tl-line[data-tone='ontime'] .tl-value { color: var(--k-green); }
-.kiosk .k-tl-line[data-tone='unknown'] .tl-value { color: var(--k-ink-3); }
-/* The line tile (kajimafix 03.3, the concept's Promet scene): the badge at control height, the line's two ends on their own line, the state word at main size in its tone, the vehicles glyph and count; content stacked from the top. */
-.kiosk .k-tl-line { align-content: start; gap: calc(var(--k-gap) * 0.4); }
-.kiosk .k-tl-line .k-line-badge { height: var(--k-control); min-width: calc(var(--k-control) * 1.6); font-size: var(--k-main-size); }
-/* The line's ends wrap to two lines rather than cut: on a sign a name is read whole. */
-.kiosk .k-tl-name { display: -webkit-box; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-transform: none; letter-spacing: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; color: var(--k-ink); }
-/* A line badge mentioned inside a context (an event's lines) at the kiosk's scale (kajimafix 04). */
-.kiosk .line[data-size='xs'] { block-size: calc(28px * var(--k-zoom)); min-inline-size: calc(40px * var(--k-zoom)); padding: 0 0.3em; border-radius: calc(5px * var(--k-zoom)); font-size: var(--k-hint-size); }
-.kiosk .tl[data-state='down'] .tl-value { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-3); white-space: normal; }
-
-/* --- The invitation card: QR, lead, hint, code, remaining time ------------ */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.8); box-sizing: border-box; min-height: 0; padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+/* --- The invitation card: QR, lead, hint, code, remaining time ------------
+   Padded by a gap, its rows 0.6 of a gap apart: the card's height is part of the column's budget (above). */
+.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: auto minmax(var(--k-qr), 1fr) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; column-gap: var(--k-gap); row-gap: calc(var(--k-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-lead { grid-area: lead; font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
-.k-invite > .k-hint { grid-area: hint; align-self: end; font-size: var(--k-hint-size); line-height: 1.3; }
-.k-hint-host { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; }
+.k-invite > .k-hint { grid-area: hint; align-self: end; min-width: 0; font-size: var(--k-hint-size); line-height: 1.3; }
+/* The typed address, whole: beside a 240 px QR it wraps at the break points
+   the markup gives it (after each dot, before the path) and, as the last
+   resort, anywhere -- a typed address is useless ellipsised. */
+.k-hint-host { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; }
 .k-code-box { position: relative; }
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 .k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
+@keyframes k-code-in { from { opacity: 0; } }
+@keyframes k-code-out { to { opacity: 0; } }
+.k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-code-out 180ms var(--ease-exit) both; }
 /* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
 /* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
 .k-code { font-family: var(--font-mono); display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
@@ -427,7 +356,7 @@
 .k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
 /* The same card, stood up: the lead, the QR, the hint, the code, one under the other. */
-.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; background: var(--k-surface); color: var(--k-ink); }
+.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; margin-top: var(--k-gap); background: var(--k-surface); color: var(--k-ink); }
 .kiosk[data-size='handheld'] .k-invite > .k-hint { align-self: start; color: var(--k-ink-2); }
 .kiosk[data-size='handheld'] .k-code { color: var(--k-action); }
 .kiosk[data-size='handheld'] .k-code[data-state='waiting'] { color: var(--k-ink-3); }
@@ -547,9 +476,6 @@ button.k-strip-verdict { cursor: pointer; }
 .k-strip-item[data-state='active'][data-severity='minor'], .k-strip-item[data-state='active'][data-severity='moderate'] { color: var(--k-amber); }
 .k-strip-item[data-state='unknown'], .k-strip-item[data-state='down'] { color: var(--k-ink-3); }
 .k-strip-item[data-state='stale'] { color: var(--k-amber); }
-/* The rotation's countdown; hidden while the field is not rotating or when the strip has no room for it (fitStrip). */
-.k-strip-next { flex: none; margin-left: var(--k-gap); color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
-.k-strip-next[hidden], .k-strip--nonext .k-strip-next { display: none; }
 .k-strip-hitno { display: inline-flex; flex: none; align-items: center; box-sizing: border-box; min-height: 44px; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
@@ -657,59 +583,55 @@ button.k-strip-verdict { cursor: pointer; }
 .k-join-code { font-family: var(--font-mono); margin-top: calc(var(--k-gap) * 0.2); font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
 .k-join-text .k-meta { margin-top: calc(var(--k-gap) * 0.2); }
 
-/* --- Lightweight: system type, no shadows, the lines board fills the map column --- */
+/* --- Lightweight: system type, no shadows, the lines board is the field --- */
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
+:root[data-lagano='1'] .k-field { background: var(--k-surface); }
 :root[data-lagano='1'] .k-map { background: var(--k-surface); }
 
-/* --- Portrait: one column, the scene (or the paired main region) on top ----------
+/* --- Portrait: one column, the field (or the paired main region) on top ----------
    A 1080 x 1920 totem (kiosk/layout.ts: the compact tokens at zoom 1 there,
-   data-portrait='1'). The scene field takes 55% of the stage at least; under
-   it the side column lays its two value tiles beside the invitation card
-   instead of above it, because the two have far more room side by side than
-   the tiles stacked over a QR-bound card would leave for either. Compact
-   tiers and the compact QR: these rules place blocks and set no token. */
-.kiosk[data-portrait='1'] .k-invitation, .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
+   data-portrait='1'). The field takes half the stage at least; under it the
+   column becomes one row, the statements to the left of the invitation
+   card, joined to the field by a hairline on top rather than on the left.
+   Compact tiers and the compact QR: these rules place blocks and set no token. */
+.kiosk[data-portrait='1'] .k-invitation { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(50%, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
 .kiosk[data-portrait='1'] .k-basics-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.kiosk[data-portrait='1'] .k-invitation .k-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, auto); column-gap: var(--k-gap); }
-.kiosk[data-portrait='1'] .k-side-tiles { align-content: center; }
+.kiosk[data-portrait='1'] .k-column { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, auto); column-gap: var(--k-gap); border-left: 0; border-top: 1px solid var(--k-line); }
 /* The portrait header is 1044 px wide: the date and the sub-brand leave in every mode and the chip narrows, so the
    clock group keeps its sunset time on screen. */
 .kiosk[data-portrait='1'] .k-date { display: none; }
 .kiosk[data-portrait='1'] .k-context { max-width: 30vw; }
 .kiosk[data-portrait='1'][data-mode='unlocked'] .k-context { max-width: 22vw; }
-/* The scene field needs no portrait rule of its own any more: the map is the
-   field at every size and the rail asks the room how many members it holds,
-   so a totem's tall, narrow picture simply carries a shorter rail. */
 
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
-  .kiosk .k-scene-item, .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
-  .kiosk .k-scene-item[data-leaving], .kiosk .k-code-ghost { display: none; }
+  .kiosk .k-say-value[data-replace], .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
+  .kiosk .k-code-ghost { display: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
-:root[data-lagano='1'] .k-scene-item, :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
-:root[data-lagano='1'] .k-scene-item[data-leaving], :root[data-lagano='1'] .k-code-ghost { display: none; }
+:root[data-lagano='1'] .k-say-value[data-replace], :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-code-ghost { display: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
    data-size='handheld' on the root; the body, which owns the page scroll,
    reads it through :has, as dashboard.css's html:has(.ki) does). There is no
    separate handheld composition: a phone gets the invitation every screen
-   gets, drawn at phone sizes -- the header, a --k-map-band map band with the
-   chapter chip on it, the chapter's rail in flow beneath the band rather than
-   over it (a chapter change is a cut, not a crossfade, on a screen held in a
-   hand), the two value tiles two across, the card in its one-column form with
-   its 240 px QR, the safety strip, and the provisioning address as a footnote
-   at the foot. The page scrolls instead of cropping and the wizard's grids
-   fall into as many columns as fit. Zoom is 1 here. */
+   gets, drawn at phone sizes -- the header, a --k-map-band map band, the
+   statements in flow beneath it (every candidate: a phone scrolls), the card
+   in its one-column form with its 240 px QR, the safety strip, and the
+   provisioning address as a footnote at the foot. The stage keeps its
+   padding here (a phone is a page, not a wall), the page scrolls instead of
+   cropping and the wizard's grids fall into as many columns as fit. Zoom is
+   1 here. */
 .kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }
 .kiosk[data-size='handheld'] {
   --k-head-h: auto;
   --k-strip-h: auto;
   --k-pad: 16px;
   --k-gap: 12px;
-  --k-tile-gap: 8px;
   --k-side-w: 100%;
   --k-paired-side-w: 100%;
   --k-qr: 240px;
@@ -718,9 +640,7 @@ button.k-strip-verdict { cursor: pointer; }
   --k-main-size: 24px;
   --k-sup-size: 18px;
   --k-hint-size: 18px;
-  --k-scene-time-size: 24px;
   --k-label-size: 14px;
-  --k-tile-size: 18px;
   --k-credit-size: 13px;
   --k-badge: 36px;
   --k-icon-size: 20px;
@@ -729,10 +649,6 @@ button.k-strip-verdict { cursor: pointer; }
   --k-radius-s: 10px;
   --k-control: 48px;
   --k-map-band: 280px;
-  --k-tile-min: 168px;
-  --k-row-min: 240px;
-  --k-time-min: 240px;
-  --k-ink-w: 260px;
   --k-block-min: 160px;
   --k-arc-w: 280px;
   --k-arc-h: 157px;
@@ -746,6 +662,7 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-head-mid { flex-basis: 100%; justify-content: flex-start; padding: 0; }
 .kiosk[data-size='handheld'] .k-head-mid:empty { display: none; }
 .kiosk[data-size='handheld'] .k-alert { position: static; margin: var(--k-gap) var(--k-pad) 0; }
+.kiosk[data-size='handheld'][data-phase='invitation'] .k-stage { padding: var(--k-pad); }
 .kiosk[data-size='handheld'] .k-stage > section { height: auto; }
 .kiosk[data-size='handheld'] .k-strip { height: auto; flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
 .kiosk[data-size='handheld'] .k-strip-label { margin-right: 0; }
@@ -755,21 +672,13 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-basics { position: static; }
 .kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
 
-/* The invitation on a phone: one column, and the picture a band with the rail
-   standing under it rather than on it -- 280 px of map is a glance, not a
-   stage, and a rail over that much would leave nothing to look at. */
+/* The invitation on a phone: one column, the picture a 280 px band -- a
+   glance, not a stage -- and the column in flow under it: every statement
+   the ranker offers, on the canvas with its hairlines, then the card. */
 .kiosk[data-size='handheld'] .k-invitation { grid-template-columns: minmax(0, 1fr); }
-.kiosk[data-size='handheld'] .k-invitation .k-side { grid-template-rows: auto auto; }
-.kiosk[data-size='handheld'] .k-scene[data-map='1'] > .k-map { display: grid; grid-template-rows: var(--k-map-band) auto; height: auto; }
-.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-map-host { position: relative; inset: auto; }
-.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-scene-body { position: relative; inset: auto; }
-.kiosk[data-size='handheld'] .k-scene[data-map='1'] .k-scene-item { position: relative; inset: auto; animation: none; }
-.kiosk[data-size='handheld'] .k-scene-item[data-leaving] { display: none; }
-/* Before the first measurement the rail asks for the drawing's three across; at this width it holds one, so Grad's lead track never opens a column the phone has no room for. */
-.kiosk[data-size='handheld'] .k-rail, .kiosk[data-size='handheld'] .k-rail[data-chapter='grad'] { grid-template-columns: minmax(0, 1fr); }
-/* A line row stood up on a phone wraps its vehicles count rather than squeezing the line's name to nothing. */
-.kiosk[data-size='handheld'] .k-rail .k-line { flex-wrap: wrap; row-gap: calc(var(--k-gap) * 0.2); }
-.kiosk[data-size='handheld'] .k-rail .k-line-near { flex-basis: 100%; min-width: 0; margin-left: 0; text-align: left; }
+.kiosk[data-size='handheld'] .k-field { height: var(--k-map-band); border-radius: var(--k-radius); }
+.kiosk[data-size='handheld'] .k-column { display: block; padding: var(--k-gap) 0 0; border: 0; background: transparent; }
+.kiosk[data-size='handheld'] .k-says { overflow: visible; }
 
 /* The wizard: one card that grows with its content, grids at auto-fit, the stop list unclipped. */
 .kiosk[data-size='handheld'] .k-setup { height: auto; overflow: visible; }

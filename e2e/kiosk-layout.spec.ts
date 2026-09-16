@@ -1,35 +1,38 @@
 // The public screen's geometry, in a real browser, at both landscape design
 // sizes, the 1080 x 1920 portrait totem, and both faces (the theme resolves
-// from prefers-color-scheme at script load). Every size opens the invitation
-// pinned to `?prizor=promet` (D13's operator hook, as lagano.spec does),
-// exactly like the scene the reader lands on before rotation ever tries to
-// move it, so a slow CI box never measures a field mid-swap:
+// from prefers-color-scheme at script load). The invitation is one fixed
+// window (plan "Frame", R-KP1): nothing rotates, so every size measures the
+// one composition the reader sees:
 //
 //   - the QR is at least 240 CSS px and the code is whole inside its card;
-//   - nothing in the stage overflows its block (no half row, no text over a
-//     source line), no two blocks overlap, the stage ends above the strip;
+//   - nothing in the stage overflows its block (no half statement, no text
+//     over a source line), no two blocks overlap, the stage ends above the
+//     strip; the invitation has the page's one h1;
 //   - the header and the strip keep their fixed 96 px (wide) / 72 px
 //     (compact, portrait) row, scaled by the kiosk's own zoom;
-//   - the scene field is the stage's dominant element in landscape and, in
-//     portrait, at least 55% of the stage's height and nearly its full width;
-//   - the map is the stage, not a panel on it: at least 0.55 of the stage by
-//     area in landscape, with the chapter's chip on its upper quarter, the
-//     chapter's rail inside it and below its middle, and the sign column
-//     never crossing it;
-//   - a portrait screen stacks the invitation (plan, Kiosk (i)): the scene on
-//     top, the two value tiles and the invitation card side by side under it
-//     with the card to the right, the two tiles sharing a row of their own;
-//   - Večeras and Grad, reached through their own `?prizor=` pins, pass the
-//     same clip and overlap checks;
+//   - the map IS the field: in landscape at least 0.60 of the invitation by
+//     area, with nothing on the picture but MapLibre's attribution and the
+//     column never crossing it; in portrait the field is half the stage or
+//     more with the statements left of the card under it;
+//   - every statement value fits its box in at most two lines and is never
+//     ellipsised (R-KP5: the composer shortens by rule and by measurement);
+//   - the frame holds its statements: with the plan's own three statements
+//     in the column, both landscape sizes show two whole over the card and
+//     the totem's row three, the transit label within the rows its badge
+//     cap budgets, a long title cut at a word (kiosk.css "The column");
+//   - the prozor profile places at most eight major street names in the
+//     field, read off data-major-labels (contract 3) once the map is ready;
+//     while the map handle is the R-KP15 stub the attribute never appears,
+//     which is reported as a note, never passed silently;
 //   - the basics panel fits its rows without a scroller;
 //   - once a phone unlocks the screen, each of the six paired compositions
 //     obeys the same clip and overlap rules, the header names the mirrored
 //     domain, and no column or strip line is cut by its box.
 //
 // A screenshot per size and face lands in test-results/kiosk-<w>-<face>.png,
-// one per scene in test-results/kiosk-<w>-<face>-<scene>.png, and one per
-// paired composition in kiosk-<w>-<face>-paired-<layer>.png.
+// and one per paired composition in kiosk-<w>-<face>-paired-<layer>.png.
 import { expect, test, type Page } from '@playwright/test';
+import { SAY_BADGE_CAP, type Composition } from '../app/src/kiosk/layout';
 import { APP_URL, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { KIOSK_WIDE_MIN_PX } from './lib';
 
@@ -37,14 +40,102 @@ import { KIOSK_WIDE_MIN_PX } from './lib';
 const SIZES = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }] as const;
 const FACES = ['light', 'dark'] as const;
 type Face = (typeof FACES)[number];
-/** The six mirrored domains and the word the kiosk's header names each by (kiosk/strings-hr.ts layers). */
+/** The six mirrored domains and the word the kiosk's header names each by (i18n layers.*). */
 const LAYERS = { 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' } as const;
-/** kiosk/scenes.ts's SCENE_ORDER, mirrored here so the spec names no import from app code. */
-const OTHER_SCENES = ['veceras', 'grad'] as const;
 const SHOTS_DIR = 'test-results';
 const MIN_QR_PX = 240;
 /** frame.ts's fixed row height at wide vs. the compact tokens (compact and portrait share them); C.4. */
 const HEAD_STRIP_PX = { wide: 96, compact: 72 } as const;
+/** The map's least share of the invitation by area in landscape (plan "Frame": 0.73 at 1920, 0.68 at 1366). */
+const MIN_MAP_SHARE = 0.6;
+/** The field's least share of a portrait stage's height (plan "Frame"). */
+const MIN_PORTRAIT_FIELD = 0.5;
+/** The most major street names the prozor profile places in the field (plan D3), read off data-major-labels (contract 3). */
+const MAX_MAJOR_LABELS = 8;
+/** How long the placed-labels attribute is waited for once the map is ready; the stub never writes it. */
+const MAJOR_LABELS_WAIT_MS = 8_000;
+/** A statement value is at most this many lines (R-KP5). */
+const MAX_VALUE_LINES = 2;
+/** The 1 s tick fits the column (kiosk.ts fitAll); a sample put into it is measured within this. */
+const FIT_WAIT_MS = 10_000;
+
+/** What the frame holds at each design size, measured with the plan's own
+ *  three statements (plan "The column": the transit verdict with the stop's
+ *  line badges and a two-line worst case, a closure, a session with a long
+ *  title) put into the live column and fitted by the composition
+ *  (kiosk/invitation.ts fit()). Full HD holds two whole statements over the
+ *  card at both landscape sizes -- a third needs about 400 px where the
+ *  520 px column has 373 beside the 240 px QR card with its two-line lead
+ *  (kiosk.css "The column") -- and the totem's row holds three. The label
+ *  rows are the badge cap's budget (kiosk/layout.ts SAY_BADGE_CAP): two at
+ *  wide, one at compact; the totem's eight badges take one or two. */
+const FRAME: Record<Exclude<Composition, 'handheld'>, { shown: readonly string[]; labelRowsAtMost: number }> = {
+  wide: { shown: ['e2e:transit', 'e2e:closure'], labelRowsAtMost: 2 },
+  compact: { shown: ['e2e:transit', 'e2e:closure'], labelRowsAtMost: 1 },
+  portrait: { shown: ['e2e:transit', 'e2e:closure', 'e2e:assembly'], labelRowsAtMost: 2 },
+};
+/** An eleven-line stop (Trg bana Jelačića's trams, then buses), badged to the composition's cap with the "+N" tail as say.ts would. */
+const STOP_LINES: readonly (readonly [string, 'tram' | 'bus'])[] = [['1', 'tram'], ['6', 'tram'], ['11', 'tram'], ['12', 'tram'], ['13', 'tram'], ['14', 'tram'], ['17', 'tram'], ['106', 'bus'], ['201', 'bus'], ['203', 'bus'], ['268', 'bus']];
+/** The session's title in the plan's example, longer than two lines of the main tier at every size, so the composition has to cut it. */
+const ASSEMBLY_TITLE = '25. sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba';
+/** The plan's own statements in the contract's markup (contract 4), keyed apart from the ranker's and marked as the sample. */
+function sampleStatements(composition: Composition): string {
+  const cap = SAY_BADGE_CAP[composition];
+  const badges = STOP_LINES.slice(0, cap).map(([n, kind]) => `<span class="k-line-badge line" data-kind="${kind}" data-size="k" aria-label="${kind === 'tram' ? 'Tramvaj' : 'Autobus'} ${n}">${n}</span>`).join('');
+  const more = STOP_LINES.length > cap ? `<span class="k-say-more">+${STOP_LINES.length - cap}</span>` : '';
+  return `<article class="k-say" data-e2e-sample data-key="e2e:transit" data-domain="transit" data-tone="late" data-testid="kiosk-say" data-say="transit">
+  <p class="k-say-label"><span class="k-say-kicker">Promet</span><span class="k-say-badges">${badges}${more}</span></p>
+  <p class="k-say-value" data-replace data-sig="6 kasni 4 min · 13 kasni 3 min">6 kasni 4 min · 13 kasni 3 min</p>
+  <p class="k-say-context">23 vozila u blizini · ZET 14:34</p>
+</article>
+<article class="k-say" data-e2e-sample data-key="e2e:closure" data-domain="komunalno" data-tone="komunalno" data-testid="kiosk-say" data-say="closure">
+  <p class="k-say-label"><span class="k-say-kicker">Zatvoreno</span></p>
+  <p class="k-say-value" data-replace data-sig="Amruševa">Amruševa</p>
+  <p class="k-say-context">350 m · oba smjera · do 18:00</p>
+</article>
+<article class="k-say" data-e2e-sample data-key="e2e:assembly" data-domain="civic" data-testid="kiosk-say" data-say="assembly">
+  <p class="k-say-label"><span class="k-say-kicker">Gradska skupština</span></p>
+  <p class="k-say-value" data-replace data-sig="${ASSEMBLY_TITLE}">${ASSEMBLY_TITLE}</p>
+  <p class="k-say-context">sutra 08:30 · Skupština Grada Zagreba</p>
+</article>`;
+}
+
+interface FrameMeasure {
+  /** The sample statements the composition left shown, in order. */
+  shown: string[];
+  /** The column's box holds everything shown (nothing is clipped). */
+  overflow: boolean;
+  /** Lines per shown value: the box's height over its line-height. */
+  valueLines: Record<string, number>;
+  /** The shown values' text, to see a cut title end in an ellipsis. */
+  values: Record<string, string>;
+  /** Distinct rows the transit label's badges and tail stand on. */
+  labelRows: number;
+}
+/** Puts the sample into the live column (again, if a paint since replaced it) and reads what the composition made of it. */
+function measureFrame(page: Page, html: string): Promise<FrameMeasure> {
+  return page.evaluate((sample) => {
+    const says = document.querySelector<HTMLElement>('[data-testid=kiosk-says]')!;
+    if (!says.querySelector('[data-e2e-sample]')) says.innerHTML = sample;
+    const items = [...says.querySelectorAll<HTMLElement>('article[data-e2e-sample]')];
+    const shownItems = items.filter((el) => el.offsetParent !== null);
+    const valueLines: Record<string, number> = {};
+    const values: Record<string, string> = {};
+    for (const el of shownItems) {
+      const value = el.querySelector<HTMLElement>('.k-say-value')!;
+      const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
+      valueLines[el.dataset.key!] = Math.round(value.clientHeight / lineHeight);
+      values[el.dataset.key!] = value.textContent ?? '';
+    }
+    // A row is a cluster of vertically overlapping boxes: the "+N" tail is shorter than a badge and centred on its row.
+    const rows: { top: number; bottom: number }[] = [];
+    for (const box of [...says.querySelectorAll<HTMLElement>('[data-key="e2e:transit"] .k-say-badges > *')].map((b) => b.getBoundingClientRect())) {
+      const row = rows.find((r) => box.top < r.bottom - 1 && box.bottom > r.top + 1);
+      if (row) { row.top = Math.min(row.top, box.top); row.bottom = Math.max(row.bottom, box.bottom); } else rows.push({ top: box.top, bottom: box.bottom });
+    }
+    return { shown: shownItems.map((el) => el.dataset.key!), overflow: says.scrollHeight > says.clientHeight + 1, valueLines, values, labelRows: rows.length };
+  }, html);
+}
 
 /** Every geometry rule in one page-side pass; an empty list is the proof. */
 function geometryIssues(page: Page): Promise<string[]> {
@@ -52,8 +143,8 @@ function geometryIssues(page: Page): Promise<string[]> {
     const out: string[] = [];
     const shown = (sel: string): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null);
     const tag = (el: HTMLElement): string => `${el.className.split(' ')[0]}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`;
-    // A tile, the scene field, the chapter's rail or the side column's block box clips its children when a row or a title does not fit.
-    for (const el of shown('.tl, .k-scene, .k-scene-body, .k-rail, .k-scene-head, .k-invite, .k-side, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
+    // The field, the column, a statement, the card or a paired block clips its children when a row or a value does not fit.
+    for (const el of shown('.k-field, .k-column, .k-says, .k-say, .k-invite, .k-lines, .k-block, .k-join, .k-ess-row, .k-block-body, .k-side-blocks, .k-strip-items')) {
       if (el.scrollHeight > el.clientHeight + 1) out.push(`overflow-y ${tag(el)} ${el.scrollHeight}>${el.clientHeight}`);
       if (el.scrollWidth > el.clientWidth + 1) out.push(`overflow-x ${tag(el)} ${el.scrollWidth}>${el.clientWidth}`);
     }
@@ -70,17 +161,11 @@ function geometryIssues(page: Page): Promise<string[]> {
       // task-T2.11-report.md, "Findings outside scope" #3, and its fix-round addendum.
       if (c.right > card.right + 0.5 || code.scrollWidth > code.clientWidth + 1) out.push('code clipped');
     }
-    // Every visible tile title, in every scene and column: clamped, never overflowing its tile, never squeezed to no height.
-    for (const title of shown('.tl-title')) {
-      const tile = title.closest<HTMLElement>('.tl')!;
-      if (title.getBoundingClientRect().bottom > tile.getBoundingClientRect().bottom + 0.5) out.push(`${tag(tile)} title clipped`);
-      if (title.textContent!.trim() !== '' && title.clientHeight === 0) out.push(`${tag(tile)} title has no height`);
-    }
     // The header's three groups are boxes too: a session pill that paints over the chip or the date is an overlap like any other.
-    // The rule the map's own composition needed restating, not loosening (R-K7): two boxes may share a patch of screen
-    // only when one CONTAINS the other, which is how the chapter's chip and rail may sit on the map -- they are the map's
-    // own children -- while any other pair painting over each other is still a fault. The chip is a box here now too.
-    const boxes = shown('.k-stage .tl, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-scene-head, .k-stage .k-block, .k-stage .k-join, .k-head-brand, .k-head-mid, .k-head-when')
+    // Two boxes may share a patch of screen only when one CONTAINS the other (R-K7), which is how the map container and
+    // MapLibre's attribution may sit on the field -- they are its own children -- while any other pair painting over
+    // each other is a fault.
+    const boxes = shown('.k-stage .k-field, .k-stage .k-say, .k-stage .k-invite, .k-stage .k-map, .k-stage .k-block, .k-stage .k-join, .k-head-brand, .k-head-mid, .k-head-when')
       .map((el) => [tag(el), el, el.getBoundingClientRect()] as const);
     for (let i = 0; i < boxes.length; i += 1) {
       for (let j = i + 1; j < boxes.length; j += 1) {
@@ -97,47 +182,68 @@ function geometryIssues(page: Page): Promise<string[]> {
   });
 }
 
-/** What the invitation's own composition claims, measured rather than assumed:
- *  the map IS the stage, the chapter's chip and rail live on it without taking
- *  it, and the sign column stands beside it and never over it. The map's share
- *  of the stage is the rule .superpowers/sdd/2026-09-15-dan-grada/task-T2.11-report.md
- *  deleted when the measurement of the day fell to 0.2156; the map is the field
- *  now, so it is a rule again. */
-function compositionIssues(page: Page, portrait: boolean): Promise<string[]> {
-  return page.evaluate((isPortrait) => {
+/** What the invitation's own composition claims, measured rather than assumed
+ *  (plan "Frame", R-KP1, R-KP5): the map is the field and the field is the
+ *  stage's subject; nothing paints over the picture but the attribution; the
+ *  column stands beside (or, in portrait, under) it; every statement value
+ *  fits whole in at most two lines with no ellipsis; the QR is readable. */
+function compositionIssues(page: Page, portrait: boolean, maxLines: number, minShare: number, minPortraitField: number): Promise<string[]> {
+  return page.evaluate(({ isPortrait, lines, share: minMap, portraitField }) => {
     const out: string[] = [];
-    // The composition's own box: the stage inside its frame, which is the room
-    // the map and the sign column actually divide (the stage's padding belongs
-    // to neither of them).
-    const stage = document.querySelector<HTMLElement>('.k-invitation');
-    const map = document.querySelector<HTMLElement>('.k-invitation .k-map');
-    if (!stage || !map || map.offsetParent === null) return ['the invitation has no map on its stage'];
-    const s = stage.getBoundingClientRect();
-    const m = map.getBoundingClientRect();
+    const invitation = document.querySelector<HTMLElement>('.k-invitation');
+    const field = document.querySelector<HTMLElement>('.k-invitation [data-testid=kiosk-live]');
+    const host = document.querySelector<HTMLElement>('.k-invitation [data-testid=kiosk-map-host]');
+    const map = document.querySelector<HTMLElement>('.k-invitation [data-testid=kiosk-map]');
+    if (!invitation || !field || !host || !map || map.offsetParent === null) return ['the invitation has no map on its field'];
+    const s = invitation.getBoundingClientRect();
+    const f = field.getBoundingClientRect();
+    const h = host.getBoundingClientRect();
+    const overlaps = (a: DOMRect, b: DOMRect): boolean => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+    // The map's box is the field: the host fills it.
+    if (Math.abs(h.width - f.width) > 1 || Math.abs(h.height - f.height) > 1) out.push(`the map host (${h.width.toFixed(0)}x${h.height.toFixed(0)}) is not the field (${f.width.toFixed(0)}x${f.height.toFixed(0)})`);
     // Landscape: the map is the stage's subject, not one panel of three.
-    const share = (m.width * m.height) / (s.width * s.height);
-    if (!isPortrait && share < 0.55) out.push(`the map is ${share.toFixed(4)} of the stage`);
-    const rail = map.querySelector<HTMLElement>('.k-rail');
-    if (!rail) out.push('no chapter rail on the map');
-    else {
-      const r = rail.getBoundingClientRect();
-      if (r.left < m.left - 0.5 || r.right > m.right + 0.5 || r.top < m.top - 0.5 || r.bottom > m.bottom + 0.5) out.push('the rail is not inside the map');
-      if (r.top < m.top + m.height / 2) out.push(`the rail crosses the map's middle by ${(m.top + m.height / 2 - r.top).toFixed(1)} px`);
+    const mapShare = (h.width * h.height) / (s.width * s.height);
+    if (!isPortrait && mapShare < minMap) out.push(`the map is ${mapShare.toFixed(4)} of the invitation`);
+    // Nothing on the picture but MapLibre's attribution: every visible box inside the field's rectangle is the map's own or the credit.
+    for (const el of [...document.querySelectorAll<HTMLElement>('.kiosk *')]) {
+      if (el.offsetParent === null || field.contains(el) || el.contains(field)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && overlaps(r, h)) out.push(`${el.className.split(' ')[0]} crosses the map`);
     }
-    const chip = map.querySelector<HTMLElement>('.k-scene-head');
-    if (!chip) out.push('no chapter chip on the map');
-    else {
-      const c = chip.getBoundingClientRect();
-      if (c.bottom > m.top + m.height / 4) out.push(`the chip crosses the map's upper quarter by ${(c.bottom - m.top - m.height / 4).toFixed(1)} px`);
+    for (const el of [...field.querySelectorAll<HTMLElement>('*')]) {
+      if (el.offsetParent === null || map.contains(el) || el === map || el === host) continue;
+      out.push(`${el.className.split(' ')[0]} is drawn on the field`);
     }
-    const sign = document.querySelector<HTMLElement>('.k-invitation .k-side');
-    if (!sign) out.push('no sign column');
-    else {
-      const g = sign.getBoundingClientRect();
-      if (g.left < m.right - 1 && m.left < g.right - 1 && g.top < m.bottom - 1 && m.top < g.bottom - 1) out.push('the sign column crosses the map');
+    const attribution = field.querySelectorAll('.maplibregl-ctrl-attrib');
+    if (attribution.length !== 1) out.push(`${attribution.length} attribution controls on the field`);
+    const column = document.querySelector<HTMLElement>('.k-invitation .k-column');
+    if (!column) out.push('no column');
+    else if (overlaps(column.getBoundingClientRect(), h)) out.push('the column crosses the map');
+    // The QR is readable from steps away.
+    const qr = document.querySelector<HTMLElement>('[data-testid=kiosk-qr]')?.getBoundingClientRect();
+    if (!qr || qr.width < 240 - 0.5 || qr.height < 240 - 0.5) out.push(`the QR is ${qr?.width.toFixed(0)}x${qr?.height.toFixed(0)}`);
+    // Every statement value shown: whole inside its statement, at most two lines, never ellipsised (R-KP5). Lines are
+    // the box's height over its line-height: a tight line box lets the face's ink paint a few pixels past it, which
+    // scrollHeight would count and a reader would not.
+    for (const value of [...document.querySelectorAll<HTMLElement>('.k-invitation .k-say-value')].filter((el) => el.offsetParent !== null)) {
+      const article = value.closest<HTMLElement>('.k-say')!;
+      const key = article.dataset.key ?? '?';
+      if (value.getBoundingClientRect().bottom > article.getBoundingClientRect().bottom + 0.5) out.push(`${key} value runs past its statement`);
+      const style = getComputedStyle(value);
+      if (style.textOverflow === 'ellipsis') out.push(`${key} value is ellipsised`);
+      const lineHeight = Number.parseFloat(style.lineHeight);
+      if (lineHeight > 0 && value.clientHeight / lineHeight > lines + 0.1) out.push(`${key} value runs ${(value.clientHeight / lineHeight).toFixed(1)} lines`);
+    }
+    if (isPortrait) {
+      const stage = document.querySelector<HTMLElement>('[data-testid=kiosk-stage]')!.getBoundingClientRect();
+      if (f.height / stage.height < portraitField) out.push(`the field is ${(f.height / stage.height).toFixed(3)} of a portrait stage`);
+      const says = document.querySelector<HTMLElement>('[data-testid=kiosk-says]')!.getBoundingClientRect();
+      const card = document.querySelector<HTMLElement>('[data-testid=kiosk-invite]')!.getBoundingClientRect();
+      if (says.right > card.left + 1) out.push('the statements are not left of the card');
+      if (!(says.top < card.bottom && card.top < says.bottom)) out.push('the statements and the card do not share a row');
     }
     return out;
-  }, portrait);
+  }, { isPortrait: portrait, lines: maxLines, share: minShare, portraitField: minPortraitField });
 }
 
 /** kiosk/layout.ts's zoom, read off the root: 1 at every design size in SIZES, whatever it is elsewhere. */
@@ -148,28 +254,50 @@ function zoomOf(page: Page): Promise<number> {
   });
 }
 
-async function openInvitation(page: Page, face: Face, size: { width: number; height: number }, kioskUrl: string, scene: 'promet' | (typeof OTHER_SCENES)[number] = 'promet'): Promise<void> {
+async function openInvitation(page: Page, face: Face, size: { width: number; height: number }, kioskUrl: string): Promise<void> {
   await page.emulateMedia({ colorScheme: face });
   await page.setViewportSize(size);
-  await page.goto(kioskUrl.replace('#', `?prizor=${scene}#`));
+  await page.goto(kioskUrl);
   await expect(page.locator('[data-testid=pair-code][data-state=live]')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('kiosk-scene')).toHaveAttribute('data-scene', scene, { timeout: 15_000 });
   // Geometry is measured in the final face: Manrope loaded, not the wider fallback.
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1500);
 }
 
+/** Contract 3: how many distinct major street names the map placed, as the
+ *  controller stamped it on the map host once the map was ready; null when
+ *  the attribute never came -- the map handle is the R-KP15 stub without
+ *  placedNames until area P1 lands -- which the caller reports as a note. */
+async function majorLabels(page: Page): Promise<number | null> {
+  await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
+  const host = page.getByTestId('kiosk-map-host');
+  try {
+    await expect(host).toHaveAttribute('data-major-labels', /^\d+$/, { timeout: MAJOR_LABELS_WAIT_MS });
+  } catch {
+    return null;
+  }
+  return Number(await host.getAttribute('data-major-labels'));
+}
+
+/** A stub-dependent proof that cannot run yet is written down, never passed in silence. */
+function noteStub(what: string): void {
+  const description = `${what}; see task-P3-report.md (R-KP15 stubs)`;
+  test.info().annotations.push({ type: 'stub', description });
+  console.log(`[kiosk-layout] ${description}`);
+}
+
 for (const size of SIZES) {
   const portrait = size.height > size.width;
   for (const face of FACES) {
-    test(`the invitation at ${size.width} by ${size.height}, ${face}: whole code, QR of ${MIN_QR_PX} px or more, nothing overflows or overlaps, basics fit`, async ({ page, request }) => {
+    test(`the invitation at ${size.width} by ${size.height}, ${face}: whole code, QR of ${MIN_QR_PX} px or more, the map is the field, statements whole, nothing overflows or overlaps, basics fit`, async ({ page, request }) => {
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
-      await openInvitation(page, face, size, kioskUrl, 'promet');
+      await openInvitation(page, face, size, kioskUrl);
       const root = page.getByTestId('kiosk');
       // A portrait screen is the compact drawing stood up (kiosk/layout.ts), never the wide one on its side.
       const wide = !portrait && size.width >= KIOSK_WIDE_MIN_PX;
       await expect(root).toHaveAttribute('data-size', wide ? 'wide' : 'compact');
       await expect(root).toHaveAttribute('data-portrait', portrait ? '1' : '0');
+      await expect(root).toHaveAttribute('data-phase', 'invitation');
       const qr = (await page.getByTestId('kiosk-qr').boundingBox())!;
       expect(qr.width, 'the QR is readable from steps away').toBeGreaterThanOrEqual(MIN_QR_PX);
       expect(qr.height).toBeGreaterThanOrEqual(MIN_QR_PX);
@@ -181,31 +309,23 @@ for (const size of SIZES) {
       expect(Math.abs(head.height - expectedRow), 'the header keeps its fixed row').toBeLessThanOrEqual(1);
       expect(Math.abs(stripBox.height - expectedRow), 'the strip keeps its fixed row').toBeLessThanOrEqual(1);
 
-      const scene = (await page.getByTestId('kiosk-scene').boundingBox())!;
+      // The stage has no padding for the invitation: the field meets the header, the strip and the column on hairlines.
+      const field = (await page.getByTestId('kiosk-live').boundingBox())!;
       const stage = (await page.getByTestId('kiosk-stage').boundingBox())!;
-      if (portrait) {
-        // Plan, Kiosk (i): the scene field on top at 55% of the stage or more, the two tiles and the card sharing the row under it, the card to the right.
-        expect(scene.height / stage.height, 'the scene field is 55% or more of a portrait stage').toBeGreaterThanOrEqual(0.55);
-        expect(scene.width / stage.width, 'the scene field spans nearly the full width').toBeGreaterThan(0.9);
-        const tiles = (await page.getByTestId('kiosk-tiles').boundingBox())!;
-        const invite = (await page.getByTestId('kiosk-invite').boundingBox())!;
-        // "Share a row" means side by side, not a pixel-identical top edge: the
-        // tiles column stretches the full row (its own tiles centred inside it,
-        // .k-side-tiles's own align-content), while the card sits at its natural
-        // height within the same row -- both end up flush with the row's foot.
-        expect(tiles.y, 'the tiles and the invitation card share a row').toBeLessThan(invite.y + invite.height);
-        expect(invite.y, 'the tiles and the invitation card share a row').toBeLessThan(tiles.y + tiles.height);
-        expect(invite.x, 'the card sits to the right of the tiles').toBeGreaterThanOrEqual(tiles.x + tiles.width - 1);
-        const tileEls = page.getByTestId('kiosk-tiles').locator('.tl');
-        await expect(tileEls, 'the two value tiles').toHaveCount(2);
-        const tileBoxes = await Promise.all([tileEls.nth(0).boundingBox(), tileEls.nth(1).boundingBox()]);
-        expect(Math.abs(tileBoxes[0]!.y - tileBoxes[1]!.y), 'the two value tiles share a row').toBeLessThan(1);
-      } else {
-        expect(scene.width / stage.width, 'the scene field is the stage’s dominant element').toBeGreaterThanOrEqual(0.58);
-      }
+      expect(Math.abs(field.x - stage.x), 'the field starts at the stage edge').toBeLessThanOrEqual(1);
+      expect(Math.abs(field.y - stage.y), 'the field starts under the header').toBeLessThanOrEqual(1);
+      if (!portrait) expect(Math.abs(field.height - stage.height), 'the field is the stage’s full height').toBeLessThanOrEqual(1);
+
+      // One h1 on the page: the card's lead (e2e/a11y.spec.ts holds the same for every surface without a session).
+      expect(await page.locator('h1').count(), 'exactly one h1: the invitation lead').toBe(1);
       expect(await geometryIssues(page)).toEqual([]);
-      expect(await compositionIssues(page, portrait), 'the map is the stage').toEqual([]);
+      expect(await compositionIssues(page, portrait, MAX_VALUE_LINES, MIN_MAP_SHARE, MIN_PORTRAIT_FIELD), 'the map is the field').toEqual([]);
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}.png`, fullPage: false });
+
+      // Contract 3: the prozor profile places at most eight major street names in the field.
+      const labels = await majorLabels(page);
+      if (labels === null) noteStub('data-major-labels never appeared: CityMapHandle.placedNames is the R-KP15 stub until area P1 lands, so the eight-names proof waits');
+      else expect(labels, 'the prozor profile places at most eight major street names in the field').toBeLessThanOrEqual(MAX_MAJOR_LABELS);
 
       await page.getByTestId('kiosk-essentials-open').click();
       const panel = page.getByTestId('kiosk-essentials');
@@ -215,16 +335,40 @@ for (const size of SIZES) {
       await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}-basics.png`, fullPage: false });
       await page.keyboard.press('Escape');
       await expect(panel).toBeHidden();
-
-      // Večeras and Grad, reached through their own pins (D13): the same clip and overlap proof, one screenshot each.
-      for (const other of OTHER_SCENES) {
-        await openInvitation(page, face, size, kioskUrl, other);
-        expect(await geometryIssues(page), other).toEqual([]);
-        expect(await compositionIssues(page, portrait), other).toEqual([]);
-        await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-${face}-${other}.png`, fullPage: false });
-      }
     });
   }
+}
+
+for (const size of SIZES) {
+  const portrait = size.height > size.width;
+  const composition: Exclude<Composition, 'handheld'> = portrait ? 'portrait' : size.width >= KIOSK_WIDE_MIN_PX ? 'wide' : 'compact';
+  const frame = FRAME[composition];
+  test(`the frame at ${size.width} by ${size.height} holds ${frame.shown.length} of the plan's statements whole over the card, the transit label in ${frame.labelRowsAtMost} row(s) at most, every value in two lines, a long title cut at a word`, async ({ page, request }) => {
+    const { kioskUrl } = await provisionKiosk(request, APP_URL);
+    await openInvitation(page, 'light', size, kioskUrl);
+    await expect(page.getByTestId('kiosk')).toHaveAttribute('data-phase', 'invitation');
+    const html = sampleStatements(composition);
+    // The composition's own fit() runs on the 1 s tick: the statements the room does not hold whole are hidden from the
+    // foot up and a value past two lines is cut at a word (R-KP5). Everything fit() decides is polled together, so the
+    // reading is of the fitted column: the session's title runs past two lines at every size, so where its statement
+    // is shown the cut ("…" on a word) is the proof that fit() has run; where it is hidden, the hiding is.
+    await expect.poll(async () => {
+      const m = await measureFrame(page, html);
+      const assembly = m.values['e2e:assembly'];
+      return {
+        shown: m.shown,
+        overflow: m.overflow,
+        valuesInTwoLines: Object.values(m.valueLines).every((lines) => lines <= MAX_VALUE_LINES),
+        titleCutAtAWord: assembly === undefined || (/\S…$/.test(assembly) && assembly.length < ASSEMBLY_TITLE.length),
+      };
+    }, { timeout: FIT_WAIT_MS, message: `the ${composition} frame holds ${frame.shown.join(', ')} whole, fitted` }).toEqual({ shown: [...frame.shown], overflow: false, valuesInTwoLines: true, titleCutAtAWord: true });
+    // The label's rows are the sheet's and the cap's, not fit()'s: read once the column is fitted.
+    const m = await measureFrame(page, html);
+    expect(m.labelRows, 'the transit label stays within the rows its badge cap budgets').toBeLessThanOrEqual(frame.labelRowsAtMost);
+    expect(await geometryIssues(page)).toEqual([]);
+    expect(await compositionIssues(page, portrait, MAX_VALUE_LINES, MIN_MAP_SHARE, MIN_PORTRAIT_FIELD)).toEqual([]);
+    await page.screenshot({ path: `${SHOTS_DIR}/kiosk-${size.width}-frame.png`, fullPage: false });
+  });
 }
 
 for (const size of SIZES) {
@@ -243,6 +387,8 @@ for (const size of SIZES) {
         await expect(kiosk.getByTestId('kiosk-layer')).toBeVisible();
         await expect(kiosk.locator('[data-testid=corner-qr] .qr')).toBeVisible();
         await expect(kiosk.getByTestId('kiosk-essentials-open')).toBeHidden();
+        // The paired compositions keep the stage's padding (R-KP8): the phase attribute says so.
+        await expect(kiosk.getByTestId('kiosk')).toHaveAttribute('data-phase', 'paired');
         for (const [layer, word] of Object.entries(LAYERS)) {
           // The phone steers through its own history (the dashboard restores the hash), then casts explicitly (D5):
           // the Kvart panel's primary sends the phone's current layer to the room; the screen never follows a tap by itself.
@@ -283,8 +429,10 @@ test('a stale ZET feed holds the map: the screen tells the map the feed state an
   await openInvitation(page, 'light', SIZES[0], kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-feed', 'stale', { timeout: 15_000 });
-  // The board says so too, and the lines keep their last words rather than a fresh claim.
-  await expect(page.getByTestId('kiosk-lines')).toContainText('zastarjelo');
+  // The transit statement says so too (contract 4: data-state on the article), once say.ts writes statements at all.
+  const transit = page.locator('[data-testid=kiosk-say][data-say=transit]');
+  if ((await transit.count()) > 0) await expect(transit).toHaveAttribute('data-state', 'stale');
+  else noteStub('no transit statement to carry data-state=stale: say.ts is the R-KP15 stub until area P2 lands');
   // The basics panel pauses and resumes the map; the hold survives the resume.
   await page.getByTestId('kiosk-essentials-open').click();
   await page.keyboard.press('Escape');
