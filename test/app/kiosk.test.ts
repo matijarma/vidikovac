@@ -1040,6 +1040,39 @@ describe('the field, the column and the one map', () => {
     expect(q(says, '[data-skeleton]')).toBeNull();
   });
 
+  it('the column fits by measurement (R-KP5): a value past two lines is cut at a word with "…" while its signature stays whole, a value of pairs is left alone, and a statement the room does not hold is hidden whole', async () => {
+    const long = 'Dvadeset peta sjednica Odbora za Statut, Poslovnik i propise Gradske skupštine Grada Zagreba u velikoj vijećnici';
+    const pairs = '<span class="k-say-pair"><span class="k-line-badge line" data-kind="tram" data-size="k">6</span><time>23:58</time></span>';
+    say.rank.mockImplementation(() => [statement('say:assembly', long), statement('say:lastrun', '23:58', { say: 'lastrun' }), statement('say:kvart', 'Novi park u Trnju', { say: 'kvart' })]);
+    say.markup.mockImplementation((slots: readonly Slot[]) => sayHtml(slots).replace('data-replace data-sig="23:58">23:58', `data-replace data-sig="23:58">${pairs}`));
+    const k = mount({ stored: STORED });
+    await flush();
+    const says = q(k.root, '[data-testid=kiosk-says]')!;
+    const [first, second, third] = [...says.children] as HTMLElement[];
+    const value = q(first!, '.k-say-value')!;
+    // A line every 30 characters at a 44 px line box, and a column that holds two statements of three.
+    for (const el of [first!, second!, third!]) Object.defineProperty(el, 'getBoundingClientRect', { value: () => ({ height: 120 }) });
+    Object.defineProperty(value, 'clientHeight', { get: () => Math.ceil((value.textContent ?? '').length / 30) * 44 });
+    value.style.lineHeight = '44px';
+    Object.defineProperty(says, 'clientHeight', { get: () => 300 });
+    Object.defineProperty(says, 'scrollHeight', { get: () => [...says.children].filter((el) => !(el as HTMLElement).hidden).length * 120 });
+    k.tick(CODE_TICK_MS);
+    const cut = value.textContent ?? '';
+    expect(cut.endsWith('…')).toBe(true);
+    expect(cut.length).toBeLessThanOrEqual(61);
+    expect(cut).toMatch(/^Dvadeset peta sjednica Odbora za Statut, Poslovnik/);
+    expect(cut).not.toMatch(/\s…$/); // cut at a word boundary, the space with it
+    expect(value.dataset.sig).toBe(long); // the whole text stays the reconciler's signature
+    expect(q(second!, '.k-say-value')!.innerHTML).toContain('<time>23:58</time>'); // pairs are not text to cut
+    expect([first!.hidden, second!.hidden, third!.hidden]).toEqual([false, false, true]);
+    // A poll with the same answer keeps the clamp and the hiding (the reconciler kept the nodes, fit ran again).
+    k.poll();
+    await flush();
+    expect(q(says, 'article[data-key="say:assembly"]')).toBe(first);
+    expect((q(first!, '.k-say-value')!.textContent ?? '').endsWith('…')).toBe(true);
+    expect(third!.hidden).toBe(true);
+  });
+
   it('each composition hands the ranker its own tables (R-KP5): wide 3/12/56, compact 2/6/44, portrait 3/8/48, handheld all/6/40, with the stop, the modules and the moment', async () => {
     const cases: [string, { width: number; height: number }, keyof typeof SAY_SLOTS][] = [
       ['wide', { width: 1920, height: 1080 }, 'wide'], ['compact', { width: 1366, height: 768 }, 'compact'],

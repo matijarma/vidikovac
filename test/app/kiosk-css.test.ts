@@ -318,6 +318,9 @@ describe('the invitation: one field, one column', () => {
     const badges = decls('.k-say-badges');
     expect(badges.display).toBe('inline-flex');
     expect(badges['flex-wrap']).toBe('wrap');
+    // With badges the kicker keeps the first row's left and the badges wrap under themselves, never under the kicker.
+    expect(decls('.k-say-label:has(.k-say-badges)')['grid-template-columns']).toBe('auto minmax(0, 1fr)');
+    expect(decls('.k-say-label:has(.k-say-badges) .k-say-kicker')['line-height']).toBe('calc(var(--k-badge) * 0.62)');
     expect(decls('.k-say-more')['font-size']).toBe('var(--k-hint-size)');
     expect(decls('.k-say-more')['text-transform']).toBe('none');
     const pair = decls('.k-say-pair');

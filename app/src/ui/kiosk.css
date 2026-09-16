@@ -263,8 +263,13 @@
 /* A statement: label, value, context, separated from the next by a hairline; no fill, no border, no radius. */
 .k-say { display: grid; gap: calc(var(--k-gap) * 0.25); min-width: 0; padding-block: calc(var(--k-gap) * 0.9); border-top: 1px solid var(--k-line); }
 .k-say:first-child { border-top: 0; padding-top: 0; }
-/* The kicker in the domain's colour, with the transit statement's line badges beside it and a "+N" when the cap cuts them. */
+/* The kicker in the domain's colour, with the transit statement's line badges beside it and a "+N" when the cap cuts them.
+   With badges the label is two columns -- the kicker, then the badges wrapping in the rest of the width -- so a second
+   row of badges opens under the first, never under the kicker (plan "Frame": "PROMET  [1][6][11]… +8" on one line). */
 .k-say-label { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5); min-width: 0; font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
+.k-say-label:has(.k-say-badges) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+/* Beside badges the kicker takes a badge's height, so its word sits on the first badge row's centre line. */
+.k-say-label:has(.k-say-badges) .k-say-kicker { line-height: calc(var(--k-badge) * 0.62); }
 .k-say[data-domain='transit'] .k-say-label { color: var(--k-action); }
 .k-say[data-domain='komunalno'] .k-say-label { color: var(--k-amber); }
 .k-say[data-domain='safety'] .k-say-label { color: var(--k-rose); }

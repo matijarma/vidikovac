@@ -188,7 +188,10 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
    *  VALUE_LINES of its own line-height; its data-sig is the whole text, so
    *  the next reconcile keeps the node and this runs again on it. A value
    *  made of pairs (the last departures' badges and times) wraps as its
-   *  badges dictate and is left alone. A DOM without layout measures nothing. */
+   *  badges dictate and is left alone. A DOM without layout measures nothing.
+   *  Lines are the box's height over its line-height, never its scrollHeight:
+   *  a 1.1 line box lets the face's ascenders and descenders paint a few
+   *  pixels past it, which is ink, not a line. */
   function clampValue(article: HTMLElement): void {
     const value = article.querySelector<HTMLElement>('.k-say-value');
     if (!value || value.children.length > 0 || value.clientHeight === 0) return;
@@ -196,9 +199,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     if (value.textContent !== whole) value.textContent = whole;
     const lineHeight = Number.parseFloat(getComputedStyle(value).lineHeight);
     if (!(lineHeight > 0)) return;
-    const limit = lineHeight * VALUE_LINES + 1;
+    const lines = (): number => Math.round(value.clientHeight / lineHeight);
     let text = whole;
-    while (value.scrollHeight > limit) {
+    while (lines() > VALUE_LINES) {
       const cut = text.replace(/…$/, '').trimEnd().lastIndexOf(' ');
       if (cut <= 0) break;
       text = `${text.slice(0, cut).trimEnd()}…`;

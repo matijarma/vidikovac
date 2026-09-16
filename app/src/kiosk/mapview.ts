@@ -32,7 +32,7 @@
 // assembly points while the state is urgent -- each with the rule that keeps
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
-import type { ModuleSnapshot } from '../../../worker/feed/schema';
+import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
@@ -303,29 +303,43 @@ export function placedEvents(dogadanja: ModuleSnapshot | undefined, now: number)
   return out;
 }
 
+/** One quake as a place: the circle carries the magnitude and nothing else; a
+ *  quake the source gave no magnitude carries its region as its name and
+ *  draws no circle, because a circle with no magnitude would be the claim
+ *  "M 0". */
+function quakePoint(quake: FeedItem, locale: string): MapPoint | null {
+  if (quake.geo?.type !== 'Point') return null;
+  const [lon, lat] = quake.geo.coordinates as number[];
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  const mag = dataNumber(quake, 'mag');
+  const region = dataText(quake, 'region') || quake.title;
+  return { id: `quake:${quake.id}`, lon: lon!, lat: lat!, title: mag === null ? region : `M ${fmtNumber(locale, mag, 1)}`, place: 'quake', ...(mag === null ? {} : { props: { mag } }) };
+}
+
+/** The quakes recentQuakes() selects (72 hours, 150 km of Zagreb), as places: the generic reader the overlay tests and the paired stories share. */
+export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
+  return recentQuakes(emsc, now).map((quake) => quakePoint(quake, locale)).filter((point): point is MapPoint => point !== null);
+}
+
 /** The kiosk's own quake rule (R-KP9, one rule for the map and the statement):
  *  magnitude 3.0 or more within the last 24 hours, on top of recentQuakes()'s
  *  150 km -- a magnitude-1.4 tremor in Slovenia two days ago is not a fact a
  *  café reads from three metres, while the paired stories and the teaser keep
  *  recentQuakes()'s own 72 hours. A quake the source gave no magnitude cannot
- *  meet the rule and draws nothing: a circle without a magnitude would be the
- *  claim "M 0". Wave B moves the rule into kiosk/local.ts's kioskQuakes (P2)
- *  and this becomes a call. */
+ *  meet the rule and draws nothing. Wave B moves the rule into
+ *  kiosk/local.ts's kioskQuakes (P2) and this becomes a call. */
 export const KIOSK_QUAKE_MIN_MAG = 3;
 export const KIOSK_QUAKE_WINDOW_MS = 24 * 3_600_000;
 
-/** The quakes the kiosk rule selects, as places. The circle carries the magnitude and nothing else. */
-export function quakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
+/** The quakes the kiosk rule selects, as places (cityPoints lights them on both phases). */
+export function kioskQuakePoints(emsc: ModuleSnapshot | undefined, now: number, locale: string): MapPoint[] {
   const out: MapPoint[] = [];
   for (const quake of recentQuakes(emsc, now)) {
-    if (quake.geo?.type !== 'Point') continue;
-    const [lon, lat] = quake.geo.coordinates as number[];
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     const mag = dataNumber(quake, 'mag');
-    if (mag === null || mag < KIOSK_QUAKE_MIN_MAG) continue;
     const at = quake.at ? Date.parse(quake.at) : NaN;
-    if (!Number.isFinite(at) || now - at > KIOSK_QUAKE_WINDOW_MS) continue;
-    out.push({ id: `quake:${quake.id}`, lon: lon!, lat: lat!, title: `M ${fmtNumber(locale, mag, 1)}`, place: 'quake', props: { mag } });
+    if (mag === null || mag < KIOSK_QUAKE_MIN_MAG || !Number.isFinite(at) || now - at > KIOSK_QUAKE_WINDOW_MS) continue;
+    const point = quakePoint(quake, locale);
+    if (point) out.push(point);
   }
   return out;
 }
@@ -385,7 +399,7 @@ export function seatPoint(stop: ScreenStop | null): MapPoint[] {
 export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, now: number, locale: string): MapPoint[] {
   return [
     ...placedEvents(snapshots.dogadanja, now),
-    ...quakePoints(snapshots.emsc, now, locale),
+    ...kioskQuakePoints(snapshots.emsc, now, locale),
     ...assemblyPoints(snapshots['ckan-geo'], stop, safetyState(snapshots, now).level === 'urgent'),
     ...pharmacyPoint(stop),
     ...seatPoint(stop),

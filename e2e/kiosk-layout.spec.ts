@@ -137,10 +137,13 @@ function compositionIssues(page: Page, portrait: boolean, maxLines: number, minS
     // The QR is readable from steps away.
     const qr = document.querySelector<HTMLElement>('[data-testid=kiosk-qr]')?.getBoundingClientRect();
     if (!qr || qr.width < 240 - 0.5 || qr.height < 240 - 0.5) out.push(`the QR is ${qr?.width.toFixed(0)}x${qr?.height.toFixed(0)}`);
-    // Every statement value shown: whole, at most two lines, never ellipsised (R-KP5).
+    // Every statement value shown: whole inside its statement, at most two lines, never ellipsised (R-KP5). Lines are
+    // the box's height over its line-height: a tight line box lets the face's ink paint a few pixels past it, which
+    // scrollHeight would count and a reader would not.
     for (const value of [...document.querySelectorAll<HTMLElement>('.k-invitation .k-say-value')].filter((el) => el.offsetParent !== null)) {
-      const key = value.closest<HTMLElement>('.k-say')?.dataset.key ?? '?';
-      if (value.scrollHeight > value.clientHeight + 1) out.push(`${key} value overflows ${value.scrollHeight}>${value.clientHeight}`);
+      const article = value.closest<HTMLElement>('.k-say')!;
+      const key = article.dataset.key ?? '?';
+      if (value.getBoundingClientRect().bottom > article.getBoundingClientRect().bottom + 0.5) out.push(`${key} value runs past its statement`);
       const style = getComputedStyle(value);
       if (style.textOverflow === 'ellipsis') out.push(`${key} value is ellipsised`);
       const lineHeight = Number.parseFloat(style.lineHeight);
