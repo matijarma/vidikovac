@@ -833,7 +833,13 @@
       "works_few": "{count} rada u tijeku",
       "works_other": "{count} radova u tijeku",
       "today": "danas",
-      "tomorrow": "sutra"
+      "tomorrow": "sutra",
+      "tonight": "Večeras u gradu",
+      "forecast": "Sutra",
+      "allDay": "cijeli dan",
+      "tonightMore_one": "još {count} događanje",
+      "tonightMore_few": "još {count} događanja",
+      "tonightMore_other": "još {count} događanja"
     },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",

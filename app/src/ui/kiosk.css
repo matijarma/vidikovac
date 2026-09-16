@@ -309,6 +309,7 @@
 .k-say-label:has(.k-say-badges) .k-say-kicker { line-height: calc(var(--k-badge) * 0.62); }
 .k-say[data-domain='transit'] .k-say-label { color: var(--k-action); }
 .k-say[data-domain='komunalno'] .k-say-label { color: var(--k-amber); }
+.k-say[data-domain='weather'] .k-say-label { color: var(--k-amber); }
 .k-say[data-domain='safety'] .k-say-label { color: var(--k-rose); }
 .k-say[data-domain='events'] .k-say-label { color: var(--k-violet); }
 .k-say[data-domain='civic'] .k-say-label, .k-say[data-domain='mobility'] .k-say-label { color: var(--k-ink-3); }

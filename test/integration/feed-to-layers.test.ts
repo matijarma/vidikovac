@@ -7,7 +7,7 @@
 // FeedItem by hand.
 import { describe, expect, it } from 'vitest';
 import { MODULES, MODULE_IDS, OPEN_LICENCE, OPEN_MODULES, TEASER_MODULES, teaserSubset } from '../../worker/feed/registry';
-import { OPEN_LICENCE_EVENT_SOURCES, isOpenLicenceEvent } from '../../worker/feed/modules/dogadanja/licence';
+import { isOpenLicenceEvent } from '../../worker/feed/modules/dogadanja/licence';
 import { OPEN_DATASETS } from '../../worker/open/catalog';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
@@ -202,16 +202,14 @@ describe('the kiosk teaser renders the real feed output', () => {
     }
   });
 
-  it('puts one city row on the screen, from the real Skupština/kvartovske/komunalne/ZET fixtures, under the Otvorena dozvola', () => {
+  it('puts one city row on the screen from the real dogadanja fixtures, credited to its own source', () => {
     const card = teaserCards(teaser, i18n, NOW).find((c) => c.id === 'city')!;
     expect(card).toBeDefined();
     expect(card.body).not.toBe('');
     expect(card.body).not.toBe(LOADING);
     expect(card.body).not.toBe(CITY_EMPTY);
     expect(card.body).not.toContain(UNAVAILABLE);
-    expect(card.attribution?.licence).toBe(OPEN_LICENCE);
-    expect(card.attribution?.text).toContain('Otvorena dozvola');
-    expect(card.attribution?.text).not.toContain('CC BY-SA');
+    expect(card.attribution?.text).toMatch(/^Izvor: /);
   });
 
   it('keeps the safety strip counting real closures', () => {
@@ -222,54 +220,30 @@ describe('the kiosk teaser renders the real feed output', () => {
   });
 });
 
-describe('the licence boundary: no CC BY-SA row ever reaches the open tier', () => {
+describe('every source reaches the public screen; only /open stays licence-selected', () => {
   const merged = snapshots.dogadanja!;
   const source = (item: { data?: unknown }) => dataText(item as never, 'source');
-  const notOpen = merged.items.filter((item) => !isOpenLicenceEvent(item));
-  const notOpenTitles = notOpen.map((item) => item.title);
 
-  it('starts from a merged module that really carries Kulturpunkt (CC BY-SA 3.0 HR) and Etnografski rows, so the filter is exercised, not vacuous', () => {
-    expect(notOpen.some((item) => source(item) === 'kulturpunkt')).toBe(true);
-    expect(notOpen.some((item) => source(item) === 'etnografski')).toBe(true);
-    expect(new Set(notOpen.map(source))).toEqual(new Set(['kulturpunkt', 'etnografski']));
-    // and every one of the five open sources is present too, so the teaser has something to carry.
-    for (const s of OPEN_LICENCE_EVENT_SOURCES) expect(merged.items.some((item) => source(item) === s), s).toBe(true);
+  it('starts from a merged module that really carries Kulturpunkt and Etnografski rows beside the City\u2019s and ZET\u2019s', () => {
+    const sources = new Set(merged.items.map(source));
+    for (const s of ['kulturpunkt', 'etnografski', 'skupstina', 'kvartovske', 'komunalne']) expect(sources.has(s), s).toBe(true);
   });
 
   it('keeps dogadanja out of /open and its catalogue: the module is session tier as a whole', () => {
     expect(MODULES.dogadanja.tier).toBe('session');
     expect(OPEN_MODULES).not.toContain('dogadanja');
     expect(OPEN_DATASETS.map((d) => d.module)).not.toContain('dogadanja');
+    expect(merged.items.some((item) => !isOpenLicenceEvent(item))).toBe(true);
   });
 
-  it('reduces the /api/teaser copy of dogadanja to Otvorena dozvola rows only, with an attribution that names no other licence', () => {
+  it('carries the whole module to /api/teaser: Kulturpunkt and Etnografski rows included, the module\u2019s own attribution kept', () => {
     expect(TEASER_MODULES).toContain('dogadanja');
-    const reduced = teaserSubset(merged);
-    expect(reduced.items.length).toBeGreaterThan(0);
-    expect(reduced.items.every(isOpenLicenceEvent)).toBe(true);
-    expect(reduced.items.map(source)).not.toContain('kulturpunkt');
-    expect(reduced.items.map(source)).not.toContain('etnografski');
-    expect(reduced.attribution.licence).toBe(OPEN_LICENCE);
-    expect(reduced.attribution.text).not.toContain('CC BY-SA');
-    expect(reduced.attribution.text).not.toContain('Kulturpunkt');
-    const payload = JSON.stringify(reduced);
-    for (const title of notOpenTitles) expect(payload).not.toContain(JSON.stringify(title).slice(1, -1));
-  });
-
-  it('shows no non-open title on any kiosk teaser card, whether or not the payload was filtered upstream', () => {
-    const filtered = [...OPEN_MODULES, ...TEASER_MODULES].map((id) => teaserSubset(snapshots[id]!));
-    const unfiltered = [...OPEN_MODULES, ...TEASER_MODULES].map((id) => (id === 'dogadanja' ? snapshots[id]! : teaserSubset(snapshots[id]!)));
-    for (const modules of [filtered, unfiltered]) {
-      for (const c of teaserCards(modules, i18n, NOW)) {
-        const text = [c.title, c.body, c.attribution?.text ?? ''].join(' | ');
-        for (const title of notOpenTitles) expect(text, c.id).not.toContain(title);
-        expect(text, c.id).not.toContain('CC BY-SA');
-      }
-    }
-  });
-
-  it('still shows the CC BY-SA rows where they belong: the session-tier Kultura panel, attributed as such', () => {
-    const kultura = clean(renderLayer('kultura', ctx()));
-    expect(kultura).toContain('Kulturpunkt (CC BY-SA 3.0 HR)');
+    expect(TEASER_MODULES).toContain('dhmz-forecast');
+    expect(TEASER_MODULES).toContain('glasnik');
+    const passed = teaserSubset(merged);
+    expect(passed.items.map(source)).toContain('kulturpunkt');
+    expect(passed.items.map(source)).toContain('etnografski');
+    expect(passed.items).toHaveLength(merged.items.length);
+    expect(passed.attribution).toBe(merged.attribution);
   });
 });

@@ -637,14 +637,16 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(false);
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('žuto upozorenje · Grmljavina · zastarjelo');
     // The ranker is told, source by source: the last-good copies are stale, and the field is still one field with its map.
-    expect(lastInput().modules.map((m) => m.status)).toEqual(MODULES.map(() => 'stale'));
+    // The fixture's seven modules go stale; the two the payload never carried (forecast, gazette) stand as honest down placeholders behind them.
+    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'stale'));
+    expect(lastInput().modules.slice(MODULES.length).every((m) => m.status === 'down')).toBe(true);
     expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-map]')).not.toBeNull();
     fail = false;
     k.poll();
     await flush();
     expect(calls.at(-1)).toBe('live');
-    expect(lastInput().modules.map((m) => m.status)).toEqual(MODULES.map(() => 'live'));
+    expect(lastInput().modules.map((m) => m.status).slice(0, MODULES.length)).toEqual(MODULES.map(() => 'live'));
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
@@ -1129,7 +1131,7 @@ describe('the field, the column and the one map', () => {
     expect(SAY_VALUE_CHARS).toEqual({ wide: 56, compact: 44, portrait: 48, handheld: 40 });
     // A phone shows every candidate: "all" is every kind say.ts knows, read from say.ts itself so it cannot drift.
     expect(SAY_SLOTS.handheld).toBe(realSay.SAY_KINDS.length);
-    expect(realSay.SAY_KINDS).toHaveLength(8);
+    expect(realSay.SAY_KINDS).toHaveLength(10);
   });
 
   it('a handheld frames 1400 m across its band and a totem 2800 m across its full width, each at its design box before layout; the totem doubles the street names’ padding for its twice-the-wall ground and follows the measured box on a repaint (R-KP17, contract 3)', async () => {

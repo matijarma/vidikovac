@@ -804,7 +804,12 @@
       "works_one": "{count} project under way",
       "works_other": "{count} projects under way",
       "today": "today",
-      "tomorrow": "tomorrow"
+      "tomorrow": "tomorrow",
+      "tonight": "Tonight in the city",
+      "forecast": "Tomorrow",
+      "allDay": "all day",
+      "tonightMore_one": "{count} more event",
+      "tonightMore_other": "{count} more events"
     },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",

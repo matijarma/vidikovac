@@ -9,6 +9,8 @@ import { zagrebIso } from '../time';
 // `ddmmyy`; the forecast covers the whole Zagreb calendar day.
 
 export const DHMZ_FORECAST_URL = 'https://prognoza.hr/prognoza_danas.xml';
+/** The same document for the next day: the public screen says what tomorrow does (owner, 16 Sept 2026). */
+export const DHMZ_FORECAST_TOMORROW_URL = 'https://prognoza.hr/prognoza_sutra.xml';
 export const ZAGREB_FORECAST_STATION = 'Zagreb';
 
 interface VwParam {
@@ -82,6 +84,15 @@ export function parseDhmzForecast(xml: string): FeedPayload {
 }
 
 export async function fetchDhmzForecast(ctx: FetchContext): Promise<FeedPayload> {
-  const response = await ctx.fetch(DHMZ_FORECAST_URL);
-  return parseDhmzForecast(await response.text());
+  const today = parseDhmzForecast(await (await ctx.fetch(DHMZ_FORECAST_URL)).text());
+  // Tomorrow is the useful half on a wall in the evening; a missing or broken
+  // second document costs the day after, never today's forecast.
+  let tomorrow: FeedPayload = { items: [] };
+  try {
+    tomorrow = parseDhmzForecast(await (await ctx.fetch(DHMZ_FORECAST_TOMORROW_URL)).text());
+  } catch {
+    tomorrow = { items: [] };
+  }
+  const seen = new Set(today.items.map((item) => item.id));
+  return { ...today, items: [...today.items, ...tomorrow.items.filter((item) => !seen.has(item.id))] };
 }

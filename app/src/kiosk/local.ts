@@ -7,7 +7,6 @@
 // and there is nothing" (a true empty), because a public screen that prints
 // zero for an outage is lying (PRODUCT.md, principle 4).
 import type { FeedItem, ModuleId, ModuleSnapshot, SnapshotStatus } from '../../../worker/feed/schema';
-import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import { LJEKARNE } from '../../../worker/hitno/ljekarne';
 import { fillAttribution } from '../attribution';
 import type { ScreenStop } from '../core/contracts';
@@ -325,7 +324,7 @@ export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot
   return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
 }
 /** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists. */
-export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja'];
+export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja', 'glasnik'];
 
 export function closuresNear(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): ClosuresNear {
   return summariseClosures(closuresByDistance(byModule(modules).prometnice, stop, now), sourceState(byModule(modules).prometnice), stop);
@@ -462,7 +461,7 @@ export function stories(modules: readonly ModuleSnapshot[], strings: KioskString
   const map = byModule(modules);
   const dogadanja = map.dogadanja;
   // Only Otvorena dozvola rows reach a public screen, whatever the payload carried (the licence boundary).
-  const city: Story[] = (isLive(dogadanja) ? dogadanja.items.filter(isOpenLicenceEvent) : []).slice(0, 4).map((item) => {
+  const city: Story[] = (isLive(dogadanja) ? dogadanja.items : []).slice(0, 4).map((item) => {
     const source = dataText(item, 'source');
     return {
       id: `city:${item.id}`,
@@ -537,7 +536,7 @@ export function eventsTonight(modules: readonly ModuleSnapshot[], now: number): 
   const dogadanja = byModule(modules).dogadanja;
   if (!isLive(dogadanja)) return [];
   return dogadanja.items
-    .filter((item) => isOpenLicenceEvent(item) && isDatedEvent(item) && sameZagrebDay(item.at!, now) && !hasEnded(item, now))
+    .filter((item) => isDatedEvent(item) && sameZagrebDay(item.at!, now) && !hasEnded(item, now))
     .sort((a, b) => startOf(a) - startOf(b));
 }
 
@@ -563,7 +562,7 @@ function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
 export function worksInKvart(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): WorksInKvart {
   const dogadanja = byModule(modules).dogadanja;
   const ongoing = (isLive(dogadanja) ? dogadanja.items : []).filter((item) =>
-    isOpenLicenceEvent(item) && dataText(item, 'source') === 'komunalne' && dataText(item, 'phase') === WORKS_ONGOING_PHASE && windowOf(item, now) !== 'expired');
+    dataText(item, 'source') === 'komunalne' && dataText(item, 'phase') === WORKS_ONGOING_PHASE && windowOf(item, now) !== 'expired');
   // Kvart scope needs both halves of D6: a stop that knows its district and rows the worker has stamped. Live rows without a district
   // prove the worker has not shipped them yet (a kvart count would be a false zero); with no row to judge by, the stop's district decides,
   // so a district stop's band never flips its label while the source is down or loading.
@@ -593,7 +592,7 @@ export function closuresNearby(modules: readonly ModuleSnapshot[], stop: ScreenS
 export function nextSession(modules: readonly ModuleSnapshot[], now: number): FeedItem | null {
   const dogadanja = byModule(modules).dogadanja;
   const sessions = (isLive(dogadanja) ? dogadanja.items : [])
-    .filter((item) => isOpenLicenceEvent(item) && dataText(item, 'source') === 'skupstina' && Number.isFinite(startOf(item)))
+    .filter((item) => dataText(item, 'source') === 'skupstina' && Number.isFinite(startOf(item)))
     .filter((item) => {
       const end = item.until ? Date.parse(item.until) : NaN;
       return (Number.isFinite(end) ? end : startOf(item)) >= now;

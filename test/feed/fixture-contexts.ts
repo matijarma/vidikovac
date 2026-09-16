@@ -58,7 +58,7 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
   'zet-rt': fixtureContext([['gtfs-rt-protobuf', () => bytes('zet-rt.pb')]]),
   prometnice: fixtureContext([['data.json', () => text('prometnice.json')]]),
   'dhmz-now': fixtureContext([['hrvatska1_n.xml', () => text('hrvatska1_n.xml')]]),
-  'dhmz-forecast': fixtureContext([['prognoza_danas.xml', () => text('prognoza_danas.xml')]]),
+  'dhmz-forecast': fixtureContext([['prognoza_danas.xml', () => text('prognoza_danas.xml')], ['prognoza_sutra.xml', () => text('prognoza_sutra.xml')]]),
   'dhmz-cap': fixtureContext([['cap_hr_today.xml', () => text('cap_hr_today.xml')]]),
   emsc: fixtureContext([['seismicportal.eu', () => text('emsc.json')]]),
   glasnik: fixtureContext([

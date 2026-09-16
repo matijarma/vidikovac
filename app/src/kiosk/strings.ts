@@ -91,6 +91,12 @@ export interface KioskStrings {
    *  zero, the other seven statements' kickers and the works plural, and
    *  "danas"/"sutra" for the Assembly's context line. */
   say: {
+    /** "Večeras u gradu": the events kicker. */
+    tonight: string;
+    /** "Sutra": tomorrow's forecast kicker. */
+    forecast: string;
+    allDay: string;
+    tonightMore: PluralForms;
     transit: string;
     transitRegular: string;
     transitNoData: string;
@@ -286,9 +292,10 @@ function build(code: SupportedLocale): KioskStrings {
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
     say: {
-      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow']),
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
+      tonightMore: forms('say', 'tonightMore'),
     },
     safety: {
       ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics']),

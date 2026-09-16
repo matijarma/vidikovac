@@ -1,17 +1,11 @@
-// The licence boundary of the dogadanja module, in one place.
+// The licence predicate of the dogadanja module, for /open/*.json alone.
 //
-// The module is session tier as a whole because one of its six sources,
-// Kulturpunkt, is CC BY-SA 3.0 HR, and another, the Etnografski muzej, states
-// no reuse licence at all; republishing either at /open, or showing it on a
-// public screen that is itself the open tier, would misstate a licence in a
-// filed grant application (area E preamble; docs/izvori.md). The other five
-// `data.source` values are the City's own rows and ZET's, all under the
-// Otvorena dozvola, and those alone may leave the session:
-// registry.teaserSubset cuts the /api/teaser copy of the module down to them,
-// and the kiosk card (app/src/layers/grad-teaser.ts) filters by the same
-// predicate again, so the boundary holds even if a payload were ever handed
-// to the screen unreduced. test/integration/feed-to-layers.test.ts drives the
-// real fixtures through both.
+// Kulturpunkt is CC BY-SA 3.0 HR and the Etnografski muzej states no reuse
+// licence, so neither may be republished machine-readably under the Otvorena
+// dozvola at /open. That is the whole reach of this predicate. Every source
+// the app fetches is shown on every screen, public or paired, with its own
+// credit (owner, 16 Sept 2026): a row on a wall with its source named is
+// display with attribution, not republication.
 //
 // `data.source` values, not sub-fetcher ids: ZET's one sub-fetcher tags its
 // two feeds 'zet-novosti' and 'zet-promet' (zet-rss.ts), so the item-level

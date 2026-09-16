@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DHMZ_NOW_URL, ZAGREB_STATION, fetchDhmzNow, parseDhmzNow } from '../../worker/feed/modules/dhmz-now';
-import { DHMZ_FORECAST_URL, fetchDhmzForecast, parseDhmzForecast } from '../../worker/feed/modules/dhmz-forecast';
+import { DHMZ_FORECAST_TOMORROW_URL, DHMZ_FORECAST_URL, fetchDhmzForecast, parseDhmzForecast } from '../../worker/feed/modules/dhmz-forecast';
 
 const nowXml = readFileSync(new URL('../fixtures/hrvatska1_n.xml', import.meta.url), 'utf8');
 const forecastXml = readFileSync(new URL('../fixtures/prognoza_danas.xml', import.meta.url), 'utf8');
@@ -91,7 +91,8 @@ describe('the two DHMZ fetchers', () => {
         return new Response(forecastXml);
       },
     });
-    expect(askedForecast).toEqual([DHMZ_FORECAST_URL]);
+    // Today's document and tomorrow's: the public screen says what tomorrow does.
+    expect(askedForecast).toEqual([DHMZ_FORECAST_URL, DHMZ_FORECAST_TOMORROW_URL]);
     expect(DHMZ_FORECAST_URL).toBe('https://prognoza.hr/prognoza_danas.xml');
   });
 });

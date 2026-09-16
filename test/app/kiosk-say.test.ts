@@ -38,13 +38,20 @@ const SESSION = item('dogadanja', 'skupstina:1', 'event', '15. sjednica Gradske 
 const WORKS_ROW = item('dogadanja', 'komunalne:1', 'event', 'Obnova vodovoda, Ilica', { at: '2026-09-01T00:00:00Z', dateBasis: 'updated', data: { source: 'komunalne', phase: 'Radovi u tijeku', district: STOP.district } });
 const ZET_NOTICE = item('dogadanja', 'zet-promet:1', 'event', 'Obustava prometa za liniju 14', { at: '2026-09-11T09:00:00Z', dateBasis: 'published', data: { source: 'zet-promet' } });
 const KVARTOVSKA = item('dogadanja', 'kvartovske:1', 'event', 'Novi parkić u Dubravi', { dateBasis: 'unknown', data: { source: 'kvartovske' } });
+const KP_EVENT = item('dogadanja', 'kp:1', 'event', 'Antonio Kutleša: Smeđe krave daju čokoladno mlijeko', { at: '2026-09-11T17:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', precision: 'time', venue: 'KONTEJNER' } }); // 19:00 tonight
+const KP_EVENT_2 = item('dogadanja', 'kp:2', 'event', 'Prostor, krajobraz i teritorij', { at: '2026-09-11T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', precision: 'time', venue: 'Pogon Jedinstvo' } }); // 20:00 tonight
+const FORECAST = snap('dhmz-forecast', [
+  item('dhmz-forecast', 'zagreb:2026-09-11', 'forecast', 'Prognoza za Zagreb', { at: '2026-09-10T22:00:00Z', until: '2026-09-11T22:00:00Z', summary: 'Sunčano i vrlo toplo.', data: { tmin: 12, tmax: 28 } }),
+  item('dhmz-forecast', 'zagreb:2026-09-12', 'forecast', 'Prognoza za Zagreb', { at: '2026-09-11T22:00:00Z', until: '2026-09-12T22:00:00Z', summary: 'Umjereno do pretežno oblačno, povremeno kiša, moguće i pljusak.', data: { tmin: 13, tmax: 22 } }),
+]);
 const QUAKE = item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:00:00Z', data: { mag: 3.4, depth: 8, region: 'Petrinja' } });
 
 const MODULES: ModuleSnapshot[] = [
   ZET,
   CLOSURE,
-  snap('dogadanja', [SESSION, WORKS_ROW, ZET_NOTICE, KVARTOVSKA]),
+  snap('dogadanja', [SESSION, WORKS_ROW, ZET_NOTICE, KVARTOVSKA, KP_EVENT, KP_EVENT_2]),
   snap('emsc', [QUAKE]),
+  FORECAST,
 ];
 const LAST_RUN = {
   status: 'live' as const, fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-09-20T00:00:00Z',
@@ -73,9 +80,19 @@ describe('shorten: cut at a word boundary, never mid-word', () => {
 });
 
 describe('rankStatements: 14:00, the full fixture', () => {
-  it('ranks transit, quake and closure into the top three; the transit value names the two worst lines, worst first, each an unbreakable run so a two-line value breaks only at " · " (R-KP22); six badges, no "+N"', () => {
+  it('ranks transit, quake and tonight into the top three (tonight and a near closure tie at 90; the table order decides); the transit value names the two worst lines, worst first, each an unbreakable run so a two-line value breaks only at " · " (R-KP22); six badges, no "+N"', () => {
     const slots = rankStatements(input(), []);
-    expect(keysOf(slots)).toEqual(['say:transit', 'say:quake', 'say:closure']);
+    expect(keysOf(slots)).toEqual(['say:transit', 'say:quake', 'say:tonight']);
+    const tonight = statementOf(slots, 'tonight')!;
+    expect(tonight.value).toBe('Antonio Kutleša: Smeđe krave daju čokoladno mlijeko');
+    expect(tonight.context).toBe('19:00 · KONTEJNER · Kulturpunkt · još 1 događanje');
+    const wide = rankStatements(input({ slots: 10 }), []);
+    const forecast = statementOf(wide, 'forecast')!;
+    expect(forecast.value).toBe('13\u00a0do\u00a022\u00a0°C');
+    expect(forecast.context).toBe('Umjereno do pretežno oblačno, povremeno kiša, moguće i pljusak.');
+    // 88 sits under the near closure's 90 and over the ZET notice's 80.
+    expect(keysOf(wide).indexOf('say:forecast')).toBeGreaterThan(keysOf(wide).indexOf('say:closure'));
+    expect(keysOf(wide).indexOf('say:forecast')).toBeLessThan(keysOf(wide).indexOf('say:zet'));
     const transit = statementOf(slots, 'transit')!;
     expect(transit.value).toBe('6\u00a0kasni\u00a04\u00a0min · 13\u00a0kasni\u00a03\u00a0min');
     expect(transit.value.split(' · ').every((run) => !run.includes(' '))).toBe(true);
@@ -86,7 +103,7 @@ describe('rankStatements: 14:00, the full fixture', () => {
     const quake = statementOf(slots, 'quake')!;
     expect(quake.value).toBe('Magnituda\u00a03,4 · Petrinja');
     expect(quake.context).toBe('EMSC · 12:00 · dubina 8 km');
-    const closure = statementOf(slots, 'closure')!;
+    const closure = statementOf(wide, 'closure')!;
     expect(closure.value).toBe('Ilica');
     expect(closure.context).toBe('350\u00a0m · oba smjera · do 18:00');
     expect(closure.weight).toBe(90); // 350 m is inside the 500 m street radius
@@ -103,7 +120,7 @@ describe('rankStatements: 14:00, the full fixture', () => {
   });
 
   it('assembly reads "sutra HH:MM"; zet and works are ranked but outside the top three', () => {
-    const slots = rankStatements(input({ slots: 8 }), []);
+    const slots = rankStatements(input({ slots: 10 }), []);
     const assembly = statementOf(slots, 'assembly')!;
     expect(assembly.context).toBe('sutra 08:30 · Skupština Grada Zagreba');
     expect(assembly.weight).toBe(60); // under 24 h ahead
@@ -182,6 +199,10 @@ describe('rankStatements: honest absence', () => {
     expect(keysOf(slots)).not.toContain('say:lastrun');
   });
 
+  it('a forecast module with no row for tomorrow says nothing: yesterday\u2019s tomorrow is today', () => {
+    const todayOnly = withModule(MODULES, 'dhmz-forecast', { items: [FORECAST.items[0]!] });
+    expect(statementOf(rankStatements(input({ modules: todayOnly, slots: 10 }), []), 'forecast')).toBeUndefined();
+  });
   it('a quake under magnitude 3.0 is not a statement at all (R-KP9)', () => {
     const modules = withModule(MODULES, 'emsc', { items: [{ ...QUAKE, data: { ...QUAKE.data, mag: 2.1 } }] });
     const slots = rankStatements(input({ modules, slots: 8 }), []);

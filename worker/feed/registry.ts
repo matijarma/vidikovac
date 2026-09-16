@@ -9,8 +9,6 @@ import { fetchGlasnik } from './modules/glasnik';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt, inTeaserBox } from './modules/zet-rt';
 import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
-import { KOMUNALNE_URL } from './modules/dogadanja/komunalne';
-import { openLicenceEvents, OPEN_LICENCE_EVENT_SOURCES } from './modules/dogadanja/licence';
 
 // The registry is the single source of truth for tier, refresh windows and
 // attribution. Module files know only how to parse their own source.
@@ -165,58 +163,17 @@ export function clearFetcherOverrides(): void {
   FETCHER_OVERRIDES.clear();
 }
 
-// The kiosk shows a reduced view of three session modules before anyone scans:
-// enough to be useful standing in a cafe, not enough to replace the session.
-// dogadanja is reduced by licence first and only then by size (teaserSubset below).
-export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja'];
+// Every module the app fetches reaches the public screen before anyone scans
+// (owner, 16 Sept 2026: "we use the sources that we use"). The only reduction
+// the teaser makes is to zet-rt's payload (the vehicle box below) and emsc's
+// count; nothing is held back by tier or by source licence. /open/*.json, the
+// machine-readable republication, keeps its own open-tier selection and is a
+// different thing from showing a row on a wall with its credit.
+export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja', 'dhmz-forecast', 'glasnik'];
 export const TEASER_EMSC_LIMIT = 10;
-// R-KP10 / D14: the public screen's column shows only the top-ranked open
-// rows, but the cap must not be the thing that drops today's session or a
-// service notice on a busy day -- twenty (up from ten) leaves headroom below
-// the two ranked kinds without shipping the whole register (40 komunalne
-// rows with their activity text) to every screen every 30 s.
-export const TEASER_EVENTS_LIMIT = 20;
 
 function vozila(count: number): string {
   return count % 10 === 1 && count % 100 !== 11 ? `${count} vozilo` : `${count} vozila`;
-}
-
-// What the open tier may say about dogadanja: the merged module's own
-// attribution (DOGADANJA_ATTRIBUTION) names all six sources and two licences,
-// which is right on a session panel and wrong on a public screen that carries
-// only the Otvorena dozvola rows. The url is the one open dataset the reduced
-// copy always draws on; every item still carries its own link.
-export const DOGADANJA_OPEN_ATTRIBUTION: Attribution = {
-  text:
-    'Izvor: Grad Zagreb (Skupština Grada Zagreba, kvartovske novosti, plan komunalnih aktivnosti s data.zagreb.hr) i ZET, ' +
-    'Otvorena dozvola; poveznica uz svaku stavku',
-  url: KOMUNALNE_URL,
-  licence: OPEN_LICENCE,
-};
-
-/** R-KP10 / D14: within the open-licence dogadanja rows, an upcoming
- *  Skupština session and a ZET promet notice matter to a kiosk reader more
- *  than a routine kvart or komunalne row that happens to sit earlier in the
- *  merge order -- so both move to the front, sessions soonest first (the
- *  one a reader can still attend), ZET promet newest first, before the cap
- *  that follows can drop either. A session already under way or in the
- *  past keeps the plain merge-order slot: it is no longer the thing to
- *  lead with. `fetchedAt`, not `Date.now()`, is "now" here so the function
- *  stays pure and reproducible from a snapshot alone. */
-function rankDogadanjaTeaser(items: readonly FeedItem[], fetchedAt: string): FeedItem[] {
-  const now = Date.parse(fetchedAt);
-  const sessions: FeedItem[] = [];
-  const zetPromet: FeedItem[] = [];
-  const rest: FeedItem[] = [];
-  for (const item of items) {
-    const at = item.at ? Date.parse(item.at) : NaN;
-    if (item.data?.source === 'skupstina' && Number.isFinite(at) && at >= now) sessions.push(item);
-    else if (item.data?.source === 'zet-promet') zetPromet.push(item);
-    else rest.push(item);
-  }
-  sessions.sort((a, b) => Date.parse(a.at ?? '') - Date.parse(b.at ?? ''));
-  zetPromet.sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));
-  return [...sessions, ...zetPromet, ...rest];
 }
 
 export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; lat: number }): ModuleSnapshot {
@@ -246,37 +203,6 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
         data: { vehicles },
       };
       return { ...snapshot, items: [count, ...boxed, ...delays] };
-    }
-    case 'dogadanja': {
-      // The licence boundary (modules/dogadanja/licence.ts): Kulturpunkt
-      // (CC BY-SA 3.0 HR) and Etnografski rows never leave the session tier.
-      // Filtered first, then cut, so the cap never eats the open rows.
-      // `sourceCounts`, the module's own extra property, is deliberately not
-      // carried: the open copy states nothing about the sources it may not show.
-      const allowed = new Set<string>(OPEN_LICENCE_EVENT_SOURCES);
-      const open = openLicenceEvents(snapshot.items);
-      const items = rankDogadanjaTeaser(open, snapshot.fetchedAt).slice(0, TEASER_EVENTS_LIMIT);
-      const sources = snapshot.sources
-        ? Object.fromEntries(Object.entries(snapshot.sources).filter(([id]) => allowed.has(id)))
-        : undefined;
-      const result: ModuleSnapshot = {
-        module: snapshot.module,
-        tier: snapshot.tier,
-        status: snapshot.status,
-        fetchedAt: snapshot.fetchedAt,
-        ...(snapshot.staleSince ? { staleSince: snapshot.staleSince } : {}),
-        ...(snapshot.sourceUpdatedAt ? { sourceUpdatedAt: snapshot.sourceUpdatedAt } : {}),
-        attribution: DOGADANJA_OPEN_ATTRIBUTION,
-        items,
-        ...(sources ? { sources } : {}),
-      };
-      if (sources && Object.keys(sources).length) {
-        const states = Object.values(sources);
-        result.status = states.every((source) => source.status === 'live') ? 'live'
-          : states.every((source) => source.status === 'down') ? 'down' : 'stale';
-        if (result.status === 'live') delete result.staleSince;
-      }
-      return limitedSnapshot(result, items, open.length);
     }
     case 'emsc': {
       const newestFirst = [...snapshot.items].sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));

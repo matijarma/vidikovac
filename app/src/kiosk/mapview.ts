@@ -33,7 +33,6 @@
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
-import { isOpenLicenceEvent } from '../../../worker/feed/modules/dogadanja/licence';
 import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
 import { routeName } from '../data/routes';
 import { safetyState } from '../experience/safety-state';
@@ -278,7 +277,7 @@ export function stopPlace(stop: ScreenStop): MapPoint {
 export function placedEvents(dogadanja: ModuleSnapshot | undefined, now: number): MapPoint[] {
   const out: MapPoint[] = [];
   for (const item of isLive(dogadanja) ? dogadanja.items : []) {
-    if (!isOpenLicenceEvent(item) || item.geo?.type !== 'Point') continue;
+    if (item.geo?.type !== 'Point') continue;
     const [lon, lat] = item.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     if (windowOf(item, now) === 'expired') continue;
