@@ -163,6 +163,7 @@ function mount(options: {
   result?: ScanOk | ScanFail;
   scan?: (code: string) => Promise<ScanOk | ScanFail>;
   now?: () => number;
+  readClipboard?: () => Promise<string>;
 } = {}) {
   const root = document.createElement('main');
   document.body.appendChild(root);
@@ -176,6 +177,7 @@ function mount(options: {
     replaceUrl,
     now: options.now ?? (() => NOW),
     scan,
+    readClipboard: options.readClipboard,
   });
   const input = root.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
   const form = root.querySelector<HTMLFormElement>('form')!;
@@ -191,6 +193,28 @@ function mount(options: {
   };
   return { root, handle, navigate, replaceUrl, scan, input, form, submitButton, status, errorBox, type, send };
 }
+
+describe('clipboard paste', () => {
+  it.each(['ABCD-EFGH', 'https://zagreb.aningfilm.hr/s/#ABCD-EFGH'])('fills a copied code or scan link without submitting: %s', async (value) => {
+    const page = mount({ readClipboard: async () => value });
+    page.root.querySelector<HTMLButtonElement>('[data-testid=code-paste]')!.click();
+    await flush();
+    expect(page.input.value).toBe('ABCD-EFGH');
+    expect(page.submitButton.disabled).toBe(false);
+    expect(page.scan).not.toHaveBeenCalled();
+  });
+  it('preserves manual entry when clipboard access is denied', async () => {
+    const page = mount({ readClipboard: async () => { throw new Error('denied'); } });
+    page.type('ABCD');
+    page.root.querySelector<HTMLButtonElement>('[data-testid=code-paste]')!.click();
+    await flush();
+    expect(page.input.value).toBe('ABCD');
+    expect(page.status.textContent).toContain('Zalijepi kod izravno');
+    expect(document.activeElement).toBe(page.input);
+    page.type('ABCD-EFGH');
+    expect(page.submitButton.disabled).toBe(false);
+  });
+});
 
 const ERRORS: [ScanFail['error'], string][] = [
   ['bad-request', 'Kod nije u ispravnom obliku.'],

@@ -559,6 +559,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const link = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]');
     const corner = element.querySelector<HTMLElement>('[data-testid=corner-qr]');
     const joinCode = element.querySelector<HTMLElement>('[data-testid=join-code]');
+    const copy = element.querySelector<HTMLButtonElement>('[data-testid=pair-copy]');
+    if (copy) {
+      copy.disabled = !slot;
+      copy.innerHTML = iconMarkup('copy');
+      copy.setAttribute('aria-label', s.invitation.copyCode);
+      copy.title = s.invitation.copyCode;
+    }
+    const copyStatus = element.querySelector<HTMLElement>('[data-testid=pair-copy-status]');
+    if (copyStatus) copyStatus.textContent = '';
     if (!slot) {
       if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)}</p>`;
       if (codeA) codeA.textContent = '····';
@@ -585,6 +594,32 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous, joinCode);
     paintProgress();
   }
+  stage.addEventListener('click', async (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-testid=pair-copy]');
+    const slot = codesAllowed() ? currentSlot : null;
+    if (!button || !slot || button.disabled) return;
+    button.disabled = true;
+    let copied = false;
+    try { await navigator.clipboard.writeText(formatCode(slot.code)); copied = true; } catch { /* manual selection remains available */ }
+    if (disposed || !button.isConnected) return;
+    button.disabled = !codesAllowed() || !currentSlot;
+    if (currentSlot?.code !== slot.code) return; // a rotated code has its own label
+    const message = i18n.t(copied ? 'session.shareCopied' : 'export.copyFailed');
+    button.innerHTML = iconMarkup(copied ? 'check-circle' : 'alert-circle');
+    button.title = message;
+    button.setAttribute('aria-label', message);
+    const status = element.querySelector<HTMLElement>('[data-testid=pair-copy-status]');
+    if (status) status.textContent = message;
+    if (!copied) {
+      const code = element.querySelector('[data-testid=pair-code]');
+      if (code) {
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const selected = window.getSelection();
+        selected?.removeAllRanges(); selected?.addRange(range);
+      }
+    }
+  });
   /** The outgoing digits stay 180 ms as a ghost over the live code, fading, while the new ones fade in (data-swap); the join code fades in the same beat.
    *  The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits) so both copies sit on the same pixels and the
    *  crossfade never reads as the second half sliding sideways; it carries no testid, so `pair-code` stays one element mid-swap. */

@@ -53,6 +53,7 @@ export interface ScanPageDeps {
   createScanner?: (deps: QrScannerDeps) => QrScannerHandle;
   /** Drops the spent code from the address bar once the Worker has answered. */
   replaceUrl?: (url: string) => void;
+  readClipboard?: () => Promise<string>;
 }
 
 export interface ScanPageHandle {
@@ -145,7 +146,10 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
         aria-labelledby="scan-confirm-title" tabindex="-1" hidden></section>
       ${cameraOffered ? '<div class="scan-camera" id="scan-camera-region" data-testid="scan-camera-region" hidden></div>' : ''}
       <form class="scan-form" novalidate>
-        <label class="scan-label" for="scan-code">${escapeHtml(i18n.t('scan.codeLabel'))}</label>
+        <div class="scan-code-head">
+          <label class="scan-label" for="scan-code">${escapeHtml(i18n.t('scan.codeLabel'))}</label>
+          <button type="button" class="btn-ghost scan-paste" data-testid="code-paste">${escapeHtml(i18n.t('scan.paste'))}</button>
+        </div>
         <input id="scan-code" class="scan-input" data-testid="code-input" type="text" name="code"
           inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off"
           spellcheck="false" enterkeyhint="go" maxlength="9" placeholder="ABCD-EFGH"
@@ -173,8 +177,11 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
   const input = element.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
   const submitButton = element.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
   const status = element.querySelector<HTMLElement>('[data-testid=scan-status]')!;
+  const pasteButton = element.querySelector<HTMLButtonElement>('[data-testid=code-paste]')!;
 
   let busy = false;
+  let pasting = false;
+  let disposed = false;
   let navigated = false;
   /** The slow-down wait: the check stays closed until the countdown reaches zero. */
   let waiting = false;
@@ -188,7 +195,8 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
 
   /** The check opens only for a complete code, outside a POST and outside a wait. */
   function syncSubmit(): void {
-    submitButton.disabled = busy || waiting || !isCompleteCode(input.value);
+    submitButton.disabled = busy || waiting || pasting || !isCompleteCode(input.value);
+    pasteButton.disabled = busy || waiting || pasting || navigated;
   }
 
   function hideConfirm(): void {
@@ -291,7 +299,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
   }
 
   async function submitCode(raw: string): Promise<void> {
-    if (busy || waiting || navigated) return;
+    if (busy || waiting || pasting || navigated || disposed) return;
     const code = normalizeCode(raw);
     if (!isCompleteCode(code)) {
       showError('incomplete');
@@ -299,6 +307,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
       return;
     }
     busy = true;
+    syncSubmit();
     clearError();
     // Read-only, never disabled: the keyboard and the caret stay where they
     // are, the field only stops taking edits until the Worker answers.
@@ -349,6 +358,26 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     if (input.value !== formatted) input.value = formatted;
     syncSubmit();
     clearError();
+  });
+  pasteButton.addEventListener('click', async () => {
+    if (busy || waiting || pasting || navigated || disposed) return;
+    const before = input.value;
+    pasting = true;
+    syncSubmit();
+    clearError();
+    try {
+      const raw = await (deps.readClipboard ?? (() => navigator.clipboard.readText()))();
+      if (disposed || navigated || input.value !== before) return;
+      const code = codeFromScan(raw);
+      if (!code) { status.textContent = i18n.t('scan.pasteInvalid'); return; }
+      input.value = formatCode(code);
+      status.textContent = i18n.t('scan.pasted');
+    } catch {
+      if (!disposed) status.textContent = i18n.t('scan.pasteFailed');
+    } finally {
+      pasting = false;
+      if (!disposed) { syncSubmit(); input.focus(); }
+    }
   });
 
   form.addEventListener('submit', (event) => {
@@ -451,6 +480,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     element,
     submit: submitCode,
     destroy() {
+      disposed = true;
       stopWait();
       closeScanner();
       element.remove();

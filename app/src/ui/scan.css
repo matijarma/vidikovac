@@ -37,6 +37,8 @@ p.scan-brand a { display: inline-flex; align-items: center; min-block-size: var(
 
 .scan-form { display: grid; gap: var(--sp-2); }
 .scan-label { font-size: var(--type-body); font-weight: var(--weight-medium); }
+.scan-code-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.scan-code-head .scan-paste { min-height: 44px; padding-inline: var(--sp-3); font-size: var(--type-control); }
 /* input[type='text'].scan-input, not bare .scan-input: base.css's generic
    `input[type='text'], select` reset is (0,1,1) and would otherwise beat a
    single-class selector's (0,1,0) on every contested longhand (border-width,

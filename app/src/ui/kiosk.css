@@ -444,8 +444,14 @@
    the markup gives it (after each dot, before the path) and, as the last
    resort, anywhere -- a typed address is useless ellipsised. */
 .k-hint-host { display: block; font-weight: 700; overflow-wrap: anywhere; }
-.k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; }
-.k-code-box { position: relative; }
+.k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; min-inline-size: 0; container-type: inline-size; }
+.k-code-box { position: relative; min-width: 0; }
+.k-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; align-items: center; }
+.k-code-copy { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid currentColor; border-radius: var(--r-sm); background: transparent; color: inherit; cursor: pointer; }
+.k-code-copy:hover:not(:disabled) { background: color-mix(in oklab, currentColor 12%, transparent); }
+.k-code-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.k-code-copy:disabled { opacity: 0.5; cursor: default; }
+.k-code-copy .icon { width: 20px; height: 20px; }
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 .k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 @keyframes k-code-in { from { opacity: 0; } }
@@ -453,7 +459,7 @@
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-code-out 180ms var(--ease-exit) both; }
 /* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
 /* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
-.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; justify-content: space-between; font-size: min(calc(40px * var(--k-sign-zoom)), 15cqi); font-weight: 700; letter-spacing: 0.015em; line-height: 1.15; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
+.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; justify-content: space-between; font-size: 28px; font-size: clamp(20px, 11cqi, calc(36px * var(--k-sign-zoom))); font-weight: 700; letter-spacing: 0.015em; line-height: 1.15; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; user-select: text; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 /* The code's separator is a dimmed middle dot; the 8 px bar fills paper over a quarter-paper track on the accent (kajimafix 03.4). */
 .k-code-dash { margin: 0 0.15em; opacity: 0.4; }

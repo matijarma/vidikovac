@@ -37,6 +37,7 @@ export interface KioskStrings {
     qrLabel: string;
     qrWaiting: string;
     codeWaiting: string;
+    copyCode: string;
     progressLabel: string;
   };
   weather: {
@@ -296,7 +297,7 @@ function build(code: SupportedLocale): KioskStrings {
       themeWord: record(THEME_PREFERENCES, (pref) => `kiosk.header.themeWord.${pref}`),
     },
     status: group('status', ['offline', 'reconnecting', 'dataDown']),
-    invitation: group('invite', ['lead', 'support', 'typeCode', 'qrLabel', 'qrWaiting', 'codeWaiting', 'progressLabel']),
+    invitation: { ...group('invite', ['lead', 'support', 'typeCode', 'qrLabel', 'qrWaiting', 'codeWaiting', 'progressLabel']), copyCode: i18n.t('session.shareCopy') },
     weather: {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),

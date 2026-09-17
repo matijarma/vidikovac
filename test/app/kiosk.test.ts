@@ -143,6 +143,40 @@ const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelec
 
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
+describe('clipboard copy', () => {
+  it('copies the current visible code, including after rotation', async () => {
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    try {
+      let now = NOW;
+      const k = mount({ stored: STORED, now: () => now });
+      k.handlers.onCodes(batch(NOW), NOW);
+      q(k.root, '[data-testid=pair-copy]')!.click();
+      await flush();
+      expect(write).toHaveBeenLastCalledWith('ABCD-EFG0');
+      expect(text(q(k.root, '[data-testid=pair-copy-status]'))).toBe('Kod je kopiran.');
+      now += 30_000;
+      k.tick(250);
+      q(k.root, '[data-testid=pair-copy]')!.click();
+      await flush();
+      expect(write).toHaveBeenLastCalledWith('ABCD-EFG1');
+      k.handle.destroy();
+    } finally { write.mockRestore(); }
+  });
+  it('keeps the visible text available when clipboard access is denied', async () => {
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+    try {
+      const k = mount({ stored: STORED });
+      k.handlers.onCodes(batch(NOW), NOW);
+      q(k.root, '[data-testid=pair-copy]')!.click();
+      await flush();
+      expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
+      expect(text(q(k.root, '[data-testid=pair-copy-status]'))).toBe('Kopiranje nije uspjelo.');
+      expect((q(k.root, '[data-testid=pair-copy]') as HTMLButtonElement).disabled).toBe(false);
+      k.handle.destroy();
+    } finally { write.mockRestore(); }
+  });
+});
+
 describe('versioned explicit public presentation', () => {
   it('the initial idle state preserves the mounted overview and a recent scan notice', async () => {
     const k = mount({ stored: STORED });

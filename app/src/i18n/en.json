@@ -759,6 +759,10 @@
     "footerClosing": "See you in the city."
   },
   "scan": {
+    "paste": "Paste",
+    "pasted": "The code is pasted.",
+    "pasteFailed": "The browser cannot read the clipboard. Paste the code directly into the field.",
+    "pasteInvalid": "The clipboard does not contain a complete code. Copy the code from the screen.",
     "title": "Unlock a view of Zagreb",
     "noCode": "No code? See how to try it.",
     "intro": "Scan the QR code on the screen or type the code below. Ten minutes from a screen, five from another person's phone.",

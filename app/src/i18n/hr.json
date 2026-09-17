@@ -783,6 +783,10 @@
     "footerClosing": "Vidimo se u gradu."
   },
   "scan": {
+    "paste": "Zalijepi",
+    "pasted": "Kod je zalijepljen.",
+    "pasteFailed": "Preglednik ne dopušta pristup međuspremniku. Zalijepi kod izravno u polje.",
+    "pasteInvalid": "Međuspremnik ne sadrži potpuni kod. Kopiraj kod sa zaslona.",
     "title": "Otključaj pogled na Zagreb",
     "noCode": "Nemaš kod? Pogledaj kako isprobati.",
     "intro": "Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.",
