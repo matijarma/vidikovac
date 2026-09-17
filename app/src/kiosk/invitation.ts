@@ -68,7 +68,7 @@ export interface InvitationHandle {
 /** The card the rotation paints (R-KP21): the lead over the hint in one side
  *  wrapper the QR stands beside, then the code and its bar across. Reading
  *  order is the lead, the hint, the QR, the code; the lead is the page's one h1. */
-function cardMarkup(s: KioskStrings, codeBase?: string): string {
+export function cardMarkup(s: KioskStrings, codeBase?: string): string {
   return `<article class="k-invite" data-testid="kiosk-invite">
       <div class="k-invite-side"><h1 class="k-lead">${escapeHtml(s.invitation.lead)}</h1>${hintMarkup(s, codeBase)}</div>
       <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p></div>
@@ -85,37 +85,29 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   const element = document.createElement('section');
   element.className = 'k-front';
   element.dataset.testid = 'kiosk-invitation';
-  // The tonight panel across the top left; the bottom row of the lines, the field and the surroundings; the right column of the forecast, the city and the card.
-  element.innerHTML = `${panelShell('tonight')}<div class="k-bottom">${panelShell('promet')}</div><aside class="k-column">${panelShell('weather')}${panelShell('city')}<div class="k-panel k-panel--card">${cardMarkup(s, deps.codeBase)}</div></aside>`;
+  element.innerHTML = `<div class="k-local"><div class="k-geography"></div>${panelShell('promet')}</div>
+    <aside class="k-overview">${panelShell('weather')}${panelShell('tonight')}
+      <div class="k-neighborhood"><div class="k-context-stack">${panelShell('around')}${panelShell('city')}</div>
+        <div class="k-panel--card">${cardMarkup(s, deps.codeBase)}</div>
+      </div>
+    </aside>`;
   host.appendChild(element);
-  const bottom = element.querySelector<HTMLElement>('.k-bottom')!;
-  // The field takes the bottom row's middle cell; the surroundings its last.
-  const field: FieldHandle = mountField(bottom, { lightweight });
-  bottom.insertAdjacentHTML('beforeend', panelShell('around'));
+  const field: FieldHandle = mountField(element.querySelector<HTMLElement>('.k-geography')!, { lightweight });
   const panels = Object.fromEntries(PANEL_IDS.map((id) => [id, element.querySelector<HTMLElement>(`[data-panel="${id}"]`)!])) as Record<PanelId, HTMLElement>;
   const lastHtml: Partial<Record<PanelId, string>> = {};
   let disposed = false;
 
-  /** Every row whole or not at all: the ones a panel's box does not hold are
-   *  hidden from the foot up, then the forecast's sentence; the kicker, the
-   *  figure and the credit always stand. A box of no height (a pre-paint
-   *  mount, a phone's auto-height panel) hides nothing. */
+  /** Content budgets belong to the model. Never make a panel silently empty
+   *  to satisfy a geometry test. Unexpected overflow is visible to QA. */
   function fit(): void {
     for (const id of PANEL_IDS) {
       const panel = panels[id];
-      const yielding = [...panel.querySelectorAll<HTMLElement>('.k-fr'), ...panel.querySelectorAll<HTMLElement>('.k-panel-text')];
-      for (const el of yielding) el.hidden = false;
-      if (panel.clientHeight === 0) continue;
-      let left = yielding;
-      while (left.length > 0 && panel.scrollHeight > panel.clientHeight + 1) {
-        left[left.length - 1]!.hidden = true;
-        left = left.slice(0, -1);
-      }
+      panel.dataset.overflow = panel.clientHeight > 0 && panel.scrollHeight > panel.clientHeight + 1 ? 'true' : 'false';
     }
   }
 
   function paint(model: InvitationModel): void {
-    const built = frontPanels({ modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale, lightweight });
+    const built = frontPanels({ modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale, lightweight, composition: model.composition });
     for (const id of PANEL_IDS) {
       const html = panelMarkup(built[id]);
       if (html === lastHtml[id]) continue;

@@ -308,7 +308,7 @@ describe('the sheet', () => {
     expect(all('[data-testid=transport-detail] .t-head').map(text)).toEqual(['Linije u pokretu', 'Stanica ovog zaslona', 'Kašnjenja po linijama', 'Zatvorene prometnice', 'Obavijesti ZET-a']);
     expect(document.querySelector('.t-subtitle')).toBeNull();
     expect(q<HTMLElement>('[data-testid=map-status]').hidden).toBe(true);
-    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('half');
+    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('peek');
   });
 
   it('before the model has placed anything the reports are listed by route alone, with no position of any kind; the peek shows the busiest lines', () => {
@@ -426,8 +426,6 @@ describe('the map, the paired screen and the feed', () => {
     const { context, navigate } = ctx({ maps });
     render(context);
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
-    q<HTMLButtonElement>('.t-sheet-toggle').click();
-    q<HTMLButtonElement>('.t-sheet-toggle').click();
     expect(ws.dataset.sheet).toBe('peek');
     last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
     expect(ws.dataset.sheet).toBe('half');
@@ -547,12 +545,14 @@ describe('detents on the phone stage', () => {
     render(context);
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
     const covered = (): number => Number.parseFloat(ws.style.getPropertyValue('--sheet-h'));
-    expect(ws.dataset.sheet).toBe('half');
+    expect(ws.dataset.sheet).toBe('peek');
     expect(covered()).toBeGreaterThan(0);
     expect(last().options.fitPadding).toEqual({ bottom: covered(), right: 0 });
     const chevron = q<HTMLButtonElement>('.t-sheet-toggle');
-    expect(chevron.getAttribute('aria-expanded')).toBe('true');
+    expect(chevron.getAttribute('aria-expanded')).toBe('false');
     expect(chevron.getAttribute('aria-controls')).toBe(q('[data-testid=transport-detail]').id);
+    chevron.click();
+    expect(ws.dataset.sheet).toBe('half');
     chevron.click();
     expect(ws.dataset.sheet).toBe('open');
     expect(last().setFitPadding).toHaveBeenLastCalledWith({ bottom: covered(), right: 0 });
@@ -588,7 +588,7 @@ describe('detents on the phone stage', () => {
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
     expect(ws.dataset.sheet).toBe('open');
     expect(ws.style.getPropertyValue('--sheet-h')).toBe('');
-    expect(last().options).toMatchObject({ attributionCompact: false, fitPadding: { bottom: 0, right: 0 } });
+    expect(last().options).toMatchObject({ attributionCompact: true, fitPadding: { bottom: 0, right: 0 } });
     q<HTMLButtonElement>('.t-sheet-toggle').click();
     expect(toggle).toHaveBeenCalledTimes(1);
     expect(ws.dataset.sheet).toBe('open');
@@ -602,10 +602,11 @@ describe('detents on the phone stage', () => {
     // happy-dom lays nothing out: the stage is given the 740 px of a 390×844 phone, so half is 370 and open 700.
     Object.defineProperty(q<HTMLElement>('.transport-body'), 'clientHeight', { get: () => 740, configurable: true });
     const covered = (): number => Number.parseFloat(ws.style.getPropertyValue('--sheet-h'));
-    const half = 370;
+    const half = 740 * 0.38;
     const chevron = (): HTMLButtonElement => q<HTMLButtonElement>('.t-sheet-toggle');
     const handle = last();
     const reset = (): void => { for (const fn of [handle.select, handle.fit, handle.setFitPadding]) spy(fn).mockClear(); };
+    chevron().click();
     chevron().click();
     expect(ws.dataset.sheet).toBe('open');
     expect(covered()).toBe(700);
@@ -741,20 +742,17 @@ describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-s
     render(ctx({ maps, selection: { kind: 'item', id: publicItemKey('prometnice', 'c1'), module: 'prometnice' } }).context);
     expect(document.querySelector('.t-save')).toBeNull();
   });
-  it('every detail carries the ghost cast button, enabled when the session can cast', () => {
+  it('details leave presentation to the shared header instead of duplicating the control', () => {
     const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
     render(ctx({ maps, selection: { kind: 'route', id: '11' }, cast: CAN_CAST }).context);
-    const cast = q<HTMLButtonElement>('[data-testid=detail-cast]');
-    expect(cast.classList.contains('btn-ghost')).toBe(true);
-    expect(cast.hasAttribute('aria-disabled')).toBe(false);
-    expect(text(cast)).toBe('Na zaslon');
+    expect(document.querySelector('[data-testid=detail-cast]')).toBeNull();
+    expect(q('[data-testid=route-title]').textContent).toContain('11');
   });
-  it('disables the cast button with the reason when it cannot fire, the same sentence the Kvart panel reads', () => {
+  it('a no-screen session keeps useful details without a dead presentation button', () => {
     const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
     render(ctx({ maps, selection: { kind: 'route', id: '11' }, cast: NO_SCREEN }).context);
-    const cast = q<HTMLButtonElement>('[data-testid=detail-cast]');
-    expect(cast.getAttribute('aria-disabled')).toBe('true');
-    expect(cast.getAttribute('title')).toBe('Ova sesija nema zaslon.');
+    expect(document.querySelector('[data-testid=detail-cast]')).toBeNull();
+    expect(q('[data-testid=route-title]').textContent).toContain('11');
   });
   it('kiosk carries neither: a public screen has no finger to press them', () => {
     const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
@@ -774,7 +772,7 @@ describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-s
       if (target) heard.push(target.dataset.action!);
     });
     shell.querySelector<HTMLButtonElement>('.t-save')!.click();
-    shell.querySelector<HTMLButtonElement>('[data-testid=detail-cast]')!.click();
-    expect(heard).toEqual(['save', 'cast']);
+    expect(shell.querySelector('[data-testid=detail-cast]')).toBeNull();
+    expect(heard).toEqual(['save']);
   });
 });

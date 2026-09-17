@@ -382,7 +382,7 @@ describe('the basemap and the overlays on it', () => {
     expect(JSON.stringify(map.filters['stops'])).not.toContain('"6"');
     expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, 24]);
     expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
-    expect(map.layout['vehicles']?.['icon-allow-overlap']).toEqual(['step', ['zoom'], false, 15.1, true]);
+    expect(map.layout['vehicles']?.['icon-allow-overlap']).not.toBe(true); // Collision is retained at every zoom; no changed paint op is necessary.
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
     // Back to no option set: today's drawing, thresholds and the profile's own padding included.
     handle.setProzor!(null);
@@ -434,9 +434,10 @@ describe('selection and status', () => {
     expect(map.paint['network-tram']?.['line-opacity']).toEqual(overlays.NETWORK_OPACITY);
   });
 
-  it('a basemap failure before or after load reads tiles-failed while the overlays keep drawing; a tile that loads again reads ready', async () => {
+  it('a basemap failure before load ends the loading state; after load overlays draw with tiles-failed and recover', async () => {
     const { map, statuses, handle } = await harness({ load: false });
     map.fire('error', { sourceId: 'basemap', tile: {}, error: { url: 'https://zagreb.example/maps/zagreb-v1/13/1/1.mvt' } });
+    expect(handle.status!()).toBe('unavailable');
     map.fire('load');
     expect(handle.status!()).toBe('tiles-failed');
     expect(map.getSource('vehicles')).toBeDefined();
@@ -444,8 +445,71 @@ describe('selection and status', () => {
     map.fire('sourcedata', { sourceId: 'basemap', tile: {} });
     expect(handle.status!()).toBe('ready');
     map.fire('error', { sourceId: 'basemap', tile: {}, error: {} });
-    expect(statuses).toEqual(['tiles-failed', 'ready', 'tiles-failed']);
+    expect(statuses).toEqual(['unavailable', 'tiles-failed', 'ready', 'tiles-failed']);
     expect((await harness()).container.dataset.mapStatus).toBe('ready');
+  });
+  it('keeps the latest requested camera while the map library is still loading', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    let release!: (value: never) => void;
+    const handle = createCityMap(
+      { container, ariaLabel: 'Karta', points: [], center: [15.977, 45.813], zoom: 15 },
+      { loadMaplibre: () => new Promise(resolve => { release = resolve; }), raf: () => 0, cancel: () => {} },
+    );
+    handle.setView!({ center: [15.96, 45.79], zoom: 13 });
+    handle.setView!({ center: [16.02, 45.82], zoom: 14 });
+    release(lib as never);
+    await flush();
+    const map = FakeMap.instances.at(-1)!;
+    expect(map.options).toMatchObject({ center: [16.02, 45.82], zoom: 14 });
+    map.fire('load');
+    expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'jumpTo', options: { center: [16.02, 45.82], zoom: 14 } });
+    expect(handle.status!()).toBe('ready');
+    handle.destroy();
+  });
+  it('a selection requested before initialization is fitted once its geometry exists', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    let release!: (value: never) => void;
+    const handle = createCityMap(
+      { container, ariaLabel: 'Karta', points: [], lines: [CLOSURE] },
+      { loadMaplibre: () => new Promise(resolve => { release = resolve; }), raf: () => 0, cancel: () => {} },
+    );
+    handle.setView!({ center: [15.977, 45.813], zoom: 15 });
+    handle.select!({ kind: 'closure', id: CLOSURE.id }, { fit: true });
+    release(lib as never);
+    await flush();
+    const map = FakeMap.instances.at(-1)!;
+    map.fire('load');
+    expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'fitBounds', options: { bounds: [[15.957, 45.799], [15.959, 45.799]], maxZoom: 16 } });
+    handle.destroy();
+  });
+  it('a person moving the map during startup cancels an older programmatic camera', async () => {
+    const { map, handle } = await harness({ load: false });
+    handle.setView!({ center: [16.02, 45.82], zoom: 14, selection: { kind: 'closure', id: CLOSURE.id } });
+    map.fire('moveend', { originalEvent: {} });
+    map.cameraCalls.length = 0;
+    map.fire('load');
+    expect(map.cameraCalls).toEqual([]);
+  });
+  it('relabels the attribution disclosure when the language changes in place', async () => {
+    const { container, handle } = await harness();
+    const toggle = document.createElement('summary');
+    toggle.className = 'maplibregl-ctrl-attrib-button';
+    container.appendChild(toggle);
+    handle.setLocale!('en');
+    expect(toggle.getAttribute('aria-label')).toBe('Map attribution');
+    handle.setLocale!('hr');
+    expect(toggle.getAttribute('aria-label')).toBe('Izvori karte');
+  });
+  it('a tile arriving before the style cannot certify the renderer as ready', async () => {
+    const { map, handle } = await harness({ load: false });
+    map.fire('error', { error: { url: 'https://zagreb.example/maps/sprites/light.json' } });
+    expect(handle.status!()).toBe('unavailable');
+    map.fire('sourcedata', { sourceId: 'basemap', tile: {} });
+    expect(handle.status!()).toBe('unavailable');
+    map.fire('load');
+    expect(handle.status!()).toBe('ready');
   });
 });
 

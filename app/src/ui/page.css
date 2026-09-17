@@ -3,9 +3,9 @@
    product. Sections are content, not cards (plan, "Surfaces"): a hairline
    above every h2 and every licence entry, no border or background, the way
    the domain workspaces already read. */
-.page { max-width: 46rem; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-12); line-height: var(--lh-prose); display: grid; gap: var(--sp-6); min-inline-size: 0; overflow-wrap: anywhere; }
+.page { max-width: 52rem; margin: 0 auto; padding: var(--sp-6) var(--sp-5) var(--sp-12); line-height: var(--lh-prose); display: grid; gap: var(--sp-6); min-inline-size: 0; overflow-wrap: anywhere; }
 .page > *, .izvor > * { min-inline-size: 0; }
-.page h1 { font-size: var(--type-display); line-height: var(--lh-title); letter-spacing: -0.02em; margin-block-start: var(--sp-4); }
+.page h1 { font-size: 2.5rem; line-height: var(--lh-title); letter-spacing: -0.04em; margin-block-start: var(--sp-4); }
 .page h2 { font-size: var(--type-title); letter-spacing: -0.015em; margin-block-start: 0; padding-block-start: var(--sp-6); border-block-start: 1px solid var(--tone-stroke); }
 .page h3 { font-size: var(--type-head); margin-block-start: var(--sp-4); }
 .page p, .page li { max-width: 68ch; font-size: var(--type-body); font-weight: 400; line-height: var(--lh-prose); }
@@ -22,3 +22,8 @@
 /* .page-nav .page-brand outweighs base.css's a:hover, so the wordmark keeps its ink without !important. */
 .page-nav .page-brand { font-weight: var(--weight-bold); font-size: var(--type-head); letter-spacing: -0.02em; color: var(--tone-text-primary); text-decoration: none; }
 .page-brand .mark { color: var(--tone-action-brand); }
+.page > .page-nav:first-child { border-bottom: 1px solid var(--tone-stroke); padding-bottom: var(--sp-4); }
+.page > h1 + p { color: var(--tone-text-muted); font-size: 1.125rem; line-height: 1.6; }
+.page > ol > li { padding-bottom: var(--sp-4); }
+.page > ol > li::marker { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
+.page > nav.page-nav:last-child { border-top: 1px solid var(--tone-stroke); padding-top: var(--sp-4); }

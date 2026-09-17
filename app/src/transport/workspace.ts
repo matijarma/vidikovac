@@ -140,7 +140,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   element.dataset.testid = 'transport-workspace';
   element.dataset.persist = 'u-pokretu';
   element.dataset.status = 'loading';
-  element.dataset.sheet = 'half';
+  element.dataset.sheet = 'peek';
   // Built once. The controls below are updated in place on every render; only
   // the sheet body's content is ever re-set, with its focus restored by id.
   // The mode chips and the tools float over the map; the search sits in the
@@ -148,18 +148,22 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   element.innerHTML = `
     <div class="transport-body">
       <div class="transport-map" id="u-pokretu-map" data-testid="transport-map">
+        <details class="t-map-menu" data-testid="map-controls">
+        <summary class="t-map-menu-trigger">${iconMarkup('sliders-horizontal')}<span data-ref="tools-title"></span></summary>
+        <div class="t-map-menu-body">
         <div class="t-map-chips" role="group" data-ref="modes">
           <button type="button" class="t-toggle" id="${id}-mode-tram" data-action="toggle-mode" data-mode="${ROUTE_TYPE_TRAM}" aria-pressed="true"></button>
           <button type="button" class="t-toggle" id="${id}-mode-bus" data-action="toggle-mode" data-mode="${ROUTE_TYPE_BUS}" aria-pressed="true"></button>
           <button type="button" class="t-toggle" id="${id}-closures" data-action="toggle-closures" aria-pressed="true"></button>
           <span class="t-schema-legend" data-testid="schema-mode-legend" hidden></span>
         </div>
-        <p class="t-map-status" role="status" data-testid="map-status" hidden></p>
         <div class="t-map-tools" role="group" data-ref="tools">
           <button type="button" class="btn-ghost t-action" id="${id}-map-mode" data-testid="map-mode-toggle" data-action="toggle-map-mode" aria-pressed="false" hidden></button>
           <button type="button" class="btn-ghost t-action" id="${id}-fit-city" data-action="fit-city"></button>
           <button type="button" class="btn-ghost t-action" id="u-pokretu-map-full" data-testid="map-full-toggle" data-action="toggle-full" hidden></button>
         </div>
+        </div></details>
+        <p class="t-map-status" role="status" data-testid="map-status" hidden></p>
       </div>
       <aside class="transport-sheet" data-testid="transport-sheet">
         <div class="t-sheet-head" data-ref="sheet-head">
@@ -433,6 +437,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     schemaLegend.hidden = !schema;
     schemaLegend.textContent = tr(i18n, 'schemaTramsOnly');
     tools.setAttribute('aria-label', tr(i18n, 'toolsLabel'));
+    q<HTMLElement>('[data-ref=tools-title]').textContent = tr(i18n, 'toolsLabel');
+    q<HTMLElement>('.t-map-menu-trigger').setAttribute('aria-label', tr(i18n, 'toolsLabel'));
+    q<HTMLElement>('.t-map-menu').hidden = k;
     tools.hidden = k;
     mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps;
     const modeLabel = tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema');
@@ -719,7 +726,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
   });
 
-  searchInput.addEventListener('focus', raise);
+  searchInput.addEventListener('focus', () => {
+    // Keyboard focus must be visible immediately, not after the sheet's
+    // transition. Its taller summary must never travel under the tab bar.
+    if (sheet?.detent() === 'peek') sheet.set('half', { animate: false });
+  });
   searchInput.addEventListener('input', () => {
     query = searchInput.value;
     activeOption = null;
@@ -812,7 +823,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         interactive: !kiosk(),
         symbolScale: kiosk() ? KIOSK_SYMBOL_SCALE : 1,
         // The compact credit on the phone stage, where the sheet leaves the map little room; the full line on the desk and the kiosk.
-        attributionCompact: !kiosk() && !deskMedia?.matches,
+        attributionCompact: !kiosk(),
         fitPadding: fitPadding(),
         center: renderer === 'map' ? camera?.center : undefined,
         zoom: renderer === 'map' ? camera?.zoom : undefined,

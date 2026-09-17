@@ -1,11 +1,12 @@
-// The paired compositions: one glanceable screen per domain, read from
-// several steps away, mirroring the layer and the public selection the
-// driver's phone relayed. Not the phone's long page cropped into a kiosk:
+// Deliberate public presentations: one glanceable screen per domain, read
+// from several steps away, showing the subject a visitor explicitly chose.
+// Not the phone's long page cropped into a kiosk:
 // each domain has its own arrangement of two or three blocks, big figures
 // first, lists bounded, every block naming its source and its own time.
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
-import { LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
+import type { PresentationTarget } from '../../../worker/presentation';
+import { LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
 import { fillAttribution } from '../attribution';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
@@ -19,11 +20,15 @@ import { kBadge, kicker, linesMarkup, weatherMarkup } from './markup';
 import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
+import { cardMarkup } from './invitation';
+import { frontPanels, panelMarkup } from './front';
+import { columnsFor } from '../experience/timeband';
+import { districtLabel } from './districts';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */
 export const KIOSK_LAYER_MODULES: Record<LayerId, ModuleId[]> = {
-  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice'],
+  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'dogadanja', 'glasnik'],
   'u-pokretu': ['zet-rt', 'prometnice'],
   'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc'],
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
@@ -31,7 +36,7 @@ export const KIOSK_LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   kultura: ['dogadanja'],
 };
 
-export const PAIRED_MAP_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'u-pokretu']);
+export const PAIRED_MAP_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['u-pokretu']);
 
 export interface PairedContext {
   layer: LayerId;
@@ -46,6 +51,7 @@ export interface PairedContext {
   size: 'wide' | 'compact';
   /** The stop list once the controller has loaded it, so a stop selection can be named. */
   stops?: readonly ScreenStop[] | null;
+  target?: PresentationTarget;
 }
 
 export interface PairedDeps {
@@ -53,6 +59,7 @@ export interface PairedDeps {
   i18n: I18n;
   locale: string;
   lightweight: boolean;
+  codeBase?: string;
   /** Called after the shell was (re)built for a layer: the join QR needs painting again. */
   onShell?: () => void;
 }
@@ -194,12 +201,8 @@ const ROUNDING_PX = 1;
  *  counted in one "prikazano N od M" line, so a block never shows half a row
  *  or runs into its own source line. A DOM without layout (tests) measures
  *  nothing and leaves every row in place; `measure` is injectable for that.
- *  The floor is zero, not one: a block whose own coverage line ("prikazano
- *  N od M") does not fit beside even a single row (a long street name in a
- *  cramped compact side column) drops the row rather than clip the line
- *  that discloses how many exist -- a bare "prikazano 0 od M" still tells
- *  the reader the truth, where a half-visible row or a silently cropped
- *  line would not. */
+ *  Always retain the first useful row. If even that row cannot fit, flag a
+ *  composition defect instead of turning a populated panel into a heading. */
 export function fitRows(
   root: ParentNode,
   coverage: string,
@@ -227,7 +230,7 @@ export function fitRows(
     let m = measure(body);
     if (m.client === 0 || m.scroll <= m.client + ROUNDING_PX) continue;
     let visible = rows.length;
-    while (visible > 0 && m.scroll > m.client + ROUNDING_PX) {
+    while (visible > 1 && m.scroll > m.client + ROUNDING_PX) {
       visible -= 1;
       rows[visible]!.hidden = true;
       setNote(body, visible, totalOf(body));
@@ -250,6 +253,8 @@ export function fitRows(
       }
       visible += 1;
     }
+    const size = measure(body);
+    body.dataset.overflow = size.client > 0 && size.scroll > size.client + ROUNDING_PX ? 'true' : 'false';
   }
 }
 
@@ -267,12 +272,12 @@ function linesBox(ctx: PairedContext): string {
  *  region, the side column's block box, and the join card the controller
  *  paints the small QR into. Polls rewrite the boxes, never the shell, so
  *  the map container parked in the host is never torn out by a repaint. */
-export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolean): string {
-  const left = PAIRED_MAP_LAYERS.has(layer)
-    ? `<div class="k-map" data-testid="kiosk-live"><div class="k-map-host" data-testid="kiosk-map-host"${lightweight ? ' hidden' : ''}></div><div class="k-lines ${lightweight ? 'k-lines--board' : 'k-lines--overlay'}" data-testid="kiosk-lines"></div></div>`
+export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolean, district = false, codeBase?: string): string {
+  const left = PAIRED_MAP_LAYERS.has(layer) || district
+    ? `<div class="k-present-local"><div class="k-map" data-testid="kiosk-live"${lightweight ? ' hidden' : ''}><div class="k-map-host" data-testid="kiosk-map-host"></div></div><div class="k-lines k-present-board" data-testid="kiosk-lines"></div></div>`
     : `<div class="k-main" data-testid="kiosk-main"></div>`;
   return `${left}<aside class="k-side"><div class="k-side-blocks" data-testid="kiosk-side"></div>
-    <article class="k-join" data-testid="kiosk-join"><div class="k-join-qr" data-testid="corner-qr"></div><div class="k-join-text"><p class="k-join-title">${escapeHtml(s.session.join)}</p><p class="k-join-code" data-testid="join-code"></p><p class="k-meta">${escapeHtml(s.session.joinHint)}</p></div></article></aside>`;
+    <div class="k-present-invite" data-testid="kiosk-join">${cardMarkup(s, codeBase)}</div></aside>`;
 }
 
 function warningRows(ctx: PairedContext): string[] {
@@ -321,17 +326,46 @@ function closuresBlock(ctx: PairedContext, limit: number, grow = false): string 
 }
 
 function renderSada(ctx: PairedContext): PairedMarkup {
-  // With a selection on show, the column gives its room to the selection; the strip still carries the warning state.
-  // The weather is status in the frame's header (D11), never a block here. The column follows the strip's
-  // verdict: on a calm day (green notices at most) the closures near the stop take the whole column; an
-  // active warning of yellow or above, or a source that is not answering, brings the warnings block in
-  // beside them at wide, and alone at compact, where two list blocks never both fit a row next to the join card.
-  const selected = selectionCard(ctx);
-  const warnings = !selected && warningsRelevant(ctx) && safetyState(ctx.snapshots, ctx.now).level !== 'calm';
-  const side = selected ? `${selected}${closuresBlock(ctx, 2, true)}`
-    : warnings && ctx.size === 'compact' ? warningsBlock(ctx, true)
-    : `${warnings ? warningsBlock(ctx) : ''}${closuresBlock(ctx, ctx.size === 'wide' ? 3 : 2, true)}`;
-  return { lines: linesBox(ctx), main: '', side };
+  const warnings = warningsRelevant(ctx) && safetyState(ctx.snapshots, ctx.now).level !== 'calm';
+  let modules = modulesOf(ctx);
+  if (ctx.target?.time && ctx.target.time !== 'sada') {
+    const window = columnsFor(ctx.i18n, ctx.now).find(column => column.id === ctx.target!.time);
+    if (window) modules = modules.map(module => module.module !== 'dogadanja' ? module : {
+      ...module, items: module.items.filter(item => item.dateBasis !== 'event' || (item.at && Date.parse(item.at) >= window.start && Date.parse(item.at) < window.end)),
+    });
+  }
+  const front = frontPanels({ modules, stop: ctx.stop, now: ctx.now, lastRun: null, strings: ctx.strings, i18n: ctx.i18n, locale: ctx.locale, lightweight: false, composition: ctx.size });
+  if (ctx.target?.layer === 'kvart') {
+    const district = ctx.target.district ?? ctx.stop?.district;
+    const closures = (ctx.snapshots.prometnice?.items ?? []).filter(item => item.data?.district === district && (!item.until || Date.parse(item.until) >= ctx.now));
+    const works = (ctx.snapshots.dogadanja?.items ?? []).filter(item => item.data?.source === 'komunalne' && item.data?.district === district && /tijek/i.test(String(item.data?.phase ?? '')));
+    const rows = [...closures, ...works].slice(0, ctx.size === 'wide' ? 3 : 2).map(item => ({
+      key: `${item.module}:${item.id}`, title: item.title,
+      lead: item.kind === 'closure' ? ctx.strings.say.closure : ctx.strings.front.worksLead,
+      sub: item.kind === 'closure' && item.until
+        ? fill(ctx.strings.paired.untilTime, { time: dayTime(item.until) })
+        : dataText(item, 'phase'),
+    }));
+    const confirmed = ctx.snapshots.prometnice?.status === 'live' && ctx.snapshots.dogadanja?.status === 'live';
+    return {
+      lines: `<section class="k-panel" data-panel="around">${panelMarkup({
+        id: 'around', kicker: districtLabel(district) || ctx.i18n.t('nav.kvart'), rows,
+        note: rows.length ? undefined : confirmed ? ctx.i18n.t('presentation.districtEmpty') : ctx.strings.paired.unconfirmed,
+        credit: 'Grad Zagreb (data.zagreb.hr)', state: confirmed ? 'live' : 'stale',
+      })}</section>`,
+      main: '', side: '',
+    };
+  }
+  const panels = ['promet', 'tonight', 'weather', 'city'] as const;
+  // The QR rail has room for one local fact, not a full list with a second
+  // large provenance block. Use the same budgeted fact as the public overview.
+  // Urgent warnings remain explicit in the permanent safety strip.
+  const localSummary = `<section class="k-panel k-rail-summary" data-panel="around">${panelMarkup(front.around)}</section>`;
+  return {
+    lines: linesBox(ctx),
+    main: panels.map(id => `<section class="k-panel" data-panel="${id}">${panelMarkup(front[id])}</section>`).join(''),
+    side: ctx.size === 'compact' ? localSummary : warnings ? warningsBlock(ctx, true) : closuresBlock(ctx, 2, true),
+  };
 }
 
 /** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */
@@ -340,61 +374,10 @@ function kindOfRoute(routeId: string): 'tram' | 'bus' | 'other' {
   return type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
 }
 
-interface RouteSummary { delay: number | null; count: number | null }
-
-/** Every route the feed summarises: its median delay when plausible (a six-hour figure is a stale trip update, not a delay) and its vehicle count. */
-function routeSummaries(zet: ModuleSnapshot | undefined): Map<string, RouteSummary> {
-  const out = new Map<string, RouteSummary>();
-  for (const item of zet?.items ?? []) {
-    if (!item.id.startsWith('route:')) continue;
-    const routeId = dataText(item, 'routeId');
-    if (!routeId) continue;
-    const delay = dataNumber(item, 'medianDelaySeconds');
-    out.set(routeId, { delay: plausibleDelay(delay) ? delay : null, count: dataNumber(item, 'vehicles') });
-  }
-  return out;
-}
-
-/** One line of the departure board: the badge, the destination, the word for the state, the vehicles out. */
-function boardRow(ctx: PairedContext, routeId: string, summary: RouteSummary | undefined, atStop: boolean): string {
-  const count = summary?.count ?? null;
-  const vehicles = count === null ? '' : `<span class="k-row-aside">${escapeHtml(plural(ctx.locale, ctx.strings.paired.routeVehicles, count))}</span>`;
-  return `<li class="k-row k-row--line" data-route="${escapeAttribute(routeId)}"${atStop ? ' data-at-stop="1"' : ''}>${kBadge(routeId, kindOfRoute(routeId))}<span class="k-row-name">${escapeHtml(routeLongName(routeId))}</span><span class="k-row-word">${escapeHtml(delayWord(ctx.i18n, summary?.delay))}</span>${vehicles}</li>`;
-}
-
-/** The transport board: the stop's lines first, each with its delay word and
- *  vehicle count, then the five largest deviations elsewhere on the network,
- *  and "prikazano N od M linija" for the routes the feed knows. When the
- *  board leads the column it keeps five rows (k-block--board); under a
- *  selection card it takes the general floor, the selection being the subject. */
-function delaysBoard(ctx: PairedContext, lead: boolean): string {
-  const { strings: s } = ctx;
-  const zet = ctx.snapshots['zet-rt'];
-  const summaries = routeSummaries(zet);
-  const atStop = ctx.stop ? sortRouteIds(ctx.stop.routes) : [];
-  const stopSet = new Set(atStop);
-  const deviations = [...summaries]
-    .filter(([routeId, summary]) => !stopSet.has(routeId) && summary.delay !== null)
-    .sort((a, b) => Math.abs(b[1].delay!) - Math.abs(a[1].delay!) || a[0].localeCompare(b[0], 'hr', { numeric: true }))
-    .slice(0, 5)
-    .map(([routeId]) => routeId);
-  const known = [...summaries].filter(([, summary]) => summary.delay !== null).map(([routeId]) => routeId);
-  const total = new Set([...atStop, ...known]).size;
-  const rows = [...atStop.map((routeId) => boardRow(ctx, routeId, summaries.get(routeId), true)), ...deviations.map((routeId) => boardRow(ctx, routeId, summaries.get(routeId), false))];
-  const body = rows.length === 0
-    ? listBody(zet, [], s.paired.noData, s)
-    : `<ul class="k-rows"${total > rows.length ? ` data-total="${total}"` : ''} data-coverage="${escapeAttribute(plural(ctx.locale, s.paired.coverageLines, total))}">${rows.join('')}</ul>`;
-  return block(s.paired.delays, body, { s, snapshot: zet, testid: 'k-delays', grow: true, extraClass: lead ? 'k-block--board' : '' });
-}
-
 function renderPromet(ctx: PairedContext): PairedMarkup {
-  // The board and the join card are the composition at both sizes: five rows,
-  // their coverage line and ZET's mandated three-line credit fill what the
-  // column has beside the join card (measured at 1920: 500 of 640 px), so no
-  // second block fits. Closures stay on Sada and Sigurnost; ZET's own notices
-  // are Događanja's undated notices (`k-notices`, see NOTICE_SOURCES).
-  const selected = selectionCard(ctx);
-  return { lines: linesBox(ctx), main: '', side: `${selected}${delaysBoard(ctx, !selected)}` };
+  // The selected subject belongs beside its map, not in the narrow QR rail.
+  // A missing subject must not silently turn into the kiosk's route board.
+  return { lines: ctx.selection ? selectionCard(ctx) : linesBox(ctx), main: '', side: '' };
 }
 
 // --- The public selection the phone relayed --------------------------------
@@ -405,6 +388,21 @@ function findItem(ctx: PairedContext, module: ModuleId, key: string): { item: Fe
   return snapshot && item ? { item, snapshot } : null;
 }
 
+/** Shared by the actual composition and its delivery receipt. A source may
+ *  be stale while its named subject remains readable; an absent subject is
+ *  never the same thing as an unrelated overview that happened to render. */
+function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavailable' {
+  const pick = ctx.selection;
+  if (!pick || ctx.target?.layer === 'kvart') return 'displayed';
+  if (pick.kind === 'route') return routeType(pick.id) === null ? 'unavailable' : 'displayed';
+  if (pick.kind === 'stop') {
+    if (pick.id === ctx.stop?.id || ctx.stops?.some(stop => stop.id === pick.id)) return 'displayed';
+    return ctx.stops ? 'unavailable' : 'loading';
+  }
+  if (!ctx.snapshots[pick.module]) return 'loading';
+  return findItem(ctx, pick.module, pick.id) ? 'displayed' : 'unavailable';
+}
+
 /** One card naming what the driver's phone selected: a line with its delay
  *  and vehicle count, a stop with its lines, or one item by its public key.
  *  Nothing else the phone knows (filters, coordinates) ever reaches here. */
@@ -413,6 +411,11 @@ function selectionCard(ctx: PairedContext): string {
   if (!selection) return '';
   // The selection is the column's subject: it takes the room the column has.
   const o = { s, testid: 'k-selection', tone: 'select', grow: true };
+  const status = selectionStatus(ctx);
+  if (status !== 'displayed') {
+    const message = status === 'loading' ? s.paired.noData : i18n.t('presentation.unavailable');
+    return block(s.session.selected, `<p class="k-select-main">${escapeHtml(message)}</p>`, { ...o, testid: `k-selection-${status}` });
+  }
   if (selection.kind === 'route') {
     const zet = ctx.snapshots['zet-rt'];
     const summary = zet?.items.find((item) => item.id === `route:${selection.id}`);
@@ -432,7 +435,7 @@ function selectionCard(ctx: PairedContext): string {
   const found = findItem(ctx, selection.module, selection.id);
   if (!found) return '';
   const { item, snapshot } = found;
-  const when = item.at && item.dateBasis !== 'unknown' ? dayTime(item.at) : '';
+  const when = cityDateLine(item, s, ctx.locale);
   const body = `<p class="k-select-main k-select-main--item">${escapeHtml(item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${escapeHtml(item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
   return block(s.session.selected, body, { ...o, snapshot, item });
 }
@@ -504,9 +507,23 @@ function quakesBlock(ctx: PairedContext, limit: number, grow = false): string {
 }
 
 function renderVrijeme(ctx: PairedContext): PairedMarkup {
-  const main = `${weatherHero(ctx)}${forecastBlock(ctx)}${sunBlock(ctx)}`;
-  const selected = selectionCard(ctx);
-  return { lines: '', main, side: `${selected}${warningsBlock(ctx, true)}${selected ? '' : quakesBlock(ctx, ctx.size === 'wide' ? 3 : 2)}` };
+  const main = `${weatherHero(ctx)}${forecastBlock(ctx)}${sunBlock(ctx)}${warningsBlock(ctx, true)}`;
+  if (ctx.size === 'wide') return { lines: '', main, side: quakesBlock(ctx, 2) };
+  const snapshot = ctx.snapshots.emsc;
+  const quake = recentQuakes(snapshot, ctx.now)[0];
+  const mag = quake ? dataNumber(quake, 'mag') : null;
+  const state = snapshot?.status ?? 'loading';
+  const note = !quake ? state === 'loading' ? ctx.strings.paired.noData
+    : state !== 'live' ? ctx.strings.paired.unconfirmed : ctx.strings.paired.quakeNone : undefined;
+  const summary = panelMarkup({
+    id: 'around', kicker: ctx.i18n.t('presentation.quakeSummary'), state,
+    rows: quake ? [{
+      key: `quake:${quake.id}`, lead: mag === null ? ctx.strings.paired.magUnknown : `M ${fmtNumber(ctx.locale, mag, 1)}`,
+      title: dataText(quake, 'region') || quake.title, sub: dayTime(quake.at),
+    }] : [],
+    note, credit: `EMSC, seismicportal.eu${state === 'stale' ? ` · ${ctx.strings.paired.stale}` : ''}`,
+  });
+  return { lines: '', main, side: `<section class="k-panel k-rail-summary" data-testid="k-quakes">${summary}</section>` };
 }
 
 // --- Sigurnost ------------------------------------------------------------------
@@ -549,7 +566,14 @@ function assemblyBlock(ctx: PairedContext, limit: number): string {
 function renderSigurnost(ctx: PairedContext): PairedMarkup {
   const wide = ctx.size === 'wide';
   const main = `${warningsBlock(ctx, true)}${closuresBlock(ctx, wide ? 6 : 4, true)}${quakesBlock(ctx, wide ? 3 : 2)}${assemblyBlock(ctx, wide ? 3 : 2)}`;
-  return { lines: '', main, side: `${selectionCard(ctx)}${pharmaciesBlock(ctx, wide ? 3 : 2, true)}` };
+  if (wide) return { lines: '', main, side: pharmaciesBlock(ctx, 1, true) };
+  const nearest = pharmaciesByDistance(ctx.stop)[0]!;
+  const summary = panelMarkup({
+    id: 'around', kicker: ctx.i18n.t('presentation.pharmacySummary'),
+    rows: [{ key: nearest.label, title: nearest.label, sub: nearest.phoneDisplay ?? undefined }],
+    credit: ctx.i18n.t('presentation.pharmacyChecked', { date: weekdayDayMonth(ctx.locale, LJEKARNE_CHECKED_ON) }),
+  });
+  return { lines: '', main, side: `<section class="k-panel k-rail-summary" data-testid="k-pharmacies">${summary}</section>` };
 }
 
 // --- Grad (uprava-i-pravo) ------------------------------------------------------
@@ -614,8 +638,8 @@ function renderGrad(ctx: PairedContext): PairedMarkup {
   const dog = ctx.snapshots.dogadanja;
   // The one credit names the sources these blocks draw from: the Assembly's calendar and the works register.
   const cityItems = (isLive(dog) ? dog.items : []).filter((item) => citySource(item) === 'skupstina' || citySource(item) === 'komunalne');
-  const main = `${actsBlock(ctx, wide ? 6 : 4)}${sessionsBlock(ctx, wide ? 5 : 3)}${mainSource(dog, cityItems, ctx.strings)}`;
-  return { lines: '', main, side: `${selectionCard(ctx)}${worksBlock(ctx, wide ? 5 : 3)}` };
+  const main = `${actsBlock(ctx, wide ? 4 : 3)}<div class="k-stack">${sessionsBlock(ctx, 2)}${worksBlock(ctx, 2)}</div>${mainSource(dog, cityItems, ctx.strings)}`;
+  return { lines: '', main, side: '' };
 }
 
 // --- Događanja (kultura) --------------------------------------------------------
@@ -690,7 +714,8 @@ function eventsBlock(ctx: PairedContext, title: string, items: readonly FeedItem
 }
 
 function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: number): string[] {
-  return items.slice(0, limit).map((item) => row(
+  const priority = (item: FeedItem) => dataText(item, 'source') === 'zet-promet' ? 0 : 1;
+  return [...items].sort((a, b) => priority(a) - priority(b)).slice(0, limit).map((item) => row(
     escapeHtml(item.title),
     escapeHtml([cityKicker(dataText(item, 'source'), ctx.strings), cityDateLine(item, ctx.strings, ctx.locale)].filter(Boolean).join(' · ')),
   ));
@@ -718,13 +743,16 @@ function renderKultura(ctx: PairedContext): PairedMarkup {
   // One credit for the whole layer, naming the sources of the rows it can show -- the notices included, so no second copy sits under them.
   const shown = [...groups.today, ...groups.ongoing, ...groups.tomorrow, ...groups.later, ...groups.notices];
   const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, shown, s)}`;
-  const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, ctx.size === 'wide' ? 4 : 3), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true, noSource: true });
-  return { lines: '', main, side: `${selectionCard(ctx)}${notices}` };
+  const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, 1), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true, noSource: true });
+  return { lines: '', main, side: notices };
 }
 
 // --- Dispatch and mount ------------------------------------------------------------
 
 export function pairedMarkup(ctx: PairedContext): PairedMarkup {
+  if (ctx.selection && ctx.layer !== 'u-pokretu' && ctx.target?.layer !== 'kvart') {
+    return { lines: '', main: selectionCard(ctx), side: '' };
+  }
   switch (ctx.layer) {
     case 'u-pokretu': return renderPromet(ctx);
     case 'zrak-i-nebo': return renderVrijeme(ctx);
@@ -744,6 +772,7 @@ export function mountPaired(host: HTMLElement, deps: PairedDeps): PairedHandle {
   element.dataset.testid = 'kiosk-layer';
   host.appendChild(element);
   let layer: LayerId | null = null;
+  let shellKey = '';
   let last: PairedMarkup = { lines: '', main: '', side: '' };
   let linesEl: HTMLElement | null = null;
   let mainEl: HTMLElement | null = null;
@@ -752,10 +781,12 @@ export function mountPaired(host: HTMLElement, deps: PairedDeps): PairedHandle {
     element,
     mapHost: null,
     update(ctx) {
-      if (ctx.layer !== layer) {
+      const nextKey = `${ctx.layer}:${ctx.target?.layer === 'kvart'}`;
+      if (nextKey !== shellKey) {
+        shellKey = nextKey;
         layer = ctx.layer;
         element.dataset.layer = layer;
-        element.innerHTML = pairedShell(layer, deps.strings, deps.lightweight);
+        element.innerHTML = pairedShell(layer, deps.strings, deps.lightweight, ctx.target?.layer === 'kvart', deps.codeBase);
         linesEl = element.querySelector<HTMLElement>('[data-testid=kiosk-lines]');
         mainEl = element.querySelector<HTMLElement>('[data-testid=kiosk-main]');
         sideEl = element.querySelector<HTMLElement>('[data-testid=kiosk-side]');
@@ -763,10 +794,13 @@ export function mountPaired(host: HTMLElement, deps: PairedDeps): PairedHandle {
         last = { lines: '', main: '', side: '' };
         deps.onShell?.();
       }
+      element.dataset.focus = ctx.selection && ctx.layer !== 'u-pokretu' ? '1' : '0';
       const next = pairedMarkup(ctx);
       if (linesEl && next.lines !== last.lines) linesEl.innerHTML = next.lines;
+      if (linesEl) linesEl.dataset.status = ctx.snapshots['zet-rt']?.status ?? 'down';
       if (mainEl && next.main !== last.main) mainEl.innerHTML = next.main;
       if (sideEl && next.side !== last.side) sideEl.innerHTML = next.side;
+      element.dataset.presentationStatus = selectionStatus(ctx);
       last = next;
     },
     destroy() {

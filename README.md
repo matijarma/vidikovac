@@ -4,6 +4,10 @@ Radni prototip gradske informacijske usluge za prijavu na zagrebački poziv za o
 
 Pristup se na vlastitom uređaju otključava na deset minuta skeniranjem koda sa zaslona, odnosno na pet minuta s telefona druge osobe. Ista Wi-Fi mreža radi. Sigurnost je dostupna bez sesije, također bez JavaScripta. Ne postoji posebna demonstracija koja zaobilazi uparivanje.
 
+Skeniranje ne mijenja javni pregled grada. Prikazivanje odabranog sadržaja zasebna
+je radnja kroz kontrolu **Zaslon**, s potvrdom iscrtavanja i izričitom potvrdom
+preuzimanja od druge osobe. Privatno pregledavanje ostaje na vlastitom uređaju.
+
 Prototip: https://zagreb.aningfilm.hr, javno dostupan od 14. rujna 2026. Namijenjen je ocjenjivanju u prijavi Gradu. Javni zasloni u prostorima, pilot i daljnji razvoj ovise o financiranju i partnerstvu s Gradom; bez toga nema zasebnog javnog projekta. Operaterske rute `/api/admin/*` i `/stats` traže Cloudflare Access i svima ostalima odgovaraju 404.
 
 *English: a working Zagreb city-information prototype for the City's open-data funding application. Real screens and rotating codes grant ten-minute sessions, with five-minute one-hop sharing. Safety is sessionless. The prototype is public since 14 September 2026; only the operator routes require Cloudflare Access. A citizen rollout is conditional on City backing.*
@@ -58,7 +62,7 @@ test/          vitest; test/fixtures su spremljeni živi uzorci svakog izvora
 
 ## Dokumenti
 
-- Važeći produkt i dizajn: `PRODUCT.md`, `newdesignsystem.md`; provedba i status: `docs/implementation-kaj-ima.md`
+- Važeći produkt i dizajn: `PRODUCT.md`, `DESIGN.md`; redizajn i provjera: `docs/redesign-2026-09-17.md`. `newdesignsystem.md` i `docs/implementation-kaj-ima.md` su povijest prethodne inačice.
 - Ranije specifikacije u `docs/superpowers/` su povijesni zapis, ne važeće vizualne upute.
 - Arhitektura: `docs/arhitektura.md` · Javni zasloni: `docs/kiosk.md` · Izvori i licence: `docs/izvori.md`
 - Prijava (hrvatski): `docs/prijava/prijedlog-projekta.html` (pisani prijedlog u obliku za zaslon, isti tekst u `prijedlog-projekta.md`), `obrazac-2-2.md` (tekst polja Obrasca 2.2), `obrazac-3-financijski-plan.md`, `plan-provedbe.md`, `rizici-i-odgovori.md`

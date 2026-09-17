@@ -150,6 +150,7 @@ for (const viewport of SIZES) {
         await auditSurface(page, `/d/ ${layer} @${viewport.width} (${scheme})`, `layer-${layer}`);
       }
       if (viewport === PHONE) {
+        await page.getByTestId('tab-more').click();
         await page.getByTestId('tab-kvart').click();
         await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
         const map = page.getByTestId('kvart-map-canvas');

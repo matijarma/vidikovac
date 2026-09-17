@@ -11,6 +11,7 @@ import {
   type RoomClientMessage,
   type RoomServerMessage,
 } from '../../worker/protocol';
+import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 
 export const RESUME_KEY = 'vidikovac-resume';
 /**
@@ -66,6 +67,7 @@ export interface SessionSnapshot {
   participants: number;
   secondsLeft: number;
   screen?: ScreenMetadata;
+  presentation?: PresentationState;
 }
 
 export interface SessionClient {
@@ -77,6 +79,8 @@ export interface SessionClient {
   onExpiring(l: (secondsLeft: number) => void): () => void;
   onExpired(l: () => void): () => void;
   onView(l: (layer: LayerId, params?: Record<string, string>) => void): () => void;
+  onPresentation(l: (state: PresentationState) => void): () => void;
+  onPresentationResult(l: (result: PresentationResult) => void): () => void;
   onCodes(l: (batch: CodeSlot[], serverNow: number) => void): () => void;
   onCount(l: (participants: number) => void): () => void;
   /**
@@ -87,6 +91,8 @@ export interface SessionClient {
   onError(l: (error: string, reason?: 'revoked' | 'no-ticket') => void): () => void;
   onClose(l: (code: number) => void): () => void;
   sendView(layer: LayerId, params?: Record<string, string>): void;
+  present(command: PresentationCommand): void;
+  refreshPresentation(): void;
   share(): void;
   event(name: ClientEvent, dim?: string): void;
   close(): void;
@@ -137,6 +143,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   let resumeToken = readResume(storage, deps.roomId);
   let participants = 0;
   let screen: ScreenMetadata | undefined;
+  let presentation: PresentationState | undefined;
   let offset = 0;
   let expiredFired = false;
 
@@ -144,6 +151,8 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
   const expiring = new Set<(n: number) => void>();
   const expired = new Set<() => void>();
   const view = new Set<(layer: LayerId, params?: Record<string, string>) => void>();
+  const presentations = new Set<(state: PresentationState) => void>();
+  const presentationResults = new Set<(result: PresentationResult) => void>();
   const codes = new Set<(batch: CodeSlot[], serverNow: number) => void>();
   const count = new Set<(n: number) => void>();
   const error = new Set<(e: string, reason?: 'revoked' | 'no-ticket') => void>();
@@ -152,7 +161,20 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
 
   const serverNow = (): number => now() + offset;
   const secondsLeft = (): number => (expiresAt === null ? 0 : Math.max(0, Math.floor((expiresAt - serverNow()) / 1000)));
-  const snapshot = (): SessionSnapshot => ({ phase, role, expiresAt, dataToken, participants, secondsLeft: secondsLeft(), ...(screen ? { screen } : {}) });
+  const snapshot = (): SessionSnapshot => ({ phase, role, expiresAt, dataToken, participants, secondsLeft: secondsLeft(), ...(screen ? { screen } : {}), ...(presentation ? { presentation } : {}) });
+
+  function acceptPresentation(state: PresentationState): boolean {
+    if (state.version !== 1 || !Number.isSafeInteger(state.revision)) return false;
+    if (presentation && state.revision < presentation.revision) return false;
+    // The accepted command response may arrive after the kiosk's ack. Never
+    // regress a displayed subject back to pending at the same revision.
+    if (presentation && state.revision === presentation.revision && presentation.status !== 'pending' && state.status === 'pending') {
+      state = { ...state, status: presentation.status };
+    }
+    presentation = state;
+    presentations.forEach(l => l(state));
+    return true;
+  }
 
   function send(message: RoomClientMessage): void {
     if (socket && socket.readyState === 1) socket.send(JSON.stringify(message));
@@ -203,6 +225,7 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         resumeToken = message.resumeToken;
         participants = message.participants;
         screen = message.screen;
+        if (message.presentation) acceptPresentation(message.presentation);
         offset = message.serverNow - now();
         phase = 'live';
         attempt = 0;
@@ -211,6 +234,11 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
         joined.forEach((l) => l(snapshot()));
         return;
       case 'view': view.forEach((l) => l(message.layer, message.params)); return;
+      case 'presentation': acceptPresentation(message.state); return;
+      case 'presentation-result':
+        acceptPresentation(message.result.state);
+        presentationResults.forEach(l => l({ ...message.result, state: presentation ?? message.result.state }));
+        return;
       case 'codes': codes.forEach((l) => l(message.batch, message.serverNow)); return;
       case 'count': participants = message.participants; count.forEach((l) => l(participants)); return;
       case 'expiring': expiring.forEach((l) => l(message.secondsLeft)); return;
@@ -326,11 +354,15 @@ export function createSessionClient(deps: SessionClientDeps): SessionClient {
     onExpiring: (l) => sub(expiring, l),
     onExpired: (l) => sub(expired, l),
     onView: (l) => sub(view, l),
+    onPresentation: (l) => sub(presentations, l),
+    onPresentationResult: (l) => sub(presentationResults, l),
     onCodes: (l) => sub(codes, l),
     onCount: (l) => sub(count, l),
     onError: (l) => sub(error, l),
     onClose: (l) => sub(closed, l),
     sendView(layer, params) { send(params ? { t: 'view', layer, params } : { t: 'view', layer }); },
+    present(command) { send({ t: 'present', command }); },
+    refreshPresentation() { send({ t: 'presentation-get' }); },
     share() { send({ t: 'share' }); },
     event(name, dim) { send(dim === undefined ? { t: 'event', name } : { t: 'event', name, dim }); },
     close() {

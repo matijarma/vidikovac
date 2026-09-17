@@ -1,12 +1,28 @@
 // Page-level helpers for the pairing tier. Two browser contexts per test so the
 // kiosk and the phone share no storage, exactly like a screen in a café and a
 // stranger's phone.
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protocol';
 import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
+import { localNetworkHeaders } from '../scripts/local-network.mjs';
 
 export const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
+const RUN_ID = randomUUID();
+
+/** A local test is one visitor network, not the combined traffic of every
+ *  previous run. Hosted tests never send a synthetic Cloudflare address. */
+export function localHeaders(base = APP_URL): Record<string, string> {
+  return localNetworkHeaders(base, `${RUN_ID}:${test.info().testId}`);
+}
+export function localContext(browser: Browser, options: BrowserContextOptions = {}, base = APP_URL): Promise<BrowserContext> {
+  return browser.newContext({ ...options, extraHTTPHeaders: { ...options.extraHTTPHeaders, ...localHeaders(base) } });
+}
+export async function isolateLocalNetwork(context: BrowserContext, base = APP_URL): Promise<void> {
+  const headers = localHeaders(base);
+  if (Object.keys(headers).length) await context.setExtraHTTPHeaders(headers);
+}
 /** The stop the Prozor proofs give their screen (DEFAULT_STOP_ID on both sides of the wire, the wizard's preselection):
  *  Trg bana J. Jelačića, platform 1. The id is a literal here because Playwright's own loader cannot follow either
  *  module's JSON imports. */
@@ -84,18 +100,12 @@ export async function readPairing(kiosk: Page, base: string): Promise<{ code: st
 }
 
 /**
- * Phone side: open the scanned URL, read the confirm card, press Otključaj, wait for the session label.
- * `expectedMinutesText` is the confirm card's minutes wording for the session under test — per
- * `confirmLabel`'s `Math.max(1, Math.round((expiresAt - now) / 60_000))`, that's '10 minuta' for the
- * default 10-minute session (the main pairing spec, :8787) but '1 minuta' for the 12-second
- * SESSION_MINUTES=0.2 session (the expiry spec, :8788) — never a literal shared between the two.
+ * Phone side: redeem the real code and land directly in the granted session.
+ * The remaining argument is retained for callers distinguishing ordinary and
+ * short-lived expiry scenarios; no redundant unlock screen is expected.
  */
 export async function unlockOnPhone(phone: Page, scanUrl: string, expectedMinutesText: string): Promise<void> {
   await phone.goto(scanUrl);
-  const card = phone.getByTestId('confirm-card');
-  await expect(card).toBeVisible({ timeout: 30_000 });
-  await expect(card).toContainText(expectedMinutesText);
-  await phone.getByRole('button', { name: 'Otključaj' }).click();
   await expect(phone.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
   await expect(phone.getByTestId('session-label')).toHaveAttribute('data-state', 'live', { timeout: 30_000 });
   await expect(phone.getByTestId('session-label')).toHaveAttribute('data-expires-at', /^\d{13}$/);

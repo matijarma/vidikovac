@@ -40,6 +40,8 @@ export function castReasonText(i18n: I18n, cast: CastView | undefined): string {
       case 'no-screen': return i18n.t('cast.noScreen');
       case 'peer': return i18n.t('cast.peer');
       case 'frozen': return i18n.t('cast.frozen');
+      case 'screen-offline': return i18n.t('presentation.offline');
+      case 'unsupported': return i18n.t('presentation.unsupported');
       default: return i18n.t('cast.connecting');
     }
   }
@@ -248,7 +250,7 @@ export function renderKvart(ctx: LayerContext, mode: KvartMode): HTMLElement {
   const title = ctx.kvartLabel ?? kvartLabel(i18n, kvart);
   const cast = ctx.cast as CastView | undefined;
   const map = buildMapSection(ctx, kvart, title);
-  const body = [map.html, savedSection(i18n, ctx), walkSection(i18n, ctx), castSection(i18n, cast), notifyButton(i18n, ctx), `<p class="kv-note" data-key="note">${escapeHtml(i18n.t('kvart.localNote'))}</p>`].join('');
+  const body = [map.html, savedSection(i18n, ctx), walkSection(i18n, ctx), notifyButton(i18n, ctx), `<p class="kv-note" data-key="note">${escapeHtml(i18n.t('kvart.localNote'))}</p>`].join('');
   const section = mode === 'aside'
     ? createElementFromHTML(`<section class="kv" data-testid="kvart-panel" data-reconcile aria-labelledby="kv-aside-title">
 <header class="kv-head" data-key="head"><h2 class="kv-title" id="kv-aside-title">${escapeHtml(title)}</h2>${mapLink(i18n, ctx)}</header>

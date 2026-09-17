@@ -3,9 +3,10 @@
 // so UI state tests are deterministic and never depend on upstream availability.
 import type { Page } from '@playwright/test';
 import type { ModuleId, ModuleSnapshot } from '../worker/feed/schema';
-import { MODULE_IDS, MODULES } from '../worker/feed/registry';
+import { MODULE_IDS, MODULES, teaserSubset } from '../worker/feed/registry';
 import type { Role, RoomServerMessage, ScreenStop } from '../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../test/feed/fixture-contexts';
+import type { PresentationState } from '../worker/presentation';
 
 export type FixtureState = 'ready' | 'empty' | 'down' | 'stale';
 const FIXTURE_ROOM = '0000000000000000';
@@ -46,6 +47,7 @@ export async function experienceSnapshots(state: FixtureState = 'ready'): Promis
 
 export interface FixtureSession {
   expire(): void;
+  acknowledgePresentation(): void;
   requests: string[];
   events: Record<string, unknown>[];
 }
@@ -68,10 +70,12 @@ export async function installExperienceFixture(
   const requests: string[] = [];
   const events: Record<string, unknown>[] = [];
   const sockets: { send(message: string): void }[] = [];
+  let presentation: PresentationState = { version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true };
   const joined: RoomServerMessage = {
     t: 'joined', role: options.role ?? 'scanner', expiresAt: now + 600_000, serverNow: now,
     resumeToken: 'fixture-resume', dataToken: 'fixture-data-token', participants: 1,
     ...(options.screen ?? true ? { screen: { kind: 'temporary', expiresAt: now + 86_400_000, stop: FIXTURE_STOP } } : {}),
+    ...((options.role ?? 'scanner') === 'scanner' && (options.screen ?? true) ? { presentation } : {}),
   };
   await page.route('**/api/data/**', async (route) => {
     const id = new URL(route.request().url()).pathname.split('/').at(-1) as ModuleId;
@@ -89,6 +93,13 @@ export async function installExperienceFixture(
       const message = JSON.parse(raw) as Record<string, unknown>;
       events.push(message);
       if (message.t === 'join' || message.t === 'resume') socket.send(JSON.stringify(joined));
+      if (message.t === 'presentation-get') socket.send(JSON.stringify({ t: 'presentation', state: presentation }));
+      if (message.t === 'present') {
+        const command = message.command as { requestId: string; action: string; target?: PresentationState['target'] };
+        presentation = { ...presentation, revision: presentation.revision + 1, target: command.target ?? null, owner: command.action === 'present' ? 'self' : null, expiresAt: now + 600_000, status: command.action === 'present' ? 'pending' : 'idle' };
+        socket.send(JSON.stringify({ t: 'presentation', state: presentation }));
+        socket.send(JSON.stringify({ t: 'presentation-result', result: { requestId: command.requestId, state: presentation } }));
+      }
       if (message.t === 'share') socket.send(JSON.stringify({
         t: 'codes', serverNow: now,
         batch: [{ code: 'ABCDEFGH', slotStart: now, slotEnd: now + 30_000 }],
@@ -97,8 +108,34 @@ export async function installExperienceFixture(
   });
   return {
     requests, events,
+    acknowledgePresentation() {
+      presentation = { ...presentation, status: 'displayed' };
+      for (const socket of sockets) socket.send(JSON.stringify({ t: 'presentation', state: presentation }));
+    },
     expire() { for (const socket of sockets) socket.send(JSON.stringify({ t: 'expired' })); },
   };
 }
 
 export const FIXTURE_DASHBOARD = `/d/#room=${FIXTURE_ROOM}&ticket=fixture-ticket`;
+
+/** Deterministic feed content with a real clock. No pairing/socket mocks:
+ * use with a real local screen for presentation and display-state tests. */
+export async function installKioskFeedFixture(page: Page, state: FixtureState = 'ready'): Promise<void> {
+  const snapshots = await experienceSnapshots(state);
+  const delta = Date.now() - FIXTURE_NOW.getTime();
+  const shift = (value: string | undefined) => value ? new Date(Date.parse(value) + delta).toISOString() : undefined;
+  for (const snapshot of Object.values(snapshots)) {
+    snapshot.fetchedAt = shift(snapshot.fetchedAt)!;
+    snapshot.sourceUpdatedAt = shift(snapshot.sourceUpdatedAt);
+    snapshot.validUntil = shift(snapshot.validUntil);
+    snapshot.items = snapshot.items.map(item => ({ ...item, at: shift(item.at), until: shift(item.until) }));
+  }
+  await page.route('**/api/teaser*', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ generatedAt: new Date().toISOString(), modules: Object.values(snapshots).map(snapshot => teaserSubset(snapshot, FIXTURE_STOP)) }),
+  }));
+  await page.route('**/api/data/**', route => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-1) as ModuleId;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snapshots[id]) });
+  });
+}

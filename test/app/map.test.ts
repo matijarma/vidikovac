@@ -148,7 +148,16 @@ class FakeMap {
   }
   on(): void {}
   once(): void {}
-  addControl(control: FakeControl, position?: string): void { this.controls.push({ control, position }); }
+  addControl(control: FakeControl, position?: string): void {
+    this.controls.push({ control, position });
+    if ('customAttribution' in control.options) {
+      const credit = document.createElement('details');
+      credit.className = `maplibregl-ctrl-attrib${control.options.compact ? ' maplibregl-compact maplibregl-compact-show' : ''}`;
+      credit.open = true; // the library's actual default, including compact mode
+      credit.innerHTML = `<summary></summary><div>${control.options.customAttribution}</div>`;
+      (this.options.container as HTMLElement).appendChild(credit);
+    }
+  }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   addImage(): void {}
   hasImage(): boolean { return false; }
@@ -188,7 +197,7 @@ async function stageMap(extra: Partial<CityMapOptions> = {}, box?: { width: numb
   await flush();
   const map = FakeMap.instances.at(-1)!;
   const credit = map.controls.find((c) => 'customAttribution' in c.control.options)!;
-  return { handle, map, attribution: credit.control, corner: credit.position };
+  return { handle, map, container, attribution: credit.control, corner: credit.position };
 }
 
 afterEach(() => {
@@ -198,10 +207,11 @@ afterEach(() => {
 
 describe('the stage options: cooperative gestures, compact attribution, padding-aware fits', () => {
   it('leaves cooperative gestures off and the attribution expanded by default, as every surface before the stage', async () => {
-    const { map, attribution, corner } = await stageMap();
+    const { map, attribution, corner, container } = await stageMap();
     expect(map.options.cooperativeGestures).toBeFalsy();
     expect(attribution.options).toEqual({ compact: false, customAttribution: basemap.MAP_ATTRIBUTION_HTML });
     expect(corner).toBe('bottom-right');
+    expect(container.querySelector('details')?.open).toBe(true);
   });
 
   it('cooperative: true asks MapLibre for cooperative gestures and gives its help texts in the page’s language', async () => {
@@ -211,14 +221,20 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
     expect(locale['CooperativeGesturesHandler.MobileHelpText']).toBe('Kartu pomiči dvama prstima');
     expect(locale['CooperativeGesturesHandler.WindowsHelpText']).toContain('Ctrl');
     expect(locale['CooperativeGesturesHandler.MacHelpText']).toContain('⌘');
+    expect(locale['AttributionControl.ToggleAttribution']).toBe('Izvori karte');
     const en = await stageMap({ cooperative: true, locale: 'en' });
     expect((en.map.options.locale as Record<string, string>)['CooperativeGesturesHandler.MobileHelpText']).toBe('Use two fingers to move the map');
+    expect((en.map.options.locale as Record<string, string>)['AttributionControl.ToggleAttribution']).toBe('Map attribution');
   });
 
   it('attributionCompact: true builds the compact control with the same custom credit, bottom-left where the stage keeps its zoom and tools clear', async () => {
-    const { attribution, corner } = await stageMap({ attributionCompact: true });
+    const { attribution, corner, container } = await stageMap({ attributionCompact: true });
     expect(attribution.options).toEqual({ compact: true, customAttribution: basemap.MAP_ATTRIBUTION_HTML });
     expect(corner).toBe('bottom-left');
+    expect(container.querySelector('details')?.open).toBe(false);
+    expect(container.querySelector('details')?.classList.contains('maplibregl-compact-show')).toBe(false);
+    expect(container.querySelector('details')?.textContent).toContain('OpenStreetMap');
+    expect(container.querySelector('details a')?.getAttribute('href')).toBe('https://www.openstreetmap.org/copyright');
   });
 
   it('fitPadding is added to the 40 px breathing space on every fit, follows setFitPadding, and offsets a centred point by half of it', async () => {
@@ -293,7 +309,10 @@ describe('the field camera and the paired camera', () => {
     const plain = pairedView({ stop: STOP, selection: null });
     expect(plain).toEqual({ zoom: PAIRED_ZOOM, emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat], selectedStop: STOP.id });
     const route = pairedView({ stop: STOP, selection: { kind: 'route', id: '6' } });
-    expect(route).toMatchObject({ selectedRoute: '6', follow: true, selectedStop: STOP.id });
+    expect(route).toMatchObject({ selectedRoute: '6' });
+    expect(route.follow).toBeUndefined();
+    expect(route.selectedStop).toBeUndefined();
+    expect(route.center).toBeUndefined(); // The renderer fits the public route.
     const other = pairedView({ stop: STOP, selection: { kind: 'stop', id: '200_1' } });
     expect(other.selectedStop).toBe('200_1');
     expect(other.follow).toBeUndefined();

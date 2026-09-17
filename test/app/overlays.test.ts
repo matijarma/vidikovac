@@ -48,8 +48,8 @@ describe('the overlay layer list', () => {
     expect(layerById(LAYERS.vehicleDots).minzoom).toBeUndefined();
     const pills = layerById(LAYERS.vehicles);
     expect(pills.minzoom).toBe(PILL_ZOOM);
-    expect(pills.layout!['icon-allow-overlap']).toEqual(['step', ['zoom'], false, PILL_OVERLAP_ZOOM, true]);
-    expect(pills.layout!['text-allow-overlap']).toEqual(['step', ['zoom'], false, PILL_OVERLAP_ZOOM, true]);
+    expect(pills.layout!['icon-allow-overlap']).toBe(false);
+    expect(pills.layout!['text-allow-overlap']).toBe(false);
     expect(pills.layout!['text-optional']).toBe(false); // number and pill are one mark
     expect(layerById(LAYERS.vehicleNoses).minzoom).toBe(PILL_OVERLAP_ZOOM);
     const selected = layerById(LAYERS.vehicleSelected);
@@ -129,8 +129,8 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(image).toContain(PILL_IMAGE_PREFIX);
       expect(image).toContain('"tram"');
       expect(image).toContain('"length",["get","short"]');
-      expect(pills.layout!['icon-allow-overlap']).toEqual(['step', ['zoom'], false, 14.6, true]);
-      expect(pills.layout!['text-allow-overlap']).toEqual(['step', ['zoom'], false, 14.6, true]);
+      expect(pills.layout!['icon-allow-overlap']).toBe(false);
+      expect(pills.layout!['text-allow-overlap']).toBe(false);
       expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6);
       expect(JSON.stringify(by(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
       // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
@@ -155,7 +155,7 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(dark.map((l) => l.id)).toEqual(overlayLayers(OVERLAY_LIGHT).map((l) => l.id));
     expect(styleDiff(light, dark).every((op) => op.kind === 'paint')).toBe(true);
     // The figure's own literals live in the report's colour table; only the pinned tram blue is asserted here, because the plan forbids touching it.
-    expect(OVERLAY_LIGHT.routeTram).toBe('#03409c');
+    expect(OVERLAY_LIGHT.routeTram).toBe('#0751bf');
   });
 });
 

@@ -48,21 +48,20 @@ export function classifySetupError(error: unknown): { kind: SetupErrorKind; retr
 }
 
 function districtMarkup(district: District, checked: boolean): string {
-  return `<label class="k-choice"><input type="radio" name="district" value="${escapeAttribute(district.slug)}"${checked ? ' checked' : ''}><span class="k-choice-text">${escapeHtml(district.name)}</span></label>`;
+  return `<option value="${escapeAttribute(district.slug)}"${checked ? ' selected' : ''}>${escapeHtml(district.name)}</option>`;
 }
 
 function setupMarkup(s: KioskStrings, initialDistrict: string): string {
   return `<header class="k-setup-head">
-      <p class="k-setup-step" data-testid="setup-step">${escapeHtml(s.setup.step1)}</p>
       <h1 class="k-setup-title" id="k-setup-title">${escapeHtml(s.setup.title)}</h1>
       <p class="k-setup-intro">${escapeHtml(s.setup.intro)}</p>
     </header>
     <form class="k-setup-form" novalidate>
       <fieldset class="k-setup-step-box" data-testid="setup-districts">
         <legend class="k-setup-legend">${escapeHtml(s.setup.districtLegend)}</legend>
-        <div class="k-choice-grid">${DISTRICTS.map((d) => districtMarkup(d, d.slug === initialDistrict)).join('')}</div>
+        <label class="k-district-pick"><span class="k-visually-hidden">${escapeHtml(s.setup.districtLegend)}</span><select name="district" data-testid="setup-district">${DISTRICTS.map((d) => districtMarkup(d, d.slug === initialDistrict)).join('')}</select></label>
       </fieldset>
-      <fieldset class="k-setup-step-box" data-testid="setup-stops" hidden>
+      <fieldset class="k-setup-step-box" data-testid="setup-stops">
         <legend class="k-setup-legend">${escapeHtml(s.setup.stopLegend)}</legend>
         <label class="k-search"><span class="k-search-label">${escapeHtml(s.setup.search)}</span><input type="search" class="k-search-input" data-testid="setup-search" autocomplete="off" spellcheck="false"></label>
         <p class="k-setup-hint" data-testid="setup-stop-hint">${escapeHtml(s.setup.searchHint)}</p>
@@ -71,9 +70,7 @@ function setupMarkup(s: KioskStrings, initialDistrict: string): string {
       </fieldset>
       <p class="k-setup-error" role="alert" data-testid="setup-error" hidden></p>
       <div class="k-setup-actions">
-        <button type="button" class="k-btn k-btn--ghost" data-testid="setup-back" hidden>${escapeHtml(s.setup.back)}</button>
-        <button type="button" class="k-btn k-btn--primary" data-testid="setup-next">${escapeHtml(s.setup.next)}</button>
-        <button type="submit" class="k-btn k-btn--primary" data-testid="setup-create" hidden>${escapeHtml(s.setup.create)}</button>
+        <button type="submit" class="k-btn k-btn--primary" data-testid="setup-create" disabled>${escapeHtml(s.setup.create)}</button>
         <button type="button" class="k-btn k-btn--ghost" data-testid="setup-retry" hidden>${escapeHtml(s.setup.retry)}</button>
       </div>
       <p class="k-setup-summary" data-testid="setup-summary"></p>
@@ -92,15 +89,12 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
   host.appendChild(element);
   const q = <T extends HTMLElement>(selector: string): T => element.querySelector<T>(selector)!;
   const form = q<HTMLFormElement>('form');
-  const stepEl = q('[data-testid=setup-step]');
   const districtsBox = q('[data-testid=setup-districts]');
   const stopsBox = q('[data-testid=setup-stops]');
   const search = q<HTMLInputElement>('[data-testid=setup-search]');
   const list = q('[data-testid=setup-stop-list]');
   const countEl = q('[data-testid=setup-stop-count]');
   const errorEl = q('[data-testid=setup-error]');
-  const backBtn = q<HTMLButtonElement>('[data-testid=setup-back]');
-  const nextBtn = q<HTMLButtonElement>('[data-testid=setup-next]');
   const createBtn = q<HTMLButtonElement>('[data-testid=setup-create]');
   const retryBtn = q<HTMLButtonElement>('[data-testid=setup-retry]');
   const summaryEl = q('[data-testid=setup-summary]');
@@ -114,7 +108,7 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
   let lastAction: 'load' | 'create' = 'load';
 
   const district = (): District =>
-    districtBySlug(element.querySelector<HTMLInputElement>('input[name=district]:checked')?.value) ?? DISTRICTS[0]!;
+    districtBySlug(element.querySelector<HTMLSelectElement>('select[name=district]')?.value) ?? DISTRICTS[0]!;
 
   function showError(text: string, retryable: boolean): void {
     errorEl.textContent = text;
@@ -165,7 +159,6 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
   async function ensureStops(): Promise<boolean> {
     if (stops) return true;
     lastAction = 'load';
-    nextBtn.disabled = true;
     countEl.textContent = s.setup.loadingStops;
     try {
       stops = await deps.loadStops();
@@ -174,31 +167,13 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
     } catch {
       if (!destroyed) showError(s.setup.errorStops, true);
       return false;
-    } finally {
-      nextBtn.disabled = false;
-    }
-  }
-
-  function setStep(step: 1 | 2): void {
-    districtsBox.hidden = step === 2;
-    stopsBox.hidden = step === 1;
-    backBtn.hidden = step === 1;
-    nextBtn.hidden = step === 2;
-    createBtn.hidden = step === 1;
-    stepEl.textContent = step === 1 ? s.setup.step1 : s.setup.step2;
-    if (step === 2) {
-      renderStops();
-      search.focus();
-    } else {
-      paintSummary();
-      element.querySelector<HTMLInputElement>('input[name=district]:checked')?.focus();
     }
   }
 
   async function goNext(): Promise<void> {
     clearError();
     if (!(await ensureStops()) || destroyed) return;
-    setStep(2);
+    renderStops();
   }
 
   function armCountdown(seconds: number): void {
@@ -254,8 +229,6 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
   }
 
   form.addEventListener('submit', (event) => { event.preventDefault(); if (!createBtn.hidden) void create(); });
-  nextBtn.addEventListener('click', () => { void goNext(); });
-  backBtn.addEventListener('click', () => { clearError(); setStep(1); });
   retryBtn.addEventListener('click', () => { if (lastAction === 'load') void goNext(); else void create(); });
   search.addEventListener('input', renderStops);
   search.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
@@ -263,9 +236,9 @@ export function mountSetup(host: HTMLElement, deps: SetupDeps): SetupHandle {
     const input = event.target as HTMLInputElement;
     if (input.name === 'stop') { selectedStopId = input.value; paintSummary(); }
   });
-  districtsBox.addEventListener('change', () => { selectedStopId = null; search.value = ''; paintSummary(); });
+  districtsBox.addEventListener('change', () => { selectedStopId = null; search.value = ''; renderStops(); });
 
-  setStep(1);
+  void goNext();
   return {
     element,
     destroy() {

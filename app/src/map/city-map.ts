@@ -431,6 +431,7 @@ export interface MapView {
   padding?: FitPadding;
   selectedRoute?: string;
   selectedStop?: string;
+  selection?: MapSelection | null;
   follow?: boolean;
   /** Which kinds of city point this chapter lights; null lights every one. */
   emphasis?: readonly PlaceKind[] | null;
@@ -745,7 +746,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let stop: ScreenStop | null = options.stop ?? null;
   let outline: MapOutline | null = options.outline ?? null;
   let status: MapStatus = 'loading';
-  /** A basemap asset has failed since the last tile that loaded; reported as tiles-failed once the style is up. */
+  let pendingCamera: MapCamera | null = null;
+  let pendingSelectionFit: { padding?: FitPadding } | null = null;
+  let cameraMovedByUser = false;
+  /** A basemap asset has failed since the last tile that loaded. Before a
+   *  usable style exists, the route/stop alternative must replace loading. */
   let basemapFailing = false;
   /** The feed is stale or down: the loop holds, separately from pause(), so old evidence is never reckoned forward as if live. */
   let held = false;
@@ -883,6 +888,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       'NavigationControl.ZoomIn': tr(strings, 'zoomIn'),
       'NavigationControl.ZoomOut': tr(strings, 'zoomOut'),
       'NavigationControl.ResetBearing': tr(strings, 'resetBearing'),
+      'AttributionControl.ToggleAttribution': tr(strings, 'mapAttribution'),
       'CooperativeGesturesHandler.WindowsHelpText': tr(strings, 'coopWindows'),
       'CooperativeGesturesHandler.MacHelpText': tr(strings, 'coopMac'),
       'CooperativeGesturesHandler.MobileHelpText': tr(strings, 'coopMobile'),
@@ -902,6 +908,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   function initialCamera(l: MaplibreModule): MapCamera {
+    if (pendingCamera) return pendingCamera;
     if (options.center) return { center: options.center, zoom: options.zoom ?? FOCUS_ZOOM };
     if (stop && Number.isFinite(stop.lon) && Number.isFinite(stop.lat)) return { center: [stop.lon, stop.lat], zoom: options.zoom ?? 15 };
     return { center: ZAGREB_CENTER, zoom: options.zoom ?? l.CITY_ZOOM };
@@ -942,6 +949,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // short stage (a small phone, a landscape one) the two would collide.
     const compact = options.attributionCompact === true;
     created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), compact ? 'bottom-left' : 'bottom-right');
+    if (compact) {
+      // MapLibre initially expands even its compact control. Keep the full
+      // credit in the native disclosure, without covering the phone's map
+      // before a reader asks for it. Subsequent toggles remain library-owned.
+      const credit = container.querySelector<HTMLDetailsElement>('details.maplibregl-ctrl-attrib');
+      if (credit) { credit.open = false; credit.classList.remove('maplibregl-compact-show'); }
+    }
     // A scale bar belongs to a map one can move; on a thumbnail it only collided with the credit (kajimafix 01.8).
     if (interactive) created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
     if (interactive) created.addControl(new l.NavigationControl({ showCompass: false }), 'top-right');
@@ -973,10 +987,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     styled = true;
-    if (status === 'loading') setStatus(basemapFailing ? 'tiles-failed' : 'ready');
-    if (!options.center && !stop && placesOnly()) fitPlaces();
-    else if (!options.center && options.selection) fitSelection();
+    // A resize or a deliberate presentation can arrive before the library or
+    // style finishes loading. Apply the latest request before reporting ready,
+    // never certify the constructor's now-obsolete frame.
+    if (pendingCamera) {
+      const camera = pendingCamera;
+      pendingCamera = null;
+      created.jumpTo({ ...camera, offset: offsetFor() });
+    } else if (pendingSelectionFit) {
+      const fit = pendingSelectionFit;
+      pendingSelectionFit = null;
+      fitSelection(fit.padding);
+    } else if (!cameraMovedByUser && !options.center && !stop && placesOnly()) fitPlaces();
+    else if (!cameraMovedByUser && !options.center && selection) fitSelection();
     if (typeof following === 'string') centreOn(following);
+    setStatus(basemapFailing ? 'tiles-failed' : 'ready');
     if (!paused && !held) loop.start();
   }
 
@@ -1012,14 +1037,15 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       return;
     }
     basemapFailing = true;
-    if (status === 'ready') setStatus('tiles-failed');
+    if (!styled) setStatus('unavailable');
+    else if (status === 'ready') setStatus('tiles-failed');
   }
 
   /** A basemap tile arriving after a failure: the basemap is back. */
   function onSourceData(event: MapEventLike): void {
     if (lib === null || event.sourceId !== lib.BASEMAP_SOURCE || event.tile === undefined) return;
     basemapFailing = false;
-    if (status === 'tiles-failed') setStatus('ready');
+    if (styled && status === 'tiles-failed') setStatus('ready');
   }
 
   /** An image the style names but the sprite lacks (basemap.ts bounds the known
@@ -1040,6 +1066,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** A move a person made (drag, wheel, keyboard) ends a follow; the wrapper's own easeTo carries no originalEvent. */
   function onMoveEnd(event: MapEventLike): void {
     if (!event.originalEvent || !map) return;
+    pendingCamera = null;
+    pendingSelectionFit = null;
+    cameraMovedByUser = true;
     following = null;
     options.onUserMove?.(cameraOf(map));
   }
@@ -1154,7 +1183,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  `padding` is this fit's own extra clearance beyond the standing fitPadding. */
   function fitSelection(padding?: FitPadding): void {
     const sel = selection;
-    if (!map || !sel) return;
+    if (!sel) return;
+    pendingCamera = null;
+    if (!map) { pendingSelectionFit = { padding }; return; }
+    pendingSelectionFit = null;
     switch (sel.kind) {
       case 'route': {
         if (!net) return;
@@ -1224,6 +1256,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const pairs: [string, string][] = [
       ['.maplibregl-ctrl-zoom-in', labels['NavigationControl.ZoomIn']],
       ['.maplibregl-ctrl-zoom-out', labels['NavigationControl.ZoomOut']],
+      ['.maplibregl-ctrl-attrib-button', labels['AttributionControl.ToggleAttribution']],
     ];
     for (const [selector, label] of pairs) {
       const el = container.querySelector<HTMLElement>(selector);
@@ -1286,6 +1319,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   const move = (center: [number, number], zoom: number): void => {
+    pendingSelectionFit = null;
+    if (!styled) pendingCamera = { center: [...center], zoom };
     map?.easeTo({ center, zoom, offset: offsetFor(), duration: reduced ? 0 : CAMERA_MS });
   };
 
@@ -1326,7 +1361,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setView(view) {
       if (view.padding) fitPadding = { ...view.padding };
       if (view.emphasis !== undefined) setEmphasis(view.emphasis);
-      const next = viewSelection(view.selectedRoute, view.selectedStop);
+      const next = view.selection ?? viewSelection(view.selectedRoute, view.selectedStop);
       if (next?.kind === 'stop') {
         const platform = net?.stops.find((s) => s.id === next.id);
         if (platform) next.ids = siblingPlatforms(platform.name);

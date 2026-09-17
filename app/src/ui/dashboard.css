@@ -12,8 +12,8 @@
   --ki-kvart: 18.75rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr;
-  grid-template-areas: 'status' 'banners' 'main';
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas: 'status' 'presentation' 'banners' 'main';
   min-height: 100vh;
   min-height: 100svh;
   background: var(--tone-surface-canvas);
@@ -22,7 +22,7 @@
 .ki-head {
   grid-area: status;
   position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: var(--sp-2);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: var(--sp-1);
   min-block-size: var(--ki-top);
   padding-block-start: env(safe-area-inset-top, 0px);
   padding-inline: max(var(--sp-3), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
@@ -31,6 +31,24 @@
   container-type: inline-size; container-name: header;
 }
 .ki-head > * { min-inline-size: 0; }
+.ki-screen { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-width: var(--target); min-height: var(--target); padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); background: transparent; color: var(--tone-text-muted); cursor: pointer; }
+.ki-screen[data-active='true'], .ki-screen[aria-expanded='true'] { background: var(--tone-tint-action); color: var(--tone-action-brand); border-color: var(--tone-stroke); }
+.ki-screen > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.ki-presentation { grid-area: presentation; min-width: 0; background: var(--tone-surface-1); border-bottom: 1px solid var(--tone-stroke); }
+.ki-presentation:empty { display: none; }
+.present { max-width: 68rem; margin: 0 auto; padding: var(--sp-4); display: grid; gap: var(--sp-3); }
+.present-head { display: flex; align-items: start; justify-content: space-between; gap: var(--sp-3); }
+.present-head h2 { font-size: var(--type-head); }
+.present-head p, .present-label { font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.present-views { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+.present-views > div { min-width: 0; }
+.present-subject { font-size: var(--type-control); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.present-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.present-actions button { white-space: normal; text-align: start; }
+.present-confirm { display: grid; gap: var(--sp-3); }
+.present-confirm p, .present-feedback { font-size: var(--type-control); }
+.present-feedback { color: var(--tone-action-brand); }
+.present-private { font-size: var(--type-meta); color: var(--tone-text-muted); max-width: var(--measure-prose); }
 /* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
 .ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
 .ki[data-loading='true'] .ki-head::after { opacity: 1; }
@@ -60,7 +78,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 
 /* Wordmark: compact, sentence case; the one brand gesture is the question mark in peacock. */
 .ki-wordmark { display: inline-flex; align-items: center; min-height: var(--target); color: var(--tone-text-primary); text-decoration: none; }
-.ki-wordmark-text { font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
+.ki-wordmark-text { font-size: var(--type-body); font-weight: var(--weight-bold); letter-spacing: -0.04em; white-space: nowrap; }
 .ki-wordmark-mark { color: var(--tone-action-brand); }
 
 /* The kvart control (B.5): a native select at opacity 0 over a 44 px ink face,
@@ -68,7 +86,8 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    `selected`, and e2e/geometry.ts measures the real control. The closed face
    shows the resolved district's name. */
 .ki-kvart-pick { position: relative; display: inline-flex; min-block-size: var(--target); min-inline-size: var(--target); max-inline-size: 100%; justify-self: start; }
-.ki-kvart-face { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); max-inline-size: 100%; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--r-md); background: var(--tone-text-primary); color: var(--tone-surface-canvas); font-size: var(--type-control); font-weight: var(--weight-bold); }
+.ki-kvart-face { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); max-inline-size: 100%; padding: 0 var(--sp-1); border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font-size: var(--type-control); font-weight: var(--weight-medium); }
+.ki-head .ki-kvart-face > .icon:first-child { display: none; }
 .ki-kvart-face .icon { flex: none; width: 1rem; height: 1rem; color: inherit; }
 .ki-kvart-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ki-kvart-select { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; font: inherit; cursor: pointer; touch-action: manipulation; }
@@ -78,8 +97,8 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    for readers. Amber for the last minute, rose for the last twenty seconds:
    the ring strokes with --tone-action-brand, so one override recolours the
    ring and the tint together. */
-.ki-session { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); padding: 0 var(--sp-3) 0 var(--sp-2); border: 0; border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-primary); font: inherit; cursor: pointer; touch-action: manipulation; }
-.ki-session .g-ring { inline-size: 1.75rem; block-size: 1.75rem; flex: none; }
+.ki-session { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); padding: 0 var(--sp-1); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; cursor: pointer; touch-action: manipulation; }
+.ki-session .g-ring { display: none; }
 .ki-session-text { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .ki-session-sentence { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ki-session-time { font-size: var(--text-sm); font-weight: var(--weight-bold); line-height: 1; }
@@ -92,15 +111,21 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 
 /* One-tap safety: the shield alone on the urgency tint, a 44 px square (the target rule;
    the spec's 40 px reading is the icon). The aria-label carries the word at every width. */
-.ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-urgency); background: var(--tone-tint-urgency); text-decoration: none; touch-action: manipulation; }
+.ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-text-muted); background: transparent; text-decoration: none; touch-action: manipulation; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
 /* Zoom-compact (390 px at 200 % is 12.2rem): four 44 px controls do not fit, so the kvart control leaves the header (the Kvart tab's panel head carries the same selector). Ceiling 56 px × scale. */
 @container header (max-width: 18rem) {
   .ki-head { column-gap: var(--sp-1); padding-inline: var(--sp-2); }
   .ki-kvart-pick { display: none; }
-  .ki-wordmark { min-inline-size: var(--target); justify-content: center; }
-  .ki-wordmark-text { font-size: var(--text-body); }
+  .ki-wordmark { min-inline-size: 44px; justify-content: center; }
+  .ki-wordmark-text { font-size: 0; }
+  .ki-wordmark-mark { font-size: var(--type-title); }
   .ki-session .g-ring { display: none; }
+}
+@media (max-width: 59.99rem) {
+  .ki-head > [data-key='screen'] { grid-column: 3; }
+  .ki-head > [data-key='session'] { grid-column: 4; }
+  .ki-head > [data-key='safety'] { grid-column: 5; }
 }
 
 /* Phone tab bar: four labelled targets, 44 px and up, safe-area aware. */
@@ -160,10 +185,19 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    clock with the weather group and the bell; the tab bar and the FAB leave,
    the aside is the panel the phone reaches through its Kvart tab. */
 @media (min-width: 60rem) {
-  .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr) var(--ki-kvart); grid-template-rows: auto auto 1fr; grid-template-areas: 'status status' 'banners kvart' 'main kvart'; }
-  html:has(.ki) { scroll-padding-block: 3.5rem 0; }
-  .ki-head { grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
-  .ki-wordmark-text { font-size: var(--text-xl); }
+  .ki { --ki-top: 6.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
+  html:has(.ki) { scroll-padding-block: 6.5rem 0; }
+  .ki-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto; grid-template-rows: 3.5rem 3rem; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki-wordmark-text { font-size: var(--type-title); }
+  .ki-screen { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
+  .ki-screen > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .ki-domains { grid-column: 1 / -1; grid-row: 2; }
+  .ki-domains ul { display: flex; gap: var(--sp-5); list-style: none; margin: 0; padding: 0; }
+  .ki-domains .ki-tab { flex-direction: row; gap: var(--sp-2); min-height: 3rem; padding: 0 var(--sp-1); }
+  .ki-domains .ki-tab .icon { width: 1.125rem; height: 1.125rem; }
+  .ki-domains .ki-tab[aria-current='page']::before { inset-block-start: auto; inset-block-end: 0; height: 3px; border-radius: 2px 2px 0 0; }
+  .ki-domains .ki-tab[aria-current='page'] { color: var(--tone-action-brand); }
+  .present { padding: var(--sp-5) var(--sp-8); }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'], .ki-search[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
@@ -182,7 +216,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
   .ki-bell { position: relative; color: var(--tone-text-muted); }
   .ki-bell[data-active]:not([data-active='0'])::after { content: ''; position: absolute; inset-block-start: 0.6rem; inset-inline-end: 0.6rem; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
-  .ki-kvart { display: block; grid-area: kvart; position: sticky; inset-block-start: var(--ki-top); align-self: start; max-block-size: calc(100svh - var(--ki-top)); overflow-y: auto; padding: var(--sp-4); background: var(--tone-surface-1); border-inline-start: 1px solid var(--tone-stroke); }
+  .ki-kvart { display: none; }
   .ki-kvart[hidden] { display: none; }
   .ki-tabbar, .ki-fab { display: none; }
   .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-6) 0; }

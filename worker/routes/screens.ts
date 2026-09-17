@@ -35,13 +35,15 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
   let reservation: string | undefined;
   try {
     let principal = await accessPrincipal(env, request);
+    // The public quota path is identical locally: independent simulated
+    // visitors must not collapse into one fixed test principal.
+    if (!principal) principal = await networkPrincipal(env, request);
     // Local development exercises the same self-service path, without an Access
-    // tenant. This never confers administrative access or skips code redemption.
+    // tenant or (in direct unit requests) a client address. This fallback never
+    // confers administrative access or skips code redemption.
     if (!principal && isTestEnvironment(env)) {
       principal = hexEncode(await hmacSha256(requireSecret(env, 'SESSION_SECRET'), 'local-screen-evaluator'));
     }
-    // A public deployment has no Access identity: the quota is then per network.
-    if (!principal) principal = await networkPrincipal(env, request);
     if (!principal) return json({ error: 'evaluation-access-required' }, 403);
     const raw = await readCappedBody(request, 512);
     let body: Record<string, unknown>;

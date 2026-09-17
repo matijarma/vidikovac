@@ -338,7 +338,7 @@ function detailHead(i18n: I18n, title: string, kiosk: boolean, extras?: DetailHe
   if (kiosk) return title;
   const buttons = [back(i18n)];
   if (extras?.save) buttons.push(saveButton(i18n, extras.save));
-  buttons.push(castButton(i18n, extras?.cast));
+  // Presentation lives in the shared header on every workspace.
   return actions(buttons) + title;
 }
 

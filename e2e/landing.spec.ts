@@ -1,5 +1,5 @@
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
-import { APP_URL, readPairing } from './helpers';
+import { APP_URL, isolateLocalNetwork, localContext, readPairing } from './helpers';
 
 const sample = () => {
   const time = new Date().toISOString();
@@ -34,7 +34,9 @@ test('the homepage is a public introduction, not an automatic session or full ap
   const writes: string[] = [];
   const sockets: string[] = [];
   page.on('request', (r) => { if (r.method() === 'POST') writes.push(new URL(r.url()).pathname); });
-  page.on('websocket', (socket) => sockets.push(socket.url()));
+  // A local Vite preview owns an HMR socket; only product sockets would
+  // constitute an accidental application session on the public landing.
+  page.on('websocket', (socket) => { if (new URL(socket.url()).pathname.startsWith('/ws/')) sockets.push(socket.url()); });
   await page.goto('/');
   await fonts(page);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Manje zaslona. Više grada.');
@@ -140,17 +142,17 @@ test('a missing capture leaves readable copy and the real trial actions availabl
 for (const mode of ['same browser', 'separate phone'] as const) {
   test(`homepage trial: ${mode} completes real screen setup and single-use code redemption`, async ({ page, context, browser }) => {
     test.skip(!['localhost', '127.0.0.1'].includes(new URL(APP_URL).hostname), 'This self-service trial check is local-only.');
+    await isolateLocalNetwork(context);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/');
     await page.getByTestId('cta-try').click();
     const [screen] = await Promise.all([
       context.waitForEvent('page'), page.getByTestId('cta-kiosk').click(),
     ]);
-    await screen.getByTestId('setup-next').click();
     await screen.getByTestId('setup-create').click();
     const { code, scanUrl } = await readPairing(screen, APP_URL);
     const phoneContext = mode === 'separate phone'
-      ? await browser.newContext({ ...devices['Pixel 7'], locale: 'hr-HR' }) : null;
+      ? await localContext(browser, { ...devices['Pixel 7'], locale: 'hr-HR' }) : null;
     try {
       let phone: Page;
       if (phoneContext) {
@@ -163,10 +165,8 @@ for (const mode of ['same browser', 'separate phone'] as const) {
         await phone.getByTestId('code-input').fill(code);
         await phone.getByTestId('code-submit').click();
       }
-      await expect(phone.getByTestId('confirm-card')).toContainText('10 minuta');
-      await phone.getByRole('button', { name: 'Otključaj', exact: true }).click();
       await expect(phone.getByTestId('session-label')).toHaveAttribute('data-state', 'live');
-      await expect(screen.locator('.kiosk')).toHaveAttribute('data-phase', 'paired');
+      await expect(screen.locator('.kiosk')).toHaveAttribute('data-phase', 'invitation');
       expect(Number(await phone.getByTestId('session-label').getAttribute('data-expires-at')) - Date.now()).toBeGreaterThan(540_000);
       expect((await phone.request.get(`${APP_URL}/api/data/zet-rt`)).status()).toBe(401);
       const reuse = await phone.request.post(`${APP_URL}/api/scan`, { data: { code } });

@@ -88,8 +88,8 @@
   --k-rose: var(--tone-urgency);
   --k-rose-soft: var(--tone-tint-urgency);
   --k-green: var(--tone-live);
-  --k-qr-plate: #ffffff;
-  --k-qr-ink: #0c1250;
+  --k-qr-plate: var(--tone-qr-plate);
+  --k-qr-ink: var(--tone-qr-ink);
   --k-focus: var(--tone-focus-ring);
   --k-glass: var(--tone-glass-bg);
   --k-shadow: var(--tone-shadow-soft);
@@ -110,8 +110,8 @@
 
 /* --- Per-composition tokens: every size is a token times --k-zoom -------- */
 .kiosk[data-size='wide'] {
-  --k-head-h: calc(96px * var(--k-zoom));
-  --k-strip-h: calc(96px * var(--k-zoom));
+  --k-head-h: calc(88px * var(--k-zoom));
+  --k-strip-h: calc(72px * var(--k-zoom));
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
   --k-side-w: calc(520px * var(--k-sign-zoom));
@@ -128,9 +128,9 @@
   --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
   --k-sup-size: calc(28px * var(--k-zoom));
-  --k-hint-size: calc(26px * var(--k-zoom));
-  --k-label-size: calc(24px * var(--k-zoom));
-  --k-credit-size: calc(20px * var(--k-zoom));
+  --k-hint-size: calc(22px * var(--k-zoom));
+  --k-label-size: calc(20px * var(--k-zoom));
+  --k-credit-size: calc(18px * var(--k-zoom));
   --k-badge: calc(60px * var(--k-zoom));
   --k-icon-size: calc(28px * var(--k-zoom));
   --k-icon-lg: calc(48px * var(--k-zoom));
@@ -139,8 +139,8 @@
   --k-control: calc(64px * var(--k-zoom));
 }
 .kiosk[data-size='compact'] {
-  --k-head-h: calc(72px * var(--k-zoom));
-  --k-strip-h: calc(72px * var(--k-zoom));
+  --k-head-h: calc(64px * var(--k-zoom));
+  --k-strip-h: calc(56px * var(--k-zoom));
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
   --k-side-w: calc(440px * var(--k-sign-zoom));
@@ -153,7 +153,7 @@
   --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
   --k-sup-size: calc(22px * var(--k-zoom));
-  --k-hint-size: calc(20px * var(--k-zoom));
+  --k-hint-size: calc(18px * var(--k-zoom));
   --k-label-size: calc(18px * var(--k-zoom));
   --k-credit-size: calc(16px * var(--k-zoom));
   --k-badge: calc(46px * var(--k-zoom));
@@ -178,7 +178,7 @@
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
 /* The stop chip: ink on paper, paper on night (kajimafix 03.1); the accent is kept for badges and the invitation card. */
-.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding: 0.25em 0.8em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-size: var(--k-hint-size); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding-left: var(--k-gap); border-left: 1px solid var(--k-line); color: var(--k-ink-2); font-size: var(--k-hint-size); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-context:empty { display: none; }
 .k-head-mid { display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
@@ -213,7 +213,8 @@
    field, the column's own hairline and padding are its frame. The wizard,
    the notices and the paired compositions keep the stage's padding
    (kiosk.ts writes data-phase on the root). */
-.kiosk[data-phase='invitation'] .k-stage { padding: 0; }
+.kiosk[data-phase='invitation'] .k-stage { padding: var(--k-pad); }
+.k-head .k-weather { display: none; }
 
 /* --- Compositions: the front page's panels, the paired main and side ----
    The front page (kiosk/invitation.ts) is a grid of surface panels on a
@@ -222,11 +223,47 @@
    column of the forecast, the city and the card. The 1 px gaps over the
    hairline ground are the panels' joints; no panel has a radius or a
    shadow. Rows 1.1 : 1 give tonight's events the larger share of a wall. */
-.k-front { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1px; min-height: 0; background: var(--k-line); }
-.k-front > [data-panel='tonight'] { grid-column: 1; grid-row: 1; }
-.k-bottom { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.75fr); gap: 1px; min-width: 0; min-height: 0; background: var(--k-line); }
-.k-column { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 1px; min-width: 0; min-height: 0; background: var(--k-line); }
-.k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-paired-side-w); gap: var(--k-gap); }
+.k-front { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--k-gap); min-height: 0; }
+.k-local { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
+.k-geography { min-width: 0; min-height: 0; display: grid; border-radius: var(--k-radius); overflow: hidden; border: 1px solid var(--k-line); }
+.k-overview { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
+.k-neighborhood { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; height: calc(430px * var(--k-sign-zoom)); }
+.k-context-stack { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: var(--k-gap); min-width: 0; min-height: 0; }
+.kiosk[data-size='wide'] .k-front { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.kiosk[data-size='wide'] .k-neighborhood { height: calc(330px * var(--k-zoom)); grid-template-columns: minmax(0,1fr) calc(430px * var(--k-sign-zoom)); }
+.kiosk[data-size='wide'] .k-neighborhood .k-invite { grid-template-columns: var(--k-qr) minmax(0,1fr); grid-template-rows: var(--k-qr) auto; grid-template-areas: 'qr side' 'code code'; }
+.kiosk[data-size='wide'] .k-neighborhood .k-invite-side { display: grid; grid-area: side; grid-template-areas: 'lead' 'hint'; grid-template-rows: auto 1fr; align-items: start; gap: var(--sp-3); }
+.kiosk[data-size='wide'] .k-neighborhood .k-hint { align-self: end; }
+.kiosk[data-size='wide'] .k-context-stack .k-panel { padding-block: calc(var(--k-gap) * 0.4); }
+.kiosk[data-size='wide'] .k-context-stack .k-fr { padding-block: calc(var(--k-gap) * 0.2); }
+.kiosk[data-size='wide'] .k-context-stack .k-panel-head { margin-bottom: 0; }
+.kiosk[data-size='wide'] .k-context-stack [data-panel='city'] .k-fr-sub { display: none; }
+.k-paired { display: grid; grid-template-columns: minmax(0, 1fr) calc(320px * var(--k-sign-zoom)); gap: var(--k-gap); }
+.k-present-local { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
+.k-present-board { padding: var(--k-gap) var(--k-pad); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); }
+.k-present-board .k-line-near { display: none; }
+.k-present-board .k-line-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--k-gap); }
+.k-present-board .k-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: calc(var(--k-gap) * 0.3); }
+.k-present-board .k-line-name { white-space: normal; margin-left: 0; font-size: var(--k-hint-size); }
+.k-present-board .k-line-word { grid-column: 2; margin-left: 0; font-size: var(--k-hint-size); }
+.k-present-board > .k-block { padding: 0; border: 0; background: transparent; }
+.k-present-board .k-select-main { font-size: var(--k-main-size); }
+.k-present-board .k-select-sub { font-size: var(--k-sup-size); }
+.k-present-board .k-source { margin-top: var(--k-gap); }
+.k-present-invite { margin-top: auto; align-self: end; }
+.k-present-invite .k-invite { justify-content: center; }
+.k-paired .k-side-blocks .k-block { padding: var(--k-gap); }
+.k-paired .k-side-blocks .k-source { font-size: var(--k-credit-size); }
+.k-paired .k-side-blocks .k-kicker, .k-paired .k-side-blocks .k-row-main { font-size: var(--k-hint-size); }
+.k-paired .k-side-blocks .k-row-sub { font-size: var(--k-credit-size); }
+.k-paired[data-focus='1'] .k-main { display: block; }
+.k-paired[data-focus='1'] .k-main > .k-block { height: 100%; padding: calc(var(--k-pad) * 2); border: 1px solid var(--k-line); }
+.k-paired[data-focus='1'] .k-select-main--item { font-size: calc(var(--k-main-size) * 1.4); line-height: 1.15; max-width: 30ch; }
+.k-paired[data-focus='1'] .k-select-sub--long { max-height: none; -webkit-line-clamp: unset; font-size: var(--k-sup-size); line-height: 1.5; max-width: 64ch; }
+.k-return { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.75em; border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); color: var(--k-action); font: inherit; font-size: var(--k-credit-size); cursor: pointer; }
+.k-head-mid { gap: calc(var(--k-gap) * 0.6); min-width: 0; }
+.k-head-mid[role='status'] { font-size: var(--k-credit-size); color: var(--k-green); }
+.k-session { border-radius: var(--k-radius-s); font-size: var(--k-label-size); min-width: 0; white-space: normal; }
 .k-side { display: flex; flex-direction: column; min-height: 0; }
 .k-side > * + * { margin-top: var(--k-gap); }
 .k-side-blocks { display: flex; flex: 1; flex-direction: column; min-height: 0; }
@@ -282,12 +319,12 @@
    by measurement (kiosk/invitation.ts fit); nothing is clipped mid-row.
    Titles run to two lines at most and are then cut by the sheet: a list row
    is a list row, not a headline. */
-.k-panel { display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; min-height: 0; padding: calc(var(--k-gap) * 0.7) var(--k-pad) calc(var(--k-gap) * 0.5); overflow: hidden; background: var(--k-surface); }
+.k-panel { display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; min-height: 0; padding: var(--k-gap) var(--k-pad); background: var(--k-surface); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); }
 /* Nothing inside a panel shrinks: what does not fit overflows the panel, which is what fit() measures and hides rows against (a shrinking child hides the overflow from the measurement and clips itself instead). */
 .k-panel > * { flex: none; }
-.k-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--k-gap); row-gap: 0; min-width: 0; margin-bottom: calc(var(--k-gap) * 0.45); }
-.k-panel-kicker { font-size: var(--k-label-size); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
-.k-panel-meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); line-height: 1.2; color: var(--k-ink-2); }
+.k-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: calc(var(--k-gap) * 0.3) var(--k-gap); min-width: 0; margin-bottom: calc(var(--k-gap) * 0.6); }
+.k-panel-kicker { font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.035em; text-transform: uppercase; line-height: 1.2; color: var(--k-ink-3); }
+.k-panel-meta { min-width: 0; font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-2); }
 .k-panel[data-panel='tonight'] .k-panel-kicker { color: var(--k-violet); }
 .k-panel[data-panel='weather'] .k-panel-kicker { color: var(--k-amber); }
 .k-panel[data-panel='city'] .k-panel-kicker { color: var(--k-action); }
@@ -295,17 +332,17 @@
 .k-panel[data-panel='around'] .k-panel-kicker { color: var(--k-amber); }
 /* The rows: hairlines between, none above the first; tonight's run in two columns on a wall. */
 .k-panel-rows { display: grid; flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; column-gap: var(--k-pad); min-width: 0; margin: 0; padding: 0; list-style: none; }
-.k-panel[data-panel='tonight'] .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.k-panel[data-panel='promet'] .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .k-fr { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: calc(var(--k-gap) * 0.7); align-items: start; min-width: 0; padding-block: calc(var(--k-gap) * 0.45); border-top: 1px solid var(--k-line); }
 .k-panel-rows > .k-fr:first-child { border-top: 0; }
-.k-panel[data-panel='tonight'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 0; }
+.k-panel[data-panel='promet'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 0; }
 /* The lead cell: a clock or a distance in the supporting tier, tabular; a day word over it in the label tier; a badge at the kiosk's badge size. */
 .k-fr-lead { display: grid; min-width: 3.8em; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--k-ink); font-variant-numeric: tabular-nums; }
 .k-fr-day { font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
 .k-fr-lead--badge { min-width: 0; padding-top: 0.05em; }
 .k-fr-main { display: grid; gap: calc(var(--k-gap) * 0.15); min-width: 0; }
-.k-fr-title { display: -webkit-box; overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--k-ink); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
-.k-fr-sub { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-hint-size); line-height: 1.2; color: var(--k-ink-2); }
+.k-fr-title { display: -webkit-box; overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--k-ink); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
+.k-fr-sub { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
 /* A line's state word colours its title's context (late rose, early amber, on time green, unknown the third ink), as the line words always had. */
 .k-fr[data-tone='late'] .k-fr-sub { color: var(--k-rose); }
 .k-fr[data-tone='early'] .k-fr-sub { color: var(--k-amber); }
@@ -325,11 +362,60 @@
 /* The credit at the foot of every panel, pushed down by the rows above it. */
 .k-panel-credit { margin-top: auto; padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The card's own panel: the card at the column's foot, on the surface, padded like the others. */
-.k-panel--card { display: grid; align-content: end; padding: var(--k-gap) var(--k-pad); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-column { grid-template-rows: minmax(0, 0.85fr) minmax(0, 1.15fr) auto; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-panel-text { display: none; }
-/* The compact column's rows keep their titles to one line: 152 px of city hold one whole row that way, none with two-line titles. */
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-column .k-fr-title { -webkit-line-clamp: 1; line-clamp: 1; }
+.k-panel--card { min-width: 0; align-self: end; }
+.k-panel[data-panel='promet'] { background: var(--k-surface); }
+.k-panel[data-panel='promet'] .k-panel-head { padding-bottom: calc(var(--k-gap) * 0.5); border-bottom: 1px solid var(--k-line); }
+.k-context-stack .k-panel { padding: calc(var(--k-gap) * 0.75); }
+.k-context-stack .k-fr { display: block; }
+.k-context-stack .k-fr-lead { display: flex; gap: 0.4em; min-width: 0; margin-bottom: calc(var(--k-gap) * 0.25); font-size: var(--k-label-size); color: var(--k-action); }
+.k-context-stack .k-fr-title { font-size: var(--k-hint-size); }
+.k-context-stack .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
+.k-context-stack .k-panel-meta { display: none; }
+.k-context-stack .k-panel-credit { padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); }
+.k-panel[data-panel='weather'] { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--k-pad); align-items: start; background: var(--k-action-soft); border-color: transparent; }
+.k-panel[data-panel='weather'] > .k-panel-head { grid-column: 1 / -1; margin-bottom: calc(var(--k-gap) * 0.3); }
+.k-panel[data-panel='weather'] > .k-panel-credit { display: none; }
+.k-weather-current { min-width: 0; }
+.k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.3); }
+.k-weather-current .k-weather-main { flex-wrap: wrap; gap: calc(var(--k-gap) * 0.4); }
+.k-weather-current .k-condition { flex-basis: 100%; font-size: var(--k-hint-size); }
+.k-weather-current .k-meta { margin-top: calc(var(--k-gap) * 0.4); }
+.k-weather-current > .k-condition { font-size: var(--k-hint-size); line-height: 1.25; }
+.k-panel[data-panel='weather'] { padding-block: calc(var(--k-gap) * 0.6); }
+.k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.1); }
+.k-panel[data-panel='tonight'] { padding-block: calc(var(--k-gap) * 0.4); }
+.k-panel[data-panel='tonight'] .k-fr { padding-block: calc(var(--k-gap) * 0.3); }
+.k-panel[data-panel='tonight'] .k-fr-title { font-size: calc(var(--k-sup-size) * 0.88); }
+.k-panel[data-panel='tonight'] .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
+.k-panel[data-panel='tonight'] .k-fr-lead { font-size: var(--k-hint-size); }
+.k-panel[data-panel='tonight'] .k-fr:not(:first-child) .k-fr-title { -webkit-line-clamp: 1; line-clamp: 1; }
+.k-weather-outlook { border-left: 1px solid var(--k-line); padding-left: var(--k-pad); min-width: 0; }
+.k-weather-day { font-size: var(--k-label-size); font-weight: 700; color: var(--k-ink-2); margin-bottom: calc(var(--k-gap) * 0.2) !important; }
+.k-weather-outlook .k-panel-figure { font-size: var(--k-sup-size); }
+.k-weather-outlook .k-panel-text { font-size: var(--k-credit-size); -webkit-line-clamp: 2; line-clamp: 2; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-panel { padding: calc(var(--k-gap) * 0.65) var(--k-gap); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-fr-sub { display: none; }
+/* 1366x768 is its own composition: map over a board and local context;
+   weather, an upcoming event and a horizontal invitation alongside. */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-front { grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.6fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) calc(264px * var(--k-zoom)); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-local,
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-overview,
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood { display: contents; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-geography { grid-column: 1 / 3; grid-row: 1 / 3; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] { grid-column: 1; grid-row: 3; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-panel-rows { grid-template-columns: 1fr; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-fr-title { font-size: var(--k-hint-size); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-fr-sub { font-size: var(--k-credit-size); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack { grid-column: 2; grid-row: 3; }
+.kiosk[data-size='compact']:not([data-portrait='1']) [data-panel='weather'] { grid-column: 3; grid-row: 1; }
+.kiosk[data-size='compact']:not([data-portrait='1']) [data-panel='tonight'] { grid-column: 3; grid-row: 2; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood > .k-panel--card { grid-column: 3; grid-row: 3; align-self: stretch; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-invite { height: 100%; grid-template-columns: var(--k-qr) minmax(0,1fr); grid-template-rows: 1fr auto 1fr; grid-template-areas: 'qr lead' 'qr code' 'qr hint'; column-gap: var(--k-gap); padding: calc(12px * var(--k-zoom)); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-invite > .k-qr { align-self: center; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-hint { align-self: end; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-panel-credit { font-size: var(--k-credit-size); white-space: normal; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-panel-head { margin-bottom: 0; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-fr { padding-block: calc(var(--k-gap) * 0.3); }
 
 /* --- The invitation card: the QR beside the lead and the hint, the code spanning (R-KP21) ---
    Two rows: the 240 px QR in the first column with the lead over the hint
@@ -344,16 +430,16 @@
    the type doubles and the card stops at 1.35, the lead and the hint keep
    the card's own proportions instead of overflowing the side column; at
    the design sizes and up to 2560 x 1440 the two scales are one. */
-.k-invite { display: grid; grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-rows: minmax(var(--k-qr), auto) auto; grid-template-areas: 'qr side' 'code code'; column-gap: var(--k-card-gap); row-gap: calc(var(--k-card-gap) * 0.6); box-sizing: border-box; min-height: 0; padding: var(--k-card-gap); border-radius: var(--k-radius); background: var(--k-action); color: var(--k-action-ink); }
+.k-invite { display: grid; grid-template-columns: var(--k-qr); grid-template-rows: auto var(--k-qr) auto auto; grid-template-areas: 'lead' 'qr' 'code' 'hint'; gap: calc(var(--k-card-gap) * 0.5); box-sizing: border-box; min-height: 0; padding: calc(var(--k-card-gap) * 0.7); border-radius: var(--k-radius-s); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
 /* The lead and the hint share the side column: the lead at its head, the hint at its foot, over the QR's own height. */
-.k-invite-side { grid-area: side; display: grid; align-content: space-between; min-width: 0; }
-.k-lead { font-size: min(var(--k-sup-size), var(--k-card-lead)); font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
+.k-invite-side { display: contents; }
+.k-lead { grid-area: lead; font-size: calc(21px * var(--k-sign-zoom)); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-card-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-card-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
-.k-hint { min-width: 0; font-size: min(var(--k-hint-size), var(--k-card-hint)); line-height: 1.3; }
+.k-hint { grid-area: hint; min-width: 0; font-size: calc(15px * var(--k-sign-zoom)); line-height: 1.3; }
 /* The typed address, whole: beside a 240 px QR it wraps at the break points
    the markup gives it (after each dot, before the path) and, as the last
    resort, anywhere -- a typed address is useless ellipsised. */
@@ -367,12 +453,12 @@
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-code-out 180ms var(--ease-exit) both; }
 /* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
 /* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
-.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
+.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; justify-content: space-between; font-size: min(calc(40px * var(--k-sign-zoom)), 15cqi); font-weight: 700; letter-spacing: 0.015em; line-height: 1.15; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 /* The code's separator is a dimmed middle dot; the 8 px bar fills paper over a quarter-paper track on the accent (kajimafix 03.4). */
 .k-code-dash { margin: 0 0.15em; opacity: 0.4; }
-.k-progress { height: calc(8px * var(--k-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
-.k-progress-bar { width: 100%; height: 100%; border-radius: 999px; background: var(--k-action-ink); transition: width 1s linear; }
+.k-progress { height: calc(3px * var(--k-sign-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
+.k-progress-bar { width: 100%; height: 100%; transform-origin: left; border-radius: 999px; background: var(--k-action-ink); transition: transform 1s linear; }
 /* The same card, stood up: the lead, the QR, the hint, the code, one under the other (the side wrapper dissolves; see the portrait section). */
 .kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; margin-top: var(--k-gap); background: var(--k-surface); color: var(--k-ink); }
 .kiosk[data-size='handheld'] .k-invite .k-hint { align-self: start; color: var(--k-ink-2); }
@@ -567,7 +653,19 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Paired compositions: one arrangement per domain ------------------------------ */
 .k-main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-gap: var(--k-gap); gap: var(--k-gap); min-height: 0; }
 .k-main:empty { display: none; }
-.k-paired[data-layer='zrak-i-nebo'] .k-main { grid-template-columns: 1.15fr 1fr; grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+.k-paired[data-layer='zrak-i-nebo'] .k-main { grid-template-columns: 1.15fr 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.k-paired[data-layer='zrak-i-nebo'] .k-block--sun { grid-column: auto; }
+.k-paired[data-layer='zrak-i-nebo'] .k-block--sun .k-block-body { display: flex; flex-direction: column; justify-content: space-between; gap: var(--k-gap); }
+.k-paired[data-layer='zrak-i-nebo'] .k-sun-text .k-figure { font-size: var(--k-sup-size); line-height: 1.3; }
+.k-paired[data-layer='zrak-i-nebo'] .k-sun-text .k-figure-sub { font-size: var(--k-hint-size); }
+.k-paired[data-layer='zrak-i-nebo'] .k-sunarc { align-self: center; width: min(100%, var(--k-arc-w)); height: auto; max-height: calc(150px * var(--k-zoom)); min-height: 0; flex: 1 1 0; }
+.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-text { -webkit-line-clamp: 3; line-clamp: 3; }
+.k-rail-summary { padding: var(--k-gap); }
+.k-rail-summary .k-panel-meta { display: none; }
+.k-rail-summary .k-fr { display: block; padding: 0; }
+.k-rail-summary .k-fr-lead { font-size: var(--k-hint-size); margin-bottom: calc(var(--k-gap) * 0.25); }
+.k-rail-summary .k-fr-title { font-size: var(--k-hint-size); }
+.k-rail-summary .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
 .k-main-source { grid-column: 1 / -1; padding: 0 var(--k-pad); }
 .k-block--sun { grid-column: 1 / -1; }
 .k-block--sun .k-block-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); align-items: center; }
@@ -605,7 +703,8 @@ button.k-strip-verdict { cursor: pointer; }
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
 :root[data-lagano='1'] .k-field { background: var(--k-surface); }
 /* Under lagano the field is the lines board (R-L2) and holds ten rows and the overflow line (R-V1): the bottom row takes the larger share. */
-:root[data-lagano='1'] .k-front { grid-template-rows: minmax(0, 0.4fr) minmax(0, 1fr); }
+:root[data-lagano='1'] .k-front { grid-template-rows: minmax(0, 1fr); }
+:root[data-lagano='1'] .k-local { grid-template-rows: minmax(0, 1fr) auto; }
 :root[data-lagano='1'] .k-map { background: var(--k-surface); }
 
 /* --- Portrait: the front page stacked, the paired main region on top ----------
@@ -613,10 +712,19 @@ button.k-strip-verdict { cursor: pointer; }
    data-portrait='1'). Tonight's events take the top, the bottom row keeps its
    three panels at a third each, the column becomes a row at the foot.
    Compact tiers and the compact QR: these rules place blocks and set no token. */
-.kiosk[data-portrait='1'] .k-front { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.95fr); }
+.kiosk[data-portrait='1'] .k-front { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr); }
+.kiosk[data-portrait='1'] .k-overview { grid-template-rows: auto minmax(0, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-neighborhood { grid-template-columns: minmax(0, 1fr) auto; height: auto; min-height: calc(420px * var(--k-zoom)); }
+.kiosk[data-portrait='1'] .k-context-stack { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
 .kiosk[data-portrait='1'] .k-bottom { grid-column: 1; grid-row: 2; }
 .kiosk[data-portrait='1'] .k-bottom .k-field { min-height: calc(340px * var(--k-zoom)); }
-.kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(55%, 1fr) minmax(0, auto); }
+.kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-paired .k-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--k-gap); }
+.kiosk[data-portrait='1'] .k-paired .k-side > * { margin-top: 0; }
+.kiosk[data-size='handheld'] .k-paired { display: flex; flex-direction: column; }
+.kiosk[data-size='handheld'] .k-present-local { display: flex; flex-direction: column; }
+.kiosk[data-size='handheld'] .k-present-local .k-map { height: 300px; flex: none; }
+.kiosk[data-size='handheld'] .k-present-board .k-line-list { grid-template-columns: 1fr; }
 .kiosk[data-portrait='1'] .k-basics-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* The totem's column is a row under the bottom panels: the forecast over the city on the left, the card on the right. */
 .kiosk[data-portrait='1'] .k-column { grid-column: 1; grid-row: 3; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto minmax(0, 1fr); }
@@ -627,7 +735,7 @@ button.k-strip-verdict { cursor: pointer; }
    column's one row is as tall as the card), so the taller drawing holds the three statements the totem shows, where the
    wall's two-row card (above) would cost one. A phone stands the same pieces up. In both the side wrapper dissolves
    (display: contents) and the lead and the hint take their own areas; the lead keeps the wall's tier. */
-.kiosk[data-portrait='1'] .k-invite { grid-template-rows: auto minmax(var(--k-qr), auto) auto; grid-template-areas: 'lead lead' 'qr hint' 'code code'; }
+.kiosk[data-portrait='1'] .k-invite { grid-template-columns: var(--k-qr); grid-template-rows: auto var(--k-qr) auto auto; grid-template-areas: 'lead' 'qr' 'code' 'hint'; }
 .kiosk[data-portrait='1'] .k-invite-side, .kiosk[data-size='handheld'] .k-invite-side { display: contents; }
 .kiosk[data-portrait='1'] .k-lead, .kiosk[data-size='handheld'] .k-lead { grid-area: lead; }
 .kiosk[data-portrait='1'] .k-hint, .kiosk[data-size='handheld'] .k-hint { grid-area: hint; }
@@ -713,7 +821,12 @@ button.k-strip-verdict { cursor: pointer; }
    its own surface with the kiosk radius, the map a 280 px band among them
    (a glance, not a stage), the card last; the page scrolls, so no row is
    ever hidden (fit measures a box of auto height as holding everything). */
-.kiosk[data-size='handheld'] .k-front, .kiosk[data-size='handheld'] .k-bottom, .kiosk[data-size='handheld'] .k-column { display: flex; flex-direction: column; gap: var(--k-gap); background: transparent; }
+.kiosk[data-size='handheld'] .k-front, .kiosk[data-size='handheld'] .k-local, .kiosk[data-size='handheld'] .k-overview, .kiosk[data-size='handheld'] .k-neighborhood, .kiosk[data-size='handheld'] .k-context-stack { display: flex; flex-direction: column; gap: var(--k-gap); background: transparent; }
+.kiosk[data-size='handheld'] .k-neighborhood { height: auto; }
+.kiosk[data-size='handheld'] .k-panel[data-panel='promet'] .k-panel-rows { grid-template-columns: 1fr; }
+.kiosk[data-size='handheld'] .k-panel--card { align-self: stretch; }
+.kiosk[data-size='handheld'] .k-invite { justify-items: center; }
+.kiosk[data-size='handheld'] .k-lead, .kiosk[data-size='handheld'] .k-hint { text-align: center; }
 .kiosk[data-size='handheld'] .k-panel { overflow: visible; border-radius: var(--k-radius); }
 .kiosk[data-size='handheld'] .k-panel[data-panel='tonight'] .k-panel-rows { grid-template-columns: minmax(0, 1fr); }
 .kiosk[data-size='handheld'] .k-panel[data-panel='tonight'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 1px solid var(--k-line); }
@@ -737,3 +850,22 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-provision { display: block; margin-top: var(--k-gap); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
 .kiosk[data-size='handheld'] .k-provision-title { font-size: var(--k-sup-size); font-weight: 700; line-height: 1.3; color: var(--k-ink-2); }
 .kiosk[data-size='handheld'] .k-provision-url { display: inline-block; min-height: 44px; margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
+
+/* Setup is a short, ordinary form, never a wall-sized field of choices. */
+.k-setup { max-width: 62rem; margin-inline: auto; }
+.k-setup-form { gap: var(--sp-4); }
+.k-district-pick { display: block; max-width: 30rem; }
+.k-district-pick select { width: 100%; min-height: 48px; font-size: 1rem; }
+.k-setup .k-setup-title { font-size: 2rem; }
+.k-setup .k-setup-intro { font-size: 1rem; max-width: 60ch; }
+.k-setup .k-setup-legend, .k-setup .k-search-label { font-size: 0.875rem; font-weight: 700; }
+.k-setup .k-search-input { font-size: 1rem; min-height: 48px; }
+.k-setup .k-stop-list { grid-template-columns: 1fr 1fr; gap: var(--sp-2); max-height: 18rem; }
+.k-setup .k-choice { min-height: 56px; padding: var(--sp-3); }
+.k-setup .k-stop-name { font-size: 1rem; }
+.k-setup .k-stop-meta, .k-setup .k-setup-count, .k-setup .k-setup-hint, .k-setup .k-setup-meta { font-size: 0.8125rem; line-height: 1.4; }
+.k-setup .k-setup-summary { font-size: 0.875rem; }
+.k-setup .k-btn { min-height: 48px; font-size: 1rem; }
+@media (max-width: 35rem) {
+  .k-setup .k-stop-list { grid-template-columns: 1fr; max-height: none; }
+}

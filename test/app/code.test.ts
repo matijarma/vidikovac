@@ -27,8 +27,8 @@ describe('code helpers (Crockford base32, 8 chars, ABCD-EFGH)', () => {
     expect(codeFromScan('ABCD')).toBeNull();
   });
   it('builds the QR payload with the display form in the fragment', () => {
-    expect(codeUrl('ABCDEFGH')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFGH');
-    expect(codeUrl('ABCDEFGH', 'http://localhost:8787')).toBe('http://localhost:8787/s#ABCD-EFGH');
+    expect(codeUrl('ABCDEFGH')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFGH');
+    expect(codeUrl('ABCDEFGH', 'http://localhost:8787')).toBe('http://localhost:8787/s/#ABCD-EFGH');
   });
   it('spells the code for a screen reader in two groups', () => {
     expect(speakableCode('ABCD-EFGH')).toBe('A B C D, E F G H');

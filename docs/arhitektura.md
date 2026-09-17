@@ -1,12 +1,13 @@
 # Arhitektura na jednoj stranici
 
-Kaj ima? je jedan Cloudflare Worker (`worker/index.ts`) sa statičkim datotekama (`app/dist`), četiri Durable Object klase sa SQLite pohranom, KV prostorom za posljednju dobru kopiju izvora i privatnim R2 spremnikom regionalne karte. Tehničko ime Workera i repozitorija ostaje `vidikovac`. Adresa je javna od 14. rujna 2026.; Cloudflare Access štiti samo operaterske rute `/api/admin/*` i `/stats`, odvojeno od sesije proizvoda. Kod je AGPL-3.0-or-later; izvorne licence podataka ostaju očuvane.
+Kaj ima? je jedan Cloudflare Worker (`worker/index.ts`) sa statičkim datotekama (`app/dist`), pet Durable Object klasa sa SQLite pohranom, KV prostorom za posljednju dobru kopiju izvora i privatnim R2 spremnikom regionalne karte. Tehničko ime Workera i repozitorija ostaje `vidikovac`. Adresa je javna od 14. rujna 2026.; Cloudflare Access štiti samo operaterske rute `/api/admin/*` i `/stats`, odvojeno od sesije proizvoda. Kod je AGPL-3.0-or-later; izvorne licence podataka ostaju očuvane.
 
 ## Važeće promjene za Kaj ima?
 
 - **Uparivanje:** ista mreža dopuštena je. Nema mrežnog HMAC-a ni zadanog razvojnog ključa. `SESSION_SECRET` obvezan je; administrativni testni prolaz zahtijeva `APP_ENV=test`.
 - **Privremeni zasloni:** `POST /api/screens` stvara stvarni BeaconDO na 24 sata, s odabranim stajalištem. Quota je pet postava po pseudonimnom ključu i trideset ukupno u pomičnom satu; ključ je Access identitet kad ga zahtjev nosi, inače mreža s koje zahtjev dolazi (adresa ili prvih 64 bita IPv6 adrese, kroz HMAC tajnom sesije, pa redovi quote ne nose adresu). Ne pohranjuje se identitet ni adresa u izvornom obliku; redovi kvote nose HMAC prefiksa i brišu se nakon sat vremena. Isti BeaconDO/RoomDO put koriste privremeni i trajni zasloni.
 - **Sesije:** deset minuta sa zaslona, pet minuta jednokratnog prosljeđivanja. Uklanjanje zaslona ne ukida izdanu sesiju. Rok sesije provjerava se i pri obradi poruke, ne samo alarmom.
+- **Prikazivanje:** `BeaconDO` upravlja javnim prikazom neovisno o osobnim sobama. `RoomDO` provjerava pravo izravnog skenera pa prosljeđuje verzionirani zahtjev. Novi sken ne preuzima prikaz; preuzimanje traži potvrdu revizije, a uspjeh potvrdu stvarnog iscrtavanja.
 - **Podaci:** `dateBasis`, pojedinačni `sources` i `coverage` čuvaju značenje datuma i neovisnu dostupnost. Djelomičan uspjeh ne briše posljednje valjane stavke drugog izvora. Njihova starost nije produljena novim dohvatom drugog izvora.
 - **Klijent:** zajednički feed/view ugovori, stvarni odabir sloja i javne stavke, stabilno stanje kroz osvježavanja. Pretrage i privatne koordinate ne šalju se na zajednički zaslon. Mrežni zahtjev ograničen je na 15 sekundi.
 - **Karta:** Protomaps v4 regionalni PMTiles arhiv u `vidikovac-maps`; dopuštene verzionirane putanje `/maps/zagreb-v1/{z}/{x}/{y}.mvt`. MapLibre 6.4.1, vlastiti glifovi i spriteovi, odvojena geometrija ZET mreže. Gibanje i dalje računa postojeći model.
@@ -44,12 +45,13 @@ flowchart LR
   R -- "razrijesi kod" --> I
   R -- "iskoristi kod" --> B
   B -- "otvori sobu" --> RM
-  K -- "wss /ws/room/:id" --> RM
+  RM -- "odobren zahtjev za javni prikaz" --> B
+  B -- "prikaz, revizija, potvrda" --> K
   P -- "wss /ws/room/:id" --> RM
   S -- "wss /ws/room/:id" --> RM
   P -- "GET /api/data/* Bearer dataToken" --> T
   T --> F
-  F --> Z & G & D & E & H & SG
+  F --> Z & G & D & E & SG
   R -- "session_start, scan_fail, source_fetch" --> M
   RM -- "session_end, panel_open, export" --> M
 ```
@@ -152,8 +154,8 @@ Preferencija `kajima:map-mode:v1` vrijedi samo na uređaju (`map` ili `schema`,
 zadano `map`). Na zaslonu `?prikaz=shema|karta` ima prednost i preživljava
 čišćenje jednokratnog fragmenta. Promet mijenja map-slot, oslobađa stari
 renderer i pamti zadnju geografsku kameru. Shema i njezina imovina učitavaju
-se dinamički; lagano ih nikada ne dohvaća. Odvojena geografska sličica Kvarta
-na desktopu ostaje kakva je bila. `stale` nastavlja plan, samo `down` zaustavlja
+se dinamički; lagano ih nikada ne dohvaća. Kvart se otvara kao zasebni pogled,
+bez stalne druge karte uz radni prostor. `stale` nastavlja plan, samo `down` zaustavlja
 slike; pauza sesije i uništavanje čiste petlju, događaje i zakašnjele dohvate.
 
 ### Autobusi: predaja
@@ -169,13 +171,49 @@ Vlasnik je autobusni krug odgodio; nije dio sheme ni ove isporuke.
 ## Tok uparivanja
 
 1. Zaslon se spaja na `/ws/beacon/<beaconId>`; `BeaconDO` šalje nonce, zaslon odgovara `HMAC(secret, nonce)`. Nakon uspjeha `BeaconDO` kuje paket od 20 kodova po 30 s (Crockford base32, 8 znakova, 40 bita), registrira ga u `IndexDO` jednim pozivom i šalje zaslonu s `serverNow`. Zaslon rotira po zidnom satu i traži novi paket kad ostanu tri.
-2. Telefon skenira `https://zagreb.aningfilm.hr/s#ABCD-EFGH` (kod je u fragmentu adrese i putuje samo u tijelu POST zahtjeva, nikad u URL-u ni u zapisu) i šalje `POST /api/scan {code}`. Worker pita `IndexDO` čiji je kod, pa `BeaconDO` provjerava prozor (slotStart − 5 s do slotEnd + 30 s), jednokratnost i opoziv. Mreže zaslona i telefona ne uspoređuju se: provjera iste mreže umirovljena je 13. rujna 2026. i `networkCheck()` uvijek vraća `off`; `RL_SCAN` (10 pokušaja u minuti po adresi, na rubu Cloudflarea) i usporavanje `BeaconDO`-a nakon 20 neuspjelih pokušaja ostaju jedina zaštita od pogađanja. `BeaconDO` otvara `RoomDO` s `expiresAt = now + 10 min` i dvije jednokratne ulaznice; zaslon dobiva `{t:'unlocked'}`, telefon `ScanOk` i prikazuje karticu potvrde ("Zaslon: kafić, Donji grad, 10 minuta").
-3. Oba uređaja ulaze u sobu (`/ws/room/<roomId>`, `{t:'join', ticket}`) i dobivaju `{t:'joined', role, expiresAt, resumeToken, dataToken}`. `view` ide samo od vozača prema zaslonu; `share` kuje kodove za drugu osobu (5 svježih minuta, jedan skok, bez mrežne provjere).
-4. Alarm `RoomDO`-a: `live → warned60 → warned20 → closed` (idempotentno po fazi); `expiring` na 60 i 20 s, `expired` pa zatvaranje koda 4000. Telefon zamrzava prikaz kao statičku snimku s atribucijom; zaslon se vraća na teaser. Soba briše sve (`storage.deleteAll()`).
+2. Telefon skenira `https://zagreb.aningfilm.hr/s/#ABCD-EFGH` i šalje `POST /api/scan {code}`. Kod iz fragmenta ne ide u URL mrežnog zahtjeva. Provjere vremenskog prozora, jednokratnosti, opoziva i učestalosti ostaju iste. `BeaconDO` otvara desetominutni `RoomDO` i na poslužitelju ga veže uz zaslon. Zaslon s `presentationVersion: 1` dobiva samo potvrdu pristupa `{t:'paired'}`; sadržaj se ne mijenja. Ulaznice za stariji protokol ostaju radi kompatibilnosti.
+3. Telefon izravno ulazi u sobu i dobiva ulogu, rok, `resumeToken`, `dataToken` te stanje prikaza. **Zaslon** šalje `{t:'present', command}` s verzijom, ključem ponavljanja i očekivanom revizijom. Soba dopušta samo izravnom skeneru zahtjev prema svojem zaslonu. `BeaconDO` serijalizira promjene, traži izričito preuzimanje zauzetog zaslona i šalje javni cilj autentificiranoj vezi zaslona. Tek `{t:'presented'}` potvrđuje iscrtavanje. Pretraga, spremljeni popisi i koordinate uređaja nisu dio dopuštenog cilja.
+4. `share` i dalje izdaje zasebnu petominutnu sobu bez upravljanja zaslonom i bez daljnjeg dijeljenja. Alarm osobne sobe provodi `live → warned60 → warned20 → closed`, upozorenja na 60 i 20 sekundi i brisanje po isteku. `BeaconDO` zasebno provjerava rok prikaza, vraća javni pregled i čisti privremene veze i potvrde zahtjeva. Zamrznuti osobni pogled ostaje atributirana snimka s izvozom.
+
+### Ugovor prikazivanja
+
+`worker/presentation.ts` odvaja `PresentationTarget` od privatnog `ViewState`.
+Cilj sadrži poznato područje ili `kvart`, opcionalni javni izbor, poznatu
+gradsku četvrt i vremenski raspon. Nema HTML-a, slobodnog teksta ili kamere.
+Klijent šalje očekivanu reviziju i `requestId`; ponavljanje već prihvaćenog
+zahtjeva ne vraća nadjačani sadržaj. Statusi su `idle`, `pending`, `displayed`
+i `unavailable`. Osam sekundi bez potvrde nije uspjeh.
+
+Na novoj vezi zaslona revizija se poveća i traži se nova potvrda iscrtavanja;
+zakašnjela potvrda stare veze ne može potvrditi nov renderer. Token za podatke
+aktivnog prikaza šalje se samo autentificiranom zaslonu. Korisnici vide
+`self` ili `other`, ne identitet druge osobe. Nema nove javne HTTP rute ni
+novih Cloudflare resursa; dodane tablice nalaze se u postojećem `BeaconDO`.
+Potvrda prati stvarno iscrtani predmet i nakon prvog prikaza: uklonjena stavka
+postaje `unavailable`, a povratak izvora može vratiti `displayed` bez preuzimanja
+ili nove revizije. Neizmijenjene potvrde ne šalju se na svakom otkucaju.
+Nova postava zaslona u istom pregledniku dobiva vlastiti slijed revizija.
 
 ## Što se pohranjuje
 
-Registar zaslona (id, tajna za postavljanje u izvornom obliku — HMAC izazova ključa se njome, vidi `BEACON_AUTH` u `worker/protocol.ts` — vrsta, četvrt, oznaka); redovi soba do 10 minuta; kodovi do 5 minuta nakon isteka; brojači `(dan, sat, dogadaj, dim1, dim2) → broj` u zatvorenim rječnicima. Ništa drugo: ni IP, ni User-Agent, ni identifikator uređaja, ni kolačić, ni koordinate. Privitak WebSocket veze nosi samo ulogu i identifikator sobe. Adresa prolazi kroz ograničivače na rubu Cloudflarea i, kao HMAC prefiksa, kroz satnu kvotu samoposlužnih zaslona; u izvornom obliku se nigdje ne pohranjuje, a HMAC prefiksa živi u redovima kvote najviše sat vremena.
+Registar zaslona čuva id, tajnu za postavljanje, vrstu, četvrt, oznaku i javno
+stajalište. Tajna ostaje u izvornom obliku jer se njome ključa HMAC izazova
+(`BEACON_AUTH` u `worker/protocol.ts`). Redovi soba žive do deset minuta, kodovi
+do pet minuta nakon isteka. `BeaconDO` čuva aktivni javni cilj, njegovu reviziju,
+stanje iscrtavanja, rok te privremenu vezu s ovlaštenom sobom. Veze soba i
+ključevi ponavljanja zahtjeva čiste se po isteku; prestankom prikaza uklanja se
+cilj i vlasnik, a ostaje revizija potrebna za odbijanje zakašnjelih zahtjeva.
+
+Brojači `(dan, sat, dogadaj, dim1, dim2) → broj` koriste zatvorene rječnike.
+Adresa prolazi kroz ograničivače na rubu Cloudflarea i, kao HMAC prefiksa, kroz
+satnu kvotu samoposlužnih zaslona; redovi kvote ne nose izvornu adresu i žive
+najviše sat vremena. Nema trajnog identifikatora osobe ili uređaja, povijesti
+privatnog pregledavanja, privatne pretrage, GPS-a telefona ili kolačića za praćenje.
+
+To nije tvrdnja da sustav ne čuva javne koordinate: predmemorija izvora, GTFS
+artefakti i model kretanja gore opisan čuvaju javnu geografiju i podatke vozila,
+ne lokaciju korisnika. Privici WebSocket veza čuvaju stanje autentifikacije,
+verziju protokola ili ulogu sudionika potrebnu za tu kratkotrajnu vezu.
 
 ## Granice i ograničenja
 

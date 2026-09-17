@@ -21,7 +21,7 @@
 // for the integrator to glide across two frames without a second poll.
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { APP_URL, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { APP_URL, health, localContext, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 
 // Trg bana Jelačića -- motion/schematic.ts's own DEFAULT_CROP centre, so a
 // fix here sits inside both the locked kiosk's crop and any session's
@@ -253,8 +253,8 @@ test.describe('the motion model, mounted end to end (T11)', () => {
   }) => {
     expect((await health(request, APP_URL)).networkCheck).toBe('off');
 
-    const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } });
-    const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
+    const kioskCtx = await localContext(browser, { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } });
+    const phoneCtx = await localContext(browser, { ...devices['Pixel 7'] });
     try {
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       const kiosk = await kioskCtx.newPage();
@@ -262,6 +262,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       const { scanUrl } = await readPairing(kiosk, APP_URL);
 
       const phone = await phoneCtx.newPage();
+      phone.setDefaultTimeout(15_000);
       await stubSessionData(phone, zetSnapshot('e2e-dash-1', 0));
       await unlockOnPhone(phone, scanUrl, '10 minuta');
 
@@ -272,6 +273,14 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       await phone.waitForTimeout(300);
       const f2 = await frames(phone, schematicSel);
       expect(f2, 'the dashboard schematic must advance its own frame counter').toBeGreaterThan(f1);
+      const credit = phone.locator('details.maplibregl-ctrl-attrib');
+      await expect(credit).toHaveJSProperty('open', false);
+      const creditToggle = credit.locator('summary');
+      await expect(creditToggle).toHaveAttribute('aria-label', 'Izvori karte');
+      await creditToggle.click();
+      await expect(credit.locator('a').filter({ hasText: 'OpenStreetMap' })).toBeVisible();
+      await creditToggle.click();
+      await expect(credit).toHaveJSProperty('open', false);
 
       // The tap card: select the one drawn vehicle with the keyboard (T9's
       // own arrow-key contract, schematic-view.ts's onCanvasKey) rather than
@@ -288,6 +297,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
 
       // The new full-map mode keeps the working shell, not the retired
       // panorama/meander graphic.
+      await phone.locator('.t-map-menu > summary').click();
       await phone.click('#u-pokretu-map-full');
       await expect(phone.locator('.ki[data-view="map"]')).toBeVisible();
       await expect(phone.getByTestId('session-label')).toBeVisible();

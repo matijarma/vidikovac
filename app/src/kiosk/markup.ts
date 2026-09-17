@@ -78,7 +78,7 @@ function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale:
   return `<li class="k-line" data-kind="${row.kind}" data-route="${escapeAttribute(row.routeId)}">
       ${kBadge(row.label, row.kind, `${kindWord} ${row.label}`.trim())}
       <span class="k-line-name">${escapeHtml(row.longName)}</span>
-      <span class="k-line-word">${escapeHtml(row.word)}</span>
+      <span class="k-line-word">${escapeHtml(row.word || strings.say.transitNoData)}</span>
       <span class="k-line-near">${escapeHtml(near)}</span>
     </li>`;
 }

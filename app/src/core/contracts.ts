@@ -36,7 +36,7 @@ export type FeedErrors = Partial<Record<ModuleId, string>>;
 
 /** Why the cast button is disabled, when it is (D5): no screen on the session, a one-hop
  *  peer (never the driver), the session frozen, or the socket still connecting. */
-export type CastReason = 'no-screen' | 'peer' | 'frozen' | 'connecting';
+export type CastReason = 'no-screen' | 'peer' | 'frozen' | 'connecting' | 'screen-offline' | 'unsupported';
 
 /** The cast button's state, computed once by the dashboard and read by the Kvart panel,
  *  the FAB and the transport detail head alike (D5). */

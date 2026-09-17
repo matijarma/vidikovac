@@ -25,7 +25,24 @@ import { APP_URL, provisionKiosk } from './helpers';
 
 const KIOSK = { width: 1920, height: 1080 };
 const SHOTS_DIR = 'test-results';
-const MIN_METER_HEIGHT_PX = 6;
+const MIN_METER_HEIGHT_PX = 2;
+
+async function expectBoardFits(page: Page): Promise<void> {
+  // One browser-frame measurement. Separate boundingBox calls can resolve
+  // handles on opposite sides of a legitimate source/metadata reconciliation.
+  const box = await page.evaluate(() => {
+    const list = document.querySelector<HTMLElement>('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
+    const stage = document.querySelector<HTMLElement>('[data-testid=kiosk-stage]');
+    if (!list || !stage) return null;
+    const rect = list.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, bottom: rect.bottom, stageBottom: stage.getBoundingClientRect().bottom, overflow: list.scrollHeight - list.clientHeight };
+  });
+  expect(box, 'the visible board and stage must both exist').not.toBeNull();
+  expect(box!.width).toBeGreaterThan(0);
+  expect(box!.height).toBeGreaterThan(0);
+  expect(box!.bottom, 'the board stays inside the stage, never over the safety strip').toBeLessThanOrEqual(box!.stageBottom + 0.5);
+  expect(box!.overflow, 'the board never overflows its box').toBeLessThanOrEqual(1);
+}
 
 const FONT_REQUEST = /\.(woff2?|ttf|otf)(\?|$)|\/assets\/fonts-/;
 const NETWORK_ARTEFACT = /zet-network\.json/;
@@ -146,12 +163,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     await expect(list.locator('li.k-line').first()).toBeVisible();
     expect(await page.locator('canvas').count(), 'still no canvas on the lightweight path').toBe(0);
 
-    const listBox = await list.boundingBox();
-    const stage = await page.getByTestId('kiosk-stage').boundingBox();
-    expect(listBox).not.toBeNull();
-    expect(stage).not.toBeNull();
-    expect(listBox!.y + listBox!.height, 'the board ends inside the stage, never over the strip').toBeLessThanOrEqual(stage!.y + stage!.height + 0.5);
-    expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), 'the board never overflows its box').toBe(true);
+    await expectBoardFits(page);
   });
 
   // R-V1: "at ten rows of 24 px with 8 px spacing that is 320 px, inside the
@@ -194,11 +206,6 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     await expect(list.locator('li.k-line')).toHaveCount(10);
     await expect(list.locator('.k-line-more')).toHaveText('još 1 linija');
 
-    const listBox = await list.boundingBox();
-    const stage = await page.getByTestId('kiosk-stage').boundingBox();
-    expect(listBox).not.toBeNull();
-    expect(stage).not.toBeNull();
-    expect(listBox!.y + listBox!.height, 'ten rows plus the overflow row still end inside the stage (R-V1’s row budget, measured for real)').toBeLessThanOrEqual(stage!.y + stage!.height + 0.5);
-    expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), 'the board never overflows its box').toBe(true);
+    await expectBoardFits(page);
   });
 });

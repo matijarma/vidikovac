@@ -437,7 +437,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const dimmed = sel?.kind === 'route';
   // The public screen's thresholds follow the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const overlapZoom = prozor?.overlapZoom ?? PILL_OVERLAP_ZOOM;
-  const overlap: Expr = ['step', ['zoom'], false, overlapZoom, true];
+  // Every vehicle remains a dot. Number plates must earn collision-free
+  // room; unconditional terminal labels turned busy stops into blue blobs.
+  const overlap = false;
   const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
   /** A network is drawn for its mode when the modes admit it and, on the public screen, when the option set names it. */
   const drawn = (kind: 'tram' | 'bus'): boolean => kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));

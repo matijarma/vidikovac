@@ -339,62 +339,47 @@ describe('createScanPage', () => {
     expect(submitButton.disabled).toBe(false);
   });
 
-  it('scans the code from the fragment, shows the approved confirm card and takes the code out of the address bar', async () => {
-    const { root, scan, replaceUrl } = mount({ hash: '#ABCD-EFGH' });
+  it('redeems the fragment once, removes the code and opens the granted session directly', async () => {
+    const { root, scan, replaceUrl, navigate, form } = mount({ hash: '#ABCD-EFGH' });
     await flush();
     expect(scan).toHaveBeenCalledWith('ABCDEFGH');
     const card = root.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
-    expect(card.hidden).toBe(false);
-    expect(text(card.querySelector('.scan-confirm-title'))).toBe('Isti kod je na zaslonu?');
-    expect(text(card.querySelector('[data-testid=confirm-code]'))).toBe('ABCD-EFGH');
-    expect(card.querySelector('[data-testid=confirm-code]')?.getAttribute('aria-label')).toBe('A B C D, E F G H');
-    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Kavana Velebit · Donji grad · 10 minuta');
-    expect(card.querySelector('[data-testid=confirm-stop]')).toBeNull();
-    expect(text(card.querySelector('.scan-confirm-hint'))).toBe('Provjeri da ovaj kod odgovara kodu na drugom uređaju. Otključavanje otvara pogled na oba uređaja.');
-    const unlock = card.querySelector<HTMLButtonElement>('[data-testid=unlock]')!;
-    expect(unlock.textContent).toBe('Otključaj');
-    expect(unlock.className).toBe('btn btn-primary');
-    const cancel = card.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!;
-    expect(text(cancel)).toBe('Odustani');
-    expect(cancel.className).toBe('btn-ghost');
-    expect(before(unlock, cancel)).toBe(true);
-    expect(document.activeElement).toBe(card);
+    expect(card.hidden).toBe(true);
+    expect(root.querySelector('[data-testid=unlock]')).toBeNull();
+    expect(form.hidden).toBe(true);
+    expect(navigate).toHaveBeenCalledWith(dashboardUrl(KIOSK));
     expect(replaceUrl).toHaveBeenCalledWith('/s/');
-    // The card floats above the form, the field stays where it was.
-    expect(before(card, root.querySelector('form')!)).toBe(true);
   });
 
-  it('adds the stop and its lines when the screen stands at one', async () => {
-    const { root } = mount({ hash: '#ABCD-EFGH', result: AT_STOP });
+  it('keeps the granted screen identity while navigating directly', async () => {
+    const { status, navigate } = mount({ hash: '#ABCD-EFGH', result: AT_STOP });
     await flush();
-    const card = root.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
-    expect(text(card.querySelector('[data-testid=confirm-label]'))).toBe('Kavana Velebit · Donji grad · 10 minuta');
-    expect(text(card.querySelector('[data-testid=confirm-stop]'))).toBe('Stanica Trg bana J. Jelačića · linije 6, 11, 12, 13');
-    expect(before(card.querySelector('[data-testid=confirm-label]')!, card.querySelector('[data-testid=confirm-stop]')!)).toBe(true);
+    expect(text(status)).toBe('Kavana Velebit · Donji grad · 10 minuta');
+    expect(navigate).toHaveBeenCalledWith(dashboardUrl(AT_STOP));
   });
 
   it('names a peer’s phone with its own five minutes (the pairing spec’s "5 minuta")', async () => {
-    const { root } = mount({ hash: '#ABCD-EFGH', result: PHONE });
+    const { status, navigate } = mount({ hash: '#ABCD-EFGH', result: PHONE });
     await flush();
-    expect(text(root.querySelector('[data-testid=confirm-label]'))).toBe('Telefon druge osobe · 5 minuta');
+    expect(text(status)).toBe('Telefon druge osobe · 5 minuta');
+    expect(navigate).toHaveBeenCalledWith(dashboardUrl(PHONE));
   });
 
-  it('Otključaj navigates to the dashboard once, however often it is pressed', async () => {
-    const { root, navigate } = mount({ hash: '#ABCD-EFGH' });
+  it('navigates only once even if submit is repeated after success', async () => {
+    const { handle, navigate, scan } = mount({ hash: '#ABCD-EFGH' });
     await flush();
-    const unlock = root.querySelector<HTMLButtonElement>('[data-testid=unlock]')!;
-    unlock.click();
-    unlock.click();
+    await handle.submit('ABCD-EFGH');
     expect(navigate).toHaveBeenCalledTimes(1);
+    expect(scan).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith('/d/#room=r1&ticket=t1&label=Kavana%20Velebit');
   });
 
-  it('Odustani puts the person back in the field with the card gone', async () => {
-    const { root, input } = mount({ hash: '#ABCD-EFGH' });
+  it('successful redemption introduces no second unlock or cancel decision', async () => {
+    const { root, form } = mount({ hash: '#ABCD-EFGH' });
     await flush();
-    root.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!.click();
     expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
-    expect(document.activeElement).toBe(input);
+    expect(root.querySelector('[data-testid=confirm-cancel]')).toBeNull();
+    expect(form.hidden).toBe(true);
   });
 
   it.each(ERRORS)('shows the Croatian sentence for %s, drops the spent code from the address bar and keeps the field usable', async (error, message) => {
@@ -459,11 +444,11 @@ describe('createScanPage', () => {
     expect(text(submitButton)).toBe('Provjera…');
     release(KIOSK);
     await flush();
-    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('');
+    expect(text(root.querySelector('[data-testid=scan-status]'))).toContain('Kavana Velebit');
     expect(input.readOnly).toBe(false);
     expect(input.hasAttribute('aria-busy')).toBe(false);
     expect(text(submitButton)).toBe('Provjeri kod');
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
   });
 
   it('destroy() takes the section off the page', () => {
@@ -653,7 +638,7 @@ describe('camera region', () => {
     release(KIOSK);
     await flush();
     expect(button.disabled).toBe(false);
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
   });
 });
 

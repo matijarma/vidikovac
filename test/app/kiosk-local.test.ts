@@ -335,7 +335,7 @@ describe('local content from the stop-scoped teaser', () => {
   // beside another block) can leave a block too short even for one row plus
   // its own "prikazano N od M" line; the floor is zero, not one, so the
   // line that discloses the true count is never itself the thing clipped.
-  it('drops to zero rows, never clipping the coverage line, when even one row does not fit', () => {
+  it('keeps the first useful row and reports a composition defect when it cannot fit', () => {
     const host = document.createElement('div');
     host.innerHTML = `<article class="k-block"><div class="k-block-body"><ul class="k-rows" data-total="39">${[1, 2].map((n) => `<li class="k-row">${n}</li>`).join('')}</ul></div></article>`;
     // A 64 px body: two rows of 62 px each never fit, and neither does one row (62) plus the note (28).
@@ -345,8 +345,9 @@ describe('local content from the stop-scoped teaser', () => {
       return { client: 64, scroll: visible * 62 + note };
     };
     fitRows(host, hr.paired.coverage, measure);
-    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(0);
-    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 0 od 39');
+    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(1);
+    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 1 od 39');
+    expect(host.querySelector<HTMLElement>('.k-block-body')!.dataset.overflow).toBe('true');
   });
   // T5.4: a block sized to its content (the portrait column under the map)
   // reads its body a rounding pixel over its box (clientHeight 159 against
@@ -410,13 +411,13 @@ describe('local content from the stop-scoped teaser', () => {
     expect(culture.main).not.toContain('Splitu');
     // Promet's column is the departure board alone: ZET's notices are Događanja's undated notices (asserted above), closures stay on Sada and Sigurnost.
     const promet = pairedMarkup({ ...withOngoing, layer: 'u-pokretu' as const });
-    expect(promet.side).toContain('data-testid="k-delays"');
+    expect(promet.lines).toContain('class="k-line-list"');
     expect(promet.side).not.toContain('k-zet-notices');
     expect(promet.side).not.toContain('Obilazak linija 6 i 11');
     expect(promet.side).not.toContain('data-testid="k-closures"');
     const grad = pairedMarkup({ ...withOngoing, layer: 'uprava-i-pravo' as const });
     expect(grad.main).toContain('13. sjednica');
-    expect(grad.side).toContain('data-testid="k-works"');
+    expect(grad.main).toContain('data-testid="k-works"');
   });
 });
 
@@ -615,7 +616,7 @@ describe('the one map, through the additive adapter', () => {
     expect(setView).not.toHaveBeenCalled();
     requestKioskMap(maps, { ...input, phase: 'paired', selection: { kind: 'route', id: '6' } }, adapter);
     expect(setView).toHaveBeenCalledTimes(1);
-    expect(setView).toHaveBeenCalledWith({ zoom: PAIRED_ZOOM, emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat], selectedRoute: '6', selectedStop: '106_1', follow: true });
+    expect(setView).toHaveBeenCalledWith({ zoom: PAIRED_ZOOM, emphasis: [], selectedRoute: '6' });
     // Back on the invitation a wider field asks for a closer camera, on the same map, and the overlap threshold follows it.
     requestKioskMap(maps, { ...input, widthPx: 1800 }, adapter);
     expect(setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(1800, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
@@ -720,7 +721,7 @@ describe('credits and rows on a screen read from steps away', () => {
   it('a row keeps its whole title with the aside inside it; the selected item grows to main size; an observation without a reading says so in a word', () => {
     expect(row('Naslov', 'detalj', '20:00', ' data-x="1"')).toBe('<span class="k-row-main" data-x="1"><span class="k-row-aside">20:00</span>Naslov</span><span class="k-row-sub">detalj</span>');
     expect(row('Naslov')).toBe('<span class="k-row-main">Naslov</span>');
-    const selected = ctx('kultura', { selection: { kind: 'item', id: publicItemKey('dogadanja', 'kp:1'), module: 'dogadanja' } }).side;
+    const selected = ctx('kultura', { selection: { kind: 'item', id: publicItemKey('dogadanja', 'kp:1'), module: 'dogadanja' } }).main;
     expect(selected).toContain('k-block--grow');
     expect(selected).toContain('class="k-select-main k-select-main--item"');
     expect(selected).toContain('potpuna atribucija: /izvori');
@@ -753,35 +754,26 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     const loading = weatherMarkup(weatherNow([], hr, 'hr'), hr);
     expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a…</p>');
   });
-  it('Promet: the board leads with the stop\u2019s lines as single-line rows with k badges, then the largest deviations, and names its coverage in lines', () => {
-    const { side } = paired('u-pokretu');
-    expect(side).toContain('data-testid="k-delays"');
-    expect(side).toContain('k-block--board');
-    expect(side.match(/<li class="k-row k-row--line"/g)!.length).toBeGreaterThanOrEqual(9);
-    expect(side).toContain('data-coverage="prikazano {shown} od {total} linija"');
-    expect(side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
-    expect(side).toContain('<span class="k-row-word">kasni 2 min</span>');
-    expect(side).toContain('<span class="k-row-aside">12 vozila</span>');
-    expect(side.match(/data-testid="k-delays"[\s\S]*?<\/article>/)![0]).not.toContain('k-row-sub');
-    // The board and the join card are the column at both sizes: five rows, the coverage line and ZET's three-line credit leave no room for a second block.
-    expect(side).not.toContain('k-zet-notices');
-    expect(side).not.toContain('k-closures');
+  it('transport gives the board its own region, and a selected route becomes its subject', () => {
+    const { lines, side } = paired('u-pokretu');
+    expect(side).toBe('');
+    expect(lines).toContain('class="k-line-list"');
+    expect(lines).toContain('data-size="k"');
+    expect(lines).toContain('kasni 2 min');
+    expect(lines).toContain('još');
     const compact = paired('u-pokretu', { size: 'compact' });
-    expect(compact.side).toContain('data-testid="k-delays"');
-    expect(compact.side).not.toContain('k-zet-notices');
-    expect(compact.side).not.toContain('k-closures');
-    // With a selection the board keeps the general floor: the selection is the column's subject.
+    expect(compact.lines).toContain('class="k-line-list"');
     const selected = paired('u-pokretu', { selection: { kind: 'route', id: '6' } });
-    expect(selected.side).toContain('data-testid="k-selection"');
-    expect(selected.side).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
-    expect(selected.side.match(/data-testid="k-delays"/)).not.toBeNull();
-    expect(selected.side).not.toContain('k-block--board');
+    expect(selected.lines).toContain('data-testid="k-selection"');
+    expect(selected.lines).toContain('<span class="k-line-badge line" data-kind="tram" data-size="k">6</span>');
+    expect(selected.lines).not.toContain('class="k-line-list"');
+    expect(selected.side).toBe('');
   });
   it('a warning row carries its level as a badge word with its shape; the Sada column carries no weather block (the header is the weather)', () => {
     const cap = snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe', summary: 'Jaki udari vjetra.' })]);
-    const { side } = paired('zrak-i-nebo', { snapshots: { ...all(), 'dhmz-cap': cap } });
-    expect(side).toContain('<span class="badge k-badge" data-tone="severe">narančasto upozorenje</span> Grmljavina');
-    expect(side).not.toContain('<strong>narančasto upozorenje</strong>');
+    const { main } = paired('zrak-i-nebo', { snapshots: { ...all(), 'dhmz-cap': cap } });
+    expect(main).toContain('<span class="badge k-badge" data-tone="severe">narančasto upozorenje</span> Grmljavina');
+    expect(main).not.toContain('<strong>narančasto upozorenje</strong>');
     const sada = paired('grad-sada');
     expect(sada.side).not.toContain('k-weather');
     expect(sada.side).toContain('data-testid="k-closures"');

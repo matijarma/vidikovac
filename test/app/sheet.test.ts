@@ -5,8 +5,9 @@ import { createSheet, type Detent } from '../../app/src/transport/sheet';
 // The phone stage is 740 px tall at 390×844 (844 minus the 48 px header and the
 // 56 px tab bar): peek 5rem = 80, half 370, open 740 - 2.5rem = 700.
 const STAGE = 740;
+const HALF = STAGE * 0.38;
 
-interface MountOptions { stageHeight?: number; reducedMotion?: boolean; onChange?: (d: Detent, h: number) => void; now?: () => number }
+interface MountOptions { stageHeight?: number; initial?: Detent; reducedMotion?: boolean; onChange?: (d: Detent, h: number) => void; now?: () => number }
 
 function mount(o: MountOptions = {}) {
   const root = document.createElement('div');
@@ -25,6 +26,7 @@ function mount(o: MountOptions = {}) {
   root.appendChild(stage);
   document.body.appendChild(root);
   const controller = createSheet({ root, sheet, head, body, stage: () => stage, onChange: o.onChange, reducedMotion: o.reducedMotion, now: o.now });
+  if (o.initial) controller.set(o.initial, { animate: false });
   return { root, stage, sheet, head, body, controller, resize: (h: number) => { height = h; } };
 }
 
@@ -52,14 +54,14 @@ describe('detent heights from the stage', () => {
   it('peek is 5rem, half is half the stage, open leaves 2.5rem of map; the controller starts at half and writes both custom properties', () => {
     const changes: [Detent, number][] = [];
     const { root, controller } = mount({ onChange: (d, h) => changes.push([d, h]) });
-    expect(controller.heightFor('peek')).toBe(80);
-    expect(controller.heightFor('half')).toBe(370);
+    expect(controller.heightFor('peek')).toBe(120);
+    expect(controller.heightFor('half')).toBe(HALF);
     expect(controller.heightFor('open')).toBe(700);
-    expect(controller.detent()).toBe('half');
-    expect(root.dataset.sheet).toBe('half');
-    expect(root.style.getPropertyValue('--sheet-h')).toBe('370px');
+    expect(controller.detent()).toBe('peek');
+    expect(root.dataset.sheet).toBe('peek');
+    expect(root.style.getPropertyValue('--sheet-h')).toBe('120px');
     expect(root.style.getPropertyValue('--sheet-open-h')).toBe('700px');
-    expect(changes).toEqual([['half', 370]]);
+    expect(changes).toEqual([['peek', 120]]);
   });
 
   it('set() writes data-sheet and --sheet-h and reports the change; the body says whether it is scrolled to its top', () => {
@@ -71,7 +73,7 @@ describe('detent heights from the stage', () => {
     expect(changes.at(-1)).toEqual(['open', 700]);
     controller.set('peek');
     expect(root.dataset.sheet).toBe('peek');
-    expect(sheetH(root)).toBe(80);
+    expect(sheetH(root)).toBe(120);
     expect(body.dataset.atTop).toBe('true');
     body.scrollTop = 40;
     body.dispatchEvent(new Event('scroll'));
@@ -100,12 +102,13 @@ describe('detent heights from the stage', () => {
     vi.stubGlobal('ResizeObserver', undefined);
     const changes: [Detent, number][] = [];
     const { root, controller, resize } = mount({ onChange: (d, h) => changes.push([d, h]) });
+    controller.set('half');
     resize(640);
     window.dispatchEvent(new Event('resize'));
     expect(controller.detent()).toBe('half');
-    expect(sheetH(root)).toBe(320);
+    expect(sheetH(root)).toBe(640 * 0.38);
     expect(root.style.getPropertyValue('--sheet-open-h')).toBe('600px');
-    expect(changes.at(-1)).toEqual(['half', 320]);
+    expect(changes.at(-1)).toEqual(['half', 640 * 0.38]);
     expect(root.dataset.dragging).toBeUndefined();
   });
 
@@ -118,15 +121,15 @@ describe('detent heights from the stage', () => {
 describe('pointer drags', () => {
   it('a drag on the head from half upward by 200 px ends open, with no transition while the finger is down', () => {
     const clock = { t: 0 };
-    const { root, head, controller } = mount({ now: () => clock.t });
+    const { root, head, controller } = mount({ now: () => clock.t, initial: 'half' });
     pointer(head, 'pointerdown', 500);
     clock.t += 50;
     pointer(head, 'pointermove', 400);
     expect(root.dataset.dragging).toBe('true');
-    expect(sheetH(root)).toBe(470);
+    expect(sheetH(root)).toBeCloseTo(HALF + 100);
     clock.t += 50;
     pointer(head, 'pointermove', 300);
-    expect(sheetH(root)).toBe(570);
+    expect(sheetH(root)).toBeCloseTo(HALF + 200);
     clock.t += 50;
     pointer(head, 'pointerup', 300);
     expect(root.dataset.dragging).toBeUndefined();
@@ -136,12 +139,12 @@ describe('pointer drags', () => {
 
   it('a slow release snaps to the nearest detent; a flick above 0.3 px/ms goes one detent further in its direction', () => {
     const clock = { t: 0 };
-    const { head, controller } = mount({ now: () => clock.t });
+    const { head, controller } = mount({ now: () => clock.t, initial: 'half' });
     // 100 px down over 400 ms (0.25 px/ms): 270 px is nearer half (370) than peek (80).
-    drag(head, 400, 500, clock, 100);
+    drag(head, 400, 460, clock, 100);
     expect(controller.detent()).toBe('half');
     // The same 100 px in 40 ms (2.5 px/ms): a flick downward, so the next detent down.
-    drag(head, 400, 500, clock, 10);
+    drag(head, 400, 460, clock, 10);
     expect(controller.detent()).toBe('peek');
     // From peek, a 60 px flick upward lands on half, not open: one detent per flick.
     drag(head, 600, 540, clock, 10);
@@ -150,7 +153,7 @@ describe('pointer drags', () => {
 
   it('a body drag moves the sheet only from the top of its scroll and only downward; a scrolled body or an upward first move is left to the browser', () => {
     const clock = { t: 0 };
-    const { root, body, controller } = mount({ now: () => clock.t });
+    const { root, body, controller } = mount({ now: () => clock.t, initial: 'half' });
     body.scrollTop = 40;
     drag(body, 300, 500, clock, 100);
     expect(controller.detent()).toBe('half');
@@ -165,7 +168,7 @@ describe('pointer drags', () => {
 
   it('a tap on the head starts no drag, and the click after a real drag is swallowed so a row under the lifted finger never opens', () => {
     const clock = { t: 0 };
-    const { root, head, body, controller } = mount({ now: () => clock.t });
+    const { root, head, body, controller } = mount({ now: () => clock.t, initial: 'half' });
     const clicks = vi.fn();
     root.addEventListener('click', clicks);
     pointer(head, 'pointerdown', 500);
@@ -185,15 +188,15 @@ describe('pointer drags', () => {
 
   it('a mouse drag is followed from the window: the head sits at the sheet’s top edge, so the first move already lands over the map and a mouse has no implicit capture', () => {
     const clock = { t: 0 };
-    const { root, head, controller } = mount({ now: () => clock.t });
+    const { root, head, controller } = mount({ now: () => clock.t, initial: 'half' });
     pointer(head, 'pointerdown', 500, 1);
     clock.t += 50;
     pointer(document.body, 'pointermove', 400, 1); // never reaches the sheet
     expect(root.dataset.dragging).toBe('true');
-    expect(sheetH(root)).toBe(470);
+    expect(sheetH(root)).toBeCloseTo(HALF + 100);
     clock.t += 50;
     pointer(document.body, 'pointermove', 300, 1);
-    expect(sheetH(root)).toBe(570);
+    expect(sheetH(root)).toBeCloseTo(HALF + 200);
     clock.t += 50;
     pointer(document.body, 'pointerup', 300, 1);
     expect(root.dataset.dragging).toBeUndefined();
@@ -202,7 +205,7 @@ describe('pointer drags', () => {
 
   it('a press that ends away from the sheet leaves nothing behind: the next drag, from a new pointer, still moves the sheet; a cancelled drag snaps from where the finger last was', () => {
     const clock = { t: 0 };
-    const { root, head, controller } = mount({ now: () => clock.t });
+    const { root, head, controller } = mount({ now: () => clock.t, initial: 'half' });
     pointer(head, 'pointerdown', 500, 7);
     clock.t += 30;
     pointer(document.body, 'pointerup', 502, 7);
@@ -222,7 +225,7 @@ describe('pointer drags', () => {
 
   it('a drag from a row the next poll replaces keeps going: once it commits, capture moves to the sheet itself, and the release is heard wherever the finger is', () => {
     const clock = { t: 0 };
-    const { root, sheet, body, controller } = mount({ now: () => clock.t });
+    const { root, sheet, body, controller } = mount({ now: () => clock.t, initial: 'half' });
     const row = document.createElement('button');
     body.appendChild(row);
     const captured = vi.fn();
@@ -234,12 +237,12 @@ describe('pointer drags', () => {
     clock.t += 50;
     pointer(row, 'pointermove', 320, 9);
     expect(captured).toHaveBeenCalledWith(9);
-    expect(sheetH(root)).toBe(350);
+    expect(sheetH(root)).toBeCloseTo(HALF - 20);
     body.replaceChildren(); // the poll re-sets the body's content: the row under the finger is gone
     expect(row.isConnected).toBe(false);
     clock.t += 50;
     pointer(document.body, 'pointermove', 420, 9);
-    expect(sheetH(root)).toBe(250);
+    expect(sheetH(root)).toBeCloseTo(HALF - 120);
     clock.t += 50;
     pointer(document.body, 'pointerup', 500, 9);
     expect(released).toHaveBeenCalledWith(9);

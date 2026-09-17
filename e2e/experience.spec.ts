@@ -50,30 +50,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.locator('canvas[data-testid="panorama"], [data-testid="meander-legend"]')).toHaveCount(0);
     });
 
-    test('heading order: the five time words read as h3 headings at FIXTURE_NOW, the lanes follow in time order, and every lane is labelled by its head', async ({ page }) => {
+    test('overview has named local and upcoming regions, with explicit time filters and a readable clock', async ({ page }) => {
       await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
       await expect(page.getByTestId('tb')).toBeVisible();
-      const band = await page.getByTestId('tb').evaluate((tb) => {
-        const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
-        const heads = [...tb.querySelectorAll('.tb-heads .tb-head')];
-        const lanes = [...tb.querySelectorAll('.tb-lanes > .tb-lane')];
+      const overview = await page.getByTestId('tb').evaluate((tb) => {
+        const regions = [...tb.querySelectorAll(':scope > section')];
         return {
-          heads: heads.map((head) => text(head.querySelector('h3'))),
-          headCols: heads.map((head) => head.getAttribute('data-col')),
-          lanes: lanes.map((lane) => lane.getAttribute('data-col')),
-          headings: tb.querySelectorAll('h3').length,
-          headsBeforeLanes: heads.every((head) => lanes.every((lane) => Boolean(head.compareDocumentPosition(lane) & Node.DOCUMENT_POSITION_FOLLOWING))),
-          labelledByOwnHead: lanes.every((lane) => lane.getAttribute('role') === 'group'
-            && document.getElementById(lane.getAttribute('aria-labelledby') ?? '')?.closest('.tb-head')?.getAttribute('data-col') === lane.getAttribute('data-col')),
+          labels: regions.map(region => document.getElementById(region.getAttribute('aria-labelledby') ?? '')?.textContent),
+          filters: [...tb.querySelectorAll('[data-filter-key="tb-col"]')].map(button => button.getAttribute('data-filter-value')),
+          localBeforeAgenda: Boolean(regions[0]!.compareDocumentPosition(regions[1]!) & Node.DOCUMENT_POSITION_FOLLOWING),
         };
       });
-      expect(band.heads, 'a reader hears the five time words as headings').toEqual(HEADS_AT_FIXTURE_NOW);
-      expect(band.headCols).toEqual(COLUMNS_AT_FIXTURE_NOW);
-      expect(band.lanes, 'lanes in time order').toEqual(COLUMNS_AT_FIXTURE_NOW);
-      expect(band.headings, 'the band has no heading but the five time words').toBe(COLUMNS_AT_FIXTURE_NOW.length);
-      expect(band.headsBeforeLanes, 'heads precede lanes in DOM order').toBe(true);
-      expect(band.labelledByOwnHead, 'each lane is a group labelled by its own head').toBe(true);
+      expect(overview.labels).toEqual(['Ovdje i sada', 'Što slijedi']);
+      expect(overview.filters).toEqual(COLUMNS_AT_FIXTURE_NOW);
+      expect(overview.localBeforeAgenda).toBe(true);
+      await expect(page.locator('.day-clock')).toHaveText('14:00');
     });
 
     test('source outages never claim no warnings and retain usable navigation', async ({ page }) => {
@@ -99,9 +91,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await page.clock.runFor(31_000);
       expect(fixture.requests.length).toBe(requestsAfterExpiry);
       await expect(page.getByTestId('frozen-line').locator('a')).toBeVisible();
-      const safety = page.locator('[data-layer=sigurnost][href="/hitno"]:visible').first();
-      await expect(safety).toBeVisible();
-      await safety.click();
+      await page.locator('[data-layer=sigurnost][href="/hitno"]:visible').first().click();
       await expect(page).toHaveURL(/\/hitno\/?$/);
       await expect(page.locator('a[href="tel:112"]')).toBeVisible();
     });
@@ -132,6 +122,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       const map = page.getByTestId('map-canvas');
       await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
       const canvas = await map.locator('canvas').elementHandle();
+      if (phone) {
+        await page.locator('.t-sheet-toggle').click();
+        await expect(page.getByTestId('transport-workspace')).toHaveAttribute('data-sheet', 'half');
+      }
       // On the phone stage the canvas fills the stage and the sheet floats over its lower part, so the map a
       // person sees is the canvas above the sheet's top edge; on the desk the board column takes real width.
       const uncovered = async (): Promise<{ width: number; height: number; stage: number }> => {
@@ -140,9 +134,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
         return { width: box.width, height: Math.min(box.y + box.height, sheet.y) - box.y, stage: box.height };
       };
       const before = await uncovered();
+      await page.locator('.t-map-menu > summary').click();
       await page.getByTestId('map-full-toggle').click();
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
-      if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 200);
+      if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 100);
       else await expect.poll(async () => (await uncovered()).width).toBeGreaterThanOrEqual(before.width + 300);
       expect(await canvas!.evaluate((el) => el === document.querySelector('[data-testid=map-canvas] canvas'))).toBe(true);
       await expect(page.getByTestId('session-label')).toBeVisible();
@@ -157,7 +152,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect.poll(async () => {
         const after = await uncovered();
         if (!phone) return Math.abs(after.width - before.width);
-        return Math.abs(after.height - (before.height - (before.stage - after.stage) / 2));
+        return Math.abs(after.height - after.stage * 0.62);
       }).toBeLessThanOrEqual(4);
     });
   });
@@ -178,28 +173,19 @@ test('phone overview gives the city the first viewport and passes accessibility 
   expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([]);
 });
 
-test('text zoom collapses the band at 1440: five lanes at 100 %, three at 125 %, one lane and the segments at 200 %', async ({ page }) => {
+test('text zoom retains both overview regions and every time filter without horizontal overflow', async ({ page }) => {
   const width = 1440;
   await page.setViewportSize({ width, height: 1000 });
   await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(FIXTURE_DASHBOARD);
   await expect(page.getByTestId('tb')).toBeVisible();
-  /** The lanes whose box lies in the lane row's box (a lane at display: none has no box; a lane scrolled out of the row is not in view), and whether the segments (the band's sibling in the workspace) show. */
-  const band = () => page.locator('#layer-grad-sada').evaluate((ws) => {
-    const row = ws.querySelector('[data-testid="tb-lanes"]')!.getBoundingClientRect();
-    const seg = ws.querySelector('[data-testid="tb-seg"]')?.getBoundingClientRect();
-    const lanes = [...ws.querySelectorAll('.tb-lane')].filter((lane) => {
-      const r = lane.getBoundingClientRect();
-      return r.width > 0 && Math.min(r.right, row.right) - Math.max(r.left, row.left) >= 8;
-    }).map((lane) => lane.getAttribute('data-col'));
-    return { lanes, segments: Boolean(seg && seg.width > 0 && seg.height > 0) };
-  });
-  expect(await band(), 'at 100 % the desk reads all five lanes and no segments').toEqual({ lanes: COLUMNS_AT_FIXTURE_NOW, segments: false });
-  await page.addStyleTag({ content: 'html { font-size: 125% !important; }' });
-  await expect.poll(band, { message: 'at 125 % sutra and tjedan wait in Događanja: three lanes' }).toEqual({ lanes: ['sada', 'danas', 'veceras'], segments: false });
-  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
-  await expect.poll(band, { message: 'at 200 % the band takes its phone form: one lane in view and the segments shown' }).toEqual({ lanes: ['sada'], segments: true });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the lane row scrolls inside itself').toBeLessThanOrEqual(width + 1);
+  for (const zoom of [100, 125, 200]) {
+    await page.addStyleTag({ content: `html { font-size: ${zoom}% !important; }` });
+    await expect(page.locator('.day-now')).toBeVisible();
+    await expect(page.locator('.day-ahead')).toBeVisible();
+    await expect(page.locator('.day-time')).toHaveCount(5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+  }
 });
 
 test('without WebGL the transport search still opens a real stop and its routes', async ({ page }) => {

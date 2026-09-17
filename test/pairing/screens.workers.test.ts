@@ -60,6 +60,20 @@ describe('real temporary screens', () => {
     await runInDurableObject(index, (instance) => { vi.spyOn(instance, 'now').mockReturnValue(Date.now() + 3_600_001); });
     expect((await index.reserveScreen(principal)).allowed).toBe(true);
   });
+  it('uses the actual network quota in test mode too, retaining the five-screen limit', async () => {
+    const request = (ip: string) => new Request('https://vidikovac.test/api/screens', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': ip }, body: '{}',
+    });
+    const ip = '2001:db8:10:20::1';
+    const principal = await networkPrincipal(testEnv, request(ip));
+    expect(principal).toBeTruthy();
+    for (let i = 0; i < 5; i++) await indexStub(testEnv).reserveScreen(principal!);
+    const limited = await SELF.fetch(request(ip));
+    expect(limited.status).toBe(429);
+    expect((await limited.json<{ error: string }>()).error).toBe('screen-limit');
+    const independent = await SELF.fetch(request('2001:db8:30:40::1'));
+    expect(independent.status).toBe(201);
+  });
 
   it('expires the screen, never revokes an already issued room grant', async () => {
     const response = await SELF.fetch('https://vidikovac.test/api/screens', { method: 'POST', body: '{}' });
@@ -131,4 +145,3 @@ describe('self-service screens on a public deployment', () => {
     expect(await networkPrincipal(publicEnv, new Request('https://vidikovac.test/api/screens'))).toBeNull();
   });
 });
-

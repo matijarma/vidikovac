@@ -1,7 +1,7 @@
 # Kaj ima? · zaslon, postavljanje i provjera
 
-Važeće upute za prototip od 13. rujna 2026. Zamjenjuju starije upute s
-panoramom, meandrom, rasterskom kartom i zabranom iste mreže.
+Upute za redizajnirani prototip od 17. rujna 2026. Zamjenjuju prethodne
+rasporede i automatsko preuzimanje prikaza pri skeniranju.
 Tehničko ime `vidikovac`, domena i ključevi pohrane ostaju nepromijenjeni.
 Adresa je javna od 14. rujna 2026.; Cloudflare Access štiti samo operaterske
 rute `/api/admin/*` i `/stats`.
@@ -10,14 +10,16 @@ rute `/api/admin/*` i `/stats`.
 
 1. Na računalu ili zaslonu otvoriti https://zagreb.aningfilm.hr i na početnoj
    stranici odabrati „Otvori gradski zaslon” (stranica `/kiosk/`).
-2. Odabrati gradsku četvrt, zatim stvarno ZET-ovo stajalište. Zadana postava
+2. U istom obrascu odabrati gradsku četvrt i stvarno ZET-ovo stajalište. Zadana postava
    je Donji grad i Trg bana J. Jelačića (`106_1`).
 3. Potvrditi stvaranje. `POST /api/screens` vraća redovnu postavu zaslona
    koja vrijedi 24 sata. Postava sama ne daje otključanu sesiju.
-4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Potvrditi
-   „Otključaj”.
-5. Telefon dobiva deset minuta i vodi povezani zaslon. Za provjeru radne
-   površine istu stvar napraviti u drugoj kartici preglednika.
+4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Uspješna
+   provjera izravno otvara desetominutni pogled, bez drugog gumba „Otključaj”.
+5. Zaslon nastavlja prikazivati pregled grada. Telefon pregledava privatno.
+   Za prikazivanje otvoriti **Zaslon**, provjeriti cilj i odabrati
+   **Prikaži ovaj pogled**. Za provjeru radne površine isti postupak radi
+   u drugoj kartici preglednika.
 
 Isti Wi-Fi je dopušten. Ne treba isključivati Wi-Fi ili trošiti mobilne podatke.
 Kod je jednokratan, prikazuje se kao dvije skupine po četiri znaka i mijenja
@@ -30,30 +32,24 @@ pokreće izričitom radnjom, ne automatskom petljom.
 
 ## Što zaslon prikazuje
 
-Nepovezan zaslon je gradska naslovnica za svoje stajalište: pet ploča na
-jednoj slici, bez rotacije prizora i bez odbrojavanja. Gore lijevo
-„Večeras u gradu”: današnja događanja po početku (ono što tek počinje, pa
-ono što traje), zatim sutrašnja s oznakom „sutra”, svako s vremenom,
-naslovom, vrstom, mjestom i izvorom; kad večer prođe, ploča se zove „Sutra u
-gradu”. Ispod nje donji red: „Promet” s linijama stajališta (bedž, oba kraja
-linije, riječ stanja i vozila u blizini), od 20 sati redak „Zadnji polazak”
-po rasporedu ZET-a (nikad kao procjena dolaska) i najnovija ZET-ova
-obavijest; karta stajališta razapeta na 1,5 km širine, sjever gore, s
-prugama, vozilima, zatvaranjima i obrisom kvarta; „Oko stajališta” sa
-zatvaranjima do 1,5 km po udaljenosti i radovima u kvartu. Desni stupac:
-„Sutra” s DHMZ-ovom prognozom za idući dan kao brojkom i današnjim rasponom
-pod njom, „Grad” sa sljedećom sjednicom Skupštine, brojem Službenog
-glasnika s njegovim aktima i kvartovskim novostima, te stalna pozivnica na
-dnu: QR uz poziv i uputu, kod preko cijele širine. Redovi koje ploča ne
-drži cijele skrivaju se od dna, nikad se ne režu; naslov reda ide u najviše
-dva retka. Svaka ploča nosi navod svojih izvora. Zaglavlje nosi sat i, kad
-DHMZ odgovara, vrijeme kao stanje uz sat, nikad kao pločicu. Sigurnosna
-traka nosi presudu i tri stavke, bez odbrojavanja. Rasporedi za 1920 × 1080,
-1366 × 768 i okomiti totem namjerno su različiti; QR u svima mora biti
-najmanje 240 CSS piksela. Dežurna ljekarna na karti nosi prsten i svoju
-adresu; kad leži unutar 150 m od stajališta zaslona, adresa se s karte
-ispušta (ležala bi preko imena stajališta), a prsten ostaje i sigurnosna je
-traka i dalje imenuje u cijelosti.
+Normalan zaslon prikazuje koristan pregled grada i prije i nakon
+skeniranja. U vodoravnom rasporedu lokalna karta i odvojena ploča linija
+zauzimaju lijevi dio; vrijeme i dnevna prognoza, sljedeća događanja,
+obližnja zatvaranja, gradske informacije i pozivnica desni.
+Karta nema ploču linija preko sebe. Brojevi vozila prorjeđuju se pri
+preklapanju, a položaji ostaju označeni točkama.
+
+Zaglavlje nosi mjesto, datum i vrijeme. Sigurnosna traka uvijek ostaje
+vidljiva i imenuje stanje izvora, upozorenje kada postoji i dežurnu
+ljekarnu. Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
+„Zadnji polazak” navodi raspored ZET-a, ne procjenu dolaska.
+
+Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena
+ploča ne smije postati prazna samo da bi se uklonilo prelijevanje teksta.
+Rasporedi za 1920 × 1080, 1366 × 768 i okomiti totem namjerno su
+različiti; QR na tim zaslonima ostaje najmanje 240 CSS piksela.
+Dežurna ljekarna na karti nosi prsten i adresu. Blizu stajališta zaslona
+prsten ostaje, a sigurnosna traka nosi puni naziv.
 
 Radovi u tijeku broje se za gradsku četvrt stajališta kad je poznata i
 ploča to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
@@ -64,14 +60,23 @@ postavku smanjenog pokreta preglednika, ali sada zaustavlja samo glatki
 prijelaz pri pomicanju vozila na karti; podaci se i dalje osvježavaju kao
 i inače.
 
-Povezan zaslon preuzima javni izbor s telefona: područje, liniju, stajalište
-ili stavku. Sedam područja ima raspored za gledanje s udaljenosti, ne
-obrezanu kopiju telefonske stranice. Tekst pretrage i privatne koordinate
-ne prenose se na zaslon.
+Izričit prikaz na zaslon šalje samo javni izbor: područje, liniju,
+stajalište ili stavku te javnu četvrt i vremenski raspon tog pogleda.
+Šest područja i pogled Kvart imaju raspored za gledanje s udaljenosti.
+Tekst pretrage, spremljeni popisi i koordinate uređaja ne prenose se.
 
-Nova osoba koja skenira preuzima prikaz zaslona, dok prethodnoj osobi njezina
-sesija ostaje do izvornog isteka. „Podijeli grad” daje drugoj osobi vlastitih
-pet minuta u zasebnoj sesiji koja se ne može dalje dijeliti.
+Nova osoba koja skenira ne prekida postojeći prikaz. Ako želi prikazati
+svoj pogled, mora potvrditi **Preuzmi i prikaži**. Prethodna osoba
+nastavlja vlastitu sesiju, a oba uređaja vide promjenu upravljanja.
+Poruka **Prikazano na zaslonu** pojavljuje se tek nakon potvrde iscrtavanja
+sa zaslona. Ako potvrda ne stigne u osam sekundi, telefon kaže da prikaz
+nije potvrđen i nudi ponovni pokušaj.
+
+**Vrati pregled grada** završava prikazivanje, ne osobnu sesiju. Kratak
+prekid veze telefona ne briše sadržaj javnog zaslona. Ponovno povezivanje
+zaslona vraća važeći prikaz uz novu potvrdu. Istek sesije izlagača vraća
+pregled grada. „Podijeli grad” daje drugoj osobi vlastitih pet minuta u
+zasebnoj sesiji, bez daljnjeg dijeljenja i bez upravljanja javnim zaslonom.
 
 Nakon isteka povezane sesije zaslon se vraća pozivu sa svježim kodom. Telefon
 zadržava označeni zamrznuti prikaz i dostupne izvoze; osvježavanje prestaje.
@@ -177,6 +182,7 @@ npm run typecheck
 npm test
 npm run e2e
 node scripts/review-experience.mjs
+node scripts/review-redesign.mjs
 ```
 
 Playwright ima zaseban lokalni poslužitelj za 12-sekundni test isteka.
@@ -196,8 +202,18 @@ bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
 | Postava je istekla ili opozvana | Pokrenuti novu postavu izričito. Ne ponavljati automatski stvaranje. |
 | Kod je istekao ili iskorišten | Upisati novi aktualni kod; provjeriti automatsko podešavanje sata uređaja. |
 | Telefon ne završava povezivanje | Nakon kratkih ponovnih pokušaja sučelje nudi novi ulazak; upotrijebiti svježi kod. |
+| Prikaz nije potvrđen | Provjeriti vezu zaslona, zatim ponoviti zahtjev u ploči Zaslon. „Poslano” nije dokaz prikaza. |
+| Zaslon treba osvježiti | Učitana je starija inačica zaslona bez protokola prikazivanja; osvježiti `/kiosk/`. |
+| Druga osoba vodi zaslon | Pregledavanje ostaje dostupno; preuzimanje traži izričitu potvrdu. |
+| Zaslon je otvoren u drugoj kartici | Jedna postava ima jednu aktivnu vezu. Zatvoriti staru karticu ili osvježiti željenu. |
 | Izvor je zastario ili nedostupan | Zadnja dobra kopija nije trenutačna potvrda; provjeriti izvor i mogućnost ponovnog dohvata. |
 | Karta ne radi | Koristiti pretragu i popis ili `?lagano=1`; provjeriti lokalni R2 arhiv pri razvoju. |
 
 Isporuka ide isključivo kroz provjereni `git push` i postojeći Cloudflare Build.
 Ne koristi se `wrangler deploy`; Access na operaterskim rutama i privatnost repozitorija ostaju očuvani.
+
+Pri isporuci redizajna osvježiti dugotrajno otvorene zaslone. Dodana
+SQLite pohrana i poruke protokola ne brišu postave, kodove ni osobne
+sesije. Starija osobna sesija može se nastaviti do svog roka; za novi
+prikaz koristi se osvježena aplikacija. Dokumenti poslane prijave
+ostaju neizmijenjeni.

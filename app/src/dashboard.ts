@@ -44,6 +44,8 @@ import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
+import { PRESENTATION_ACK_MS, PRESENTATION_TIMES, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
+import { presentationPanel, presentationTargetLabel } from './experience/presentation';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
@@ -201,6 +203,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The moment the last cast frame went out; the cast buttons say "sent" for CAST_SENT_MS after it. */
   let castSentAt: number | null = null;
   let castTimer: unknown = null;
+  let presentationOpen = false;
+  let presentationState: PresentationState | undefined = session.snapshot().presentation;
+  let presentationConfirmRevision: number | null = null;
+  let presentationRequest: PresentationCommand | null = null;
+  let presentationRequestAt = 0;
+  let presentationPendingSince = 0;
+  let presentationMessage = '';
+  let presentationSequence = 0;
   let mapFull = false;
   let reconnecting = false;
   let error: string | null = null;
@@ -235,6 +245,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
 <header class="ki-head ki-status" data-region="status" data-testid="status-line"></header>
+<div class="ki-presentation" data-region="presentation"></div>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
 <aside class="ki-kvart" data-region="kvart" data-testid="kvart-aside" aria-label="${escapeAttribute(i18n.t('nav.kvart'))}" hidden></aside>
@@ -247,7 +258,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const main = element.querySelector<HTMLElement>('main')!;
-  const regions = { status: region('status'), banners: region('banners'), kvart: region('kvart'), fab: region('fab'), tabs: region('tabs') };
+  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), kvart: region('kvart'), fab: region('fab'), tabs: region('tabs') };
 
   /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
   function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
@@ -260,7 +271,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
    */
   function castState(): CastState {
     const s = session.snapshot();
-    const reason: CastReason | null = frozen ? 'frozen' : s.phase !== 'live' ? 'connecting' : !s.screen ? 'no-screen' : s.role !== 'scanner' ? 'peer' : null;
+    const reason: CastReason | null = frozen ? 'frozen' : s.phase !== 'live' ? 'connecting' : !s.screen ? 'no-screen' : s.role !== 'scanner' ? 'peer' : !presentationState?.online ? 'screen-offline' : !presentationState?.supported ? 'unsupported' : null;
     return { can: reason === null, reason, screenLabel: deps.label ?? null, stopName: s.screen?.stop?.name ?? null };
   }
 
@@ -279,12 +290,50 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       notice, sourcesDown: sourcesDown(feed),
       surface: surface(), panel, kvartChoice: kvartStore.snapshot(), kvart, kvartLabel: kvartLabel(i18n, kvart), stopName: stop?.name ?? null,
       hasScreen: Boolean(s.screen), canCast: cast.can, castReason: cast.reason, castSent: castSentAt !== null,
+      presentation: presentationState, presentationOpen,
       notify, notifyActive: activeCount(notify, notifyKeys), notifyKeys,
     };
   }
 
   function paintRegion(target: HTMLElement, markup: string): void {
     reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
+  }
+
+  function currentPresentationTarget(): PresentationTarget {
+    const state = view.snapshot();
+    const district = resolveKvart(kvartStore.snapshot(), session.snapshot().screen?.stop ?? undefined);
+    const time = state.filters['tb-col'];
+    return {
+      layer: panel === 'kvart' ? 'kvart' : state.layer,
+      ...(panel === null && state.selection ? { selection: state.selection } : {}),
+      ...(district ? { district } : {}),
+      ...(panel === null && state.layer === 'grad-sada' && (PRESENTATION_TIMES as readonly string[]).includes(time ?? '') ? { time: time as PresentationTarget['time'] } : {}),
+    };
+  }
+
+  function paintPresentation(): void {
+    const target = currentPresentationTarget();
+    const waiting = presentationRequest !== null || presentationState?.status === 'pending';
+    const since = presentationRequest ? presentationRequestAt : presentationPendingSince;
+    const pending = waiting && now() - since < PRESENTATION_ACK_MS;
+    const s = session.snapshot();
+    let message = presentationMessage;
+    if (s.phase !== 'live' || frozen) message = i18n.t(frozen ? 'cast.frozen' : 'cast.connecting');
+    else if (!presentationState?.online) message = i18n.t('presentation.offline');
+    else if (!presentationState.supported) message = i18n.t('presentation.unsupported');
+    else if (waiting && !pending && !message) message = i18n.t('presentation.notConfirmed');
+    else if (pending && !message) message = i18n.t('presentation.pending');
+    else if (presentationState.status === 'unavailable') message = i18n.t('presentation.unavailable');
+    else if (presentationState.status === 'displayed' && presentationState.owner === 'self' && !message) message = i18n.t('presentation.displayed');
+    paintRegion(regions.presentation, presentationPanel(i18n, {
+      open: presentationOpen, state: presentationState, target,
+      targetLabel: presentationTargetLabel(i18n, target, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : [])),
+      currentLabel: presentationState?.status === 'pending' ? i18n.t('presentation.pending')
+        : presentationState?.status === 'unavailable' ? i18n.t('presentation.unavailable')
+        : presentationTargetLabel(i18n, presentationState?.target ?? null, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : [])),
+      screenLabel: deps.label ?? s.screen?.stop?.name ?? i18n.t('session.labelScreen'),
+      can: castState().can, confirming: presentationConfirmRevision !== null, pending, message,
+    }));
   }
 
   /**
@@ -326,6 +375,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     syncKvartSelects();
     sheet.refresh();
     notifySheet.refresh();
+    paintPresentation();
   }
 
   /** Shows one notice in flow for `ms` (null: until replaced or the freeze) and paints. */
@@ -443,15 +493,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   /** The desk keeps the kvart panel as a sticky aside beside the workspace; the phone reaches it through its tab. */
   function paintKvartAside(ctx: LayerContext): void {
-    if (surface() === 'desktop') {
-      const wrapper = doc.createElement('div');
-      wrapper.appendChild(renderKvart(ctx, 'aside'));
-      reconcileChildren(regions.kvart, wrapper);
-      regions.kvart.hidden = false;
-    } else {
-      regions.kvart.hidden = true;
-      regions.kvart.replaceChildren();
-    }
+    regions.kvart.hidden = true;
+    regions.kvart.replaceChildren();
   }
 
   /** The 245 kB stop catalogue, once per mount and only when a saved stop needs its walking row. */
@@ -567,21 +610,33 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   /** Explicit casting (D5): the one place a view frame leaves this device, for the current layer and selection. */
   function cast(): void {
-    if (!castState().can) return;
-    const v = view.snapshot();
-    session.sendView(v.layer, selectionParams(v.selection));
-    castSentAt = now();
-    polite.textContent = i18n.t('cast.sent', { layer: i18n.t(`layers.${v.layer}`) });
-    if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
-    castTimer = setTimer(() => {
-      if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
-      castSentAt = null;
-      if (disposed) return;
-      paintShell();
-      render();
-    }, CAST_SENT_MS);
-    render();
+    presentationOpen = !presentationOpen;
+    presentationConfirmRevision = null;
+    if (presentationOpen) session.refreshPresentation?.();
     paintShell();
+    paintPresentation();
+  }
+
+  function present(action: 'present' | 'stop', confirm = false, target = currentPresentationTarget()): void {
+    if (!castState().can || !presentationState) return;
+    if (action === 'present' && presentationState.owner === 'other' && !confirm) {
+      presentationConfirmRevision = presentationState.revision;
+      paintPresentation();
+      return;
+    }
+    const expectedRevision = confirm ? presentationConfirmRevision : presentationState.revision;
+    if (expectedRevision === null) return;
+    presentationRequest = {
+      version: 1, requestId: `p_${now().toString(36)}_${++presentationSequence}`,
+      action, expectedRevision,
+      ...(action === 'present' ? { target } : {}),
+      ...(confirm ? { takeover: true } : {}),
+    };
+    presentationConfirmRevision = null;
+    presentationRequestAt = now();
+    presentationMessage = '';
+    session.present?.(presentationRequest);
+    paintPresentation();
   }
 
   /** The status search and "+ stanica": Promet with its search field focused (the phone workspace raises its sheet on focus). */
@@ -858,6 +913,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {
+    presentationState = snapshot.presentation;
     reconnecting = false;
     error = null;
     totalSeconds ??= snapshot.expiresAt ? Math.max(1, session.secondsLeft()) : null;
@@ -901,6 +957,46 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     }
   });
   session.onCodes((batch, serverNow) => openShare(batch, serverNow));
+  session.onPresentation?.((state) => {
+    if (disposed || (presentationState && state.revision < presentationState.revision)) return;
+    const previous = presentationState;
+    if (state.status === 'pending' && (previous?.revision !== state.revision || previous?.status !== 'pending')) presentationPendingSince = now();
+    if (state.owner !== 'self' || state.status !== 'displayed') presentationMessage = '';
+    if (state.owner === 'self' && state.status === 'displayed' && (previous?.status !== 'displayed' || previous?.owner !== 'self')) {
+      presentationMessage = i18n.t('presentation.displayed');
+      polite.textContent = presentationMessage;
+    }
+    if (state.status === 'unavailable' && previous?.status !== 'unavailable') {
+      polite.textContent = i18n.t('presentation.unavailable');
+    }
+    presentationState = state;
+    if (presentationRequest && state.revision > presentationRequest.expectedRevision) {
+      if (state.status === 'displayed' && state.owner === 'self') {
+        presentationMessage = i18n.t('presentation.displayed');
+        polite.textContent = presentationMessage;
+        presentationRequest = null;
+      } else if (state.status === 'unavailable') {
+        presentationMessage = i18n.t('presentation.unavailable');
+        presentationRequest = null;
+      } else if (state.owner !== 'self') {
+        presentationRequest = null;
+        presentationMessage = i18n.t(state.target ? 'presentation.changed' : 'presentation.overview');
+      }
+    }
+    paintPresentation(); paintShell();
+  });
+  session.onPresentationResult?.((result) => {
+    if (disposed || result.requestId !== presentationRequest?.requestId) return;
+    if (result.error) {
+      const key = { unavailable: 'offline', unsupported: 'unsupported', 'not-allowed': 'notAllowed', changed: 'changed', occupied: 'other', 'invalid-request': 'changed', 'too-many-requests': 'tooMany' }[result.error];
+      presentationMessage = i18n.t(`presentation.${key}`);
+      presentationRequest = null;
+    } else if (result.state.target === null) {
+      presentationRequest = null;
+      presentationMessage = i18n.t('presentation.overview');
+    }
+    paintPresentation();
+  });
 
   // --- delegated interactions: stable roots, no closures on discarded nodes --
   element.addEventListener('click', (event) => {
@@ -918,6 +1014,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       case 'directory': toggleDirectory(); return;
       case 'kvart': toggleKvart(); return;
       case 'cast': cast(); return;
+      case 'presentation': cast(); return;
+      case 'presentation-close': presentationOpen = false; presentationConfirmRevision = null; paintPresentation(); paintShell(); return;
+      case 'present-request': present('present'); return;
+      case 'present-confirm': present('present', true); return;
+      case 'present-cancel': presentationConfirmRevision = null; paintPresentation(); return;
+      case 'present-stop': present('stop'); return;
+      case 'present-retry':
+        if (presentationRequest && castState().can) { presentationRequestAt = now(); presentationMessage = ''; session.present?.(presentationRequest); paintPresentation(); }
+        else if (presentationState?.owner === 'self' && presentationState.target) present('present', false, presentationState.target);
+        return;
       case 'save': case 'unsave': {
         if (!d.kind || !d.id) return;
         const ref = { kind: d.kind as SavedKind, id: d.id };
@@ -957,6 +1063,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.addEventListener('change', (event) => {
     const select = event.target;
     if (select instanceof HTMLSelectElement && select.dataset.action === 'kvart-pick') kvartStore.set(select.value as KvartChoice);
+    else if (select instanceof HTMLSelectElement && select.dataset.filterKey) view.setFilter(select.dataset.filterKey, select.value);
   });
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !mapFull) return;
@@ -1000,8 +1107,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const stopNotify = onChange(notifyStore.subscribe, () => { render(); paintShell(); });
   const stopMapMode = onChange(mapMode.subscribe, () => { if (!disposed) render(); });
   const onMedia = (): void => {
-    // The desk has the aside instead of the panel.
-    if (surface() === 'desktop' && panel !== null) { panel = null; updateTitle(); }
+    // Kvart is a workspace on both surfaces; resizing never changes the task.
     paintShell();
     render();
   };
@@ -1030,6 +1136,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
     tickTimebandClock(main, now());
     paintShell();
+    if (presentationOpen) paintPresentation();
   }, TICK_MS);
 
   return {

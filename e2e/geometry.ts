@@ -97,7 +97,10 @@ export interface TargetOptions {
 }
 
 /** Every link in a source line is a tall enough target (plan, "Test updates", new test 6). */
-export const SOURCE_LINK_TARGETS: TargetOptions = { selector: SOURCE_LINKS, minPx: TARGET_MIN_PX, axes: 'height' };
+// Map copyright is running text, covered by WCAG's inline-link exception.
+// Its separate attribution toggle retains a 44px target. Do not inflate
+// every word of the credit into a control that obscures the map.
+export const SOURCE_LINK_TARGETS: TargetOptions = { selector: '.provenance a, .source a', minPx: TARGET_MIN_PX, axes: 'height' };
 /** Every other control is a box in both dimensions (the production audit's target rule). */
 export const CONTROL_TARGETS: TargetOptions = { selector: CONTROLS, minPx: TARGET_MIN_PX, axes: 'both' };
 

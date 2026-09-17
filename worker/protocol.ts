@@ -1,6 +1,7 @@
 // Wire contract between the Worker, the Durable Objects and the browser code.
 // Shared by worker/ and app/src/ (imported by relative path from both), so it
 // must stay free of runtime dependencies.
+import type { PresentationCommand, PresentationResult, PresentationState, ScreenPresentation } from './presentation';
 
 /** Crockford base32: 0-9 and A-Z without I, L, O, U. 32 symbols, `byte % 32` is unbiased. */
 export const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -103,7 +104,9 @@ export interface CreateBeaconResponse {
 // ---- WebSocket: /ws/beacon/:beaconId (kiosk <-> BeaconDO) ------------------
 
 export type BeaconClientMessage =
-  | { t: 'auth'; hmac: string }
+  | { t: 'auth'; hmac: string; presentationVersion?: 1 }
+  | { t: 'presented'; version: 1; revision: number; status: 'displayed' | 'unavailable' }
+  | { t: 'presentation-stop'; version: 1; revision: number }
   | { t: 'more' } // request the next code batch
   | { t: 'ping' } // keepalive, answered by the DO's auto-response without waking it
   | { t: 'pong' };
@@ -112,6 +115,8 @@ export type BeaconServerMessage =
   | { t: 'challenge'; nonce: string }
   | { t: 'codes'; batch: CodeSlot[]; serverNow: number; screen?: ScreenMetadata }
   | { t: 'unlocked'; roomId: string; ticket: string; expiresAt: number }
+  | { t: 'paired'; expiresAt: number }
+  | { t: 'presentation'; presentation: ScreenPresentation }
   | { t: 'revoked' }
   | { t: 'pong' }
   | { t: 'error'; error: string };
@@ -126,6 +131,8 @@ export type RoomClientMessage =
   | { t: 'join'; ticket: string }
   | { t: 'resume'; resumeToken: string }
   | { t: 'view'; layer: LayerId; params?: Record<string, string> }
+  | { t: 'present'; command: PresentationCommand }
+  | { t: 'presentation-get' }
   | { t: 'share' }
   | { t: 'event'; name: ClientEvent; dim?: string }
   | { t: 'ping' };
@@ -140,8 +147,11 @@ export type RoomServerMessage =
       dataToken: string;
       participants: number;
       screen?: ScreenMetadata;
+      presentation?: PresentationState;
     }
   | { t: 'view'; layer: LayerId; params?: Record<string, string> }
+  | { t: 'presentation'; state: PresentationState }
+  | { t: 'presentation-result'; result: PresentationResult }
   | { t: 'codes'; batch: CodeSlot[]; serverNow: number }
   | { t: 'count'; participants: number }
   | { t: 'expiring'; secondsLeft: number }

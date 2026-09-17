@@ -7,6 +7,8 @@ import {
   APP_URL,
   SHORT_URL,
   health,
+  localContext,
+  localHeaders,
   provisionKiosk,
   readDataToken,
   readPairing,
@@ -14,16 +16,16 @@ import {
 } from './helpers';
 import { CODE_RE } from './lib';
 
-async function twoContexts(browser: Browser): Promise<{ kioskCtx: BrowserContext; phoneCtx: BrowserContext }> {
-  const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } });
-  const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
+async function twoContexts(browser: Browser, base = APP_URL): Promise<{ kioskCtx: BrowserContext; phoneCtx: BrowserContext }> {
+  const kioskCtx = await localContext(browser, { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } }, base);
+  const phoneCtx = await localContext(browser, { ...devices['Pixel 7'] }, base);
   return { kioskCtx, phoneCtx };
 }
 
 test.describe('pairing: a public screen and a phone', () => {
   test('one-hop sharing gives a second phone its own five minutes without extending or taking over the original session', async ({ browser, request }) => {
     const { kioskCtx, phoneCtx } = await twoContexts(browser);
-    const peerCtx = await browser.newContext({ ...devices['Pixel 7'], locale: 'hr-HR' });
+    const peerCtx = await localContext(browser, { ...devices['Pixel 7'], locale: 'hr-HR' });
     try {
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       const kiosk = await kioskCtx.newPage();
@@ -45,11 +47,12 @@ test.describe('pairing: a public screen and a phone', () => {
       const room = (url: string) => new URLSearchParams(new URL(url).hash.slice(1)).get('room');
       expect(room(peer.url())).not.toBe(room(phone.url()));
       await expect(phone.getByTestId('session-label')).toHaveAttribute('data-expires-at', originalExpiry!);
-      await expect(kiosk.getByTestId('session-label')).toHaveAttribute('data-expires-at', originalExpiry!);
+      await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
+      await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
       await peer.getByTestId('session-label').click();
       await expect(peer.getByTestId('session-sheet')).toBeVisible();
       await expect(peer.getByTestId('share-city')).toHaveCount(0);
-      const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code: raw } });
+      const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code: raw }, headers: localHeaders() });
       expect((await reuse.json()).error).toBe('code-used');
       const token = await readDataToken(peer);
       const allowed = await peer.request.get(`${APP_URL}/api/data/zet-rt`, { headers: { authorization: `Bearer ${token}` } });
@@ -60,7 +63,7 @@ test.describe('pairing: a public screen and a phone', () => {
       await kioskCtx.close();
     }
   });
-  test('a scan unlocks both devices, the token gates /api/data, the code is single-use', async ({ browser, request }) => {
+  test('a scan unlocks a private session without interrupting the public display; tokens and codes keep their protections', async ({ browser, request }) => {
     expect((await health(request, APP_URL)).networkCheck).toBe('off');
     const { kioskCtx, phoneCtx } = await twoContexts(browser);
     try {
@@ -73,20 +76,10 @@ test.describe('pairing: a public screen and a phone', () => {
       // Same-Wi-Fi pairing is a supported journey, on the deployed app too.
       await unlockOnPhone(phone, scanUrl, '10 minuta');
 
-      // Both devices are in the same session: identical expiry down to the millisecond.
-      const kioskLabel = kiosk.getByTestId('session-label');
-      await expect(kioskLabel).toBeVisible({ timeout: 30_000 });
+      await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
+      await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
       const phoneLabel = phone.getByTestId('session-label');
-      const [kioskExpiry, phoneExpiry] = await Promise.all([
-        kioskLabel.getAttribute('data-expires-at'),
-        phoneLabel.getAttribute('data-expires-at'),
-      ]);
-      expect(kioskExpiry).toMatch(/^\d{13}$/);
-      expect(phoneExpiry).toBe(kioskExpiry);
-      // The screen says "Otključano do HH:MM"; the phone names the venue in
-      // between ("Otključano · Kavana Velebit · do HH:MM", hr.json
-      // session.unlocked), so the shared shape is the word and the time.
-      await expect(kioskLabel).toContainText(/Otključano.*do \d{1,2}:\d{2}/);
+      expect(await phoneLabel.getAttribute('data-expires-at')).toMatch(/^\d{13}$/);
       await expect(phoneLabel).toContainText(/Otključano.*do \d{1,2}:\d{2}/);
 
       // The phone's stateless data token opens the session tier; nothing else does.
@@ -108,7 +101,7 @@ test.describe('pairing: a public screen and a phone', () => {
       expect(tampered.status()).toBe(401);
 
       // The redeemed code is spent.
-      const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code } });
+      const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code }, headers: localHeaders() });
       expect(reuse.status()).toBeGreaterThanOrEqual(400);
       expect(reuse.status()).toBeLessThan(500);
       expect((await reuse.json()).error).toBe('code-used');
@@ -125,7 +118,7 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
   test('the phone freezes with the closing line and the screen shows the QR again', async ({ browser, request }) => {
     const base = SHORT_URL!;
     expect((await health(request, base)).networkCheck).toBe('off');
-    const { kioskCtx, phoneCtx } = await twoContexts(browser);
+    const { kioskCtx, phoneCtx } = await twoContexts(browser, base);
     try {
       const { kioskUrl } = await provisionKiosk(request, base);
       const kiosk = await kioskCtx.newPage();
@@ -134,7 +127,10 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
       const phone = await phoneCtx.newPage();
       // 12 seconds rounds to 1 minute: Math.max(1, Math.round((expiresAt - now) / 60_000)) per confirmLabel.
       await unlockOnPhone(phone, scanUrl, '1 minuta');
-      await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 30_000 });
+      await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
+      await phone.getByTestId('screen-control').click();
+      await phone.getByTestId('present-view').click();
+      await expect(kiosk.getByTestId('session-label')).toBeVisible({ timeout: 10_000 });
 
       // Guard: prove the short server really runs with 0.2 minutes, otherwise fail
       // in seconds with a sentence instead of timing out after two minutes.

@@ -31,7 +31,7 @@ import {
 } from '../../app/src/map/basemap';
 import { overlayLayers, type ProzorOptions } from '../../app/src/map/overlays';
 import { KIOSK_SYMBOL_SCALE, LABEL_PADDING_TILE_PX } from '../../app/src/kiosk/mapview';
-import { deltaE, hexToLinear } from './oklab';
+import { deltaE, hexToLinear, linearToOklab } from './oklab';
 
 const ORIGIN = 'https://zagreb.example';
 
@@ -120,36 +120,49 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(ops.length).toBeGreaterThan(20);
     expect(ops.every((op) => op.kind === 'paint')).toBe(true);
     expect(styleDiff(light, light)).toEqual([]);
-    // Product colours, not the upstream flavour: the dark face's ground is ultramarine ink, the light face's water a paper-family blue.
-    expect(flavorFor('dark').earth).toBe('#0b1150');
-    expect(flavorFor('light').water).toBe('#c3cbe8');
+    // Product colours: charcoal ground at night and a restrained water blue by day.
+    expect(flavorFor('dark').earth).toBe('#111922');
+    expect(flavorFor('light').water).toBe('#bad6ea');
     expect(flavorFor('light').regular).toBe(MAP_FONTS.regular);
     expect(flavorFor('dark').bold).toBe(MAP_FONTS.medium);
+  });
+  it('keeps map surfaces low-chroma and labels readable in both themes, reserving saturated blue for transit', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      const flavor = flavorFor(theme);
+      for (const key of ['earth', 'buildings', 'park_a', 'park_b', 'wood_a', 'wood_b', 'scrub_a', 'scrub_b', 'runway', 'water'] as const) {
+        const color = flavor[key] as string;
+        const [, a, b] = linearToOklab(...hexToLinear(color));
+        expect(Math.hypot(a, b), `${theme} ${key} chroma`).toBeLessThan(0.075);
+        expect(contrast(flavor.roads_label_major, color), `${theme} ${key} label contrast`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    expect(flavorFor('dark').buildings).toBe('#23313f');
+    expect(flavorFor('light').buildings).toBe('#dde5ee');
   });
 
   // R-D3: one Zagreb blue for trams (the accent role) and ink for buses (the
   // transit role, which equals ink in the light face); land moves from
   // mineral green to paper by day and ultramarine by night.
   it('paints trams in the accent blue and buses in ink, in both faces (R-D3)', () => {
-    expect(OVERLAY_LIGHT.tram).toBe('#03409c');
-    expect(OVERLAY_LIGHT.bus).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.routeTram).toBe('#03409c');
-    expect(OVERLAY_LIGHT.routeBus).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.closure).toBe('#b3271e');
-    expect(OVERLAY_LIGHT.stopFill).toBe('#f4f2ec');
-    expect(OVERLAY_LIGHT.label).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.halo).toBe('#fbfaf6');
-    expect(OVERLAY_LIGHT.selection).toBe('#0c1250');
-    expect(OVERLAY_LIGHT.screenStop).toBe('#03409c');
-    expect(OVERLAY_DARK.tram).toBe('#f4f2ec');
-    expect(OVERLAY_DARK.tramText).toBe('#0b1150');
-    expect(OVERLAY_DARK.bus).toBe('#9fb4ff');
-    expect(OVERLAY_DARK.busText).toBe('#0b1150');
-    expect(OVERLAY_DARK.routeTram).toBe('#f4f2ec');
-    expect(OVERLAY_DARK.routeBus).toBe('#9fb4ff');
-    expect(OVERLAY_DARK.closure).toBe('#ff9d9d');
-    expect(OVERLAY_DARK.label).toBe('#f4f2ec');
-    expect(OVERLAY_DARK.halo).toBe('#0b1150');
+    expect(OVERLAY_LIGHT.tram).toBe('#0751bf');
+    expect(OVERLAY_LIGHT.bus).toBe('#34465c');
+    expect(OVERLAY_LIGHT.routeTram).toBe('#0751bf');
+    expect(OVERLAY_LIGHT.routeBus).toBe('#34465c');
+    expect(OVERLAY_LIGHT.closure).toBe('#b72d39');
+    expect(OVERLAY_LIGHT.stopFill).toBe('#f1f4f7');
+    expect(OVERLAY_LIGHT.label).toBe('#142334');
+    expect(OVERLAY_LIGHT.halo).toBe('#fbfcfe');
+    expect(OVERLAY_LIGHT.selection).toBe('#142334');
+    expect(OVERLAY_LIGHT.screenStop).toBe('#0751bf');
+    expect(OVERLAY_DARK.tram).toBe('#84b5ff');
+    expect(OVERLAY_DARK.tramText).toBe('#102236');
+    expect(OVERLAY_DARK.bus).toBe('#b8c9dc');
+    expect(OVERLAY_DARK.busText).toBe('#102236');
+    expect(OVERLAY_DARK.routeTram).toBe('#84b5ff');
+    expect(OVERLAY_DARK.routeBus).toBe('#b8c9dc');
+    expect(OVERLAY_DARK.closure).toBe('#ff9aa5');
+    expect(OVERLAY_DARK.label).toBe('#f1f4f7');
+    expect(OVERLAY_DARK.halo).toBe('#111922');
     expect(deltaE(hexToLinear(OVERLAY_LIGHT.tram), hexToLinear(OVERLAY_LIGHT.bus))).toBeGreaterThanOrEqual(0.1);
     expect(deltaE(hexToLinear(OVERLAY_DARK.tram), hexToLinear(OVERLAY_DARK.bus))).toBeGreaterThanOrEqual(0.1);
   });
@@ -180,7 +193,7 @@ describe('the same-origin Protomaps v4 basemap', () => {
   // the way a badge does, so the two fills have to stay apart in the space a
   // person perceives (OKLab distance, the same maths the contrast test uses).
   // The plan asks for 0.10 in both faces (R-D6: the dark bus carries the blue
-  // the dark map already drew, #9fb4ff, so badge, pill and route line agree).
+  // the dark map already drew, #b8c9dc, so badge, pill and route line agree).
   it('keeps the tram and bus route fills apart in OKLab, so a glance tells the mode', () => {
     const apart = (p: { routeTram: string; routeBus: string }): number => deltaE(hexToLinear(p.routeTram), hexToLinear(p.routeBus));
     expect(apart(OVERLAY_LIGHT)).toBeGreaterThanOrEqual(0.1);
@@ -248,8 +261,8 @@ describe('the prozor basemap profile: the ground under the figure, readable from
     throw new Error(`unhandled operator ${op}`);
   }
   const TONES: Record<MapTheme, { ground: string; green: string; blocks: string; water: string }> = {
-    light: { ground: '#f4f2ec', green: '#dfe4cf', blocks: '#ebe8df', water: '#c3cbe8' },
-    dark: { ground: '#0b1150', green: '#12275c', blocks: '#121a63', water: '#060a3a' },
+    light: { ground: '#f1f4f7', green: '#dde9e2', blocks: '#e5eaf0', water: '#bad6ea' },
+    dark: { ground: '#111922', green: '#1d3534', blocks: '#192430', water: '#0b2538' },
   };
 
   it('shares one layer list across the faces, drops what a café guest cannot use, and paints every landuse in two tones under blocks one step off the ground', () => {
@@ -311,8 +324,8 @@ describe('the prozor basemap profile: the ground under the figure, readable from
   // quarter for the majors, so Ilica and Savska orient the eye.
   it('draws streets as hairlines of ink by day and a whisper and translucent paper by night, majors over minors over nothing, bridges exactly as their surface roads, the railway as upstream left it', () => {
     const inks = {
-      light: { minor: '#0c1250', minorOpacity: 0.18, major: '#0c1250', majorOpacity: 0.34 },
-      dark: { minor: '#1a2373', minorOpacity: 1, major: '#f4f2ec', majorOpacity: 0.25 },
+      light: { minor: '#142334', minorOpacity: 0.18, major: '#142334', majorOpacity: 0.34 },
+      dark: { minor: '#23313f', minorOpacity: 1, major: '#f1f4f7', majorOpacity: 0.25 },
     };
     for (const theme of ['light', 'dark'] as const) {
       const layers = layersOf(theme);
@@ -392,7 +405,7 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       expect(hood.layout!['text-letter-spacing']).toBe(0.12);
       expect(hood.layout!['text-padding']).toBe(12);
       expect(hood.layout!['text-font']).toEqual([MAP_FONTS.medium]);
-      expect(hood.paint!['text-color']).toBe(theme === 'light' ? '#363d73' : '#b6bbe0');
+      expect(hood.paint!['text-color']).toBe(theme === 'light' ? '#40536b' : '#b8c5d5');
       expect(flavor.subplace_label).toBe(hood.paint!['text-color']);
       expect(hood.paint!['text-halo-color']).toBe(ground);
       expect(hood.paint!['text-halo-width']).toBe(2);
@@ -414,7 +427,7 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       const filter = JSON.stringify(street.filter);
       expect(filter).toContain(JSON.stringify(['in', ['get', 'kind_detail'], ['literal', PROZOR_MAJOR_ROAD_DETAILS]]));
       expect(filter).toContain(JSON.stringify(['literal', ['highway', 'major_road']]));
-      expect(street.paint!['text-color']).toBe(theme === 'light' ? '#4a5178' : '#8f96c9');
+      expect(street.paint!['text-color']).toBe(theme === 'light' ? '#47586d' : '#9badc2');
       expect(street.paint!['text-halo-color']).toBe(ground);
       // The Sava is the best orientation cue this city has: its labels keep the promoted sizes.
       expect(textSizeAt(byId(layers, 'water_label_lakes').layout!['text-size'], 14)).toBe(22);

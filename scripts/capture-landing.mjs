@@ -5,6 +5,8 @@ import { chromium } from 'playwright';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { localNetworkHeaders } from './local-network.mjs';
+import { fulfillPublicMap } from './review-maps.mjs';
 
 const base = process.env.LANDING_CAPTURE_URL ?? 'http://127.0.0.1:5174';
 if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) {
@@ -25,12 +27,22 @@ const variants = [
 ];
 const phoneSize = { width: 390, height: 844 };
 const desktopSize = { width: 1440, height: 900 };
-const kioskContext = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, locale: 'hr-HR', timezoneId: 'Europe/Zagreb' });
-const phoneContext = await browser.newContext({ viewport: phoneSize, deviceScaleFactor: 2, locale: 'hr-HR', timezoneId: 'Europe/Zagreb' });
-const peerContext = await browser.newContext({ viewport: phoneSize, deviceScaleFactor: 2, locale: 'hr-HR', timezoneId: 'Europe/Zagreb' });
+const extraHTTPHeaders = localNetworkHeaders(base);
+const kioskContext = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, locale: 'hr-HR', timezoneId: 'Europe/Zagreb', extraHTTPHeaders });
+const phoneContext = await browser.newContext({ viewport: phoneSize, deviceScaleFactor: 2, locale: 'hr-HR', timezoneId: 'Europe/Zagreb', extraHTTPHeaders });
+const peerContext = await browser.newContext({ viewport: phoneSize, deviceScaleFactor: 2, locale: 'hr-HR', timezoneId: 'Europe/Zagreb', extraHTTPHeaders });
 const kiosk = await kioskContext.newPage();
 const phone = await phoneContext.newPage();
 const peer = await peerContext.newPage();
+// The local Worker still owns all data and real pairing. An optional read-only
+// tile origin avoids requiring a second PMTiles archive for capture work.
+const mapOrigin = process.env.LANDING_MAP_ORIGIN;
+if (mapOrigin) {
+  if (new URL(mapOrigin).origin !== 'https://zagreb.aningfilm.hr') throw new Error('Unexpected map origin.');
+  for (const context of [kioskContext, phoneContext, peerContext]) {
+    await context.route('**/maps/**', route => fulfillPublicMap(route, new URL(mapOrigin).origin));
+  }
+}
 
 async function settle(page) {
   await page.evaluate(() => document.fonts.ready);
@@ -91,6 +103,10 @@ async function capture(page, name, variant, widths, route) {
   const file = `${name}-${locale}-${theme}`;
   const style = await maskCredentials(page, locale);
   await settle(page);
+  for (const map of await page.locator('[data-map-status]').all()) {
+    if (!await map.isVisible()) continue;
+    await page.waitForFunction(el => el.dataset.mapStatus === 'ready', await map.elementHandle(), { timeout: 30_000 });
+  }
   await page.screenshot({ path: resolve(raw, `${file}.png`), fullPage: false });
   await style.evaluate((el) => el.remove());
   for (const width of widths) {
@@ -117,8 +133,6 @@ function saveManifest() {
 
 async function scan(page, code) {
   await page.goto(`${base}/s/#${code}`);
-  await page.getByTestId('confirm-card').waitFor({ timeout: 30_000 });
-  await page.getByTestId('confirm-card').getByRole('button').first().click();
   await page.getByTestId('session-label').waitFor({ timeout: 30_000 });
   await page.waitForFunction(() => document.querySelector('[data-testid=session-label]')?.getAttribute('data-state') === 'live');
   await settle(page);
@@ -127,7 +141,7 @@ async function scan(page, code) {
 try {
   await kiosk.goto(`${base}/kiosk/`);
   await preferences(kiosk, variants[0]);
-  await kiosk.getByTestId('setup-next').click();
+  await kiosk.getByTestId('setup-create').waitFor();
   await kiosk.getByTestId('setup-create').click();
   await kiosk.getByTestId('pair-code').waitFor({ timeout: 30_000 });
   await kiosk.waitForFunction(() => document.querySelector('[data-testid=pair-code]')?.getAttribute('data-state') === 'live');

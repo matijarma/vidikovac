@@ -68,10 +68,11 @@ describe('docs/arhitektura.md and README.md', () => {
     expect(readme).toContain('npm run e2e');
     expect(readme).toContain('AGPL-3.0-or-later');
   });
-  it('points "design" at newdesignsystem.md, the retired design.md is gone', () => {
+  it('points to the approved design and identifies the previous system as historical', () => {
     const readme = read('README.md');
     expect(readme).toContain('newdesignsystem.md');
-    expect(readme).not.toMatch(/\bdesign\.md\b/);
+    expect(readme).toContain('DESIGN.md');
+    expect(readme).toContain('docs/redesign-2026-09-17.md');
   });
 });
 

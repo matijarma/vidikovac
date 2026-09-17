@@ -12,20 +12,27 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
+  await page.locator('.t-map-menu > summary').click();
   const toggle = page.getByTestId('map-mode-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  // The disclosure can stay open while several filters are adjusted.
+  // Close it before gesturing on the map underneath.
+  await page.locator('.t-map-menu > summary').click();
   const canvas = page.getByTestId('schema-vehicles');
   await expect(canvas).toBeVisible();
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'ready');
+  // Geometry readiness is not feed readiness. The built app can load the
+  // diagram before its HTTP fixture arrives; an empty renderer correctly
+  // parks after eight unchanged frames. Measure only once evidence exists.
+  await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(1);
   await page.clock.runFor(1000);
   const before = await canvas.evaluate(c => ({ frames: Number(c.dataset.frames ?? 0), pixels: (c as HTMLCanvasElement).toDataURL() }));
   await page.clock.runFor(1500);
   const after = await canvas.evaluate(c => ({ frames: Number(c.dataset.frames ?? 0), pixels: (c as HTMLCanvasElement).toDataURL() }));
   expect(after.frames).toBeGreaterThan(before.frames);
   expect(after.pixels).not.toBe(before.pixels);
-  await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(1);
   expect(await page.evaluate(() => localStorage.getItem('kajima:map-mode:v1'))).toBe('schema');
   await expect(page.locator('.transport-map .maplibregl-canvas')).toHaveCount(0);
   const diagram = page.getByTestId('schema-map');
@@ -55,6 +62,7 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('transport-detail')).toContainText('6');
   await expect(page.locator('.schema-map [role=dialog]')).toHaveCount(0);
+  await page.locator('.t-map-menu > summary').click();
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   await expect(canvas).toHaveCount(0);

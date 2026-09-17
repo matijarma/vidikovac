@@ -80,7 +80,7 @@ function mount(opts: MountOptions = {}) {
   const raw: Record<string, string> = {};
   if (opts.stored) raw[BEACON_STORAGE_KEY] = opts.stored;
   const storage = { getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
-  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => 'live' as const, close: vi.fn() };
+  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => 'live' as const, close: vi.fn(), acknowledgePresentation: vi.fn(), stopPresentation: vi.fn() };
   let handlers: Parameters<NonNullable<KioskDeps['createBeacon']>>[0] | null = null;
   const timers: Timer[] = [];
   const sessions: { close: ReturnType<typeof vi.fn> }[] = [];
@@ -88,7 +88,7 @@ function mount(opts: MountOptions = {}) {
   let sessionView: ((layer: string, params?: Record<string, string>) => void) | null = null;
   let secondsLeft = 600;
   const modules = opts.modules ?? MODULES;
-  const fetchData = vi.fn(async (module: ModuleId) => modules.find((m) => m.module === module) ?? snap(module, []));
+  const fetchData = vi.fn(async (module: ModuleId, _token: string) => modules.find((m) => m.module === module) ?? snap(module, []));
   const createScreen = opts.createScreen ?? vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: SCREEN }));
   const loadStops = opts.loadStops ?? vi.fn(async () => STOPS);
   /** The stop's last-departure table: none by default (the stop is not in the generated set), so nothing reaches the wire from here. */
@@ -143,26 +143,217 @@ const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelec
 
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
-describe('setup: two real steps, one creation per press', () => {
+describe('versioned explicit public presentation', () => {
+  it('the initial idle state preserves the mounted overview and a recent scan notice', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const overview = q(k.root, '[data-testid=kiosk-invitation]');
+    const rows = q(k.root, '[data-testid=kiosk-panel-promet]');
+    k.handlers.onPresentation?.({ version: 1, revision: 0, target: null, expiresAt: null });
+    expect(q(k.root, '[data-testid=kiosk-invitation]')).toBe(overview);
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(rows);
+    k.handlers.onPaired?.(NOW + 600_000);
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: null, expiresAt: null });
+    expect(q(k.root, '[data-testid=kiosk-invitation]')).toBe(overview);
+    expect(text(q(k.root, '[data-testid=kiosk-head-mid]'))).toContain('otvoren');
+  });
+  it('a scan acknowledges access without changing the useful overview or joining a room', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const overview = q(k.root, '[data-testid=kiosk-invitation]');
+    const board = q(k.root, '[data-testid=kiosk-panel-promet]');
+    k.handlers.onPaired?.(NOW + 600_000);
+    expect(k.handle.phase()).toBe('invitation');
+    expect(q(k.root, '[data-testid=kiosk-invitation]')).toBe(overview);
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(board);
+    expect(k.sessions).toHaveLength(0);
+    expect(text(q(k.root, '[data-testid=kiosk-head-mid]'))).toContain('otvoren');
+    expect(k.handlers.presentationVersion).toBe(1);
+  });
+  it('renders an explicit route, then acknowledges it after its data is ready', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'v1-test-token' });
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    expect(k.sessions).toHaveLength(0);
+    expect(text(q(k.root, '.k-present-board .k-select-main'))).toContain('Črnomerec');
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(1, 'displayed');
+    expect(k.root.innerHTML).not.toContain('v1-test-token');
+    expect(q(k.root, '[data-testid=kiosk-stop-presentation]')).not.toBeNull();
+    q(k.root, '[data-testid=kiosk-stop-presentation]')!.click();
+    expect(k.beacon.stopPresentation).toHaveBeenCalledWith(1);
+  });
+  it('a second scan and an older frame cannot replace an active presentation', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 3, target: { layer: 'zrak-i-nebo' }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    k.handlers.onPaired?.(NOW + 600_000);
+    k.handlers.onPresentation?.({ version: 1, revision: 2, target: { layer: 'kultura' }, expiresAt: NOW + 600_000, dataToken: 'old' });
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe('zrak-i-nebo');
+    expect(k.sessions).toHaveLength(0);
+  });
+  it('a missing selected item is explicit and is never acknowledged as displayed', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 4, target: { layer: 'kultura', selection: { kind: 'item', module: 'dogadanja', id: '0123456789abcdef' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(q(k.root, '[data-testid=k-selection-unavailable]')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(4, 'unavailable');
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalledWith(4, 'displayed');
+  });
+  it('updates the receipt when a displayed item disappears and recovers, without repeating unchanged acknowledgements', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const chosen = MODULES.find(m => m.module === 'dogadanja')!.items[0]!;
+    k.handlers.onPresentation?.({ version: 1, revision: 5, target: { layer: 'kultura', selection: { kind: 'item', module: 'dogadanja', id: publicItemKey('dogadanja', chosen.id) } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(text(q(k.root, '[data-testid=k-selection]'))).toContain(chosen.title);
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[5, 'displayed']]);
+    k.tick(CODE_TICK_MS);
+    k.tick(REFRESH_MS);
+    await flush();
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledTimes(1);
+
+    k.fetchData.mockResolvedValue(snap('dogadanja', []));
+    k.tick(REFRESH_MS);
+    await flush();
+    expect(q(k.root, '[data-testid=k-selection-unavailable]')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[5, 'displayed'], [5, 'unavailable']]);
+    k.tick(CODE_TICK_MS);
+    k.tick(REFRESH_MS);
+    await flush();
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledTimes(2);
+
+    k.fetchData.mockResolvedValue(snap('dogadanja', [chosen], 'stale'));
+    k.tick(REFRESH_MS);
+    await flush();
+    expect(text(q(k.root, '[data-testid=k-selection]'))).toContain(chosen.title);
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[5, 'displayed'], [5, 'unavailable'], [5, 'displayed']]);
+  });
+  it.each([
+    { kind: 'item' as const, module: 'prometnice' as const, id: '0123456789abcdef' },
+    { kind: 'route' as const, id: '99999' },
+    { kind: 'stop' as const, id: 'not-a-stop' },
+  ])('a missing transport $kind stays an explicit unavailable subject, not the host route board', async (selection) => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(q(k.root, '.k-present-board [data-testid=k-selection-unavailable]')).not.toBeNull();
+    expect(q(k.root, '.k-present-board .k-line')).toBeNull();
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'unavailable']]);
+  });
+  it('a selected stop waits for its name, and a failed stop lookup resolves as unavailable', async () => {
+    let fail!: (error: Error) => void;
+    const k = mount({ stored: STORED, loadStops: () => new Promise((_resolve, reject) => { fail = reject; }) });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '200_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(q(k.root, '[data-testid=k-selection-loading]')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
+    fail(new Error('offline'));
+    await flush();
+    expect(q(k.root, '[data-testid=k-selection-unavailable]')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'unavailable']]);
+  });
+  it('fetches the selected public item even when its source is outside the base layer module list', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const chosen = MODULES.find(m => m.module === 'dogadanja')!.items[0]!;
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'item', module: 'dogadanja', id: publicItemKey('dogadanja', chosen.id) } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(k.fetchData).toHaveBeenCalledWith('dogadanja', 'dt');
+    expect(text(q(k.root, '.k-present-board [data-testid=k-selection]'))).toContain(chosen.title);
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'displayed']]);
+  });
+  it('a repeated pending frame neither restarts loading nor certifies an unfinished render', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    let finish!: (snapshot: ModuleSnapshot) => void;
+    k.fetchData.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const request = { version: 1 as const, revision: 1, target: { layer: 'kultura' as const }, expiresAt: NOW + 600_000, dataToken: 'dt' };
+    k.handlers.onPresentation?.(request);
+    const first = q(k.root, '[data-testid=kiosk-layer]');
+    k.handlers.onPresentation?.(request);
+    expect(q(k.root, '[data-testid=kiosk-layer]')).toBe(first);
+    expect(k.fetchData).toHaveBeenCalledTimes(1);
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
+    finish(snap('dogadanja', []));
+    await flush();
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'displayed']]);
+  });
+  it('creating a new screen resets revisions and ignores callbacks from the forgotten beacon', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const old = k.handlers;
+    old.onPresentation?.({ version: 1, revision: 9, target: { layer: 'kultura' }, expiresAt: NOW + 600_000, dataToken: 'old' });
+    await flush();
+    old.onPresentation?.({ version: 1, revision: 10, target: null, expiresAt: null });
+    old.onRevoked();
+    q(k.root, '[data-testid=kiosk-setup-again]')!.click();
+    await flush();
+    submit(k.root);
+    await flush();
+    expect(k.handle.phase()).toBe('invitation');
+    expect(k.handlers).not.toBe(old);
+    old.onPresentation?.({ version: 1, revision: 100, target: { layer: 'sigurnost' }, expiresAt: NOW + 600_000, dataToken: 'forgotten' });
+    old.onRevoked();
+    expect(k.handle.phase()).toBe('invitation');
+    k.handlers.onPresentation?.({ version: 1, revision: 0, target: null, expiresAt: null });
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'fresh' });
+    await flush();
+    expect(text(q(k.root, '[data-testid=k-selection]'))).toContain('Črnomerec');
+    expect(k.beacon.acknowledgePresentation).toHaveBeenLastCalledWith(1, 'displayed');
+    expect(k.fetchData.mock.calls.some(call => call[1] === 'forgotten')).toBe(false);
+  });
+  it('a server stop restores the overview and discards session presentation data', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'kultura' }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 2, target: null, expiresAt: null });
+    expect(k.handle.phase()).toBe('invitation');
+    expect(q(k.root, '[data-testid=kiosk-layer]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-invitation]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-stop-presentation]')).toBeNull();
+  });
+  it('keeps a presentation through a dropped screen socket but returns at the grant deadline', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'grad-sada' }, expiresAt: NOW + 12_000, dataToken: 'dt' });
+    await flush();
+    k.handlers.onStatus('offline');
+    expect(k.handle.phase()).toBe('paired');
+    now += 12_001;
+    k.tick(CODE_TICK_MS);
+    expect(k.handle.phase()).toBe('invitation');
+  });
+});
+
+describe('setup: one form, one creation per press', () => {
   it('opens the wizard when nothing is provisioned, without touching the beacon; the strip is already there', () => {
     const k = mount();
     expect(k.handle.phase()).toBe('setup');
     expect(q(k.root, '[data-testid=kiosk-setup]')).not.toBeNull();
-    expect(text(q(k.root, '[data-testid=setup-step]'))).toBe('Korak 1 od 2');
-    expect(k.root.querySelectorAll('input[name=district]')).toHaveLength(17);
-    expect((q(k.root, 'input[name=district][value=donji-grad]') as HTMLInputElement).checked).toBe(true);
+    expect(q(k.root, '[data-testid=setup-step]')).toBeNull();
+    expect(k.root.querySelectorAll('select[name=district] option')).toHaveLength(17);
+    expect((q(k.root, 'select[name=district]') as HTMLSelectElement).value).toBe('donji-grad');
     expect(k.beacon.connect).not.toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Sigurnost');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
-  it('step two lists stops nearest the district seat with 106_1 chosen, searches by name, creates the screen once and boots the beacon', async () => {
+  it('lists stops nearest the district seat with 106_1 chosen, searches by name, creates the screen once and boots the beacon', async () => {
     const k = mount({ createScreen: vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.S3CR3TXYZ', screen: SCREEN })) });
-    q(k.root, '[data-testid=setup-next]')!.click();
     await flush();
     expect(k.loadStops).toHaveBeenCalledTimes(1);
-    expect(text(q(k.root, '[data-testid=setup-step]'))).toBe('Korak 2 od 2');
+    expect(q(k.root, '[data-testid=setup-next]')).toBeNull();
     expect((q(k.root, 'input[name=stop]:checked') as HTMLInputElement).value).toBe('106_1');
     expect(text(q(k.root, '[data-testid=setup-summary]'))).toBe('Trg bana J. Jelačića · Donji grad');
     const search = q(k.root, '[data-testid=setup-search]') as HTMLInputElement;
@@ -188,7 +379,6 @@ describe('setup: two real steps, one creation per press', () => {
     const attempts: unknown[] = [new ScreenError('evaluation-access-required', 403), new ScreenError('screen-limit', 429, 90), new TypeError('Failed to fetch')];
     const createScreen = vi.fn(async () => { throw attempts.shift(); });
     const k = mount({ createScreen });
-    q(k.root, '[data-testid=setup-next]')!.click();
     await flush();
     submit(k.root);
     await flush();
@@ -211,10 +401,9 @@ describe('setup: two real steps, one creation per press', () => {
   it('a stop list that fails to load is one sentence and one retry button', async () => {
     const loadStops = vi.fn(async () => { throw new Error('stops-unavailable'); });
     const k = mount({ loadStops });
-    q(k.root, '[data-testid=setup-next]')!.click();
     await flush();
     expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Popis stanica nije dostupan.');
-    expect(text(q(k.root, '[data-testid=setup-step]'))).toBe('Korak 1 od 2');
+    expect(q(k.root, '[data-testid=setup-next]')).toBeNull();
     expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(false);
     expect(loadStops).toHaveBeenCalledTimes(1);
   });
@@ -245,34 +434,36 @@ describe('invitation: the screen a passer-by sees', () => {
     // The front page: tonight across the top left, the lines, the field and the surroundings under it, the forecast, the city and the card on the right (kiosk/invitation.ts).
     const front = q(k.root, '[data-testid=kiosk-invitation]')!;
     expect(front.classList.contains('k-front')).toBe(true);
-    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['tonight', 'k-bottom', 'k-column']);
-    expect([...q(front, '.k-bottom')!.children].map((el) => (el as HTMLElement).dataset.panel ?? (el as HTMLElement).dataset.testid)).toEqual(['promet', 'kiosk-live', 'around']);
-    const column = q(front, '.k-column')!;
+    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-local', 'k-overview']);
+    expect(q(front, '.k-local .k-geography .k-field')).not.toBeNull();
+    expect(q(front, '.k-local > [data-panel=promet]')).not.toBeNull();
+    const column = q(front, '.k-overview')!;
     expect(column.tagName).toBe('ASIDE');
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'city', 'k-panel k-panel--card']);
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-neighborhood']);
     expect(q(column, '.k-panel--card [data-testid=kiosk-invite]')).not.toBeNull();
     // The lines panel: the stop's routes as rows with their badges, the state word and the vehicles near, capped at eight of the stop's nine; the kicker names the count beyond.
     const promet = q(front, '[data-testid=kiosk-panel-promet]')!;
     expect(promet.dataset.say).toBe('transit');
     const rows = [...promet.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-fr')];
-    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11', 'line:12', 'line:13', 'line:14', 'line:17', 'line:31', 'line:32']);
+    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11', 'line:12', 'line:13', 'line:14', 'line:17']);
     expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
     expect(text(q(rows[0]!, '.k-fr-sub'))).toBe('kasni 2 min · 1 vozilo u blizini');
     expect(rows[0]!.dataset.tone).toBe('late');
-    expect(text(q(promet, '.k-panel-meta'))).toBe('1 vozilo u blizini · još 1 linija');
+    expect(text(q(promet, '.k-panel-meta'))).toContain('6 / 9');
+    expect(text(q(promet, '.k-panel-meta'))).toContain('1 vozilo u blizini');
     expect(text(q(promet, '.k-panel-credit'))).toContain('ZET 14:31');
     // The city panel names the Assembly's next session with its day; the surroundings the closure by distance; the forecast and the gazette, not in this teaser, say so honestly.
     expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-title'))).toBe('13. sjednica Gradske skupštine');
     expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-day'))).toBe('čet 17. 9.');
     expect(text(q(front, '[data-testid=kiosk-panel-around] li[data-key="closure:c1"] .k-fr-title'))).toBe('Ilica');
-    expect(q(front, '[data-testid=kiosk-panel-weather] .k-panel-note')).not.toBeNull();
+    expect(q(front, '[data-testid=kiosk-panel-weather] .k-weather-outlook .k-panel-text')).not.toBeNull();
     expect(q(front, '[data-testid=kiosk-panel-tonight] .k-panel-note')).not.toBeNull();
     for (const gone of ['kiosk-scene', 'kiosk-scene-meta', 'kiosk-tiles', 'tile-vehicles', 'tile-closures', 'kiosk-tonight', 'kiosk-city', 'k-city-ink']) expect(q(k.root, `[data-testid=${gone}]`), gone).toBeNull();
     for (const gone of ['.k-scene', '.k-rail', '.k-side-tiles', '.k-dot', '.k-scene-head']) expect(q(k.root, gone), gone).toBeNull();
     expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
     // One element per testid on the whole screen: the header's group is the only weather (D11; T2.8 report, Ruling 5).
     expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
-    expect(k.root.querySelectorAll('[data-testid=kiosk-temp]')).toHaveLength(1);
+    expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(1);
     const strip = text(q(k.root, '[data-testid=safety-strip]'));
     expect(strip).toContain('žuto upozorenje · Grmljavina');
     expect(strip).not.toContain('zatvaranj'); // closures are the column's (kajimafix 03.5)
@@ -292,7 +483,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(qr.getAttribute('aria-label')).toContain('A B C D, E F G 0');
     expect(k.root.querySelector('svg')).not.toBeNull();
     const link = q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
+    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
     expect(link.hidden).toBe(false);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
     k.handlers.onCodes(batch(NOW - 17 * 30_000), NOW);
@@ -380,12 +571,12 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(k.handle.phase()).toBe('paired');
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.mode).toBe('unlocked');
     expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe('grad-sada');
-    expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-map-host]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-main]')).not.toBeNull();
     const label = q(k.root, '[data-testid=session-label]')!;
     expect(label.dataset.expiresAt).toBe(String(NOW + 600_000));
     expect(text(label)).toBe('Otključano do 14:42 · Sada');
-    expect(q(k.root, '[data-testid=corner-qr] .qr')).not.toBeNull();
-    expect(text(q(k.root, '[data-testid=join-code]'))).toBe('ABCD-EFG0');
+    expect(q(k.root, '[data-testid=kiosk-qr] .qr')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     // The weather is the header's status group; the Sada column holds the warnings and the closures only.
@@ -403,22 +594,24 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=k-closures]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=strip-verdict]'))).toBe('mirno');
   });
-  it('under a yellow warning the wide Sada column holds the warnings beside the closures', async () => {
+  it('under a yellow warning the wide Sada column leads with the warning and keeps it in the strip', async () => {
     const k = await pairedKiosk();
     expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
-    expect(q(k.root, '[data-testid=k-closures]')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
   });
-  it('under a yellow warning the compact Sada column shows the warnings alone; the strip carries no closures cell', async () => {
+  it('compact Sada keeps a useful local summary and an explicit warning in the permanent safety strip', async () => {
     const k = await pairedKiosk({ viewport: { width: 1366, height: 768 } });
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
-    expect(q(k.root, '[data-testid=k-warnings]')).not.toBeNull();
+    expect(text(q(k.root, '.k-rail-summary'))).toContain('Ilica');
+    expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
+    expect(q(k.root, '.k-strip-hitno')?.getAttribute('href')).toBe('/hitno');
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
     expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });
   it('mirrors each of the six domains with its own blocks; the join QR survives every layer change', async () => {
     const k = await pairedKiosk();
     const expectations: [string, string[]][] = [
-      ['u-pokretu', ['k-delays', 'kiosk-map-host']],
+      ['u-pokretu', ['kiosk-lines', 'kiosk-map-host']],
       ['zrak-i-nebo', ['k-weather', 'k-forecast', 'k-sun', 'k-quakes', 'k-warnings']],
       ['sigurnost', ['k-warnings', 'k-closures', 'k-quakes', 'k-assembly', 'k-pharmacies']],
       ['uprava-i-pravo', ['k-acts', 'k-sessions', 'k-works']],
@@ -429,7 +622,7 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
       await flush();
       expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe(layer);
       for (const id of ids) expect(q(k.root, `[data-testid=${id}]`), `${layer} ${id}`).not.toBeNull();
-      expect(q(k.root, '[data-testid=corner-qr] .qr'), layer).not.toBeNull();
+      expect(q(k.root, '[data-testid=kiosk-qr] .qr'), layer).not.toBeNull();
     }
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-map-host]')).toBeNull();
   });
@@ -503,8 +696,8 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
     expiry.fn();
     expect(k.handle.phase()).toBe('paired');
     expect(q(k.root, '[data-testid=session-label]')).not.toBeNull();
-    expect(q(k.root, '[data-testid=corner-qr] .qr')).toBeNull();
-    expect(text(q(k.root, '[data-testid=join-code]'))).toBe('Otvorena sesija traje do svog kraja; zaslon zatim prestaje izdavati kodove.');
+    expect(q(k.root, '[data-testid=kiosk-qr] .qr')).toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Otvorena sesija traje do svog kraja; zaslon zatim prestaje izdavati kodove.');
     expect(k.beacon.close).toHaveBeenCalledTimes(1);
     k.expire();
     expect(k.handle.phase()).toBe('expired');
@@ -522,7 +715,6 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
   it('a fresh screen after starting over rotates only its own codes', async () => {
     const k = mount({ stored: JSON.stringify({ beaconId: 'OLD00001', secret: 'stara', screen: { ...SCREEN, expiresAt: NOW - 1 } }) });
     q(k.root, '[data-testid=kiosk-setup-again]')!.click();
-    q(k.root, '[data-testid=setup-next]')!.click();
     await flush();
     submit(k.root);
     await flush();
@@ -587,12 +779,12 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
     // The lines panel lists the stop's own routes from the stop alone, each with the honest "no data" word; every other panel has no row to show yet.
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(8);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(6);
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr .k-fr-sub'))).toBe('Nema podataka o kašnjenju · nijedno vozilo u blizini');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(8);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(6);
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-note'))).toBe('Učitavanje podataka ZET-a…');
     for (const id of ['around', 'city', 'tonight']) expect(text(q(k.root, `[data-testid=kiosk-panel-${id}] .k-panel-note`)), id).toBe('učitavanje podataka');
-    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-panel-note'))).toBe('Učitavanje podataka DHMZ-a…');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-note'))).toBe('Učitavanje podataka DHMZ-a…');
     expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
     k.handle.destroy();
   });
@@ -676,7 +868,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     k.poll(); // the teaser poll has its own 10 s beat (R-TE4), not the paired refresh's
     await flush();
     expect(calls.at(-1)).toBe('stale');
-    expect(text(q(k.root, '[data-testid=k-delays]'))).toContain('zastarjelo');
+    expect(text(q(k.root, '.k-present-board'))).toContain('zastarjelo');
   });
   it('a late answer from an earlier session request never overwrites a newer one', async () => {
     const pending: ((value: ModuleSnapshot) => void)[] = [];
@@ -694,7 +886,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     await flush();
     pending[0]!({ ...zet, status: 'stale' }); // then the older one, with older words: dropped
     await flush();
-    expect(q(k.root, '[data-testid=k-delays]')!.dataset.status).toBe('live');
+    expect(q(k.root, '.k-present-board')!.dataset.status).toBe('live');
   });
   function fakeMap() {
     const calls: string[] = [];
@@ -718,11 +910,13 @@ describe('alerts, polling, the first tap and disposal', () => {
     k.handlers.onCodes(batch(NOW), NOW);
     k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
     await flush();
-    // Parked while the composition changed, then re-parented into the paired map column.
+    k.view('u-pokretu');
+    await flush();
+    // Parked on Sada, then re-parented when transport is explicitly shown.
     const resize = map.calls.lastIndexOf('resize');
     expect(resize).toBeGreaterThan(before);
-    expect(map.calls.slice(before, resize)).toEqual(['pause', 'feed:stale']); // parked, then told from the teaser on the paired paint
-    expect(map.calls.slice(resize, resize + 3)).toEqual(['resize', 'resume', 'feed:stale']);
+    expect(map.calls.slice(before, resize)).toContain('pause');
+    expect(map.calls.slice(resize, resize + 3)).toEqual(['resize', 'resume', 'feed:live']);
     expect(map.calls.at(-1)).toBe('feed:live'); // the session's own zet-rt answered live
     const beforeKultura = map.calls.length;
     k.view('kultura');
@@ -801,13 +995,13 @@ describe('the invitation composition: the card, the header group, the strip', ()
   it('orders the column forecast, city, then the card; the header carries the weather group with the condition icon, the reading and the sun time; the card is the lead over the hint beside the QR, then the code (R-KP21)', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    const column = q(k.root, '[data-testid=kiosk-invitation] .k-column')!;
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? (el as HTMLElement).querySelector('[data-testid]')?.getAttribute('data-testid'))).toEqual(['weather', 'city', 'kiosk-invite']);
+    const column = q(k.root, '[data-testid=kiosk-invitation] .k-overview')!;
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-neighborhood']);
     const weather = q(k.root, '.k-head .k-clock-row [data-testid=kiosk-weather]')!;
     expect(weather.hidden).toBe(false);
     expect(weather.dataset.state).toBe('live');
     expect(q(weather, '.k-weather-icon use')!.getAttribute('href')).toBe('#icon-sun'); // 'vedro'
-    expect(text(q(weather, '[data-testid=kiosk-temp]'))).toBe('21 °C');
+    expect(text(q(k.root, '.k-weather-current .k-temp'))).toBe('21 °C');
     expect(text(q(weather, '.k-sun time'))).toMatch(/^\d\d:\d\d$/);
     expect(q(weather, '.k-weather-details')).toBeNull();
     expect(q(weather, '.k-kicker')).toBeNull();
@@ -845,7 +1039,7 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect(q(k.root, '[data-testid=kiosk-temp]')).toBeNull();
     // The rest of the screen is unaffected: the strip still speaks and the lines panel still lists the stop.
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(8);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(6);
   });
   it('builds the hostname sentence from codeBase, never from a literal', async () => {
     const k = mount({ stored: STORED, codeBase: 'https://example.test' });
@@ -891,21 +1085,15 @@ describe('the invitation composition: the card, the header group, the strip', ()
     k.fetchData.mockImplementation(async (module: ModuleId) => modules.find((m) => m.module === module) ?? snap(module, []));
     k.view('u-pokretu');
     await flush();
-    const board = q(k.root, '[data-testid=k-delays]')!;
-    const rows = [...board.querySelectorAll<HTMLElement>('.k-row')];
-    // Nine lines at the stop, then the five deviations (600, 500, 400, 300, 200 s); line 4 at 100 s is the sixth and stays off.
-    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13', '14', '17', '31', '32', '34', '109', '268', '7', '205', '2']);
-    expect(rows.slice(0, 9).every((r) => r.dataset.atStop === '1')).toBe(true);
-    expect(rows.slice(9).every((r) => r.dataset.atStop === undefined)).toBe(true);
+    const board = q(k.root, '.k-present-board')!;
+    const rows = [...board.querySelectorAll<HTMLElement>('.k-line')];
+    expect(rows.map((r) => r.dataset.route)).toEqual(['6', '11', '12', '13', '14']);
     const first = rows[0]!;
     expect(q(first, '.line[data-size=k][data-kind=tram]')!.textContent).toBe('6');
-    expect(text(q(first, '.k-row-word'))).toBe('kasni 2 min');
-    expect(text(q(first, '.k-row-aside'))).toBe('12 vozila');
-    expect(text(q(rows[2]!, '.k-row-word'))).toBe('nema podataka');
-    expect(text(q(rows[9]!, '.k-row-word'))).toBe('kasni 10 min');
-    expect(text(q(rows[10]!, '.k-row-word'))).toBe('rani 8 min');
-    expect(text(q(board, '.k-row-more'))).toBe('prikazano 14 od 15 linija');
-    expect(board.classList.contains('k-block--board')).toBe(true);
+    expect(text(q(first, '.k-line-word'))).toBe('kasni 2 min');
+    expect(text(q(rows[2]!, '.k-line-word'))).toBe('Nema podataka o kašnjenju');
+    expect(text(q(board, '.k-line-more'))).toBe('još 4 linije');
+    expect(board.closest('.k-map')).toBeNull();
   });
   it('paired: a warning row names its level as a badge word with its shape', async () => {
     const k = await pairedKiosk();
@@ -993,6 +1181,8 @@ describe('the field, the column and the one map', () => {
     await flush();
     expect(k.handle.phase()).toBe('paired');
     expect(map.calls).toContain('pause');
+    k.view('u-pokretu');
+    await flush();
     expect(map.handle.setView).toHaveBeenLastCalledWith({ zoom: 15, emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat], selectedStop: STOP.id });
     expect(container.parentElement).toBe(q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-map-host]'));
     k.expire();
@@ -1034,19 +1224,17 @@ describe('the field, the column and the one map', () => {
     k.poll();
     await flush();
     expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
-    const notice = q(promet, 'li[data-key="notice:zet-promet:1"]')!;
-    expect(text(q(notice, '.k-fr-title'))).toBe('Linija 6 mijenja trasu');
-    expect(text(q(notice, '.k-fr-sub'))).toBe('ZET javlja · 12:00');
+    expect(q(promet, 'li[data-key="notice:zet-promet:1"]')).toBeNull(); // The fixed six-row route budget is not displaced by a seventh row.
     // The same notice appears in no other panel: the city panel keeps its Assembly row alone.
     expect(k.root.querySelectorAll('[data-testid=kiosk-panel-city] li.k-fr')).toHaveLength(1);
   });
 
-  it('a panel fits by measurement after a paint and on a resize, never on the 1 s tick: rows the box does not hold whole are hidden from the foot up, and a taller box shows them again', async () => {
+  it('reports a layout defect instead of silently hiding useful rows to pass a geometry check', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     const rows = [...promet.querySelectorAll<HTMLElement>('li.k-fr')];
-    expect(rows).toHaveLength(8);
+    expect(rows).toHaveLength(6);
     // A box that holds five rows of eight (happy-dom lays nothing out: the box is stubbed at 300 px and each shown row costs 60).
     let height = 300;
     Object.defineProperty(promet, 'clientHeight', { get: () => height, configurable: true });
@@ -1054,11 +1242,12 @@ describe('the field, the column and the one map', () => {
     k.tick(CODE_TICK_MS);
     expect(rows.every((el) => !el.hidden)).toBe(true); // the tick measures nothing
     k.repaint();
-    expect(rows.map((el) => el.hidden)).toEqual([false, false, false, false, false, true, true, true]);
-    // A box that holds no row at all hides every row and keeps the kicker and the credit.
+    expect(rows.every(el => !el.hidden)).toBe(true);
+    expect(promet.dataset.overflow).toBe('true');
+    // Even a broken box cannot erase useful rows to pretend that it fits.
     height = 30;
     k.repaint();
-    expect(rows.every((el) => el.hidden)).toBe(true);
+    expect(rows.every((el) => !el.hidden)).toBe(true);
     // The box grows (a resize): every row comes back.
     height = 600;
     k.repaint();
@@ -1214,15 +1403,15 @@ describe('handheld: the kiosk on a phone', () => {
     // No separate handheld composition: the phone draws the invitation with a map band, the column in flow beneath it, the card stood up.
     expect(css).toContain('--k-map-band: 280px;');
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-field \{[^}]*height: var\(--k-map-band\);/);
-    expect(css).toContain(".kiosk[data-size='handheld'] .k-front, .kiosk[data-size='handheld'] .k-bottom, .kiosk[data-size='handheld'] .k-column { display: flex; flex-direction: column;");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-local");
+    expect(css).toContain(".kiosk[data-size='handheld'] .k-overview");
     expect(css).toContain(".kiosk[data-size='handheld'] .k-field { height: var(--k-map-band); border-radius: var(--k-radius); }");
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\]\[data-phase='invitation'\] \.k-stage \{ padding: var\(--k-pad\); \}/);
-    for (const dead of ['.k-handheld', '.k-invite-text', '.k-support', '.k-scene', '.k-rail']) expect(css, dead).not.toContain(dead);
+    for (const dead of ['k-handheld', 'k-invite-text', 'k-support', 'k-scene', 'k-rail']) expect(css, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
   });
   it('after creation gives a phone the whole invitation, with the provisioning address as a footnote under it', async () => {
     const k = mount({ viewport: PHONE });
     expect(k.handle.phase()).toBe('setup');
-    q(k.root, '[data-testid=setup-next]')!.click();
     await flush();
     submit(k.root);
     await flush();
@@ -1246,7 +1435,7 @@ describe('handheld: the kiosk on a phone', () => {
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
-    expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s#ABCD-EFG0');
+    expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
     // The header's weather group paints on a handheld too (C.3), the only weather there.
     expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);

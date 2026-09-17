@@ -33,7 +33,8 @@
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
-import type { FeedSnapshots, PublicSelection, ScreenStop } from '../core/contracts';
+import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
+import type { PresentationTarget } from '../../../worker/presentation';
 import { routeName } from '../data/routes';
 import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
@@ -46,7 +47,7 @@ import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from './layout';
 import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
-import { stopDistanceM } from './stops';
+import { routeType, stopDistanceM } from './stops';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** The paired compositions' street level around one stop: named streets, the stop, the vehicles near it (R-KP8). */
@@ -151,7 +152,7 @@ export interface KioskMapRequest extends MapSlotOptions {
   prozor?: ProzorOptions;
 }
 
-export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'follow' | 'emphasis'>;
+export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'selection' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
 export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor'>;
@@ -223,6 +224,7 @@ export function viewOf(request: KioskMapRequest): KioskMapView {
   if (request.center) view.center = request.center;
   if (request.selectedRoute) view.selectedRoute = request.selectedRoute;
   if (request.selectedStop) view.selectedStop = request.selectedStop;
+  if (request.selection) view.selection = request.selection;
   if (request.follow) view.follow = true;
   return view;
 }
@@ -422,6 +424,7 @@ export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, no
 
 /** Where a district's drawable outline lives. */
 export const KVART_OUTLINE_PATH = '/data/kvart';
+const mapDistrict = new WeakMap<MapSlots, string>();
 
 const outlinePending = new Map<string, Promise<MapOutline | null>>();
 const outlineReady = new Map<string, MapOutline | null>();
@@ -527,9 +530,11 @@ export function pairedView(input: PairedInput): KioskView {
   }
   if (input.selection?.kind === 'route') {
     view.selectedRoute = input.selection.id;
-    view.follow = true;
+    delete view.selectedStop;
+    delete view.center;
   } else if (input.selection?.kind === 'stop') {
     view.selectedStop = input.selection.id;
+    delete view.center;
   }
   return view;
 }
@@ -572,7 +577,8 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  the stop's routes, the measured field's threshold and its padding reach
  *  the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number): ProzorOptions {
-  return { networkKinds: ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
+  const buses = stop?.routes.some(id => routeType(id) === 3);
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
 }
 
 export interface KioskMapInput {
@@ -596,17 +602,55 @@ export interface KioskMapInput {
   locale?: string;
   /** Fixed for the screen's boot, including paired sessions. */
   renderer?: CityMapOptions['renderer'];
+  target?: PresentationTarget;
+  stops?: readonly ScreenStop[];
 }
 
 /** Builds the request for this render and asks the slots for the one map.
  *  Null when the page has no map factory (lightweight, or a browser with
  *  no WebGL), in which case the composition shows its list instead. */
 export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: KioskMapAdapter): HTMLElement | null {
-  const points = vehiclePoints(input.snapshots['zet-rt'], input.now);
+  let points = vehiclePoints(input.snapshots['zet-rt'], input.now);
+  const route = input.selection?.kind === 'route' ? input.selection.id : null;
+  const relevant = route ? [route] : input.phase === 'invitation' ? input.stop?.routes : null;
+  if (relevant?.length) points = points.filter(point => point.routeId && relevant.includes(point.routeId));
   if (input.stop) points.push(stopPlace(input.stop));
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr'));
   const field = fieldView({ stop: input.stop, widthPx: input.widthPx, spanM: input.spanM });
   const view = input.phase === 'paired' ? pairedView({ stop: input.stop, selection: input.selection }) : field;
+  const selectedStop = input.selection?.kind === 'stop' ? input.stops?.find(stop => stop.id === input.selection!.id) : null;
+  if (selectedStop) {
+    view.center = [selectedStop.lon, selectedStop.lat];
+    view.zoom = fieldZoom(input.widthPx, selectedStop.lat, 1200);
+  }
+  if (input.selection?.kind === 'item') {
+    const pick = input.selection;
+    const item = input.snapshots[pick.module]?.items.find(item => publicItemKey(pick.module, item.id) === pick.id);
+    if (item?.geo) {
+      const coordinates = item.geo.type === 'Point' ? [item.geo.coordinates as number[]] : item.geo.coordinates as number[][];
+      const lons = coordinates.map(p => p[0]!), lats = coordinates.map(p => p[1]!);
+      const lon = (Math.min(...lons) + Math.max(...lons)) / 2, lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      view.center = [lon, lat];
+      const span = Math.max(800, (Math.max(...lons) - Math.min(...lons)) * 78000, (Math.max(...lats) - Math.min(...lats)) * 111000 * input.widthPx / Math.max(1, input.heightPx));
+      view.zoom = fieldZoom(input.widthPx, lat, span * 1.3);
+      view.selection = item.kind === 'vehicle' ? { kind: 'vehicle', id: item.id } : item.kind === 'closure' ? { kind: 'closure', id: item.id } : null;
+    }
+  }
+  const district = input.target?.district ?? input.stop?.district;
+  mapDistrict.set(maps, district ?? '');
+  const outline = kvartOutline(district);
+  if (input.target?.layer === 'kvart' && district) {
+    const d = districtBySlug(district);
+    if (d) { view.center = [d.seat.lon, d.seat.lat]; view.zoom = fieldZoom(input.widthPx, d.seat.lat, 3500); delete view.selectedStop; }
+    if (outline) {
+      const coordinates = outline.polygons.flat(2);
+      const lons = coordinates.map(p => p[0]), lats = coordinates.map(p => p[1]);
+      const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      view.center = [(Math.min(...lons) + Math.max(...lons)) / 2, lat];
+      const span = Math.max((Math.max(...lons) - Math.min(...lons)) * 78000, (Math.max(...lats) - Math.min(...lats)) * 111000 * input.widthPx / Math.max(1, input.heightPx));
+      view.zoom = Math.max(10, Math.min(15.5, Math.log2(EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180) * input.widthPx / (512 * span * 1.15))));
+    }
+  }
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
     stop: input.stop,
@@ -614,8 +658,8 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     symbolScale: KIOSK_SYMBOL_SCALE,
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
-    outline: input.renderer !== 'schema' ? kvartOutline(input.stop?.district) : null,
-    prozor: prozorOptions(input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM)),
+    outline: input.renderer !== 'schema' ? outline : null,
+    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM)),
   };
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,
@@ -627,10 +671,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     reducedMotion: input.reducedMotion,
     ...extras,
     zoom: view.zoom,
-    emphasis: view.emphasis,
+    emphasis: route ? [] : view.emphasis,
   };
   if (view.center) request.center = view.center;
   if (view.selectedStop) request.selectedStop = view.selectedStop;
+  if (view.selection) request.selection = view.selection;
   if (view.selectedRoute) request.selectedRoute = view.selectedRoute;
   if (view.follow) request.follow = true;
   // The view is set before the slot call so a map created by it starts there.
@@ -648,10 +693,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   adapter?.handle()?.setProzor?.(extras.prozor ?? null);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
-  const district = input.stop?.district;
   if (container && input.renderer !== 'schema' && district && !request.outline) {
     void loadKvartOutline(district, input.fetchImpl).then((outline) => {
-      if (outline) adapter?.handle()?.setOutline?.(outline);
+      if (outline && mapDistrict.get(maps) === district) adapter?.handle()?.setOutline?.(outline);
     });
   }
   return container;

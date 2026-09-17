@@ -1,0 +1,75 @@
+/* Sada: readable nearby facts beside a dated agenda. Temporal filtering
+   changes the agenda, not the person's local context or private selection. */
+.day-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding-block: var(--sp-2); }
+.day-heading > div { min-width: 0; }
+.day-date { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-bottom: var(--sp-2); }
+.day-title { font-size: 2rem; line-height: 1.15; letter-spacing: -0.045em; }
+.day-location { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--target); padding: 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); text-align: start; cursor: pointer; }
+.day-weather { display: grid; justify-items: end; gap: var(--sp-1); flex: none; max-width: 45%; color: var(--tone-text-primary); text-decoration: none; font-size: var(--type-control); text-align: right; }
+.day-weather-now { display: flex; align-items: center; gap: var(--sp-2); }
+.day-weather-now > .icon { width: 2rem; height: 2rem; color: var(--tone-weather); }
+.day-weather-now strong { font-size: 2rem; line-height: 1.2; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.day-weather-source { font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.day-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+.day-now, .day-ahead { min-width: 0; }
+.day-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.day-section-head h3 { font-size: var(--type-head); letter-spacing: -0.02em; }
+.day-link { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--target); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; }
+.day-facts { display: grid; gap: var(--sp-2); }
+.day-facts .tl { min-width: 0; padding: var(--sp-3) var(--sp-4); box-shadow: none; }
+.day-facts .tl[data-domain='transit'] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-3); align-items: center; border: 0; border-bottom: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; padding-inline: var(--sp-1); }
+.day-facts .tl[data-domain='transit'] .tl-label { grid-column: 1; display: flex; align-items: flex-start; min-width: 0; gap: var(--sp-2); }
+.day-facts .tl-label-title { white-space: normal; font-size: var(--type-body); line-height: 1.3; font-weight: var(--weight-bold); overflow: visible; }
+.day-facts .tl[data-domain='transit'] .tl-value { grid-column: 2; grid-row: 1 / 3; font-size: var(--type-head); white-space: nowrap; }
+.day-facts .tl[data-domain='transit'] .tl-context { grid-column: 1; padding-left: 2.5rem; margin-top: var(--sp-1); }
+.day-facts .tl-context, .day-facts .tl-trail { font-size: var(--type-secondary); }
+.day-facts .tl[data-domain='safety'] { background: transparent; border: 0; padding-inline: var(--sp-1); }
+.day-facts .tl[data-variant='band'] .tl-title { font-size: var(--type-body); line-height: 1.35; }
+.day-more { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-1); }
+.day-times { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+.day-time { min-height: var(--target); padding: 0 var(--sp-3); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); cursor: pointer; }
+.day-time[aria-pressed='true'] { background: var(--tone-text-primary); color: var(--tone-surface-1); font-weight: var(--weight-bold); }
+.day-agenda { display: grid; gap: var(--sp-3); }
+.day-event { min-width: 0; }
+.day-event-date { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-bottom: var(--sp-1); }
+.day-agenda .tl { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); column-gap: var(--sp-3); row-gap: var(--sp-1); padding: var(--sp-4); min-width: 0; background: var(--tone-surface-1); border: 1px solid var(--tone-stroke); color: var(--tone-text-primary); }
+.day-agenda .tl-time { grid-column: 1; grid-row: 1 / 4; align-self: start; font-size: var(--type-head); line-height: 1.3; color: var(--tone-events); white-space: normal; }
+.day-agenda .tl-label { grid-column: 2; color: var(--tone-text-muted); }
+.day-agenda .tl-title { grid-column: 2; font-size: var(--type-body); line-height: 1.35; -webkit-line-clamp: 3; line-clamp: 3; }
+.day-agenda .tl-context { grid-column: 2; display: block; font-size: var(--type-secondary); white-space: normal; color: var(--tone-text-muted); line-height: 1.35; }
+.day-agenda .tl-ctx-text { white-space: normal; }
+.day-agenda .tl[data-variant='ink'] .tl-label,
+.day-agenda .tl[data-variant='ink'] .tl-context { color: var(--tone-text-muted); }
+.day-empty { padding: var(--sp-4) 0; color: var(--tone-text-muted); font-size: var(--type-control); }
+.day-city { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--tone-stroke); }
+.day-city .tl { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); padding: 0; border: 0; background: transparent; min-height: var(--target); }
+.day-city .tl-value { font-size: var(--type-head); }
+@media (hover: hover) {
+  .day-time:hover { border-color: var(--tone-stroke); }
+  .day-weather:hover, .day-location:hover { color: var(--tone-action-brand); }
+}
+@media (min-width: 48rem) {
+  .day-overview { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-8); }
+  .day-title { font-size: 2.5rem; }
+  .day-heading { padding-block: var(--sp-5) var(--sp-6); }
+}
+@media (min-width: 75rem) {
+  .ws-overview { max-width: 86rem; margin-inline: auto; }
+  .day-overview { gap: var(--sp-12); }
+  .day-facts .tl { padding: var(--sp-4) var(--sp-5); }
+}
+@media (max-width: 23rem) {
+  .day-title, .day-weather-now strong { font-size: var(--type-title); }
+  .day-weather-now > .icon { width: 1.5rem; height: 1.5rem; }
+  .day-facts .tl[data-domain='transit'] { grid-template-columns: 1fr; }
+  .day-facts .tl[data-domain='transit'] .tl-value { grid-column: 1; grid-row: auto; padding-left: 2.5rem; }
+}
+@container ws (max-width: 18rem) {
+  .day-heading { flex-wrap: wrap; }
+  .day-weather { max-width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: start; gap: var(--sp-2); }
+  .day-facts .tl[data-domain='transit'] { grid-template-columns: 1fr; }
+  .day-facts .tl[data-domain='transit'] .tl-value { grid-column: 1; grid-row: auto; padding-left: 2.5rem; }
+  .day-agenda .tl { grid-template-columns: 1fr; }
+  .day-agenda .tl > * { grid-column: 1; grid-row: auto; }
+  .day-section-head { flex-wrap: wrap; }
+}

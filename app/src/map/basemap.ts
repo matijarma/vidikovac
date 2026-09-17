@@ -101,7 +101,7 @@ export function spriteUrl(theme: MapTheme, origin?: string): string {
 }
 
 /** Upstream paints POI names in six hues, and on this product's paper ground
- *  four of them fail WCAG 4.5:1 outright (measured against #f4f2ec: pink
+ *  four of them fail WCAG 4.5:1 outright (measured against #f1f4f7: pink
  *  2.80, blue 3.39, tangerine 3.42, green 4.25). `flavor.pois` is the one
  *  palette group the two override blocks below never reached, so the failure
  *  survived every other colour decision in this file.
@@ -115,191 +115,171 @@ export function spriteUrl(theme: MapTheme, origin?: string): string {
  *  `red` and `turquoise` reach no layer but are set so no future upstream
  *  layer can reintroduce an unmeasured hue. */
 const POI_INK_LIGHT = Object.freeze({
-  green: '#0c1250', lapis: '#0c1250', slategray: '#0c1250', pink: '#0c1250',
-  blue: '#4a5178', tangerine: '#4a5178', red: '#4a5178', turquoise: '#4a5178',
+  green: '#142334', lapis: '#142334', slategray: '#142334', pink: '#142334',
+  blue: '#47586d', tangerine: '#47586d', red: '#47586d', turquoise: '#47586d',
 });
 const POI_INK_DARK = Object.freeze({
-  green: '#f4f2ec', lapis: '#f4f2ec', slategray: '#f4f2ec', pink: '#f4f2ec',
-  blue: '#b6bbe0', tangerine: '#b6bbe0', red: '#b6bbe0', turquoise: '#b6bbe0',
+  green: '#f1f4f7', lapis: '#f1f4f7', slategray: '#f1f4f7', pink: '#f1f4f7',
+  blue: '#b8c5d5', tangerine: '#b8c5d5', red: '#b8c5d5', turquoise: '#b8c5d5',
 });
 
-/** The product palette laid over the upstream light flavour: land the paper
- *  canvas itself, parks a step of green kept just inside the paper family,
- *  roads white-on-tan casings, water an ultramarine tint at 12 % over
- *  canvas, labels in muted ink and full ink with the canvas as halo.
- *  Buildings, parks, woods and water sit one step off the canvas rather than
- *  a whisper away from it: at three metres a 1.05:1 fill is not a surface, it
- *  is noise, and a promoted label needs something to
- *  sit on. Measured against the canvas: buildings 1.32:1, parks 1.34:1, woods
- *  1.57:1, water 1.44:1. Tunnels
- *  and the "other" road class recede to the canvas exactly -- unclassified
- *  and buried paths read as bare page, marked only by a casing where one
- *  exists; bridges repeat their surface counterpart's fill and casing
- *  value for value, as at any zoom a bridge is the same road merely raised. */
+/** Mineral daylight: neutral buildings and roads, vegetation green and
+ *  water blue. Brand saturation belongs to the transit overlay, not the
+ *  ground. Labels use the product's ink and canvas halo. MapLibre consumes
+ *  sRGB; tests bound these fills' OKLCH chroma and rendered label contrast.
+ *  Bridges repeat their surface roads; tunnels recede to the canvas. */
 const LIGHT_OVERRIDES: Partial<Flavor> = {
-  background: '#f4f2ec',
-  earth: '#f4f2ec',
-  park_a: '#d5dcc2',
-  park_b: '#cfd6bb',
-  wood_a: '#c2cbb0',
-  wood_b: '#bec7aa',
-  scrub_a: '#d9dfc8',
-  scrub_b: '#d1d8bc',
-  glacier: '#f4f2ec',
+  background: '#f1f4f7',
+  earth: '#f1f4f7',
+  park_a: '#d7e6dc',
+  park_b: '#d1e1d5',
+  wood_a: '#c5dace',
+  wood_b: '#bfd5c9',
+  scrub_a: '#dce8df',
+  scrub_b: '#d1e2d7',
+  glacier: '#f1f4f7',
   sand: '#ebe6d6',
   beach: '#ece7d7',
-  aerodrome: '#e9e6dc',
-  runway: '#dbd9ce',
-  zoo: '#d5dcc2',
-  military: '#e9e6dc',
+  aerodrome: '#e6ecf3',
+  runway: '#d7e0eb',
+  zoo: '#d7e6dc',
+  military: '#e6ecf3',
   hospital: '#f0e6e2',
-  industrial: '#e9e6dc',
-  school: '#ece9dc',
-  pedestrian: '#e9e6dc',
-  pier: '#e9e6dc',
-  water: '#c3cbe8',
-  buildings: '#dad4c2',
-  minor_service_casing: '#e4e0d4',
-  minor_casing: '#ddd9cc',
-  link_casing: '#d3cebe',
-  major_casing_late: '#cdc8b8',
-  highway_casing_late: '#d8cfa9',
-  other: '#f4f2ec',
-  minor_service: '#f7f5ef',
-  minor_a: '#fbfaf6',
-  minor_b: '#fbfaf6',
-  link: '#fbfaf6',
-  major_casing_early: '#cdc8b8',
-  major: '#fbfaf6',
-  highway_casing_early: '#d8cfa9',
-  highway: '#f5efdc',
-  railway: '#aeb0bd',
-  boundaries: '#b9bccb',
-  tunnel_other_casing: '#e8e5da',
-  tunnel_minor_casing: '#e8e5da',
-  tunnel_link_casing: '#e8e5da',
-  tunnel_major_casing: '#e8e5da',
-  tunnel_highway_casing: '#e8e5da',
-  tunnel_other: '#f4f2ec',
-  tunnel_minor: '#f4f2ec',
-  tunnel_link: '#f4f2ec',
-  tunnel_major: '#f4f2ec',
-  tunnel_highway: '#f4f2ec',
-  bridges_other_casing: '#ddd9cc',
-  bridges_minor_casing: '#ddd9cc',
-  bridges_link_casing: '#d3cebe',
-  bridges_major_casing: '#cdc8b8',
-  bridges_highway_casing: '#d8cfa9',
-  bridges_other: '#f4f2ec',
-  bridges_minor: '#fbfaf6',
-  bridges_link: '#fbfaf6',
-  bridges_major: '#fbfaf6',
-  bridges_highway: '#f5efdc',
-  roads_label_minor: '#4a5178',
-  roads_label_minor_halo: '#f4f2ec',
-  roads_label_major: '#4a5178',
-  roads_label_major_halo: '#f4f2ec',
-  ocean_label: '#4a5178',
-  subplace_label: '#4a5178',
-  subplace_label_halo: '#f4f2ec',
-  city_label: '#0c1250',
-  city_label_halo: '#f4f2ec',
-  state_label: '#4a5178',
-  state_label_halo: '#f4f2ec',
-  country_label: '#4a5178',
-  address_label: '#0c1250',
-  address_label_halo: '#f4f2ec',
+  industrial: '#e6ecf3',
+  school: '#e6ecf3',
+  pedestrian: '#e6ecf3',
+  pier: '#e6ecf3',
+  water: '#bad6ea',
+  buildings: '#dde5ee',
+  minor_service_casing: '#e0e6ee',
+  minor_casing: '#d7e0eb',
+  link_casing: '#cdd8e4',
+  major_casing_late: '#c1cedd',
+  highway_casing_late: '#b8c8dc',
+  other: '#f1f4f7',
+  minor_service: '#f1f4f7',
+  minor_a: '#fbfcfe',
+  minor_b: '#fbfcfe',
+  link: '#fbfcfe',
+  major_casing_early: '#c1cedd',
+  major: '#fbfcfe',
+  highway_casing_early: '#b8c8dc',
+  highway: '#e8eef5',
+  railway: '#9caabc',
+  boundaries: '#a4b3c5',
+  tunnel_other_casing: '#e3e9f0',
+  tunnel_minor_casing: '#e3e9f0',
+  tunnel_link_casing: '#e3e9f0',
+  tunnel_major_casing: '#e3e9f0',
+  tunnel_highway_casing: '#e3e9f0',
+  tunnel_other: '#f1f4f7',
+  tunnel_minor: '#f1f4f7',
+  tunnel_link: '#f1f4f7',
+  tunnel_major: '#f1f4f7',
+  tunnel_highway: '#f1f4f7',
+  bridges_other_casing: '#d7e0eb',
+  bridges_minor_casing: '#d7e0eb',
+  bridges_link_casing: '#cdd8e4',
+  bridges_major_casing: '#c1cedd',
+  bridges_highway_casing: '#b8c8dc',
+  bridges_other: '#f1f4f7',
+  bridges_minor: '#fbfcfe',
+  bridges_link: '#fbfcfe',
+  bridges_major: '#fbfcfe',
+  bridges_highway: '#e8eef5',
+  roads_label_minor: '#47586d',
+  roads_label_minor_halo: '#f1f4f7',
+  roads_label_major: '#47586d',
+  roads_label_major_halo: '#f1f4f7',
+  ocean_label: '#47586d',
+  subplace_label: '#47586d',
+  subplace_label_halo: '#f1f4f7',
+  city_label: '#142334',
+  city_label_halo: '#f1f4f7',
+  state_label: '#47586d',
+  state_label_halo: '#f1f4f7',
+  country_label: '#47586d',
+  address_label: '#142334',
+  address_label_halo: '#f1f4f7',
   pois: POI_INK_LIGHT,
 };
 
-/** Ultramarine night: the dark ink itself as ground, water a step darker
- *  still, and roads simplified to two levels instead of the daylight's
- *  three -- one ribbon tone for every ordinary road (fills flatten to one
- *  value, casings to another) with only the highway breaking free as its
- *  own brighter fill, the way a paper map keeps its road hierarchy in white
- *  variants but a night map keeps only the one road that matters. Land-use
- *  polygons rarely seen on this city's tiles (aerodrome, hospital, school,
- *  sand and the rest) recede to the built tier so nothing carries the old
- *  mineral hue after dark; "other" and every tunnel fill drop to the ground
- *  colour exactly, matched to the light face's identical treatment. Labels
- *  sit in the dark muted tier or the bright ink tier with the ground as
- *  halo. The built, planted and water tiers step off the ground by the same
- *  measure as by day (buildings 1.28:1, parks 1.33:1, woods 1.54:1, water
- *  1.18:1 -- water can only move away from an ink ground by going darker,
- *  and near-black is as far as that goes). */
+/** Charcoal night is separately tuned, not ultramarine or an inversion of
+ *  daylight. The same three geographic roles remain legible with restrained
+ *  chroma; bright Zagreb blue is reserved for actual tram routes and vehicles. */
 const DARK_OVERRIDES: Partial<Flavor> = {
-  background: '#0b1150',
-  earth: '#0b1150',
-  park_a: '#1a2d64',
-  park_b: '#172a5e',
-  wood_a: '#1d3a68',
-  wood_b: '#1a3562',
-  scrub_a: '#18295c',
-  scrub_b: '#152657',
-  glacier: '#0b1150',
-  sand: '#121a63',
-  beach: '#121a63',
-  aerodrome: '#121a63',
-  runway: '#1d266e',
-  zoo: '#1a2d64',
-  military: '#121a63',
-  hospital: '#121a63',
-  industrial: '#121a63',
-  school: '#121a63',
-  pedestrian: '#121a63',
-  pier: '#121a63',
-  water: '#02030f',
-  buildings: '#1a2474',
-  minor_service_casing: '#26307f',
-  minor_casing: '#26307f',
-  link_casing: '#26307f',
-  major_casing_late: '#26307f',
-  highway_casing_late: '#26307f',
-  other: '#0b1150',
-  minor_service: '#1a2373',
-  minor_a: '#1a2373',
-  minor_b: '#1a2373',
-  link: '#1a2373',
-  major_casing_early: '#26307f',
-  major: '#1a2373',
-  highway_casing_early: '#26307f',
-  highway: '#2a347f',
-  railway: '#4a5178',
-  boundaries: '#5a6187',
-  tunnel_other_casing: '#192168',
-  tunnel_minor_casing: '#192168',
-  tunnel_link_casing: '#192168',
-  tunnel_major_casing: '#192168',
-  tunnel_highway_casing: '#192168',
-  tunnel_other: '#0b1150',
-  tunnel_minor: '#0b1150',
-  tunnel_link: '#0b1150',
-  tunnel_major: '#0b1150',
-  tunnel_highway: '#0b1150',
-  bridges_other_casing: '#26307f',
-  bridges_minor_casing: '#26307f',
-  bridges_link_casing: '#26307f',
-  bridges_major_casing: '#26307f',
-  bridges_highway_casing: '#26307f',
-  bridges_other: '#0b1150',
-  bridges_minor: '#1a2373',
-  bridges_link: '#1a2373',
-  bridges_major: '#1a2373',
-  bridges_highway: '#2a347f',
-  roads_label_minor: '#b6bbe0',
-  roads_label_minor_halo: '#0b1150',
-  roads_label_major: '#b6bbe0',
-  roads_label_major_halo: '#0b1150',
-  ocean_label: '#b6bbe0',
-  subplace_label: '#b6bbe0',
-  subplace_label_halo: '#0b1150',
-  city_label: '#f4f2ec',
-  city_label_halo: '#0b1150',
-  state_label: '#b6bbe0',
-  state_label_halo: '#0b1150',
-  country_label: '#b6bbe0',
-  address_label: '#f4f2ec',
-  address_label_halo: '#0b1150',
+  background: '#111922',
+  earth: '#111922',
+  park_a: '#1d3534',
+  park_b: '#1b3030',
+  wood_a: '#214038',
+  wood_b: '#1e3933',
+  scrub_a: '#20332f',
+  scrub_b: '#1b302c',
+  glacier: '#111922',
+  sand: '#192430',
+  beach: '#192430',
+  aerodrome: '#192430',
+  runway: '#2a3b4b',
+  zoo: '#1d3534',
+  military: '#192430',
+  hospital: '#192430',
+  industrial: '#192430',
+  school: '#192430',
+  pedestrian: '#192430',
+  pier: '#192430',
+  water: '#0b2538',
+  buildings: '#23313f',
+  minor_service_casing: '#344457',
+  minor_casing: '#344457',
+  link_casing: '#344457',
+  major_casing_late: '#344457',
+  highway_casing_late: '#344457',
+  other: '#111922',
+  minor_service: '#23313f',
+  minor_a: '#23313f',
+  minor_b: '#23313f',
+  link: '#23313f',
+  major_casing_early: '#344457',
+  major: '#23313f',
+  highway_casing_early: '#344457',
+  highway: '#3a4f62',
+  railway: '#47586d',
+  boundaries: '#55677c',
+  tunnel_other_casing: '#172431',
+  tunnel_minor_casing: '#172431',
+  tunnel_link_casing: '#172431',
+  tunnel_major_casing: '#172431',
+  tunnel_highway_casing: '#172431',
+  tunnel_other: '#111922',
+  tunnel_minor: '#111922',
+  tunnel_link: '#111922',
+  tunnel_major: '#111922',
+  tunnel_highway: '#111922',
+  bridges_other_casing: '#344457',
+  bridges_minor_casing: '#344457',
+  bridges_link_casing: '#344457',
+  bridges_major_casing: '#344457',
+  bridges_highway_casing: '#344457',
+  bridges_other: '#111922',
+  bridges_minor: '#23313f',
+  bridges_link: '#23313f',
+  bridges_major: '#23313f',
+  bridges_highway: '#3a4f62',
+  roads_label_minor: '#b8c5d5',
+  roads_label_minor_halo: '#111922',
+  roads_label_major: '#b8c5d5',
+  roads_label_major_halo: '#111922',
+  ocean_label: '#b8c5d5',
+  subplace_label: '#b8c5d5',
+  subplace_label_halo: '#111922',
+  city_label: '#f1f4f7',
+  city_label_halo: '#111922',
+  state_label: '#b8c5d5',
+  state_label_halo: '#111922',
+  country_label: '#b8c5d5',
+  address_label: '#f1f4f7',
+  address_label_halo: '#111922',
   pois: POI_INK_DARK,
 };
 
@@ -320,16 +300,16 @@ const DARK_OVERRIDES: Partial<Flavor> = {
 // sheet does not carry: each is its canvas pulled a step toward the success
 // role's hue and kept inside the canvas family (measured 1.08:1 by day and
 // 1.16:1 by night against the ground -- texture, not a surface).
-const PROZOR_LIGHT_GROUND = '#f4f2ec'; // --palette-light-canvas
-const PROZOR_LIGHT_GREEN = '#dfe4cf'; // the canvas toward --palette-light-success
-const PROZOR_DARK_GROUND = '#0b1150'; // --palette-dark-canvas
-const PROZOR_DARK_GREEN = '#12275c'; // the canvas toward --palette-dark-success
+const PROZOR_LIGHT_GROUND = '#f1f4f7'; // --palette-light-canvas
+const PROZOR_LIGHT_GREEN = '#dde9e2'; // the canvas toward --palette-light-success
+const PROZOR_DARK_GROUND = '#111922'; // --palette-dark-canvas
+const PROZOR_DARK_GREEN = '#1d3534'; // the canvas toward --palette-dark-success
 
 const PROZOR_LIGHT: Partial<Flavor> = {
   background: PROZOR_LIGHT_GROUND,
   earth: PROZOR_LIGHT_GROUND,
   // Blocks: --palette-light-surface-2, the sheet's own raised surface.
-  buildings: '#ebe8df',
+  buildings: '#e5eaf0',
   // Planted: one green.
   park_a: PROZOR_LIGHT_GREEN,
   park_b: PROZOR_LIGHT_GREEN,
@@ -352,11 +332,11 @@ const PROZOR_LIGHT: Partial<Flavor> = {
   runway: PROZOR_LIGHT_GROUND,
   military: PROZOR_LIGHT_GROUND,
   // Water as on every surface: ultramarine at 12 % over the canvas.
-  water: '#c3cbe8',
+  water: '#bad6ea',
   // Neighbourhood names in the label role, street names in the muted tier, both haloed by the ground.
-  subplace_label: '#363d73', // --palette-light-label
+  subplace_label: '#40536b', // --palette-light-label
   subplace_label_halo: PROZOR_LIGHT_GROUND,
-  roads_label_major: '#4a5178', // --palette-light-text-muted
+  roads_label_major: '#47586d', // --palette-light-text-muted
   roads_label_major_halo: PROZOR_LIGHT_GROUND,
 };
 
@@ -364,7 +344,7 @@ const PROZOR_DARK: Partial<Flavor> = {
   background: PROZOR_DARK_GROUND,
   earth: PROZOR_DARK_GROUND,
   // Blocks: --palette-dark-surface-1.
-  buildings: '#121a63',
+  buildings: '#192430',
   park_a: PROZOR_DARK_GREEN,
   park_b: PROZOR_DARK_GREEN,
   wood_a: PROZOR_DARK_GREEN,
@@ -383,12 +363,11 @@ const PROZOR_DARK: Partial<Flavor> = {
   aerodrome: PROZOR_DARK_GROUND,
   runway: PROZOR_DARK_GROUND,
   military: PROZOR_DARK_GROUND,
-  // Deeper than the ground (--palette-dark-canvas-deep is #080c40; the Sava
-  // needs one more step to read as a body of water and not a shadow).
-  water: '#060a3a',
-  subplace_label: '#b6bbe0', // --palette-dark-label
+  // A restrained river blue, shared with the interactive map.
+  water: '#0b2538',
+  subplace_label: '#b8c5d5', // --palette-dark-label
   subplace_label_halo: PROZOR_DARK_GROUND,
-  roads_label_major: '#8f96c9', // --palette-dark-text-subtle
+  roads_label_major: '#9badc2', // --palette-dark-text-subtle
   roads_label_major_halo: PROZOR_DARK_GROUND,
 };
 
@@ -439,10 +418,10 @@ export interface OverlayPalette {
 }
 
 /* The mode colours repeat the interface roles value for value: a tram and
- * its route line are the accent role (--tone-accent, #03409c light, #f4f2ec
+ * its route line are the accent role (--tone-accent, #0751bf light, #f1f4f7
  * dark, paper-on-night so its text inverts to the dark ink); a bus and its
- * route line the transit role (--tone-transit, #0c1250 light, the same hex
- * as ink -- #9fb4ff dark); a closure the urgency role (#b3271e, #ff9d9d).
+ * route line the transit role (--tone-transit, #142334 light, the same hex
+ * as ink -- #84b5ff dark); a closure the urgency role (#b72d39, #ff9aa5).
  * The stop fill and every halo take the canvas or its brighter paper-white
  * sibling; the selection and the screen stop pin take the ink and accent
  * roles. One Zagreb blue and one ink across the map, the badges
@@ -450,53 +429,53 @@ export interface OverlayPalette {
  * literals, so these are the token hexes written out; tokens.css stays
  * their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
-  tram: '#03409c',
-  tramText: '#ffffff',
-  bus: '#0c1250',
-  busText: '#ffffff',
-  other: '#4a5178',
-  otherText: '#fbfaf6',
-  routeTram: '#03409c',
-  routeBus: '#0c1250',
-  figure: '#0c1250', // --palette-light-text-primary, the ink
+  tram: '#0751bf',
+  tramText: '#f7faff',
+  bus: '#34465c',
+  busText: '#f7faff',
+  other: '#47586d',
+  otherText: '#fbfcfe',
+  routeTram: '#0751bf',
+  routeBus: '#34465c',
+  figure: '#142334', // --palette-light-text-primary, the ink
   figureOpacity: 0.9,
-  stopFill: '#f4f2ec',
-  stopStroke: '#4a5178',
-  label: '#0c1250',
-  halo: '#fbfaf6',
-  closure: '#b3271e',
-  closureCasing: '#fbfaf6',
+  stopFill: '#f1f4f7',
+  stopStroke: '#47586d',
+  label: '#142334',
+  halo: '#fbfcfe',
+  closure: '#b72d39',
+  closureCasing: '#fbfcfe',
   place: '#b8731a',
-  event: '#6b3fa0',
-  work: '#4a5178',
-  selection: '#0c1250',
-  selectionHalo: '#fbfaf6',
-  screenStop: '#03409c',
+  event: '#7040a2',
+  work: '#47586d',
+  selection: '#142334',
+  selectionHalo: '#fbfcfe',
+  screenStop: '#0751bf',
 });
 
 export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
-  tram: '#f4f2ec',
-  tramText: '#0b1150',
-  bus: '#9fb4ff',
-  busText: '#0b1150',
-  other: '#b6bbe0',
-  otherText: '#0b1150',
-  routeTram: '#f4f2ec',
-  routeBus: '#9fb4ff',
-  figure: '#b6bbe0', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
+  tram: '#84b5ff',
+  tramText: '#102236',
+  bus: '#b8c9dc',
+  busText: '#102236',
+  other: '#b8c5d5',
+  otherText: '#111922',
+  routeTram: '#84b5ff',
+  routeBus: '#b8c9dc',
+  figure: '#b8c5d5', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
   figureOpacity: 0.7,
-  stopFill: '#0b1150',
-  stopStroke: '#b6bbe0',
-  label: '#f4f2ec',
-  halo: '#0b1150',
-  closure: '#ff9d9d',
-  closureCasing: '#0b1150',
+  stopFill: '#111922',
+  stopStroke: '#b8c5d5',
+  label: '#f1f4f7',
+  halo: '#111922',
+  closure: '#ff9aa5',
+  closureCasing: '#111922',
   place: '#f0c060',
-  event: '#c9b3ff',
-  work: '#b6bbe0',
-  selection: '#f4f2ec',
-  selectionHalo: '#0b1150',
-  screenStop: '#f4f2ec',
+  event: '#c9aff0',
+  work: '#b8c5d5',
+  selection: '#f1f4f7',
+  selectionHalo: '#111922',
+  screenStop: '#84b5ff',
 });
 
 export function overlayPalette(theme: MapTheme): Readonly<OverlayPalette> {
@@ -729,8 +708,8 @@ export const PROZOR_LABEL_PADDING_PX = 24;
  *  #454b86 composited, 2.5:1 -- so Ilica and Savska orient the eye without
  *  competing with the rails drawn over them. */
 const PROZOR_STREETS: Readonly<Record<MapTheme, { minor: string; minorOpacity: number; major: string; majorOpacity: number }>> = Object.freeze({
-  light: { minor: '#0c1250', minorOpacity: 0.18, major: '#0c1250', majorOpacity: 0.34 },
-  dark: { minor: '#1a2373', minorOpacity: 1, major: '#f4f2ec', majorOpacity: 0.25 },
+  light: { minor: '#142334', minorOpacity: 0.18, major: '#142334', majorOpacity: 0.34 },
+  dark: { minor: '#23313f', minorOpacity: 1, major: '#f1f4f7', majorOpacity: 0.25 },
 });
 /** Which street layers take which of the two weights; a bridge draws exactly
  *  as its surface road (the same table row), and the footbridge -- the one

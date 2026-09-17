@@ -15,12 +15,14 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { ring } from '../ui/graphics';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { weatherStatusMarkup, type WeatherStatus } from './weather-status';
+import type { PresentationState } from '../../../worker/presentation';
+import { presentationButton } from './presentation';
 
 export type Surface = 'phone' | 'desktop';
 /** A phone tab: a domain, or the Kvart panel, which is a shell surface and never a LayerId (D9). */
 export type PhoneTab = { kind: 'layer'; layer: LayerId } | { kind: 'kvart' };
-export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'kvart' }];
-export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo'];
+export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'layer', layer: 'kultura' }];
+export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo'];
 export const KVART_ICON: IconName = 'map-pin';
 
 export const LAYER_ICONS: Record<LayerId, IconName> = {
@@ -73,6 +75,8 @@ export interface ShellState {
   castReason: CastReason | null;
   /** True for the moment after a cast, while the polite region says so: the FAB carries data-sent. */
   castSent: boolean;
+  presentation?: PresentationState;
+  presentationOpen?: boolean;
   notify: NotifyFlags;
   notifyActive: number;
   notifyKeys: readonly NotifyKey[];
@@ -118,8 +122,11 @@ export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather
   const kvart = kvartMenuMarkup(i18n, s, { id: 'ki-kvart', short: s.surface === 'phone' });
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
-  if (s.surface === 'phone') return `${wordmark}${kvart}${session}${safety}`;
-  return `${wordmark}${kvart}${moreButtonMarkup(i18n, s)}${searchLaunchMarkup(i18n, s)}${clockMarkup(i18n, s, now, weather)}${session}${bellMarkup(i18n, s)}${safety}`;
+  const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
+  if (s.surface === 'phone') return `${wordmark}${kvart}${display}${session}${safety}`;
+  const domains: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost'];
+  const navigation = `<nav class="ki-domains" data-key="domains" aria-label="${escapeAttribute(i18n.t('nav.label'))}"><ul>${domains.map(layer => layerTab(i18n, s, layer)).join('')}<li>${kvartTab(i18n, s).replace(/^<li>|<\/li>$/g, '')}</li></ul></nav>`;
+  return `${wordmark}${kvart}<div class="ki-status-space" data-key="space"></div>${clockMarkup(i18n, s, now, null)}${display}${session}${moreButtonMarkup(i18n, s)}${navigation}`;
 }
 
 /**
@@ -196,6 +203,9 @@ export function safetyMarkup(i18n: I18n, s: ShellState): string {
 /** A domain tab; frozen it keeps its handler (navigate() declines) so its hash never replaces the fragment. */
 function layerTab(i18n: I18n, s: ShellState, layer: LayerId): string {
   const current = s.layer === layer && !s.directory && s.panel === null;
+  if (s.frozen && layer === 'sigurnost') {
+    return `<li><a class="ki-tab" href="/hitno" data-layer="sigurnost">${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
+  }
   return `<li><a class="ki-tab" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
 }
 
@@ -209,8 +219,8 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
   if (s.surface === 'desktop') return '';
   const inMore = MORE_LAYERS.includes(s.layer);
   const showsLayer = inMore && !s.directory && s.panel === null;
-  const moreCurrent = s.panel === null && (s.directory || inMore);
-  const moreLabel = showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
+  const moreCurrent = s.panel === 'kvart' || (s.panel === null && (s.directory || inMore));
+  const moreLabel = s.panel === 'kvart' ? i18n.t('nav.kvart') : showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
   const tabs = PHONE_TABS.map((tab) => (tab.kind === 'layer' ? layerTab(i18n, s, tab.layer) : kvartTab(i18n, s))).join('');
   return `<ul class="ki-tabs" role="list">${tabs}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(showsLayer ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
 }
@@ -221,10 +231,8 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
  * button), the directory and the Kvart panel (whose primary casts). '' when hidden.
  */
 export function fabMarkup(i18n: I18n, s: ShellState): string {
-  const shown = s.surface === 'phone' && s.phase === 'live' && !s.frozen && s.role === 'scanner' && s.hasScreen && !s.directory && s.panel === null && s.layer !== 'u-pokretu';
-  if (!shown) return '';
-  const label = i18n.t('cast.fabLabel', { layer: layerLabel(i18n, s.layer), label: s.label ?? i18n.t('session.labelScreen') });
-  return `<button type="button" class="ki-fab" data-action="cast" data-testid="cast-fab" aria-label="${escapeAttribute(label)}"${s.castSent ? ' data-sent="1"' : ''}>${iconMarkup('cast')}<span>${escapeHtml(i18n.t('cast.fab'))}</span></button>`;
+  // One stable header control on every workspace. Never cover city content.
+  return '';
 }
 
 /**

@@ -2,6 +2,7 @@
 // receive code batches, ask for the next batch, notice the unlock and the
 // revoke, reconnect with backoff. Knows nothing about the DOM.
 import type { BeaconClientMessage, BeaconServerMessage, CodeSlot, ScreenMetadata } from '../../worker/protocol';
+import type { ScreenPresentation } from '../../worker/presentation';
 import { hmacSha256Base64Url } from './crypto';
 import { beaconSocketUrl, type WebSocketLike } from './session';
 
@@ -17,7 +18,7 @@ export interface BeaconCredentials {
   screen?: ScreenMetadata;
 }
 
-export type BeaconStatus = 'idle' | 'connecting' | 'live' | 'offline' | 'revoked';
+export type BeaconStatus = 'idle' | 'connecting' | 'live' | 'offline' | 'revoked' | 'replaced';
 
 /** '#BEACON01.s3cr3t' from the one-time provisioning URL. */
 export function parseProvisionHash(hash: string): BeaconCredentials | null {
@@ -63,6 +64,9 @@ export interface BeaconClientDeps {
   onRevoked: () => void;
   onStatus: (status: BeaconStatus) => void;
   onContext?: (screen: ScreenMetadata) => void;
+  presentationVersion?: 1;
+  onPaired?: (expiresAt: number) => void;
+  onPresentation?: (presentation: ScreenPresentation) => void;
 }
 
 export interface BeaconClient {
@@ -70,6 +74,8 @@ export interface BeaconClient {
   requestMore(): void;
   status(): BeaconStatus;
   close(): void;
+  acknowledgePresentation(revision: number, status: 'displayed' | 'unavailable'): void;
+  stopPresentation(revision: number): void;
 }
 
 export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
@@ -107,8 +113,10 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
   function handle(message: BeaconServerMessage): void {
     switch (message.t) {
       case 'challenge':
-        void hmac(deps.credentials.secret, message.nonce).then((mac) => send({ t: 'auth', hmac: mac }));
+        void hmac(deps.credentials.secret, message.nonce).then((mac) => send({ t: 'auth', hmac: mac, ...(deps.presentationVersion ? { presentationVersion: deps.presentationVersion } : {}) }));
         return;
+      case 'paired': deps.onPaired?.(message.expiresAt); return;
+      case 'presentation': deps.onPresentation?.(message.presentation); return;
       case 'codes':
         attempt = 0; // a batch means the screen is healthy; next drop retries fast
         setStatus('live');
@@ -143,9 +151,14 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
         handle(parsed as BeaconServerMessage);
       }
     });
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
       socket = null;
       if (status === 'revoked' || stopped) return;
+      if (event.code === 4004) {
+        stopped = true;
+        setStatus('replaced');
+        return;
+      }
       setStatus('offline');
       scheduleReconnect();
     });
@@ -164,6 +177,12 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
     },
     requestMore() {
       send({ t: 'more' });
+    },
+    acknowledgePresentation(revision, status) {
+      send({ t: 'presented', version: 1, revision, status });
+    },
+    stopPresentation(revision) {
+      send({ t: 'presentation-stop', version: 1, revision });
     },
     status: () => status,
     close() {

@@ -1,22 +1,17 @@
-// Kaj ima? public screen: the controller. Decides the phase (setup,
-// invitation, paired, expired, revoked), mounts that phase's composition from
-// app/src/kiosk/*, and wires the real beacon and room sockets, the code
-// rotation, the stop-scoped teaser poll and the one map. Nothing here talks
-// to the network directly: every dependency is injected and defaults to the
-// real client, so tests drive the same paths with fakes. The screen secret is
-// stored and handed to the beacon client; it is never rendered or logged.
-//
-// The invitation is one fixed window (R-KP1, R-KP11): no chapters, no
-// rotation, no countdown. Its camera follows the field's measured width
-// (R-KP2), its column is ranked on every poll and once a minute (the ZET time
-// in a context), and the stop's last-departure table is fetched on stop
-// change and again once it has expired (R-KP6).
+// Kaj ima? public screen controller. Scanning leaves the useful public
+// overview in place; a versioned, explicit request selects a separate
+// presentation. The internal `paired` phase is retained for compatibility.
+// One map survives composition changes. Injected clients own networking,
+// code rotation and feed polling; tests drive these same paths with fakes.
+// Screen credentials never enter public presentation markup or logs.
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
+import type { ScreenPresentation } from '../../worker/presentation';
+import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
 import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/lastrun';
 import type { MapMode } from './core/map-mode-store';
@@ -223,6 +218,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let teaser: ModuleSnapshot[] = [];
   let currentSlot: CodeSlot | null = null;
   let beacon: BeaconClient | null = null;
+  let beaconEpoch = 0;
   let beaconWasLive = false;
   let session: SessionClient | null = null;
   let unlockedToken: string | null = null;
@@ -237,6 +233,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The provisioning footnote a phone carries under the invitation. */
   let provision: HTMLElement | null = null;
   let paired: PairedHandle | null = null;
+  let presentation: ScreenPresentation | null = null;
+  let acknowledgedRevision = -1;
+  let acknowledgedStatus: 'displayed' | 'unavailable' | null = null;
+  let presentationLoaded = false;
+  let pairingNoticeUntil = 0;
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
   let essentialsIdle: unknown = null;
@@ -332,13 +333,27 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // Two spans, one text: at compact and in portrait the CSS drops the layer word (the stage shows the layer) so the pill fits the header's one row.
     const until = document.createElement('span');
     until.className = 'k-session-until';
-    until.textContent = fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
+    until.textContent = presentation?.target
+      ? i18n.t('presentation.showing', { name: presentationTargetLabel(i18n, presentation.target) })
+      : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
     const layer = document.createElement('span');
     layer.className = 'k-session-layer';
-    layer.textContent = ` · ${s.layers[activeLayer]}`;
+    layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`;
     sessionLabel.replaceChildren(until, layer);
+    if (presentation?.target && !headMid.querySelector('[data-testid=kiosk-stop-presentation]')) {
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'k-return';
+      back.dataset.testid = 'kiosk-stop-presentation';
+      back.textContent = i18n.t('presentation.stop');
+      back.addEventListener('click', () => { if (presentation) beacon?.stopPresentation?.(presentation.revision); });
+      headMid.appendChild(back);
+    }
   }
-  function removeSessionLabel(): void { sessionLabel?.remove(); sessionLabel = null; sessionExpiresAt = null; }
+  function removeSessionLabel(): void {
+    sessionLabel?.remove(); sessionLabel = null; sessionExpiresAt = null;
+    headMid.querySelector('[data-testid=kiosk-stop-presentation]')?.remove();
+  }
 
   // --- Safety strip: always present, sharing the visible source state --------
   function paintStrip(): void {
@@ -419,9 +434,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
       phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,
-      widthPx: invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],
+      target: presentation?.target ?? undefined,
+      stops: stops ?? undefined,
+      widthPx: host.clientWidth || invitation?.measureWidth() || FIELD_DESIGN_WIDTH[composition],
       // With the width, the ground the field shows: the street names' padding follows it (mapview.ts labelPadding).
-      heightPx: invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
+      heightPx: host.clientHeight || invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
       spanM: composition === 'handheld' ? HANDHELD_SPAN_M : FIELD_SPAN_M,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
@@ -498,7 +515,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
-    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops };
+    const target = presentation?.target;
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops, ...(target ? { target } : {}) };
   }
   /** Both tiers of one module: the session copy, unless it is no longer live and the teaser holds a live one. */
   function mergedSnapshots(): Partial<Record<ModuleId, ModuleSnapshot>> {
@@ -520,6 +538,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintMap();
     if (!basics.hidden) paintEssentials();
     fitAll();
+    acknowledgePresentation();
   }
   /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
   function fitAll(): void {
@@ -541,7 +560,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const corner = element.querySelector<HTMLElement>('[data-testid=corner-qr]');
     const joinCode = element.querySelector<HTMLElement>('[data-testid=join-code]');
     if (!slot) {
-      if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(s.invitation.qrWaiting)}</p>`;
+      if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)}</p>`;
       if (codeA) codeA.textContent = '····';
       if (codeB) codeB.textContent = '····';
       if (codeEl) codeEl.dataset.state = 'waiting';
@@ -601,7 +620,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     bar.dataset.pct = pct.toFixed(2);
     bar.setAttribute('aria-valuenow', String(Math.round(pct * 100)));
     const fillEl = bar.firstElementChild as HTMLElement | null;
-    if (fillEl) fillEl.style.width = `${Math.round(pct * 1000) / 10}%`;
+    if (fillEl) fillEl.style.transform = `scaleX(${Math.round(pct * 1000) / 1000})`;
   }
   /** A rotation belongs to one screen: forgetting the screen starts a fresh one,
    *  so a dead screen's still-open slots can never surface as the next screen's code. */
@@ -639,7 +658,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
       if (layout.size === 'handheld' && credentials) mountProvision();
     }
-    else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, onShell: paintCode });
+    else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, onShell: paintCode });
     else mountNotice(next);
     paintContext();
     paintLocal();
@@ -666,7 +685,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The one way back from a dead screen: forget it and open the wizard.
    *  Nothing automatic -- no recreation, no retry, one person's press. */
   function startOver(): void {
+    beaconEpoch += 1;
     beacon?.close(); beacon = null;
+    resetPresentation();
+    beaconWasLive = false;
+    clearAlert('beacon');
     rotation.stop(); rotation = newRotation(); currentSlot = null;
     forgetBeacon(storage);
     credentials = null; stop = null; screenDead = null;
@@ -691,6 +714,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  A screen already past its expiry never connects (no reconnect loop against
    *  a socket the DO refuses) and shows the notice instead. */
   function adoptCredentials(creds: BeaconCredentials, persist: boolean): void {
+    resetPresentation();
     credentials = creds;
     if (persist) storeBeacon(storage, creds);
     stop = creds.screen?.stop ?? null;
@@ -708,23 +732,102 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   // --- The beacon socket ---------------------------------------------------------
   function startBeacon(creds: BeaconCredentials): void {
+    const epoch = ++beaconEpoch;
+    const current = (): boolean => !disposed && epoch === beaconEpoch;
     beacon = makeBeacon({
       credentials: creds,
-      onCodes: (batch, serverNow) => rotation.setBatch(batch, serverNow),
-      onContext: applyScreen,
-      onUnlocked: ({ roomId, ticket }) => openSession(roomId, ticket),
+      presentationVersion: 1,
+      onCodes: (batch, serverNow) => { if (current()) rotation.setBatch(batch, serverNow); },
+      onContext: (screen) => { if (current()) applyScreen(screen); },
+      onUnlocked: ({ roomId, ticket }) => { if (current()) openSession(roomId, ticket); },
+      onPaired: () => {
+        if (!current() || phase !== 'invitation') return;
+        pairingNoticeUntil = now() + 4500;
+        headMid.textContent = i18n.t('presentation.connected');
+        headMid.setAttribute('role', 'status');
+      },
+      onPresentation: (next) => { if (current()) applyPresentation(next); },
       onRevoked: () => {
+        if (!current()) return;
         screenDead = screenExpired(credentials?.screen, now()) ? 'expired' : 'revoked';
         if (phase === 'paired') paintCode();
         else setPhase(screenDead);
       },
       onStatus: (status) => {
+        if (!current()) return;
         if (status === 'offline') showAlert(s.status.offline, 'beacon');
+        else if (status === 'replaced') showAlert(i18n.t('presentation.replaced'), 'beacon');
         else if (status === 'connecting' && beaconWasLive) showAlert(s.status.reconnecting, 'beacon');
         else if (status === 'live') { beaconWasLive = true; clearAlert('beacon'); }
       },
     });
     beacon.connect();
+  }
+
+  /** Revisions and pending loads belong to one beacon, never the next screen
+   *  created in this browser. Invalidate in-flight fetches even if a token is
+   *  reused by an injected transport. */
+  function resetPresentation(): void {
+    presentation = null;
+    acknowledgedRevision = -1;
+    acknowledgedStatus = null;
+    presentationLoaded = false;
+    pairingNoticeUntil = 0;
+    sessionSeq += 1;
+    session?.close(); session = null;
+    unlockedToken = null;
+    sessionSnapshots = {};
+    selection = null;
+    activeLayer = 'grad-sada';
+    removeSessionLabel();
+    headMid.replaceChildren();
+    headMid.removeAttribute('role');
+  }
+
+  function applyPresentation(next: ScreenPresentation): void {
+    if (next.version !== 1 || disposed || (presentation && next.revision < presentation.revision)) return;
+    if (next.target && next.expiresAt !== null && next.expiresAt <= rotation.serverNow()) return;
+    if (presentation?.revision === next.revision) {
+      acknowledgePresentation();
+      return;
+    }
+    if (!next.target && phase !== 'paired' && !session && !unlockedToken) {
+      // Initial/repeated idle state is not a composition change. In
+      // particular, do not detach a useful overview as authentication ends.
+      presentation = next;
+      presentationLoaded = false;
+      return;
+    }
+    presentation = next;
+    presentationLoaded = false;
+    pairingNoticeUntil = 0;
+    headMid.textContent = '';
+    sessionLabel = null;
+    if (!next.target) { endSession(); presentation = next; return; }
+    session?.close(); session = null;
+    unlockedToken = next.dataToken ?? null;
+    sessionSnapshots = {};
+    selection = next.target.selection ?? null;
+    activeLayer = next.target.layer === 'kvart' ? 'grad-sada' : next.target.layer;
+    setPhase('paired');
+    showSessionLabel(next.expiresAt);
+    if (selection?.kind === 'stop') void ensureStops();
+    void refreshSessionData();
+  }
+
+  /** Receipt means the subject exists in the rendered composition, not merely
+   *  that a socket accepted a frame. Loading maps wait; failed maps retain a
+   *  text alternative. A removed selection is explicitly unavailable. */
+  function acknowledgePresentation(): void {
+    if (!presentation?.target || !presentationLoaded || !paired || disposed) return;
+    const status = mapAdapter.handle()?.status?.();
+    if (paired.mapHost && !lightweight && status === 'loading') return;
+    const rendered = paired.element.dataset.presentationStatus;
+    if (rendered !== 'displayed' && rendered !== 'unavailable') return;
+    if (acknowledgedRevision === presentation.revision && acknowledgedStatus === rendered) return;
+    beacon?.acknowledgePresentation?.(presentation.revision, rendered);
+    acknowledgedRevision = presentation.revision;
+    acknowledgedStatus = rendered;
   }
   /** The DO's copy of the screen metadata is authoritative: it is stored beside
    *  the existing credentials, never a new secret. */
@@ -761,7 +864,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else setPhase('expired');
   }
 
-  // --- The room session: the driver's phone steers, the kiosk mirrors ------------
+  // --- Legacy room compatibility; versioned screens use explicit presentation ---
   function openSession(roomId: string, ticket: string): void {
     // A second redeem mid-session opens a fresh room; the socket of the one it
     // replaces must not leak.
@@ -804,7 +907,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const token = unlockedToken;
     if (!token) return;
     const seq = ++sessionSeq;
-    const modules = KIOSK_LAYER_MODULES[activeLayer];
+    const modules = [...new Set([
+      ...KIOSK_LAYER_MODULES[activeLayer],
+      ...(selection?.kind === 'item' ? [selection.module] : []),
+    ])];
     const results = await Promise.allSettled(modules.map((id) => fetchData(id, token)));
     // Another session, or a newer refresh, has spoken since: this answer is history.
     if (disposed || unlockedToken !== token || seq !== sessionSeq) return;
@@ -815,13 +921,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // A request that failed leaves its last-good copy stale, source by source; a module never seen is down.
       else sessionSnapshots[id] = sessionSnapshots[id] ? staleCopy(sessionSnapshots[id]!, at) : downPlaceholder(id, at);
     });
+    if (presentation?.target) presentationLoaded = true;
     paintLocal();
   }
   async function ensureStops(): Promise<void> {
     try {
       stops = await loadStops();
       if (!disposed) paintLocal();
-    } catch { /* the selection keeps its id */ }
+    } catch {
+      // Resolved failure is distinct from a stop list still loading. A later
+      // explicit request may retry; this one must not claim a rendered stop.
+      if (!disposed) { stops = []; paintLocal(); }
+    }
   }
 
   // --- The stop-scoped teaser poll, aligned to the realtime feed's own tick -------
@@ -916,6 +1027,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const codeTimer = setTimer(() => {
     paintClock();
     paintProgress();
+    if (presentation?.target && presentation.expiresAt !== null && rotation.serverNow() >= presentation.expiresAt) {
+      presentation = { ...presentation, target: null, dataToken: undefined };
+      endSession();
+    }
+    if (presentation?.target) acknowledgePresentation();
+    if (pairingNoticeUntil > 0 && now() >= pairingNoticeUntil) {
+      pairingNoticeUntil = 0;
+      if (phase === 'invitation') headMid.textContent = '';
+    }
     // The column names the ZET time in a context: it repaints when the minute turns, never every second.
     const minute = Math.floor(now() / 60_000);
     if (minute !== paintedMinute && invitation) {

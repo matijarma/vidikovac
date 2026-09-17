@@ -291,7 +291,7 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
   }
 
   async function submitCode(raw: string): Promise<void> {
-    if (busy || waiting) return;
+    if (busy || waiting || navigated) return;
     const code = normalizeCode(raw);
     if (!isCompleteCode(code)) {
       showError('incomplete');
@@ -334,7 +334,14 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
       return;
     }
     syncSubmit();
-    renderConfirm(code, result);
+    // Redemption already created the grant. A second "unlock" button spent
+    // session time without adding consent or security. Continue immediately.
+    if (!navigated) {
+      navigated = true;
+      status.textContent = confirmLabel(result, i18n, now());
+      form.hidden = true;
+      deps.navigate(dashboardUrl(result));
+    }
   }
 
   input.addEventListener('input', () => {

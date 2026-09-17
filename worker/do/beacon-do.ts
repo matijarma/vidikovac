@@ -11,7 +11,8 @@ import { recordMetric, zagrebDayHour } from '../metrics';
 import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
 import { withDistrict } from '../pairing/stops';
-import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId } from '../pairing/tokens';
+import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId, signDataToken } from '../pairing/tokens';
+import { parsePresentationCommand, type PresentationCommand, type PresentationResult, type PresentationState, type PresentationTarget } from '../presentation';
 import {
   CODES_PER_BATCH,
   CODE_GRACE_MS,
@@ -76,11 +77,18 @@ export interface BeaconCreateInput {
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
 type ChallengeAttachment = { phase: 'challenge'; nonce: string; issuedAt: number; attempts: number };
-type AuthedAttachment = { phase: 'authed' };
+type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1 };
 type SocketAttachment = ChallengeAttachment | AuthedAttachment;
 
 type MetaRow = { key: string; value: string };
 type CodeRow = { code: string; slot_start: number; slot_end: number; used: number };
+interface StoredPresentation {
+  revision: number;
+  roomId: string | null;
+  target: PresentationTarget | null;
+  expiresAt: number | null;
+  status: PresentationState['status'];
+}
 
 export function beaconStub(env: Env, beaconId: string): DurableObjectStub<BeaconDO> {
   const namespace = env.BEACON_DO as DurableObjectNamespace<BeaconDO>;
@@ -94,8 +102,12 @@ function frame(message: BeaconServerMessage): string {
 function parseClient(message: string | ArrayBuffer): BeaconClientMessage | null {
   if (typeof message !== 'string' || message.length > 512) return null;
   try {
-    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown };
-    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac };
+    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown };
+    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}) };
+    if (parsed.version === 1 && Number.isSafeInteger(parsed.revision) && (parsed.revision as number) >= 0) {
+      if (parsed.t === 'presented' && (parsed.status === 'displayed' || parsed.status === 'unavailable')) return { t: 'presented', version: 1, revision: parsed.revision as number, status: parsed.status };
+      if (parsed.t === 'presentation-stop') return { t: 'presentation-stop', version: 1, revision: parsed.revision as number };
+    }
     if (parsed.t === 'more') return { t: 'more' };
     if (parsed.t === 'ping' || parsed.t === 'pong') return { t: parsed.t };
     return null;
@@ -124,6 +136,8 @@ export class BeaconDO extends DurableObject<Env> {
     sql.exec('CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, slot_start INTEGER NOT NULL, slot_end INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)');
     sql.exec('CREATE TABLE IF NOT EXISTS sessions (started_at INTEGER NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS fails (at INTEGER NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS presentation_rooms (room_id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS presentation_requests (room_id TEXT NOT NULL, request_id TEXT NOT NULL, signature TEXT NOT NULL, PRIMARY KEY (room_id, request_id))');
   }
 
   now(): number {
@@ -162,7 +176,138 @@ export class BeaconDO extends DurableObject<Env> {
   }
 
   private authenticatedSockets(): WebSocket[] {
-    return this.ctx.getWebSockets().filter((ws) => (ws.deserializeAttachment() as SocketAttachment | null)?.phase === 'authed');
+    return this.ctx.getWebSockets().filter((ws) => !this.socketsGone.has(ws) && (ws.deserializeAttachment() as SocketAttachment | null)?.phase === 'authed');
+  }
+
+  // The beacon, not the newest scanner's room, owns the public display.
+  private presentationRecord(): StoredPresentation {
+    const raw = this.meta('presentation');
+    return raw ? JSON.parse(raw) as StoredPresentation : { revision: 0, roomId: null, target: null, expiresAt: null, status: 'idle' };
+  }
+
+  private presentationSockets(): WebSocket[] {
+    return this.authenticatedSockets().filter(ws => (ws.deserializeAttachment() as AuthedAttachment).presentationVersion === 1);
+  }
+
+  private stateFor(roomId: string): PresentationState {
+    const p = this.presentationRecord();
+    return {
+      version: 1, revision: p.revision, target: p.target, expiresAt: p.expiresAt, status: p.status,
+      owner: p.roomId === null ? null : p.roomId === roomId ? 'self' : 'other',
+      online: !this.isRevoked() && this.authenticatedSockets().length > 0,
+      supported: this.presentationSockets().length > 0,
+    };
+  }
+
+  private prunePresentations(): void {
+    this.ctx.storage.sql.exec('DELETE FROM presentation_requests WHERE room_id IN (SELECT room_id FROM presentation_rooms WHERE expires_at <= ?)', this.now());
+    this.ctx.storage.sql.exec('DELETE FROM presentation_rooms WHERE expires_at <= ?', this.now());
+  }
+
+  private notifyPresentation(): void {
+    this.prunePresentations();
+    const beaconId = this.meta('beaconId')!;
+    // Do not await a callback into the room currently awaiting this beacon.
+    const rooms = this.ctx.storage.sql.exec<{ room_id: string }>('SELECT room_id FROM presentation_rooms').toArray();
+    this.ctx.waitUntil(Promise.all(rooms.map(({ room_id }) =>
+      roomStub(this.env, room_id).presentationChanged(beaconId, this.stateFor(room_id))
+        .catch(error => logError('presentation-notify-failed', error)),
+    )));
+  }
+
+  private async sendPresentation(ws: WebSocket): Promise<void> {
+    const p = this.presentationRecord();
+    if ((ws.deserializeAttachment() as AuthedAttachment)?.presentationVersion !== 1) return;
+    const token = p.roomId && p.expiresAt && p.expiresAt > this.now()
+      ? await signDataToken(this.env, p.roomId, p.expiresAt) : undefined;
+    // Signing yields: an older frame must not overtake a takeover or stop.
+    if (this.presentationRecord().revision !== p.revision || this.isRevoked()) return;
+    try {
+      ws.send(frame({ t: 'presentation', presentation: {
+        version: 1, revision: p.revision, target: p.target, expiresAt: p.expiresAt,
+        ...(token ? { dataToken: token } : {}),
+      } }));
+    } catch (error) { logError('presentation-screen-send-failed', error); }
+  }
+
+  private publishPresentation(): void {
+    this.notifyPresentation();
+    this.ctx.waitUntil(Promise.all(this.presentationSockets().map(ws => this.sendPresentation(ws))));
+    this.ctx.waitUntil(this.armPresentationAlarm());
+  }
+
+  private clearPresentation(): void {
+    const p = this.presentationRecord();
+    if (!p.target) return;
+    this.setMeta('presentation', JSON.stringify({ revision: p.revision + 1, roomId: null, target: null, expiresAt: null, status: 'idle' } satisfies StoredPresentation));
+    this.publishPresentation();
+  }
+
+  private expirePresentation(): void {
+    const p = this.presentationRecord();
+    if (p.expiresAt !== null && p.expiresAt <= this.now()) this.clearPresentation();
+  }
+
+  private async armPresentationAlarm(): Promise<void> {
+    const screen = Number(this.meta('screenExpiresAt') ?? 0);
+    const presentation = this.presentationRecord().expiresAt ?? 0;
+    const binding = this.ctx.storage.sql.exec<{ at: number | null }>('SELECT MIN(expires_at) AS at FROM presentation_rooms').one().at ?? 0;
+    const times = [screen, presentation, binding].filter(t => t > this.now());
+    if (times.length) await this.ctx.storage.setAlarm(Math.min(...times));
+    else if (!this.isRevoked()) await this.ctx.storage.deleteAlarm();
+  }
+
+  presentationStatus(roomId: string): PresentationState {
+    this.expirePresentation();
+    return this.stateFor(roomId);
+  }
+
+  async present(roomId: string, input: PresentationCommand): Promise<PresentationResult> {
+    this.expirePresentation();
+    this.prunePresentations();
+    const result = (error?: PresentationResult['error']): PresentationResult => ({
+      requestId: typeof input?.requestId === 'string' ? input.requestId : '',
+      state: this.stateFor(roomId), ...(error ? { error } : {}),
+    });
+    const command = parsePresentationCommand(input);
+    if (!command) return result('invalid-request');
+    const binding = this.ctx.storage.sql.exec<{ expires_at: number }>('SELECT expires_at FROM presentation_rooms WHERE room_id = ?', roomId).toArray()[0];
+    if (!binding || binding.expires_at <= this.now()) return result('not-allowed');
+    if (this.isRevoked() || !this.authenticatedSockets().length) return result('unavailable');
+    if (!this.presentationSockets().length) return result('unsupported');
+    const signature = JSON.stringify(command);
+    const receipt = this.ctx.storage.sql.exec<{ signature: string }>('SELECT signature FROM presentation_requests WHERE room_id = ? AND request_id = ?', roomId, command.requestId).toArray()[0];
+    if (receipt) {
+      if (receipt.signature !== signature) return result('invalid-request');
+      // A retry reads the current truth, never revives a superseded request.
+      this.ctx.waitUntil(Promise.all(this.presentationSockets().map(ws => this.sendPresentation(ws))));
+      return result();
+    }
+    const p = this.presentationRecord();
+    if (p.revision !== command.expectedRevision) return result('changed');
+    if (command.action === 'stop' && p.roomId !== roomId) return result('not-allowed');
+    if (command.action === 'present' && p.roomId && p.roomId !== roomId && !command.takeover) return result('occupied');
+    const count = this.ctx.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM presentation_requests WHERE room_id = ?', roomId).one().n;
+    if (count >= 120) return result('too-many-requests');
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec('INSERT INTO presentation_requests (room_id, request_id, signature) VALUES (?, ?, ?)', roomId, command.requestId, signature);
+      this.setMeta('presentation', JSON.stringify({
+        revision: p.revision + 1,
+        roomId: command.action === 'present' ? roomId : null,
+        target: command.action === 'present' ? command.target! : null,
+        expiresAt: command.action === 'present' ? binding.expires_at : null,
+        status: command.action === 'present' ? 'pending' : 'idle',
+      } satisfies StoredPresentation));
+    });
+    this.publishPresentation();
+    return result();
+  }
+
+  /** Called by a closing room; another visitor's presentation is unaffected. */
+  releasePresentation(roomId: string): void {
+    if (this.presentationRecord().roomId === roomId) this.clearPresentation();
+    this.ctx.storage.sql.exec('DELETE FROM presentation_requests WHERE room_id = ?', roomId);
+    this.ctx.storage.sql.exec('DELETE FROM presentation_rooms WHERE room_id = ?', roomId);
   }
 
   // --- RPC: provisioning ---------------------------------------------------
@@ -262,11 +407,24 @@ export class BeaconDO extends DurableObject<Env> {
         this.rejectChallenge(ws, attachment, 'auth-required');
         return;
       }
-      await this.handleAuth(ws, attachment, parsed.hmac);
+      await this.handleAuth(ws, attachment, parsed.hmac, parsed.presentationVersion);
       return;
     }
     if (parsed === null) {
       ws.send(frame({ t: 'error', error: 'bad-frame' }));
+      return;
+    }
+    if (attachment.presentationVersion === 1 && parsed.t === 'presented') {
+      this.expirePresentation();
+      const p = this.presentationRecord();
+      if (p.target && parsed.revision === p.revision) {
+        this.setMeta('presentation', JSON.stringify({ ...p, status: parsed.status }));
+        this.notifyPresentation();
+      }
+      return;
+    }
+    if (attachment.presentationVersion === 1 && parsed.t === 'presentation-stop') {
+      if (parsed.revision === this.presentationRecord().revision) this.clearPresentation();
       return;
     }
     if (parsed.t === 'more') {
@@ -304,9 +462,10 @@ export class BeaconDO extends DurableObject<Env> {
   private noteSocketGone(ws: WebSocket): void {
     if (this.socketsGone.has(ws)) return;
     this.socketsGone.add(ws);
+    this.notifyPresentation();
   }
 
-  private async handleAuth(ws: WebSocket, attachment: ChallengeAttachment, hmac: string): Promise<void> {
+  private async handleAuth(ws: WebSocket, attachment: ChallengeAttachment, hmac: string, presentationVersion?: 1): Promise<void> {
     if (this.isRevoked()) {
       ws.send(frame({ t: 'revoked' }));
       ws.close(CLOSE_REVOKED, 'revoked');
@@ -325,10 +484,28 @@ export class BeaconDO extends DurableObject<Env> {
       this.rejectChallenge(ws, attachment, 'auth-failed');
       return;
     }
-    const authed: AuthedAttachment = { phase: 'authed' };
+    const authed: AuthedAttachment = { phase: 'authed', ...(presentationVersion ? { presentationVersion } : {}) };
     ws.serializeAttachment(authed);
     await this.markOnline();
     await this.sendBatch(ws);
+    if (presentationVersion === 1) {
+      // A provisioned screen is a single physical display. A reload replaces
+      // the old connection, preventing acknowledgements from a ghost tab.
+      for (const previous of this.authenticatedSockets()) {
+        if (previous === ws) continue;
+        this.socketsGone.add(previous);
+        try { previous.close(4004, 'screen-replaced'); } catch { /* already closed */ }
+      }
+      this.expirePresentation();
+      const current = this.presentationRecord();
+      if (current.target) {
+        // A fresh screen connection must confirm its own paint. An old
+        // connection's acknowledgement cannot certify this renderer.
+        this.setMeta('presentation', JSON.stringify({ ...current, revision: current.revision + 1, status: 'pending' }));
+      }
+      await this.sendPresentation(ws);
+    }
+    this.notifyPresentation();
   }
 
   private rejectChallenge(ws: WebSocket, attachment: ChallengeAttachment, code: string): void {
@@ -444,18 +621,24 @@ export class BeaconDO extends DurableObject<Env> {
       area: areaSlug,
       screenLabel,
       screen: this.screenMetadata(),
+      beaconId: this.meta('beaconId')!,
       tickets: [
         { ticket: scannerTicket, role: 'scanner' },
         { ticket: kioskTicket, role: 'kiosk' },
       ],
     };
     const opened = await roomStub(this.env, roomId).open(open);
+    this.prunePresentations();
+    this.ctx.storage.sql.exec('INSERT INTO presentation_rooms (room_id, expires_at) VALUES (?, ?)', roomId, expiresAt);
+    this.ctx.waitUntil(this.armPresentationAlarm());
 
     this.countSession(now, areaSlug);
 
     for (const ws of kioskSockets) {
       try {
-        ws.send(frame({ t: 'unlocked', roomId, ticket: kioskTicket, expiresAt }));
+        if ((ws.deserializeAttachment() as AuthedAttachment).presentationVersion === 1) {
+          ws.send(frame({ t: 'paired', expiresAt }));
+        } else ws.send(frame({ t: 'unlocked', roomId, ticket: kioskTicket, expiresAt }));
       } catch (error) {
         logError('beacon-unlocked-send-failed', error);
       }
@@ -478,9 +661,10 @@ export class BeaconDO extends DurableObject<Env> {
 
   /** Only this screen and its codes expire; already opened rooms keep their grant. */
   async alarm(): Promise<void> {
+    this.expirePresentation();
+    this.prunePresentations();
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
-    if (!expiry) return;
-    if (this.now() < expiry) { await this.ctx.storage.setAlarm(expiry); return; }
+    if (!expiry || this.now() < expiry) { await this.armPresentationAlarm(); return; }
     await this.revoke();
     if (this.now() < expiry + 15 * 60_000) {
       await this.ctx.storage.setAlarm(expiry + 15 * 60_000);

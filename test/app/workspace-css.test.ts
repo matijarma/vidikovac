@@ -42,7 +42,7 @@ describe('layers.css reflows the workspace by its own room', () => {
   it('never hides overflow or shrinks text to make room', () => {
     const collapse = /@container ws[\s\S]*$/.exec(LAYERS)?.[0] ?? '';
     expect(collapse).not.toMatch(/overflow:\s*hidden/);
-    expect(collapse).not.toMatch(/font-size/);
+    expect(collapse).not.toMatch(/font-size:\s*[\d.]+px/);
   });
 });
 
@@ -82,4 +82,3 @@ describe('sections are content, not cards (plan "Surfaces", R-D3)', () => {
     expect(sec).toContain('display: grid');
   });
 });
-

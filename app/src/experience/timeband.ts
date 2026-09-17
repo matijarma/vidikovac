@@ -520,7 +520,7 @@ export function renderTimeband(i18n: I18n, model: TimebandModel): string {
  * reads the same clock. Within a minute nothing is touched.
  */
 export function tickTimebandClock(root: ParentNode, now: number): void {
-  const clock = root.querySelector('.tb-clock');
+  const clock = root.querySelector('.tb-clock, .day-clock');
   if (!clock) return;
   const time = zagrebTime(now);
   if (clock.textContent === time) return;

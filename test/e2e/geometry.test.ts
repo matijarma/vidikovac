@@ -45,7 +45,7 @@ describe('the thresholds the plan fixes', () => {
   });
 
   it('measures a source-line link by height (inline text, plan: Spacing) and every other control in both dimensions', () => {
-    expect(SOURCE_LINK_TARGETS).toEqual({ selector: '.provenance a, .source a, .maplibregl-ctrl-attrib a', minPx: TARGET_MIN_PX, axes: 'height' });
+    expect(SOURCE_LINK_TARGETS).toEqual({ selector: '.provenance a, .source a', minPx: TARGET_MIN_PX, axes: 'height' });
     expect(CONTROL_TARGETS.axes).toBe('both');
     expect(CONTROL_TARGETS.minPx).toBe(TARGET_MIN_PX);
     expect(CONTROL_TARGETS.selector).toContain(':not(.provenance a, .source a, .maplibregl-ctrl-attrib a)');

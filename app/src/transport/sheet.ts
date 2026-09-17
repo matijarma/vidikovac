@@ -40,7 +40,7 @@ export interface SheetDeps {
 
 const ORDER: readonly Detent[] = ['peek', 'half', 'open'];
 /** The head: a 24 px handle row and a 56 px board line. */
-const PEEK_REM = 5;
+const PEEK_REM = 7.5;
 /** The strip of map left above an open sheet. */
 const OPEN_GAP_REM = 2.5;
 /** Faster than this at release, the sheet goes one detent further in the finger's direction. */
@@ -74,7 +74,7 @@ interface Drag {
 export function createSheet(deps: SheetDeps): SheetController {
   const { root, sheet, head, body } = deps;
   const now = deps.now ?? (() => performance.now());
-  let current: Detent = 'half';
+  let current: Detent = 'peek';
   let stageHeight = -1;
   let drag: Drag | null = null;
   let dragEndedAt = Number.NEGATIVE_INFINITY;
@@ -86,7 +86,7 @@ export function createSheet(deps: SheetDeps): SheetController {
     if (detent === 'peek') return peek;
     const open = Math.max(peek, stage - OPEN_GAP_REM * rem);
     if (detent === 'open') return open;
-    return clamp(stage / 2, peek, open);
+    return clamp(stage * 0.38, peek, open);
   }
 
   function write(heightPx: number): void {
@@ -248,7 +248,7 @@ export function createSheet(deps: SheetDeps): SheetController {
   sheet.addEventListener('click', onClick, true);
 
   if (deps.reducedMotion) root.dataset.sheetMotion = 'none';
-  set('half', { animate: false });
+  set('peek', { animate: false });
 
   return {
     detent: () => current,

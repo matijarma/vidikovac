@@ -116,7 +116,8 @@ describe('static pages', () => {
     expect(html).toContain('nema prijave ni autentikacijskog kolačića');
     expect(html).toContain('Izvorni kod prototipa javan je od 15. rujna 2026.');
     expect(html).toContain('token za nastavak sesije i token kojim ta sesija dohvaća podatke');
-    expect(html).toContain('U localStorage ostaju tema, jezik, odabir laganog prikaza, odabrana četvrt, spremljene linije i stajališta te prekidači Obavijesti');
+    expect(html).toContain('U localStorage ostaju tema, jezik, lagani prikaz, odabrana četvrt, spremljene linije i stajališta te prekidači Obavijesti');
+    expect(html).toContain('pri izričitom prikazivanju šalje se samo odabrani javni pogled');
     expect(html).toContain('zaokruženi na 5, a ćelije s manje od 10 presavijene u „ostalo“');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });

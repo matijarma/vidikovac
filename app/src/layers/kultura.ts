@@ -321,12 +321,9 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const keep = (item: FeedItem): boolean => (!category || eventCategory(item) === category) && matchesQuery(item, query);
   const filtered = upcoming.filter(keep);
   const ongoingShown = ongoing.filter(keep);
-  const chipOf = (label: string, value: string, count: number): string =>
-    chip(label, { action: 'filter', extra: { 'filter-key': 'category', 'filter-value': value, tone: 'events' }, selected: category === value, count });
-  const chips = filterChips([
-    chipOf(i18n.t('events.allCategories'), '', upcoming.length),
-    ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => chipOf(categoryLabel(i18n, key), key, count)),
-  ], i18n.t('events.categoryLabel'));
+  const option = (label: string, value: string, count: number): string =>
+    `<option value="${escapeAttribute(value)}"${category === value ? ' selected' : ''}>${escapeHtml(label)} (${count})</option>`;
+  const categories = `<label class="ev-category"><span class="visually-hidden">${escapeHtml(i18n.t('events.categoryLabel'))}</span><select data-filter-key="category" data-testid="event-category">${option(i18n.t('events.allCategories'), '', upcoming.length)}${[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => option(categoryLabel(i18n, key), key, count)).join('')}</select></label>`;
   // The count line names what the lists below hold; the status word, never a head, sits beside it.
   const countText = filtered.length + ongoingShown.length
     ? ongoingShown.length ? i18n.t('events.countLine', { count: filtered.length, ongoing: ongoingShown.length }) : i18n.t('events.count', { count: filtered.length })
@@ -334,7 +331,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const badge = statusBadge(i18n, dogadanja, ctx.errors?.dogadanja);
   const countLine = countText || badge ? `<p class="ev-count" data-testid="ev-count">${countText ? `<span>${escapeHtml(countText)}</span>` : ''}${badge}</p>` : '';
   // Filters only when there is something to filter; the empty state speaks for itself.
-  const toolbar = `<div class="ws-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? chips : ''}${countLine}</div>`;
+  const toolbar = `<div class="ws-toolbar ev-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? categories : ''}${countLine}</div>`;
   const emptyText = query || category ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
   const shown = shownCount(ctx, 'events', AGENDA_PAGE, filtered.length);

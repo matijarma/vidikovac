@@ -23,6 +23,7 @@ import '../ui/signage.css';
 import '../ui/toast.css';
 import '../ui/panel.css';
 import '../ui/layers.css';
+import '../ui/overview.css';
 import '../ui/dashboard.css';
 import '../ui/kvart.css';
 import '../ui/dialog.css';

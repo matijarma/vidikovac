@@ -75,8 +75,12 @@
   --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem;
   --sp-5: 1.25rem; --sp-6: 1.5rem; --sp-8: 2rem; --sp-10: 2.5rem; --sp-12: 3rem;
 
-  --r-xs: 0.375rem; --r-sm: 0.5rem; --r-md: 0.875rem; --r-lg: 1rem;
-  --r-xl: 1.25rem; --r-2xl: 1.5rem; --r-pill: 999px;
+  --r-xs: 0.25rem; --r-sm: 0.375rem; --r-md: 0.625rem; --r-lg: 0.875rem;
+  --r-xl: 1.125rem; --r-2xl: 1.5rem; --r-pill: 999px;
+  --space-related: var(--sp-2);
+  --space-group: var(--sp-4);
+  --space-section: var(--sp-8);
+  --measure-prose: 68ch;
 
   /* Product motion: 140-220 ms, ease-out. */
   --dur-fast: 140ms; --dur-base: 180ms; --dur-slow: 220ms;
@@ -90,99 +94,99 @@
   --target: 2.75rem;
   --target-primary: 3rem;
 
-  /* Layer 1: light - papir i ultramarin */
-  --palette-light-canvas: #f4f2ec;
-  --palette-light-canvas-deep: #ece9df;
-  --palette-light-surface-1: #fbfaf6;
-  --palette-light-surface-2: #ebe8df;
-  --palette-light-surface-3: #ddd9cc;
-  --palette-light-text-primary: #0c1250;
-  --palette-light-text-muted: #4a5178;
-  --palette-light-text-subtle: #5a6187;
-  --palette-light-label: #363d73;
-  --palette-light-accent: #03409c;
-  --palette-light-accent-deep: #00327e;
-  --palette-light-on-accent: #ffffff;
-  --palette-light-warning: #8a5800;
-  --palette-light-danger: #b3271e;
-  --palette-light-success: #1e6f47;
-  --palette-light-events: #6b3fa0;
-  --palette-light-transit: #0c1250;
-  --palette-light-border: rgba(12, 18, 80, 0.14);
-  --palette-light-border-strong: rgba(12, 18, 80, 0.34);
-  --palette-light-glass: rgba(251, 250, 246, 0.9);
-  --palette-light-scrim: rgba(12, 18, 80, 0.42);
-  --palette-light-glow: rgba(3, 64, 156, 0.28);
-  --palette-light-shadow-soft: 0 1px 2px rgba(12, 18, 80, 0.05), 0 6px 20px rgba(12, 18, 80, 0.07);
-  --palette-light-shadow-md: 0 2px 4px rgba(12, 18, 80, 0.06), 0 12px 32px rgba(12, 18, 80, 0.12);
-  --palette-light-shadow-heavy: 0 16px 48px rgba(12, 18, 80, 0.2);
+  /* Daylight: low-chroma mineral surfaces, legible ink and Zagreb blue. */
+  --palette-light-canvas: #f1f4f7;
+  --palette-light-canvas-deep: #e5eaf0;
+  --palette-light-surface-1: #fbfcfe;
+  --palette-light-surface-2: #eaf0f6;
+  --palette-light-surface-3: #d7e0eb;
+  --palette-light-text-primary: #142334;
+  --palette-light-text-muted: #47586d;
+  --palette-light-text-subtle: #55677c;
+  --palette-light-label: #40536b;
+  --palette-light-accent: #0751bf;
+  --palette-light-accent-deep: #093e8a;
+  --palette-light-on-accent: #f7faff;
+  --palette-light-warning: #89521a;
+  --palette-light-danger: #b72d39;
+  --palette-light-success: #176b56;
+  --palette-light-events: #7040a2;
+  --palette-light-transit: #34465c;
+  --palette-light-border: rgba(20, 35, 52, 0.15);
+  --palette-light-border-strong: rgba(20, 35, 52, 0.48);
+  --palette-light-glass: #fbfcfe;
+  --palette-light-scrim: rgba(20, 35, 52, 0.42);
+  --palette-light-glow: rgba(7, 81, 191, 0.2);
+  --palette-light-shadow-soft: 0 1px 2px rgba(20, 35, 52, 0.05);
+  --palette-light-shadow-md: 0 4px 8px rgba(20, 35, 52, 0.04), 0 16px 32px rgba(20, 35, 52, 0.1);
+  --palette-light-shadow-heavy: 0 20px 64px rgba(20, 35, 52, 0.2);
 
-  /* Layer 1: dark - ultramarinska noć; the accent is paper, so a tram badge is paper-on-night */
-  --palette-dark-canvas: #0b1150;
-  --palette-dark-canvas-deep: #080c40;
-  --palette-dark-surface-1: #121a63;
-  --palette-dark-surface-2: #1a2373;
-  --palette-dark-surface-3: #26307f;
-  --palette-dark-text-primary: #f4f2ec;
-  --palette-dark-text-muted: #b6bbe0;
-  --palette-dark-text-subtle: #8f96c9;
-  --palette-dark-label: #b6bbe0;
-  --palette-dark-accent: #f4f2ec;
-  --palette-dark-accent-deep: #ffffff;
-  --palette-dark-on-accent: #0b1150;
-  --palette-dark-warning: #f2c46f;
-  --palette-dark-danger: #ff9d9d;
-  --palette-dark-success: #7fd6a8;
-  --palette-dark-events: #c9b3ff;
-  --palette-dark-transit: #9fb4ff;
-  --palette-dark-border: rgba(244, 242, 236, 0.14);
-  --palette-dark-border-strong: rgba(244, 242, 236, 0.34);
-  --palette-dark-glass: rgba(18, 26, 99, 0.86);
-  --palette-dark-scrim: rgba(4, 6, 32, 0.6);
-  --palette-dark-glow: rgba(244, 242, 236, 0.32);
-  --palette-dark-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --palette-dark-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 36px rgba(0, 0, 0, 0.45);
-  --palette-dark-shadow-heavy: 0 24px 64px rgba(0, 0, 0, 0.6);
+  /* Evening: distinct charcoal surfaces, softened blue and illuminated ink. */
+  --palette-dark-canvas: #111922;
+  --palette-dark-canvas-deep: #0c131c;
+  --palette-dark-surface-1: #192430;
+  --palette-dark-surface-2: #23313f;
+  --palette-dark-surface-3: #344457;
+  --palette-dark-text-primary: #eef3fa;
+  --palette-dark-text-muted: #b8c5d5;
+  --palette-dark-text-subtle: #9badc2;
+  --palette-dark-label: #bdcde0;
+  --palette-dark-accent: #84b5ff;
+  --palette-dark-accent-deep: #b0cfff;
+  --palette-dark-on-accent: #102236;
+  --palette-dark-warning: #efbc76;
+  --palette-dark-danger: #ff9aa5;
+  --palette-dark-success: #79d5b4;
+  --palette-dark-events: #c9aff0;
+  --palette-dark-transit: #b8c9dc;
+  --palette-dark-border: rgba(238, 243, 250, 0.16);
+  --palette-dark-border-strong: rgba(238, 243, 250, 0.42);
+  --palette-dark-glass: #23313f;
+  --palette-dark-scrim: rgba(12, 19, 28, 0.7);
+  --palette-dark-glow: rgba(132, 181, 255, 0.28);
+  --palette-dark-shadow-soft: 0 1px 0 rgba(238, 243, 250, 0.04);
+  --palette-dark-shadow-md: 0 12px 32px rgba(12, 19, 28, 0.4);
+  --palette-dark-shadow-heavy: 0 24px 64px rgba(12, 19, 28, 0.6);
 }
 /* The same palette in OKLCH where the engine renders it: even tints, even
    hover steps. The hex values above stay the measured fallback. */
 @supports (color: oklch(50% 0.1 180)) {
   :root {
-    --palette-light-canvas: oklch(96.10% 0.0083 91.5);
-    --palette-light-canvas-deep: oklch(93.36% 0.0137 93.0);
-    --palette-light-surface-1: oklch(98.48% 0.0054 95.1);
-    --palette-light-surface-2: oklch(93.08% 0.0125 91.5);
-    --palette-light-surface-3: oklch(88.49% 0.0181 92.7);
-    --palette-light-text-primary: oklch(23.11% 0.1111 270.0);
-    --palette-light-text-muted: oklch(44.58% 0.0647 275.7);
-    --palette-light-text-subtle: oklch(50.21% 0.0612 275.9);
-    --palette-light-label: oklch(38.22% 0.0917 275.6);
-    --palette-light-accent: oklch(40.07% 0.1605 260.1);
-    --palette-light-accent-deep: oklch(34.21% 0.1381 259.8);
-    --palette-light-on-accent: oklch(100% 0 0);
-    --palette-light-warning: oklch(50.38% 0.1082 71.5);
-    --palette-light-danger: oklch(50.21% 0.1776 28.9);
-    --palette-light-success: oklch(48.28% 0.1006 157.2);
-    --palette-light-events: oklch(46.85% 0.1522 301.7);
-    --palette-light-transit: oklch(23.11% 0.1111 270.0);
+    --palette-light-canvas: oklch(96.573% 0.00514 247.88);
+    --palette-light-canvas-deep: oklch(93.497% 0.00973 252.81);
+    --palette-light-surface-1: oklch(99.087% 0.00286 264.54);
+    --palette-light-surface-2: oklch(95.233% 0.01032 247.93);
+    --palette-light-surface-3: oklch(90.312% 0.01792 253.35);
+    --palette-light-text-primary: oklch(25.159% 0.03844 252.41);
+    --palette-light-text-muted: oklch(45.454% 0.04049 253.95);
+    --palette-light-text-subtle: oklch(50.702% 0.04005 252.52);
+    --palette-light-label: oklch(43.644% 0.04641 254.54);
+    --palette-light-accent: oklch(46.762% 0.18498 260.07);
+    --palette-light-accent-deep: oklch(38.156% 0.13746 259.07);
+    --palette-light-on-accent: oklch(98.425% 0.00738 260.73);
+    --palette-light-warning: oklch(49.206% 0.10019 61.44);
+    --palette-light-danger: oklch(51.790% 0.17375 21.36);
+    --palette-light-success: oklch(47.384% 0.08442 171.60);
+    --palette-light-events: oklch(47.710% 0.15425 303.66);
+    --palette-light-transit: oklch(38.848% 0.04412 253.82);
 
-    --palette-dark-canvas: oklch(22.87% 0.1126 269.7);
-    --palette-dark-canvas-deep: oklch(19.82% 0.0963 270.4);
-    --palette-dark-surface-1: oklch(27.09% 0.1267 270.0);
-    --palette-dark-surface-2: oklch(30.91% 0.1358 270.8);
-    --palette-dark-surface-3: oklch(35.30% 0.1327 272.2);
-    --palette-dark-text-primary: oklch(96.10% 0.0083 91.5);
-    --palette-dark-text-muted: oklch(80.04% 0.0525 279.1);
-    --palette-dark-text-subtle: oklch(68.64% 0.0755 278.2);
-    --palette-dark-label: oklch(80.04% 0.0525 279.1);
-    --palette-dark-accent: oklch(96.10% 0.0083 91.5);
-    --palette-dark-accent-deep: oklch(100% 0 0);
-    --palette-dark-on-accent: oklch(22.87% 0.1126 269.7);
-    --palette-dark-warning: oklch(84.36% 0.1160 81.5);
-    --palette-dark-danger: oklch(79.59% 0.1174 20.0);
-    --palette-dark-success: oklch(80.85% 0.1076 159.6);
-    --palette-dark-events: oklch(81.24% 0.1076 297.2);
-    --palette-dark-transit: oklch(78.25% 0.1099 271.7);
+    --palette-dark-canvas: oklch(20.994% 0.02156 251.79);
+    --palette-dark-canvas-deep: oklch(18.432% 0.02147 254.98);
+    --palette-dark-surface-1: oklch(25.574% 0.02758 251.09);
+    --palette-dark-surface-2: oklch(30.697% 0.03162 248.89);
+    --palette-dark-surface-3: oklch(38.099% 0.03864 253.08);
+    --palette-dark-text-primary: oklch(96.238% 0.01080 256.70);
+    --palette-dark-text-muted: oklch(81.842% 0.02668 253.60);
+    --palette-dark-text-subtle: oklch(74.062% 0.03648 252.34);
+    --palette-dark-label: oklch(84.211% 0.03179 252.72);
+    --palette-dark-accent: oklch(76.798% 0.11904 258.41);
+    --palette-dark-accent-deep: oklch(84.836% 0.07527 259.03);
+    --palette-dark-on-accent: oklch(24.751% 0.04522 252.34);
+    --palette-dark-warning: oklch(82.618% 0.10553 74.24);
+    --palette-dark-danger: oklch(79.298% 0.12122 13.18);
+    --palette-dark-success: oklch(80.639% 0.10100 168.56);
+    --palette-dark-events: oklch(79.881% 0.09429 302.63);
+    --palette-dark-transit: oklch(82.897% 0.03253 251.16);
   }
 }
 

@@ -46,6 +46,8 @@ import {
   type ServerEvent,
 } from '../protocol';
 import { indexStub } from './index-do';
+import { beaconStub } from './beacon-do';
+import { parsePresentationCommand, type PresentationState } from '../presentation';
 
 /** randomId(10) → 16 Crockford symbols. */
 export const ROOM_ID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
@@ -80,6 +82,8 @@ export interface RoomOpenInput {
   area: string | null;
   screenLabel: string | null;
   screen?: ScreenMetadata;
+  /** Set by BeaconDO only when a physical screen issues this grant. */
+  beaconId?: string;
   tickets: RoomTicket[];
 }
 
@@ -147,6 +151,7 @@ function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
     params?: unknown;
     name?: unknown;
     dim?: unknown;
+    command?: unknown;
   };
   try {
     parsed = JSON.parse(message) as typeof parsed;
@@ -155,6 +160,11 @@ function parseClient(message: string | ArrayBuffer): RoomClientMessage | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   switch (parsed.t) {
+    case 'presentation-get': return { t: 'presentation-get' };
+    case 'present': {
+      const command = parsePresentationCommand(parsed.command);
+      return command ? { t: 'present', command } : null;
+    }
     case 'join':
       return typeof parsed.ticket === 'string' && parsed.ticket.length <= 64
         ? { t: 'join', ticket: parsed.ticket }
@@ -316,6 +326,7 @@ export class RoomDO extends DurableObject<Env> {
       this.setMeta('area', input.area ?? '');
       this.setMeta('screenLabel', input.screenLabel ?? '');
       if (input.screen) this.setMeta('screen', JSON.stringify(input.screen));
+      if (input.beaconId && input.beaconType === 'kiosk') this.setMeta('beaconId', input.beaconId);
       this.setMeta('phase', 'live');
       for (const entry of input.tickets) {
         this.ctx.storage.sql.exec(
@@ -414,6 +425,24 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
     switch (parsed.t) {
+      case 'presentation-get': {
+        const beaconId = this.meta('beaconId');
+        if (beaconId && this.isDriver(attachment)) {
+          const state = await beaconStub(this.env, beaconId).presentationStatus(this.meta('roomId')!);
+          this.safeSend(ws, frame({ t: 'presentation', state }));
+        }
+        return;
+      }
+      case 'present': {
+        const beaconId = this.meta('beaconId');
+        if (!beaconId || !this.isDriver(attachment)) {
+          this.safeSend(ws, frame({ t: 'error', error: 'presentation-not-allowed' }));
+          return;
+        }
+        const result = await beaconStub(this.env, beaconId).present(this.meta('roomId')!, parsed.command);
+        this.safeSend(ws, frame({ t: 'presentation-result', result }));
+        return;
+      }
       case 'join':
       case 'resume':
         this.safeSend(ws, frame({ t: 'error', error: 'already-joined' }));
@@ -548,6 +577,9 @@ export class RoomDO extends DurableObject<Env> {
     ws.serializeAttachment(attachment);
     const dataToken = await signDataToken(this.env, roomId, expiresAt);
     const participants = this.joinedSockets(replaced).length;
+    const beaconId = this.meta('beaconId');
+    const presentation = beaconId && role === 'scanner'
+      ? await beaconStub(this.env, beaconId).presentationStatus(roomId) : undefined;
     this.safeSend(
       ws,
       frame({
@@ -559,6 +591,7 @@ export class RoomDO extends DurableObject<Env> {
         dataToken,
         participants,
         ...(this.screenMetadata() ? { screen: this.screenMetadata()! } : {}),
+        ...(presentation ? { presentation } : {}),
       }),
     );
     const count = frame({ t: 'count', participants });
@@ -574,6 +607,15 @@ export class RoomDO extends DurableObject<Env> {
       )
       .toArray()[0];
     return driver !== undefined && driver.resume_token === attachment.resumeToken;
+  }
+
+  /** Internal callback. It cannot bind a room to a different screen. */
+  presentationChanged(beaconId: string, state: PresentationState): void {
+    if (!this.isLive() || this.meta('beaconId') !== beaconId) return;
+    for (const peer of this.joinedSockets()) {
+      const attachment = peer.deserializeAttachment() as RoomAttachment;
+      if (this.isDriver(attachment)) this.safeSend(peer, frame({ t: 'presentation', state }));
+    }
   }
 
   /** A view from anyone else is dropped in silence: it is not an error the person made. */
@@ -710,6 +752,8 @@ export class RoomDO extends DurableObject<Env> {
     // Marked closed before anything else: a retried alarm must not send a second
     // 'expired' or count a second session_end.
     this.setMeta('phase', 'closed');
+    const beaconId = this.meta('beaconId');
+    if (beaconId) this.ctx.waitUntil(beaconStub(this.env, beaconId).releasePresentation(this.meta('roomId')!).catch(error => logError('presentation-release-failed', error)));
     this.broadcast(frame({ t: 'expired' }));
     for (const ws of this.ctx.getWebSockets()) {
       this.socketsGone.add(ws);

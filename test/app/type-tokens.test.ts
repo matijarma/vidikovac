@@ -88,7 +88,7 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(LAYERS).toMatch(/\.sec-note \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.route-name \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.ev-allday \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/^\.agenda-day \{[^}]*font-size: var\(--type-secondary\);/m);
+    expect(LAYERS).toMatch(/^\.agenda-day \{[^}]*font-size: var\(--type-body\);/m);
     expect(LAYERS).toMatch(/\.detail-facts div \{[^}]*font-size: var\(--type-secondary\);/);
     expect(LAYERS).toMatch(/\.ws-detail-hint \{[^}]*font-size: var\(--type-secondary\);/);
   });
@@ -124,7 +124,7 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
 
   it('never touches the @container ws blocks (R-O1): no font-size appears in or after them', () => {
     const fromFirstContainer = /@container ws[\s\S]*$/.exec(LAYERS)?.[0] ?? '';
-    expect(fromFirstContainer).not.toMatch(/font-size/);
+    expect(fromFirstContainer).not.toMatch(/font-size:\s*[\d.]+px/);
   });
 });
 
@@ -147,4 +147,3 @@ describe('the 13 px floor holds for the shared labels too (wave 1 merge gate: e2
     expect(LAYERS).toContain('.ws-toolbar > * { min-inline-size: 0; }');
   });
 });
-

@@ -29,6 +29,12 @@ import {
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
 import { districtLabel } from './districts';
+import type { Composition } from './layout';
+import { venueOutsideZagreb, cultureEvents as clientCultureEvents, upcomingEvents, ongoingEvents } from '../layers/kultura';
+import { weatherMarkup } from './markup';
+import { weatherNow } from './local';
+import { weatherIcon } from '../experience/weather-icon';
+import { iconMarkup } from '../ui/icons';
 
 export type PanelId = 'tonight' | 'weather' | 'city' | 'promet' | 'around';
 export const PANEL_IDS: readonly PanelId[] = ['tonight', 'weather', 'city', 'promet', 'around'];
@@ -43,6 +49,7 @@ export interface FrontInput {
   locale: string;
   /** R-L2: no map under lagano, so the field is the lines board and the promet panel does not repeat the lines. */
   lightweight: boolean;
+  composition?: Composition;
 }
 
 /** One row of a panel's list: a lead cell (a time, a distance, a badge), a title, one line of context. */
@@ -122,7 +129,7 @@ function eventCredit(items: readonly FeedItem[], i18n: I18n): string {
 
 /** Culture and community events: every dated row that is not the Assembly's (the city panel has those). */
 function cultureEvents(dogadanja: ModuleSnapshot | undefined): FeedItem[] {
-  return (isLive(dogadanja) ? dogadanja.items : []).filter((item) => isDatedEvent(item) && dataText(item, 'source') !== 'skupstina');
+  return clientCultureEvents(dogadanja).filter(item => !venueOutsideZagreb(item) && isDatedEvent(item));
 }
 
 export function tonightPanel(input: FrontInput): FrontPanel {
@@ -136,20 +143,24 @@ export function tonightPanel(input: FrontInput): FrontPanel {
   const running = today.filter((item) => startOf(item) < now).sort((a, b) => startOf(b) - startOf(a));
   const tomorrowKey = zagrebDayAfter(now, 1);
   const tomorrow = all.filter((item) => dayKey(item.at!) === tomorrowKey).sort((a, b) => startOf(a) - startOf(b));
+  const future = upcomingEvents(all, now).filter(item => !sameZagrebDay(item.at!, now) && dayKey(item.at!) !== tomorrowKey);
+  const ongoing = ongoingEvents(all, now).filter(item => !sameZagrebDay(item.at!, now));
   const rows = [
     ...upcoming.map((item) => eventRow(item, s, i18n)),
     ...running.map((item) => eventRow(item, s, i18n)),
     ...tomorrow.map((item) => eventRow(item, s, i18n, s.say.tomorrow)),
+    ...ongoing.map(item => eventRow(item, s, i18n, s.paired.ongoingWord)),
+    ...future.map(item => eventRow(item, s, i18n, weekdayDayMonth(input.locale, item.at!))),
   ];
   const meta = [today.length > 0 ? plural(input.locale, s.front.eventsToday, today.length) : '', tomorrow.length > 0 ? plural(input.locale, s.front.eventsTomorrow, tomorrow.length) : ''].filter(Boolean).join(' · ');
   const note = state === 'loading' ? i18n.t('status.loading') : state === 'down' ? s.paired.sourceDown : rows.length === 0 ? s.front.eventsNone : undefined;
   return {
     id: 'tonight',
-    kicker: today.length > 0 ? s.say.tonight : s.front.tomorrowCity,
+    kicker: i18n.t('layers.kultura'),
     meta,
     rows,
     note,
-    credit: eventCredit([...today, ...tomorrow], i18n),
+    credit: eventCredit([...today, ...tomorrow, ...ongoing, ...future], i18n),
     state,
   };
 }
@@ -180,21 +191,24 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   const today = forecastFor(snap, dayKey(now));
   // Tomorrow is the figure: people plan by it; today's range stands under it (the header already says the weather now).
   const lead = tomorrow ?? today;
-  if (!lead) {
-    return { id: 'weather', kicker: s.say.forecast, rows: [], note: state === 'loading' ? s.weather.loading : state === 'down' ? s.paired.sourceDown : s.paired.rangeUnknown, credit: 'DHMZ', state };
-  }
   const leadIsTomorrow = lead === tomorrow;
-  const figure = `<p class="k-panel-figure">${escapeHtml(rangeOf(lead, s, locale))}</p>${lead.summary ? `<p class="k-panel-text">${escapeHtml(lead.summary)}</p>` : conditionWord(lead) ? `<p class="k-panel-text">${escapeHtml(conditionWord(lead))}</p>` : ''}`;
+  const observed = weatherNow(input.modules, s, locale);
+  const glyph = weatherIcon(observed.condition);
+  const observation = `<div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(observed.temperature ?? (observed.state === 'loading' ? s.weather.loading : s.weather.noReading))}</span></div><p class="k-condition">${escapeHtml(observed.condition)}</p><p class="k-meta">${escapeHtml(`DHMZ · ${observed.observedAt || s.paired.noData}${observed.state === 'stale' ? ` · ${s.paired.stale}` : ''}`)}</p>`;
+  const hasRange = lead && dataNumber(lead, 'tmin') !== null && dataNumber(lead, 'tmax') !== null;
+  const forecast = lead
+    ? `<p class="k-weather-day">${escapeHtml(leadIsTomorrow ? s.say.tomorrow : s.say.today)}</p><p class="${hasRange ? 'k-panel-figure' : 'k-panel-text'}">${escapeHtml(rangeOf(lead, s, locale))}</p>${lead.summary ? `<p class="k-panel-text">${escapeHtml(lead.summary)}</p>` : conditionWord(lead) ? `<p class="k-panel-text">${escapeHtml(conditionWord(lead))}</p>` : ''}`
+    : `<p class="k-weather-day">${escapeHtml(s.say.forecast)}</p><p class="k-panel-text">${escapeHtml(state === 'loading' ? s.weather.loading : state === 'down' ? s.paired.sourceDown : s.paired.rangeUnknown)}</p>`;
+  const figure = `<div class="k-weather-current">${observation}</div><div class="k-weather-outlook">${forecast}</div>`;
   const rows: FrontRow[] = [];
   if (leadIsTomorrow && today) {
     rows.push({ key: 'forecast:today', lead: s.paired.today, title: rangeOf(today, s, locale), sub: conditionWord(today) || today.summary || undefined });
   }
-  const dateWord = lead.at ? weekdayDayMonth(locale, lead.at) : '';
   return {
     id: 'weather',
-    kicker: leadIsTomorrow ? s.say.forecast : s.paired.today,
-    meta: dateWord,
-    rows,
+    kicker: input.i18n.t('layers.zrak-i-nebo'),
+    meta: undefined,
+    rows: [],
     figureMarkup: figure,
     credit: 'DHMZ',
     state,
@@ -348,7 +362,24 @@ export function aroundPanel(input: FrontInput): FrontPanel {
 // --- All five, and their markup ---------------------------------------------------
 
 export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
-  return { tonight: tonightPanel(input), weather: weatherPanel(input), city: cityPanel(input), promet: prometPanel(input), around: aroundPanel(input) };
+  const all = { tonight: tonightPanel(input), weather: weatherPanel(input), city: cityPanel(input), promet: prometPanel(input), around: aroundPanel(input) };
+  const compact = input.composition === 'compact';
+  const handheld = input.composition === 'handheld';
+  const caps: Record<PanelId, number> = handheld
+    ? { tonight: 5, weather: 0, city: 3, promet: 6, around: 3 }
+    : { tonight: compact ? 1 : 2, weather: 0, city: 1, promet: compact ? 3 : 6, around: 1 };
+  for (const id of PANEL_IDS) {
+    const p = all[id];
+    const total = id === 'promet' && input.stop ? input.stop.routes.length : p.rows.length;
+    p.rows = p.rows.slice(0, caps[id]);
+    if (id === 'city' && p.rows.length) {
+      p.credit = [...new Set(p.rows.map(row => row.key.startsWith('session:') ? ASSEMBLY_SOURCE : row.key === 'gazette' || row.key.startsWith('act:') ? input.strings.paired.acts : CITY_SOURCE))].join(' · ');
+    }
+    if (total > p.rows.length && (id === 'promet' || id === 'tonight')) {
+      p.meta = `${p.rows.length} / ${total}${p.meta ? ` · ${p.meta}` : ''}`;
+    }
+  }
+  return all;
 }
 
 function rowMarkup(row: FrontRow): string {

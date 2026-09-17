@@ -4,7 +4,7 @@
 // is exactly how a person without a phone meets them.
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
-import { APP_URL, E2E_STOP_ID, health, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
+import { APP_URL, E2E_STOP_ID, health, localContext, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
 
 // The two sizes newdesignsystem.md and Vidikovac.dc.html were drawn at: kiosk 1080p
@@ -249,8 +249,8 @@ test.describe('the moving map has a text path (R-F5)', () => {
   }) => {
     expect((await health(request, APP_URL)).networkCheck).toBe('off');
 
-    const kioskCtx = await browser.newContext({ ...devices['Desktop Chrome'], viewport: KIOSK });
-    const phoneCtx = await browser.newContext({ ...devices['Pixel 7'] });
+    const kioskCtx = await localContext(browser, { ...devices['Desktop Chrome'], viewport: KIOSK });
+    const phoneCtx = await localContext(browser, { ...devices['Pixel 7'] });
     try {
       // A stopless screen, as this proof was written for: with the screen's stop known the phone's U pokretu sheet opens
       // on a route of that stop rather than on the running-routes list, which is the phone's own behaviour to settle

@@ -32,7 +32,7 @@ const LAYERS: readonly LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'si
 const DETENTS = ['peek', 'half', 'open'] as const;
 type Detent = (typeof DETENTS)[number];
 /** Sheet detents: peek 5rem; half 50% of the stage; open leaves 2.5rem of the stage. */
-const PEEK_PX = 80;
+const PEEK_PX = 120;
 const PEEK_TOLERANCE_PX = 2;
 const HALF_TOLERANCE = 0.02;
 const OPEN_GAP_PX = 40;
@@ -262,7 +262,7 @@ test('the header stays pinned: after scrolling 1,500 px on Sada, .ki-head still 
 });
 
 // --- 3. detents ------------------------------------------------------------------------
-test('the Promet sheet has three detents: the chevron cycles peek, half, open; peek is 80 px, half is half the stage, open leaves 40 px of map; a handle drag and a body drag snap to the next detent', async ({ page }) => {
+test('the Promet sheet cycles search-visible peek, 38% detail and open; handle and body drags snap between detents', async ({ page }) => {
   await openDashboard(page, PHONE);
   await openLayer(page, 'u-pokretu');
   await waitForMap(page, /^(ready|tiles-failed|unavailable)$/);
@@ -286,7 +286,7 @@ test('the Promet sheet has three detents: the chevron cycles peek, half, open; p
 
   await cycleTo(page, 'half');
   const half = await visibleSheetHeight(page);
-  expect(Math.abs(half.sheet - half.stage / 2), `at half the sheet covers half the stage within ${HALF_TOLERANCE * 100}%; it shows ${fmt(half.sheet)} of ${fmt(half.stage)}`).toBeLessThanOrEqual(HALF_TOLERANCE * half.stage);
+  expect(Math.abs(half.sheet - half.stage * 0.38), `the detail detent preserves the map and covers 38% of the stage; it shows ${fmt(half.sheet)} of ${fmt(half.stage)}`).toBeLessThanOrEqual(HALF_TOLERANCE * half.stage);
 
   await cycleTo(page, 'open');
   const open = await visibleSheetHeight(page);
@@ -351,45 +351,19 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
 });
 
 // --- 4b. the time band's phone form ---------------------------------------------------------
-test('segments and swipe stay in sync: the sutra segment scrolls the lane row three lanes over and marks the sutra lane current, a swipe back one lane presses večeras, and nothing overflows', async ({ page }) => {
+test('time filtering changes the agenda without losing local information or presenting it automatically', async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await settle(page, fixture);
-  const segment = (col: string) => page.locator(`[data-testid=tb-seg] .tb-seg-btn[data-filter-value=${col}]`);
+  const segment = (col: string) => page.locator(`[data-testid=tb-seg] .day-time[data-filter-value=${col}]`);
   await expect(segment('sada'), 'the sada segment is pressed at first').toHaveAttribute('aria-pressed', 'true');
   await segment('sutra').click();
-  await expect(page.getByTestId('tb-lane-sutra'), 'the sutra lane is current once its segment is pressed').toHaveAttribute('data-current', 'true');
   await expect(segment('sutra')).toHaveAttribute('aria-pressed', 'true');
-  // Scrolled to the fourth lane: the row reads lane 3 by the sync's own arithmetic (scrollLeft ≈ 3 × clientWidth; the
-  // gap between lanes puts the snap point a little past it), and the sutra lane's start edge sits at the row's content edge.
-  const laneRow = () => page.evaluate((snap) => {
-    const el = document.querySelector<HTMLElement>('[data-testid=tb-lanes]')!;
-    const lane = el.querySelector('[data-col=sutra]')!.getBoundingClientRect();
-    const row = el.getBoundingClientRect();
-    const contentLeft = row.left + parseFloat(getComputedStyle(el).paddingInlineStart);
-    return { left: el.scrollLeft, width: el.clientWidth, index: Math.round(el.scrollLeft / el.clientWidth), sutraAtStart: Math.abs(lane.left - contentLeft) <= snap };
-  }, LANE_SNAP_PX);
-  await expect.poll(async () => {
-    const row = await laneRow();
-    return row.width > 0 && row.index === 3 && row.sutraAtStart;
-  }, { message: `the lane row must scroll to the fourth lane: round(scrollLeft / clientWidth) = 3 and the sutra lane's start at the row's content edge within ${LANE_SNAP_PX} px; it reads ${JSON.stringify(await laneRow())}` }).toBe(true);
-  // The glide the segment started has ended before a finger lands (a touch on a moving row cuts the glide short).
-  await page.waitForTimeout(SETTLE_MS);
-
-  const laneState = () => page.evaluate(() => {
-    const row = document.querySelector<HTMLElement>('[data-testid=tb-lanes]')!;
-    return {
-      left: Math.round(row.scrollLeft),
-      pressed: document.querySelector('.tb-seg-btn[aria-pressed="true"]')?.getAttribute('data-filter-value') ?? null,
-      current: row.querySelector('.tb-lane[data-current="true"]')?.getAttribute('data-col') ?? null,
-    };
-  });
-  const cdp = await page.context().newCDPSession(page);
-  const lanes = await boxOf(page, '[data-testid=tb-lanes]');
-  expect(lanes, 'the lane row [data-testid=tb-lanes] must be on the page to swipe').not.toBeNull();
-  const y = Math.min(lanes!.top + 120, PHONE.height - 120);
-  const travel = Math.round(lanes!.width * LANE_SWIPE_FRACTION);
-  await touchDragX(cdp, page, y, lanes!.cx - travel / 2, lanes!.cx + travel / 2);
-  await expect.poll(laneState, { message: `a ${travel} px swipe towards the start settles on the previous lane: the row snaps to večeras, its segment is pressed and its lane is current` }).toMatchObject({ pressed: 'veceras', current: 'veceras' });
+  expect(await page.locator('.day-event').evaluateAll(rows => rows.every(row => row.getAttribute('data-col') === 'sutra'))).toBe(true);
+  await expect(page.getByTestId('tb-lane-sada')).toBeVisible();
+  await segment('veceras').click();
+  await expect(segment('veceras')).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.locator('.day-event').evaluateAll(rows => rows.every(row => row.getAttribute('data-col') === 'veceras'))).toBe(true);
+  expect(fixture.events.filter(event => event.t === 'present' || event.t === 'view')).toEqual([]);
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth, `the lane row scrolls inside itself; the document must not widen past ${PHONE.width} px (it is ${scrollWidth} px)`).toBeLessThanOrEqual(PHONE.width + EDGE_TOLERANCE_PX);
 });
@@ -475,7 +449,7 @@ async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: {
     }
     if (segments) {
       const seg = document.querySelector<HTMLElement>('[data-testid=tb-seg]');
-      const spans = seg ? [...seg.querySelectorAll<HTMLElement>('.tb-seg-btn > span')] : [];
+      const spans = seg ? [...seg.querySelectorAll<HTMLElement>('.day-time')] : [];
       if (!seg || seg.getBoundingClientRect().height <= 0) out.push('the time segments [data-testid=tb-seg] must show on the phone at 200%');
       else if (spans.length !== count) out.push(`the segments carry ${spans.length} words; ${count} time words expected`);
       for (const span of spans) {
@@ -518,9 +492,11 @@ test('at 200% text the document keeps its width, the header and the tab bar have
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await page.waitForTimeout(300);
   expect(await zoomCompactIssues(page, PHONE, { segments: true }), 'zoom-compact state at 200% text on Sada').toEqual([]);
+  await page.getByTestId('tab-more').click();
   await page.getByTestId('tab-kvart').click();
   await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
-  await expect(page.getByTestId('tab-kvart'), 'the Kvart tab is the current one, so its label is the measured one').toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('tab-more')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('tab-more')).toHaveText('Kvart');
   await page.waitForTimeout(300);
   expect(await zoomCompactIssues(page, PHONE, { segments: false }), 'zoom-compact state at 200% text with the Kvart tab open').toEqual([]);
 });
@@ -578,9 +554,9 @@ test('the expiry notices sit in the banners row without covering content: expiri
 
 // --- 10. desktop first paint ------------------------------------------------------------------------
 /** The desk's directory (D10): Promet ahead of the four extra domains, in this order. */
-const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo'];
+const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo'];
 
-test('at 1440 the desk paints before the session joins: no side rail, the session card reads the connecting text, Još opens the five-domain directory in order, and the kvart aside carries the cast control', async ({ page }) => {
+test('at 1440 the desk paints before the session joins, keeps the screen control in the header and opens the domain directory', async ({ page }) => {
   await page.setViewportSize(DESK);
   // A room that never answers: the join is swallowed, so the page stays in its first paint.
   await page.routeWebSocket('**/ws/room/**', () => {});
@@ -596,5 +572,6 @@ test('at 1440 the desk paints before the session joins: no side rail, the sessio
   await expect(rows, 'the directory lists Promet and the four extra domains').toHaveCount(DESK_DIRECTORY.length);
   expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), 'the directory rows in order').toEqual(DESK_DIRECTORY);
   for (const layer of DESK_DIRECTORY) await expect(page.getByTestId(`dir-${layer}`), `the directory row dir-${layer}`).toBeVisible();
-  await expect(page.locator('[data-testid=kvart-aside] [data-testid=cast-screen]'), 'the desk keeps the kvart panel as an aside, its cast control in place').toBeVisible();
+  await expect(page.getByTestId('kvart-aside')).toBeHidden();
+  await expect(page.locator('.ki-domains [data-layer]')).toHaveCount(6);
 });

@@ -18,6 +18,7 @@ import { loadStops } from '../../app/src/core/screens';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
+import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 
 stubSessionStorage();
 stubLocalStorage();
@@ -34,11 +35,14 @@ function fakeSession(now: () => number = () => NOW) {
     joined: [] as ((s: SessionSnapshot) => void)[], expiring: [] as ((n: number) => void)[], expired: [] as (() => void)[],
     count: [] as ((n: number) => void)[], codes: [] as ((batch: unknown[], serverNow: number) => void)[],
     error: [] as ((code: string, reason?: 'revoked' | 'no-ticket') => void)[], close: [] as ((code: number) => void)[],
+    presentation: [] as ((state: PresentationState) => void)[],
+    result: [] as ((result: PresentationResult) => void)[],
   };
   let snapshot: SessionSnapshot = { phase: 'connecting', role: null, expiresAt: null, dataToken: null, participants: 0, secondsLeft: 0 };
   let runOut = false;
   const sent: { layer: LayerId; params?: Record<string, string> }[] = [];
   const events: { name: string; dim?: string }[] = [];
+  const presentations: PresentationCommand[] = [];
   const client: SessionClient = {
     connect: vi.fn(), snapshot: () => snapshot, serverNow: () => now(),
     secondsLeft: () => (runOut ? 0 : Math.max(0, Math.floor(((snapshot.expiresAt ?? now()) - now()) / 1000))),
@@ -46,6 +50,10 @@ function fakeSession(now: () => number = () => NOW) {
     onExpiring: (l) => { listeners.expiring.push(l); return () => {}; },
     onExpired: (l) => { listeners.expired.push(l); return () => {}; },
     onView: () => () => {},
+    onPresentation: l => { listeners.presentation.push(l); return () => {}; },
+    onPresentationResult: l => { listeners.result.push(l); return () => {}; },
+    present: command => { presentations.push(command); },
+    refreshPresentation: vi.fn(),
     onCodes: (l) => { listeners.codes.push(l as never); return () => {}; },
     onCount: (l) => { listeners.count.push(l); return () => {}; },
     onError: (l) => { listeners.error.push(l); return () => {}; },
@@ -54,11 +62,13 @@ function fakeSession(now: () => number = () => NOW) {
     share: vi.fn(), event: (name, dim) => { events.push({ name, dim }); }, close: vi.fn(),
   };
   return {
-    client, sent, events,
+    client, sent, events, presentations,
     join(role: 'scanner' | 'phone' = 'scanner', screen?: SessionSnapshot['screen']) {
-      snapshot = { phase: 'live', role, expiresAt: EXPIRES, dataToken: 'dt1', participants: 2, secondsLeft: 600, ...(screen ? { screen } : {}) };
+      snapshot = { phase: 'live', role, expiresAt: EXPIRES, dataToken: 'dt1', participants: 2, secondsLeft: 600, ...(screen ? { screen } : {}), ...(screen && role === 'scanner' ? { presentation: { version: 1 as const, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle' as const, online: true, supported: true } } : {}) };
       listeners.joined.forEach((l) => l(snapshot));
     },
+    presentation(state: PresentationState) { snapshot = { ...snapshot, presentation: state }; listeners.presentation.forEach(l => l(state)); },
+    result(result: PresentationResult) { listeners.result.forEach(l => l(result)); },
     expiring: (n: number) => listeners.expiring.forEach((l) => l(n)),
     expire() { snapshot = { ...snapshot, phase: 'expired' }; listeners.expired.forEach((l) => l()); },
     drop() { snapshot = { ...snapshot, phase: 'connecting' }; listeners.close.forEach((l) => l(1006)); },
@@ -114,6 +124,10 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 8; i += 1) await 
 const text = (el: Element | null | undefined): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 interface Root { querySelector<E extends Element = Element>(selectors: string): E | null }
 function click(root: Root, selector: string): HTMLElement {
+  if (selector === '[data-testid=tab-kvart]' && !root.querySelector(selector)) {
+    const more = root.querySelector<HTMLElement>('[data-testid=tab-more], [data-testid=status-more]');
+    more?.click();
+  }
   const el = root.querySelector<HTMLElement>(selector);
   expect(el, selector).not.toBeNull();
   el!.click();
@@ -121,6 +135,8 @@ function click(root: Root, selector: string): HTMLElement {
 }
 /** Opens a domain the tab bar does not carry, the way a reader does: Još, then its directory row. */
 function openViaMore(root: Root, layer: LayerId): void {
+  const primary = root.querySelector<HTMLElement>(`.ki-tabs [data-layer="${layer}"], .ki-domains [data-layer="${layer}"]`);
+  if (primary) { primary.click(); return; }
   click(root, '[data-testid=tab-more]');
   click(root, `[data-testid=dir-${layer}]`);
 }
@@ -140,8 +156,8 @@ describe('shell and navigation', () => {
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(root.querySelectorAll('[data-testid=session-label]')).toHaveLength(1);
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('data-layer')).toBe('sigurnost');
-    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Promet', 'Kvart', 'Još']);
-    expect(root.querySelector('.ki-tabs [data-testid=tab-kvart]')).not.toBeNull();
+    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Promet', 'Događanja', 'Još']);
+    expect(root.querySelector('.ki-tabs [data-layer=kultura]')).not.toBeNull();
     expect(root.querySelectorAll('.ki-side-link')).toHaveLength(0);
     const options = [...root.querySelectorAll<HTMLOptionElement>('[data-testid=kvart-select] option')];
     expect(options).toHaveLength(18);
@@ -176,7 +192,7 @@ describe('shell and navigation', () => {
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo']);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
@@ -259,7 +275,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
-    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'District', 'More']);
+    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'Events', 'More']);
     scanner.handle.destroy();
 
     const peer = mount();
@@ -535,15 +551,15 @@ describe('failure and recovery', () => {
     } });
     session.join();
     await flush();
-    expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
-    expect(root.querySelector('[data-testid=tb-lane-sada] [data-action=retry][data-module=glasnik]')).not.toBeNull();
+    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
+    expect(root.querySelector('.day-more [data-action=retry][data-module=glasnik]')).not.toBeNull();
     failNow = true;
     tick();
     await flush();
     expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
-    expect(text(root.querySelector('.tb-temp'))).toBe('21 °C');
+    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
     fetchData.mockClear();
-    click(root, '[data-testid=tb-lane-sada] [data-action=retry][data-module=glasnik]');
+    click(root, '.day-more [data-action=retry][data-module=glasnik]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['glasnik']);
   });
@@ -732,12 +748,12 @@ describe('the full map view (transport)', () => {
     desk.handle.selectLayer('u-pokretu');
     await flush();
     const thumb = desk.root.querySelector('[data-testid=kvart-map-canvas]');
-    const thumbIndex = mapFactory.mock.calls.findIndex(([o]) => o.container.dataset.testid === 'kvart-map-canvas');
-    expect(mapFactory.mock.calls[thumbIndex]?.[0].renderer ?? 'map').toBe('map');
+    expect(thumb).toBeNull();
+    expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'kvart-map-canvas')).toHaveLength(0);
     expect(mapFactory.mock.calls.find(([o]) => o.container.dataset.testid === 'map-canvas')?.[0].renderer).toBe('schema');
     click(desk.root, '[data-testid=map-mode-toggle]');
     expect(desk.root.querySelector('[data-testid=kvart-map-canvas]')).toBe(thumb);
-    expect(mapFactory.mock.results[thumbIndex]?.value.destroy).not.toHaveBeenCalled();
+    expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'kvart-map-canvas')).toHaveLength(0);
     desk.handle.destroy();
   });
 });
@@ -905,7 +921,7 @@ describe('the sticky header and notices in flow', () => {
       scrollTo.mockClear();
       const desk = mount({ wide: true });
       click(desk.root, '[data-testid=status-more]');
-      click(desk.root, '[data-testid=dir-kultura]');
+      click(desk.root, '.ki-domains [data-layer=kultura]');
       expect(desk.root.querySelector('#layer-kultura')).not.toBeNull();
       expect(scrollTo).not.toHaveBeenCalled();
       desk.handle.destroy();
@@ -1027,7 +1043,7 @@ describe('the shell regions', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;
     const order = [...shell.children].filter((el) => !el.matches('h1, p')).map((el) => el.className);
-    expect(order).toEqual(['ki-head ki-status', 'ki-banners', 'ki-main', 'ki-kvart', 'ki-fab-slot', 'ki-tabbar']);
+    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-kvart', 'ki-fab-slot', 'ki-tabbar']);
     expect(shell.querySelector('.ki-rail')).toBeNull();
     expect(shell.querySelector('nav.ki-side')).toBeNull();
     const head = shell.querySelector<HTMLElement>('header.ki-head')!;
@@ -1111,12 +1127,10 @@ describe('the status line', () => {
     expect(phone.root.querySelector('[data-testid=tab-more]')).not.toBeNull();
     phone.handle.destroy();
     const desk = mount({ wide: true });
-    expect(keys(desk.root)).toEqual(['wordmark', 'kvart', 'more', 'search', 'clock', 'session', 'bell', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'kvart', 'space', 'clock', 'session', 'more', 'domains']);
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
-    expect(text(desk.root.querySelector('[data-testid=status-search]'))).toBe('Traži liniju ili stanicu');
-    const bell = desk.root.querySelector<HTMLElement>('[data-testid=status-bell]')!;
-    expect(bell.getAttribute('aria-label')).toBe('Obavijesti, isključene');
-    expect(bell.dataset.active).toBe('0');
+    expect([...desk.root.querySelectorAll('.ki-domains [data-layer]')].map(el => el.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost']);
+    expect(desk.root.querySelector('[data-testid=status-search]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=tab-more]'), 'the desk has no tab bar').toBeNull();
     expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
     desk.handle.destroy();
@@ -1147,9 +1161,9 @@ describe('the status line', () => {
     expect(clock.getAttribute('href')).toBe('#layer=zrak-i-nebo');
     expect(clock.dataset.layer).toBe('zrak-i-nebo');
     expect(text(clock.querySelector('time'))).toBe('14:32');
-    expect(text(clock.querySelector('.tb-temp'))).toBe('21 °C');
-    expect([...clock.querySelectorAll('svg use')].map((u) => u.getAttribute('href'))).toEqual(['#icon-sun', '#icon-sunset']);
-    expect(clock.getAttribute('aria-label')).toMatch(/^14:32, vedro, 21 °C, zalazak \d{2}:\d{2}\. Otvori Vrijeme\.$/);
+    expect(clock.querySelector('.tb-temp')).toBeNull();
+    expect(text(live.root.querySelector('.day-weather-now strong'))).toBe('21 °C');
+    expect(clock.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
     live.handle.destroy();
     const down = mount({ wide: true, snapshot: (module) => { if (module === 'dhmz-now') throw new Error('down'); return snapshotOf(module); } });
     down.session.join();
@@ -1199,20 +1213,21 @@ describe('the status line', () => {
     expect(text(none.root.querySelector('[data-testid=status-line] .ki-kvart-name'))).toBe('Cijeli grad');
     expect(text(none.root.querySelector('[data-testid=status-line] option[value=screen]'))).toBe('Cijeli grad');
   });
-  it('the bell opens the notify sheet', () => {
+  it('neighborhood preferences open the notify sheet', () => {
     const { root } = mount({ wide: true });
-    click(root, '[data-testid=status-bell]');
+    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=kvart-notify]');
     const sheet = document.querySelector<HTMLDialogElement>('[data-testid=notify-sheet]')!;
     expect(sheet).not.toBeNull();
     expect(sheet.hasAttribute('open')).toBe(true);
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Obavijesti');
   });
-  it('the desktop search launcher opens Promet and focuses its search field on a lightweight mount', () => {
+  it('desktop transport navigation exposes the single search field in lightweight mode', () => {
     const { root, session } = mount({ wide: true, lightweight: true });
     session.join();
-    click(root, '[data-testid=status-search]');
+    click(root, '.ki-domains [data-layer=u-pokretu]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
-    expect(document.activeElement?.id).toBe('u-pokretu-light-search');
+    expect(root.querySelector('#u-pokretu-light-search')).not.toBeNull();
     expect(session.sent).toEqual([]);
   });
 });
@@ -1220,107 +1235,128 @@ describe('the status line', () => {
 describe('explicit casting (D5)', () => {
   const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
   const screen = { kind: 'venue' as const, expiresAt: null, stop: STOP };
-  const why = (root: Root): string => text(root.querySelector('[data-testid=cast-why]'));
-  const castButton = (root: Root): HTMLButtonElement => root.querySelector<HTMLButtonElement>('[data-testid=cast-screen]')!;
+  const state = (over: Partial<PresentationState> = {}): PresentationState => ({ version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true, ...over });
 
-  it('a scanner with a screen gets the FAB on Sada; a tap sends one view frame for the current layer, announces it, and marks the button sent for 1.5 s', () => {
-    const { root, session, tick } = mount();
+  it('keeps a single header control on every workspace and never broadcasts navigation', () => {
+    const { root, session } = mount();
     session.join('scanner', screen);
-    const shell = root.querySelector<HTMLElement>('.ki')!;
-    expect(shell.dataset.fab).toBe('1');
-    const fab = root.querySelector<HTMLButtonElement>('[data-region=fab] [data-testid=cast-fab]')!;
-    expect(fab.getAttribute('aria-label')).toBe('Na zaslon: pošalji Sada na zaslon Kavana Velebit');
-    expect(text(fab)).toBe('Na zaslon');
-    expect(fab.querySelector('svg use')?.getAttribute('href')).toBe('#icon-cast');
-    fab.click();
-    expect(session.sent).toEqual([{ layer: 'grad-sada' }]);
-    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Poslano na zaslon: Sada.');
-    expect(root.querySelector<HTMLElement>('[data-testid=cast-fab]')!.dataset.sent).toBe('1');
-    tick();
-    expect(root.querySelector<HTMLElement>('[data-testid=cast-fab]')!.dataset.sent).toBeUndefined();
-    // The Kvart panel's primary sends the same frame again; two taps, two frames, never a mirror of navigation.
-    click(root, '[data-testid=tab-kvart]');
-    const button = castButton(root);
-    expect(button.getAttribute('aria-disabled')).toBeNull();
-    expect(why(root)).toBe('Zaslon: Kavana Velebit · stanica Trg bana J. Jelačića');
-    button.click();
-    expect(session.sent).toEqual([{ layer: 'grad-sada' }, { layer: 'grad-sada' }]);
-    expect(castButton(root).dataset.sent).toBe('1');
+    expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
+    for (const layer of ['u-pokretu', 'kultura', 'grad-sada'] as const) {
+      click(root, `.ki-tabs [data-layer="${layer}"]`);
+      expect(root.querySelectorAll('[data-testid=screen-control]')).toHaveLength(1);
+    }
+    expect(session.sent).toEqual([]);
+    expect(session.presentations).toEqual([]);
+    click(root, '[data-testid=screen-control]');
+    expect(session.client.refreshPresentation).toHaveBeenCalled();
+    expect(session.presentations).toEqual([]);
+    click(root, '[data-testid=present-view]');
+    expect(session.presentations).toHaveLength(1);
+    expect(session.presentations[0]).toMatchObject({ version: 1, action: 'present', expectedRevision: 0, target: { layer: 'grad-sada' } });
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Čekamo potvrdu');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).not.toContain('Prikazano');
   });
-  it('the desk casts the current selection: an open event detail goes to the screen as layer plus params', async () => {
+  it('announces success only when the screen acknowledges the revision', () => {
+    const { root, session } = mount();
+    session.join('scanner', screen);
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=present-view]');
+    const request = session.presentations[0]!;
+    session.presentation(state({ revision: 1, target: request.target!, owner: 'self', status: 'pending', expiresAt: EXPIRES }));
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).not.toContain('Prikazano');
+    session.presentation(state({ revision: 1, target: request.target!, owner: 'self', status: 'displayed', expiresAt: EXPIRES }));
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Prikazano na zaslonu.');
+    click(root, '[data-testid=stop-presentation]');
+    expect(session.presentations[1]).toMatchObject({ action: 'stop', expectedRevision: 1 });
+    expect(session.presentations[1]).not.toHaveProperty('target');
+  });
+  it('keeps visible and announced feedback when a rendered subject disappears and recovers without another request', () => {
+    const { root, session } = mount();
+    session.join('scanner', screen);
+    const shown = state({ revision: 1, target: { layer: 'kultura' }, owner: 'self', status: 'displayed', expiresAt: EXPIRES });
+    session.presentation(shown);
+    click(root, '[data-testid=screen-control]');
+    session.presentation({ ...shown, status: 'unavailable' });
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Odabrani sadržaj više nije dostupan.');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Odabrani sadržaj više nije dostupan.');
+    session.presentation(shown);
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toBe('Prikazano na zaslonu.');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Prikazano na zaslonu.');
+    expect(session.presentations).toHaveLength(0);
+  });
+  it('the desk presents the selected event by public key, never its private browser state', async () => {
     const { root, session } = mount({ wide: true });
     session.join('scanner', screen);
     await flush();
-    click(root, '[data-testid=status-more]');
-    click(root, '[data-testid=dir-kultura]');
+    click(root, '.ki-domains [data-layer=kultura]');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(session.sent).toEqual([]);
-    click(root, '[data-testid=kvart-aside] [data-testid=cast-screen]');
-    expect(session.sent).toEqual([{ layer: 'kultura', params: { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' } }]);
-    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Poslano na zaslon: Događanja.');
+    click(root, '[data-testid=screen-control]');
+    expect(text(root.querySelector('[data-testid=presentation-panel]'))).toContain('Koncert u parku');
+    click(root, '[data-testid=present-view]');
+    expect(session.presentations[0]!.target).toEqual({ layer: 'kultura', selection: { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' } });
   });
-  it('without a screen the control is disabled and says so; a one-hop peer is told the screen follows the scanner; before the join it is connecting', () => {
+  it('does not offer public-screen controls to a peer or a session without a screen', () => {
     const noScreen = mount();
     noScreen.session.join();
-    expect(noScreen.root.querySelector('[data-testid=cast-fab]')).toBeNull();
-    click(noScreen.root, '[data-testid=tab-kvart]');
-    let button = castButton(noScreen.root);
-    expect(button.getAttribute('aria-disabled')).toBe('true');
-    expect(button.getAttribute('title')).toBe('Ova sesija nema zaslon.');
-    expect(why(noScreen.root)).toBe('Ova sesija nema zaslon.');
-    button.click();
-    expect(noScreen.session.sent).toEqual([]);
+    expect(noScreen.root.querySelector('[data-testid=screen-control]')).toBeNull();
     noScreen.handle.destroy();
-
     const peer = mount();
     peer.session.join('phone', screen);
-    expect(peer.root.querySelector('[data-testid=cast-fab]')).toBeNull();
-    click(peer.root, '[data-testid=tab-kvart]');
-    button = castButton(peer.root);
-    expect(button.getAttribute('aria-disabled')).toBe('true');
-    expect(why(peer.root)).toBe('Zaslon prati telefon koji je skenirao kod.');
-    button.click();
-    expect(peer.session.sent).toEqual([]);
+    expect(peer.root.querySelector('[data-testid=screen-control]')).toBeNull();
+    expect(peer.session.presentations).toEqual([]);
     peer.handle.destroy();
-
-    const connecting = mount();
-    click(connecting.root, '[data-testid=tab-kvart]');
-    expect(castButton(connecting.root).getAttribute('aria-disabled')).toBe('true');
-    expect(why(connecting.root)).toBe('Povezivanje sa zaslonom…');
   });
-  it('after the freeze the panel stays painted with the frozen reason and the FAB is gone', () => {
+  it('freezing the client disables presentation without disturbing the readable snapshot', () => {
+    const { root, session } = mount();
+    session.join('scanner', screen);
+    click(root, '[data-testid=screen-control]');
+    session.expire();
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    expect(root.querySelector<HTMLButtonElement>('[data-testid=present-view]')!.disabled).toBe(true);
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Sesija je završila');
+    click(root, '[data-testid=present-view]');
+    expect(session.presentations).toEqual([]);
+  });
+  it('requires confirmation before taking over and binds that confirmation to the observed revision', () => {
+    const { root, session } = mount();
+    session.join('scanner', screen);
+    session.presentation(state({ revision: 4, owner: 'other', target: { layer: 'kultura' }, expiresAt: EXPIRES, status: 'displayed' }));
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=present-view]');
+    expect(session.presentations).toEqual([]);
+    expect(text(root.querySelector('.present-confirm'))).toContain('zamijeniti prikaz druge osobe');
+    session.presentation(state({ revision: 5, owner: 'other', target: { layer: 'sigurnost' }, expiresAt: EXPIRES, status: 'displayed' }));
+    click(root, '[data-action=present-confirm]');
+    expect(session.presentations[0]).toMatchObject({ takeover: true, expectedRevision: 4 });
+    session.result({ requestId: session.presentations[0]!.requestId, state: state({ revision: 5 }), error: 'changed' });
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz na zaslonu se promijenio');
+  });
+  it('reports an unconfirmed request after eight seconds and retries with the same request id', () => {
+    let clock = NOW;
+    const { root, session, tick } = mount({ now: () => clock });
+    session.join('scanner', screen);
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=present-view]');
+    clock += 8100;
+    tick();
+    expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Prikaz nije potvrđen');
+    click(root, '[data-action=present-retry]');
+    expect(session.presentations).toHaveLength(2);
+    expect(session.presentations[1]).toEqual(session.presentations[0]);
+  });
+  it('presents the visible Kvart workspace, not the domain hidden underneath it', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
     click(root, '[data-testid=tab-kvart]');
-    session.expire();
-    expect(root.querySelector('#layer-kvart')).not.toBeNull();
-    expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
-    expect(castButton(root).getAttribute('aria-disabled')).toBe('true');
-    expect(why(root)).toBe('Sesija je završila; zaslon više ne prima prikaz.');
-    castButton(root).click();
-    expect(session.sent).toEqual([]);
-  });
-  it('the FAB is absent at the desk, under the directory, in the Kvart tab and on Promet', () => {
-    const desk = mount({ wide: true });
-    desk.session.join('scanner', screen);
-    expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
-    expect(desk.handle.element.dataset.fab).toBe('0');
-    desk.handle.destroy();
-    const phone = mount();
-    phone.session.join('scanner', screen);
-    const fab = (): Element | null => phone.root.querySelector('[data-testid=cast-fab]');
-    expect(fab()).not.toBeNull();
-    click(phone.root, '[data-testid=tab-more]');
-    expect(fab()).toBeNull();
-    click(phone.root, '[data-testid=tab-kvart]');
-    expect(fab()).toBeNull();
-    click(phone.root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
-    expect(fab()).toBeNull();
-    expect(phone.handle.element.dataset.fab).toBe('0');
-    click(phone.root, '.ki-tabs [data-action=nav][data-layer=grad-sada]');
-    expect(fab()).not.toBeNull();
-    expect(phone.handle.element.dataset.fab).toBe('1');
+    const select = root.querySelector<HTMLSelectElement>('#kv-kvart')!;
+    select.value = 'trnje';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=present-view]');
+    expect(session.presentations[0]!.target).toEqual({ layer: 'kvart', district: 'trnje' });
   });
   it('save and unsave bubble from any workspace control into the saved store, which persists them', () => {
     const { root } = mount();
@@ -1344,8 +1380,7 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     expect(document.title).toBe('Kaj ima? · Kvart');
     expect(document.activeElement?.id).toBe('layer-title-kvart');
     expect(text(root.querySelector('#layer-title-kvart'))).toBe('Cijeli grad');
-    expect(tab.getAttribute('aria-current')).toBe('page');
-    expect(tab.getAttribute('aria-expanded')).toBe('true');
+    expect(tab.isConnected).toBe(false); // The directory gives way to the workspace.
     expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
     expect(root.querySelector<HTMLElement>('.ki')!.dataset.panel).toBe('kvart');
     expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('');
@@ -1353,11 +1388,11 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     expect(root.querySelector('#layer-kvart select#kv-kvart[data-action=kvart-pick]')).not.toBeNull();
     expect(root.querySelector('#layer-kvart label[for=kv-kvart]')).not.toBeNull();
     expect(session.sent).toEqual([]);
-    click(root, '[data-testid=tab-kvart]');
+    click(root, '.ki-tabs [data-layer=grad-sada]');
     expect(root.querySelector('#layer-kvart')).toBeNull();
     expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
     expect(root.querySelector<HTMLElement>('.ki')!.dataset.panel).toBe('');
-    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-testid=tab-kvart]')).toBeNull();
   });
   it('a district picked in the panel’s own select renames the panel head and the status line together', () => {
     const { root } = mount();
@@ -1375,7 +1410,7 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(root.querySelector('#layer-kvart')).toBeNull();
-    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-current')).toBe('false');
+    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-current')).not.toBe('page');
     click(root, '[data-testid=tab-kvart]');
     expect(root.querySelector('#layer-kvart')).not.toBeNull();
     expect(root.querySelector('#layer-directory')).toBeNull();
@@ -1383,9 +1418,9 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     click(root, '.ki-tabs [data-action=nav][data-layer=grad-sada]');
     session.join();
     session.expire();
-    click(root, '[data-testid=tab-kvart]');
+    click(root, '[data-testid=tab-more]');
     expect(root.querySelector('#layer-kvart')).toBeNull();
-    expect(root.querySelector('[data-testid=tab-kvart]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(root.querySelector('#layer-directory')).toBeNull();
   });
   it('the desk lists five domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
     const today = { id: 'kp:3', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Večer poezije', at: '2026-09-11T17:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'knjizevnost', precision: 'time' } };
@@ -1397,27 +1432,29 @@ describe('the Kvart tab and the desktop aside (D9, D10)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(more.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'kultura', 'uprava-i-pravo']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo']);
     expect(text(root.querySelector('[data-testid=dir-u-pokretu] .row-sub'))).toBe('0 vozila ZET-a u pokretu');
-    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('1 događanje danas');
+    expect(root.querySelector('.ki-domains [data-layer=kultura]')).not.toBeNull();
     expect(text(root.querySelector('[data-testid=dir-zrak-i-nebo] .row-sub'))).toBe('21 °C, vedro');
     click(root, '[data-testid=dir-u-pokretu]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
     expect(root.querySelector('[data-testid=status-more]')?.getAttribute('aria-expanded')).toBe('false');
   });
-  it('the desk keeps the kvart panel as an aside beside the workspace, with the cast control and no second selector; the phone’s aside is hidden and empty', () => {
+  it('the desk opens Kvart as a workspace and never mounts a competing map sidebar', () => {
     const desk = mount({ wide: true });
     desk.session.join();
     const aside = desk.root.querySelector<HTMLElement>('[data-testid=kvart-aside]')!;
-    expect(aside.hidden).toBe(false);
-    const panel = aside.querySelector<HTMLElement>('[data-testid=kvart-panel]')!;
+    expect(aside.hidden).toBe(true);
+    expect(aside.children).toHaveLength(0);
+    click(desk.root, '[data-testid=tab-kvart]');
+    const panel = desk.root.querySelector<HTMLElement>('#layer-kvart')!;
     expect(panel.tagName).toBe('SECTION');
-    expect(panel.classList.contains('kv')).toBe(true);
-    expect(panel.getAttribute('aria-labelledby')).toBe('kv-aside-title');
-    expect(text(panel.querySelector('#kv-aside-title'))).toBe('Cijeli grad');
-    expect(panel.querySelector('[data-testid=cast-screen]')).not.toBeNull();
-    expect(panel.querySelector('[data-testid=kvart-select]')).toBeNull();
-    expect(desk.root.querySelectorAll('[data-testid=kvart-select]')).toHaveLength(1);
+    expect(panel.classList.contains('ws-kvart')).toBe(true);
+    expect(panel.getAttribute('aria-labelledby')).toBe('layer-title-kvart');
+    expect(text(panel.querySelector('#layer-title-kvart'))).toBe('Cijeli grad');
+    expect(panel.querySelector('[data-testid=cast-screen]')).toBeNull();
+    expect(panel.querySelector('[data-testid=kvart-select]')).not.toBeNull();
+    expect(desk.root.querySelectorAll('[data-testid=kvart-select]')).toHaveLength(2);
     desk.handle.destroy();
     const phone = mount();
     phone.session.join();
@@ -1501,7 +1538,7 @@ describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
     expect(loadLastRun).toHaveBeenCalledWith('106_1');
     const tiles = [...root.querySelectorAll<HTMLElement>('[data-testid=tile-lastrun]')];
     expect(tiles).toHaveLength(2);
-    expect(tiles.every((t) => t.closest('[data-testid=tb-lane-veceras]') !== null)).toBe(true);
+    expect(tiles.every((t) => t.closest('.day-event[data-col=veceras]') !== null)).toBe(true);
     expect(tiles[0]!.getAttribute('aria-label')).toBe('00:09, Zadnji polazak, Črnomerec - Dubec, po rasporedu · ZET GTFS'); // the xs badge replaces the kicker visually; the name says it
     expect(text(tiles[0])).toContain('00:09');
     expect(text(tiles[0])).toContain('po rasporedu · ZET GTFS');

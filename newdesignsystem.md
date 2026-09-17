@@ -1,4 +1,8 @@
 # Kaj ima? — the "Dan grada" system
+> Historical implementation guide. Superseded by the owner-approved redesign
+> of 17 September 2026 in `PRODUCT.md`, `DESIGN.md` and
+> `docs/redesign-2026-09-17.md`. Do not restore its screen layout rules.
+
 Design system & implementation guide · v1 · 14. 9. 2026
 
 One time axis, one tile, one blue. What to change in `app/src/ui/*.css`, `app/src/layers/*` and `app/src/kiosk/*` to turn the current /d/ and /kiosk/ into the "iteracija 4a" design (palette) with layout from "iteracija 3" (time band + Zagreb blue + glyphs).

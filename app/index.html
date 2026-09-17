@@ -6,7 +6,7 @@
 <title>Kaj ima? · Manje zaslona. Više grada.</title>
 <meta name="description" content="Kaj ima? pretvara otvorene podatke Zagreba u javni zaslon i deset minuta grada na tvom uređaju. Bez računa, instalacije i oglasa.">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f4f2ec">
+<meta name="theme-color" content="#f1f4f7">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="hr_HR">
 <meta property="og:title" content="Kaj ima? · Manje zaslona. Više grada.">
@@ -30,7 +30,7 @@
       <a href="/hitno" data-i18n="nav.safety">Sigurnost</a>
       <a href="/s/" data-i18n="landing.actions.scanShort">Upiši kod</a>
       <span data-lang-toggle></span>
-      <a class="ld-nav-try" href="#isprobaj" data-i18n="landing.actions.try">Isprobaj</a>
+      <a class="ld-nav-try" href="#isprobaj" data-testid="cta-try" data-i18n="landing.actions.try">Isprobaj</a>
     </nav>
   </div>
 </header>
@@ -43,8 +43,8 @@
         <p class="ld-lead" data-i18n="landing.lead">Tvoj tramvaj. Plan za večeras. Što se mijenja u kvartu. Saznaj što ti treba, pa nastavi svojim putem.</p>
         <p class="ld-intro" data-i18n="landing.intro">Kaj ima? donosi otvorene podatke grada na javni zaslon i u tvoju ruku.</p>
         <div class="ld-actions" data-testid="landing-actions">
-          <a class="ld-button" href="#kako-radi" data-testid="cta-story"><span data-i18n="landing.actions.story">Pogledaj kako radi</span><span aria-hidden="true">↓</span></a>
-          <a class="ld-text-link" href="#isprobaj" data-testid="cta-try"><span data-i18n="landing.actions.try">Isprobaj</span><span aria-hidden="true">↗</span></a>
+          <a class="ld-button" href="/kiosk/" target="_blank" rel="noopener" aria-describedby="ld-new-tab" data-testid="cta-kiosk-primary"><span data-i18n="landing.actions.kiosk">Otvori gradski zaslon</span><span aria-hidden="true">↗</span></a>
+          <a class="ld-text-link" href="#kako-radi" data-testid="cta-story"><span data-i18n="landing.actions.story">Pogledaj kako radi</span><span aria-hidden="true">↓</span></a>
         </div>
       </div>
     </div>
@@ -99,7 +99,7 @@
           <article class="ld-chapter" data-chapter="1" aria-labelledby="ld-take">
             <div class="ld-chapter-copy">
               <h3 id="ld-take" data-i18n="landing.story.takeTitle">Ponesi.</h3>
-              <p data-i18n="landing.story.takeBody">Skeniraj kod i grad je deset minuta na tvom uređaju. Bez računa. Bez instalacije. Otvori ono što te zanima, od svoje linije do večerašnjeg programa.</p>
+              <p data-i18n="landing.story.takeBody">Skeniraj kod i grad je deset minuta na tvom uređaju. Bez računa i instalacije. Pregledavaj privatno, a ono što želiš podijeliti pokaži na javnom zaslonu gumbom Zaslon.</p>
               <p class="ld-chapter-note" data-i18n="landing.story.takeNote">Deset minuta za ono što ti treba.</p>
             </div>
             <figure class="ld-chapter-figure ld-chapter-one-phone">
@@ -153,7 +153,7 @@
       </figure>
       <figure class="ld-feature ld-feature-day">
         <div class="ld-feature-image ld-device ld-device-screen"><picture data-capture="desktop"><source media="(prefers-color-scheme: dark)" srcset="/landing/desktop-hr-dark-720.webp 720w, /landing/desktop-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw"><img src="/landing/desktop-hr-light-720.webp" srcset="/landing/desktop-hr-light-720.webp 720w, /landing/desktop-hr-light-1280.webp 1280w" sizes="(min-width: 960px) 60vw, 90vw" width="1440" height="900" loading="lazy" decoding="async" alt="Radna površina: gradske informacije od sada do kraja tjedna, uz kartu odabrane četvrti." data-capture-alt="desktop"></picture></div>
-        <figcaption><h3 data-i18n="landing.evidence.dayTitle">Sada. Večeras. Sutra.</h3><p data-i18n="landing.evidence.dayBody">Promet, radovi, najave i gradske odluke na jednoj vremenskoj osi, uz odabrani kvart.</p></figcaption>
+        <figcaption><h3 data-i18n="landing.evidence.dayTitle">Sada. Večeras. Sutra.</h3><p data-i18n="landing.evidence.dayBody">Promet i promjene u tvom kvartu uz ono što slijedi: najave, događanja i gradske odluke, s vlastitim vremenom i izvorom.</p></figcaption>
       </figure>
     </div>
     <p class="ld-domains-line" data-i18n="landing.evidence.domains">Sada · Promet · Vrijeme · Sigurnost · Grad · Događanja</p>

@@ -44,7 +44,7 @@ export function codeFromScan(payload: string): string | null {
 }
 
 export function codeUrl(code: string, base: string = CODE_URL_BASE): string {
-  return `${base.replace(/\/$/, '')}/s#${formatCode(code)}`;
+  return `${base.replace(/\/$/, '')}/s/#${formatCode(code)}`;
 }
 
 /** "A B C D, E F G H" — for aria-labels and the kiosk's read-aloud button. */

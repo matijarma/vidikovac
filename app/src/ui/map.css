@@ -83,7 +83,7 @@
 .t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { min-block-size: var(--target); padding-inline-end: var(--target); border-radius: var(--r-pill); box-shadow: var(--tone-shadow-soft); background: var(--tone-surface-1); color: var(--tone-text-muted); }
 .t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding-inline-end: 0; min-inline-size: var(--target); }
 .t-map-canvas .maplibregl-ctrl-attrib-button { inline-size: var(--target); block-size: var(--target); background-repeat: no-repeat; background-position: center; }
-.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { line-height: var(--target); padding-inline-start: var(--sp-3); }
+.t-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { line-height: 1.4; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3); max-width: 18rem; }
 .t-map-canvas .maplibregl-ctrl-group { background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); border-radius: var(--r-sm); }
 .t-map-canvas .maplibregl-ctrl-group button { inline-size: var(--target); block-size: var(--target); }
 .t-map-canvas .maplibregl-ctrl-group button + button { border-top-color: var(--tone-stroke); }
@@ -91,7 +91,7 @@
 :root[data-theme-resolved='dark'] .t-map-canvas { --t-ctrl-filter: invert(1) hue-rotate(180deg); }
 .t-map-canvas .maplibregl-ctrl-scale { background: transparent; border-color: var(--tone-text-muted); color: var(--tone-text-muted); font-size: var(--type-secondary); }
 /* MapLibre's zoom control starts under the chip row, its right edge on the tools' edge. */
-.t-map-canvas .maplibregl-ctrl-top-right { margin-block-start: calc(var(--target) + var(--sp-3)); }
+.t-map-canvas .maplibregl-ctrl-top-right { margin-block-start: 0; }
 .t-map-canvas .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px var(--sp-2) 0 0; }
 @media (max-width: 39.99rem) {
   .t-map-canvas .maplibregl-ctrl-scale { display: none; }
@@ -132,7 +132,7 @@
 .t-sheet-head, .transport-toolbar { flex: none; }
 .t-sheet-head {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2);
-  padding: 0 var(--sp-3) var(--sp-2); min-block-size: 5rem; touch-action: none; cursor: grab;
+  padding: 0 var(--sp-3) var(--sp-2); min-block-size: 3.75rem; touch-action: none; cursor: grab;
 }
 .transport[data-dragging='true'] .t-sheet-head { cursor: grabbing; }
 .t-sheet-handle {
@@ -151,7 +151,7 @@
 .t-sheet-body[data-at-top='true'] { touch-action: pan-down; }
 .t-sheet-content { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .t-sheet-note { margin: var(--sp-4) 0 0; color: var(--tone-text-muted); font-size: var(--text-sm); }
-.transport[data-sheet='peek'] .transport-toolbar, .transport[data-sheet='peek'] .t-sheet-body { visibility: hidden; }
+.transport[data-sheet='peek'] .t-sheet-body { visibility: hidden; }
 
 /* --- Type in the sheet --------------------------------------------------- */
 .t-title { margin: 0; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.01em; line-height: var(--lh-title); display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
@@ -270,7 +270,7 @@
 /* --- A desk: the map beside a board column, no detents ------------------ */
 @media (min-width: 60rem) {
   .ki[data-stage='map'] .transport { padding-block-end: 0; }
-  .ki[data-stage='map'] .transport-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); gap: 0; }
+  .ki[data-stage='map'] .transport-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem); gap: 0; }
   .ki[data-stage='map'] .transport-map { position: relative; inset: auto; block-size: 100%; min-block-size: 0; }
   .ki[data-stage='map'] .transport-sheet {
     position: static; transform: none; transition: none; block-size: 100%; min-block-size: 0; overflow: hidden;
@@ -307,3 +307,20 @@
    sheet's body draws; the page scrolls, nothing here does. Plain class
    selectors only (R-L3, R-L5): the .row and .line rules apply as they are. */
 .t-light { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+/* Secondary map actions share one disclosure. Closed, it leaves the city
+   readable; open, every action has a proper touch target and keyboard path. */
+.t-map-menu { position: absolute; inset-block-start: var(--sp-3); inset-inline-start: var(--sp-3); z-index: 4; max-width: calc(100% - 5rem); }
+.t-map-menu-trigger { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: var(--target); padding: 0 var(--sp-3); list-style: none; background: var(--tone-surface-1); color: var(--tone-text-primary); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); box-shadow: var(--tone-shadow-soft); font-size: var(--type-control); cursor: pointer; }
+.t-map-menu-trigger::-webkit-details-marker { display: none; }
+.t-map-menu-body { display: grid; gap: var(--sp-3); margin-top: var(--sp-2); padding: var(--sp-3); max-height: min(60vh, 25rem); overflow-y: auto; background: var(--tone-surface-1); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); box-shadow: var(--tone-shadow-md); }
+.transport .t-map-menu .t-map-chips, .ki[data-stage='map'] .transport .t-map-menu .t-map-tools { position: static; inset: auto; margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-2); max-width: 100%; overflow: visible; padding: 0; }
+.transport .t-map-menu .t-map-tools { flex-direction: column; align-items: stretch; }
+.t-map-menu .t-toggle { border-radius: var(--r-sm); box-shadow: none; }
+.t-map-menu .t-map-tools .t-action { justify-content: flex-start; box-shadow: none; }
+.t-map-menu .t-map-status { position: static; max-width: 16rem; box-shadow: none; }
+.transport[data-sheet='peek'] .t-peek-count { display: none; }
+.transport[data-sheet='peek'] .t-sheet-head { gap: 0; }
+@media (max-height: 30rem) and (orientation: landscape) {
+  .t-map-menu { max-width: calc(55% - 5rem); }
+}

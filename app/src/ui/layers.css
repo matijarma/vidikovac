@@ -331,7 +331,12 @@
    venue or the source, a chevron. Violet only where it carries meaning: the
    day heads, the all-day word, the source dot and the pressed chip. */
 /* The domain's name is the tab's on a phone; a desk shows it as the title. */
-.ev-title { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.ev-title { font-size: var(--type-title); padding-block: var(--sp-3) 0; }
+.ws-events { max-inline-size: 76rem; width: 100%; margin-inline: auto; }
+.ev-toolbar { grid-template-columns: minmax(0, 1fr) minmax(7rem, 11rem); align-items: end; }
+.ev-toolbar .ev-count { grid-column: 1 / -1; }
+.ev-category { min-width: 0; }
+.ev-category select { width: 100%; min-width: 0; }
 .chip[aria-pressed='true'][data-tone='events'] { background: var(--tone-tint-events); border-color: var(--tone-events); color: var(--tone-events); }
 /* "6 događanja · 4 u tijeku", with the status word beside it when the source is not live. */
 .ev-count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
@@ -340,10 +345,11 @@
 .ev-sec .sec-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
 /* The agenda: day heads in sentence case, each over a hairline; the row under a head needs none of its own. */
 .agenda { display: grid; }
-.agenda-day { margin: 0; padding-block: var(--sp-3) var(--sp-1); border-block-start: 1px solid var(--tone-stroke); font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); }
+.agenda-day { margin: 0; padding-block: var(--sp-5) var(--sp-2); border-block-start: 1px solid var(--tone-stroke); font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); }
 .agenda .agenda-day + .row { border-block-start: 0; }
 /* Rows at 3.25rem: the button gives up its own vertical padding, the row's hairline-to-hairline height does the spacing. */
-.ev-sec .row-button { padding-block: 0; }
+.ev-sec .row-button { padding-block: var(--sp-3); }
+.ev-sec .row-title { font-size: var(--type-body); line-height: 1.4; font-weight: var(--weight-medium); }
 .ev-lead { flex: none; inline-size: 3.5rem; }
 .ev-time { font-size: var(--type-control); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
 .ev-allday { font-size: var(--type-secondary); line-height: var(--lh-body); font-weight: var(--weight-bold); color: var(--tone-events); }
@@ -381,6 +387,7 @@
    `.sec` and `.detail` at the same specificity, so they win on screen while
    print.css, loaded later, still boxes both on paper. */
 .cv-grid { display: grid; }
+.ws-civic, .ws-weather, .ws-safety { max-inline-size: 82rem; width: 100%; margin-inline: auto; }
 .cv-sec { margin-block-start: var(--sp-6); padding: var(--sp-6) 0 0; border: 0; border-block-start: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; box-shadow: none; }
 .cv-grid > .cv-sec:first-child { margin-block-start: 0; padding-block-start: 0; border-block-start: 0; }
 .cv-sec .sec-title { font-size: var(--type-head); font-weight: var(--weight-bold); line-height: var(--lh-title); }
@@ -454,7 +461,7 @@
 .sf-numbers > li:first-child { grid-column: span 2; }
 @media (hover: hover) {
   .sf-number:hover { background: var(--tone-surface-3); }
-  .sf-number-primary:hover { background: var(--tone-text-primary); opacity: 0.92; }
+  .sf-number-primary:hover { background: var(--tone-text-primary); color: var(--tone-surface-canvas); opacity: 1; }
 }
 .sf-rows { margin: 0; padding: 0; list-style: none; }
 .sf-all, .sf-more { justify-self: start; }
@@ -498,6 +505,7 @@
 /* Press feedback: a touch has no hover, so :active stands in for it. */
 @media (hover: none) {
   .row-button:active, .route-link:active, .tb-more:active, .tb-seg-btn:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+  .sf-number-primary:active { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
   /* Rows inside the events well and the tiles already sit on a raised surface; their press goes one level
      further. A tinted or ink tile has no deeper surface to go to and shows the hover's inset stroke instead. */
   .ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }
@@ -578,4 +586,9 @@
   .sf-numbers > li:first-child { grid-column: auto; }
   .sf-level { flex-wrap: wrap; row-gap: var(--sp-1); }
   .sf-verdict-text { flex: 1 0 100%; }
+}
+@container ws (max-width: 18rem) {
+  .wx-temp { font-size: var(--type-tile-xl); white-space: nowrap; }
+  .wx-nowrap { white-space: normal; }
+  .ev-toolbar { grid-template-columns: minmax(0, 1fr); }
 }
