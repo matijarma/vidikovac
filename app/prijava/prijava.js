@@ -174,6 +174,7 @@
 
   // --- Scrollspy for the contents bar ---------------------------------------
   function bindScrollspy() {
+    var track = $('#toc');
     var links = $$('#toc .toc-link');
     if (!links.length || !('IntersectionObserver' in window)) return;
     var byId = {};
@@ -185,7 +186,16 @@
       current = id;
       links.forEach(function (a) { if (a.getAttribute('data-target') === id) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
       var a = byId[id];
-      if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduced ? 'auto' : 'smooth' });
+      // Reveal only the horizontal contents track. scrollIntoView also moves
+      // its ancestors, pulling the reader back to the top of the document.
+      if (a && track) {
+        var item = a.getBoundingClientRect(), box = track.getBoundingClientRect();
+        if (item.left < box.left || item.right > box.right) {
+          var left = track.scrollLeft + item.left - box.left - (track.clientWidth - item.width) / 2;
+          if (track.scrollTo) track.scrollTo({ left: left, behavior: reduced ? 'auto' : 'smooth' });
+          else track.scrollLeft = left;
+        }
+      }
     };
     var visible = {};
     var io = new IntersectionObserver(function (entries) {
