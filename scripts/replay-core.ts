@@ -295,7 +295,16 @@ interface PathFrames {
 }
 
 function pathFrames(paths: readonly Path[]): PathFrames {
-  const edgeIndex: Map<number, number>[] = paths.map((path) => new Map(path.edges.map((e, k) => [e, k] as const)));
+  // First occurrence wins, exactly as laws.ts's `to.edges.indexOf(edge)`
+  // does: no path in the artefact runs an edge twice today, but a measurement
+  // that judged a law must map arcs the way that law does.
+  const edgeIndex: Map<number, number>[] = paths.map((path) => {
+    const index = new Map<number, number>();
+    path.edges.forEach((e, k) => {
+      if (!index.has(e)) index.set(e, k);
+    });
+    return index;
+  });
   function edgeAt(pathIdx: number, s: number): { edge: number; arc: number } {
     const path = paths[pathIdx];
     let lo = 0;
