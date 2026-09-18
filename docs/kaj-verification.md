@@ -549,14 +549,132 @@ obrade po otkucaju. Okviri se čitaju iz direktorija i slažu po vlastitom vreme
 po imenu datoteke, tako da propušteno objavljivanje jednostavno znači da je sljedeći okvir na
 redu.
 
-Pokretanje: `node scripts/replay-twin.mjs <direktorij-okvira> [--limit N]`. Nijedan dan još nije
-snimljen (blizanac još nije objavljen, D3), pa direktorij dolazi iz R2-a alatom wrangler,
-objekt po objekt (naredba je zapisana u zaglavlju skripte, `npx wrangler r2 object get
-vidikovac-feed/zet-rt/GGGG/MM/DD/...`). Pragovi za tablicu bit će zabilježeni ovdje tek nakon
-prvog cijelog snimljenog dana; do tada scenarijski test `test/scripts/replay-twin.test.ts` nad
-kratkim sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`) dokazuje
-da jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
+Pokretanje: `node scripts/replay-twin.mjs <direktorij-okvira> [--limit N]`. Direktorij dolazi iz
+R2-a alatom wrangler, objekt po objekt (naredba je zapisana u zaglavlju skripte, `npx wrangler r2
+object get vidikovac-feed/zet-rt/GGGG/MM/DD/...`), i drži se izvan gita (`recordings/`). Uz
+snimljeni dan stoji i scenarijski test `test/scripts/replay-twin.test.ts` nad kratkim
+sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`), koji dokazuje da
+jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
 vraća plan unatrag i pogađa 30 s unaprijed unutar 60 m pri p95.
+
+### Redci ocjenjivača i simulacija klijenta (F7)
+
+Krug F dodaje istoj tablici pet mjera. Sve se mjere nad istim snimljenim danom prije ijedne
+promjene pogona i mjere ponovno nakon svake, pa je napredak broj, a ne dojam. Definicije:
+
+**Ocjena unatrag s predznakom.** Uz postojeće razrede apsolutne greške, svako ocijenjeno
+očitanje nosi i predznak: položaj plana minus položaj očitanja duž iste putanje, pozitivno kad
+je plan bio *ispred* tramvaja. Razredi su `ahead_ge50` (plan 50 m ili više ispred), `within50`
+i `behind_ge50`. Pravilo kruga je „radije iza nego ispred”: oznaka iza pravog tramvaja čita se
+kao kašnjenje GPS-a, a oznaka ispred, koja se poslije mora vraćati, čita se kao pokvarena
+aplikacija. Isti brojevi idu i na `/stats` (`twin_hindsight_sign`, dim1 horizont, dim2 razred),
+upisani u istom skupnom upisu kao i razredi bez predznaka.
+
+**Regresija između planova (> 25 m).** Za tramvaj koji ima plan u dva uzastopna otkucaja, oba
+se plana čitaju u trenutku zaglavlja kasnijeg otkucaja. Broji se kad je noviji plan stavio
+tramvaj više od 25 m *iza* mjesta gdje ga je imao stariji. 25 m je gornja granica prvog razreda
+ocjene unatrag -- najmanji korak koji gledatelj čita kao ispravak, a ne kao podrhtavanje.
+Promjena vožnje (okretanje na okretištu) nije regresija i preskače se.
+
+**Prekršaj redoslijeda prema očitanjima (≤ 5 s, > 35 m).** Dva tramvaja na dijeljenom kolosijeku
+(brid pod jednim leži na putanji drugoga) čija su svježa očitanja unutar 5 s jedno od drugoga --
+pola otkucaja, pa razlika u trenutku javljanja dvaju vozila iz istog okvira ne može lažirati
+prekršaj. Oba se očitanja i oba objavljena plana preslikaju na jednu putanju; broji se kad
+objavljeni redoslijed proturječi redoslijedu očitanja, a očitanja su razmaknuta više od jedne
+duljine tramvaja (35 m, `HEADWAY_M` iz `shared/motion/laws.ts`; bliži par nema redoslijed koji
+bi se mogao prekršiti).
+
+**Fantomska stajališta.** Po putanji: koliko stajališta geometrijski leži na njezinim bridovima
+(`stopsOnPath`) naspram onih na kojima neki njezin uzorak zaista staje -- za putanju s oblikom
+unija svih uzoraka indeksa putovanja koji voze taj oblik (pa su i skraćene varijante pokrivene),
+za sintetsku putanju `path:` njezin vlastiti niz stajališta. Geometrijski zapis koji nije ni u
+jednom od njih je fantom: peron druge linije na istim tračnicama, na kojem planer danas svejedno
+stoji. To je broj koji odjeljak E0 uklanja. Tablica ispisuje ukupne iznose i medijan po putanji,
+odvojeno za putanje s oblikom i za sintetske; iznosi po pojedinoj putanji stoje u
+`report.phantoms.paths`.
+
+**Simulacija klijenta.** Pravi integrator (`app/src/motion/integrator.ts`) vođen upravo onim
+teretima koje je ponovljeni blizanac objavio, dekodiranima točno kako ih dekodira stranica
+(`app/src/motion/fixes.ts` razrješava vremena čvorova prema `sourceUpdatedAt`). Anketa stiže
+3,5 s nakon zaglavlja (vlastiti jastuk otkucaja, rubna predmemorija i mreža), a slike se crtaju
+12 puta u sekundi između anketa. Broji se ono što bi gledatelj vidio:
+
+- *slike unatrag*: nacrtani `s` tramvaja smanjio se za više od jednog centimetra između dviju
+  slika na istoj geometriji (mora biti 0);
+- *vidljiva križanja*: dva tramvaja na dijeljenom kolosijeku čiji nacrtani redoslijed, preslikan
+  na jednu putanju, proturječi redoslijedu njihovih planova razmaknutih više od 35 m (mora biti
+  0); broji se jednom po paru koji uđe u to stanje, ne po svakoj slici;
+- *udio držanja*: udio tramvajskih slika u kojima nacrtani `s` nije napredovao dok je meta plana
+  napredovala više od 0,5 m, i prosječna duljina takvog držanja u sekundama.
+
+### Polazna tablica, snimljeni dan 17. 9. 2026.
+
+Mjereno 18. 9. 2026. nad `recordings/2026/09/17/`, prije ijedne promjene pogona u krugu F:
+`node scripts/replay-twin.mjs recordings/2026/09/17`. Prisutno je bilo **2216 okvira**, prozor
+**2026-09-17T00:00:04Z do 2026-09-17T06:41:16Z** (UTC), s jutarnjim vrhom od 05 do 06 h;
+ostatak dana još se povlačio iz R2-a, pa se sljedeća mjerenja rade nad istim direktorijem i
+uspoređuju samo nad istim prozorom.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           435
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=374587)
+  30s:  p50 <100m   p95 ge200m  (n=371570)
+  60s:  p50 <200m   p95 ge200m  (n=363142)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 22.2%  within 53.7%  behind 24.2%  (n=374587)
+  30s:  ahead 25.7%  within 39.0%  behind 35.2%  (n=371570)
+  60s:  ahead 26.3%  within 30.1%  behind 43.6%  (n=363142)
+
+between-plan regressions (>25 m):     48983  (of 190842 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2228  (of 1203162 fresh pairs on shared rails)
+phantom stops:           6410 of 10599 geometric entries on 145 paths (4189 served)
+  shape paths:           100 paths, 7657 geometric / 3032 served / 4625 phantom, median per path 76.5 / 29.0 / 43.5
+  synthetic paths:       45 paths, 2942 geometric / 1157 served / 1785 phantom, median per path 58.0 / 25.0 / 34.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 288926 frames, 26316757 tram-frames):
+  backward frames (must be 0):        9606292
+  visible crossings (must be 0):      9550
+  hold-time share:                    7.9%  mean hold length: 5.1 s  (34426 holds)
+
+overtakes (must be 0):   2864
+reversals (must be 0):   0
+concessions:             1535
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 836  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 48.36  p95 355.21
+```
+
+Što se iz nje čita, prije ijedne promjene u krugu F:
+
+- **Cilj kruga na 30 s nije ni blizu.** Plan je 50 m ili više *ispred* tramvaja u 25,7 % od
+  371.570 ocijenjenih očitanja; cilj je 10 % ili manje. Udio unutar 50 m pada s horizontom
+  (53,7 % na 10 s, 39,0 % na 30 s, 30,1 % na 60 s), a p95 je na svim horizontima preko 200 m.
+- **Planovi se međusobno proturječe.** Svaki četvrti uzastopni par planova (48.983 od 190.842)
+  vraća tramvaj više od 25 m unatrag u odnosu na ono što je prethodni plan tvrdio za isti
+  trenutak. To je izvor i oznaka koje se na zaslonu vraćaju i ocjene ispred.
+- **Klijent danas crta unatrag.** 9.606.292 od 26.316.757 tramvajskih slika (36,5 %) nacrtane
+  su iza prethodne slike, i 9.550 puta par tramvaja na dijeljenom kolosijeku nacrtan je u
+  krivom redoslijedu. Integrator to danas dopušta namjerno (`BACKWARD_MAX_MS` 1 m/s do 30 m po
+  planu), pa je "mora biti 0" cilj kruga, a ne današnje svojstvo. Držanje je 7,9 % slika,
+  prosječno 5,1 s.
+- **Fantomska stajališta su većina.** 6.410 od 10.599 geometrijskih zapisa nije ni na jednom
+  uzorku svoje putanje; na putanjama s oblikom medijan je 76,5 geometrijskih naspram 29,0
+  posluženih po putanji. To je mjera koju odjeljak E0 uklanja.
+- Prekršaja redoslijeda prema očitanjima ima 2.228 od 1.203.162 provjerenih parova (0,19 %), a
+  vožnji unatrag u samom planu nijedna; preticanja koja zakon nije sankcionirao ustupkom ima
+  2.864 uz 1.535 ustupaka. Prvo planirano kretanje po vozilu čeka p50 836 s -- vozilo se pojavi
+  u feedu davno prije nego što ga plan pokrene.
+
+Cijeli prolaz traje oko osam i pol minuta na osam jezgri (21:51 do 21:59), gotovo sve u
+simulaciji klijenta, koja integrator korača 12 puta u sekundi kroz cijeli snimljeni raspon.
 
 Dopuna 16. 9. 2026., drugi prolaz, nakon što je područje Vijesti izašlo iz proizvoda
 (`b8a6a19`) i karta postala cijelo polje javnog zaslona (`e60bbfc` do `c0c9867`): prijedlog,
