@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSchemaMap, type SchemaFrame } from '../../app/src/motion/schema-map';
-import { LABEL_MIN_PX_PER_UNIT } from '../../app/src/motion/schema-paint';
+import { LABEL_MIN_PX_PER_UNIT, PILL_EDGE_MARGIN_PX } from '../../app/src/motion/schema-paint';
+import { PILL_INKS } from '../../app/src/motion/pills';
+import { DENSITY } from '../../app/src/ui/canvas';
 import type { CityMapHandle, CityMapOptions, MapPoint } from '../../app/src/map/city-map';
 import { toLonLat } from '../../shared/motion/geo';
 import { corridorSpec, syntheticNetwork } from './synthetic-network';
@@ -30,6 +32,20 @@ const TRAM: MapPoint = {
   lon: 16, lat: 46, at: NOW, path: '1_0', speed: 10, confidence: 0.9,
   headsign: 'C1200', nextStopId: 'T600',
   plan: { on: 'path', knots: [[NOW, 200], [NOW + 60_000, 800]] },
+};
+// A second tram line drawn over the first, sharing its T0/T600 stops: two
+// vehicles on it land a few artwork units apart, which is where the pills
+// merge into one cluster.
+const TWO_LINE_ART = {
+  ...ART,
+  lines: [
+    ART.lines[0],
+    {
+      route: '2', night: false, colour: '#4a8f5a', width: 3.5345,
+      pts: [[100, 410], [1100, 410]],
+      stops: [{ u: 0, name: 'T0', ownCircle: true }, { u: 500, name: 'T600', ownCircle: true }],
+    },
+  ],
 };
 const POINTS: MapPoint[] = [
   TRAM,
@@ -92,10 +108,11 @@ function harness(extra: Partial<CityMapOptions> = {}, pending?: Promise<unknown>
   };
   const canvas = () => container.querySelector<HTMLCanvasElement>('[data-testid=schema-vehicles]')!;
   const staticCalls = () => calls.get(container.querySelector<HTMLCanvasElement>('[data-testid=schema-routes]')!) ?? [];
+  const vehicleCalls = () => calls.get(canvas()) ?? [];
   const buttons = () => [...container.querySelectorAll<HTMLButtonElement>('[data-testid=vehicle-list] button')];
   return {
     handle, container, onSelect, onUserMove, onStatus, onNetwork, loadSchema, frames,
-    frame, canvas, staticCalls, buttons, pendingFrames: () => queue.size,
+    frame, canvas, staticCalls, vehicleCalls, buttons, pendingFrames: () => queue.size,
     resize: (width: number, height: number) => { size = { width, height }; handle.resize!(); },
   };
 }
@@ -122,7 +139,11 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   h.frame();
   const first = h.frames.at(-1)!;
   expect(first.marks.map((m) => m.id)).toEqual(['tram']);
-  expect(first.marks[0].colour).toBe(ART.lines[0].colour);
+  // The vehicle's own number, painted in the city map's tram-blue pill. The
+  // ZET line colour stays where it belongs: on the line under the pill.
+  expect(first.marks[0]).toMatchObject({ label: '1', pill: 'single' });
+  expect(h.vehicleCalls().some((c) => c.op === 'fillStyle' && c.args[0] === PILL_INKS.light.tram)).toBe(true);
+  expect(h.vehicleCalls().some((c) => c.op === 'fillText' && c.args[0] === '1')).toBe(true);
   expect(h.buttons().map((b) => b.dataset.vehicle)).toEqual(['tram']);
   expect(h.buttons()[0].textContent).toContain('C1200');
   expect(h.buttons()[0].textContent).toContain('T600');
@@ -248,4 +269,45 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   await flush();
   bootFit.frame();
   expect(bootFit.frames.at(-1)!.viewport.scale).toBeGreaterThanOrEqual(LABEL_MIN_PX_PER_UNIT);
+});
+
+it('merges two trams a pill apart into one cluster mark naming both lines, while the list keeps a button each', async () => {
+  const h = harness({
+    points: [{ ...TRAM, id: 'a' }, { ...TRAM, id: 'b', routeId: '2', path: '2_0' }],
+  }, Promise.resolve(TWO_LINE_ART));
+  await flush();
+  h.frame();
+  const marks = h.frames.at(-1)!.marks;
+  expect(marks).toHaveLength(1);
+  expect(marks[0]).toMatchObject({ pill: 'cluster', label: '1·2' });
+  expect([...(marks[0].ids ?? [])].sort()).toEqual(['a', 'b']);
+  // One merged pill on the canvas is still two vehicles for a reader.
+  expect(h.buttons().map((b) => b.dataset.vehicle)).toEqual(['a', 'b']);
+});
+
+it('keeps a mark whose centre has just left the canvas, so a pill at the edge is clipped rather than culled', async () => {
+  const h = harness();
+  await flush();
+  key(h.canvas(), '+'); // one step in: the artwork is now wider than the viewport
+  for (let i = 0; i < 4; i++) key(h.canvas(), 'ArrowRight', true); // pan hard left, to the clamp
+  h.frame();
+  const mark = h.frames.at(-1)!.marks.find((m) => m.id === 'tram');
+  expect(mark).toBeDefined();
+  const cssX = mark!.x / DENSITY;
+  expect(cssX).toBeLessThan(0);
+  expect(cssX).toBeGreaterThan(-PILL_EDGE_MARGIN_PX);
+});
+
+it('keeps the selection while the model still draws the vehicle, even after its mark leaves the canvas', async () => {
+  const h = harness();
+  await flush();
+  h.handle.select!({ kind: 'vehicle', id: 'tram' });
+  h.onSelect.mockClear();
+  for (let i = 0; i < 4; i++) key(h.canvas(), '+');
+  for (let i = 0; i < 8; i++) key(h.canvas(), 'ArrowRight', true);
+  h.frame();
+  expect(h.frames.at(-1)!.marks).toHaveLength(0);
+  expect(h.frames.at(-1)!.drawn.some((v) => v.id === 'tram')).toBe(true);
+  expect(h.onSelect).not.toHaveBeenCalled();
+  expect(h.handle.selection!()).toEqual({ kind: 'vehicle', id: 'tram' });
 });

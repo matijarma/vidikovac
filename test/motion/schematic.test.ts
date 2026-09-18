@@ -20,8 +20,10 @@ import {
   vehicleMarks,
   wholeNetworkCrop,
   type Crop,
-  type SchematicContext,
+  type VehicleMark,
 } from '../../app/src/motion/schematic';
+import { paintPills, type SchemaContext } from '../../app/src/motion/schema-paint';
+import { PILL_HEIGHT_PX, pillWidthPx } from '../../app/src/motion/pills';
 
 // Every test here runs in plain node: the geometry is pure, and the two
 // painters are exercised against a recording context that only knows the
@@ -78,7 +80,7 @@ interface Call { op: string; args: unknown[] }
 
 /** Records every call and every style assignment in order, so a test can
  *  assert on the sequence a real canvas would have received. */
-function recorder(): { ctx: SchematicContext; calls: Call[] } {
+function recorder(): { ctx: SchemaContext; calls: Call[] } {
   const calls: Call[] = [];
   const props: Record<string, unknown> = {
     strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, globalAlpha: 1,
@@ -89,11 +91,13 @@ function recorder(): { ctx: SchematicContext; calls: Call[] } {
     moveTo: method('moveTo'), lineTo: method('lineTo'), rect: method('rect'), clip: method('clip'),
     stroke: method('stroke'), fillRect: method('fillRect'), clearRect: method('clearRect'),
     translate: method('translate'), rotate: method('rotate'),
+    // The pill painter's own surface (SchemaContext): capsules and text.
+    arc: method('arc'), closePath: method('closePath'), fill: method('fill'), fillText: method('fillText'),
   };
   const ctx = new Proxy(target, {
     get: (t, key: string) => (key in t ? t[key] : props[key]),
     set: (_t, key: string, value: unknown) => { props[key] = value; calls.push({ op: `set ${key}`, args: [value] }); return true; },
-  }) as unknown as SchematicContext;
+  }) as unknown as SchemaContext;
   return { ctx, calls };
 }
 
@@ -471,5 +475,53 @@ describe('paintVehicles with a selection', () => {
     const { ctx, calls } = recorder();
     paintVehicles(ctx, l, marks, { ink: '#16226b', halo: '#f2ead8' }, 'gone');
     expect(calls.filter((c) => c.op === 'rect')).toHaveLength(0);
+  });
+});
+
+describe('paintPills (F3: the schema draws numbered pills, not rectangles)', () => {
+  const INKS = { fill: '#0751bf', text: '#f7faff', halo: '#fbfcfe', ink: '#16226b' };
+  const LAYOUT = { w: 300, h: 200, density: 1 };
+  const pill = (over: Partial<VehicleMark>): VehicleMark => ({
+    id: 'a', kind: 'tram', x: 100, y: 100, angle: 0, alpha: 1,
+    w: pillWidthPx(1), h: PILL_HEIGHT_PX, label: '6', pill: 'single', ...over,
+  });
+
+  it('draws a capsule with its number, a one-pixel paper halo for a single and a two-pixel ink ring for a cluster', () => {
+    const { ctx, calls } = recorder();
+    const cluster = pill({ id: 'c', x: 200, w: pillWidthPx(4), label: '6·11', pill: 'cluster', ids: ['a', 'b'] });
+    paintPills(ctx, LAYOUT, [pill({}), cluster], INKS);
+    expect(calls[0]).toEqual({ op: 'clearRect', args: [0, 0, 300, 200] });
+    // Two arcs (the capsule's ends) and one fill per pill.
+    expect(calls.filter((c) => c.op === 'arc')).toHaveLength(4);
+    expect(calls.filter((c) => c.op === 'fill')).toHaveLength(2);
+    expect(calls.filter((c) => c.op === 'fillText').map((c) => c.args[0])).toEqual(['6', '6·11']);
+    expect(calls.filter((c) => c.op === 'set fillStyle').map((c) => c.args[0]))
+      .toEqual([INKS.fill, INKS.text, INKS.fill, INKS.text]);
+    // A single is separated from the line under it by a hairline of paper; a
+    // cluster trades that for the ink ring that says "several here".
+    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.halo, INKS.ink]);
+    expect(calls.filter((c) => c.op === 'set lineWidth').map((c) => c.args[0])).toEqual([1, 2]);
+    expect(calls.filter((c) => c.op === 'set font').every((c) => String(c.args[0]).startsWith('600 12px'))).toBe(true);
+  });
+
+  it('rings the selected pill in ink, outside the capsule it already drew', () => {
+    const { ctx, calls } = recorder();
+    paintPills(ctx, LAYOUT, [pill({})], INKS, 'a');
+    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.halo, INKS.ink]);
+    expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(2);
+    const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
+    expect(Math.max(...radii)).toBeGreaterThan(PILL_HEIGHT_PX / 2);
+  });
+});
+
+describe('hitVehicle on a pill mark', () => {
+  it('reaches a wide pill through its own half-width, and the WCAG target floor otherwise', () => {
+    const wide: VehicleMark = {
+      id: 'c', kind: 'tram', x: 100, y: 100, angle: 0, alpha: 1,
+      w: pillWidthPx(8), h: PILL_HEIGHT_PX, label: '6·11·12', pill: 'cluster', ids: ['a', 'b'],
+    };
+    expect(pillWidthPx(8) / 2).toBeGreaterThan(HIT_RADIUS_CSS_PX);
+    expect(hitVehicle([wide], 100 + pillWidthPx(8) / 2 - 1, 100, 1)?.id).toBe('c');
+    expect(hitVehicle([wide], 100 + pillWidthPx(8) / 2 + 1, 100, 1)).toBeNull();
   });
 });
