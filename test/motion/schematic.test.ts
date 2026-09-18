@@ -593,6 +593,11 @@ describe('paintSchema (F4: flat names, a collision pass and terminal chips)', ()
     expect(text[halo].args[2]).toBeCloseTo(50 * LABEL_MIN_PX_PER_UNIT);
     expect(calls.some((c) => c.op === 'set globalAlpha' && c.args[0] === LABEL_HALO_ALPHA)).toBe(true);
     expect(inked(calls)).toContain('ČRNOMEREC');
+    // An ordinary ring is under the name, showing through its halo: a ring
+    // painted after a letter would cover it.
+    const ring = calls.findIndex((c) => c.op === 'arc' && Math.abs((c.args[2] as number) - 2 * LABEL_MIN_PX_PER_UNIT) < 1e-9);
+    expect(ring).toBeGreaterThan(-1);
+    expect(ring).toBeLessThan(calls.findIndex((c) => c.op === 'fillText'));
   });
 
   it('skips the lower-ranked of two names that collide, and draws both once the zoom parts them', () => {
@@ -617,6 +622,13 @@ describe('paintSchema (F4: flat names, a collision pass and terminal chips)', ()
     expect(chips.map((c) => c.args[0])).toEqual(['#cc706f', '#4a8f5a', '#cc706f', '#4a8f5a']);
     expect(calls.filter((c) => c.op === 'fillText' && c.args[0] === '1')).toHaveLength(2);
     expect(calls.filter((c) => c.op === 'fillText' && c.args[0] === '2')).toHaveLength(2);
+    // The disc never sits on its own name: the capitals hang below its rim,
+    // and the chips below them again.
+    const centre = 50 * LABEL_MIN_PX_PER_UNIT;
+    const name = calls.find((c) => c.op === 'fillText' && c.args[0] === 'ČRNOMEREC')!;
+    expect(name.args[2] as number).toBeGreaterThanOrEqual(centre + disc);
+    const chip = calls.find((c) => c.op === 'fillText' && c.args[0] === '1')!;
+    expect(chip.args[2] as number).toBeGreaterThan(name.args[2] as number);
   });
 });
 

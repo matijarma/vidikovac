@@ -77,6 +77,10 @@ const TERMINAL_MIN_RING_PX = 4;
  *  printed network's own terminus mark, a filled disc with a ring cut out. */
 const TERMINAL_GAP_RATIO = 0.7;
 const TERMINAL_GAP_PX = 1;
+/** A terminal's disc is never allowed to sit on its own name, so the
+ *  capitals hang below it, clear of the disc's rim by half an em -- the
+ *  space a printed network leaves between a terminus dot and its name. */
+const TERMINAL_NAME_GAP_EM = 0.5;
 /** The chips under a terminal's name. Barely rounded, like the kiosk's tram
  *  plate (pills.ts PLATE_RADIUS_PX): a number on a coloured tab. */
 export const CHIP_RADIUS_PX = 3;
@@ -334,7 +338,9 @@ interface NamePlan {
   rows: string[];
   terminal: boolean;
   px: number;
-  /** The stop's own point: the centre of the row block. */
+  /** The stop's own point horizontally; vertically the centre of the FIRST
+   *  row -- an ordinary name straddles the stop, a terminal's hangs below
+   *  its disc. */
   x: number;
   y: number;
   advance: number;
@@ -412,7 +418,6 @@ function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => X
     let width = 0;
     for (const row of rows) width = Math.max(width, ctx.measureText(row).width);
     const advance = px * LABEL_ROW_ADVANCE;
-    const height = (rows.length - 1) * advance + px;
     const at = point(stop);
     const chips = terminal ? terminalChips(layout, stop.name) : [];
     const chipPx = Math.max(px * CHIP_HEIGHT_EM * CHIP_TEXT_RATIO, minPx);
@@ -426,18 +431,26 @@ function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => X
       }
       chipsWidth += (chips.length - 1) * CHIP_GAP_PX * density;
     }
-    const top = at.y - height / 2 - halo / 2;
-    const nameBottom = at.y + height / 2 + halo / 2;
+    // An ordinary name straddles its stop and lets the ring show through
+    // the halo; a terminal's disc is too large for that, so its capitals
+    // hang below the disc's rim and the disc is never sat on.
+    const disc = terminal ? terminalDiscRadius(stop, scale, density) : 0;
+    const firstRow = terminal
+      ? at.y + disc + TERMINAL_NAME_GAP_EM * px + px / 2
+      : at.y - (rows.length - 1) * advance / 2;
+    const top = firstRow - px / 2 - halo / 2;
+    const nameBottom = firstRow + (rows.length - 1) * advance + px / 2 + halo / 2;
     const chipY = nameBottom + CHIP_GAP_PX * density + chipHeight / 2;
-    const reach = Math.max(width + halo, chipsWidth) / 2;
+    const reach = Math.max(width + halo, chipsWidth, 2 * disc) / 2;
     const box: LabelBox = {
       x0: at.x - reach, x1: at.x + reach,
-      y0: top, y1: chips.length > 0 ? chipY + chipHeight / 2 : nameBottom,
+      // A terminal's box covers its disc, its name and its chips.
+      y0: Math.min(top, at.y - disc), y1: chips.length > 0 ? chipY + chipHeight / 2 : nameBottom,
     };
     // A public screen shows the lot; an interactive map chooses (F4).
     if (kioskMinPx === undefined && placed.some(other => overlaps(other, box, gap))) continue;
     placed.push(box);
-    plans.push({ rows, terminal, px, x: at.x, y: at.y, advance, chips, chipPx, chipHeight, chipsWidth, chipY });
+    plans.push({ rows, terminal, px, x: at.x, y: firstRow, advance, chips, chipPx, chipHeight, chipsWidth, chipY });
   }
   return plans;
 }
@@ -454,7 +467,7 @@ function paintNames(ctx: SchemaContext, plans: readonly NamePlan[], tones: Schem
   for (const plan of plans) {
     ctx.font = nameFont(plan.terminal, plan.px);
     plan.rows.forEach((row, i) => {
-      const y = plan.y + (i - (plan.rows.length - 1) / 2) * plan.advance;
+      const y = plan.y + i * plan.advance;
       ctx.globalAlpha = LABEL_HALO_ALPHA;
       ctx.strokeText(row, plan.x, y);
       ctx.globalAlpha = 1;
@@ -567,10 +580,6 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       ctx.lineWidth = line.width * scale;
       ctx.stroke();
     }
-    // The names go on before the rings, so a ring is never hidden by the
-    // word it belongs to; the pills on the canvas above drive over both.
-    const plans = layout.labels ? planNames(ctx, layout, point, scale) : [];
-    paintNames(ctx, plans, tones, density);
     // The source has one ring per line/platform within a corridor. A
     // canonical named stop is its label/selection anchor, not another ring
     // invented halfway between the parallel lines.
@@ -596,21 +605,11 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       ctx.lineWidth = Math.max(0.75 * density, 0.36 * scale);
       ctx.stroke();
     }
-    // One highlight per named stop, not a stack of overlapping large rings
-    // for every line's tiny platform circle in that corridor.
-    for (const name of new Set([layout.screenStop, layout.selectedStop].filter(Boolean))) {
-      const stop = stopsByName.get(name!);
-      if (!stop) continue;
-      const p = point(stop);
-      // Clear of whatever mark it rings: a terminal's disc is larger than
-      // the platform ring, and a highlight inside it would be invisible.
-      const marked = stop.terminal ? terminalDiscRadius(stop, scale, density) : stop.r * scale;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(marked + 4 * density, 8 * density), 0, Math.PI * 2);
-      ctx.strokeStyle = tones.ink;
-      ctx.lineWidth = 2 * density;
-      ctx.stroke();
-    }
+    // The names go on over the ordinary rings, which show through the
+    // translucent halo, so a ring never covers a letter and a letter never
+    // covers a ring; the pills on the canvas above drive over both.
+    const plans = layout.labels ? planNames(ctx, layout, point, scale) : [];
+    paintNames(ctx, plans, tones, density);
     // The end of a line is a mark of its own: a disc half again the size of
     // an ordinary platform ring, with a gap ring of paper cut into it.
     for (const stop of schema.stops) {
@@ -627,9 +626,25 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       ctx.lineWidth = TERMINAL_GAP_PX * density;
       ctx.stroke();
     }
-    // The chips belong to the name they sit under, so they go last, over
-    // the disc and the rings, and only where that name was actually placed.
+    // The chips belong to the name they sit under, and are drawn only where
+    // that name was actually placed.
     paintChips(ctx, plans, tones, density);
+    // One highlight per named stop, not a stack of overlapping large rings
+    // for every line's tiny platform circle in that corridor. Last of all:
+    // "this one" outranks every mark and every name under it.
+    for (const name of new Set([layout.screenStop, layout.selectedStop].filter(Boolean))) {
+      const stop = stopsByName.get(name!);
+      if (!stop) continue;
+      const p = point(stop);
+      // Clear of whatever mark it rings: a terminal's disc is larger than
+      // the platform ring, and a highlight inside it would be invisible.
+      const marked = stop.terminal ? terminalDiscRadius(stop, scale, density) : stop.r * scale;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(marked + 4 * density, 8 * density), 0, Math.PI * 2);
+      ctx.strokeStyle = tones.ink;
+      ctx.lineWidth = 2 * density;
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
