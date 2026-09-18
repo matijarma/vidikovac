@@ -169,7 +169,9 @@ try {
 
   // The ZET schema is another real renderer, fed a real-path plan at the
   // browser boundary. Neither application routes nor production data fake it.
-  const { schemaSnapshot } = await loader.ssrLoadModule('/e2e/schema-fixtures.ts');
+  const { schemaSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE } = await loader.ssrLoadModule('/e2e/schema-fixtures.ts');
+  // The scale at which the diagram starts lettering its stops.
+  const { LABEL_MIN_PX_PER_UNIT } = await loader.ssrLoadModule('/app/src/motion/schema-paint.ts');
   const { FIXTURE_NOW } = await loader.ssrLoadModule('/test/feed/fixture-contexts.ts');
   for (const scene of [
     { name: 'schema-phone', width: 390, height: 844, theme: 'light', locale: 'hr' },
@@ -203,6 +205,185 @@ try {
     await context.close();
   }
 
+  // ------------------------------------------------------------- round F ---
+  // The round's own rules, each at the zoom it is about: two trams 20 m apart
+  // (F2's clustering, F3's pills), the direction nose past its band (F2/D),
+  // one line only and then the whole network again (F5), and the diagram's
+  // flat names with a terminal's chips (F4). Same fixture the browser gate
+  // runs on, so a scene and a spec can never drift apart.
+
+  /** The dashboard with the pair of trams, on a clock that runs: the camera's
+   *  eases and the 12 Hz push both live on rAF, and the plan is rebuilt at
+   *  fulfil time so the pair never runs out of it however long a capture
+   *  takes. `routes` is what each tram reports -- two different numbers on the
+   *  city map (the clustering case), the path's own line twice on the diagram,
+   *  which places a tram only on the line its route names. */
+  async function openTwoTrams(page, routes) {
+    // These scenes let the clock run, so MapLibre's own tile retries run with
+    // it. Where the basemap's R2 bucket is empty -- every developer machine --
+    // each of those retries is a slow 503, and enough of them starve the
+    // requests the page itself needs: the next map in the run comes up
+    // `unavailable` and draws nothing. Probed once above, so a machine that
+    // really serves the tiles still sees them under the overlays.
+    if (tilesMissing) await page.route('**/maps/zagreb-v1/**', route => route.fulfill({ status: 404, body: '' }));
+    const snapshots = await experienceSnapshots();
+    snapshots['zet-rt'] = twoTramSnapshot(FIXTURE_NOW.getTime(), routes);
+    await installExperienceFixture(page, snapshots);
+    const started = Date.now();
+    await page.route('**/api/data/zet-rt', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(twoTramSnapshot(FIXTURE_NOW.getTime() + (Date.now() - started), routes)),
+    }));
+    await page.clock.resume();
+    await page.goto(`${base}${FIXTURE_DASHBOARD}`);
+    await page.locator('[data-testid=tb]').waitFor();
+    await openLayer(page, 'u-pokretu');
+  }
+
+  /** A read-only probe attribute the renderer writes (city-map.ts, schema-map.ts). */
+  const waitForProbe = (page, selector, name, value) => page.waitForFunction(
+    ([sel, key, want]) => document.querySelector(sel)?.getAttribute(`data-${key}`) === want,
+    [selector, name, value], { timeout: 30_000 });
+
+  // Is this machine serving the basemap at all? One tile decides it; see
+  // openTwoTrams below for what hangs on the answer.
+  const tilesMissing = await fetch(`${base}/maps/zagreb-v1/14/8918/5840.mvt`)
+    .then(response => response.status !== 200).catch(() => true);
+
+  // A browser of its own for the round: by this point the run has built and
+  // torn down a dozen WebGL contexts, and Chrome keeps about sixteen before it
+  // starts losing the oldest (the reason map-slots.ts exists at all). A city
+  // map that loses its context reports `unavailable` and draws nothing, which
+  // is a lost scene rather than a finding about the product.
+  const roundF = await chromium.launch({ headless: true });
+
+  /** The city map's round-F scenes for one viewport: the pair at zoom 17, the
+   *  line alone, and the whole network back. Returns false when the map never
+   *  came up, so the caller can try once more. */
+  async function captureRoundFCity(scene) {
+    const context = await roundF.newContext({
+      viewport: { width: scene.width, height: scene.height }, colorScheme: 'light', locale: 'hr-HR',
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => { localStorage.setItem('vidikovac-locale', 'hr'); });
+    try {
+      await openTwoTrams(page, ['6', '11']);
+      await page.waitForFunction(
+        () => (document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-pills') ?? '').length > 0,
+        null, { timeout: 25_000 });
+      // The session's map opens on the screen's stop at zoom 15, where the
+      // fixture parks the pair; MapLibre's keyboard step is +1 from the zoom
+      // it is at *now*, so the two steps are taken one at a time and land on
+      // exactly 17 -- the zoom the cluster rule is about.
+      await page.locator('[data-testid=map-canvas] canvas').focus();
+      for (const stop of ['16.00', '17.00']) {
+        await page.keyboard.press('=');
+        await waitForProbe(page, '[data-testid=map-canvas]', 'zoom', stop);
+      }
+      await captureLayer(page, scene.name, 'u-pokretu');
+
+      // One line only, then the whole network again, on the same camera.
+      await page.getByTestId('transport-search').fill('6');
+      await page.locator('[data-action=select-route][data-id="6"]').first().click();
+      await page.getByTestId('line-focus').waitFor();
+      await page.waitForFunction(
+        () => (document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-focus') ?? '').includes(' none '),
+        null, { timeout: 30_000 });
+      await captureLayer(page, `${scene.name}-focus-on`, 'u-pokretu');
+      await page.getByTestId('line-focus').click();
+      await page.waitForFunction(
+        () => (document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-focus') ?? '').includes(' visible '),
+        null, { timeout: 30_000 });
+      await captureLayer(page, `${scene.name}-focus-off`, 'u-pokretu');
+      if (errors.length) findings.push({ scene: scene.name, problem: 'page-errors', errors });
+      return true;
+    } catch (error) {
+      // Headless Chromium intermittently refuses a WebGL context while the
+      // previous one is still being torn down; city-map.ts catches that,
+      // reports `unavailable` and draws nothing. That is a lost scene, not
+      // something the product did, so it is worth one more go.
+      const status = await page.evaluate(
+        () => document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-map-status') ?? 'no map',
+      ).catch(() => 'unreadable');
+      console.log(`${scene.name}: map ${status} -- ${String(error).slice(0, 120)}`);
+      return false;
+    } finally {
+      await context.close();
+    }
+  }
+
+  for (const scene of [
+    { name: 'round-f-city-phone', width: 390, height: 844 },
+    { name: 'round-f-city-desktop', width: 1440, height: 1000 },
+  ]) {
+    if (!(await captureRoundFCity(scene)) && !(await captureRoundFCity(scene))) {
+      findings.push({ scene: scene.name, problem: 'map-never-came-up' });
+    }
+  }
+
+  for (const scene of [
+    // The pair stands at Trg bana J. Jelačića. On the desk that frame also
+    // holds Črnomerec, the end of their line, 230 artwork units west with its
+    // chips under it; a 390 px phone cannot hold 322 px of diagram at the
+    // scale a name is readable at, so its scene is the pair and the names
+    // around them, with Mihaljevac as the terminal in view.
+    { name: 'round-f-schema-phone', width: 390, height: 844, theme: 'light' },
+    { name: 'round-f-schema-phone-dark', width: 390, height: 844, theme: 'dark' },
+    { name: 'round-f-schema-desktop', width: 1440, height: 1000, theme: 'light' },
+  ]) {
+    const context = await roundF.newContext({
+      viewport: { width: scene.width, height: scene.height }, colorScheme: scene.theme, locale: 'hr-HR',
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+      localStorage.setItem('kajima:map-mode:v1', 'schema');
+      localStorage.setItem('vidikovac-locale', 'hr');
+    });
+    await openTwoTrams(page, [TWO_TRAM_PATH_ROUTE, TWO_TRAM_PATH_ROUTE]);
+    await page.getByTestId('schema-vehicles').waitFor();
+    // Picking the line and then one of its trams centres the diagram on that
+    // tram at no less than the scale a name is readable at (schema-map.ts
+    // fit('selection')), which is what turns the names and chips on.
+    await page.getByTestId('transport-search').fill(TWO_TRAM_PATH_ROUTE);
+    await page.locator(`[data-action=select-route][data-id="${TWO_TRAM_PATH_ROUTE}"]`).first().click();
+    await page.locator('[data-testid=route-vehicles] button').first().click();
+    await waitForProbe(page, '[data-testid=schema-map]', 'labels', 'true');
+    if (scene.width < 700) {
+      // On the phone the sheet opens over most of the stage on a vehicle
+      // detail, and folding it back re-fits the diagram to the taller stage
+      // (pan-zoom.ts reframe), which drops the scale back under the one a
+      // name is readable at. So: follow the tram first -- the controller then
+      // keeps it centred whatever the frame does -- fold the sheet down, and
+      // zoom back in. That is also the sequence a reader takes to watch one
+      // tram on the diagram.
+      await page.locator('#t-follow').click();
+      await page.waitForTimeout(400);
+      const toggle = page.locator('[data-action=toggle-sheet]').first();
+      // `data-next` says which way the chevron's next step goes (workspace.ts
+      // renderSheetToggle): 'up' is the bottom of the cycle.
+      for (let i = 0; i < 3 && (await toggle.getAttribute('data-next')) !== 'up'; i++) {
+        await toggle.click();
+        await page.waitForTimeout(400);
+      }
+      await page.getByTestId('schema-vehicles').focus();
+      for (let i = 0; i < 6; i++) {
+        if (Number(await page.getAttribute('[data-testid=schema-map]', 'data-scale')) >= LABEL_MIN_PX_PER_UNIT) break;
+        await page.keyboard.press('+');
+        await page.waitForTimeout(250);
+      }
+    }
+    await page.waitForTimeout(200);
+    await captureLayer(page, scene.name, 'u-pokretu');
+    if (errors.length) findings.push({ scene: scene.name, problem: 'page-errors', errors });
+    await context.close();
+  }
+
+  await roundF.close();
+
   // Provision a local test kiosk through the existing test-only admin path.
   {
     const { provisionKiosk } = await loader.ssrLoadModule('/e2e/helpers.ts');
@@ -210,8 +391,12 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    // The kiosk's crop is centred on its own stop, which is where the pair
+    // stands, so the public screen's schema shows round F's case too: two
+    // pills at one ring, at the screen's doubled symbol scale.
     await page.route('**/api/teaser', route => route.fulfill({
-      status: 200, contentType: 'application/json', body: JSON.stringify({ modules: [schemaSnapshot(Date.now())] }),
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ modules: [twoTramSnapshot(Date.now(), [TWO_TRAM_PATH_ROUTE, TWO_TRAM_PATH_ROUTE])] }),
     }));
     const { kioskUrl } = await provisionKiosk(context.request, base, { stopId: '106_1' });
     const url = new URL(kioskUrl);
