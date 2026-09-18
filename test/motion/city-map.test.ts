@@ -233,6 +233,27 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('never merges across modes: a bus swallowed by a tram’s cluster would vanish the moment trams are switched off', () => {
+    const at = (id: string, type: number, short: string, lon: number): Drawn =>
+      ({ id, type, routeId: short, short, p: toPlane(lon, 45.81), heading: null, speed: 0, confidence: 1, onShape: null });
+    // Ten thousand CSS px per degree again: 10 px apart, well inside both pills.
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    const fc = vehiclesToGeoJson([at('t', 0, '6', 15.97), at('b', 3, '109', 15.971)], { project });
+    expect(fc.features.map((f) => f.properties.id).sort()).toEqual(['b', 't']);
+    expect(fc.features.map((f) => f.properties.cluster)).toEqual([false, false]);
+  });
+
+  it('measures the pill boxes at the size the map paints them: on a screen at symbolScale 2 two trams 30 px apart merge, on a phone they stay apart', async () => {
+    const NEAR: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.003, title: '11', routeId: '11' };
+    const pushedIds = async (symbolScale: number): Promise<string[]> => {
+      const { frame, vehicles } = await harness({ points: [A, NEAR], extra: { symbolScale } });
+      frame();
+      return (vehicles().calls.at(-1) as FC).features.map((f) => String(f.properties.id));
+    };
+    expect(await pushedIds(2)).toEqual(['cluster:vehicle:1,vehicle:2']);
+    expect((await pushedIds(1)).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+  });
+
   it('merges only where pills are drawn: below PILL_ZOOM every vehicle keeps its own dot, and the camera moving in merges them', async () => {
     const SECOND: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.0002, title: '11', routeId: '11' };
     const { map, frame, vehicles } = await harness({ points: [A, SECOND] });

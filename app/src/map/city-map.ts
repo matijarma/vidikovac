@@ -291,6 +291,15 @@ export interface VehicleGeoJsonOptions {
   /** The selected or followed vehicle: never absorbed into a cluster, so a
    *  tap never loses the mark it was aimed at (motion/pills.ts). */
   selectedId?: string | null;
+  /** The map's symbol scale (CityMapOptions.symbolScale; 2 on the public
+   *  screen). motion/pills.ts writes its boxes in the CSS px the pill geometry
+   *  itself is stated in, while the layer paints them at `icon-size: scale`:
+   *  the projected positions are divided by it so two marks are compared at
+   *  the size they are actually drawn. Without this the public screen would
+   *  merge only inside half the distance at which its pills really overlap --
+   *  and with the collision pass no longer thinning anything, a busy hub would
+   *  pile up worse than before. */
+  symbolScale?: number;
 }
 
 /** A vehicle's mark as `clusterPills` measures it: its pill's centre on screen
@@ -301,13 +310,13 @@ interface VehiclePillPoint extends PillPoint {
 
 /** One merged mark for a group of overlapping pills: the members' joined label
  *  ("6·11"), their ids, their centroid, and the properties a layer still has
- *  to be able to read -- `kind` so the mode colours and the mode filters work
- *  unchanged (a group with a tram in it is a tram), the one route id the group
- *  shares or none at all, the members' best alpha, and no heading, because a
- *  merged mark has no one facing and draws no direction nose. */
+ *  to be able to read -- the mode they all share (the group is built inside
+ *  one mode, see below), the one route id they share or none at all, the
+ *  members' best alpha, and no heading, because a merged mark has no one
+ *  facing and draws no direction nose. */
 function clusterToFeature(cluster: Cluster<VehiclePillPoint>): VehicleFeature {
   const members = cluster.members.map((m) => m.feature);
-  const kind: VehicleKind = members.some((f) => f.properties.kind === 'tram') ? 'tram' : members[0]!.properties.kind;
+  const kind: VehicleKind = members[0]!.properties.kind;
   const routes = new Set(members.map((f) => f.properties.routeId));
   const lon = members.reduce((sum, f) => sum + f.geometry.coordinates[0], 0) / members.length;
   const lat = members.reduce((sum, f) => sum + f.geometry.coordinates[1], 0) / members.length;
@@ -344,8 +353,9 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>): VehicleFeature {
  * overlap on screen leave as one cluster feature instead of a pile: the pill
  * layer draws every mark it is given, so the thinning happens here, where the
  * app knows what the marks mean, rather than in MapLibre's collision pass,
- * which only knew that two boxes touched. An untyped mark ('other') is never
- * merged -- it has no number to join a label with.
+ * which only knew that two boxes touched. Trams merge with trams and buses
+ * with buses, never across (see below); an untyped mark ('other') is never
+ * merged at all -- it has no number to join a label with.
  */
 export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJsonOptions = {}): VehicleFeatureCollection {
   const features: VehicleFeature[] = [];
@@ -371,20 +381,34 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   }
   const project = options.project;
   if (!project) return { type: 'FeatureCollection', features };
+  const scale = options.symbolScale ?? 1;
+  const selectedId = options.selectedId ?? null;
 
-  const points: VehiclePillPoint[] = [];
+  // One group per mode, never across them. Every vehicle layer filters on
+  // `kind` (overlays.ts kindFilter), and the mode toggle is a live control: a
+  // bus swallowed into a cluster that called itself a tram would disappear
+  // from the pills *and* the dots the moment a reader turned trams off. A pill
+  // also carries its mode's ink, and a tram-blue capsule labelled with a bus
+  // route would be a lie about both.
+  const byKind = new Map<VehicleKind, VehiclePillPoint[]>();
   const alone: VehicleFeature[] = [];
   for (const feature of features) {
-    const at = feature.properties.kind === 'other' ? null : project(feature.geometry.coordinates);
+    const kind = feature.properties.kind;
+    const at = kind === 'other' ? null : project(feature.geometry.coordinates);
     if (!at) {
       alone.push(feature);
       continue;
     }
-    points.push({ id: feature.properties.id, x: at.x, y: at.y, label: feature.properties.short, feature });
+    const point: VehiclePillPoint = { id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, feature };
+    const mode = byKind.get(kind);
+    if (mode) mode.push(point);
+    else byKind.set(kind, [point]);
   }
   const merged: VehicleFeature[] = [...alone];
-  for (const group of clusterPills(points, { selectedId: options.selectedId ?? null })) {
-    merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group));
+  for (const points of byKind.values()) {
+    for (const group of clusterPills(points, { selectedId })) {
+      merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group));
+    }
   }
   return { type: 'FeatureCollection', features: merged };
 }
@@ -912,7 +936,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // dot, nothing can pile up, and merging there would empty the city of the
     // marks that say it is moving.
     const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId() });
+    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId(), symbolScale: scale });
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
     const changed = signature !== lastPushedSignature;
