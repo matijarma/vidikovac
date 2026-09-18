@@ -5,6 +5,11 @@
 // chain-delta-encoded as integer units against `origin`/`scale`; this file
 // undoes exactly that, once, at load time.
 //
+// Version 3 also carries `graphHash` (F8c), the name of the rail graph the
+// edge indices belong to: the builder nodes a crossing where a line turns and
+// no shape draws the turn, which renumbers every edge, and the twin drops
+// what it learned per edge when the name changes.
+//
 // Version 3 (F8) adds the SERVED-STOP TABLE: every path carries `served`,
 // the platforms its own trips call at, in arc order, and every stop carries
 // `terminal`. The geometric `onEdge` links stay exactly as they were -- they
@@ -103,6 +108,13 @@ export interface Network {
 export interface GraphNetwork extends Network, GraphMethods {
   edges: Edge[];
   paths: Path[];
+  /** The name of THIS rail graph (F8c): a hash over the ordered edges'
+   *  endpoints and polylines as the wire carries them, computed by
+   *  scripts/gtfs-shapes.mjs. An edge index only means something within one
+   *  graph, so anything keyed by one -- the twin's learned edge times -- must
+   *  be dropped when this changes. An empty string is an artefact from before
+   *  F8c, which names no graph and so counts as a different one. */
+  graphHash: string;
 }
 
 /** The only version this decoder understands. A cached artefact from a
@@ -130,6 +142,7 @@ const DECIMETRES_PER_METRE = 10;
 interface RawNetworkArtefact {
   version: number;
   feedVersion: string;
+  graphHash?: string;
   origin: [number, number];
   scale: number;
   routes: { id: string[]; short: string[]; type: number[]; rank: number[]; shapes: number[][] };
@@ -326,6 +339,7 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
   return {
     version: r.version,
     feedVersion: r.feedVersion,
+    graphHash: typeof r.graphHash === 'string' ? r.graphHash : '',
     routes,
     shapes,
     stops,

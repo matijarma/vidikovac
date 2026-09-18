@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
@@ -25,6 +26,7 @@ import {
   decodeStopOn,
   decodeStopOnEdge,
   fromColumnar,
+  graphHashOf,
   main,
   pathThroughStops,
   stopSequenceHash,
@@ -721,5 +723,10 @@ describe('noding a crossing a pattern needs', () => {
     expect(xsPath.e).toHaveLength(3);
     const arcs = xsPath.served.map(([, dm]: [number, number]) => dm / 10);
     expect(arcs[1] - arcs[0]).toBeLessThan(700); // the turn, not the 1970 m bypass
+
+    // Every artefact names the graph it was cut from, and the name follows the edges.
+    expect(net.graphHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(net.graphHash).toBe(graphHashOf(edgesOf(net)));
+    expect((await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).graphHash).not.toBe(net.graphHash);
   });
 });

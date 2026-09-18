@@ -20,6 +20,9 @@ export function rawArtefactV3() {
   return {
     version: 3,
     feedVersion: '000123',
+    // F8c: the name of the graph these edges make, which the twin learns
+    // under and drops its edge-keyed rows on a change of.
+    graphHash: '00112233445566aa',
     origin: ORIGIN,
     scale: SCALE,
     routes: { id: ['R1', 'RB'], short: ['1', '101'], type: [0, 3], rank: [1, 2], shapes: [[0], [1]] },

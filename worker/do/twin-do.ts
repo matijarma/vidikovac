@@ -40,6 +40,7 @@ import { indexRowsFromIndex } from '../twin/index-load';
 import {
   INDEX_RECHECK_MS,
   LEARN_FLUSH_MS,
+  adoptGraph,
   ensureSchema,
   flushLearned,
   indexCheckedAt,
@@ -428,6 +429,13 @@ export class TwinDO extends DurableObject<Env> {
       this.net = await twinNetworkSource(this.env)();
       this.pathResolver = null; // a new network needs its own path indexes
       cold.networkMs = Date.now() - t0;
+      // A rebuilt rail graph renumbers its edges (F8c), so everything keyed
+      // by an edge index is about a different piece of track and goes. This
+      // must happen BEFORE loadLearnedOnce reads the tables.
+      if (this.net) {
+        const dropped = adoptGraph(this.ctx.storage, this.net.graphHash);
+        if (dropped !== null) logInfo('twin_graph_changed', { graph: this.net.graphHash, droppedEdgeRows: dropped });
+      }
     }
     if (this.net && this.index && !this.engine) {
       this.loadLearnedOnce();

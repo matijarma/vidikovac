@@ -37,6 +37,7 @@
 //
 // Attribution obligation (Otvorena dozvola, ZET) carries over unchanged;
 // see ZET_ATTRIBUTION in gtfs-routes.mjs.
+import { createHash } from 'node:crypto';
 import { createInflateRaw } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
@@ -292,6 +293,22 @@ export function stopSequenceHash(stopIds) {
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h.toString(16).padStart(8, '0');
+}
+
+/** A stable name for the rail graph itself: SHA-256 over the ordered edges'
+ *  endpoints and their polylines exactly as the wire carries them, truncated
+ *  to GRAPH_HASH_HEX_CHARS. It changes whenever an edge is added, removed,
+ *  split or re-drawn -- which is exactly when an edge INDEX stops meaning
+ *  what it meant, so everything keyed by one (the twin's `edge_time`) must be
+ *  thrown away. 16 hex digits is 64 bits: a collision between two builds of
+ *  one city's rail graph is not a risk worth more bytes.
+ *  @param {readonly {from: number, to: number, d: readonly number[]}[]} edges */
+export const GRAPH_HASH_HEX_CHARS = 16;
+export function graphHashOf(edges) {
+  const hash = createHash('sha256');
+  for (const e of edges) hash.update(`${e.from}:${e.to}:${e.d.join(',')}
+`);
+  return hash.digest('hex').slice(0, GRAPH_HASH_HEX_CHARS);
 }
 
 function round1(x) {
@@ -2170,6 +2187,10 @@ export async function buildNetwork(zipBuf, opts = {}) {
   return {
     version: ARTEFACT_VERSION,
     feedVersion,
+    // The graph the edge INDICES below belong to (F8c): anything a consumer
+    // keys by one -- the twin's learned edge times -- is about a different
+    // piece of track once this changes.
+    graphHash: graphHashOf(edges),
     builtAt: now().toISOString(),
     origin: ORIGIN,
     scale: SCALE,

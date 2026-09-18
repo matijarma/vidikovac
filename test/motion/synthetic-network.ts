@@ -166,6 +166,9 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
   return {
     version: 3,
     feedVersion: 'synthetic',
+    // A fixed name for this fixture's graph (F8c): a test that wants a
+    // REBUILT graph spreads a different one over the network it hands in.
+    graphHash: '5ecc0a11ed0e5000',
     routes,
     shapes,
     stops,

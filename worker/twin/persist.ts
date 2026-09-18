@@ -295,6 +295,34 @@ export function markLearnFlushed(sql: SqlStorage, atMs: number): void {
   metaSet(sql, 'learn_flushed_at', String(atMs));
 }
 
+/**
+ * The graph the learned edge rows belong to. `edge_time` is keyed by edge
+ * INDEX, and an index only means something within one rail graph: the F8c
+ * builder nodes a crossing where a line turns and renumbers everything after
+ * it, so a histogram for "edge 137" would then be about a different piece of
+ * track. On a change every edge-keyed row goes and the new name is recorded;
+ * `stop_dwell` is keyed by stop id, which no rebuild renumbers, so it stays.
+ * Returns the rows dropped, or null when the graph is the one already
+ * recorded (nothing to do, nothing to say).
+ */
+export function adoptGraph(storage: DurableObjectStorage, graphHash: string): number | null {
+  const sql = storage.sql;
+  const stored = metaGet(sql, 'graph_hash');
+  if (stored === graphHash) return null;
+  let dropped = 0;
+  storage.transactionSync(() => {
+    dropped = sql.exec<{ c: number }>('SELECT count(*) AS c FROM edge_time').one().c;
+    sql.exec('DELETE FROM edge_time');
+    metaSet(sql, 'graph_hash', graphHash);
+  });
+  return dropped;
+}
+
+/** The graph the learned edge rows were gathered under, or null before any. */
+export function learnedGraphHash(sql: SqlStorage): string | null {
+  return metaGet(sql, 'graph_hash');
+}
+
 /** Every learned histogram the tables hold. */
 export function loadLearned(sql: SqlStorage): LearnedAggregates {
   const agg = emptyAggregates();

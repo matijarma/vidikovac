@@ -9,10 +9,11 @@ const plane = (lonlat: [number, number][]) => lonlat.map(([lon, lat]) => toPlane
 const lenOf = (pts: { x: number; y: number }[]) => cumulative(pts)[pts.length - 1];
 
 describe('decodeNetwork', () => {
-  it('decodes version 3 into the superset the client reads: edges, tram shapes rebuilt from them, bus polylines, paths with offsets and their served stops, terminal stops, stops at exact arcs on every shape through their edges, nextStop; rejects a version 2 artefact; loads only outside lightweight mode', async () => {
+  it('decodes version 3 into the superset the client reads: edges, tram shapes rebuilt from them, bus polylines, paths with offsets and their served stops, terminal stops, the graph hash, stops at exact arcs on every shape through their edges, nextStop; rejects a version 2 artefact; loads only outside lightweight mode', async () => {
     const net = decodeNetwork(rawArtefactV3());
     expect(net.version).toBe(3);
     expect(net.feedVersion).toBe('000123');
+    expect(net.graphHash).toBe('00112233445566aa'); // F8c: carried through, not recomputed
     expect(net.routes.get('R1')).toEqual({ short: '1', type: 0, rank: 1, shapes: [0] });
     expect(net.diagram.lines).toEqual([{ route: 'R1', pts: [{ x: 0, y: 0 }, { x: 1, y: 0.5 }] }]);
 
@@ -50,6 +51,12 @@ describe('decodeNetwork', () => {
     expect(net.nextStop(0, s1.len)).toBeNull();
     expect(net.nextStop(5, 0)).toBeNull();
     expect(net.stops.map((s) => s.terminal)).toEqual([true, false, true, false]);
+
+    // An artefact from before F8c carries no graph hash; the empty string is
+    // "a graph I cannot name", which the twin treats as a change.
+    const unnamed = rawArtefactV3();
+    delete (unnamed as { graphHash?: string }).graphHash;
+    expect(decodeNetwork(unnamed).graphHash).toBe('');
 
     const stale = rawArtefactV3();
     (stale as { version: number }).version = 2;
