@@ -740,6 +740,12 @@ Isti okviri, prije (`cd7495c`) i poslije (F8):
 | ustupci | 1.553 | 650 | −58,2 % |
 | otkucaj p50 / p95 | 47,33 / 303,52 ms | 29,45 / 180,72 ms | −38 % / −40 % |
 
+Tablica je zapis prolaza od 18. 9. 2026., **prije kontrolorovih odluka A i B** (poslužni radijus
+`SERVED_STOP_MAX_METRES` 60 m i razrješenje putanje u SQLite spoju): artefakt od tada nosi
+**3100** posluženih zapisa umjesto 3091, jer je Olipska 251_2 ušla u poslužne popise devet
+putanja. Brojke iznad nisu ponovno mjerene i stoje kao zapis onoga što je taj prolaz dao;
+fantomskih stajališta i dalje je 0 po konstrukciji.
+
 Što se iz nje čita:
 
 - **Fantomi su otišli, i to je cijela svrha ovog koraka.** Nijedan zapis na putanji nije više
