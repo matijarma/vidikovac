@@ -904,6 +904,125 @@ uopće), te dva zastarjela komentara u kodu koja su imenovala uklonjeno područj
 (`producers/index.ts`, `kiosk.css`). Ovo nije aplikacija za vijesti; hitna sigurnosna
 informacija dolazi iz DHMZ-a, EMSC-a i Grada, nikada iz novinskog izvora.
 
+### Nakon F8c (čvorovi na križanjima koja linije stvarno skreću), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba: `node scripts/replay-twin.mjs recordings/2026/09/17 --limit
+2216`. **Prozor se opet nije pomaknuo.** Direktorij je u međuvremenu narastao na 5232 okvira,
+ali prva 2216 po zaglavlju i dalje idu od 00:00:04Z do 06:34:27Z: `frames processed` 2216,
+`vehicles seen` 433 i sva tri broja ocijenjenih očitanja (373886 / 370862 / 362424) identična
+su F8 i F8b, pa je tablica F8b valjan stupac „prije" nad **istim** okvirima.
+
+Feed je provjeren prije prve izmjene i nakon zadnje: `feed_version` **000395**, `Last-Modified`
+Tue, 01 Sep 2026 08:50:29 GMT, 14.720.190 B -- isti bajt do bajta kao u F8 i F8b.
+
+Gradnja mreže sada zatvara nedostatak koji je F8b samo izmjerio. Od devet predugih skokova
+usmjerivač je ponudio **pet kandidatskih križanja**, a gradnja je zadržala **tri** -- ona na
+kojima neka putanja doista skreće:
+
+```
+Junctions noded: 3 of 5 crossings considered for 9 long hops; 2 hops still route past 2x the straight line (2 allowlisted in scripts/gtfs-shapes-overrides.json)
+Junction at 15.978,45.8056 (48.8 deg, 0.37 m off the exact crossing): edges 109 x 228 -> 111,112,231,232 at node 105
+Junction at 15.9933,45.8104 (48.5 deg, 0.35 m off the exact crossing): edges 85 x 248 -> 85,86,253,254 at node 80
+Junction at 15.9933,45.8103 (50.1 deg, 0.24 m off the exact crossing): edges 98 x 247 -> 99,100,251,252 at node 95
+```
+
+Prvi je kod Glavnog kolodvora (kolosijek prema jugu križa Mihanovićevu prema zapadu), druga dva
+su dva kolosijeka Šubićeve ulice preko dva kolosijeka Ulice kralja Zvonimira. Preostala dva
+kandidata (Šubićeva ↔ suprotni kolosijek Zvonimirove) nijedna putanja ne koristi, pa ih graf
+nije dobio: čvor stvara skretanja na sve strane, a mreža puna skretanja koja nijedan tramvaj ne
+vozi lošiji je model od jednog obilaska. Graf ima **293 brida nad 212 čvorova** (bilo 287 nad
+209): šest bridova rasječeno je na dvanaest, sve ostalo je nedirnuto.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 23.9%  within 51.6%  behind 24.5%  (n=373886)
+  30s:  ahead 28.4%  within 37.6%  behind 34.0%  (n=370862)
+  60s:  ahead 29.9%  within 29.6%  behind 40.6%  (n=362424)
+
+between-plan regressions (>25 m):     58944  (of 190816 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2784  (of 1124149 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        10490391
+  visible crossings (must be 0):      10384
+  hold-time share:                    8.1%  mean hold length: 5.4 s  (32063 holds)
+
+overtakes (must be 0):   3304
+reversals (must be 0):   0
+concessions:             659
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 31.60  p95 200.89
+```
+
+Isti okviri, prije (F8b) i poslije (F8c), uz stupac F8 za mjeru cijelog kruga:
+
+| Mjera | F8 | prije (F8b) | poslije (F8c) | promjena F8b → F8c |
+|---|---|---|---|---|
+| bridovi grafa / čvorovi | 287 / 209 | 287 / 209 | **293 / 212** | tri križanja postala su čvorovi |
+| predugi skokovi (> 2× zraka i > 500 m) | 9 | 9 | **2, oba s obrazloženjem** | sedam popravljeno |
+| sintetičke putanje | 45 | 52 | 52 | nijedna nije izgubljena |
+| posluženih zapisa | 3.100 | 3.302 | 3.302 | nepromijenjeno |
+| fantomska stajališta | 0 od 10.599 | 0 od 11.161 | **0 od 11.004** | 157 geometrijskih zapisa manje (obilasci više ne prolaze pokraj tuđih perona) |
+| 30 s: plan ≥ 50 m ispred | 28,4 % | 28,9 % | 28,4 % | −0,5 p. b. |
+| 30 s: unutar 50 m | 37,6 % | 37,3 % | **37,6 %** | +0,3 p. b. |
+| 30 s: plan ≥ 50 m iza | 34,1 % | 33,8 % | 34,0 % | +0,2 p. b. |
+| regresije među planovima (> 25 m) | 58.919 | 60.119 | **58.944** | −2,0 % |
+| prekršaji redoslijeda prema očitanjima | 2.793 od 1.132.483 | 2.804 od 1.118.044 | **2.784 od 1.124.149** | −0,7 % broja, 0,251 ‰ → 0,248 ‰ |
+| slike unatrag (klijent) | 10.543.874 | 10.707.174 | **10.490.391** | −2,0 % (ispod F8) |
+| vidljiva križanja | 10.324 | 10.974 | **10.384** | −5,4 % |
+| udio zadržavanja | — | 8,4 % / 5,5 s | 8,1 % / 5,4 s | −0,3 p. b. |
+| preticanja | 3.324 | 3.336 | **3.304** | −1,0 % (ispod F8) |
+| ustupci | 650 | 661 | 659 | −0,3 % |
+| **udio poznatog smjera** | 100,0 % | 100,0 % | **100,0 %** | nepromijenjen, kako je i traženo |
+| **udio nepoznate vožnje** | 0,0 % | 0,0 % | **0,0 %** | nepromijenjen, kako je i traženo |
+| otkucaj p50 / p95 | 29,45 / 180,72 ms | 30,17 / 194,71 ms | 31,60 / 200,89 ms | +4,7 % / +3,2 % |
+
+Što se iz nje čita:
+
+- **Svaki redak kvalitete se popravio, i F8c poništava cijenu koju je F8b platio.** Regresije
+  među planovima vratile su se na razinu F8 (58.944 prema 58.919), slike unatrag i preticanja
+  pale su *ispod* F8, vidljiva križanja vratila su se na +0,6 % od F8 umjesto +6,3 %. Razlog je
+  isti u svim redcima: sedam planova koji su vozili 1,5 do 2,7 km oko ugla koji tramvaj ne vozi
+  više to ne rade, pa ne ostavljaju fantomske tramvaje na bridovima koje dijele druge linije,
+  gdje zakon redoslijeda onda steže prave.
+- **Sedam od devet skokova je popravljeno, dva nisu i to je zapisano.** Linija 13 sada skreće iz
+  Šubićeve u Zvonimirovu u 304 m luka umjesto 1779 (`path:13:1:129fd87e`), odnosno 564 umjesto
+  2122 m u suprotnom smjeru; linije 6 i 17 voze Zrinjevac → Botanički vrt u 747 m umjesto 3261.
+  Preostaju **Botanički vrt → Zrinjevac na linijama 6 i 9** (3242 m luka za 511 m zraka). To
+  skretanje se ne da učvoriti: kolosijek Mihanovićeve prema istoku *završava* u čvoru kod
+  Glavnog kolodvora, a kolosijek prema sjeveru *počinje* 6,79 m dalje, pa se dvije crte nikada
+  ne sijeku i nema točke koja leži na obje. 6,79 m je daleko izvan `SNAP_METRES` (2,5 m), a
+  spajanje dvaju čvorova umjesto toga stvorilo bi tri okreta u mjestu koje nijedan tramvaj ne
+  vozi. Oba skoka su zato imenovana u `scripts/gtfs-shapes-overrides.json` s razlogom; bez
+  zapisa gradnja **pada**.
+- **Graf sada nosi svoje ime.** Artefakt ima `graphHash` (SHA-256 nad poredanim bridovima kako
+  ih žica nosi, 16 znamenki), blizanac pamti pod kojim je imenom učio i pri promjeni briše sve
+  što je ključano indeksom brida (`edge_time`), a zadržava `stop_dwell`, koji je ključan
+  identifikatorom stajališta i koji nijedna pregradnja ne prenumerira. Bez toga bi histogram za
+  „brid 137" nakon ove pregradnje govorio o drugom komadu pruge.
+- **Tri putanje linije 4 vratile su se na vlastiti ulazni brid.** F8b ih je nehotice pomaknuo na
+  61-metarski privoz koji nijedan oblik linije 4 ne crta; prvo i zadnje stajalište uzorka sada
+  opet čitaju geometrijskih 40 m (200-metarska iznimka za okretišta i dalje vrijedi), pa putanje
+  kreću s brida koji crtaju oblici `4_3` i `4_9`.
+- **Cijena je jedan otkucaj.** p50 je 31,60 ms prema 30,17 (+4,7 %); graf je za šest bridova
+  veći, a putanje kraće, pa je to unutar šuma mjerenja na jednom prolazu.
+
 ## Javni zaslon Prozor (16. 9. 2026.)
 
 Plan `C:/Users/MatijaRadeljak/.claude/plans/observe-the-layout-and-valiant-fiddle.md`, grana i
