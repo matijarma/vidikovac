@@ -88,3 +88,19 @@ describe('the ZET artwork build', () => {
     expect(gzipSync(bytes).byteLength).toBeLessThan(20_000);
   });
 });
+
+// The city map paints a focused line in the colour ZET prints it in (F5).
+// That table is not a second hand-kept list: the same build that writes the
+// schema artefact writes it, from the same strokes, in the same run.
+describe('the ZET line colour table', () => {
+  it('carries one colour per tram line, bound to the artefact’s own feed and strokes, in a stable order', () => {
+    const table = read('app/src/data/zet-line-colours.json');
+    const schema = read('app/public/data/zet-schema.json');
+    expect(table.feedVersion).toBe(schema.feedVersion);
+    const ids = Object.keys(table.colours);
+    expect(ids).toHaveLength(19);
+    // Deterministic bytes: two runs over the same source produce the same file.
+    expect(ids).toEqual([...ids].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b)));
+    for (const line of schema.lines) expect(table.colours[line.route], line.route).toBe(line.colour);
+  });
+});

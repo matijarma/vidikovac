@@ -456,9 +456,26 @@ export async function main(argv = process.argv.slice(2)) {
     return { id: path.id, matched: match.stops.length, source: match.sourceStops, legs: match.legs.map(l => l.sign), excluded: match.placeable ? null : exemption };
   });
   const text = JSON.stringify(schema) + '\n';
+  // The city map's line focus paints a route in the colour ZET prints it in
+  // (F5). The strokes that colour comes from are identified right here, so the
+  // table is written by the same run rather than kept by hand: one feed, one
+  // set of colours, one source of truth. Keys in route order and two-space
+  // JSON -- it is a committed source file, and its diff has to be readable.
+  const colours = {
+    feedVersion: schema.feedVersion,
+    colours: Object.fromEntries([...schema.lines]
+      .sort((a, b) => Number(a.route) - Number(b.route) || a.route.localeCompare(b.route))
+      .map(line => [line.route, line.colour])),
+  };
+  const coloursText = JSON.stringify(colours, null, 2) + '\n';
   if (report.unassignedGroups.length) throw new Error(`Unassigned in-diagram circle groups: ${JSON.stringify(report.unassignedGroups)}`);
-  if (!argv.includes('--check')) await writeFile(resolve(ROOT, 'app/public/data/zet-schema.json'), text, 'utf8');
-  else if (await readFile(resolve(ROOT, 'app/public/data/zet-schema.json'), 'utf8').catch(() => null) !== text) throw new Error('Committed zet-schema.json is missing or stale; run npm run build:schema');
+  if (!argv.includes('--check')) {
+    await writeFile(resolve(ROOT, 'app/public/data/zet-schema.json'), text, 'utf8');
+    await writeFile(resolve(ROOT, 'app/src/data/zet-line-colours.json'), coloursText, 'utf8');
+  } else {
+    if (await readFile(resolve(ROOT, 'app/public/data/zet-schema.json'), 'utf8').catch(() => null) !== text) throw new Error('Committed zet-schema.json is missing or stale; run npm run build:schema');
+    if (await readFile(resolve(ROOT, 'app/src/data/zet-line-colours.json'), 'utf8').catch(() => null) !== coloursText) throw new Error('Committed zet-line-colours.json is missing or stale; run npm run build:schema');
+  }
   if (argv.includes('--verbose')) console.log(JSON.stringify(report, null, 2));
   else {
     for (const line of report.lines) console.log(`Line ${line.route.padStart(2)} ${line.colour}: ${line.votes.filter(v => v === line.route).length} badge votes, ${line.circles} stops, projected [${line.projected.join(', ')}], GTFS termini [${line.termini.join(' / ')}]`);
