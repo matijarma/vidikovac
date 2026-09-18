@@ -774,6 +774,105 @@ fantomskih stajališta i dalje je 0 po konstrukciji.
 
 Prolaz traje 5 minuta i 32 sekunde (22:46:35 do 22:52:07), uglavnom u simulaciji klijenta.
 
+### Nakon F8b (putanja za svaki uzorak bez oblika), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba: `node scripts/replay-twin.mjs recordings/2026/09/17 --limit
+2216`. **Prozor se ovaj put nije pomaknuo.** Direktorij je narastao s 2904 na 4733 okvira sa
+zaglavljem, ali svi novi leže *iza* prozora: prva 2216 okvira po zaglavlju i dalje idu od
+00:00:04Z do **06:34:27Z**, točno kao u tablici F8. To potvrđuju i same brojke -- `frames
+processed` 2216, `vehicles seen` 433, sva tri broja ocijenjenih očitanja (373886 / 370862 /
+362424) i simulacija klijenta (284077 slika, 25531087 tramvajskih slika) identični su F8. Zato
+je tablica F8 valjan stupac „prije" nad **istim** okvirima i polazni kod nije ponovno pokretan.
+
+Feed je provjeren prije i poslije: `feed_version` **000395**, `Last-Modified` Tue, 01 Sep 2026
+08:50:29 GMT, 14.720.190 B -- isti kao u F8.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 24.4%  within 51.3%  behind 24.3%  (n=373886)
+  30s:  ahead 28.9%  within 37.3%  behind 33.8%  (n=370862)
+  60s:  ahead 30.4%  within 29.4%  behind 40.3%  (n=362424)
+
+between-plan regressions (>25 m):     60119  (of 190788 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2804  (of 1118044 fresh pairs on shared rails)
+phantom stops:           0 of 11161 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3504 geometric / 1074 served / 0 phantom, median per path 61.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        10707174
+  visible crossings (must be 0):      10974
+  hold-time share:                    8.4%  mean hold length: 5.5 s  (32733 holds)
+
+overtakes (must be 0):   3336
+reversals (must be 0):   0
+concessions:             661
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 30.17  p95 194.71
+```
+
+Isti okviri, prije (F8) i poslije (F8b):
+
+| Mjera | prije (F8) | poslije (F8b) | promjena |
+|---|---|---|---|
+| sintetičke putanje | 45 | **52** | sedam uzoraka koje 40-metarski usmjerivač nije mogao spojiti |
+| tramvajske putanje sa segmentima voznog reda | 145 od 145 | **152 od 152** | svaka i dalje ima vozni red |
+| uzorci bez oblika bez vlastite putanje | 6 nepreslikanih + 1 pogođen | **0 + 0** | 49 točnim nizom, 3 skraćena (linija 1) |
+| posluženih zapisa | 3.100 | 3.302 | +202 (sedam novih putanja) |
+| fantomska stajališta | 0 od 10.599 | 0 od 11.161 | i dalje 0 po konstrukciji |
+| 30 s: plan ≥ 50 m ispred | 28,4 % | 28,9 % | +0,5 p. b. |
+| 30 s: unutar 50 m | 37,6 % | 37,3 % | −0,3 p. b. |
+| 30 s: plan ≥ 50 m iza | 34,1 % | 33,8 % | −0,3 p. b. |
+| regresije među planovima (> 25 m) | 58.919 | 60.119 | +2,0 % |
+| prekršaji redoslijeda prema očitanjima | 2.793 od 1.132.483 | 2.804 od 1.118.044 | +0,4 % broja, 0,247 ‰ → 0,251 ‰ |
+| slike unatrag (klijent) | 10.543.874 | 10.707.174 | +1,5 % |
+| vidljiva križanja | 10.324 | 10.974 | +6,3 % |
+| preticanja | 3.324 | 3.336 | +0,4 % |
+| ustupci | 650 | 661 | +1,7 % |
+| **udio poznatog smjera** | 100,0 % | **100,0 %** | nepromijenjen, kako je i traženo |
+| **udio nepoznate vožnje** | 0,0 % | **0,0 %** | nepromijenjen, kako je i traženo |
+| otkucaj p50 / p95 | 29,45 / 180,72 ms | 30,17 / 194,71 ms | +2,4 % / +7,7 % |
+
+Što se iz nje čita:
+
+- **Nijedan uzorak bez oblika više nema tuđu putanju.** Prije F8b sedam uzoraka linija 2, 5 i 13
+  (13/1 s 384 vožnje dnevno, 13/0 s 356, 5/1 sa 162, 2/1 sa 150) nije imalo nikakvu sintetičku
+  putanju, pa su ih `candidatesFor` slagali na bilo koju putanju iste linije, a vozni red im je
+  dolazio od drugog uzorka. Sada svaki od njih ima svoju putanju, svoj posluženi popis i svoj
+  vozni red; `mapPatternsToPaths` javlja 0 nepreslikanih i 0 pogođenih.
+- **Uzrok je bio radijus, ne usmjerivač.** Olipska 251_2 je 39,4 m od tračnice *suprotnog*
+  smjera i 42,8 m od one kojom njezina linija vozi; na 40 m usmjerivač je vidio samo pogrešnu
+  tračnicu i od nje do Držićeve nije bilo lanca. Poslužni radijus (`SERVED_STOP_MAX_METRES`,
+  60 m, odluka A iz F8) odgovara na pitanje „na kojoj tračnici stoji stajalište *ove* linije",
+  što je upravo pitanje koje usmjerivač postavlja. Geometrijskih 40 m ostaje netaknuto: ono
+  odgovara na „pokraj kojih perona prolazi ova tračnica" i mora ostati usko.
+- **Cijena je mala i posvuda jednaka.** Sedam novih putanja znači sedam uzoraka koje motor sada
+  planira po vlastitoj geometriji umjesto po tuđoj, pa se svi redci pomiču za pola postotka do
+  nekoliko postotaka; vidljiva križanja +6,3 % najveći su pomak. Ono što je moralo ostati --
+  poznati smjer 100 % i nepoznata vožnja 0 % -- ostalo je.
+- **Ostao je jedan pravi nedostatak grafa, i sada je izmjeren.** Devet skokova između dva
+  susjedna stajališta vozi se znatno dalje nego što ide zrak: šest na putanjama linija 6, 9 i 17
+  (Botanički vrt ↔ Zrinjevac, 3241–3261 m luka za 511–522 m zraka) koji su u artefaktu već od
+  F8, i tri na linijama 13 (Šubićeva ↔ Trg žrtava fašizma, 1779–2122 m za 304–511 m). Uzrok je
+  isti: graf nema čvor ondje gdje linija skreće, jer nijedan oblik u feedu ne crta to skretanje.
+  Kod Šubićeve to se vidi golim okom -- Šubićeva ulica (brid 85) i Ulica kralja Zvonimira
+  (bridovi 247/248, koje crtaju samo dva oblika noćne linije 32) križaju se *usred* oba brida,
+  pa tramvaj koji tuda skreće nema kuda. Gradnja sada svaki takav skok ispisuje imenom
+  (`HOP_DETOUR_FACTOR`), ali ga ne odbija: bez putanje bi uzorak bio ondje gdje je i bio.
+
 Dopuna 16. 9. 2026., drugi prolaz, nakon što je područje Vijesti izašlo iz proizvoda
 (`b8a6a19`) i karta postala cijelo polje javnog zaslona (`e60bbfc` do `c0c9867`): prijedlog,
 Obrazac 2.2, plan provedbe i pitanja Povjerenstva kažu šest područja i devet modula izvora;
