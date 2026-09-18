@@ -120,6 +120,38 @@ export const TERMINUS_TRIM_STOPS = 2;
 // the pathless pattern this task exists to end.
 export const HOP_DETOUR_FACTOR = 2; // past twice the straight line...
 export const HOP_DETOUR_EXCESS_METRES = 500; // ...and past half a kilometre longer
+// F8c NODES those crossings, one reported leg at a time. The search is
+// deliberately narrow, because a node where two tracks cross grows turns in
+// every direction and the graph must not sprout turns no tram takes:
+// only edges that pass within JUNCTION_SEARCH_METRES of one of the leg's own
+// two platforms are considered (on feed 000395 the rail a line turns onto is
+// at most 60 m from the platform, and Subiceva 163_2 is 59.9 m from the
+// street it comes down -- 120 m is that with room to spare and still local),
+// and a candidate junction survives only if some path then actually turns
+// there (see the prune pass in buildNetwork).
+export const JUNCTION_SEARCH_METRES = 120;
+// Below this the two polylines are not a street crossing but two
+// digitisations of one corridor brushing past each other: on feed 000395 the
+// two Kralja Zvonimira tracks "cross" at 6.8 and 8.1 degrees a kilometre and
+// a half east of anything, while every real crossing the reported legs need
+// meets at 48 to 50 degrees.
+export const JUNCTION_MIN_ANGLE_DEG = 20;
+// Two polylines that cross TWICE within this distance swap sides rather than
+// meet: the two Zvonimira tracks cross and cross back over 9 m at Subiceva,
+// the two Mihanoviceva tracks over 2 m at Botanicki vrt. Neither is a
+// junction, and noding one would offer the router a crossover no tram uses.
+// Thirty metres is the same length SNAP_MIN_RUN_METRES calls "a shared
+// stretch worth an edge".
+export const JUNCTION_TWIN_CROSSING_METRES = 30;
+// The split point is the exact segment-segment intersection, rounded to the
+// artefact's own 1e-5 deg lattice -- the only coordinates the graph and the
+// wire can express. The rounding moves it at most half a cell in each axis,
+// so it still lies on both polylines to within HALF a cell's diagonal
+// (0.68 m at Zagreb's latitude, under the 1.1 m quantum the whole rail graph
+// is built on). The build measures the offset for every junction it makes
+// and refuses a larger one, which would mean the intersection did not lie on
+// the segments the junction names.
+export const JUNCTION_MAX_OFFSET_METRES = 0.5 * Math.hypot(SCALE * DEG2RAD * COS_LAT0 * EARTH_RADIUS_M, SCALE * DEG2RAD * EARTH_RADIUS_M);
 // The diagram's second simplification pass, after the octilinear snap.
 export const DIAGRAM_SIMPLIFY_METRES = 120;
 
@@ -167,6 +199,15 @@ function deltaEncode(value, origin) {
 /** An integer unit pair back to the metre plane. */
 function unitsToMetres([x, y]) {
   return toMetres(ORIGIN[0] + x * SCALE, ORIGIN[1] + y * SCALE);
+}
+
+/** The inverse: a metre-plane point onto the artefact's integer lattice.
+ *  Lossy by up to half a cell in each axis -- the quantum every coordinate in
+ *  this file already carries (JUNCTION_MAX_OFFSET_METRES). */
+function unitsFromMetres(p) {
+  const lon = p.x / (DEG2RAD * COS_LAT0 * EARTH_RADIUS_M);
+  const lat = p.y / (DEG2RAD * EARTH_RADIUS_M);
+  return [deltaEncode(lon, ORIGIN[0]), deltaEncode(lat, ORIGIN[1])];
 }
 
 /**
@@ -364,6 +405,44 @@ function bboxesOverlap(a, b) {
 /** Nearest point on a polyline (given its cumulative arc length), returning
  *  the perpendicular distance, the arc length at the nearest point, the
  *  segment index and the fraction along that segment. */
+/** Where two plane segments cross, or null: `t`/`u` the fractions along a->b
+ *  and c->d, `angle` the (acute) angle between them in degrees. Parallel
+ *  segments never cross here, which is what we want -- two digitisations of
+ *  one track must not become a junction. */
+function segmentIntersection(a, b, c, d) {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const den = r.x * s.y - r.y * s.x;
+  if (den === 0) return null;
+  const t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / den;
+  const u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / den;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  const deg = (Math.abs(Math.atan2(den, r.x * s.x + r.y * s.y)) * 180) / Math.PI;
+  return { p: { x: a.x + t * r.x, y: a.y + t * r.y }, t, u, angle: Math.min(deg, 180 - deg) };
+}
+
+/** Every point at which two polylines cross, with the arc on each and the
+ *  crossing angle. Quadratic in the segment counts, which is why the callers
+ *  narrow the edge set to a leg's own neighbourhood first. */
+function polylineCrossings(planeA, cumA, planeB, cumB) {
+  const out = [];
+  for (let i = 1; i < planeA.length; i++) {
+    for (let j = 1; j < planeB.length; j++) {
+      const hit = segmentIntersection(planeA[i - 1], planeA[i], planeB[j - 1], planeB[j]);
+      if (!hit) continue;
+      out.push({
+        p: hit.p,
+        angle: hit.angle,
+        arcA: cumA[i - 1] + hit.t * (cumA[i] - cumA[i - 1]),
+        arcB: cumB[j - 1] + hit.u * (cumB[j] - cumB[j - 1]),
+        segA: i - 1,
+        segB: j - 1,
+      });
+    }
+  }
+  return out;
+}
+
 function nearestOnPolyline(p, points, cum) {
   let best = Infinity;
   let bestArc = 0;
@@ -735,6 +814,57 @@ function snapNearDuplicates(shapesUnits, trace = null) {
   return { shapes, snappedRuns };
 }
 
+/**
+ * Forces a vertex at each junction point on every shape that runs one of the
+ * segments it was found on, so the run-splitting pass below cuts BOTH tracks
+ * there: with two tracks through one vertex its undirected degree is four,
+ * which is the same rule that already cuts an at-grade crossing the feed's
+ * shapes happen to draw through a shared point. Splitting here, before the
+ * runs are cut, is what keeps every edge a maximal run of segments with one
+ * owner set -- nothing downstream has to be re-canonicalised.
+ *
+ * A junction is `{ u, segs }` in the same integer units as the shapes: `u`
+ * the split point, `segs` the one or two segments it lies on, named by their
+ * two endpoints. Naming the segments rather than measuring a distance is
+ * deliberate: the opposite track can run under a metre away (Glavni kolodvor:
+ * 0.14 m), and a tolerance would cut it too.
+ */
+function insertJunctionVertices(shapes, junctions) {
+  const bySegment = new Map(); // segment key, both orders -> the units to put on it
+  for (const { u, segs } of junctions) {
+    for (const [a, b] of segs) {
+      for (const key of [segmentKey(a, b), segmentKey(b, a)]) {
+        let list = bySegment.get(key);
+        if (!list) bySegment.set(key, (list = []));
+        if (!list.some((v) => unitKey(v) === unitKey(u))) list.push(u);
+      }
+    }
+  }
+  let inserted = 0;
+  for (const units of shapes) {
+    for (let i = 1; i < units.length; i++) {
+      const list = bySegment.get(segmentKey(units[i - 1], units[i]));
+      if (!list) continue;
+      // Already a vertex of this shape (the intersection rounded onto one):
+      // the node is there, nothing to insert.
+      const wanted = list.filter((u) => unitKey(u) !== unitKey(units[i - 1]) && unitKey(u) !== unitKey(units[i]));
+      if (wanted.length === 0) continue;
+      const from = unitsToMetres(units[i - 1]);
+      const ordered = wanted
+        .map((u) => {
+          const q = unitsToMetres(u);
+          return { u, d: Math.hypot(q.x - from.x, q.y - from.y) };
+        })
+        .sort((x, y) => x.d - y.d)
+        .map((entry) => [entry.u[0], entry.u[1]]);
+      units.splice(i, 0, ...ordered);
+      inserted += ordered.length;
+      i += ordered.length;
+    }
+  }
+  return inserted;
+}
+
 /** Sampled points every `step` metres along a polyline, vertices included. */
 function samplePolyline(plane, cum, step) {
   const out = [];
@@ -804,11 +934,13 @@ function findNearParallel(edges) {
  * Options: `snap: false` skips the near-duplicate merge (the residual-pair
  * report then shows what it would have merged); `trace(line)` receives one
  * line per detected run, for diagnosing a build whose residual check fails.
+ * `junctions` (F8c) forces a node where two tracks only cross, so a turn the
+ * feed's shapes never draw becomes expressible; see insertJunctionVertices.
  * `snappedShapes` in the result is the geometry after snapping, for the same
  * diagnostic use; the artefact is cut from the edges, not from it.
  */
 export function buildRailGraph(shapesUnits, opts = {}) {
-  const { snap = true, trace = null } = opts;
+  const { snap = true, trace = null, junctions = [] } = opts;
   let spikePoints = 0;
   const deduped = shapesUnits.map((units) => {
     const cleaned = collapseSpikes(dedupeUnits(units));
@@ -819,6 +951,7 @@ export function buildRailGraph(shapesUnits, opts = {}) {
   let shapes = deduped;
   let snappedRuns = 0;
   if (snap) ({ shapes, snappedRuns } = snapNearDuplicates(deduped, trace));
+  const junctionVertices = junctions.length > 0 ? insertJunctionVertices(shapes, junctions) : 0;
 
   const owners = new Map(); // segment key -> Set(shape index)
   const neighbours = new Map(); // unit key -> Set(unit key), undirected
@@ -876,7 +1009,15 @@ export function buildRailGraph(shapesUnits, opts = {}) {
     shapeEdges.push(seq);
   }
   const residualPairs = findNearParallel(edges);
-  return { edges, shapeEdges, nodeCount: nodeIds.size, snappedShapes: shapes, report: { snappedRuns, residualPairs, unsharedShareBefore, spikePoints } };
+  const junctionNodes = new Map(junctions.map(({ u }) => [unitKey(u), nodeIds.get(unitKey(u)) ?? null]));
+  return {
+    edges,
+    shapeEdges,
+    nodeCount: nodeIds.size,
+    snappedShapes: shapes,
+    junctionNodes,
+    report: { snappedRuns, residualPairs, unsharedShareBefore, spikePoints, junctionVertices },
+  };
 }
 
 /** Shortest path over directed edges from any of `sources` to any of
@@ -1316,73 +1457,37 @@ export async function buildNetwork(zipBuf, opts = {}) {
   // --- The rail graph from the RAW tram points (before any simplification).
   const tramRows = shapeRows.filter((s) => s.kind === 'tram');
   const tramUnits = tramRows.map((s) => s.rawPts.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]));
-  const graph = buildRailGraph(tramUnits);
-  if (graph.report.residualPairs.length > 0) {
-    const listed = graph.report.residualPairs.map((p) => `edges ${p.a} and ${p.b} run together for ${p.metres} m`).join('; ');
-    throw new Error(`Rail graph: ${graph.report.residualPairs.length} same-direction near-parallel edge pair(s) survived the snapping pass: ${listed}`);
-  }
-  // Edge interiors simplified at 5 m, endpoints kept (the graph's nodes).
-  const edgeUnits = graph.edges.map((e) => {
-    const plane = e.units.map(unitsToMetres);
-    const keep = dpIndices(plane, SIMPLIFY_METRES);
-    return keep.map((i) => e.units[i]);
-  });
-  const edgePlane = edgeUnits.map((units) => units.map(unitsToMetres));
-  const edgeCum = edgePlane.map(cumulative);
-  const edgeLen = edgeCum.map((cum) => cum[cum.length - 1]);
-  // Wide enough for BOTH stop radii: the 40 m geometric links the wire
-  // carries and the 60 m links the synthetic-path router walks (F8b).
-  const edgeBbox = edgePlane.map((plane) => bboxExpanded(plane, SERVED_STOP_MAX_METRES));
-  const outgoing = new Map();
-  graph.edges.forEach((e, idx) => {
-    const list = outgoing.get(e.from);
-    if (list) list.push(idx);
-    else outgoing.set(e.from, [idx]);
-  });
+  const baseGraph = buildRailGraph(tramUnits);
+  const refuseResidualPairs = (g) => {
+    if (g.report.residualPairs.length === 0) return;
+    const listed = g.report.residualPairs.map((p) => `edges ${p.a} and ${p.b} run together for ${p.metres} m`).join('; ');
+    throw new Error(`Rail graph: ${g.report.residualPairs.length} same-direction near-parallel edge pair(s) survived the snapping pass: ${listed}`);
+  };
+  refuseResidualPairs(baseGraph);
+  // The same graph with junction vertices forced (F8c). The near-duplicate
+  // snapping pass is most of the build's time and its output is what a
+  // junction's segments are named against, so it runs once: cutting the
+  // SNAPPED shapes again with snapping off gives byte-identical edges (the
+  // snapping pass is idempotent on its own output), plus the junction splits.
+  const cutWithJunctions = (junctions) => {
+    if (junctions.length === 0) return baseGraph;
+    const cut = buildRailGraph(baseGraph.snappedShapes, { snap: false, junctions });
+    cut.report.snappedRuns = baseGraph.report.snappedRuns;
+    cut.report.unsharedShareBefore = baseGraph.report.unsharedShareBefore;
+    cut.report.spikePoints = baseGraph.report.spikePoints;
+    refuseResidualPairs(cut);
+    return cut;
+  };
 
   // Bus sharing ratio, informational: the same segment measure on bus shapes.
   const busRows = shapeRows.filter((s) => s.kind === 'bus');
   const busUnsharedShare = unsharedShare(busRows.map((s) => s.rawPts.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])])));
 
-  // --- Shapes: trams as edge sequences (geometry reconstructed for the
-  // diagram and the length), buses simplified and chain-encoded as in v1.
-  const shapes = [];
-  const planeByShapeIdx = [];
-  const cumByShapeIdx = [];
-  const bboxByShapeIdx = [];
-  let tramCursor = 0;
-  for (const row of shapeRows) {
-    if (row.kind === 'tram') {
-      const seq = graph.shapeEdges[tramCursor++];
-      const plane = [];
-      for (const e of seq) {
-        const pts = edgePlane[e];
-        for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
-      }
-      const cum = cumulative(plane);
-      shapes.push({ id: row.id, route: row.route, dir: row.dir, d: [], e: seq, len: round1(cum[cum.length - 1]) });
-      planeByShapeIdx.push(plane);
-      cumByShapeIdx.push(cum);
-      bboxByShapeIdx.push(bboxExpanded(plane, STOP_SHAPE_MAX_METRES));
-    } else {
-      const plane = row.rawPts.map((p) => toMetres(p.lon, p.lat));
-      const keepIdx = dpIndices(plane, SIMPLIFY_METRES);
-      const simplifiedLonLat = keepIdx.map((i) => row.rawPts[i]);
-      const simplifiedPlane = keepIdx.map((i) => plane[i]);
-      const cum = cumulative(simplifiedPlane);
-      const units = simplifiedLonLat.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]);
-      shapes.push({ id: row.id, route: row.route, dir: -1, d: chainEncodeXY(units), e: [], len: round1(cum[cum.length - 1]) });
-      planeByShapeIdx.push(simplifiedPlane);
-      cumByShapeIdx.push(cum);
-      bboxByShapeIdx.push(bboxExpanded(simplifiedPlane, STOP_SHAPE_MAX_METRES));
-    }
-  }
-
   const shapeIdxByRoute = new Map();
-  for (let i = 0; i < shapes.length; i++) {
-    const list = shapeIdxByRoute.get(shapes[i].route);
+  for (let i = 0; i < shapeRows.length; i++) {
+    const list = shapeIdxByRoute.get(shapeRows[i].route);
     if (list) list.push(i);
-    else shapeIdxByRoute.set(shapes[i].route, [i]);
+    else shapeIdxByRoute.set(shapeRows[i].route, [i]);
   }
 
   // Rank: every tram route, then every other route, each group ordered by
@@ -1421,353 +1526,571 @@ export async function buildNetwork(zipBuf, opts = {}) {
     stopPlane.push(unitsToMetres(stopUnits[i]));
     return { id: s.id, name: s.name, p: [stopPChain[2 * i], stopPChain[2 * i + 1]], on: [], onEdge: [], terminal: terminalStops.has(s.id) ? 1 : 0 };
   });
-  const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres, within STOP_SHAPE_MAX_METRES
-  // The same, within SERVED_STOP_MAX_METRES: which rails a line's own stop
-  // may sit on, which is the question the synthetic-path router asks. A
-  // superset of edgeLinks, and never written to the wire (F8b).
-  const routerLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
-  const shapeLinks = stops.map(() => []); // stopIdx -> [{ shape, frac }]
-
-  // Stop-transfer overrides: the sample trip's first and last stop of every
-  // shape link to its first edge at arc 0 and its last edge at its full
-  // length (trams), or to the shape at fraction 0 and 1 (buses).
-  const overriddenEdge = stops.map(() => new Set());
-  const overriddenShape = stops.map(() => new Set());
-  shapes.forEach((shape, shapeIdx) => {
-    const sampleTripId = shapeSampleTrip.get(shape.id);
-    const ends = sampleTripId ? tripEndpoints.get(sampleTripId) : undefined;
-    if (!ends) return;
-    const first = stopIndexById.get(ends.firstStop);
-    const last = stopIndexById.get(ends.lastStop);
-    if (shape.e.length > 0) {
-      const firstEdge = shape.e[0];
-      const lastEdge = shape.e[shape.e.length - 1];
-      if (first !== undefined) {
-        edgeLinks[first].push({ edge: firstEdge, s: 0 });
-        routerLinks[first].push({ edge: firstEdge, s: 0 });
-        overriddenEdge[first].add(firstEdge);
-      }
-      if (last !== undefined) {
-        edgeLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
-        routerLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
-        overriddenEdge[last].add(lastEdge);
-      }
-    } else {
-      if (first !== undefined) {
-        shapeLinks[first].push({ shape: shapeIdx, frac: 0 });
-        overriddenShape[first].add(shapeIdx);
-      }
-      if (last !== undefined) {
-        shapeLinks[last].push({ shape: shapeIdx, frac: 1 });
-        overriddenShape[last].add(shapeIdx);
-      }
-    }
-  });
-
-  for (let si = 0; si < stops.length; si++) {
-    const p = stopPlane[si];
-    for (let e = 0; e < graph.edges.length; e++) {
-      if (overriddenEdge[si].has(e) || !inBbox(p, edgeBbox[e])) continue;
-      const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
-      if (near.dist > SERVED_STOP_MAX_METRES) continue;
-      routerLinks[si].push({ edge: e, s: near.arc });
-      if (near.dist <= STOP_SHAPE_MAX_METRES) edgeLinks[si].push({ edge: e, s: near.arc });
-    }
-    for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
-      if (shapes[shapeIdx].e.length > 0 || overriddenShape[si].has(shapeIdx) || !inBbox(p, bboxByShapeIdx[shapeIdx])) continue;
-      const poly = planeByShapeIdx[shapeIdx];
-      if (poly.length < 2) continue;
-      const near = nearestOnPolyline(p, poly, cumByShapeIdx[shapeIdx]);
-      if (near.dist <= STOP_SHAPE_MAX_METRES) {
-        const len = cumByShapeIdx[shapeIdx][cumByShapeIdx[shapeIdx].length - 1];
-        shapeLinks[si].push({ shape: shapeIdx, frac: len > 0 ? clamp01(near.arc / len) : 0 });
-      }
-    }
-  }
-  // Encode: sorted by index, chain-delta on the index, the arc as decimetres
-  // (edges) or as the scaled fraction (bus shapes). One link per edge or
-  // shape per stop -- a stop within reach of an edge twice (a loop) keeps the
-  // nearer, first-found arc.
-  const encodeEdgeLinks = (links) => {
-    const byEdge = new Map();
-    for (const link of links) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
-    let prev = 0;
-    return [...byEdge]
-      .sort((a, b) => a[0] - b[0])
-      .map(([edge, s]) => {
-        const wire = [edge - prev, Math.round(s * 10)];
-        prev = edge;
-        return wire;
-      });
-  };
-  for (let si = 0; si < stops.length; si++) {
-    stops[si].onEdge = encodeEdgeLinks(edgeLinks[si]);
-    let prev = 0;
-    const byShape = new Map();
-    for (const link of shapeLinks[si]) if (!byShape.has(link.shape)) byShape.set(link.shape, link.frac);
-    prev = 0;
-    stops[si].on = [...byShape]
-      .sort((a, b) => a[0] - b[0])
-      .map(([shape, frac]) => {
-        const wire = [shape - prev, Math.round(frac * BUS_ON_FRAC_SCALE)];
-        prev = shape;
-        return wire;
-      });
-  }
-
-  // --- Served stops (F8): per path, the platforms its own trips call at, in
-  // arc order, as [stopIdx, decimetres] pairs. The arc is the stop's own
-  // geometric link on an edge of that path -- the first one past the stop
-  // called before it, so an out-and-back path puts a platform on the leg the
-  // line is actually on when it calls there. A served stop the path's edges
-  // do not link -- a platform just outside the 40 m radius of the rails this
-  // line runs -- is projected onto the path's polyline when it lies within
-  // SERVED_STOP_MAX_METRES of it, and otherwise reported by name and dropped,
-  // since an invented arc would move the planner's dwell to the wrong place.
-  // A projected stop takes the path's nearest point outright: having no edge
-  // link on this path it has only the one candidate, so the call order has
-  // nothing to choose between.
-  const linksByEdge = stops.map((_, si) => {
-    const byEdge = new Map();
-    for (const link of edgeLinks[si]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
-    return byEdge;
-  });
-  const offsetsOfEdges = (edgeSeq) => {
-    const offsets = [];
-    let len = 0;
-    for (const e of edgeSeq) {
-      offsets.push(len);
-      len += edgeLen[e];
-    }
-    return offsets;
-  };
-  const planeOfEdges = (edgeSeq) => {
-    const plane = [];
-    for (const e of edgeSeq) {
-      const pts = edgePlane[e];
-      for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
-    }
-    return plane;
-  };
-  let servedProjected = 0;
-  let servedUnordered = 0;
-  const servedDropped = [];
   /**
-   * @param {string} label the path's id, for the report
-   * @param {string} routeId
-   * @param {readonly number[]} edgeSeq the path's edges
-   * @param {Iterable<string>} stopIds the stops its trips call at
-   * @param {Map<string, Map<number, number>> | null} extraLinks links the
-   *   router used that the wire does not carry (a terminus set back from the
-   *   rails, TERMINUS_STOP_MAX_METRES), so a synthetic path keeps its own end
-   * @param {readonly string[] | null} order the call order of a trip that runs
-   *   this path, which alone resolves a platform lying within reach of both
-   *   legs of an out-and-back path (8 paths, 50 platforms on feed 000395)
+   * Everything the rail graph decides: the edges' geometry, every tram shape
+   * as a sequence of them, the stops' links to them, the served lists and the
+   * synthetic paths routed over them. A function because F8c may cut the
+   * graph again with junction vertices forced, which moves every edge index,
+   * and then all of this has to follow.
    */
-  function servedFor(label, routeId, edgeSeq, stopIds, extraLinks = null, order = null) {
-    const offsets = offsetsOfEdges(edgeSeq);
-    let plane = null;
-    let cum = null;
-    const wanted = new Set(stopIds);
-    // The stops the call order knows, in that order, then the rest (a
-    // short-turn variant's platform the sample trip never calls at), sorted
-    // so the bytes do not depend on a hash iteration order.
-    const ordered = [];
-    const seen = new Set();
-    for (const stopId of order ?? []) {
-      if (wanted.has(stopId) && !seen.has(stopId)) {
-        seen.add(stopId);
-        ordered.push(stopId);
+  function deriveFromGraph(graph) {
+    // Edge interiors simplified at 5 m, endpoints kept (the graph's nodes).
+    const edgeUnits = graph.edges.map((e) => {
+      const plane = e.units.map(unitsToMetres);
+      const keep = dpIndices(plane, SIMPLIFY_METRES);
+      return keep.map((i) => e.units[i]);
+    });
+    const edgePlane = edgeUnits.map((units) => units.map(unitsToMetres));
+    const edgeCum = edgePlane.map(cumulative);
+    const edgeLen = edgeCum.map((cum) => cum[cum.length - 1]);
+    // Wide enough for BOTH stop radii: the 40 m geometric links the wire
+    // carries and the 60 m links the synthetic-path router walks (F8b).
+    const edgeBbox = edgePlane.map((plane) => bboxExpanded(plane, SERVED_STOP_MAX_METRES));
+    const outgoing = new Map();
+    graph.edges.forEach((e, idx) => {
+      const list = outgoing.get(e.from);
+      if (list) list.push(idx);
+      else outgoing.set(e.from, [idx]);
+    });
+
+    // --- Shapes: trams as edge sequences (geometry reconstructed for the
+    // diagram and the length), buses simplified and chain-encoded as in v1.
+    const shapes = [];
+    const planeByShapeIdx = [];
+    const cumByShapeIdx = [];
+    const bboxByShapeIdx = [];
+    let tramCursor = 0;
+    for (const row of shapeRows) {
+      if (row.kind === 'tram') {
+        const seq = graph.shapeEdges[tramCursor++];
+        const plane = [];
+        for (const e of seq) {
+          const pts = edgePlane[e];
+          for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
+        }
+        const cum = cumulative(plane);
+        shapes.push({ id: row.id, route: row.route, dir: row.dir, d: [], e: seq, len: round1(cum[cum.length - 1]) });
+        planeByShapeIdx.push(plane);
+        cumByShapeIdx.push(cum);
+        bboxByShapeIdx.push(bboxExpanded(plane, STOP_SHAPE_MAX_METRES));
+      } else {
+        const plane = row.rawPts.map((p) => toMetres(p.lon, p.lat));
+        const keepIdx = dpIndices(plane, SIMPLIFY_METRES);
+        const simplifiedLonLat = keepIdx.map((i) => row.rawPts[i]);
+        const simplifiedPlane = keepIdx.map((i) => plane[i]);
+        const cum = cumulative(simplifiedPlane);
+        const units = simplifiedLonLat.map((p) => [deltaEncode(p.lon, ORIGIN[0]), deltaEncode(p.lat, ORIGIN[1])]);
+        shapes.push({ id: row.id, route: row.route, dir: -1, d: chainEncodeXY(units), e: [], len: round1(cum[cum.length - 1]) });
+        planeByShapeIdx.push(simplifiedPlane);
+        cumByShapeIdx.push(cum);
+        bboxByShapeIdx.push(bboxExpanded(simplifiedPlane, STOP_SHAPE_MAX_METRES));
       }
     }
-    const rest = [...wanted].filter((id) => !seen.has(id)).sort();
-    servedUnordered += rest.length;
-    const out = [];
-    const place = (stopId, cursor) => {
-      const si = stopIndexById.get(stopId);
-      if (si === undefined) {
-        servedDropped.push({ path: label, route: routeId, stop: stopId, name: '?', metres: null });
-        return null;
-      }
-      const byEdge = extraLinks?.get(stopId) ?? linksByEdge[si];
-      const candidates = [];
-      for (let k = 0; k < edgeSeq.length; k++) {
-        const onEdge = byEdge.get(edgeSeq[k]);
-        if (onEdge !== undefined) candidates.push(offsets[k] + onEdge);
-      }
-      candidates.sort((a, b) => a - b);
-      // The first arc past the stop called before this one; failing that the
-      // last, which is as far forward as this path can put it.
-      let arc = candidates.find((c) => c > cursor);
-      if (arc === undefined) arc = candidates[candidates.length - 1];
-      if (arc === undefined) {
-        if (plane === null) {
-          plane = planeOfEdges(edgeSeq);
-          cum = cumulative(plane);
+
+    const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres, within STOP_SHAPE_MAX_METRES
+    // The same, within SERVED_STOP_MAX_METRES: which rails a line's own stop
+    // may sit on, which is the question the synthetic-path router asks. A
+    // superset of edgeLinks, and never written to the wire (F8b).
+    const routerLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
+    const shapeLinks = stops.map(() => []); // stopIdx -> [{ shape, frac }]
+
+    // Stop-transfer overrides: the sample trip's first and last stop of every
+    // shape link to its first edge at arc 0 and its last edge at its full
+    // length (trams), or to the shape at fraction 0 and 1 (buses).
+    const overriddenEdge = stops.map(() => new Set());
+    const overriddenShape = stops.map(() => new Set());
+    shapes.forEach((shape, shapeIdx) => {
+      const sampleTripId = shapeSampleTrip.get(shape.id);
+      const ends = sampleTripId ? tripEndpoints.get(sampleTripId) : undefined;
+      if (!ends) return;
+      const first = stopIndexById.get(ends.firstStop);
+      const last = stopIndexById.get(ends.lastStop);
+      if (shape.e.length > 0) {
+        const firstEdge = shape.e[0];
+        const lastEdge = shape.e[shape.e.length - 1];
+        if (first !== undefined) {
+          edgeLinks[first].push({ edge: firstEdge, s: 0 });
+          routerLinks[first].push({ edge: firstEdge, s: 0 });
+          overriddenEdge[first].add(firstEdge);
         }
-        const near = plane.length >= 2 ? nearestOnPolyline(stopPlane[si], plane, cum) : null;
-        if (near && near.dist <= SERVED_STOP_MAX_METRES) {
-          arc = near.arc;
-          servedProjected++;
-        } else {
-          servedDropped.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: near ? round1(near.dist) : null });
+        if (last !== undefined) {
+          edgeLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
+          routerLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
+          overriddenEdge[last].add(lastEdge);
+        }
+      } else {
+        if (first !== undefined) {
+          shapeLinks[first].push({ shape: shapeIdx, frac: 0 });
+          overriddenShape[first].add(shapeIdx);
+        }
+        if (last !== undefined) {
+          shapeLinks[last].push({ shape: shapeIdx, frac: 1 });
+          overriddenShape[last].add(shapeIdx);
+        }
+      }
+    });
+
+    for (let si = 0; si < stops.length; si++) {
+      const p = stopPlane[si];
+      for (let e = 0; e < graph.edges.length; e++) {
+        if (overriddenEdge[si].has(e) || !inBbox(p, edgeBbox[e])) continue;
+        const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
+        if (near.dist > SERVED_STOP_MAX_METRES) continue;
+        routerLinks[si].push({ edge: e, s: near.arc });
+        if (near.dist <= STOP_SHAPE_MAX_METRES) edgeLinks[si].push({ edge: e, s: near.arc });
+      }
+      for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
+        if (shapes[shapeIdx].e.length > 0 || overriddenShape[si].has(shapeIdx) || !inBbox(p, bboxByShapeIdx[shapeIdx])) continue;
+        const poly = planeByShapeIdx[shapeIdx];
+        if (poly.length < 2) continue;
+        const near = nearestOnPolyline(p, poly, cumByShapeIdx[shapeIdx]);
+        if (near.dist <= STOP_SHAPE_MAX_METRES) {
+          const len = cumByShapeIdx[shapeIdx][cumByShapeIdx[shapeIdx].length - 1];
+          shapeLinks[si].push({ shape: shapeIdx, frac: len > 0 ? clamp01(near.arc / len) : 0 });
+        }
+      }
+    }
+    // Encode: sorted by index, chain-delta on the index, the arc as decimetres
+    // (edges) or as the scaled fraction (bus shapes). One link per edge or
+    // shape per stop -- a stop within reach of an edge twice (a loop) keeps the
+    // nearer, first-found arc.
+    const encodeEdgeLinks = (links) => {
+      const byEdge = new Map();
+      for (const link of links) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+      let prev = 0;
+      return [...byEdge]
+        .sort((a, b) => a[0] - b[0])
+        .map(([edge, s]) => {
+          const wire = [edge - prev, Math.round(s * 10)];
+          prev = edge;
+          return wire;
+        });
+    };
+    for (let si = 0; si < stops.length; si++) {
+      stops[si].onEdge = encodeEdgeLinks(edgeLinks[si]);
+      let prev = 0;
+      const byShape = new Map();
+      for (const link of shapeLinks[si]) if (!byShape.has(link.shape)) byShape.set(link.shape, link.frac);
+      prev = 0;
+      stops[si].on = [...byShape]
+        .sort((a, b) => a[0] - b[0])
+        .map(([shape, frac]) => {
+          const wire = [shape - prev, Math.round(frac * BUS_ON_FRAC_SCALE)];
+          prev = shape;
+          return wire;
+        });
+    }
+
+    // --- Served stops (F8): per path, the platforms its own trips call at, in
+    // arc order, as [stopIdx, decimetres] pairs. The arc is the stop's own
+    // geometric link on an edge of that path -- the first one past the stop
+    // called before it, so an out-and-back path puts a platform on the leg the
+    // line is actually on when it calls there. A served stop the path's edges
+    // do not link -- a platform just outside the 40 m radius of the rails this
+    // line runs -- is projected onto the path's polyline when it lies within
+    // SERVED_STOP_MAX_METRES of it, and otherwise reported by name and dropped,
+    // since an invented arc would move the planner's dwell to the wrong place.
+    // A projected stop takes the path's nearest point outright: having no edge
+    // link on this path it has only the one candidate, so the call order has
+    // nothing to choose between.
+    const linksByEdge = stops.map((_, si) => {
+      const byEdge = new Map();
+      for (const link of edgeLinks[si]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+      return byEdge;
+    });
+    const offsetsOfEdges = (edgeSeq) => {
+      const offsets = [];
+      let len = 0;
+      for (const e of edgeSeq) {
+        offsets.push(len);
+        len += edgeLen[e];
+      }
+      return offsets;
+    };
+    const planeOfEdges = (edgeSeq) => {
+      const plane = [];
+      for (const e of edgeSeq) {
+        const pts = edgePlane[e];
+        for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
+      }
+      return plane;
+    };
+    let servedProjected = 0;
+    let servedUnordered = 0;
+    const servedDropped = [];
+    /**
+     * @param {string} label the path's id, for the report
+     * @param {string} routeId
+     * @param {readonly number[]} edgeSeq the path's edges
+     * @param {Iterable<string>} stopIds the stops its trips call at
+     * @param {Map<string, Map<number, number>> | null} extraLinks links the
+     *   router used that the wire does not carry (a terminus set back from the
+     *   rails, TERMINUS_STOP_MAX_METRES), so a synthetic path keeps its own end
+     * @param {readonly string[] | null} order the call order of a trip that runs
+     *   this path, which alone resolves a platform lying within reach of both
+     *   legs of an out-and-back path (8 paths, 50 platforms on feed 000395)
+     */
+    function servedFor(label, routeId, edgeSeq, stopIds, extraLinks = null, order = null) {
+      const offsets = offsetsOfEdges(edgeSeq);
+      let plane = null;
+      let cum = null;
+      const wanted = new Set(stopIds);
+      // The stops the call order knows, in that order, then the rest (a
+      // short-turn variant's platform the sample trip never calls at), sorted
+      // so the bytes do not depend on a hash iteration order.
+      const ordered = [];
+      const seen = new Set();
+      for (const stopId of order ?? []) {
+        if (wanted.has(stopId) && !seen.has(stopId)) {
+          seen.add(stopId);
+          ordered.push(stopId);
+        }
+      }
+      const rest = [...wanted].filter((id) => !seen.has(id)).sort();
+      servedUnordered += rest.length;
+      const out = [];
+      const place = (stopId, cursor) => {
+        const si = stopIndexById.get(stopId);
+        if (si === undefined) {
+          servedDropped.push({ path: label, route: routeId, stop: stopId, name: '?', metres: null });
           return null;
         }
+        const byEdge = extraLinks?.get(stopId) ?? linksByEdge[si];
+        const candidates = [];
+        for (let k = 0; k < edgeSeq.length; k++) {
+          const onEdge = byEdge.get(edgeSeq[k]);
+          if (onEdge !== undefined) candidates.push(offsets[k] + onEdge);
+        }
+        candidates.sort((a, b) => a - b);
+        // The first arc past the stop called before this one; failing that the
+        // last, which is as far forward as this path can put it.
+        let arc = candidates.find((c) => c > cursor);
+        if (arc === undefined) arc = candidates[candidates.length - 1];
+        if (arc === undefined) {
+          if (plane === null) {
+            plane = planeOfEdges(edgeSeq);
+            cum = cumulative(plane);
+          }
+          const near = plane.length >= 2 ? nearestOnPolyline(stopPlane[si], plane, cum) : null;
+          if (near && near.dist <= SERVED_STOP_MAX_METRES) {
+            arc = near.arc;
+            servedProjected++;
+          } else {
+            servedDropped.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: near ? round1(near.dist) : null });
+            return null;
+          }
+        }
+        out.push([si, Math.round(arc * 10)]);
+        return arc;
+      };
+      let cursor = -Infinity;
+      for (const stopId of ordered) {
+        const arc = place(stopId, cursor);
+        if (arc !== null) cursor = arc;
       }
-      out.push([si, Math.round(arc * 10)]);
-      return arc;
-    };
-    let cursor = -Infinity;
-    for (const stopId of ordered) {
-      const arc = place(stopId, cursor);
-      if (arc !== null) cursor = arc;
+      for (const stopId of rest) place(stopId, -Infinity);
+      // Arc order, a tie broken by stop index: the same feed must give the same bytes.
+      out.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+      return out;
     }
-    for (const stopId of rest) place(stopId, -Infinity);
-    // Arc order, a tie broken by stop index: the same feed must give the same bytes.
-    out.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-    return out;
+
+    // --- Synthetic paths for tram patterns whose trips carry no shape_id
+    // (lines 1, 2, 4, 5, 6, 7, 9, 12, 13, 14, 17): the shortest path over the
+    // directed graph visiting the pattern's stops in order, one per distinct
+    // (route, direction, stop sequence). The router walks the stops' links
+    // within SERVED_STOP_MAX_METRES, not the 40 m geometric ones (F8b): the
+    // question here is which rails the line's own stop sits on, the same
+    // question the served list answers. A stop with no rail within that radius
+    // -- and not a terminus the 200 m override reaches -- fails the build by
+    // name, unless `unreachableStops` in the overrides file says why it is
+    // right to route past it.
+    const allowedUnreachable = new Map(
+      (overrides.unreachableStops ?? []).map((entry) => [typeof entry === 'string' ? entry : entry.id, entry]),
+    );
+    const unreachableAllowed = [];
+    const patterns = new Map(); // key -> { route, dir, stops }
+    for (const tripId of shapelessTramTrips) {
+      const seq = tripSequences.get(tripId);
+      const trip = shapelessTrips.get(tripId);
+      if (!seq || seq.length < 2 || !trip) continue;
+      const key = `${trip.route}|${trip.direction}|${seq.join(',')}`;
+      if (!patterns.has(key)) patterns.set(key, { route: trip.route, dir: trip.direction, stops: seq });
+    }
+    const paths = [];
+    const trimmed = [];
+    const unroutable = [];
+    const longLegs = [];
+    for (const pattern of [...patterns.values()].sort((a, b) => compareRouteIds(a.route, b.route) || a.dir - b.dir || a.stops.join().localeCompare(b.stops.join()))) {
+      const label = `path:${pattern.route}:${pattern.dir}:${stopSequenceHash(pattern.stops)}`;
+      const routedStops = [];
+      const links = [];
+      pattern.stops.forEach((stopId, k) => {
+        const si = stopIndexById.get(stopId);
+        if (si === undefined) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not in stops.txt`);
+        // The 60 m router radius is for a line's INTERIOR stops, where the
+        // platform can sit nearer the opposite track than its own (Olipska,
+        // F8b). At an end it only widens the choice of where to START, and the
+        // router then prefers whichever edge leaves least to walk -- which put
+        // three route-4 paths on a 61 m lead-in edge their own shape does not
+        // draw instead of the 1,009 m one it does. The ends therefore keep the
+        // 40 m geometric list, and the 200 m terminus override below still
+        // covers the real case (line 1 out of Zapadni kolodvor).
+        const atEnd = k === 0 || k === pattern.stops.length - 1;
+        let list = atEnd ? edgeLinks[si] : routerLinks[si];
+        if (list.length === 0 && atEnd) {
+          // A terminus set back from the drawn rails: the nearest edge within the
+          // terminus tolerance starts or ends the route (TERMINUS_STOP_MAX_METRES).
+          // For routing only: the stop is NOT linked to that edge on the wire,
+          // whose lines do not serve it (Zapadni kolodvor would list lines 2 and
+          // 11); the twin runs the stretch to the platform off-graph.
+          const p = stopPlane[si];
+          let best = null;
+          for (let e = 0; e < graph.edges.length; e++) {
+            const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
+            if (near.dist <= TERMINUS_STOP_MAX_METRES && (!best || near.dist < best.dist)) best = { edge: e, s: near.arc, dist: near.dist };
+          }
+          if (best) list = [{ edge: best.edge, s: best.s }];
+        }
+        if (list.length === 0) {
+          const allowed = allowedUnreachable.get(stopId);
+          if (!allowed) {
+            throw new Error(
+              `${label} (route ${pattern.route}): stop ${stopId} "${stops[si].name}" is more than ${SERVED_STOP_MAX_METRES} m ` +
+                `from every rail edge the feed's shapes draw. If the line really calls at a platform off the rails, name it in ` +
+                `unreachableStops in ${OVERRIDES_PATH} with the reason; otherwise the feed or the graph is wrong.`,
+            );
+          }
+          unreachableAllowed.push({ path: label, route: pattern.route, stop: stopId, name: stops[si].name, reason: typeof allowed === 'string' ? '' : (allowed.reason ?? '') });
+          return; // routed past: the path neither runs to it nor serves it
+        }
+        routedStops.push(stopId);
+        links.push(list);
+      });
+      // A terminus stretch no shape draws (line 1 leaving Zapadni kolodvor runs
+      // rails only its own missing shape would carry) cannot be routed; up to
+      // TERMINUS_TRIM_STOPS stops at either end are dropped from the path, said
+      // so in the report, and left to the twin as off-graph running. A gap in
+      // the middle of a pattern is a data error and fails the build.
+      let from = 0;
+      let to = routedStops.length - 1;
+      let edgesOnPath = null;
+      if (to < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
+      while (edgesOnPath === null) {
+        try {
+          edgesOnPath = pathThroughStops(graph.edges, outgoing, edgeLen, links.slice(from, to + 1), `${label} (route ${pattern.route})`, (k) => {
+            const stopId = routedStops[from + k];
+            const si = stopIndexById.get(stopId);
+            const name = si === undefined ? "?" : stops[si].name;
+            const on = links[from + k].map((l) => `${l.edge}@${Math.round(l.s)}m`).join(",");
+            return `stop ${from + k} ${stopId} "${name}" [edges ${on}]`;
+          });
+        } catch (error) {
+          const leg = typeof error.leg === "number" ? from + error.leg : -1;
+          if (leg >= 0 && leg <= from + TERMINUS_TRIM_STOPS) from = leg;
+          else if (leg >= 0 && leg >= to - TERMINUS_TRIM_STOPS + 1) to = leg - 1;
+          else {
+            // Rails between two interior stops that no shape draws (a diversion
+            // or a crossover only short-turning trips use): the pattern gets no
+            // path rather than a wrong one, and the report says so by name; its
+            // trips stay on geometric matching within their route.
+            unroutable.push({ id: label, route: pattern.route, reason: error.message });
+            edgesOnPath = undefined;
+            break;
+          }
+          if (to - from < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
+        }
+      }
+      if (edgesOnPath === undefined) continue;
+      const covered = routedStops.slice(from, to + 1);
+      if (from > 0 || to < routedStops.length - 1) {
+        trimmed.push({ id: label, leading: routedStops.slice(0, from), trailing: routedStops.slice(to + 1) });
+      }
+      // The served list of a synthetic path is its own routed stop sequence.
+      // Its links are the ones the router walked, which for a terminus set
+      // back from the rails is the nearest edge within TERMINUS_STOP_MAX_METRES
+      // and is on no wire link of that stop.
+      const routed = new Map();
+      for (let k = from; k <= to; k++) {
+        const byEdge = new Map();
+        for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+        routed.set(routedStops[k], byEdge);
+      }
+      const served = servedFor(label, pattern.route, edgesOnPath, covered, routed, covered);
+      // The honest measure of what the feed's shapes fail to draw: a hop whose
+      // routed arc runs far past the straight line between its two platforms
+      // means the graph has no node where the line turns (HOP_DETOUR_FACTOR).
+      for (let k = 1; k < served.length; k++) {
+        const [prevIdx, prevDm] = served[k - 1];
+        const [thisIdx, thisDm] = served[k];
+        const along = (thisDm - prevDm) / 10;
+        const a = stopPlane[prevIdx];
+        const b = stopPlane[thisIdx];
+        const straight = Math.hypot(a.x - b.x, a.y - b.y);
+        if (along > straight * HOP_DETOUR_FACTOR && along - straight > HOP_DETOUR_EXCESS_METRES) {
+          longLegs.push({ path: label, route: pattern.route, from: stops[prevIdx].name, to: stops[thisIdx].name, along: round1(along), straight: round1(straight), fromIdx: prevIdx, toIdx: thisIdx });
+        }
+      }
+      paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served });
+    }
+
+    // Every tram shape is a path too: the union of the stops of every trip that
+    // runs it, so a short-turn variant's platforms are covered as well.
+    for (const shape of shapes) {
+      const sample = shapeSampleTrip.get(shape.id);
+      shape.served =
+        shape.e.length > 0
+          ? servedFor(shape.id, shape.route, shape.e, servedByShape.get(shape.id) ?? [], null, (sample && tripSequences.get(sample)) ?? null)
+          : [];
+    }
+    servedDropped.sort((a, b) => a.path.localeCompare(b.path) || a.stop.localeCompare(b.stop));
+
+    return { edgeUnits, shapes, planeByShapeIdx, paths, trimmed, unroutable, longLegs, unreachableAllowed, servedProjected, servedUnordered, servedDropped };
   }
 
-  // --- Synthetic paths for tram patterns whose trips carry no shape_id
-  // (lines 1, 2, 4, 5, 6, 7, 9, 12, 13, 14, 17): the shortest path over the
-  // directed graph visiting the pattern's stops in order, one per distinct
-  // (route, direction, stop sequence). The router walks the stops' links
-  // within SERVED_STOP_MAX_METRES, not the 40 m geometric ones (F8b): the
-  // question here is which rails the line's own stop sits on, the same
-  // question the served list answers. A stop with no rail within that radius
-  // -- and not a terminus the 200 m override reaches -- fails the build by
-  // name, unless `unreachableStops` in the overrides file says why it is
-  // right to route past it.
-  const allowedUnreachable = new Map(
-    (overrides.unreachableStops ?? []).map((entry) => [typeof entry === 'string' ? entry : entry.id, entry]),
-  );
-  const unreachableAllowed = [];
-  const patterns = new Map(); // key -> { route, dir, stops }
-  for (const tripId of shapelessTramTrips) {
-    const seq = tripSequences.get(tripId);
-    const trip = shapelessTrips.get(tripId);
-    if (!seq || seq.length < 2 || !trip) continue;
-    const key = `${trip.route}|${trip.direction}|${seq.join(',')}`;
-    if (!patterns.has(key)) patterns.set(key, { route: trip.route, dir: trip.direction, stops: seq });
-  }
-  const paths = [];
-  const trimmed = [];
-  const unroutable = [];
-  const longLegs = [];
-  for (const pattern of [...patterns.values()].sort((a, b) => compareRouteIds(a.route, b.route) || a.dir - b.dir || a.stops.join().localeCompare(b.stops.join()))) {
-    const label = `path:${pattern.route}:${pattern.dir}:${stopSequenceHash(pattern.stops)}`;
-    const routedStops = [];
-    const links = [];
-    pattern.stops.forEach((stopId, k) => {
-      const si = stopIndexById.get(stopId);
-      if (si === undefined) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not in stops.txt`);
-      let list = routerLinks[si];
-      if (list.length === 0 && (k === 0 || k === pattern.stops.length - 1)) {
-        // A terminus set back from the drawn rails: the nearest edge within the
-        // terminus tolerance starts or ends the route (TERMINUS_STOP_MAX_METRES).
-        // For routing only: the stop is NOT linked to that edge on the wire,
-        // whose lines do not serve it (Zapadni kolodvor would list lines 2 and
-        // 11); the twin runs the stretch to the platform off-graph.
-        const p = stopPlane[si];
-        let best = null;
-        for (let e = 0; e < graph.edges.length; e++) {
-          const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
-          if (near.dist <= TERMINUS_STOP_MAX_METRES && (!best || near.dist < best.dist)) best = { edge: e, s: near.arc, dist: near.dist };
-        }
-        if (best) list = [{ edge: best.edge, s: best.s }];
+  // --- F8c: node the crossings the reported long legs need, and only those.
+  //
+  // ZET's shapes draw every movement some trip runs, so where a line turns
+  // out of one street into another and NO shape draws that turn, the two
+  // polylines merely cross and the graph has no node there: the router goes
+  // round the block, and a plan 2 km long for 300 m of ground puts a phantom
+  // tram on other lines' shared rails, where the ordering law then constrains
+  // real ones. The repair is driven by the long legs the router itself
+  // reports, never by the geometry at large -- a node where two tracks cross
+  // grows turns in every direction, and a network full of turns no tram takes
+  // is a worse model than one detour.
+  //
+  // Three cuts at most: the plain one, one with every crossing the reported
+  // legs could use, and one with only the crossings a path then actually
+  // turns at. A crossing nothing turns at is not a junction this feed needs.
+
+  /** Every crossing the given long legs could turn at: a true segment-segment
+   *  intersection between two edges that both pass near one of the leg's own
+   *  platforms and that share no node yet. */
+  const junctionsForLegs = (graph, longLegs) => {
+    const rawPlane = graph.edges.map((e) => e.units.map(unitsToMetres));
+    const rawCum = rawPlane.map(cumulative);
+    const rawBbox = rawPlane.map((plane) => bboxExpanded(plane, JUNCTION_SEARCH_METRES));
+    const found = new Map(); // unit key -> the junction
+    for (const leg of longLegs) {
+      const { fromIdx, toIdx, ...named } = leg;
+      const ends = [stopPlane[fromIdx], stopPlane[toIdx]];
+      const near = [];
+      for (let e = 0; e < rawPlane.length; e++) {
+        if (!ends.some((p) => inBbox(p, rawBbox[e]))) continue;
+        if (ends.some((p) => nearestOnPolyline(p, rawPlane[e], rawCum[e]).dist <= JUNCTION_SEARCH_METRES)) near.push(e);
       }
-      if (list.length === 0) {
-        const allowed = allowedUnreachable.get(stopId);
-        if (!allowed) {
-          throw new Error(
-            `${label} (route ${pattern.route}): stop ${stopId} "${stops[si].name}" is more than ${SERVED_STOP_MAX_METRES} m ` +
-              `from every rail edge the feed's shapes draw. If the line really calls at a platform off the rails, name it in ` +
-              `unreachableStops in ${OVERRIDES_PATH} with the reason; otherwise the feed or the graph is wrong.`,
+      for (let i = 0; i < near.length; i++) {
+        for (let j = i + 1; j < near.length; j++) {
+          const a = near[i];
+          const b = near[j];
+          // Already one junction: the feed draws these two meeting, so the
+          // movement the leg wants is not the one missing here.
+          const [ea, eb] = [graph.edges[a], graph.edges[b]];
+          if (ea.from === eb.from || ea.from === eb.to || ea.to === eb.from || ea.to === eb.to) continue;
+          const hits = polylineCrossings(rawPlane[a], rawCum[a], rawPlane[b], rawCum[b]).filter((h) => h.angle >= JUNCTION_MIN_ANGLE_DEG);
+          if (hits.length === 0) continue;
+          // Two tracks that cross and cross straight back swap sides rather
+          // than meet; a node there would offer a crossover no tram uses.
+          const twin = hits.some((h, k) =>
+            hits.some((o, m) => m !== k && (Math.abs(o.arcA - h.arcA) <= JUNCTION_TWIN_CROSSING_METRES || Math.abs(o.arcB - h.arcB) <= JUNCTION_TWIN_CROSSING_METRES)),
           );
+          if (twin) continue;
+          for (const hit of hits) {
+            const u = unitsFromMetres(hit.p);
+            const q = unitsToMetres(u);
+            const offset = Math.max(nearestOnPolyline(q, rawPlane[a], rawCum[a]).dist, nearestOnPolyline(q, rawPlane[b], rawCum[b]).dist);
+            if (offset > JUNCTION_MAX_OFFSET_METRES) continue; // rounded off both polylines: not a split point
+            const key = unitKey(u);
+            let junction = found.get(key);
+            if (!junction) {
+              found.set(key, (junction = { u, key, lonLat: [round4(ORIGIN[0] + u[0] * SCALE), round4(ORIGIN[1] + u[1] * SCALE)], angle: round1(hit.angle), offsetMetres: Math.round(offset * 100) / 100, segs: [], edgesBefore: [], legs: [] }));
+            }
+            for (const [edge, seg] of [[a, hit.segA], [b, hit.segB]]) {
+              const pair = [graph.edges[edge].units[seg], graph.edges[edge].units[seg + 1]];
+              if (!junction.segs.some(([x, y]) => unitKey(x) === unitKey(pair[0]) && unitKey(y) === unitKey(pair[1]))) junction.segs.push(pair);
+              if (!junction.edgesBefore.includes(edge)) junction.edgesBefore.push(edge);
+            }
+            if (!junction.legs.some((l) => l.path === named.path && l.from === named.from && l.to === named.to)) junction.legs.push(named);
+          }
         }
-        unreachableAllowed.push({ path: label, route: pattern.route, stop: stopId, name: stops[si].name, reason: typeof allowed === 'string' ? '' : (allowed.reason ?? '') });
-        return; // routed past: the path neither runs to it nor serves it
-      }
-      routedStops.push(stopId);
-      links.push(list);
-    });
-    // A terminus stretch no shape draws (line 1 leaving Zapadni kolodvor runs
-    // rails only its own missing shape would carry) cannot be routed; up to
-    // TERMINUS_TRIM_STOPS stops at either end are dropped from the path, said
-    // so in the report, and left to the twin as off-graph running. A gap in
-    // the middle of a pattern is a data error and fails the build.
-    let from = 0;
-    let to = routedStops.length - 1;
-    let edgesOnPath = null;
-    if (to < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
-    while (edgesOnPath === null) {
-      try {
-        edgesOnPath = pathThroughStops(graph.edges, outgoing, edgeLen, links.slice(from, to + 1), `${label} (route ${pattern.route})`, (k) => {
-          const stopId = routedStops[from + k];
-          const si = stopIndexById.get(stopId);
-          const name = si === undefined ? "?" : stops[si].name;
-          const on = links[from + k].map((l) => `${l.edge}@${Math.round(l.s)}m`).join(",");
-          return `stop ${from + k} ${stopId} "${name}" [edges ${on}]`;
-        });
-      } catch (error) {
-        const leg = typeof error.leg === "number" ? from + error.leg : -1;
-        if (leg >= 0 && leg <= from + TERMINUS_TRIM_STOPS) from = leg;
-        else if (leg >= 0 && leg >= to - TERMINUS_TRIM_STOPS + 1) to = leg - 1;
-        else {
-          // Rails between two interior stops that no shape draws (a diversion
-          // or a crossover only short-turning trips use): the pattern gets no
-          // path rather than a wrong one, and the report says so by name; its
-          // trips stay on geometric matching within their route.
-          unroutable.push({ id: label, route: pattern.route, reason: error.message });
-          edgesOnPath = undefined;
-          break;
-        }
-        if (to - from < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
       }
     }
-    if (edgesOnPath === undefined) continue;
-    const covered = routedStops.slice(from, to + 1);
-    if (from > 0 || to < routedStops.length - 1) {
-      trimmed.push({ id: label, leading: routedStops.slice(0, from), trailing: routedStops.slice(to + 1) });
-    }
-    // The served list of a synthetic path is its own routed stop sequence.
-    // Its links are the ones the router walked, which for a terminus set
-    // back from the rails is the nearest edge within TERMINUS_STOP_MAX_METRES
-    // and is on no wire link of that stop.
-    const routed = new Map();
-    for (let k = from; k <= to; k++) {
-      const byEdge = new Map();
-      for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
-      routed.set(routedStops[k], byEdge);
-    }
-    const served = servedFor(label, pattern.route, edgesOnPath, covered, routed, covered);
-    // The honest measure of what the feed's shapes fail to draw: a hop whose
-    // routed arc runs far past the straight line between its two platforms
-    // means the graph has no node where the line turns (HOP_DETOUR_FACTOR).
-    for (let k = 1; k < served.length; k++) {
-      const [prevIdx, prevDm] = served[k - 1];
-      const [thisIdx, thisDm] = served[k];
-      const along = (thisDm - prevDm) / 10;
-      const a = stopPlane[prevIdx];
-      const b = stopPlane[thisIdx];
-      const straight = Math.hypot(a.x - b.x, a.y - b.y);
-      if (along > straight * HOP_DETOUR_FACTOR && along - straight > HOP_DETOUR_EXCESS_METRES) {
-        longLegs.push({ path: label, route: pattern.route, from: stops[prevIdx].name, to: stops[thisIdx].name, along: round1(along), straight: round1(straight) });
+    // Sorted by the split point, so the same feed always makes the same graph.
+    return [...found.values()].sort((x, y) => x.u[0] - y.u[0] || x.u[1] - y.u[1]);
+  };
+
+  /** True when some synthetic path TURNS at this junction's node: arrives on
+   *  one track and leaves on the other. A path that runs straight through did
+   *  not need the node -- before the split those two pieces were one edge. */
+  const turnsAt = (graph, derived, junction) => {
+    const node = graph.junctionNodes.get(junction.key);
+    if (node === null || node === undefined) return false;
+    const unitDir = (from, to) => {
+      const d = { x: to.x - from.x, y: to.y - from.y };
+      const mag = Math.hypot(d.x, d.y);
+      return mag === 0 ? null : { x: d.x / mag, y: d.y / mag };
+    };
+    for (const path of derived.paths) {
+      for (let k = 1; k < path.e.length; k++) {
+        const into = graph.edges[path.e[k - 1]];
+        const out = graph.edges[path.e[k]];
+        if (into.to !== node || out.from !== node) continue;
+        const a = into.units.map(unitsToMetres);
+        const b = out.units.map(unitsToMetres);
+        const inDir = unitDir(a[a.length - 2], a[a.length - 1]);
+        const outDir = unitDir(b[0], b[1]);
+        if (!inDir || !outDir) continue;
+        const deg = (Math.acos(Math.max(-1, Math.min(1, inDir.x * outDir.x + inDir.y * outDir.y))) * 180) / Math.PI;
+        if (deg >= JUNCTION_MIN_ANGLE_DEG) return true;
       }
     }
-    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served });
+    return false;
+  };
+
+  let graph = baseGraph;
+  let derived = deriveFromGraph(graph);
+  let junctions = [];
+  let junctionsConsidered = 0;
+  const longLegsBeforeNoding = derived.longLegs.length;
+  if (derived.longLegs.length > 0) {
+    const candidates = junctionsForLegs(baseGraph, derived.longLegs);
+    junctionsConsidered = candidates.length;
+    if (candidates.length > 0) {
+      const wide = cutWithJunctions(candidates);
+      const wideDerived = deriveFromGraph(wide);
+      const kept = candidates.filter((junction) => turnsAt(wide, wideDerived, junction));
+      if (kept.length === candidates.length) {
+        graph = wide;
+        derived = wideDerived;
+      } else if (kept.length > 0) {
+        graph = cutWithJunctions(kept);
+        derived = deriveFromGraph(graph);
+      }
+      junctions = kept;
+      for (const junction of junctions) {
+        const node = graph.junctionNodes.get(junction.key);
+        junction.node = node;
+        junction.edgesAfter = graph.edges.flatMap((e, idx) => (e.from === node || e.to === node ? [idx] : []));
+      }
+    }
+  }
+  // A leg that still runs long is either a turn the feed's geometry cannot
+  // express -- two digitisations that stop near each other without crossing --
+  // or a repair that did not take. Either way the build refuses it unless the
+  // overrides file says, with a reason, why the detour has to stand.
+  const allowedLongLegs = overrides.longLegs ?? [];
+  const longLegAllowance = (leg) => allowedLongLegs.find((entry) => entry.from === leg.from && entry.to === leg.to && (!entry.route || entry.route === leg.route));
+  const longLegs = derived.longLegs.map(({ fromIdx, toIdx, ...named }) => ({ ...named, allowed: longLegAllowance(named)?.reason ?? null }));
+  const refusedLongLegs = longLegs.filter((leg) => leg.allowed === null);
+  if (refusedLongLegs.length > 0) {
+    const listed = refusedLongLegs.map((leg) => `${leg.path} (route ${leg.route}) ${leg.from} -> ${leg.to}: ${leg.along} m of arc for ${leg.straight} m of ground`).join('; ');
+    throw new Error(
+      `Rail graph: ${refusedLongLegs.length} hop(s) still route past ${HOP_DETOUR_FACTOR}x the straight line after noding ${junctions.length} crossing(s): ${listed}. ` +
+        `If the rails really run that way, name the leg in longLegs in ${OVERRIDES_PATH} with the reason; otherwise the crossing the line turns at is missing from the graph.`,
+    );
   }
 
-  // Every tram shape is a path too: the union of the stops of every trip that
-  // runs it, so a short-turn variant's platforms are covered as well.
-  for (const shape of shapes) {
-    const sample = shapeSampleTrip.get(shape.id);
-    shape.served =
-      shape.e.length > 0
-        ? servedFor(shape.id, shape.route, shape.e, servedByShape.get(shape.id) ?? [], null, (sample && tripSequences.get(sample)) ?? null)
-        : [];
-  }
-  servedDropped.sort((a, b) => a.path.localeCompare(b.path) || a.stop.localeCompare(b.stop));
+  const { edgeUnits, shapes, planeByShapeIdx, paths, trimmed, unroutable, unreachableAllowed, servedProjected, servedUnordered, servedDropped } = derived;
 
   // --- The octilinear diagram: one line per shape of every diagram-cut route.
   const rawLines = [];
@@ -1829,7 +2152,11 @@ export async function buildNetwork(zipBuf, opts = {}) {
     paths: paths.length,
     trimmedPaths: trimmed,
     unroutablePaths: unroutable,
-    longLegs,
+    longLegs: longLegs.filter((leg) => leg.allowed === null),
+    longLegsAllowed: longLegs.filter((leg) => leg.allowed !== null),
+    junctions: junctions.map(({ u, key, segs, ...named }) => ({ ...named, unit: u })),
+    junctionsConsidered,
+    longLegsBeforeNoding,
     unreachableAllowed,
     residualPairs: graph.report.residualPairs,
     servedPaths: shapes.filter((sh) => sh.served.length > 0).length + paths.filter((pa) => pa.served.length > 0).length,
@@ -1943,11 +2270,22 @@ export async function main({
     log(`Stop routed past by allowlist (${OVERRIDES_PATH}): ${u.stop} "${u.name}" on ${u.path} (route ${u.route}) -- ${u.reason}`);
   }
   log(
-    `Synthetic paths: ${report.paths} built, ${report.unroutablePaths.length} patterns left without one, ` +
-      `${report.longLegs.length} hops routed past ${HOP_DETOUR_FACTOR}x the straight line (the graph draws no turn there)`,
+    `Junctions noded: ${report.junctions.length} of ${report.junctionsConsidered} crossings considered for ` +
+      `${report.longLegsBeforeNoding} long hops; ${report.longLegs.length + report.longLegsAllowed.length} hops still route past ${HOP_DETOUR_FACTOR}x the straight line ` +
+      `(${report.longLegsAllowed.length} allowlisted in ${OVERRIDES_PATH})`,
   );
-  for (const l of report.longLegs) {
-    log(`Long leg on ${l.path} (route ${l.route}): ${l.from} -> ${l.to} runs ${l.along} m of arc for ${l.straight} m of ground`);
+  for (const j of report.junctions) {
+    log(
+      `Junction at ${j.lonLat[0]},${j.lonLat[1]} (${j.angle} deg, ${j.offsetMetres} m off the exact crossing): ` +
+        `edges ${j.edgesBefore.join(' x ')} -> ${j.edgesAfter.join(',')} at node ${j.node}; ` +
+        `found for ${j.legs.map((l) => `${l.from} -> ${l.to} (route ${l.route}, ${l.along} m of arc for ${l.straight} m of ground)`).join('; ')}`,
+    );
+  }
+  for (const l of [...report.longLegs, ...report.longLegsAllowed]) {
+    log(
+      `Long leg on ${l.path} (route ${l.route}): ${l.from} -> ${l.to} runs ${l.along} m of arc for ${l.straight} m of ground` +
+        (l.allowed ? ` -- allowed: ${l.allowed}` : ''),
+    );
   }
   for (const t of report.trimmedPaths) {
     log(`Synthetic path ${t.id}: off-graph terminus stretch dropped, leading [${t.leading.join(", ")}], trailing [${t.trailing.join(", ")}]`);

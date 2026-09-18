@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path';
 import {
   BUS_ON_FRAC_SCALE,
   EDGE_KEYS,
+  HOP_DETOUR_EXCESS_METRES,
+  HOP_DETOUR_FACTOR,
   LINE_KEYS,
   ORIGIN,
   PATH_KEYS,
@@ -454,6 +456,7 @@ describe('the committed artefact', () => {
     expect(net.stops.find((s) => s.name === 'Trg bana J. Jelačića')!.terminal).toBe(false);
   });
 
+
   // F8b: no shapeless tram pattern is left without rails of its own. Before
   // it, seven patterns of routes 2, 5 and 13 (13/0 with 356 trips a day, 13/1
   // with 384, 5/1 with 162, 2/1 with 150) had no synthetic path at all, so
@@ -589,5 +592,134 @@ describe('the synthetic-path router', () => {
     expect(allowed.report.unreachableAllowed).toEqual([
       { path: expect.stringContaining('path:MS:0:'), route: 'MS', stop: 'M_off', name: 'Izvan tracnica', reason: 'Test: a platform off every drawn rail.' },
     ]);
+  });
+});
+
+// F8c: noding a crossing a pattern needs. Two tracks cross without either
+// shape drawing a vertex there, so the graph has no junction and the router
+// must go the long way round. The fixture is the shape of the real case
+// (Subiceva street crossing Kralja Zvonimira mid-edge, and the eastbound
+// Mihanoviceva track crossing the southbound one at Glavni kolodvor): a
+// north-south track, an east-west track crossing it, and a bypass that makes
+// the detour possible -- so the leg is LONG before noding, not impossible.
+// Units: one x unit is ~0.78 m near ORIGIN, one y unit ~1.11 m.
+const XJ_NS: [number, number][] = [[2, 600], [1, 200], [-1, -600]]; // crosses y = 0 at x = 0.5, off the lattice
+const XJ_WE: [number, number][] = [[600, 0], [-600, 0]];
+const XJ_BY: [number, number][] = [[1, 200], [900, 200], [900, 0], [600, 0]]; // the long way round
+const XJ_CROSSING: [number, number] = [1, 0]; // (0.5, 0) rounded to the coordinate lattice
+const xjLonLat = (x: number, y: number) => ({ lon: ORIGIN[0] + x * SCALE, lat: ORIGIN[1] + y * SCALE });
+const xjPlane = (pts: [number, number][]) => pts.map(([x, y]) => toMetres(ORIGIN[0] + x * SCALE, ORIGIN[1] + y * SCALE));
+const XJ_STOPS = [
+  { id: 'X_a', name: 'Sjever', ...xjLonLat(1, 300) }, // on the north-south track, north of the crossing
+  { id: 'X_b', name: 'Zapad', ...xjLonLat(-300, 0) }, // on the east-west track, west of the crossing
+];
+/** The artefact's own coordinate quantum: the diagonal of one 1e-5 deg cell. */
+const XJ_QUANTUM = Math.hypot(
+  toMetres(ORIGIN[0] + SCALE, ORIGIN[1]).x - toMetres(ORIGIN[0], ORIGIN[1]).x,
+  toMetres(ORIGIN[0], ORIGIN[1] + SCALE).y - toMetres(ORIGIN[0], ORIGIN[1]).y,
+);
+
+/** The crossing feed: route XR draws the three shapes, route XS runs the turn
+ *  with no shape_id, so its pattern needs a synthetic path. */
+function makeCrossZip(): Uint8Array {
+  const rows = (id: string, pts: [number, number][]) =>
+    pts.map(([x, y], i) => { const p = xjLonLat(x, y); return `${id},${p.lat},${p.lon},${i + 1},\n`; }).join('');
+  return makeZip([
+    { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nXR,0,"92","Crta s oblikom",,0,,,\nXS,0,"93","Crta bez oblika",,0,,,\n', method: 8 },
+    { name: 'trips.txt', data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\nXR,wd,xr_ns,,,0,,XR_ns\nXR,wd,xr_we,,,1,,XR_we\nXR,wd,xr_by,,,0,,XR_by\nXS,wd,xs_1,,,0,,\n', method: 8 },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows('XR_ns', XJ_NS)}${rows('XR_we', XJ_WE)}${rows('XR_by', XJ_BY)}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + XJ_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    { name: 'stop_times.txt', data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\nxs_1,08:00:00,08:00:00,X_a,1,,,\nxs_1,08:05:00,08:05:00,X_b,2,,,\n', method: 8 },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('noding a crossing a pattern needs', () => {
+  /** The stop's links to a graph's edges, measured by this file's own
+   *  point-to-polyline helper rather than the builder's arithmetic. */
+  const linksFor = (edges: any[], p: { x: number; y: number }, radius: number) => {
+    const out: { edge: number; s: number }[] = [];
+    edges.forEach((e: any, idx: number) => {
+      const plane = xjPlane(e.units);
+      if (distanceToPolyline(p, plane) > radius) return;
+      let best = { d: Infinity, s: 0 };
+      let run = 0;
+      for (let i = 1; i < plane.length; i++) {
+        const a = plane[i - 1];
+        const b = plane[i];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (len * len)));
+        const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+        if (d < best.d) best = { d, s: run + t * len };
+        run += len;
+      }
+      out.push({ edge: idx, s: best.s });
+    });
+    return out;
+  };
+  /** The cheapest chain from the north stop to the west one, and its arc. */
+  const route = (graph: any) => {
+    const lens = graph.edges.map((e: any) => polylineLength(xjPlane(e.units)));
+    const outgoing = new Map<number, number[]>();
+    graph.edges.forEach((e: any, idx: number) => outgoing.set(e.from, [...(outgoing.get(e.from) ?? []), idx]));
+    const a = toMetres(XJ_STOPS[0].lon, XJ_STOPS[0].lat);
+    const b = toMetres(XJ_STOPS[1].lon, XJ_STOPS[1].lat);
+    const links = [linksFor(graph.edges, a, STOP_SHAPE_MAX_METRES), linksFor(graph.edges, b, STOP_SHAPE_MAX_METRES)];
+    const path = pathThroughStops(graph.edges, outgoing, lens, links, 'cross');
+    let arc = -links[0].find((l: any) => l.edge === path[0])!.s;
+    for (const e of path) arc += lens[e];
+    arc -= lens[path[path.length - 1]] - links[1].find((l: any) => l.edge === path[path.length - 1])!.s;
+    return { path, arc, straight: Math.hypot(a.x - b.x, a.y - b.y) };
+  };
+
+  it('routes the long way round while the two polylines only cross, splits both at the crossing when a reported leg needs it, and then routes the turn', async () => {
+    const units = [XJ_NS, XJ_WE, XJ_BY].map((pts) => pts.map(([x, y]) => [x, y] as [number, number]));
+
+    // Before: four edges, no node where the two tracks cross, and the only
+    // chain from the north stop to the west one is the bypass.
+    const before = buildRailGraph(units);
+    expect(before.edges).toHaveLength(4);
+    const beforeRoute = route(before);
+    expect(beforeRoute.path).toHaveLength(3); // the north stub, the bypass, the east-west track
+    expect(beforeRoute.arc).toBeGreaterThan(beforeRoute.straight * HOP_DETOUR_FACTOR);
+    expect(beforeRoute.arc - beforeRoute.straight).toBeGreaterThan(HOP_DETOUR_EXCESS_METRES);
+
+    // After: the crossing is a vertex of both tracks, so both split there.
+    const after = buildRailGraph(units, {
+      junctions: [{ u: XJ_CROSSING, segs: [[[1, 200], [-1, -600]], [[600, 0], [-600, 0]]] }],
+    });
+    expect(after.edges).toHaveLength(6);
+    const key = (u: [number, number]) => `${u[0]},${u[1]}`;
+    const atJunction = after.edges.filter((e: any) => key(e.units[0]) === key(XJ_CROSSING) || key(e.units[e.units.length - 1]) === key(XJ_CROSSING));
+    expect(atJunction).toHaveLength(4); // two in, two out
+    // The split point lies on BOTH polylines, within the artefact's own quantum.
+    const jPoint = toMetres(ORIGIN[0] + XJ_CROSSING[0] * SCALE, ORIGIN[1] + XJ_CROSSING[1] * SCALE);
+    expect(distanceToPolyline(jPoint, xjPlane(XJ_NS))).toBeLessThanOrEqual(XJ_QUANTUM);
+    expect(distanceToPolyline(jPoint, xjPlane(XJ_WE))).toBeLessThanOrEqual(XJ_QUANTUM);
+    const afterRoute = route(after);
+    expect(afterRoute.path).toHaveLength(3); // the north stub, its southern half, the western half
+    expect(afterRoute.arc).toBeLessThan(afterRoute.straight * HOP_DETOUR_FACTOR);
+    expect(afterRoute.arc).toBeLessThan(beforeRoute.arc / 3);
+
+    // The whole build finds the crossing from the leg it reported, names it,
+    // and leaves no long leg behind.
+    const net = await buildNetwork(makeCrossZip(), { diagramBusCount: 0 });
+    expect(net.report.longLegs).toEqual([]);
+    expect(net.report.junctions).toHaveLength(1);
+    const [junction] = net.report.junctions;
+    expect(junction.legs).toEqual([
+      { path: expect.stringContaining('path:XS:0:'), route: 'XS', from: 'Sjever', to: 'Zapad', along: expect.any(Number), straight: expect.any(Number) },
+    ]);
+    expect(junction.legs[0].along).toBeGreaterThan(junction.legs[0].straight * HOP_DETOUR_FACTOR); // the detour it repaired
+    expect(junction.edgesBefore).toHaveLength(2);
+    expect(junction.edgesAfter).toHaveLength(4);
+    expect(junction.offsetMetres).toBeLessThanOrEqual(XJ_QUANTUM);
+    expect(net.edges.from).toHaveLength(6);
+    const [xsPath] = pathsOf(net);
+    expect(xsPath.e).toHaveLength(3);
+    const arcs = xsPath.served.map(([, dm]: [number, number]) => dm / 10);
+    expect(arcs[1] - arcs[0]).toBeLessThan(700); // the turn, not the 1970 m bypass
   });
 });
