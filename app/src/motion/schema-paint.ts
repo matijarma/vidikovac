@@ -549,10 +549,21 @@ function paintChips(ctx: SchemaContext, plans: readonly NamePlan[], tones: Schem
   }
 }
 
+/** What one static repaint actually put on the canvas, counted rather than
+ *  guessed: `schema-map.ts` writes it to `data-names` and `data-chips` so a
+ *  browser proof can read the collision pass's outcome (F4) without diffing
+ *  pixels. Nothing in the painting depends on it. */
+export interface SchemaPaintCensus {
+  /** Names the collision pass placed and inked at this scale. */
+  names: number;
+  /** Terminal chips painted, one per line ending at a placed terminal. */
+  chips: number;
+}
+
 /** Only static work: repaint on size, viewport, selection or theme changes,
  *  never on an ordinary vehicle frame. ZET line colours are invariant;
  *  water, paper, circles and label ink come from the app's role tokens. */
-export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: SchemaTones): void {
+export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: SchemaTones): SchemaPaintCensus {
   const { schema, viewport, density, w, h } = layout;
   const scale = viewport.scale * density;
   const point = (p: XY): XY => schemaPoint(p, viewport, density);
@@ -564,6 +575,7 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       else ctx.lineTo(q.x, q.y);
     });
   };
+  const census: SchemaPaintCensus = { names: 0, chips: 0 };
   ctx.clearRect(0, 0, w, h);
   ctx.save();
   ctx.globalAlpha = 1;
@@ -636,6 +648,8 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
     // translucent halo, so a ring never covers a letter and a letter never
     // covers a ring; the pills on the canvas above drive over both.
     const plans = layout.labels ? planNames(ctx, layout, point, scale) : [];
+    census.names = plans.length;
+    census.chips = plans.reduce((n, plan) => n + plan.chips.length, 0);
     paintNames(ctx, plans, tones, density);
     // The end of a line is a mark of its own: a disc half again the size of
     // an ordinary platform ring, with a gap ring of paper cut into it.
@@ -674,4 +688,5 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
     }
   }
   ctx.restore();
+  return census;
 }

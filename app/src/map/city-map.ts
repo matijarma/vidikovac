@@ -767,6 +767,10 @@ interface MapApi {
   addLayer(layer: Record<string, unknown>, beforeId?: string): void;
   setPaintProperty(id: string, key: string, value: unknown): void;
   setLayoutProperty(id: string, key: string, value: unknown): void;
+  /** The two getters that go with the setters above. Read only by the
+   *  `data-focus` probe, so a test stand-in need not carry them. */
+  getPaintProperty?(id: string, key: string): unknown;
+  getLayoutProperty?(id: string, key: string): unknown;
   setFilter(id: string, filter: unknown): void;
   setLayerZoomRange?(id: string, minzoom: number, maxzoom: number): void;
   getLayer?(id: string): unknown;
@@ -987,6 +991,73 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return typeof following === 'string' ? following : null;
   }
 
+  // --- Read-only probe attributes -----------------------------------------
+  //
+  // `data-frames` has been written on this container since T11 for one
+  // reason: a browser-level proof has to read what the renderer did without
+  // diffing pixels. Round F adds three more of the same kind. None of them
+  // changes what is drawn, each is a string, and each is written where the
+  // renderer already holds the answer:
+  //
+  //   data-zoom   the camera's zoom at this frame, so an e2e states the zoom
+  //               its assertion is about instead of trusting a fit to land
+  //               there. Free: the value is read for the clustering anyway.
+  //   data-pills  the labels of the pill and cluster marks in the vehicles
+  //               source, '|'-joined, written when a push actually replaces
+  //               that source's data. F2 gave the pill layer allow-overlap
+  //               and ignore-placement, so from PILL_ZOOM up a label here is
+  //               a pill on the screen; below it the layer draws dots and the
+  //               attribute is empty rather than misleading.
+  //   data-noses  how many `vehicle-noses` features MapLibre actually
+  //               renders. The nose band (overlays.ts NOSE_MIN_ZOOM and
+  //               NOSE_MAX_ZOOM) is a claim about rendering, so this one asks
+  //               MapLibre, through the same queryRenderedFeatures()
+  //               placedNames() already uses. It is the only one that costs
+  //               anything, so it is taken on `idle` -- the one moment
+  //               MapLibre has finished painting the state it was given --
+  //               and only when the zoom or the number of marks has changed
+  //               since the last answer. On a still map that is zero queries.
+  /** zoom and mark count the nose census was last taken for. */
+  let noseProbeKey = '';
+  /** Marks in the last pushed collection, half of that key. */
+  let probeMarks = 0;
+
+  function writeMarkProbe(m: MapApi, l: MaplibreModule, pushed: VehicleFeatureCollection | null): void {
+    const zoom = m.getZoom();
+    container.dataset.zoom = zoom.toFixed(2);
+    if (!pushed) return;
+    probeMarks = pushed.features.length;
+    container.dataset.pills = zoom >= l.PILL_ZOOM ? pushed.features.map((f) => f.properties.short).join('|') : '';
+  }
+
+  function writeNoseProbe(): void {
+    const m = map;
+    const l = lib;
+    if (!m || !styled || !l) return;
+    const key = `${m.getZoom().toFixed(2)}|${probeMarks}`;
+    if (key === noseProbeKey) return;
+    noseProbeKey = key;
+    const id = l.LAYERS.vehicleNoses;
+    const drawn = m.getLayer && !m.getLayer(id) ? [] : m.queryRenderedFeatures(undefined, { layers: [id] });
+    container.dataset.noses = String(drawn.length);
+  }
+
+  /** `data-focus`: what line focus did, read back off the live style once the
+   *  diff has been applied -- the focused route, whether the tram network is
+   *  still drawn, and the ink `network-selected` carries (a plain colour when
+   *  the ZET table knows the route, '-' while it is the by-mode expression).
+   *  Written once per overlay re-derive (a selection, the switch, a theme
+   *  flip), never per frame; two MapLibre getters and no work of the map's. */
+  function writeFocusProbe(m: MapApi, l: MaplibreModule): void {
+    const colour = m.getPaintProperty?.(l.LAYERS.networkSelected, 'line-color');
+    const visibility = m.getLayoutProperty?.(l.LAYERS.networkTram, 'visibility');
+    container.dataset.focus = [
+      focusRouteId() ?? '-',
+      typeof visibility === 'string' ? visibility : '-',
+      typeof colour === 'string' ? colour : '-',
+    ].join(' ');
+  }
+
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
   function draw(t: number): boolean {
     // Detached (the dashboard swapped layers and took the workspace along):
@@ -1010,7 +1081,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
     const changed = signature !== lastPushedSignature;
-    if (changed && t >= nextPushAt - PUSH_TOLERANCE_MS) {
+    const pushing = changed && t >= nextPushAt - PUSH_TOLERANCE_MS;
+    if (pushing) {
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       lastPushedSignature = signature;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
@@ -1019,6 +1091,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (following === true) followRoute();
       else if (following) followCamera(fc);
     }
+    writeMarkProbe(m, l, pushing ? fc : null);
     return changed;
   }
 
@@ -1184,6 +1257,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    // The one moment MapLibre has finished painting what it was given: the
+    // honest place to ask it what it drew (see the probe comment above).
+    created.on('idle', writeNoseProbe);
     if (interactive) bindPointer(created);
     created.once('load', () => onLoad(l, created));
     watchTheme();
@@ -1456,6 +1532,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
     focusedApplied = focusRouteId();
+    writeFocusProbe(map, l);
   }
 
   /** Selects (or clears with null) and marks it on the map; `fit` moves the camera to it. */

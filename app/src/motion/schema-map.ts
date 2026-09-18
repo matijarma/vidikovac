@@ -207,7 +207,14 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     if (staticContext && l) {
       element.dataset.labels = String(l.labels);
       element.dataset.scale = String(l.viewport.scale);
-      paintSchema(staticContext, l, tones());
+      // Read-only, beside `data-labels` and `data-scale`: what this repaint
+      // actually put on the static canvas, so a browser proof can read F4's
+      // collision pass (names give way at a small scale and come back as the
+      // reader zooms) and a terminal's chips without diffing pixels. The
+      // painter counts them as it goes; nothing here costs a measurement.
+      const census = paintSchema(staticContext, l, tones());
+      element.dataset.names = String(census.names);
+      element.dataset.chips = String(census.chips);
     }
   }
   function viewportChanged(): void {
@@ -236,6 +243,12 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     const membership = lastVehicleMarks.map(m => m.id).sort().join('\0');
     if (membership !== listMembership) { listMembership = membership; a11y?.reconcile(lastDrawn); }
     if (vehicleContext) paintPills(vehicleContext, { w: vehicleCanvas.width, h: vehicleCanvas.height, density }, lastMarks, pillInks(), selectedVehicle());
+    // Read-only, and the city map's own `data-pills` on this surface: the
+    // label of every pill the canvas just painted, '|'-joined, so a browser
+    // proof can say the diagram draws numbered pills (F3) rather than the old
+    // unlabelled rectangles. A mark without a pill (the lagano crop scene's
+    // rectangles) contributes nothing.
+    element.dataset.pills = lastMarks.map(m => m.label ?? '').join('|');
     const next = lastMarks.map(m => `${m.id}:${m.x.toFixed(2)},${m.y.toFixed(2)},${m.angle.toFixed(3)},${m.alpha.toFixed(2)}`).join('|');
     const changed = signature !== next;
     signature = next;
