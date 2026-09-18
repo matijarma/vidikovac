@@ -2,8 +2,9 @@
 // an integrator arc to this plane; reported GPS coordinates never enter a
 // painter. Canvas mounting, gestures and the clock live in schema-map.ts.
 import type { XY } from '../../../shared/motion/geo';
-import { pointAt, type Schema, type createSchemaPlacer } from '../../../shared/motion/schema';
+import { pointAt, type Schema, type SchemaStop, type createSchemaPlacer } from '../../../shared/motion/schema';
 import { vehicleLabel } from '../map/city-map';
+import { contrastRatio } from '../ui/contrast';
 import type { Drawn } from './integrator';
 import {
   clusterPills, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, pillChars, pillWidthPx, type PillPoint,
@@ -46,6 +47,50 @@ const PILL_TEXT_PX = 12;
  *  half over the edge blinked out, which is exactly what F3 exists to stop. */
 export const PILL_EDGE_MARGIN_PX = pillWidthPx(PILL_MAX_CHARS_CLUSTER) / 2 + PILL_CLUSTER_RING_PX;
 
+// --- The names and the terminals (F4). Every constant carries its reason. ---
+
+/** A name is a word to read, not texture: under 11 CSS px it is neither, so
+ *  the size floors here once names start (LABEL_MIN_PX_PER_UNIT). */
+export const LABEL_MIN_PX = 11;
+/** And it stops growing here. Past 16 px a zoom that keeps enlarging the
+ *  letters ends with three words laid over the network they name; beyond
+ *  this the camera shows more map instead of bigger type. */
+export const LABEL_MAX_PX = 16;
+/** A terminal keeps the source's larger hierarchy two px above that cap. */
+const TERMINAL_LABEL_EXTRA_PX = 2;
+/** The names lie across the coloured lines now (the owner's decision), so
+ *  each is stroked in the canvas tone first: three CSS px is about one
+ *  letter-stroke of paper on either side at the sizes above. */
+export const LABEL_HALO_PX = 3;
+/** Translucent, so the line under a name is dimmed rather than cut in two. */
+export const LABEL_HALO_ALPHA = 0.75;
+/** Two names are apart when their boxes clear each other by this much: at
+ *  one hairline the eye still reads them as one collided smudge. */
+export const LABEL_GAP_PX = 2;
+/** A terminal's disc against the ordinary platform ring: half again as
+ *  large reads as emphasis, twice as large reads as a different symbol. */
+export const TERMINAL_DISC_SCALE = 1.6;
+/** Never smaller than this, so the end of a line is still a disc at the
+ *  scale where names begin (r is about 2 units, LABEL_MIN_PX_PER_UNIT 1.4). */
+const TERMINAL_MIN_RING_PX = 4;
+/** The paper gap ring inside the disc, at this share of its radius: the
+ *  printed network's own terminus mark, a filled disc with a ring cut out. */
+const TERMINAL_GAP_RATIO = 0.7;
+const TERMINAL_GAP_PX = 1;
+/** The chips under a terminal's name. Barely rounded, like the kiosk's tram
+ *  plate (pills.ts PLATE_RADIUS_PX): a number on a coloured tab. */
+export const CHIP_RADIUS_PX = 3;
+/** A chip's box against the name above it. */
+const CHIP_HEIGHT_EM = 1.25;
+/** The number inside it keeps the vehicle pill's own proportion -- 12 px of
+ *  text in an 18 px capsule -- so both badges on the map read at one
+ *  weight, and it obeys the same size floor as a name: a line number no one
+ *  can read is not a line number. */
+const CHIP_TEXT_RATIO = PILL_TEXT_PX / PILL_HEIGHT_PX;
+/** Padding on each side of the number, and the space between two chips. */
+const CHIP_PAD_EM = 0.6;
+const CHIP_GAP_PX = 2;
+
 /** Structurally a subset of CanvasRenderingContext2D, like the existing
  *  SchematicContext, so tests can record actual paint calls without a GPU. */
 export interface SchemaContext extends SchematicContext {
@@ -53,6 +98,9 @@ export interface SchemaContext extends SchematicContext {
   closePath(): void;
   fill(): void;
   fillText(text: string, x: number, y: number): void;
+  /** The halo under a name (F4), and the width the collision pass measures. */
+  strokeText(text: string, x: number, y: number): void;
+  measureText(text: string): { width: number };
   font: string;
   textAlign: CanvasTextAlign;
   textBaseline: CanvasTextBaseline;
@@ -90,8 +138,13 @@ export interface SchemaLayout extends VehicleLayout {
   selectedRoute?: string | null;
   selectedStop?: string | null;
   screenStop?: string | null;
-  /** Kiosk floor, independent of an unusually small host's viewport. */
+  /** Kiosk floor, independent of an unusually small host's viewport. Its
+   *  presence is also what says this is a public screen: the crop there is
+   *  chosen so every name in it fits, so no name is ever dropped. */
   labelMinPx?: number;
+  /** A route's display number for a terminal's chips. The artwork carries
+   *  GTFS route ids; only the network knows what ZET calls them. */
+  routeShort: (routeId: string) => string;
 }
 
 export interface SchemaTones extends VehicleTones {
@@ -254,6 +307,217 @@ export function paintPills(
   }
 }
 
+// --- The names (F4) ------------------------------------------------------
+//
+// The artwork's own rot/anchor no longer place a name: the owner chose
+// horizontal names that cross the coloured lines at the stop's ring, with
+// the vehicle pills (a canvas above this one) driving over them. The
+// artefact is untouched; those two fields simply stop being read.
+
+/** A name's footprint on the canvas, in backing-store pixels. */
+interface LabelBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+interface TerminalChip {
+  text: string;
+  colour: string;
+  /** Measured in planNames, where the chip font is the one in the context. */
+  w: number;
+}
+
+/** One name that will be painted, already measured and placed. */
+interface NamePlan {
+  rows: string[];
+  terminal: boolean;
+  px: number;
+  /** The stop's own point: the centre of the row block. */
+  x: number;
+  y: number;
+  advance: number;
+  chips: TerminalChip[];
+  chipPx: number;
+  chipHeight: number;
+  chipsWidth: number;
+  chipY: number;
+}
+
+const nameFont = (terminal: boolean, px: number): string => `${terminal ? 700 : 600} ${px}px Manrope, sans-serif`;
+const chipFont = (px: number): string => `700 ${px}px Manrope, sans-serif`;
+
+/** A name's size: the artwork's units at the current scale, floored so it
+ *  stays a word and capped so it never grows into the network. A public
+ *  screen states its own floor and takes no cap -- its crop is chosen for
+ *  the names in it, and it is read across a room (R-P1). */
+function labelPx(units: number, scale: number, density: number, capPx: number, kioskMinPx?: number): number {
+  const raw = units * scale;
+  if (kioskMinPx !== undefined) return Math.max(raw, kioskMinPx * density);
+  return Math.min(Math.max(raw, LABEL_MIN_PX * density), capPx * density);
+}
+
+/** The lines that begin or end at this stop, one chip each, deduped by
+ *  route: two directions of one line are one number on the tab. */
+function terminalChips(layout: SchemaLayout, name: string): TerminalChip[] {
+  const chips: TerminalChip[] = [];
+  const seen = new Set<string>();
+  for (const line of layout.schema.lines) {
+    const first = line.stops[0], last = line.stops[line.stops.length - 1];
+    if (seen.has(line.route) || (first?.name !== name && last?.name !== name)) continue;
+    seen.add(line.route);
+    chips.push({ text: layout.routeShort(line.route), colour: line.colour, w: 0 });
+  }
+  return chips;
+}
+
+function overlaps(a: LabelBox, b: LabelBox, gap: number): boolean {
+  return a.x0 - gap < b.x1 && b.x0 - gap < a.x1 && a.y0 - gap < b.y1 && b.y0 - gap < a.y1;
+}
+
+/**
+ * Measures every name and decides which of them this scale has room for.
+ *
+ * The order is the rank: terminals first (they are what a stranger reads a
+ * network by), then the stops the most lines call at, then the name itself
+ * so one scale always drops the same name rather than flickering between
+ * two. A candidate is placed when its box -- the widest row by the rows'
+ * height, plus the halo, plus a terminal's chips -- clears everything
+ * already placed; otherwise it waits for the next zoom step.
+ */
+function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => XY, scale: number): NamePlan[] {
+  const { schema, density } = layout;
+  const kioskMinPx = layout.labelMinPx;
+  const minPx = (kioskMinPx ?? LABEL_MIN_PX) * density;
+  const halo = LABEL_HALO_PX * density;
+  const gap = LABEL_GAP_PX * density;
+  const calling = new Map<string, number>();
+  for (const line of schema.lines) for (const name of new Set(line.stops.map(s => s.name))) {
+    calling.set(name, (calling.get(name) ?? 0) + 1);
+  }
+  const ranked = schema.stops.filter((s): s is SchemaStop & { label: NonNullable<SchemaStop['label']> } => s.label !== null)
+    .sort((a, b) => Number(b.terminal) - Number(a.terminal)
+      || (calling.get(b.name) ?? 0) - (calling.get(a.name) ?? 0)
+      || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const placed: LabelBox[] = [];
+  const plans: NamePlan[] = [];
+  for (const stop of ranked) {
+    const terminal = stop.terminal;
+    const px = labelPx(terminal ? TERMINAL_LABEL_UNITS : STOP_LABEL_UNITS, scale, density,
+      terminal ? LABEL_MAX_PX + TERMINAL_LABEL_EXTRA_PX : LABEL_MAX_PX, kioskMinPx);
+    // A terminal shouts in the source too; Croatian diacritics survive it.
+    const rows = stop.label.text.split(/\r?\n/).map(row => terminal ? row.toLocaleUpperCase('hr') : row);
+    ctx.font = nameFont(terminal, px);
+    let width = 0;
+    for (const row of rows) width = Math.max(width, ctx.measureText(row).width);
+    const advance = px * LABEL_ROW_ADVANCE;
+    const height = (rows.length - 1) * advance + px;
+    const at = point(stop);
+    const chips = terminal ? terminalChips(layout, stop.name) : [];
+    const chipPx = Math.max(px * CHIP_HEIGHT_EM * CHIP_TEXT_RATIO, minPx);
+    const chipHeight = chipPx / CHIP_TEXT_RATIO;
+    let chipsWidth = 0;
+    if (chips.length > 0) {
+      ctx.font = chipFont(chipPx);
+      for (const chip of chips) {
+        chip.w = ctx.measureText(chip.text).width + CHIP_PAD_EM * chipPx;
+        chipsWidth += chip.w;
+      }
+      chipsWidth += (chips.length - 1) * CHIP_GAP_PX * density;
+    }
+    const top = at.y - height / 2 - halo / 2;
+    const nameBottom = at.y + height / 2 + halo / 2;
+    const chipY = nameBottom + CHIP_GAP_PX * density + chipHeight / 2;
+    const reach = Math.max(width + halo, chipsWidth) / 2;
+    const box: LabelBox = {
+      x0: at.x - reach, x1: at.x + reach,
+      y0: top, y1: chips.length > 0 ? chipY + chipHeight / 2 : nameBottom,
+    };
+    // A public screen shows the lot; an interactive map chooses (F4).
+    if (kioskMinPx === undefined && placed.some(other => overlaps(other, box, gap))) continue;
+    placed.push(box);
+    plans.push({ rows, terminal, px, x: at.x, y: at.y, advance, chips, chipPx, chipHeight, chipsWidth, chipY });
+  }
+  return plans;
+}
+
+/** Halo first, then ink, row by row: a name laid over a coloured line reads
+ *  because the paper tone is stroked under it, not because the line breaks. */
+function paintNames(ctx: SchemaContext, plans: readonly NamePlan[], tones: SchemaTones, density: number): void {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = tones.halo;
+  ctx.lineWidth = LABEL_HALO_PX * density;
+  ctx.fillStyle = tones.ink;
+  for (const plan of plans) {
+    ctx.font = nameFont(plan.terminal, plan.px);
+    plan.rows.forEach((row, i) => {
+      const y = plan.y + (i - (plan.rows.length - 1) / 2) * plan.advance;
+      ctx.globalAlpha = LABEL_HALO_ALPHA;
+      ctx.strokeText(row, plan.x, y);
+      ctx.globalAlpha = 1;
+      ctx.fillText(row, plan.x, y);
+    });
+  }
+}
+
+/** The number on a chip, in whichever tone the line's colour carries
+ *  better. The tones come from computed style and need not be hex at all
+ *  (`rgb(...)`, a keyword): what cannot be measured falls back to ink. */
+function chipTextTone(colour: string, tones: SchemaTones): string {
+  try {
+    return contrastRatio(colour, tones.halo) > contrastRatio(colour, tones.ink) ? tones.halo : tones.ink;
+  } catch {
+    return tones.ink;
+  }
+}
+
+/** The end of a line is half again the size of an ordinary platform ring,
+ *  and never under the floor, so it is still a disc where names begin. */
+function terminalDiscRadius(stop: SchemaStop, scale: number, density: number): number {
+  return Math.max(stop.r * scale, TERMINAL_MIN_RING_PX * density) * TERMINAL_DISC_SCALE;
+}
+
+/** Built by hand because the narrow context deliberately has no roundRect
+ *  (and neither do the older browsers a kiosk can be left running on). */
+function roundRectPath(ctx: SchemaContext, x: number, y: number, w: number, h: number, radius: number): void {
+  const r = Math.min(radius, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+  ctx.lineTo(x + r, y + h);
+  ctx.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+  ctx.lineTo(x, y + r);
+  ctx.arc(x + r, y + r, r, Math.PI, -Math.PI / 2);
+  ctx.closePath();
+}
+
+/** A row of numbered tabs under a terminal's name, one per line that ends
+ *  there, each in that line's own ZET colour. */
+function paintChips(ctx: SchemaContext, plans: readonly NamePlan[], tones: SchemaTones, density: number): void {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.globalAlpha = 1;
+  for (const plan of plans) {
+    if (plan.chips.length === 0) continue;
+    ctx.font = chipFont(plan.chipPx);
+    let x = plan.x - plan.chipsWidth / 2;
+    for (const chip of plan.chips) {
+      roundRectPath(ctx, x, plan.chipY - plan.chipHeight / 2, chip.w, plan.chipHeight, CHIP_RADIUS_PX * density);
+      ctx.fillStyle = chip.colour;
+      ctx.fill();
+      ctx.fillStyle = chipTextTone(chip.colour, tones);
+      ctx.fillText(chip.text, x + chip.w / 2, plan.chipY);
+      x += chip.w + CHIP_GAP_PX * density;
+    }
+  }
+}
+
 /** Only static work: repaint on size, viewport, selection or theme changes,
  *  never on an ordinary vehicle frame. ZET line colours are invariant;
  *  water, paper, circles and label ink come from the app's role tokens. */
@@ -303,6 +567,10 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       ctx.lineWidth = line.width * scale;
       ctx.stroke();
     }
+    // The names go on before the rings, so a ring is never hidden by the
+    // word it belongs to; the pills on the canvas above drive over both.
+    const plans = layout.labels ? planNames(ctx, layout, point, scale) : [];
+    paintNames(ctx, plans, tones, density);
     // The source has one ring per line/platform within a corridor. A
     // canonical named stop is its label/selection anchor, not another ring
     // invented halfway between the parallel lines.
@@ -334,29 +602,34 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       const stop = stopsByName.get(name!);
       if (!stop) continue;
       const p = point(stop);
+      // Clear of whatever mark it rings: a terminal's disc is larger than
+      // the platform ring, and a highlight inside it would be invisible.
+      const marked = stop.terminal ? terminalDiscRadius(stop, scale, density) : stop.r * scale;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(stop.r * scale + 4 * density, 8 * density), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(marked + 4 * density, 8 * density), 0, Math.PI * 2);
       ctx.strokeStyle = tones.ink;
       ctx.lineWidth = 2 * density;
       ctx.stroke();
     }
-    if (layout.labels) {
+    // The end of a line is a mark of its own: a disc half again the size of
+    // an ordinary platform ring, with a gap ring of paper cut into it.
+    for (const stop of schema.stops) {
+      if (!stop.terminal) continue;
+      const p = point(stop);
+      const radius = terminalDiscRadius(stop, scale, density);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = tones.ink;
-      ctx.textBaseline = 'alphabetic';
-      for (const stop of schema.stops) {
-        const label = stop.label;
-        if (!label) continue;
-        const p = point(label);
-        const fontSize = Math.max((stop.terminal ? TERMINAL_LABEL_UNITS : STOP_LABEL_UNITS) * scale, (layout.labelMinPx ?? 0) * density);
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        if (label.rot !== 0) ctx.rotate(label.rot);
-        ctx.textAlign = label.anchor;
-        ctx.font = `${stop.terminal ? 700 : 500} ${fontSize}px Manrope, sans-serif`;
-        label.text.split(/\r?\n/).forEach((row, i) => ctx.fillText(row, 0, i * fontSize * LABEL_ROW_ADVANCE));
-        ctx.restore();
-      }
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius * TERMINAL_GAP_RATIO, 0, Math.PI * 2);
+      ctx.strokeStyle = tones.halo;
+      ctx.lineWidth = TERMINAL_GAP_PX * density;
+      ctx.stroke();
     }
+    // The chips belong to the name they sit under, so they go last, over
+    // the disc and the rings, and only where that name was actually placed.
+    paintChips(ctx, plans, tones, density);
   }
   ctx.restore();
 }

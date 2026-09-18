@@ -204,10 +204,14 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   // turns any more -- and it is haloed before it is inked.
   expect(h.staticCalls().some((c) => c.op === 'rotate')).toBe(false);
   expect(h.staticCalls().filter((c) => c.op === 'strokeText' || c.op === 'fillText')[0]?.op).toBe('strokeText');
-  // A terminal carries a chip in the line's own colour, numbered as the
-  // network names the route (net.routes.get('1').short).
-  expect(h.staticCalls().some((c) => c.op === 'fillStyle' && c.args[0] === '#cc706f')).toBe(true);
-  expect(h.staticCalls().filter((c) => c.op === 'fillText' && c.args[0] === '1')).toHaveLength(2);
+  // One repaint of the static layer on its own, since the log accumulates:
+  // each of the two terminals carries a chip in the line's own colour,
+  // numbered as the network names the route (net.routes.get('1').short).
+  const before = h.staticCalls().length;
+  h.handle.setTheme!('light');
+  const pass = h.staticCalls().slice(before);
+  expect(pass.some((c) => c.op === 'fillStyle' && c.args[0] === '#cc706f')).toBe(true);
+  expect(pass.filter((c) => c.op === 'fillText' && c.args[0] === '1')).toHaveLength(2);
   h.handle.follow!('tram');
   h.frame();
   const describe = vi.spyOn(vehicleCard, 'describeVehicle');

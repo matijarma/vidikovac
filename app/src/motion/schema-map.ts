@@ -168,7 +168,10 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     return { schema, viewport: viewport(), density, w: routesCanvas.width, h: routesCanvas.height, labels: labels(),
       trams: trams(), selectedRoute: selection?.kind === 'route' ? selection.id : null,
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
-      screenStop: screenStop()?.name, labelMinPx: interactive ? undefined : KIOSK_LABEL_MIN_PX };
+      screenStop: screenStop()?.name, labelMinPx: interactive ? undefined : KIOSK_LABEL_MIN_PX,
+      // The artwork names its lines by GTFS route id; a terminal's chips
+      // show what ZET calls them, which only the network knows.
+      routeShort: (routeId: string) => net?.routes.get(routeId)?.short ?? routeId };
   }
   function markViewport(): SchemaMarkViewport {
     return { ...viewport(), density, symbolScale: options.symbolScale };

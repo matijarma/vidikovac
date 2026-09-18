@@ -1,5 +1,8 @@
 // WCAG 2.x relative luminance and contrast ratio. Used by the CI contrast test
-// and by nothing at runtime, so it stays dependency-free and exact.
+// and, at runtime, to pick the number's tone on a terminal's line chip
+// (schema-paint.ts, F4), so it stays dependency-free and exact. parseHex
+// throws on anything but a hex colour: a caller reading a tone off computed
+// style must be ready for that.
 
 /** WCAG AA for text under 24 px regular / 18.66 px bold. */
 export const AA_TEXT = 4.5;
