@@ -163,14 +163,19 @@ const S_CLOSE2 = { id: 'S_close2', name: 'Blizu dva', lon: T1_LON, lat: T1_LAT_0
 const S_FAR = { id: 'S_far', name: 'Daleko', lon: 16.2, lat: 45.9 };
 const S_T2_START = { id: 'S_t2_start', name: 'T2 pocetak', lon: T2_A.lon, lat: T2_A.lat - 0.0018 };
 const S_T2_END = { id: 'S_t2_end', name: 'T2 kraj', lon: T2_C.lon + 0.0026, lat: T2_C.lat };
+// 50 m east of T2's first leg: past the 40 m geometric radius, so it gets no
+// onEdge link at all, and inside SERVED_STOP_MAX_METRES, so the served list
+// still places it (one x unit is ~0.78 m here).
+const S_T2_SIDE = { id: 'S_t2_side', name: 'T2 sa strane', lon: T2_A.lon + 0.000644, lat: (T2_A.lat + T2_B.lat) / 2 };
 const S_BUS = { id: 'S_bus', name: 'Autobusno', lon: 15.951, lat: 45.8015 };
 const STOPS_TXT =
   'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' +
-  [S_CLOSE, S_CLOSE2, S_FAR, S_T2_START, S_T2_END, S_BUS].map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join('') +
+  [S_CLOSE, S_CLOSE2, S_FAR, S_T2_START, S_T2_SIDE, S_T2_END, S_BUS].map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join('') +
   'S_blank_type,,Prazan location_type,,45.85,16.05,,,,\nS_parent,,Cvoriste (nadredena postaja),,45.86,16.06,,,1,\n';
 const STOP_TIMES_TXT =
   'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
-  't2_trip_1,08:00:00,08:00:00,S_t2_start,1,,,\nt2_trip_1,08:05:00,08:05:00,S_close,2,,,\nt2_trip_1,08:10:00,08:10:00,S_t2_end,3,,,\n' +
+  't2_trip_1,08:00:00,08:00:00,S_t2_start,1,,,\nt2_trip_1,08:02:00,08:02:00,S_t2_side,2,,,\n' +
+  't2_trip_1,08:05:00,08:05:00,S_close,3,,,\nt2_trip_1,08:10:00,08:10:00,S_t2_end,4,,,\n' +
   't3_trip_1,09:00:00,09:00:00,S_close,1,,,\nt3_trip_1,09:03:00,09:03:00,S_close2,2,,,\n' +
   // t1_trip_2 gives T1_shape a served list (F8); t1_trip_1 stays without
   // stop_times, so the terminus override still leaves S_close at its arc.
@@ -250,7 +255,7 @@ describe('buildNetwork', () => {
     for (const key of SHAPE_KEYS) expect(net.shapes[key]).toHaveLength(4);
     for (const key of EDGE_KEYS) expect(net.edges[key]).toHaveLength(2);
     for (const key of PATH_KEYS) expect(net.paths[key]).toHaveLength(1);
-    for (const key of STOP_KEYS) expect(net.stops[key]).toHaveLength(7); // S_parent (location_type 1) is dropped
+    for (const key of STOP_KEYS) expect(net.stops[key]).toHaveLength(8); // S_parent (location_type 1) is dropped
 
     const routes = routesOf(net);
     expect(new Set(routes.map((r: any) => r.rank)).size).toBe(5);
@@ -303,7 +308,15 @@ describe('buildNetwork', () => {
     // arc of its own. A bus shape runs no path and serves nothing.
     const servedIds = (row: any) => row.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
     expect(servedIds(t1)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
-    expect(servedIds(t2)).toEqual([['S_t2_start', 0], ['S_t2_end', expect.closeTo(t2Len, 0)]]);
+    // S_t2_side has no edge link (50 m off the rails) but lies inside the
+    // served radius, so the served list projects it onto the path; S_close,
+    // over a kilometre away, is dropped and reported instead.
+    expect(byId.S_t2_side.onEdge).toEqual([]);
+    expect(servedIds(t2).map(([id]: [string, number]) => id)).toEqual(['S_t2_start', 'S_t2_side', 'S_t2_end']);
+    const [, sideArc] = servedIds(t2)[1];
+    expect(sideArc).toBeGreaterThan(50); // halfway along the 111 m first leg
+    expect(sideArc).toBeLessThan(60);
+    expect(servedIds(t2)[2][1]).toBeCloseTo(t2Len, 0);
     expect(b1.served).toEqual([]);
     expect(servedIds(path)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
     const dropped = (await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).report.servedDropped;
@@ -367,8 +380,8 @@ describe('the committed artefact', () => {
   // R-TE11: the measured version 2 size plus a fifth. Measured at the first v2
   // build (feed 000395, 16 Sept 2026): 533,535 B raw, 125,866 B gzip; v1 was
   // 542,147 B raw. Pins: 640 KiB raw (655,360 B), 150 KiB gzip (153,600 B).
-  // Version 3 (F8) adds the served lists and the terminal flags: 576,148 B
-  // raw, 135,630 B gzip on the same feed -- 8 % and 8 % more, still 12 % and
+  // Version 3 (F8) adds the served lists and the terminal flags: 576,279 B
+  // raw, 135,611 B gzip on the same feed -- 8 % and 8 % more, still 12 % and
   // 12 % inside the v2 pins, which therefore stand rather than being loosened
   // to fit what was just measured.
   const RAW_BUDGET_BYTES = 640 * 1024;

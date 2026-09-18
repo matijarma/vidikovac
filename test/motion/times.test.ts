@@ -58,10 +58,11 @@ describe('the timetable over the committed artefacts', () => {
     expect(without, 'tram paths the timetable says nothing about').toEqual([]);
     expect(withSegments).toHaveLength(145);
     expect(times.report.unusable).toBe(0);
-    // Thirteen patterns name a stop their path cannot place: line 1's trimmed
-    // terminus stretches and Olipska, 42.8 m off the rails of the lines that
-    // call there. The segment spanning such a stop carries its time, so those
-    // paths keep their timetable rather than losing it.
-    expect(times.report.clipped).toBe(13);
+    // Four patterns name a stop their path cannot place -- line 1's trimmed
+    // off-graph terminus stretches. The segment spanning such a stop carries
+    // its time, so those paths keep their timetable rather than losing it.
+    // (Olipska accounted for the other nine until the served radius grew to
+    // SERVED_STOP_MAX_METRES; a stop stop_times say is served is served.)
+    expect(times.report.clipped).toBe(4);
   });
 });

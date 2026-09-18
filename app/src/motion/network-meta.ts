@@ -2,7 +2,7 @@
 // Lets the app state the network artefact's age and size without fetching
 // or parsing app/public/data/zet-network.json.
 export const FEED_VERSION = "000395";
-export const BUILT_AT = "2026-09-18T20:40:40.952Z";
+export const BUILT_AT = "2026-09-18T21:16:49.952Z";
 export const ROUTE_COUNT = 154;
 export const EDGE_COUNT = 287;
-export const BYTE_SIZE = 576171;
+export const BYTE_SIZE = 576279;

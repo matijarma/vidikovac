@@ -79,6 +79,18 @@ const COS_LAT0 = Math.cos(PROJECTION_LAT_DEG * DEG2RAD);
 export const SIMPLIFY_METRES = 5;
 // A stop is linked to an edge or a bus shape when it passes within 40 m of it.
 export const STOP_SHAPE_MAX_METRES = 40;
+// How far off a path a stop stop_times SAY it serves may lie and still be
+// placed on it (F8). A stop that the timetable says is served IS served: the
+// question is only where on the path to put it, not whether it belongs. 60 m
+// is the matcher's own NEAR_M (shared/motion/match.ts) -- a fix within 60 m of
+// an edge is taken to be on that edge, so a platform within 60 m of the rails
+// it is served from is on them too. Wider than the 40 m geometric radius on
+// purpose: that radius answers "which platforms does this track pass", which
+// must stay tight or every line's stop list fills with its neighbours', while
+// this one answers "where does THIS line's own stop sit", which the feed has
+// already settled. Olipska 251_2 is the case that set it: 42.8 m from the
+// rails of lines 2, 3, 13 and 33, every one of which calls there.
+export const SERVED_STOP_MAX_METRES = 60;
 // The first and last stop of a shapeless pattern may sit further from the
 // rails any shape draws: a terminus platform served only by that line has
 // no shape of its own in the feed (line 1 at Zapadni kolodvor, 168 m past
@@ -1475,9 +1487,12 @@ export async function buildNetwork(zipBuf, opts = {}) {
   // called before it, so an out-and-back path puts a platform on the leg the
   // line is actually on when it calls there. A served stop the path's edges
   // do not link -- a platform just outside the 40 m radius of the rails this
-  // line runs -- is projected onto the path's polyline when it falls inside
-  // that radius after all, and otherwise reported by name and dropped, since
-  // an invented arc would move the planner's dwell to the wrong place.
+  // line runs -- is projected onto the path's polyline when it lies within
+  // SERVED_STOP_MAX_METRES of it, and otherwise reported by name and dropped,
+  // since an invented arc would move the planner's dwell to the wrong place.
+  // A projected stop takes the path's nearest point outright: having no edge
+  // link on this path it has only the one candidate, so the call order has
+  // nothing to choose between.
   const linksByEdge = stops.map((_, si) => {
     const byEdge = new Map();
     for (const link of edgeLinks[si]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
@@ -1557,7 +1572,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
           cum = cumulative(plane);
         }
         const near = plane.length >= 2 ? nearestOnPolyline(stopPlane[si], plane, cum) : null;
-        if (near && near.dist <= STOP_SHAPE_MAX_METRES) {
+        if (near && near.dist <= SERVED_STOP_MAX_METRES) {
           arc = near.arc;
           servedProjected++;
         } else {
@@ -1833,7 +1848,7 @@ export async function main({
   );
   log(
     `Served stops: ${report.servedPaths} paths carry a served list (${report.servedEntries} entries), ` +
-      `${report.servedProjected} projected onto the path where no edge link reached, ${report.servedDropped.length} dropped, ` +
+      `${report.servedProjected} projected onto the path within ${SERVED_STOP_MAX_METRES} m where no edge link reached, ${report.servedDropped.length} dropped, ` +
       `${report.servedUnordered} placed without a call order; ` +
       `${report.terminalStops} stops are a terminus of some trip`,
   );
