@@ -3,7 +3,7 @@ import {
   createSchemaPlacer, decodeSchema, matchSchemaPath, pointAt, tangentAt,
   type RawSchema,
 } from '../../shared/motion/schema';
-import { corridorSpec, straight, syntheticNetwork } from './synthetic-network';
+import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
 
 /** A right-angle printed line: interpolation on its track differs visibly
  *  from the honest chord of a path which skips the middle stop. */
@@ -54,6 +54,15 @@ it('places stop occurrences on forward/reverse legs, clamps termini, uses trackl
   ]) expect(() => decodeSchema(invalid)).toThrow(/schema/i);
 
   const spec = corridorSpec();
+  // This test replaces the corridor's platforms wholesale, so the corridor's
+  // served lists (which name the originals) go with them: the placer then
+  // reads the geometric derivation, which is what the repeated-visit cases
+  // below are written against.
+  const forgetServed = (s: SynthSpec): SynthSpec => {
+    for (const route of s.routes) for (const path of route.paths ?? []) delete path.served;
+    return s;
+  };
+  forgetServed(spec);
   // The same printed A and B really are visited again on the return leg.
   // Nearby repeated associations are NOT extra visits.
   spec.stops = [
@@ -76,7 +85,7 @@ it('places stop occurrences on forward/reverse legs, clamps termini, uses trackl
   spec.routes[3].paths = [{ id: 'bus-path', direction: 0, edges: [0] }];
   const net = syntheticNetwork(spec);
   const path = (id: string): number => net.paths.findIndex((p) => p.id === id);
-  const sourceStops = net.stopsOnPath(path('1_0'));
+  const sourceStops = net.stopsOnPathGeometric(path('1_0'));
   sourceStops.splice(1, 0, sourceStops[0]); // the same Stop/arc associated twice
   const b = sourceStops[3];
   sourceStops.splice(4, 0,
@@ -92,7 +101,7 @@ it('places stop occurrences on forward/reverse legs, clamps termini, uses trackl
   expect(match.stops.at(-1)!.k).toBeGreaterThan(match.stops[0].k);
   expect(sourceStops).toEqual(originalStops); // no engine/network repair
 
-  const lookups = vi.spyOn(net, 'stopsOnPath');
+  const lookups = vi.spyOn(net, 'stopsOnPathGeometric');
   const placer = createSchemaPlacer(schema, net);
   expect(placer.place(path('1_0'), 300)).toEqual({ x: 60, y: 20, track: { x: 1, y: 0 }, sign: 1, colour: '#cc706f', line: '1', chord: false });
   expect(placer.place(path('1_0'), 750)).toMatchObject({ x: 110, y: 70, sign: 1 });
@@ -120,7 +129,7 @@ it('places stop occurrences on forward/reverse legs, clamps termini, uses trackl
   // choose A(0), then A(150), and the reverse path must choose them in reverse.
   const multi = artwork();
   multi.lines[0].stops.splice(2, 0, { name: 'A', u: 150, ownCircle: true });
-  const multiSpec = corridorSpec();
+  const multiSpec = forgetServed(corridorSpec());
   multiSpec.routes[0].paths![0].edges = [0];
   multiSpec.stops = [
     { id: 'a1', name: 'A', edge: 0, s: 100 }, { id: 'b1', name: 'B', edge: 0, s: 500 },
@@ -133,9 +142,9 @@ it('places stop occurrences on forward/reverse legs, clamps termini, uses trackl
   expect(matchSchemaPath(multiSchema, multiNet, 0).stops.map((s) => s.u)).toEqual([0, 100, 150, 200]);
   expect(matchSchemaPath(multiSchema, multiNet, 1).stops.map((s) => s.u)).toEqual([200, 150, 100, 0]);
   expect(createSchemaPlacer(multiSchema, multiNet).place(0, 750)).toMatchObject({ x: 110, y: 70, sign: 1, chord: false });
-  const ambiguous = { ...multiNet, stopsOnPath: () => multiNet.stopsOnPath(0).slice(0, 2) };
+  const ambiguous = { ...multiNet, stopsOnPathGeometric: () => multiNet.stopsOnPathGeometric(0).slice(0, 2) };
   expect(matchSchemaPath(multiSchema, ambiguous, 0).reason).toBe('ambiguous-stops');
   expect(createSchemaPlacer(multiSchema, ambiguous).place(0, 300)).toBeNull();
-  const zeroArc = { ...multiNet, stopsOnPath: () => multiNet.stopsOnPath(0).slice(0, 2).map((entry) => ({ ...entry, s: 100 })) };
+  const zeroArc = { ...multiNet, stopsOnPathGeometric: () => multiNet.stopsOnPathGeometric(0).slice(0, 2).map((entry) => ({ ...entry, s: 100 })) };
   expect(matchSchemaPath(multiSchema, zeroArc, 0).reason).toBe('non-increasing-arc');
 });

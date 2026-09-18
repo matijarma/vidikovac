@@ -136,20 +136,23 @@ describe('the replay harness over a recorded corridor run', () => {
     expect(table).toMatch(/hold-time share:\s+\d+\.\d%  mean hold length: (\d+\.\d|n\/a) s/);
   });
 
-  it('counts phantom stops per path from the trip index: none on the corridor\'s shape paths, every geometric entry on the synthetic path that declares no stops', () => {
+  it("counts phantom stops per path: the engine's list against the trip index, against the geometric derivation the served lists replace", () => {
     const phantoms = phantomStops(engine);
     const byId = new Map(phantoms.paths.map((p) => [p.id, p]));
+    const trunkIdx = net.paths.findIndex((p) => p.id === '1_0');
     const trunk = byId.get('1_0')!;
-    expect(trunk.geometric).toBe(net.stopsOnPath(net.paths.findIndex((p) => p.id === '1_0')).length);
+    // The corridor's served lists leave the westbound platform and route 2's
+    // own platform off route 1's trunk path, so the geometric row is larger
+    // than the served one and no phantom survives.
+    expect(trunk.geometric).toBe(net.stopsOnPathGeometric(trunkIdx).length);
+    expect(trunk.served).toBe(net.stopsOnPath(trunkIdx).length);
+    expect(trunk.geometric).toBeGreaterThan(trunk.served);
     expect(trunk.phantom).toBe(0);
-    expect(trunk.served).toBe(trunk.geometric);
     const synthetic = byId.get('path:9:0:abc')!;
-    expect(synthetic.served).toBe(0);
-    expect(synthetic.phantom).toBe(synthetic.geometric);
-    expect(synthetic.geometric).toBeGreaterThan(0);
-    expect(report.phantoms.shapePaths.phantom).toBe(0);
-    expect(report.phantoms.total.phantom).toBe(synthetic.geometric);
-    expect(formatTable(report)).toContain(`phantom stops:           ${report.phantoms.total.phantom} of ${report.phantoms.total.geometric} geometric entries`);
+    expect(synthetic.phantom).toBe(0);
+    expect(synthetic.served).toBeGreaterThan(0);
+    expect(report.phantoms.total.phantom).toBe(0);
+    expect(formatTable(report)).toContain(`phantom stops:           0 of ${report.phantoms.total.geometric} geometric entries`);
   });
 
   // Fault injection: a pair of consecutive ticks the grader already reads

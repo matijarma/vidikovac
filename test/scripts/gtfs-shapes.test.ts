@@ -118,7 +118,8 @@ function makeZip(files: ZipInput[]): Uint8Array {
   return out;
 }
 
-// A small synthetic feed: T1 a straight tram shape with a collinear midpoint,
+// A small synthetic feed: T1 a straight tram shape with a collinear midpoint
+// (two trips, only one of which has stop_times),
 // T2 an L-shaped tram shape whose trip's terminus stops sit 200 m off it
 // (the override), T3 a tram route whose trip has no shape_id (a synthetic
 // path over T1's edge), B1 a zig-zag bus with a stop on it, B2 a quiet bus.
@@ -127,7 +128,7 @@ const ROUTES_TXT =
   'T1,0,"1","Tram jedan",,0,,,\nT2,0,"2","Tram dva",,0,,,\nT3,0,"3","Tram tri",,0,,,\nB1,0,"101","Bus sto jedan",,3,,,\nB2,0,"102","Bus sto dva",,3,,,\n';
 const TRIPS_TXT =
   'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\n' +
-  'T1,wd,t1_trip_1,,,0,,T1_shape\nT2,wd,t2_trip_1,,,1,,T2_shape\nT3,wd,t3_trip_1,,,0,,\n' +
+  'T1,wd,t1_trip_1,,,0,,T1_shape\nT1,wd,t1_trip_2,,,0,,T1_shape\nT2,wd,t2_trip_1,,,1,,T2_shape\nT3,wd,t3_trip_1,,,0,,\n' +
   'B1,wd,b1_trip_1,,,0,,B1_shape\nB1,wd,b1_trip_2,,,1,,B1_shape\nB1,wd,b1_trip_3,,,0,,B1_shape\nB2,wd,b2_trip_1,,,0,,B2_shape\n';
 const T1_LON = 15.9;
 const T1_LAT_0 = 45.75;
@@ -170,7 +171,10 @@ const STOPS_TXT =
 const STOP_TIMES_TXT =
   'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
   't2_trip_1,08:00:00,08:00:00,S_t2_start,1,,,\nt2_trip_1,08:05:00,08:05:00,S_close,2,,,\nt2_trip_1,08:10:00,08:10:00,S_t2_end,3,,,\n' +
-  't3_trip_1,09:00:00,09:00:00,S_close,1,,,\nt3_trip_1,09:03:00,09:03:00,S_close2,2,,,\n';
+  't3_trip_1,09:00:00,09:00:00,S_close,1,,,\nt3_trip_1,09:03:00,09:03:00,S_close2,2,,,\n' +
+  // t1_trip_2 gives T1_shape a served list (F8); t1_trip_1 stays without
+  // stop_times, so the terminus override still leaves S_close at its arc.
+  't1_trip_2,07:00:00,07:00:00,S_close,1,,,\nt1_trip_2,07:04:00,07:04:00,S_close2,2,,,\n';
 const FEED_INFO_TXT = 'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version\nZET,https://www.zet.hr,hr,20260901,20301231,000123\n';
 
 function makeFullZip(opts: { withFeedInfo?: boolean; stopTimes?: string } = {}): Uint8Array {
@@ -239,9 +243,9 @@ describe('the rail graph', () => {
 });
 
 describe('buildNetwork', () => {
-  it('cuts a synthetic feed into the version 2 artefact: trams on the graph, buses as polylines, stops at exact arcs, a synthetic path through its stops, a decodable superset, and it refuses a path it cannot route', async () => {
+  it('cuts a synthetic feed into the version 3 artefact: trams on the graph, buses as polylines, stops at exact arcs and terminal flags, a synthetic path through its stops, a served list per path, a decodable superset, and it refuses a path it cannot route', async () => {
     const net = await buildNetwork(makeFullZip(), { diagramBusCount: 1 });
-    expect(net.version).toBe(2);
+    expect(net.version).toBe(3);
     expect(net.feedVersion).toBe('000123');
     for (const key of SHAPE_KEYS) expect(net.shapes[key]).toHaveLength(4);
     for (const key of EDGE_KEYS) expect(net.edges[key]).toHaveLength(2);
@@ -290,7 +294,23 @@ describe('buildNetwork', () => {
     expect(byId.S_bus.onEdge).toEqual([]);
 
     const [path] = pathsOf(net);
-    expect(path).toEqual({ id: `path:T3:0:${stopSequenceHash(['S_close', 'S_close2'])}`, route: 'T3', dir: 0, e: [t1.e[0]], stops: ['S_close', 'S_close2'] });
+    expect(path).toMatchObject({ id: `path:T3:0:${stopSequenceHash(['S_close', 'S_close2'])}`, route: 'T3', dir: 0, e: [t1.e[0]], stops: ['S_close', 'S_close2'] });
+
+    // F8, the served list: the platforms a path's own trips call at, in arc
+    // order, as [stopIdx, decimetres]. T1's own trip calls at both platforms
+    // on its edge. T2's trip also calls at S_close, which lies over a
+    // kilometre off T2's rails: dropped and reported, never invented at an
+    // arc of its own. A bus shape runs no path and serves nothing.
+    const servedIds = (row: any) => row.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
+    expect(servedIds(t1)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
+    expect(servedIds(t2)).toEqual([['S_t2_start', 0], ['S_t2_end', expect.closeTo(t2Len, 0)]]);
+    expect(b1.served).toEqual([]);
+    expect(servedIds(path)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
+    const dropped = (await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).report.servedDropped;
+    expect(dropped).toEqual([{ path: 'T2_shape', route: 'T2', stop: 'S_close', name: 'Blizu', metres: expect.any(Number) }]);
+
+    // Terminal: the first or last stop of some trip, wherever it is.
+    expect(stops.filter((s: any) => s.terminal === 1).map((s: any) => s.id).sort()).toEqual(['S_close', 'S_close2', 'S_t2_end', 'S_t2_start']);
 
     const lines = linesOf(net);
     expect(new Set(lines.map((l: any) => l.route))).toEqual(new Set(['T1', 'T2', 'B1']));
@@ -312,6 +332,9 @@ describe('buildNetwork', () => {
     expect(decoded.nextStop(t1Idx, 0)?.stop.id).toBe('S_close');
     expect(decoded.nextStop(t1Idx, t1Len / 2 + 1)?.stop.id).toBe('S_close2');
     expect(decoded.paths.filter((p) => p.shape === null).map((p) => p.route)).toEqual(['T3']);
+    expect(decoded.paths[0].served?.map((e) => decoded.stops[e.stop].id)).toEqual(['S_close', 'S_close2']);
+    expect(decoded.stops.find((s) => s.id === 'S_close')!.terminal).toBe(true);
+    expect(decoded.stops.find((s) => s.id === 'S_bus')!.terminal).toBe(false);
 
     // The CLI writes the artefact and the meta constants for the same feed.
     const dir = await mkdtemp(join(tmpdir(), 'zet-network-'));
@@ -325,7 +348,7 @@ describe('buildNetwork', () => {
       now: () => new Date('2026-09-12T12:00:00.000Z'),
     });
     expect(result).toMatchObject({ routeCount: 5, edgeCount: 2, pathCount: 1 });
-    expect(JSON.parse(await readFile(join(dir, 'data/zet-network.json'), 'utf8'))).toMatchObject({ version: 2, feedVersion: '000123', builtAt: '2026-09-12T12:00:00.000Z' });
+    expect(JSON.parse(await readFile(join(dir, 'data/zet-network.json'), 'utf8'))).toMatchObject({ version: 3, feedVersion: '000123', builtAt: '2026-09-12T12:00:00.000Z' });
     const meta = await readFile(join(dir, 'motion/network-meta.ts'), 'utf8');
     expect(meta).toContain('export const FEED_VERSION = "000123";');
     expect(meta).toContain('export const EDGE_COUNT = 2;');
@@ -344,16 +367,20 @@ describe('the committed artefact', () => {
   // R-TE11: the measured version 2 size plus a fifth. Measured at the first v2
   // build (feed 000395, 16 Sept 2026): 533,535 B raw, 125,866 B gzip; v1 was
   // 542,147 B raw. Pins: 640 KiB raw (655,360 B), 150 KiB gzip (153,600 B).
+  // Version 3 (F8) adds the served lists and the terminal flags: 576,148 B
+  // raw, 135,630 B gzip on the same feed -- 8 % and 8 % more, still 12 % and
+  // 12 % inside the v2 pins, which therefore stand rather than being loosened
+  // to fit what was just measured.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
-  it('is version 2, inside the re-pinned budget, cut from the feed the meta names, and gives every tram route rails to run on with the main square on every one that passes it', () => {
+  it('is version 3, inside the re-pinned budget, cut from the feed the meta names, gives every tram route rails to run on with the main square on every one that passes it, and carries a served list on every tram path', () => {
     const raw = readFileSync(artefactPath);
     console.log(`zet-network.json: ${raw.byteLength} B raw (budget ${RAW_BUDGET_BYTES} B), ${gzipSync(raw).byteLength} B gzipped (budget ${GZIP_BUDGET_BYTES} B)`);
     expect(raw.byteLength).toBeLessThan(RAW_BUDGET_BYTES);
     expect(gzipSync(raw).byteLength).toBeLessThan(GZIP_BUDGET_BYTES);
     const parsed = JSON.parse(raw.toString('utf8'));
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.feedVersion).toBe(FEED_VERSION);
     for (const wireOn of parsed.stops.on) for (const [, scaled] of wireOn) expect(scaled).toBeLessThanOrEqual(BUS_ON_FRAC_SCALE);
 
@@ -388,5 +415,25 @@ describe('the committed artefact', () => {
       }
     });
     expect(nearTramCount).toBeGreaterThan(12);
+
+    // F8: every tram path -- shape path and synthetic alike -- knows the
+    // platforms its own trips call at, and that list is a strict, arc-ordered
+    // subset of what lies geometrically on its edges.
+    const tramPaths = net.paths.filter((p) => net.routes.get(p.route)?.type === 0);
+    expect(tramPaths).toHaveLength(145);
+    for (const path of tramPaths) {
+      const idx = net.paths.indexOf(path);
+      expect(path.served?.length, `path ${path.id} has no served list`).toBeGreaterThan(1);
+      const served = net.stopsOnPath(idx);
+      const geometric = new Set(net.stopsOnPathGeometric(idx).map((e) => e.stop.id));
+      for (let k = 1; k < served.length; k++) expect(served[k].s, `path ${path.id} arcs out of order`).toBeGreaterThanOrEqual(served[k - 1].s);
+      for (const entry of served) expect(geometric.has(entry.stop.id) || entry.s <= path.len, `path ${path.id} serves ${entry.stop.id} off its own arc`).toBe(true);
+      expect(served.length).toBeLessThanOrEqual(geometric.size);
+    }
+    // The terminus flag reaches the ends of the network, not every platform.
+    const terminals = net.stops.filter((s) => s.terminal);
+    expect(terminals.length).toBe(464);
+    expect(terminals.length).toBeLessThan(net.stops.length / 2);
+    expect(net.stops.find((s) => s.name === 'Trg bana J. Jelačića')!.terminal).toBe(false);
   });
 });

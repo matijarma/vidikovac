@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds app/public/data/zet-network.json version 2 -- the tram rail GRAPH
+// Builds app/public/data/zet-network.json version 3 -- the tram rail GRAPH
 // (directed edges shared by every line that runs them), every tram shape as
 // a sequence of those edges, synthetic paths for tram patterns whose trips
 // carry no shape_id (line 1), bus shapes as plain simplified polylines, stops
@@ -16,6 +16,18 @@
 // snapping pass for the 2 % of near-duplicate digitisations of one track.
 // The twin (worker/do/twin-do.ts) map-matches trams onto these edges and
 // keeps their order per edge; the client draws along the same geometry.
+//
+// Version 3 (F8) adds the SERVED-STOP TABLE. The geometric 40 m stop links
+// below say which platforms a rail edge PASSES; they never said which ones a
+// line CALLS AT, and on ZET's geometry the two differ by a factor of three
+// (the opposite direction's platform lies 3 to 6 m away, other lines'
+// platforms sit on the shared trunk, three platforms stand within a metre at
+// Ljubijska). So every path now also carries `served`: the platforms the
+// trips that run it actually call at, in arc order, read from stop_times --
+// the union over every trip of a shape_id, and its own routed stop sequence
+// for a synthetic path. Stops carry `terminal`, true where some trip starts
+// or ends. The geometric `onEdge` links stay exactly as they were: the
+// matcher and the city map's stop circles read those.
 //
 // Reuses the zero-dependency zip reader and CSV parser from gtfs-routes.mjs;
 // run locally with `npm run build:network` and commit both generated files.
@@ -38,9 +50,9 @@ export const GTFS_URL = 'https://www.zet.hr/gtfs-scheduled/latest';
 export const OUTPUT_PATH = 'app/public/data/zet-network.json';
 export const META_OUTPUT_PATH = 'app/src/motion/network-meta.ts';
 
-/** The wire version shared/motion/network.ts decodes; a cached version 1
+/** The wire version shared/motion/network.ts decodes; a cached version 2
  *  artefact must fail loudly there, never be misread. */
-export const ARTEFACT_VERSION = 2;
+export const ARTEFACT_VERSION = 3;
 
 const DOWNLOAD_TIMEOUT_MS = 60_000; // build-time download of a >10 MB archive, not a live request
 const USER_AGENT = 'Vidikovac/0.1 (zagreb.aningfilm.hr; kontakt@aningfilm.hr)';
@@ -103,9 +115,9 @@ export const BUS_ON_FRAC_SCALE = 500;
 // Column order for the struct-of-arrays wire format (see toColumnar).
 export const ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes'];
 export const EDGE_KEYS = ['from', 'to', 'd'];
-export const SHAPE_KEYS = ['id', 'route', 'dir', 'd', 'e', 'len'];
-export const PATH_KEYS = ['id', 'route', 'dir', 'e', 'stops'];
-export const STOP_KEYS = ['id', 'name', 'p', 'on', 'onEdge'];
+export const SHAPE_KEYS = ['id', 'route', 'dir', 'd', 'e', 'len', 'served'];
+export const PATH_KEYS = ['id', 'route', 'dir', 'e', 'stops', 'served'];
+export const STOP_KEYS = ['id', 'name', 'p', 'on', 'onEdge', 'terminal'];
 export const LINE_KEYS = ['route', 'pts'];
 // Diagram legibility cut: every tram route, plus this many of the busiest
 // bus routes by trip count (19 trams + the top 20 buses mirrors how ZET's own
@@ -1012,9 +1024,10 @@ export function parseRoutesTxt(rows) {
 
 /** trips.txt: which route each shape belongs to (first trip wins, no shape is
  *  shared between routes), a sample trip per shape for the terminus override,
- *  trip counts per route, the majority direction_id per shape, and the trips
- *  that carry no shape_id at all (route and direction), which the synthetic
- *  paths are built for. */
+ *  trip counts per route, the majority direction_id per shape, the shape each
+ *  shaped trip runs (the served lists are the union over a shape's trips,
+ *  F8), and the trips that carry no shape_id at all (route and direction),
+ *  which the synthetic paths are built for. */
 export function parseTripsTxt(rows) {
   if (rows.length === 0) throw new Error('trips.txt is empty');
   const col = columnIndexer(rows[0], 'trips.txt');
@@ -1027,6 +1040,7 @@ export function parseTripsTxt(rows) {
   const shapeSampleTrip = new Map();
   const directionVotes = new Map(); // shapeId -> [count0, count1]
   const shapelessTrips = new Map(); // tripId -> { route, direction }
+  const shapeOfTrip = new Map(); // tripId -> shapeId, for the shaped trips
   for (const r of rows.slice(1)) {
     const routeId = r[routeIdx];
     const tripId = r[tripIdx];
@@ -1037,6 +1051,7 @@ export function parseTripsTxt(rows) {
       if (tripId) shapelessTrips.set(tripId, { route: routeId, direction });
       continue;
     }
+    if (tripId) shapeOfTrip.set(tripId, shapeId);
     if (!shapeToRoute.has(shapeId)) {
       shapeToRoute.set(shapeId, routeId);
       shapeSampleTrip.set(shapeId, tripId);
@@ -1047,7 +1062,7 @@ export function parseTripsTxt(rows) {
   }
   const shapeDirection = new Map();
   for (const [shapeId, [zero, one]] of directionVotes) shapeDirection.set(shapeId, one > zero ? 1 : 0);
-  return { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips };
+  return { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip };
 }
 
 export function parseShapesTxt(rows) {
@@ -1120,12 +1135,16 @@ function stopTimesStream(buf, entry) {
 }
 
 /** Streams stop_times.txt and returns { endpoints: Map<tripId, {firstStop,
- *  lastStop}>, sequences: Map<tripId, stopId[]> } -- the sequences only for
- *  the trip ids in `sequenceTrips`, sorted by stop_sequence. */
-export async function streamStopTimes(buf, entry, sequenceTrips = new Set()) {
+ *  lastStop}>, sequences: Map<tripId, stopId[]>, shapeStops: Map<shapeId,
+ *  Set<stopId>> } -- the sequences only for the trip ids in `sequenceTrips`,
+ *  sorted by stop_sequence, and the served set only for the trips named in
+ *  `shapeOfTrip` (F8: one pass, no per-trip sequence held for the 70,000
+ *  shaped trips, whose union per shape is all a served list needs). */
+export async function streamStopTimes(buf, entry, sequenceTrips = new Set(), shapeOfTrip = new Map()) {
   const rl = createInterface({ input: stopTimesStream(buf, entry), crlfDelay: Infinity });
   const endpoints = new Map();
   const raw = new Map();
+  const shapeStops = new Map();
   let header = null;
   let tripIdx = -1;
   let stopIdx = -1;
@@ -1165,13 +1184,19 @@ export async function streamStopTimes(buf, entry, sequenceTrips = new Set()) {
       if (!list) raw.set(tripId, (list = []));
       list.push({ seq, stopId });
     }
+    const shapeId = shapeOfTrip.get(tripId);
+    if (shapeId !== undefined) {
+      let set = shapeStops.get(shapeId);
+      if (!set) shapeStops.set(shapeId, (set = new Set()));
+      set.add(stopId);
+    }
   }
   const sequences = new Map();
   for (const [tripId, list] of raw) {
     list.sort((a, b) => a.seq - b.seq);
     sequences.set(tripId, list.map((x) => x.stopId));
   }
-  return { endpoints, sequences };
+  return { endpoints, sequences, shapeStops };
 }
 
 /** Kept for callers that only want the endpoints (task A1's script imports it). */
@@ -1199,7 +1224,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const textOf = (name) => new TextDecoder('utf-8').decode(extractEntry(zipBuf, findEntry(name)));
 
   const routesMeta = parseRoutesTxt(parseCsv(textOf('routes.txt')));
-  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips } = parseTripsTxt(parseCsv(textOf('trips.txt')));
+  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip } = parseTripsTxt(parseCsv(textOf('trips.txt')));
   const rawShapesByShapeId = parseShapesTxt(parseCsv(textOf('shapes.txt')));
   const rawStops = parseStopsTxt(parseCsv(textOf('stops.txt')));
 
@@ -1216,7 +1241,21 @@ export async function buildNetwork(zipBuf, opts = {}) {
 
   const isTramRoute = (routeId) => routesMeta.get(routeId)?.type === 0;
   const shapelessTramTrips = new Set([...shapelessTrips].filter(([, t]) => isTramRoute(t.route)).map(([id]) => id));
-  const { endpoints: tripEndpoints, sequences: shapelessSequences } = await streamStopTimes(zipBuf, findEntry('stop_times.txt'), shapelessTramTrips);
+  // Only the tram shapes need a served list: a bus shape runs no path.
+  const tramShapeOfTrip = new Map();
+  for (const [tripId, shapeId] of shapeOfTrip) if (isTramRoute(shapeToRoute.get(shapeId))) tramShapeOfTrip.set(tripId, shapeId);
+  const { endpoints: tripEndpoints, sequences: shapelessSequences, shapeStops: servedByShape } = await streamStopTimes(
+    zipBuf,
+    findEntry('stop_times.txt'),
+    shapelessTramTrips,
+    tramShapeOfTrip,
+  );
+  // A platform some trip starts or ends at: a terminus, wherever it is.
+  const terminalStops = new Set();
+  for (const ends of tripEndpoints.values()) {
+    terminalStops.add(ends.firstStop);
+    terminalStops.add(ends.lastStop);
+  }
 
   // Shapes in id order, split by mode: trams go to the graph, buses stay polylines.
   const shapeIds = [...rawShapesByShapeId.keys()].sort();
@@ -1334,7 +1373,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
     // a stop 39.9 m from a track is linked by the builder exactly when the
     // client would measure it so; the raw coordinate can differ by half a unit.
     stopPlane.push(unitsToMetres(stopUnits[i]));
-    return { id: s.id, name: s.name, p: [stopPChain[2 * i], stopPChain[2 * i + 1]], on: [], onEdge: [] };
+    return { id: s.id, name: s.name, p: [stopPChain[2 * i], stopPChain[2 * i + 1]], on: [], onEdge: [], terminal: terminalStops.has(s.id) ? 1 : 0 };
   });
   const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
   const shapeLinks = stops.map(() => []); // stopIdx -> [{ shape, frac }]
@@ -1422,6 +1461,88 @@ export async function buildNetwork(zipBuf, opts = {}) {
       });
   }
 
+  // --- Served stops (F8): per path, the platforms its own trips call at, in
+  // arc order, as [stopIdx, decimetres] pairs. The arc is the stop's own
+  // geometric link on an edge of that path (the first such edge, as the
+  // decoder's own first-wins rule reads it); a served stop the path's edges
+  // do not link -- a platform just outside the 40 m radius of the rails this
+  // line runs -- is projected onto the path's polyline when it falls inside
+  // that radius after all, and otherwise reported by name and dropped, since
+  // an invented arc would move the planner's dwell to the wrong place.
+  const linksByEdge = stops.map((_, si) => {
+    const byEdge = new Map();
+    for (const link of edgeLinks[si]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+    return byEdge;
+  });
+  const offsetsOfEdges = (edgeSeq) => {
+    const offsets = [];
+    let len = 0;
+    for (const e of edgeSeq) {
+      offsets.push(len);
+      len += edgeLen[e];
+    }
+    return offsets;
+  };
+  const planeOfEdges = (edgeSeq) => {
+    const plane = [];
+    for (const e of edgeSeq) {
+      const pts = edgePlane[e];
+      for (let i = plane.length === 0 ? 0 : 1; i < pts.length; i++) plane.push(pts[i]);
+    }
+    return plane;
+  };
+  let servedProjected = 0;
+  const servedDropped = [];
+  /**
+   * @param {string} label the path's id, for the report
+   * @param {string} routeId
+   * @param {readonly number[]} edgeSeq the path's edges
+   * @param {Iterable<string>} stopIds the stops its trips call at
+   * @param {Map<string, Map<number, number>> | null} extraLinks links the
+   *   router used that the wire does not carry (a terminus set back from the
+   *   rails, TERMINUS_STOP_MAX_METRES), so a synthetic path keeps its own end
+   */
+  function servedFor(label, routeId, edgeSeq, stopIds, extraLinks = null) {
+    const offsets = offsetsOfEdges(edgeSeq);
+    let plane = null;
+    let cum = null;
+    const out = [];
+    for (const stopId of stopIds) {
+      const si = stopIndexById.get(stopId);
+      if (si === undefined) {
+        servedDropped.push({ path: label, route: routeId, stop: stopId, name: '?', metres: null });
+        continue;
+      }
+      const byEdge = extraLinks?.get(stopId) ?? linksByEdge[si];
+      let arc = null;
+      for (let k = 0; k < edgeSeq.length; k++) {
+        const onEdge = byEdge.get(edgeSeq[k]);
+        if (onEdge !== undefined) {
+          arc = offsets[k] + onEdge;
+          break;
+        }
+      }
+      if (arc === null) {
+        if (plane === null) {
+          plane = planeOfEdges(edgeSeq);
+          cum = cumulative(plane);
+        }
+        const near = plane.length >= 2 ? nearestOnPolyline(stopPlane[si], plane, cum) : null;
+        if (near && near.dist <= STOP_SHAPE_MAX_METRES) {
+          arc = near.arc;
+          servedProjected++;
+        } else {
+          servedDropped.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: near ? round1(near.dist) : null });
+          continue;
+        }
+      }
+      out.push([si, Math.round(arc * 10)]);
+    }
+    // Arc order, a tie broken by stop index: the same feed must give the same bytes.
+    out.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    return out;
+  }
+
   // --- Synthetic paths for tram patterns whose trips carry no shape_id
   // (line 1): the shortest path over the directed graph visiting the
   // pattern's stops in order, one per distinct (route, direction, stop
@@ -1498,8 +1619,25 @@ export async function buildNetwork(zipBuf, opts = {}) {
     if (from > 0 || to < pattern.stops.length - 1) {
       trimmed.push({ id: label, leading: pattern.stops.slice(0, from), trailing: pattern.stops.slice(to + 1) });
     }
-    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered });
+    // The served list of a synthetic path is its own routed stop sequence.
+    // Its links are the ones the router walked, which for a terminus set
+    // back from the rails is the nearest edge within TERMINUS_STOP_MAX_METRES
+    // and is on no wire link of that stop.
+    const routed = new Map();
+    for (let k = from; k <= to; k++) {
+      const byEdge = new Map();
+      for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
+      routed.set(pattern.stops[k], byEdge);
+    }
+    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served: servedFor(label, pattern.route, edgesOnPath, covered, routed) });
   }
+
+  // Every tram shape is a path too: the union of the stops of every trip that
+  // runs it, so a short-turn variant's platforms are covered as well.
+  for (const shape of shapes) {
+    shape.served = shape.e.length > 0 ? servedFor(shape.id, shape.route, shape.e, [...(servedByShape.get(shape.id) ?? [])].sort()) : [];
+  }
+  servedDropped.sort((a, b) => a.path.localeCompare(b.path) || a.stop.localeCompare(b.stop));
 
   // --- The octilinear diagram: one line per shape of every diagram-cut route.
   const rawLines = [];
@@ -1562,6 +1700,11 @@ export async function buildNetwork(zipBuf, opts = {}) {
     trimmedPaths: trimmed,
     unroutablePaths: unroutable,
     residualPairs: graph.report.residualPairs,
+    servedPaths: shapes.filter((sh) => sh.served.length > 0).length + paths.filter((pa) => pa.served.length > 0).length,
+    servedEntries: shapes.reduce((n, sh) => n + sh.served.length, 0) + paths.reduce((n, pa) => n + pa.served.length, 0),
+    servedProjected,
+    servedDropped,
+    terminalStops: stops.filter((st) => st.terminal === 1).length,
   };
 
   return {
@@ -1647,6 +1790,14 @@ export async function main({
       `${report.spikePoints} spike points collapsed, ${report.snappedRuns} runs snapped, ${report.residualPairs.length} residual near-parallel pairs; ` +
       `bus shapes ${(report.busUnsharedShare * 100).toFixed(1)} % unshared (informational, buses stay polylines)`,
   );
+  log(
+    `Served stops: ${report.servedPaths} paths carry a served list (${report.servedEntries} entries), ` +
+      `${report.servedProjected} projected onto the path where no edge link reached, ${report.servedDropped.length} dropped; ` +
+      `${report.terminalStops} stops are a terminus of some trip`,
+  );
+  for (const d of report.servedDropped) {
+    log(`Served stop dropped from ${d.path} (route ${d.route}): ${d.stop} "${d.name}" is ${d.metres === null ? 'not in stops.txt' : `${d.metres} m off the path`}`);
+  }
   for (const u of report.unroutablePaths) log(`Synthetic path skipped, rails not drawn by any shape: ${u.reason}`);
   for (const t of report.trimmedPaths) {
     log(`Synthetic path ${t.id}: off-graph terminus stretch dropped, leading [${t.leading.join(", ")}], trailing [${t.trailing.join(", ")}]`);

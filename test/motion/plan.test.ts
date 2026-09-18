@@ -112,6 +112,27 @@ describe('buildPlan', () => {
     expect(lost.confidence).toBeLessThanOrEqual(0.5);
   });
 
+  // F8: the plan books a dwell only where the line actually calls. The trunk
+  // carries W750 (the westbound platform of the same place) and X750 (the
+  // platform only route 2 calls at); both lie on path 1_0's edges and neither
+  // is in its served list, so no plan of route 1 may stand at either.
+  it('books no dwell at a phantom platform on the shared trunk', () => {
+    const headerSec = 1012;
+    // The last fix sits at 740 m -- inside the 40 m stop zone of both
+    // phantoms and clear of every platform route 1 calls at.
+    const tram = tramOn1('phantom', [[640, 1000], [740, 1010]]);
+    buildPlan(tram, net, eightMs, null, headerSec, headerSec, BANDS);
+    const knots = knotsOf(tram);
+    const dwellArcs: number[] = [];
+    for (let i = 1; i < knots.length; i++) {
+      if (knots[i][0] > knots[i - 1][0] && Math.abs(knots[i][1] - knots[i - 1][1]) < 0.01) dwellArcs.push(knots[i][1]);
+    }
+    expect(dwellArcs.some((s) => Math.abs(s - 900) < 1)).toBe(true); // T900, which route 1 does call at
+    for (const s of dwellArcs) expect(Math.abs(s - 750), `a dwell at arc ${s}, beside the phantom platforms`).toBeGreaterThan(40);
+    // And the stop it aims at past 600 m is T900, never one of the phantoms.
+    expect(tram.next?.stopId).toBe('T900');
+  });
+
   it('reads the timetable onto path arcs: stop-to-stop seconds by hour band, a partial segment by arc share, dwell by stop', () => {
     const patterns: TripPattern[] = [
       {

@@ -291,7 +291,14 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
   const line = schema.lines.find((l) => l.route === path.route);
   if (!line) return fail('missing-line');
   result.line = line;
-  const source = net.stopsOnPath(pathIdx);
+  // The GEOMETRIC list, not the served one (F8): this is artwork placement,
+  // not planning. Every platform the rails pass is a legitimate anchor for
+  // the arc -> u mapping -- only names printed on this line become anchors
+  // anyway, and a platform of another line at the same place is the same
+  // place. Reading the served list instead would cost three paths their
+  // anchors (13_11 and two of line 1's synthetic paths on feed 000395) and
+  // buy nothing: the placer already dedupes by name and locality.
+  const source = net.stopsOnPathGeometric(pathIdx);
   result.sourceStops = source.length;
   interface Association {
     entry: SchemaPathUnmatched;

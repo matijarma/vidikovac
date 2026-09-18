@@ -205,11 +205,16 @@ export interface PathStopCount {
   synthetic: boolean;
   /** Patterns of the trip index that run this path (its shape, or the synthetic path itself). */
   patterns: number;
-  /** Stops geometrically on the path's edges (graph.ts stopsOnPath). */
+  /** Stops geometrically on the path's edges (graph.ts stopsOnPathGeometric). */
   geometric: number;
-  /** Of those, stops some pattern of the path calls at. */
+  /** Entries of the list the ENGINE reads (graph.ts stopsOnPath) that some
+   *  pattern of the path calls at: the artefact's served list at v3, the
+   *  geometric derivation for a path that carries none. */
   served: number;
-  /** Of those, stops no pattern of the path calls at: the phantoms E0 removes. */
+  /** Entries of that same list no pattern of the path calls at: the phantoms
+   *  E0 removes. Zero once every path carries a served list, by construction
+   *  -- and a cross-check between the two artefacts, which are cut from the
+   *  same feed but by different scripts. */
   phantom: number;
 }
 
@@ -646,13 +651,14 @@ function stopTotals(paths: readonly PathStopCount[]): PathStopTotals {
 }
 
 /**
- * Per path, the stops geometrically on its edges against the stops its
- * patterns actually call at: for a shape path the union of every pattern of
- * the trip index that runs that shape (short-turn variants included), for a
- * synthetic `path:` id the stop sequence the path itself was routed through.
- * A geometric entry whose stop id is in neither is a phantom -- a platform
- * of another line on the same rails that the planner today dwells at
- * (design section E0). Static: depends on the two artefacts, not the frames.
+ * Per path, the stops geometrically on its edges against the list the engine
+ * reads and the stops its patterns actually call at: for a shape path the
+ * union of every pattern of the trip index that runs that shape (short-turn
+ * variants included), for a synthetic `path:` id the stop sequence the path
+ * itself was routed through. An entry of the engine's list whose stop id is
+ * in neither is a phantom -- a platform of another line on the same rails
+ * that the planner would dwell at (design section E0). Static: depends on
+ * the two artefacts, not the frames.
  */
 export function phantomStops(engine: Engine): PhantomReport {
   const servedByShape = new Map<string, { stops: Set<string>; patterns: number }>();
@@ -674,7 +680,16 @@ export function phantomStops(engine: Engine): PhantomReport {
     }
     const entries = engine.net.stopsOnPath(pathIdx);
     const servedCount = entries.filter((entry) => served.stops.has(entry.stop.id)).length;
-    paths.push({ pathIdx, id: path.id, route: path.route, synthetic, patterns: served.patterns, geometric: entries.length, served: servedCount, phantom: entries.length - servedCount });
+    paths.push({
+      pathIdx,
+      id: path.id,
+      route: path.route,
+      synthetic,
+      patterns: served.patterns,
+      geometric: engine.net.stopsOnPathGeometric(pathIdx).length,
+      served: servedCount,
+      phantom: entries.length - servedCount,
+    });
   });
   return {
     paths,

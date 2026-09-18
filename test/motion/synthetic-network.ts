@@ -18,6 +18,10 @@ export interface SynthPath {
   edges: number[];
   /** A synthetic path (no shape of its own), as the builder makes for shapeless patterns. */
   synthetic?: boolean;
+  /** The stops this path's own trips call at (artefact v3's `served`, F8).
+   *  Omitted, the path has no served list and stopsOnPath derives it from
+   *  the geometry, as a version 2 artefact's path did. */
+  served?: string[];
 }
 
 export interface SynthRoute {
@@ -34,6 +38,11 @@ export interface SynthStop {
   edge: number;
   /** Arc along the edge. */
   s: number;
+  /** Further edges this platform lies within reach of, as the builder's 40 m
+   *  radius links an opposite-direction platform to both tracks. */
+  also?: { edge: number; s: number }[];
+  /** First or last stop of some trip (artefact v3's `terminal`, F8). */
+  terminal?: boolean;
 }
 
 export interface SynthSpec {
@@ -67,6 +76,7 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
   const pathOfShapeIdx = new Map<number, number>();
   const routes = new Map<string, { short: string; type: number; rank: number; shapes: number[] }>();
   const synthetic: { path: SynthPath; route: string }[] = [];
+  const served: { at: number; ids: string[] | undefined }[] = [];
   let rank = 1;
   for (const route of spec.routes) {
     const shapeIdxs: number[] = [];
@@ -82,6 +92,7 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
       shapeIdxs.push(shapeIdx);
       const { offsets, len } = offsetsOf(path.edges);
       pathOfShapeIdx.set(shapeIdx, paths.length);
+      served.push({ at: paths.length, ids: path.served });
       paths.push({ id: path.id, route: route.id, direction: path.direction, shape: shapeIdx, edges: path.edges, offsets, len });
     }
     for (const bus of route.busShapes ?? []) {
@@ -93,7 +104,8 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
   }
   for (const { path, route } of synthetic) {
     const { offsets, len } = offsetsOf(path.edges);
-    paths.push({ id: path.id, route, direction: path.direction, shape: null, edges: path.edges, offsets, len, stops: [] });
+    served.push({ at: paths.length, ids: path.served });
+    paths.push({ id: path.id, route, direction: path.direction, shape: null, edges: path.edges, offsets, len, stops: path.served ?? [] });
   }
 
   // A stop on an edge is on every shape running that edge, at the shape's
@@ -117,9 +129,30 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
     const segLen = edge.cum[seg + 1] - edge.cum[seg];
     const t = segLen > 0 ? (st.s - edge.cum[seg]) / segLen : 0;
     const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    const on = (edgeInShapes.get(st.edge) ?? []).map(({ shape, offset }) => ({ shape, s: offset + st.s }));
-    return { id: st.id, name: st.name ?? st.id, p, on, onEdge: [{ edge: st.edge, s: st.s }] };
+    const onEdge = [{ edge: st.edge, s: st.s }, ...(st.also ?? [])];
+    const on = onEdge.flatMap((link) => (edgeInShapes.get(link.edge) ?? []).map(({ shape, offset }) => ({ shape, s: offset + link.s })));
+    on.sort((a, b) => a.shape - b.shape || a.s - b.s);
+    return { id: st.id, name: st.name ?? st.id, p, on, onEdge, terminal: st.terminal ?? false };
   });
+
+  // The served lists, as arcs along each path: the decoder's `served` field,
+  // built here from stop ids so a fixture can name the stops a line calls at.
+  const stopIdxById = new Map(stops.map((stop, i) => [stop.id, i] as const));
+  for (const { at: pathIdx, ids } of served) {
+    if (!ids) continue;
+    const path = paths[pathIdx];
+    const list: { stop: number; s: number }[] = [];
+    for (const id of ids) {
+      const stopIdx = stopIdxById.get(id);
+      if (stopIdx === undefined) throw new Error(`path ${path.id} serves unknown stop ${id}`);
+      const k = path.edges.findIndex((e) => (stops[stopIdx].onEdge ?? []).some((link) => link.edge === e));
+      if (k < 0) throw new Error(`path ${path.id} serves ${id}, which lies on none of its edges`);
+      const link = (stops[stopIdx].onEdge ?? []).find((l) => l.edge === path.edges[k])!;
+      list.push({ stop: stopIdx, s: path.offsets[k] + link.s });
+    }
+    list.sort((a, b) => a.s - b.s);
+    path.served = list;
+  }
 
   const byShape: { stop: Stop; s: number }[][] = shapes.map(() => []);
   for (const stop of stops) for (const { shape, s } of stop.on) byShape[shape].push({ stop, s });
@@ -131,7 +164,7 @@ export function syntheticNetwork(spec: SynthSpec): GraphNetwork {
   };
 
   return {
-    version: 2,
+    version: 3,
     feedVersion: 'synthetic',
     routes,
     shapes,
@@ -169,6 +202,15 @@ export function lonLatOf(p: XY): { lon: number; lat: number } {
  * (path 2_0: edges 0,2), '9' (synthetic-only route: path over edges 0,1 with
  * no shape, the shapeless-pattern case), bus '109' (a polyline 30 m south of
  * the trunk). Stops every 300 m on the trunk and on both branches.
+ *
+ * Two platforms on the trunk are phantoms for route 1 eastbound (F8): W750,
+ * the westbound platform of the same place, and X750, the platform only line
+ * 2 calls at. Both lie on edge 0, so the geometric derivation lists them on
+ * every path over the trunk; neither is in path 1_0's served list. W750's
+ * second link is declared rather than measured -- the corridor holds its two
+ * tracks 60 m apart so the matcher's fold tests have room, while the real
+ * builder's 40 m radius links an opposite-direction platform to both tracks
+ * (they run 3 to 6 m apart in ZET's own geometry).
  */
 export function corridorSpec(): SynthSpec {
   const stops: SynthStop[] = [];
@@ -176,11 +218,15 @@ export function corridorSpec(): SynthSpec {
     for (let s = 300; s < len; s += 300) stops.push({ id: `${prefix}${s}`, edge, s });
   };
   addStops(0, 1500, 'T');
-  stops.push({ id: 'T0', edge: 0, s: 0 });
+  stops.push({ id: 'T0', edge: 0, s: 0, terminal: true });
   addStops(1, 1200, 'C');
-  stops.push({ id: 'C1200', edge: 1, s: 1200 });
+  stops.push({ id: 'C1200', edge: 1, s: 1200, terminal: true });
   addStops(2, 1200, 'D');
-  stops.push({ id: 'W750', edge: 5, s: 750 });
+  stops.push({ id: 'W750', name: 'Zapad 750', edge: 5, s: 750, also: [{ edge: 0, s: 752 }] });
+  stops.push({ id: 'X750', name: 'Druga linija 750', edge: 0, s: 748 });
+  const trunk = ['T0', 'T300', 'T600', 'T900', 'T1200'];
+  const east = [...trunk, 'C300', 'C600', 'C900', 'C1200'];
+  const north = [...trunk, 'X750', 'D300', 'D600', 'D900'];
   return {
     edges: [
       { from: 0, to: 1, pts: straight(0, 1500) },
@@ -191,9 +237,9 @@ export function corridorSpec(): SynthSpec {
       { from: 6, to: 5, pts: [{ x: 1500, y: 60 }, { x: 0, y: 60 }] },
     ],
     routes: [
-      { id: '1', type: 0, paths: [{ id: '1_0', direction: 0, edges: [0, 1] }, { id: '1_1', direction: 1, edges: [5] }] },
-      { id: '2', type: 0, paths: [{ id: '2_0', direction: 0, edges: [0, 2] }] },
-      { id: '9', type: 0, paths: [{ id: 'path:9:0:abc', direction: 0, edges: [0, 1], synthetic: true }] },
+      { id: '1', type: 0, paths: [{ id: '1_0', direction: 0, edges: [0, 1], served: east }, { id: '1_1', direction: 1, edges: [5], served: ['W750'] }] },
+      { id: '2', type: 0, paths: [{ id: '2_0', direction: 0, edges: [0, 2], served: north }] },
+      { id: '9', type: 0, paths: [{ id: 'path:9:0:abc', direction: 0, edges: [0, 1], synthetic: true, served: east }] },
       { id: '109', type: 3, busShapes: [{ id: 'B109', pts: straight(0, 2700, -30) }] },
     ],
     stops,
