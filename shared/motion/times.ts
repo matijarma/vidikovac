@@ -71,6 +71,24 @@ export interface PatternPaths {
   report: PatternPathReport;
 }
 
+/** Everything the resolution below needs of a pattern. A TripPattern is one;
+ *  so is a row of the twin's own SQLite copy of the index (persist.ts), which
+ *  is how an evicted twin resolves the same path before the index is back in
+ *  memory. `shape` is '' or null where the pattern's trips carry none. */
+export interface PatternShape {
+  route: string;
+  /** GTFS direction_id; anything but 1 reads as 0, as every decoder here does. */
+  direction: number;
+  shape: string | null;
+  stops: readonly string[];
+}
+
+/** Resolves one pattern at a time against a network, with the path indexes
+ *  built once. mapPatternsToPaths is this over a whole trip index. */
+export interface PatternPathResolver {
+  resolve(pattern: PatternShape): { pathIdx: number | null; rung: keyof PatternPathReport };
+}
+
 /**
  * Which path each pattern of the trip index runs (D11, F8). A pattern with a
  * shape_id runs the path of that id. A shapeless pattern runs the synthetic
@@ -84,7 +102,7 @@ export interface PatternPaths {
  * sibling path. Last comes the old behaviour, the route and direction's first
  * synthetic path.
  */
-export function mapPatternsToPaths(net: GraphNetwork, index: TripIndex): PatternPaths {
+export function patternPathResolver(net: GraphNetwork): PatternPathResolver {
   const pathByShapeId = new Map<string, number>(net.paths.map((p, idx) => [p.id, idx] as const));
   const syntheticByRouteDir = new Map<string, number[]>();
   const syntheticByStops = new Map<string, number>();
@@ -98,54 +116,41 @@ export function mapPatternsToPaths(net: GraphNetwork, index: TripIndex): Pattern
     if (!syntheticByStops.has(stopsKey)) syntheticByStops.set(stopsKey, idx);
   });
 
+  return {
+    resolve(pattern: PatternShape): { pathIdx: number | null; rung: keyof PatternPathReport } {
+      if (net.routes.get(pattern.route)?.type !== 0) return { pathIdx: null, rung: 'nonTram' };
+      if (pattern.shape !== null && pattern.shape !== '') {
+        const idx = pathByShapeId.get(pattern.shape);
+        return idx === undefined ? { pathIdx: null, rung: 'unmapped' } : { pathIdx: idx, rung: 'byShape' };
+      }
+      const key = `${pattern.route}|${pattern.direction === 1 ? 1 : 0}`;
+      const exact = syntheticByStops.get(`${key}|${pattern.stops.join(',')}`);
+      if (exact !== undefined) return { pathIdx: exact, rung: 'exact' };
+      const candidates = syntheticByRouteDir.get(key) ?? [];
+      let best: number | null = null;
+      let bestRun = 0;
+      for (const idx of candidates) {
+        const run = contiguousRun(net.paths[idx].stops ?? [], pattern.stops);
+        if (run > bestRun) {
+          bestRun = run;
+          best = idx;
+        }
+      }
+      if (best !== null) return { pathIdx: best, rung: 'trimmed' };
+      if (candidates.length > 0) return { pathIdx: candidates[0], rung: 'firstOfRouteAndDirection' };
+      return { pathIdx: null, rung: 'unmapped' };
+    },
+  };
+}
+
+export function mapPatternsToPaths(net: GraphNetwork, index: TripIndex): PatternPaths {
+  const resolver = patternPathResolver(net);
   const report: PatternPathReport = { byShape: 0, exact: 0, trimmed: 0, firstOfRouteAndDirection: 0, unmapped: 0, nonTram: 0 };
   const pathOf: (number | null)[] = [];
   for (const pattern of index.patterns) {
-    if (net.routes.get(pattern.route)?.type !== 0) {
-      report.nonTram++;
-      pathOf.push(null);
-      continue;
-    }
-    if (pattern.shape !== '') {
-      const idx = pathByShapeId.get(pattern.shape);
-      if (idx === undefined) {
-        report.unmapped++;
-        pathOf.push(null);
-      } else {
-        report.byShape++;
-        pathOf.push(idx);
-      }
-      continue;
-    }
-    const key = `${pattern.route}|${pattern.direction}`;
-    const exact = syntheticByStops.get(`${key}|${pattern.stops.join(',')}`);
-    if (exact !== undefined) {
-      report.exact++;
-      pathOf.push(exact);
-      continue;
-    }
-    const candidates = syntheticByRouteDir.get(key) ?? [];
-    let best: number | null = null;
-    let bestRun = 0;
-    for (const idx of candidates) {
-      const run = contiguousRun(net.paths[idx].stops ?? [], pattern.stops);
-      if (run > bestRun) {
-        bestRun = run;
-        best = idx;
-      }
-    }
-    if (best !== null) {
-      report.trimmed++;
-      pathOf.push(best);
-      continue;
-    }
-    if (candidates.length > 0) {
-      report.firstOfRouteAndDirection++;
-      pathOf.push(candidates[0]);
-      continue;
-    }
-    report.unmapped++;
-    pathOf.push(null);
+    const { pathIdx, rung } = resolver.resolve(pattern);
+    report[rung]++;
+    pathOf.push(pathIdx);
   }
   return { pathOf, pathIdOf: pathOf.map((idx) => (idx === null ? null : net.paths[idx].id)), report };
 }

@@ -16,12 +16,14 @@ const testEnv = env as unknown as Env;
 
 // The corridor (test/motion/synthetic-network.ts) as the twin's world: route
 // '1' east along the trunk (path 1_0), route '2' north (path 2_0), bus '109'
-// on a polyline south of the trunk. Trips t1a/t1b run 1_0, t2 runs 2_0.
+// on a polyline south of the trunk. Trips t1a/t1b run 1_0, t2 runs 2_0, and
+// t9 runs the shapeless pattern's synthetic path.
 const NET = syntheticNetwork(corridorSpec());
 const INDEX = corridorIndex(NET, [
   { tripId: 't1a', pathId: '1_0' },
   { tripId: 't1b', pathId: '1_0' },
   { tripId: 't2', pathId: '2_0' },
+  { tripId: 't9', pathId: 'path:9:0:abc' },
 ]);
 
 /** A tram on the trunk at metre `x`, reported `at`. */
@@ -207,6 +209,37 @@ describe('TwinDO', () => {
     expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(450);
     await pinClock(stub, (T0 + 20) * 1000 + 2_000);
     expect(await stub.tick()).toMatchObject({ cold: true });
+  });
+
+  // F8: a shapeless pattern runs the synthetic path built from its own stop
+  // sequence. The decoded index resolves that once at load; the SQLite copy an
+  // earlier life wrote has to resolve it the same way, or an evicted twin whose
+  // index asset is slow (or unreadable) would put such a trip on the route and
+  // direction's FIRST synthetic path until the index came back.
+  it('carries the resolved path id in the SQLite join too, not only in the decoded index', async () => {
+    const { upstream } = scriptedUpstream([
+      frame(T0, [tram('a', 't9', '9', 400, T0 - 5)]),
+      frame(T0 + 10, [tram('a', 't9', '9', 500, T0 + 4)]),
+    ]);
+    setTwinUpstreamForTest(upstream);
+    const stub = freshTwin();
+    await pinClock(stub, T0 * 1000 + 2_000);
+    await stub.publish(); // the index is in memory, and its rows reach SQLite
+
+    const warm = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
+    expect(warm.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+
+    // Memory gone and the index asset unreadable: only the SQLite copy answers.
+    await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
+    setTwinIndexSourceForTest(async () => null);
+    await pinClock(stub, (T0 + 10) * 1000 + 2_000);
+    const report = await stub.tick();
+    expect(report).toMatchObject({ indexLoaded: false, networkLoaded: true });
+    const cold = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
+    expect(cold.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+    // (The plans themselves are free-plane while the index is missing -- the
+    // engine needs both assets -- so it is the join that is worth asserting:
+    // the moment the index returns, that join already names the right path.)
   });
 
   it('evicts a vehicle silent for five minutes', async () => {

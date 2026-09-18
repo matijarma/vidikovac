@@ -32,6 +32,7 @@ import { metricsStub, recordMetric } from '../metrics';
 import type { MetricsEntry } from '../metrics-do';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { createEngine, type Engine } from '../twin/engine';
+import { patternPathResolver, type PatternPathResolver } from '../../shared/motion/times';
 import { decodeFeed } from '../twin/feed-decode';
 import { BUCKETS, horizonKey, type HindsightCounts, type HindsightSignCounts, HORIZONS_S, SIGN_BUCKETS } from '../../shared/motion/hindsight';
 import { emptyAggregates, emptyHistogram, histogramMedian, isEmptyAggregates, mergeAggregates, mergeHistograms, parseKey, recordEvidence, type LearnedAggregates } from '../../shared/motion/learn';
@@ -141,6 +142,8 @@ export class TwinDO extends DurableObject<Env> {
   private index: TripIndex | null = null;
   private net: GraphNetwork | null = null;
   private engine: Engine | null = null;
+  /** Built on first use from the loaded network, for the SQLite join path. */
+  private pathResolver: PatternPathResolver | null = null;
   private coldLoad: ColdLoad | null = null;
   /** Everything learned so far: the tables plus the unflushed minute; the engine's times read it live (C1). */
   private learned: LearnedAggregates = emptyAggregates();
@@ -366,7 +369,16 @@ export class TwinDO extends DurableObject<Env> {
       }
       return out;
     }
-    return lookupTrips(this.ctx.storage.sql, tripIds);
+    // Cold start, the index not decoded yet: the SQLite copy answers, and it
+    // resolves the path the same way (F8), so an evicted twin does not put a
+    // shapeless trip on the route and direction's first synthetic path for as
+    // long as it takes the index to load.
+    const net = this.net;
+    const resolver = net ? (this.pathResolver ??= patternPathResolver(net)) : null;
+    return lookupTrips(this.ctx.storage.sql, tripIds, resolver === null || net === null ? undefined : (pattern) => {
+      const { pathIdx } = resolver.resolve({ route: pattern.route, direction: pattern.direction, shape: pattern.shape, stops: pattern.stops });
+      return pathIdx === null ? null : net.paths[pathIdx].id;
+    });
   }
 
   /** Cold start: the last state row becomes memory, and the payload follows
@@ -414,6 +426,7 @@ export class TwinDO extends DurableObject<Env> {
     if (!this.net) {
       const t0 = Date.now();
       this.net = await twinNetworkSource(this.env)();
+      this.pathResolver = null; // a new network needs its own path indexes
       cold.networkMs = Date.now() - t0;
     }
     if (this.net && this.index && !this.engine) {
@@ -437,6 +450,12 @@ export class TwinDO extends DurableObject<Env> {
 
   // ---- test seams ------------------------------------------------------------
 
+  /** The static join per trip id, as the tick sees it: which source answered
+   *  is the point (the decoded index, or the SQLite copy after an eviction). */
+  joinsForTest(tripIds: readonly string[]): Record<string, TripJoin> {
+    return Object.fromEntries(this.joinsFor(tripIds));
+  }
+
   /** Simulates an eviction: memory gone, storage kept. */
   forgetForTest(): void {
     this.state = null;
@@ -449,6 +468,7 @@ export class TwinDO extends DurableObject<Env> {
     this.index = null;
     this.net = null;
     this.engine = null;
+    this.pathResolver = null;
     this.coldLoad = null;
     this.learned = emptyAggregates();
     this.learnedLoaded = false;

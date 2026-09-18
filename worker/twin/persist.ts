@@ -67,6 +67,11 @@ export interface TripLookup extends TripJoin {
   block: string;
 }
 
+/** Resolves the path id of a pattern of the SQLite copy, the way the decoded
+ *  index does (times.ts patternPathResolver). Passed in rather than imported
+ *  so this file keeps knowing nothing about the network geometry. */
+export type PathIdOfPattern = (pattern: { idx: number; route: string; direction: 0 | 1; shape: string | null; stops: string[] }) => string | null;
+
 export function ensureSchema(sql: SqlStorage): void {
   sql.exec(
     `CREATE TABLE IF NOT EXISTS state (
@@ -232,21 +237,47 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
 }
 
 /** The join for each known trip id; unknown ids are simply absent. */
-export function lookupTrips(sql: SqlStorage, tripIds: readonly string[]): Map<string, TripLookup> {
+export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdOf?: PathIdOfPattern): Map<string, TripLookup> {
   const out = new Map<string, TripLookup>();
   const unique = [...new Set(tripIds)];
+  // One resolution per pattern, not per trip: a rush-hour tick looks up
+  // hundreds of trips over a few dozen patterns, and the shapeless ones cost
+  // a JSON parse of the stop sequence each.
+  const pathIdByPattern = new Map<number, string | null>();
   for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
     const chunk = unique.slice(i, i + LOOKUP_CHUNK);
     const rows = sql
-      .exec<{ trip_id: string; pattern: number; block: string; start: number; direction: number; shape: string | null; headsign: string }>(
-        `SELECT t.trip_id, t.pattern, t.block, t.start, p.direction, p.shape, p.headsign
+      .exec<{ trip_id: string; pattern: number; block: string; start: number; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
+        `SELECT t.trip_id, t.pattern, t.block, t.start, p.route, p.direction, p.shape, p.headsign, p.stops
            FROM trips t JOIN patterns p ON p.idx = t.pattern
           WHERE t.trip_id IN (${chunk.map(() => '?').join(', ')})`,
         ...chunk,
       )
       .toArray();
     for (const row of rows) {
-      out.set(row.trip_id, { direction: row.direction === 1 ? 1 : 0, headsign: row.headsign, shapeId: row.shape, startSec: row.start, pattern: row.pattern, block: row.block });
+      const direction = row.direction === 1 ? 1 : 0;
+      let pathId = pathIdByPattern.get(row.pattern) ?? null;
+      if (pathIdOf && !pathIdByPattern.has(row.pattern)) {
+        let stops: string[] = [];
+        try {
+          const parsed: unknown = JSON.parse(row.stops);
+          if (Array.isArray(parsed)) stops = parsed as string[];
+        } catch {
+          // A pattern row written by an older build, or a truncated one: the
+          // join goes out without a path id, as it did before F8.
+        }
+        pathId = pathIdOf({ idx: row.pattern, route: row.route, direction, shape: row.shape, stops });
+        pathIdByPattern.set(row.pattern, pathId);
+      }
+      out.set(row.trip_id, {
+        direction,
+        headsign: row.headsign,
+        shapeId: row.shape,
+        startSec: row.start,
+        pattern: row.pattern,
+        block: row.block,
+        ...(pathId === null ? {} : { pathId }),
+      });
     }
   }
   return out;
