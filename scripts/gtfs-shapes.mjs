@@ -1258,7 +1258,6 @@ export async function buildNetwork(zipBuf, opts = {}) {
     new Set([...shapelessTramTrips, ...tramSampleTrips]),
     tramShapeOfTrip,
   );
-  const shapelessSequences = tripSequences;
   // A platform some trip starts or ends at: a terminus, wherever it is.
   const terminalStops = new Set();
   for (const ends of tripEndpoints.values()) {
@@ -1472,8 +1471,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
 
   // --- Served stops (F8): per path, the platforms its own trips call at, in
   // arc order, as [stopIdx, decimetres] pairs. The arc is the stop's own
-  // geometric link on an edge of that path (the first such edge, as the
-  // decoder's own first-wins rule reads it); a served stop the path's edges
+  // geometric link on an edge of that path -- the first one past the stop
+  // called before it, so an out-and-back path puts a platform on the leg the
+  // line is actually on when it calls there. A served stop the path's edges
   // do not link -- a platform just outside the 40 m radius of the rails this
   // line runs -- is projected onto the path's polyline when it falls inside
   // that radius after all, and otherwise reported by name and dropped, since
@@ -1585,7 +1585,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
   // sequence). A stop the graph does not reach within 40 m fails the build.
   const patterns = new Map(); // key -> { route, dir, stops }
   for (const tripId of shapelessTramTrips) {
-    const seq = shapelessSequences.get(tripId);
+    const seq = tripSequences.get(tripId);
     const trip = shapelessTrips.get(tripId);
     if (!seq || seq.length < 2 || !trip) continue;
     const key = `${trip.route}|${trip.direction}|${seq.join(',')}`;
