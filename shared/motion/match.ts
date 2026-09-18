@@ -78,7 +78,7 @@ export interface Prior {
 }
 
 export interface Matcher {
-  priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior;
+  priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior;
   /** Pushes the fix into the track and matches it; returns the new match. */
   matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null): Match;
   /** Stops strictly between two arcs of a geometry key (`p<path>` or `b<shape>`), for the speed estimate. */
@@ -95,6 +95,7 @@ interface Candidate {
 
 export function createMatcher(net: GraphNetwork): Matcher {
   const shapeIndexById = new Map<string, number>(net.shapes.map((shape, idx) => [shape.id, idx] as const));
+  const pathIndexById = new Map<string, number>(net.paths.map((path, idx) => [path.id, idx] as const));
   const pathsByEdge = new Map<number, number[]>();
   net.paths.forEach((path, pathIdx) => {
     for (const e of path.edges) {
@@ -136,7 +137,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return tan.x * dir.x + tan.y * dir.y >= 0;
   }
 
-  function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior {
+  function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior {
     if (shapeId !== null) {
       const shapeIdx = shapeIndexById.get(shapeId);
       if (shapeIdx !== undefined) {
@@ -144,6 +145,13 @@ export function createMatcher(net: GraphNetwork): Matcher {
         const shapeDir = net.shapes[shapeIdx].direction;
         return { pathIdx, shapeIdx, routeId, direction: shapeDir === 0 || shapeDir === 1 ? shapeDir : direction };
       }
+    }
+    // The path the trip index resolved for this trip's pattern (F8): a
+    // shapeless variant gets the synthetic path built from its own stop
+    // sequence, which is the one the timetable has segments for.
+    if (pathId) {
+      const own = pathIndexById.get(pathId);
+      if (own !== undefined) return { pathIdx: own, shapeIdx: null, routeId, direction };
     }
     if (direction !== null) {
       const synthetic = net.paths.findIndex((p) => p.shape === null && p.route === routeId && p.direction === direction);

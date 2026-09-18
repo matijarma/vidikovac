@@ -135,7 +135,7 @@ export function runTick(input: TickInput): TickResult {
       const join = tripId !== null ? joins.get(tripId) : undefined;
       track.tripStartSec = tripStartOf(join, raw.startDate);
       if (engine) {
-        const prior = engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null);
+        const prior = engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null, join?.pathId ?? null);
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null);
       } else {
         pushFix(track, fix);

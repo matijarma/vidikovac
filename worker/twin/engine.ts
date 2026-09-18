@@ -8,7 +8,7 @@
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import { createMatcher, type Matcher } from '../../shared/motion/match';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { learnedTimes, scheduleTimes, type TimesProvider } from '../../shared/motion/times';
+import { learnedTimes, mapPatternsToPaths, scheduleTimes, type TimesProvider } from '../../shared/motion/times';
 import type { VehicleKind } from '../../shared/motion/track';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
@@ -25,6 +25,10 @@ export interface Engine {
   /** The live aggregates `times` reads; the twin adds every tick's evidence here. */
   learned: LearnedAggregates;
   matcher: Matcher;
+  /** The path id each pattern of the index runs, resolved once here so a
+   *  trip's join carries it and the matcher's prior and the timetable pick
+   *  the same path for a shapeless variant (F8). */
+  patternPathIds: readonly (string | null)[];
 }
 
 /** A timetable that knows nothing: under the learned wrapper it leaves null
@@ -34,7 +38,16 @@ const NO_TIMES: TimesProvider = { segmentSeconds: () => null, dwellSeconds: () =
 
 export function createEngine(net: GraphNetwork, index: TripIndex, learned: LearnedAggregates = emptyAggregates()): Engine {
   const schedule = scheduleTimes(net, index);
-  return { net, index, schedule, times: learnedTimes(schedule, learned, net), learnedOnly: learnedTimes(NO_TIMES, learned, net), learned, matcher: createMatcher(net) };
+  return {
+    net,
+    index,
+    schedule,
+    times: learnedTimes(schedule, learned, net),
+    learnedOnly: learnedTimes(NO_TIMES, learned, net),
+    learned,
+    matcher: createMatcher(net),
+    patternPathIds: mapPatternsToPaths(net, index).pathIdOf,
+  };
 }
 
 /** Tram or bus, from the network's route table first (the same static GTFS

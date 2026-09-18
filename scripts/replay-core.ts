@@ -269,14 +269,21 @@ export interface ReplayReport {
 /** The static join per trip id, from the trip index alone (no SQLite
  *  fallback: a one-shot replay never restarts mid-run the way the Durable
  *  Object does, worker/do/twin-do.ts's `joinsFor`). */
-function joinsFor(index: TripIndex, tripIds: Iterable<string>): Map<string, TripJoin> {
+function joinsFor(index: TripIndex, tripIds: Iterable<string>, patternPathIds: readonly (string | null)[] = []): Map<string, TripJoin> {
   const out = new Map<string, TripJoin>();
   for (const id of tripIds) {
     const record = index.tripsById.get(id);
     if (!record) continue;
     const pattern = index.patterns[record.pattern];
     if (!pattern) continue;
-    out.set(id, { direction: pattern.direction === 1 ? 1 : 0, headsign: pattern.headsign, shapeId: pattern.shape === '' ? null : pattern.shape, startSec: record.start });
+    const pathId = patternPathIds[record.pattern] ?? null;
+    out.set(id, {
+      direction: pattern.direction === 1 ? 1 : 0,
+      headsign: pattern.headsign,
+      shapeId: pattern.shape === '' ? null : pattern.shape,
+      startSec: record.start,
+      ...(pathId === null ? {} : { pathId }),
+    });
   }
   return out;
 }
@@ -756,7 +763,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     const tripIds = new Set<string>();
     for (const track of Object.values(state.tracks)) if (track.tripId !== null) tripIds.add(track.tripId);
     for (const vehicle of feed.vehicles) if (vehicle.tripId) tripIds.add(vehicle.tripId);
-    const joins = joinsFor(engine.index, tripIds);
+    const joins = joinsFor(engine.index, tripIds, engine.patternPathIds);
     for (const id of tripIds) {
       tripObservations++;
       if (!joins.has(id)) unknownTripObservations++;

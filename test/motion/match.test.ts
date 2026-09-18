@@ -45,6 +45,12 @@ describe('matchFix on the corridor', () => {
     expect(union.match.s).toBeCloseTo(600, 0);
     // A shapeless pattern with a synthetic path uses it directly.
     expect(matcher.priorFor(null, '9', 0).pathIdx).toBe(pathIdx('path:9:0:abc'));
+    // F8: the path id the trip index resolved wins over the route-and-
+    // direction guess, so a shapeless variant runs the path the timetable
+    // has segments for; an id the network does not know is ignored.
+    expect(matcher.priorFor(null, '2', 1, 'path:9:0:abc').pathIdx).toBe(pathIdx('path:9:0:abc'));
+    expect(matcher.priorFor(null, '2', 1, 'path:nowhere').pathIdx).toBeNull();
+    expect(matcher.priorFor('2_0', '2', 0, 'path:9:0:abc').pathIdx).toBe(pathIdx('2_0')); // a real shape still wins
 
     // A detour: route 1's tram leaves edge 1 for edge 2 (200 m off its path).
     // One stray fix is noise and stays on the path; the second re-derives the

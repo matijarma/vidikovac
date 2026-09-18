@@ -1244,12 +1244,21 @@ export async function buildNetwork(zipBuf, opts = {}) {
   // Only the tram shapes need a served list: a bus shape runs no path.
   const tramShapeOfTrip = new Map();
   for (const [tripId, shapeId] of shapeOfTrip) if (isTramRoute(shapeToRoute.get(shapeId))) tramShapeOfTrip.set(tripId, shapeId);
-  const { endpoints: tripEndpoints, sequences: shapelessSequences, shapeStops: servedByShape } = await streamStopTimes(
+  // A shape's sample trip also gets its ordered sequence: where a path runs
+  // out and back on parallel rails, a platform lies within 40 m of both, and
+  // only the call order says which of the two arcs is the one the line stops
+  // at on this leg (servedFor's cursor).
+  const tramSampleTrips = new Set();
+  for (const [shapeId, tripId] of shapeSampleTrip) {
+    if (tripId && isTramRoute(shapeToRoute.get(shapeId))) tramSampleTrips.add(tripId);
+  }
+  const { endpoints: tripEndpoints, sequences: tripSequences, shapeStops: servedByShape } = await streamStopTimes(
     zipBuf,
     findEntry('stop_times.txt'),
-    shapelessTramTrips,
+    new Set([...shapelessTramTrips, ...tramSampleTrips]),
     tramShapeOfTrip,
   );
+  const shapelessSequences = tripSequences;
   // A platform some trip starts or ends at: a terminus, wherever it is.
   const terminalStops = new Set();
   for (const ends of tripEndpoints.values()) {
@@ -1492,6 +1501,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
     return plane;
   };
   let servedProjected = 0;
+  let servedUnordered = 0;
   const servedDropped = [];
   /**
    * @param {string} label the path's id, for the report
@@ -1501,28 +1511,47 @@ export async function buildNetwork(zipBuf, opts = {}) {
    * @param {Map<string, Map<number, number>> | null} extraLinks links the
    *   router used that the wire does not carry (a terminus set back from the
    *   rails, TERMINUS_STOP_MAX_METRES), so a synthetic path keeps its own end
+   * @param {readonly string[] | null} order the call order of a trip that runs
+   *   this path, which alone resolves a platform lying within reach of both
+   *   legs of an out-and-back path (8 paths, 50 platforms on feed 000395)
    */
-  function servedFor(label, routeId, edgeSeq, stopIds, extraLinks = null) {
+  function servedFor(label, routeId, edgeSeq, stopIds, extraLinks = null, order = null) {
     const offsets = offsetsOfEdges(edgeSeq);
     let plane = null;
     let cum = null;
+    const wanted = new Set(stopIds);
+    // The stops the call order knows, in that order, then the rest (a
+    // short-turn variant's platform the sample trip never calls at), sorted
+    // so the bytes do not depend on a hash iteration order.
+    const ordered = [];
+    const seen = new Set();
+    for (const stopId of order ?? []) {
+      if (wanted.has(stopId) && !seen.has(stopId)) {
+        seen.add(stopId);
+        ordered.push(stopId);
+      }
+    }
+    const rest = [...wanted].filter((id) => !seen.has(id)).sort();
+    servedUnordered += rest.length;
     const out = [];
-    for (const stopId of stopIds) {
+    const place = (stopId, cursor) => {
       const si = stopIndexById.get(stopId);
       if (si === undefined) {
         servedDropped.push({ path: label, route: routeId, stop: stopId, name: '?', metres: null });
-        continue;
+        return null;
       }
       const byEdge = extraLinks?.get(stopId) ?? linksByEdge[si];
-      let arc = null;
+      const candidates = [];
       for (let k = 0; k < edgeSeq.length; k++) {
         const onEdge = byEdge.get(edgeSeq[k]);
-        if (onEdge !== undefined) {
-          arc = offsets[k] + onEdge;
-          break;
-        }
+        if (onEdge !== undefined) candidates.push(offsets[k] + onEdge);
       }
-      if (arc === null) {
+      candidates.sort((a, b) => a - b);
+      // The first arc past the stop called before this one; failing that the
+      // last, which is as far forward as this path can put it.
+      let arc = candidates.find((c) => c > cursor);
+      if (arc === undefined) arc = candidates[candidates.length - 1];
+      if (arc === undefined) {
         if (plane === null) {
           plane = planeOfEdges(edgeSeq);
           cum = cumulative(plane);
@@ -1533,11 +1562,18 @@ export async function buildNetwork(zipBuf, opts = {}) {
           servedProjected++;
         } else {
           servedDropped.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: near ? round1(near.dist) : null });
-          continue;
+          return null;
         }
       }
       out.push([si, Math.round(arc * 10)]);
+      return arc;
+    };
+    let cursor = -Infinity;
+    for (const stopId of ordered) {
+      const arc = place(stopId, cursor);
+      if (arc !== null) cursor = arc;
     }
+    for (const stopId of rest) place(stopId, -Infinity);
     // Arc order, a tie broken by stop index: the same feed must give the same bytes.
     out.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     return out;
@@ -1629,13 +1665,17 @@ export async function buildNetwork(zipBuf, opts = {}) {
       for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
       routed.set(pattern.stops[k], byEdge);
     }
-    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served: servedFor(label, pattern.route, edgesOnPath, covered, routed) });
+    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served: servedFor(label, pattern.route, edgesOnPath, covered, routed, covered) });
   }
 
   // Every tram shape is a path too: the union of the stops of every trip that
   // runs it, so a short-turn variant's platforms are covered as well.
   for (const shape of shapes) {
-    shape.served = shape.e.length > 0 ? servedFor(shape.id, shape.route, shape.e, [...(servedByShape.get(shape.id) ?? [])].sort()) : [];
+    const sample = shapeSampleTrip.get(shape.id);
+    shape.served =
+      shape.e.length > 0
+        ? servedFor(shape.id, shape.route, shape.e, servedByShape.get(shape.id) ?? [], null, (sample && tripSequences.get(sample)) ?? null)
+        : [];
   }
   servedDropped.sort((a, b) => a.path.localeCompare(b.path) || a.stop.localeCompare(b.stop));
 
@@ -1703,6 +1743,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
     servedPaths: shapes.filter((sh) => sh.served.length > 0).length + paths.filter((pa) => pa.served.length > 0).length,
     servedEntries: shapes.reduce((n, sh) => n + sh.served.length, 0) + paths.reduce((n, pa) => n + pa.served.length, 0),
     servedProjected,
+    servedUnordered,
     servedDropped,
     terminalStops: stops.filter((st) => st.terminal === 1).length,
   };
@@ -1792,7 +1833,8 @@ export async function main({
   );
   log(
     `Served stops: ${report.servedPaths} paths carry a served list (${report.servedEntries} entries), ` +
-      `${report.servedProjected} projected onto the path where no edge link reached, ${report.servedDropped.length} dropped; ` +
+      `${report.servedProjected} projected onto the path where no edge link reached, ${report.servedDropped.length} dropped, ` +
+      `${report.servedUnordered} placed without a call order; ` +
       `${report.terminalStops} stops are a terminus of some trip`,
   );
   for (const d of report.servedDropped) {
