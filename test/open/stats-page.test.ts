@@ -34,6 +34,9 @@ const ROWS: MetricsDailyRow[] = [
   row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt50', 15),
   row('2026-09-11', 11, 'twin_hindsight', '30s', 'lt100', 4),
   row('2026-09-11', 11, 'twin_hindsight', '30s', 'ge200', 1),
+  row('2026-09-11', 11, 'twin_hindsight_sign', '30s', 'ahead_ge50', 12),
+  row('2026-09-11', 11, 'twin_hindsight_sign', '30s', 'within50', 80),
+  row('2026-09-11', 11, 'twin_hindsight_sign', '30s', 'behind_ge50', 8),
 ];
 
 const VIEW = { days: 7, since: '2026-09-05', today: '2026-09-11', rows: ROWS };
@@ -127,5 +130,9 @@ describe('renderStatsPage: the twin', () => {
     expect(html).toContain('<h3>Ocjena unatrag</h3>');
     expect(html).toContain('>lt25<');
     expect(html).toContain('30 s: p50 ispod 25 m, p95 ispod 50 m');
+    // F7: the signed histogram beside it, and the share the round is judged on (12 of 100 graded fixes ahead at 30 s).
+    expect(html).toContain('Predznak greške plana po horizontu');
+    expect(html).toContain('>ahead_ge50<');
+    expect(html).toContain('30 s: 12,0 % ispred');
   });
 });

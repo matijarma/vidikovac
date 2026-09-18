@@ -126,6 +126,20 @@ function hindsightPercentile(rows: readonly MetricsDailyRow[], horizon: string, 
   return HINDSIGHT_BUCKETS[HINDSIGHT_BUCKETS.length - 1].label;
 }
 
+/** The share of a horizon's graded fixes whose plan ran ahead of the tram
+ *  by 50 m or more (F7): the round's target at 30 s is 10 % or under. */
+function aheadShareLine(rows: readonly MetricsDailyRow[]): string {
+  const parts = ['10s', '30s', '60s']
+    .map((horizon) => {
+      const total = sum(rows, (r) => r.event === 'twin_hindsight_sign' && r.dim1 === horizon);
+      if (total === 0) return null;
+      const ahead = sum(rows, (r) => r.event === 'twin_hindsight_sign' && r.dim1 === horizon && r.dim2 === 'ahead_ge50');
+      return `${escapeHtml(horizon.replace('s', ' s'))}: ${pct(ahead, total)} ispred`;
+    })
+    .filter((part): part is string => part !== null);
+  return parts.length ? `<p>Plan 50 m ili više ispred vozila, po horizontu: ${parts.join('; ')}. Cilj kruga F na 30 s: 10 % ili manje.</p>` : '';
+}
+
 function hindsightLine(rows: readonly MetricsDailyRow[]): string {
   const parts = ['10s', '30s', '60s']
     .map((horizon) => {
@@ -350,6 +364,9 @@ export function renderStatsPage(view: StatsView): string {
     `<h3>Ocjena unatrag</h3><p class="lede">Svako novo očitanje ocjenjuje planove objavljene 10, 30 i 60 s prije njega: koliko je metara plan bio od mjesta gdje se vozilo zaista našlo.</p>` +
     matrixTable('Greška plana po horizontu i razredu', 'Horizont', pivot(rows, 'twin_hindsight', 'dim1', 'dim2'), 'još nema ocijenjenih planova') +
     hindsightLine(rows) +
+    `<p class="lede">Ista očitanja po predznaku: <em>ahead_ge50</em> je plan 50 m ili više ispred vozila (oznaka koja se mora vraćati), <em>behind_ge50</em> plan toliko iza njega (čita se kao kašnjenje GPS-a), <em>within50</em> unutar toga.</p>` +
+    matrixTable('Predznak greške plana po horizontu', 'Horizont', pivot(rows, 'twin_hindsight_sign', 'dim1', 'dim2'), 'još nema ocijenjenih planova s predznakom') +
+    aheadShareLine(rows) +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
     `</section>` +
     `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +

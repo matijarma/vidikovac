@@ -83,12 +83,16 @@ describe('runTick on the corridor', () => {
           expect(Math.sign(pa - pb), `frame ${k}: ${pins[i].id} vs ${pins[j].id}`).toBe(Math.sign(a.s - b.s));
         }
       }
+      let signSamples = 0;
       for (const horizon of Object.values(result.hindsight)) {
         for (const [bucket, n] of Object.entries(horizon)) {
           hindsightSamples += n;
           tally[bucket as keyof typeof tally] += n;
         }
       }
+      // F7: every graded fix is counted once more by its sign, in the same tick result.
+      for (const horizon of Object.values(result.hindsightSign)) for (const n of Object.values(horizon)) signSamples += n;
+      expect(signSamples).toBe(Object.values(result.hindsight).reduce((sum, h) => sum + Object.values(h).reduce((a, b) => a + b, 0), 0));
       if (k === 1) expect(hindsightSamples).toBe(0); // nothing to grade before a plan has aged
     }
     expect(orderChecks).toBeGreaterThan(10);

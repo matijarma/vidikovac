@@ -233,6 +233,10 @@ export const SERVER_EVENTS = [
   // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
   'twin_tick',
   'twin_hindsight',
+  // Round F: the same graded fixes by sign (dim1 horizon, dim2
+  // ahead_ge50|within50|behind_ge50): the plan ahead of the tram is the
+  // failure the round forbids, so its share is the number /stats leads with.
+  'twin_hindsight_sign',
   // R-TE18: the hourly HEAD of ZET's static GTFS against the artefacts' build
   // time (dim1 current|newer|unknown|error); "newer" is the call to rebuild.
   'static_watch',

@@ -13,7 +13,7 @@
 // tick join the ring.
 
 import { toPlane } from '../../shared/motion/geo';
-import { countGrades, emptyCounts, gradeFix, rememberPlan, type HindsightCounts } from '../../shared/motion/hindsight';
+import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/laws';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
 import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
@@ -50,6 +50,8 @@ export interface TickResult {
   evicted: number;
   order: OrderReport | null;
   hindsight: HindsightCounts;
+  /** The same graded fixes by sign: plan ahead of the fix, within 50 m, behind (F7). */
+  hindsightSign: HindsightSignCounts;
   /** The evidence this tick mined from the fresh fixes (C1), already counted into the state's pending aggregates. */
   learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[] };
 }
@@ -159,6 +161,7 @@ export function runTick(input: TickInput): TickResult {
   const all = Object.values(tracks);
   let order: OrderReport | null = null;
   const hindsight = emptyCounts();
+  const hindsightSign = emptySignCounts();
   if (engine) {
     const bands = zagrebBands(headerSec);
     for (const track of all) {
@@ -192,7 +195,9 @@ export function runTick(input: TickInput): TickResult {
       const fix = track ? lastFix(track) : null;
       const ring = published[id];
       if (!fix || !ring || ring.length === 0) continue;
-      countGrades(hindsight, gradeFix(engine.net, fix, ring));
+      const grades = gradeFix(engine.net, fix, ring);
+      countGrades(hindsight, grades);
+      countSignGrades(hindsightSign, grades);
     }
   } else {
     for (const track of all) freePlanOnly(track, nowSec, headerSec);
@@ -206,5 +211,5 @@ export function runTick(input: TickInput): TickResult {
 
   const state: TwinState = { headerTs, etag: input.state.etag, tickAtMs: nowMs, tracks, tripUpdates, published, learnedUpTo, pendingLearned };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, learned };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned };
 }

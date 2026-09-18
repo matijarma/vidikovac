@@ -33,7 +33,7 @@ import type { MetricsEntry } from '../metrics-do';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { createEngine, type Engine } from '../twin/engine';
 import { decodeFeed } from '../twin/feed-decode';
-import { BUCKETS, horizonKey, type HindsightCounts, HORIZONS_S } from '../../shared/motion/hindsight';
+import { BUCKETS, horizonKey, type HindsightCounts, type HindsightSignCounts, HORIZONS_S, SIGN_BUCKETS } from '../../shared/motion/hindsight';
 import { emptyAggregates, emptyHistogram, histogramMedian, isEmptyAggregates, mergeAggregates, mergeHistograms, parseKey, recordEvidence, type LearnedAggregates } from '../../shared/motion/learn';
 import { indexRowsFromIndex } from '../twin/index-load';
 import {
@@ -113,6 +113,18 @@ function hindsightEntries(counts: HindsightCounts): MetricsEntry[] {
     for (const bucket of BUCKETS) {
       const count = counts[horizon][bucket];
       if (count > 0) entries.push({ event: 'twin_hindsight', dim1: horizonKey(horizon), dim2: bucket, count });
+    }
+  }
+  return entries;
+}
+
+/** The signed histogram (F7), written in the same batch as the unsigned one. */
+function hindsightSignEntries(counts: HindsightSignCounts): MetricsEntry[] {
+  const entries: MetricsEntry[] = [];
+  for (const horizon of HORIZONS_S) {
+    for (const bucket of SIGN_BUCKETS) {
+      const count = counts[horizon][bucket];
+      if (count > 0) entries.push({ event: 'twin_hindsight_sign', dim1: horizonKey(horizon), dim2: bucket, count });
     }
   }
   return entries;
@@ -291,10 +303,12 @@ export class TwinDO extends DurableObject<Env> {
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
 
     let hindsightSamples = 0;
-    const entries = hindsightEntries(result.hindsight);
-    for (const entry of entries) hindsightSamples += entry.count ?? 0;
+    const unsigned = hindsightEntries(result.hindsight);
+    for (const entry of unsigned) hindsightSamples += entry.count ?? 0;
+    const entries = [...unsigned, ...hindsightSignEntries(result.hindsightSign)];
     if (entries.length > 0) {
-      // One batched write per tick, never one RPC per vehicle.
+      // One batched write per tick, never one RPC per vehicle; the signed
+      // histogram rides in the same batch, so the two never drift apart.
       void metricsStub(this.env)
         .recordMany(entries)
         .catch((error: unknown) => logError('twin_hindsight_failed', error));
