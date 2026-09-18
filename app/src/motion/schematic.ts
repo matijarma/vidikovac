@@ -173,6 +173,17 @@ export interface VehicleMark {
   /** Optional line identity, supplied by a diagram scene. Geographic marks
    *  keep the shared ink tone when no per-mark colour is present. */
   colour?: string;
+  /** The number painted inside a pill (schema-paint.ts's paintPills): the
+   *  vehicle's own line, or a cluster's joined "6·11". A mark without a
+   *  `pill` has no text and keeps the rectangle painter below. */
+  label?: string;
+  /** A pill mark, and whether it stands for one vehicle or for several whose
+   *  pills would have piled up (motion/pills.ts). Absent on the lagano crop
+   *  scene's rectangles, which paintVehicles still draws unchanged. */
+  pill?: 'single' | 'cluster';
+  /** A cluster's members. Only a 'cluster' mark carries them; the accessible
+   *  list and the tap that opens one read it. */
+  ids?: string[];
 }
 
 /** The vehicle painter needs a pixel box, not a geographic crop. */
@@ -345,12 +356,18 @@ export function vehicleMarks(layout: SchematicLayout, vehicles: readonly Drawn[]
  * The mark under a pointer at device-pixel (x, y), or null: the nearest one
  * within HIT_RADIUS_CSS_PX (scaled by density). Pure, so the view's click
  * and the tests share one answer to "which vehicle did that tap mean".
+ *
+ * A pill is wider than the WCAG target when its label is long (a cluster's
+ * "6·11·12" is over 50 CSS px), and a tap on ink that is visibly the pill
+ * must reach it, so a pill mark's radius is its own half-width whenever that
+ * is the larger of the two. A rectangle keeps the floor exactly as before.
  */
 export function hitVehicle(marks: readonly VehicleMark[], x: number, y: number, density: number): VehicleMark | null {
-  const radius = HIT_RADIUS_CSS_PX * density;
+  const floor = HIT_RADIUS_CSS_PX * density;
   let best: VehicleMark | null = null;
   let bestD = Infinity;
   for (const m of marks) {
+    const radius = m.pill ? Math.max(floor, m.w / 2) : floor;
     const d = Math.hypot(m.x - x, m.y - y);
     if (d <= radius && d < bestD) {
       best = m;

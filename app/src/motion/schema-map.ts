@@ -10,14 +10,16 @@ import {
 } from '../map/city-map';
 import { DENSITY, tone } from '../ui/canvas';
 import { escapeHtml } from '../ui/dom/escape';
-import { createPanZoom, type PanZoom, type PanZoomViewport } from '../ui/pan-zoom';
+import { createPanZoom, MAX_ZOOM_FROM_FIT, type PanZoom, type PanZoomViewport } from '../ui/pan-zoom';
 import { createIntegrator, type Drawn, type Model } from './integrator';
 import { createLoop } from './loop';
-import { paintVehicles, type VehicleMark } from './schematic';
+import { PILL_INKS } from './pills';
+import { hitVehicle, type VehicleMark } from './schematic';
 import { mountSceneAccessibility, sceneMarkup, type Scene, type SceneAccessibility } from './schematic-view';
 import {
-  KIOSK_LABEL_SCALE, KIOSK_LABEL_MIN_PX, LABEL_MIN_PX_PER_UNIT, paintSchema, schemaInFrame, schemaMarks,
-  type SchemaLayout, type SchemaTones,
+  clusterSchemaMarks, KIOSK_LABEL_SCALE, KIOSK_LABEL_MIN_PX, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema,
+  schemaInFrame, schemaVehicleMarks,
+  type PillInkSet, type SchemaLayout, type SchemaMarkViewport, type SchemaTones,
 } from './schema-paint';
 import './schematic.css';
 import './schema.css';
@@ -41,6 +43,14 @@ export interface SchemaMapDeps {
 // measured sheet/rail coverage. The controller clamps excessive padding.
 const FIT_MARGIN = 40;
 const STOP_HIT_PX = 14;
+/** A tap on a merged pill cannot mean one vehicle while its members are a few
+ *  pixels apart, so the view goes in on them instead of guessing -- until
+ *  there is no camera left to spend. The city map stops half a step short of
+ *  its own maximum zoom (city-map.ts CLUSTER_ZOOM_IN_UNTIL); this controller
+ *  counts in scale, where the same "practically at the end" is a twentieth. */
+const CLUSTER_ZOOM_STOP = 0.95;
+/** One tap in is one doubling, the same step the double tap already takes. */
+const CLUSTER_ZOOM_STEP = 2;
 let cachedArtwork: unknown;
 async function loadArtwork(signal: AbortSignal): Promise<unknown> {
   if (cachedArtwork) return cachedArtwork;
@@ -81,7 +91,9 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   let placer: ReturnType<typeof createSchemaPlacer> | null = null, pan: PanZoom | null = null;
   let a11y: SceneAccessibility | null = null;
   let points = options.points ?? [];
-  let lastDrawn: Drawn[] = [], lastMarks: VehicleMark[] = [], signature = '', frames = 0;
+  // Two views of one frame: one pill per vehicle for the accessible list and
+  // the keyboard, and the merged pills for the canvas and the pointer.
+  let lastDrawn: Drawn[] = [], lastVehicleMarks: VehicleMark[] = [], lastMarks: VehicleMark[] = [], signature = '', frames = 0;
   let selection: MapSelection | null = options.selection ??
     (options.selectedRoute ? { kind: 'route', id: options.selectedRoute } : options.selectedStop ? { kind: 'stop', id: options.selectedStop } : null);
   let following = options.follow ?? null, stop = options.stop ?? null, padding = options.fitPadding ?? {};
@@ -123,6 +135,15 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     halo: tone(container, '--tone-surface-canvas', 'Canvas'),
     water: tone(container, '--tone-tint-transit', 'Canvas'),
   });
+  const selectedVehicle = (): string | null => selection?.kind === 'vehicle' ? selection.id : null;
+  /** The pill's own ink is the city map's (one badge on both maps, light or
+   *  dark by the resolved theme this view already observes); the paper and
+   *  ink around it stay the app's role tokens. */
+  const pillInks = (): PillInkSet => {
+    const t = tones();
+    const pill = PILL_INKS[doc.documentElement.dataset.themeResolved === 'dark' ? 'dark' : 'light'];
+    return { fill: pill.tram, text: pill.tramText, halo: t.halo, ink: t.ink };
+  };
   function setStatus(next: MapStatus): void {
     if (destroyed || status === next) return;
     status = next; container.dataset.mapStatus = next;
@@ -149,8 +170,13 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
       screenStop: screenStop()?.name, labelMinPx: interactive ? undefined : KIOSK_LABEL_MIN_PX };
   }
+  function markViewport(): SchemaMarkViewport {
+    return { ...viewport(), density, symbolScale: options.symbolScale };
+  }
+  /** One mark per vehicle: the accessible list's membership and the keyboard
+   *  walk are per vehicle even where the canvas merges the pills. */
   function marks(drawn: readonly Drawn[]): VehicleMark[] {
-    return placer && pan && trams() ? schemaMarks(placer, drawn, { ...viewport(), density, symbolScale: options.symbolScale }) : [];
+    return placer && pan && trams() ? schemaVehicleMarks(placer, drawn, markViewport()) : [];
   }
   function placeVehicle(v: Drawn): SchemaPlacement | null {
     if (v.type !== 0 || v.onShape === null) return null;
@@ -185,11 +211,12 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   };
   function paintMarks(): boolean {
     if (!pan) return false;
-    lastMarks = marks(lastDrawn);
-    a11y?.frame(lastDrawn, lastMarks);
-    const membership = lastMarks.map(m => m.id).sort().join('\0');
+    lastVehicleMarks = marks(lastDrawn);
+    lastMarks = clusterSchemaMarks(lastVehicleMarks, markViewport(), selectedVehicle());
+    a11y?.frame(lastDrawn, lastVehicleMarks);
+    const membership = lastVehicleMarks.map(m => m.id).sort().join('\0');
     if (membership !== listMembership) { listMembership = membership; a11y?.reconcile(lastDrawn); }
-    if (vehicleContext) paintVehicles(vehicleContext, { w: vehicleCanvas.width, h: vehicleCanvas.height, density }, lastMarks, tones(), selection?.kind === 'vehicle' ? selection.id : null);
+    if (vehicleContext) paintPills(vehicleContext, { w: vehicleCanvas.width, h: vehicleCanvas.height, density }, lastMarks, pillInks(), selectedVehicle());
     const next = lastMarks.map(m => `${m.id}:${m.x.toFixed(2)},${m.y.toFixed(2)},${m.angle.toFixed(3)},${m.alpha.toFixed(2)}`).join('|');
     const changed = signature !== next;
     signature = next;
@@ -256,6 +283,39 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     const next: MapSelection | null = gtfs ? { kind: 'stop', id: gtfs.id, ids: net!.stops.filter(s => s.name === gtfs.name).map(s => s.id) } : null;
     select(next); options.onSelect?.(next);
   }
+  /** A tap, in backing-store pixels: a merged pill first (it is not a
+   *  selection but a request to look closer), then the accessible scene's
+   *  own answer, which knows the vehicles and the stops under it. */
+  function tapAt(p: XY): void {
+    const point = { x: p.x * density, y: p.y * density };
+    const hit = hitVehicle(lastMarks, point.x, point.y, density);
+    if (hit?.pill === 'cluster') { openCluster(hit, point); return; }
+    a11y?.tap(point);
+  }
+  /** While the members of a cluster are a few pixels apart no tap can mean
+   *  one of them, so the view goes in on the merged pill instead of guessing;
+   *  nothing is selected on the way in. At the end of the zoom the pills are
+   *  apart and the tap means the member nearest to it. */
+  function openCluster(mark: VehicleMark, point: XY): void {
+    if (!pan) return;
+    const v = pan.snapshot();
+    if (v.scale < v.fit * MAX_ZOOM_FROM_FIT * CLUSTER_ZOOM_STOP) {
+      // toWorld/centreOn are both in the controller's own shifted plane, so
+      // the origin the artwork was moved by cancels out.
+      pan.centreOn(pan.toWorld({ x: mark.x / density, y: mark.y / density }), v.scale * CLUSTER_ZOOM_STEP);
+      return;
+    }
+    const members = new Set(mark.ids ?? []);
+    let nearest: VehicleMark | null = null, best = Infinity;
+    for (const m of lastVehicleMarks) {
+      if (!members.has(m.id)) continue;
+      const d = Math.hypot(m.x - point.x, m.y - point.y);
+      if (d < best) { best = d; nearest = m; }
+    }
+    if (!nearest) return;
+    const next: MapSelection = { kind: 'vehicle', id: nearest.id };
+    select(next); options.onSelect?.(next);
+  }
   function resize(): void {
     if (destroyed) return;
     const rect = container.getBoundingClientRect();
@@ -303,11 +363,11 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       box, interactive, reducedMotion: options.reducedMotion, padding: paddingWithMargin(), document: doc, now,
       onChange: viewportChanged,
       onUserMove() { following = null; options.onUserMove?.(null); },
-      onTap: p => a11y?.tap({ x: p.x * density, y: p.y * density }),
+      onTap: tapAt,
     });
     a11y = mountSceneAccessibility({
       element, scene, i18n, net, drawn: () => lastDrawn, delays: () => new Map(), density: () => density,
-      nudge: () => { if (active()) loop.nudge(); }, interactive, bindPointer: false,
+      nudge: () => { if (active()) loop.nudge(); }, interactive, bindPointer: false, externalSelection: true,
       onSelect(id) { const next: MapSelection | null = id ? { kind: 'vehicle', id } : null; select(next); options.onSelect?.(next); },
       onEmptyTap: tapEmpty,
     });

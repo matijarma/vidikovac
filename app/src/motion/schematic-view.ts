@@ -286,6 +286,12 @@ export interface SceneAccessibilityDeps {
   onSelect?: (vehicleId: string | null) => void;
   /** A schema scene tests stops after vehicles, before clearing selection. */
   onEmptyTap?: (point: XY) => void;
+  /** The host owns the selection (the transport sheet, not the dialog), so a
+   *  vehicle stays selected while the model still draws it: its mark may be
+   *  momentarily unplaceable or clipped at the canvas edge without the sheet
+   *  closing under the reader. The crop scene's own card keeps closing when
+   *  the mark leaves its frame. */
+  externalSelection?: boolean;
   interactive?: boolean;
   /** Gestures already resolve taps; do not also bind a raw canvas click. */
   bindPointer?: boolean;
@@ -600,7 +606,9 @@ export function mountSceneAccessibility(deps: SceneAccessibilityDeps): SceneAcce
     frame(drawnList, marks) {
       if (disposed) return;
       lastMarks = marks;
-      if (selectedId !== null && !marks.some((m) => m.id === selectedId)) closeCard('gone');
+      // A host-owned selection outlives a missing mark: it closes only when
+      // the model itself stops drawing the vehicle.
+      if (selectedId !== null && !(deps.externalSelection ? drawnList : marks).some((m) => m.id === selectedId)) closeCard('gone');
       paintCard(drawnList);
     },
     selection: () => selectedId,
