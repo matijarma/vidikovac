@@ -78,8 +78,15 @@ function harness(extra: Partial<CityMapOptions> = {}, pending?: Promise<unknown>
     if (!calls.has(this)) calls.set(this, []);
     const log = calls.get(this)!;
     const props: Record<string, unknown> = {};
+    // A name is measured before it is placed (F4), so the double answers
+    // with a monospace stand-in: every glyph 0.6 em of the current font.
+    const measureText = (text: string) => ({
+      width: String(text).length * 0.6 * Number(/([\d.]+)px/.exec(String(props.font ?? ''))?.[1] ?? 10),
+    });
     return new Proxy({}, {
-      get: (_t, k: string) => k in props ? props[k] : (...args: unknown[]) => log.push({ op: k, args, font: props.font as string }),
+      get: (_t, k: string) => k in props ? props[k]
+        : k === 'measureText' ? measureText
+        : (...args: unknown[]) => log.push({ op: k, args, font: props.font as string }),
       set: (_t, k: string, value: unknown) => { props[k] = value; log.push({ op: k, args: [value] }); return true; },
     }) as CanvasRenderingContext2D;
   } as never);
@@ -193,7 +200,14 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   h.frame();
   expect(h.frames.at(-1)!.viewport.scale).toBeGreaterThanOrEqual(LABEL_MIN_PX_PER_UNIT);
   expect(h.staticCalls().some((c) => c.op === 'fillText')).toBe(true);
-  expect(h.staticCalls().some((c) => c.op === 'rotate' && c.args[0] === -Math.PI / 4)).toBe(true);
+  // F4: a name lies flat across the lines -- nothing on the static layer
+  // turns any more -- and it is haloed before it is inked.
+  expect(h.staticCalls().some((c) => c.op === 'rotate')).toBe(false);
+  expect(h.staticCalls().filter((c) => c.op === 'strokeText' || c.op === 'fillText')[0]?.op).toBe('strokeText');
+  // A terminal carries a chip in the line's own colour, numbered as the
+  // network names the route (net.routes.get('1').short).
+  expect(h.staticCalls().some((c) => c.op === 'fillStyle' && c.args[0] === '#cc706f')).toBe(true);
+  expect(h.staticCalls().filter((c) => c.op === 'fillText' && c.args[0] === '1')).toHaveLength(2);
   h.handle.follow!('tram');
   h.frame();
   const describe = vi.spyOn(vehicleCard, 'describeVehicle');

@@ -22,8 +22,12 @@ import {
   type Crop,
   type VehicleMark,
 } from '../../app/src/motion/schematic';
-import { paintPills, type SchemaContext } from '../../app/src/motion/schema-paint';
+import {
+  LABEL_HALO_ALPHA, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema, TERMINAL_DISC_SCALE,
+  type SchemaContext, type SchemaLayout, type SchemaTones,
+} from '../../app/src/motion/schema-paint';
 import { PILL_HEIGHT_PX, pillWidthPx } from '../../app/src/motion/pills';
+import { decodeSchema } from '../../shared/motion/schema';
 
 // Every test here runs in plain node: the geometry is pure, and the two
 // painters are exercised against a recording context that only knows the
@@ -78,12 +82,18 @@ function drawn(over: Partial<Drawn> & { id: string; p: XY; type: number }): Draw
 
 interface Call { op: string; args: unknown[] }
 
+/** The px in a `600 13px Manrope, sans-serif` shorthand. */
+function fontPx(font: unknown): number {
+  return Number(/([\d.]+)px/.exec(String(font ?? ''))?.[1] ?? 10);
+}
+
 /** Records every call and every style assignment in order, so a test can
  *  assert on the sequence a real canvas would have received. */
 function recorder(): { ctx: SchemaContext; calls: Call[] } {
   const calls: Call[] = [];
   const props: Record<string, unknown> = {
     strokeStyle: '', fillStyle: '', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, globalAlpha: 1,
+    font: '', textAlign: 'start', textBaseline: 'alphabetic',
   };
   const method = (op: string) => (...args: unknown[]): void => { calls.push({ op, args }); };
   const target: Record<string, unknown> = {
@@ -93,6 +103,11 @@ function recorder(): { ctx: SchemaContext; calls: Call[] } {
     translate: method('translate'), rotate: method('rotate'),
     // The pill painter's own surface (SchemaContext): capsules and text.
     arc: method('arc'), closePath: method('closePath'), fill: method('fill'), fillText: method('fillText'),
+    // The names (F4): a halo stroke under the ink, and a width to lay a
+    // collision box on. A monospace stand-in for a real font's metrics --
+    // every glyph 0.6 em, which is what a condensed sans averages.
+    strokeText: method('strokeText'),
+    measureText: (text: string) => ({ width: String(text).length * 0.6 * fontPx(props.font) }),
   };
   const ctx = new Proxy(target, {
     get: (t, key: string) => (key in t ? t[key] : props[key]),
@@ -511,6 +526,97 @@ describe('paintPills (F3: the schema draws numbered pills, not rectangles)', () 
     expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(2);
     const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
     expect(Math.max(...radii)).toBeGreaterThan(PILL_HEIGHT_PX / 2);
+  });
+});
+
+describe('paintSchema (F4: flat names, a collision pass and terminal chips)', () => {
+  /** Two parallel lines over four stops: a terminal at each end, and Alfa
+   *  and Beta ten artwork units apart in the middle -- close enough that at
+   *  the scale where names begin only the higher-ranked of the two fits.
+   *  Every label keeps the artwork's rotated, off-centre anchor, because F4
+   *  paints from the stop point instead and nothing turns any more. */
+  const ART = {
+    version: 1, source: 'f4-test.svg', builtAt: '2026-09-18', feedVersion: 'test',
+    box: [200, 100],
+    lines: [
+      {
+        route: 'R1', night: false, colour: '#cc706f', width: 3.5,
+        pts: [[10, 50], [190, 50]],
+        stops: [
+          { u: 0, name: 'Črnomerec', ownCircle: true }, { u: 80, name: 'Alfa', ownCircle: true },
+          { u: 90, name: 'Beta', ownCircle: true }, { u: 180, name: 'Borongaj', ownCircle: true },
+        ],
+      },
+      {
+        route: 'R2', night: false, colour: '#4a8f5a', width: 3.5,
+        pts: [[10, 60], [190, 60]],
+        stops: [
+          { u: 0, name: 'Črnomerec', ownCircle: true }, { u: 80, name: 'Alfa', ownCircle: true },
+          { u: 180, name: 'Borongaj', ownCircle: true },
+        ],
+      },
+    ],
+    stops: [
+      { name: 'Črnomerec', x: 10, y: 50, r: 2, half: null, terminal: true, label: { text: 'Črnomerec', rows: 1, x: 4, y: 40, rot: -Math.PI / 4, anchor: 'start' } },
+      { name: 'Alfa', x: 90, y: 50, r: 2, half: null, terminal: false, label: { text: 'Alfa', rows: 1, x: 95, y: 40, rot: -Math.PI / 4, anchor: 'start' } },
+      { name: 'Beta', x: 100, y: 50, r: 2, half: null, terminal: false, label: { text: 'Beta', rows: 1, x: 105, y: 40, rot: -Math.PI / 4, anchor: 'start' } },
+      { name: 'Borongaj', x: 190, y: 50, r: 2, half: null, terminal: true, label: { text: 'Borongaj', rows: 1, x: 185, y: 40, rot: 0, anchor: 'end' } },
+    ],
+    water: [{ pts: [[10, 90], [190, 90]], width: 4, colour: '#738ec8' }],
+  };
+  const SCHEMA = decodeSchema(ART);
+  const SHORTS: Record<string, string> = { R1: '1', R2: '2' };
+  const TONES: SchemaTones = { ink: '#0c1250', halo: '#f4f2ec', water: '#ebe8df' };
+  const layout = (scale: number, over: Partial<SchemaLayout> = {}): SchemaLayout => ({
+    schema: SCHEMA, viewport: { x: 0, y: 0, scale, width: 1200, height: 200 },
+    density: 1, w: 1200, h: 200, labels: true, trams: true,
+    routeShort: (route: string) => SHORTS[route] ?? route, ...over,
+  });
+  const paint = (scale: number, over: Partial<SchemaLayout> = {}): Call[] => {
+    const { ctx, calls } = recorder();
+    paintSchema(ctx, layout(scale, over), TONES);
+    return calls;
+  };
+  const inked = (calls: Call[]): unknown[] => calls.filter((c) => c.op === 'fillText').map((c) => c.args[0]);
+
+  it('lays a name flat on the stop it names, haloed before it is inked, a terminal in capitals', () => {
+    const calls = paint(LABEL_MIN_PX_PER_UNIT);
+    expect(calls.some((c) => c.op === 'rotate')).toBe(false);
+    expect(calls.some((c) => c.op === 'set textAlign' && c.args[0] === 'center')).toBe(true);
+    expect(calls.some((c) => c.op === 'set textBaseline' && c.args[0] === 'middle')).toBe(true);
+    const text = calls.filter((c) => c.op === 'strokeText' || c.op === 'fillText');
+    const halo = text.findIndex((c) => c.args[0] === 'Alfa');
+    expect(text[halo].op).toBe('strokeText');
+    expect(text[halo + 1]).toMatchObject({ op: 'fillText', args: ['Alfa', expect.any(Number), expect.any(Number)] });
+    // The stop's own point, not the artwork's label anchor at (95, 40).
+    expect(text[halo].args[1]).toBeCloseTo(90 * LABEL_MIN_PX_PER_UNIT);
+    expect(text[halo].args[2]).toBeCloseTo(50 * LABEL_MIN_PX_PER_UNIT);
+    expect(calls.some((c) => c.op === 'set globalAlpha' && c.args[0] === LABEL_HALO_ALPHA)).toBe(true);
+    expect(inked(calls)).toContain('ČRNOMEREC');
+  });
+
+  it('skips the lower-ranked of two names that collide, and draws both once the zoom parts them', () => {
+    // Beta is called by one line, Alfa by two: Alfa outranks it and stays.
+    expect(inked(paint(LABEL_MIN_PX_PER_UNIT))).toContain('Alfa');
+    expect(inked(paint(LABEL_MIN_PX_PER_UNIT))).not.toContain('Beta');
+    expect(inked(paint(6))).toEqual(expect.arrayContaining(['Alfa', 'Beta']));
+  });
+
+  it('keeps every name on a public screen, whose crop is already chosen so they fit', () => {
+    expect(inked(paint(LABEL_MIN_PX_PER_UNIT, { labelMinPx: 24 }))).toEqual(expect.arrayContaining(['Alfa', 'Beta']));
+  });
+
+  it('marks a terminal with a disc over the ordinary ring and a chip per line ending there', () => {
+    const calls = paint(LABEL_MIN_PX_PER_UNIT);
+    // r (2) x scale (1.4) is under the 4 CSS px floor the disc is built on.
+    const disc = 4 * TERMINAL_DISC_SCALE;
+    const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
+    expect(radii.filter((r) => Math.abs(r - disc) < 1e-9)).toHaveLength(2);
+    expect(radii.filter((r) => Math.abs(r - disc * 0.7) < 1e-9)).toHaveLength(2);
+    const chips = calls.filter((c) => c.op === 'set fillStyle' && (c.args[0] === '#cc706f' || c.args[0] === '#4a8f5a'));
+    expect(chips.map((c) => c.args[0])).toEqual(['#cc706f', '#4a8f5a', '#cc706f', '#4a8f5a']);
+    expect(calls.filter((c) => c.op === 'fillText' && c.args[0] === '1')).toHaveLength(2);
+    expect(calls.filter((c) => c.op === 'fillText' && c.args[0] === '2')).toHaveLength(2);
   });
 });
 
