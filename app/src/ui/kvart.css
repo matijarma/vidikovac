@@ -47,19 +47,15 @@
 .kv-notify-text { flex: 1; min-inline-size: 0; text-align: start; }
 .kv-notify-count { flex: none; color: var(--tone-text-muted); }
 
+/* The alert rows are the app's shared switch (ui/base.css `.switch`): track,
+   knob, travel, target and press states all live there, so this sheet owns
+   only the list they sit in. */
 .nt-list { display: grid; }
-.nt-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--tone-text-primary); font: inherit; font-size: var(--type-control); text-align: start; cursor: pointer; touch-action: manipulation; }
-.nt-text { min-inline-size: 0; }
-.nt-knob { position: relative; flex: none; inline-size: 2.5rem; block-size: 1.5rem; border-radius: var(--r-pill); background: var(--tone-surface-3); }
-.nt-knob::after { content: ''; position: absolute; inset-block-start: 0.1875rem; inset-inline-start: 0.1875rem; inline-size: 1.125rem; block-size: 1.125rem; border-radius: 50%; background: var(--tone-surface-canvas); box-shadow: var(--tone-shadow-soft); transition: transform var(--dur-fast) var(--ease); }
-.nt-row[aria-checked='true'] .nt-knob { background: var(--tone-action-brand); }
-.nt-row[aria-checked='true'] .nt-knob::after { transform: translateX(1rem); }
-:root[data-lagano='1'] .nt-knob::after { box-shadow: none; transition: none; }
 
 @media (hover: hover) {
-  .nt-row:hover, .kv-notify:hover { background: var(--tone-surface-2); }
+  .kv-notify:hover { background: var(--tone-surface-2); }
   .kv-chip:hover { border-color: var(--tone-stroke-strong); }
 }
 @media (hover: none) {
-  .nt-row:active, .kv-notify:active, .kv-chip:active { background-color: var(--tone-surface-2); transition: none; }
+  .kv-notify:active, .kv-chip:active { background-color: var(--tone-surface-2); transition: none; }
 }

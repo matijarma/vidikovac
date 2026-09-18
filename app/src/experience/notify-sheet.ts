@@ -28,9 +28,12 @@ export interface NotifySheet {
   destroy(): void;
 }
 
-/** One 44 px switch row (`role=switch`, never a checkbox: nothing here is a form). */
+/** One 44 px switch row: the app's shared switch (ui/base.css `.switch`), the
+ *  same control the transport sheet's "Samo ova linija na karti" is. Nothing
+ *  about an alert row differs from it, so it carries no second class of its
+ *  own -- `role=switch`, never a checkbox: nothing here is a form. */
 function rowMarkup(i18n: I18n, key: NotifyKey, on: boolean): string {
-  return `<button type="button" class="nt-row" role="switch" aria-checked="${on ? 'true' : 'false'}" data-key="${key}" data-sheet-action="notify-toggle" data-testid="notify-${key}"><span class="nt-text">${escapeHtml(i18n.t(`notify.${key}`))}</span><span class="nt-knob" aria-hidden="true"></span></button>`;
+  return `<button type="button" class="switch" role="switch" aria-checked="${on ? 'true' : 'false'}" data-key="${key}" data-sheet-action="notify-toggle" data-testid="notify-${key}"><span class="switch-text">${escapeHtml(i18n.t(`notify.${key}`))}</span><span class="switch-track" aria-hidden="true"></span></button>`;
 }
 
 function bodyMarkup(i18n: I18n, s: NotifySheetState): string {

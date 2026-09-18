@@ -168,28 +168,10 @@
 .t-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .t-fold { align-self: flex-start; }
 
-/* "Samo ova linija na karti" (F5): the same track and knob the alert switches
-   already use (kvart.css .nt-row), at the 44 px target, with the label doing
-   the talking and the track only confirming the state. Its own row, so the
-   switch never sits in the same line as the push buttons above it: a control
-   that says what the map is doing is not one more thing to press. */
-.t-switch {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); inline-size: 100%;
-  min-block-size: var(--target); padding: 0 var(--sp-2); border: 0; border-radius: var(--r-md);
-  background: transparent; color: var(--tone-text-primary); font: inherit; font-size: var(--type-control);
-  text-align: start; cursor: pointer; touch-action: manipulation;
-}
-.t-switch-text { min-inline-size: 0; }
-.t-switch-track { position: relative; flex: none; inline-size: 2.5rem; block-size: 1.5rem; border-radius: var(--r-pill); background: var(--tone-surface-3); }
-.t-switch-track::after {
-  content: ''; position: absolute; inset-block-start: 0.1875rem; inset-inline-start: 0.1875rem;
-  inline-size: 1.125rem; block-size: 1.125rem; border-radius: 50%; background: var(--tone-surface-canvas);
-  box-shadow: var(--tone-shadow-soft); transition: transform var(--dur-fast) var(--ease);
-}
-.t-switch[aria-checked='true'] .t-switch-track { background: var(--tone-action-brand); }
-.t-switch[aria-checked='true'] .t-switch-track::after { transform: translateX(1rem); }
-.t-switch:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 2px; }
-:root[data-lagano='1'] .t-switch-track::after { box-shadow: none; transition: none; }
+/* "Samo ova linija na karti" (F5) is the app's shared switch and is styled
+   entirely by ui/base.css `.switch` -- the same control the alert rows are.
+   It gets a .t-actions row of its own rather than joining the one above it: a
+   control that says what the map is doing is not one more thing to press. */
 
 /* --- Rows and badges --------------------------------------------------- */
 .t-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -207,10 +189,10 @@
 /* A search result is the row itself (a listbox option, not a button): the same inset and press language as the button rows. */
 .t-list > .t-option { padding: 0 var(--sp-1); cursor: pointer; border-radius: var(--r-sm); touch-action: manipulation; }
 @media (hover: hover) {
-  button.t-row:hover, .t-option:hover, .t-switch:hover { background: var(--tone-surface-2); }
+  button.t-row:hover, .t-option:hover { background: var(--tone-surface-2); }
 }
 @media (hover: none) {
-  button.t-row:active, .t-option:active, .t-toggle:active, .t-switch:active { background: var(--tone-surface-2); transition: none; }
+  button.t-row:active, .t-option:active, .t-toggle:active { background: var(--tone-surface-2); transition: none; }
 }
 .t-option[aria-selected='true'] { background: var(--tone-surface-2); outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; }
 .t-group-label { padding: var(--sp-3) var(--sp-1) var(--sp-1); font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--tone-text-muted); }

@@ -447,7 +447,6 @@
     "routeTitle": "Route {short}",
     "showRoute": "Show the route",
     "lineFocusOn": "Only this line on the map",
-    "lineFocusOff": "Whole network on the map",
     "peekLoading": "Loading vehicles…",
     "peekFollowing": "Following: {title}",
     "closuresAndNotices": "Closures and notices",

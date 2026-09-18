@@ -184,6 +184,18 @@ describe('the kiosk overlay set (prozor)', () => {
     // The figure's own literals live in the report's colour table; only the pinned tram blue is asserted here, because the plan forbids touching it.
     expect(OVERLAY_LIGHT.routeTram).toBe('#0751bf');
   });
+
+  it('a relayed route selection keeps the pinned tram blue: with no focus handed in, the lit line is the mode ink it has always been', () => {
+    // A paired screen mirrors the phone's route (kiosk/mapview.ts setView).
+    // Round F's constraint is that its drawing does not move, and city-map.ts
+    // gives a surface that never asked for line focus no `focus` at all -- so
+    // this is the option set the kiosk actually builds, asserted whole.
+    const lit = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, selection: { kind: 'route', id: '6' }, lineFocus: false, focus: null });
+    expect(lit.find((l) => l.id === LAYERS.networkSelected)!.paint!['line-color'])
+      .toEqual(['match', ['get', 'kind'], 'tram', OVERLAY_LIGHT.routeTram, 'bus', OVERLAY_LIGHT.routeBus, OVERLAY_LIGHT.other]);
+    expect(lit.find((l) => l.id === LAYERS.networkTram)!.layout!.visibility).toBe('visible');
+    expect(lit.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toBe(NETWORK_OPACITY_DIMMED);
+  });
 });
 
 describe('filters and the selection', () => {

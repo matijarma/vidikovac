@@ -685,6 +685,31 @@ describe('selection and status', () => {
     expect(vehiclesToGeoJson(drawn, { project, focusedRoute: '2' }).features[0]!.properties.routeId).toBe('');
   });
 
+  it('a surface that never asked for line focus draws what it always drew: the pinned mode ink on the lit route and a mixed cluster still nameless', async () => {
+    // The kiosk passes no `lineFocus` at all (transport/workspace.ts), and
+    // round F's constraint is that its picture does not move. Two trams on
+    // different routes, close enough to merge, with route 6 selected.
+    const NEAR: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.0002, title: '11', routeId: '11' };
+    const clusterRoute = async (extra: Record<string, unknown>): Promise<unknown> => {
+      const { map, handle, frame, vehicles } = await harness({ points: [A, NEAR], loadNetwork: async () => NET, extra });
+      map.zoom = 15;
+      handle.select!({ kind: 'route', id: '6' });
+      frame();
+      const pushed = vehicles().calls.at(-1) as FC;
+      const cluster = pushed.features.find((f) => f.properties.cluster)!;
+      // The live colour: what a styleDiff last set, else what the layer was added with.
+      const added = map.layers.find((l) => l.id === 'network-selected')?.paint as Record<string, unknown> | undefined;
+      return { colour: map.paint['network-selected']?.['line-color'] ?? added?.['line-color'], routeId: cluster.properties.routeId };
+    };
+    const untouched = ['match', ['get', 'kind'], 'tram', basemap.OVERLAY_LIGHT.routeTram, 'bus', basemap.OVERLAY_LIGHT.routeBus, basemap.OVERLAY_LIGHT.other];
+    expect(await clusterRoute({})).toEqual({ colour: untouched, routeId: '' });
+    // A reader with the switch, turned off, is a different surface: the ZET
+    // colour on the line they picked, and the cluster no longer inverted.
+    const asked = await clusterRoute({ lineFocus: false }) as { colour: unknown; routeId: string };
+    expect(asked.colour).not.toEqual(untouched);
+    expect(asked.routeId).toBe('6');
+  });
+
   it('a tap picks a vehicle over a stop over a closure, reports it through onSelect, and Escape on the map clears it', async () => {
     const { map, handle, container, selections } = await harness();
     map.rendered = [{ layer: { id: 'stops' }, properties: { id: '1_21', name: 'Kvaternikov trg' } }, { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1' } }];

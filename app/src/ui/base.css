@@ -126,6 +126,43 @@ input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; a
 .badge[data-tone='action'] { background: var(--tone-tint-action); color: var(--tone-action-brand); }
 .badge-plain::before { display: none; }
 
+/* One switch, wherever the app has a thing to turn on or off: the alert rows
+   in the notify sheet (experience/notify-sheet.ts) and "Samo ova linija na
+   karti" in the transport sheet (transport/view.ts). role="switch", never a
+   checkbox -- nothing here is a form -- so the name stays put and the track
+   is what moves. The focus ring is this file's own global :focus-visible; a
+   second one here would be the same two pixels written twice. */
+.switch {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  /* The row is the target: full width, 44 px tall (--target), so the whole
+     line is pressable and not just the track at the end of it. */
+  inline-size: 100%; min-block-size: var(--target); padding: 0 var(--sp-2);
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-primary);
+  font: inherit; font-size: var(--type-control); text-align: start; cursor: pointer; touch-action: manipulation;
+}
+/* The label is the whole answer and may wrap; the track never shrinks. */
+.switch-text { min-inline-size: 0; }
+/* 40 x 24 px: the smallest track that still reads as a track inside a 44 px
+   row, leaving the label the rest of the line. */
+.switch-track { position: relative; flex: none; inline-size: 2.5rem; block-size: 1.5rem; border-radius: var(--r-pill); background: var(--tone-surface-3); }
+/* The knob: 18 px in a 24 px track, so 3 px of track shows all round it. */
+.switch-track::after {
+  content: ''; position: absolute; inset-block-start: 0.1875rem; inset-inline-start: 0.1875rem;
+  inline-size: 1.125rem; block-size: 1.125rem; border-radius: 50%; background: var(--tone-surface-canvas);
+  box-shadow: var(--tone-shadow-soft); transition: transform var(--dur-fast) var(--ease);
+}
+.switch[aria-checked='true'] .switch-track { background: var(--tone-action-brand); }
+/* 16 px = 40 - 3 - 18 - 3: the knob's full travel, ending 3 px from the far edge. */
+.switch[aria-checked='true'] .switch-track::after { transform: translateX(1rem); }
+/* Lagano: the knob arrives, it does not slide, and it casts nothing. */
+:root[data-lagano='1'] .switch-track::after { box-shadow: none; transition: none; }
+@media (hover: hover) {
+  .switch:hover { background: var(--tone-surface-2); }
+}
+@media (hover: none) {
+  .switch:active { background: var(--tone-surface-2); transition: none; }
+}
+
 /* Lists of rows: hairline separators, generous targets. */
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows > li { border-block-start: 1px solid var(--tone-stroke); }

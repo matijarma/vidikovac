@@ -895,7 +895,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let routeFollowAt = -Infinity;
   let modes: ReadonlySet<number> | null = options.modes ?? null;
   let emphasis: readonly PlaceKind[] | null = options.emphasis ?? null;
-  let lineFocus = options.lineFocus === true;
+  /** Three states, not two: `null` is a surface that never asked for line
+   *  focus at all (the kiosk passes no `lineFocus`), and it must draw exactly
+   *  what it drew before F5 -- no ZET colour on the lit route, no focused
+   *  route on a cluster. `false` is a reader who has the switch and turned it
+   *  off, which is a different picture and keeps both. */
+  let lineFocus: boolean | null = options.lineFocus ?? null;
   /** The focused route the overlays on the style were last built for, so a
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
@@ -948,20 +953,31 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return lastDrawn.find((v) => v.id === id)?.routeId ?? null;
   }
 
+  /** The line the overlays are built for, or null on a surface that never
+   *  asked for line focus -- which then gets no `focus` at all, and with it
+   *  neither the ZET colour on the lit route nor a focused route on a
+   *  cluster: the picture it drew before F5, to the pixel. */
+  function focusRouteId(): string | null {
+    return lineFocus === null ? null : focusedRouteId();
+  }
+
   /** The route the pills and the network are lit for: under line focus the
-   *  focused one, otherwise the selected route alone (today's rule). */
+   *  focused one, with the switch off the selected route alone (today's
+   *  rule), and on a surface without the switch nothing -- a mixed cluster
+   *  there keeps the '' it has always carried. */
   function litRouteId(): string | null {
+    if (lineFocus === null) return null;
     if (lineFocus) return focusedRouteId();
     return selection?.kind === 'route' ? selection.id : null;
   }
 
   function overlayOptions(p: OverlayPalette): OverlayOptions {
-    const routeId = focusedRouteId();
+    const routeId = focusRouteId();
     const type = routeId === null ? undefined : net?.routes.get(routeId)?.type ?? ZET_ROUTES[routeId]?.type;
     const focus = routeId === null
       ? null
       : { routeId, colour: lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus, focus };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus };
   }
 
   /** The vehicle the clustering must leave standing: the selected one, or the
@@ -983,7 +999,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // The selected vehicle's line becomes knowable the moment the model first
     // places it, and stops being so when it goes quiet: one re-derive on the
     // change, never a styleDiff per frame.
-    if (focusedRouteId() !== focusedApplied) applyOverlays();
+    if (focusRouteId() !== focusedApplied) applyOverlays();
     // The pills are merged against the camera of this very frame, so a mark
     // never merges with one the reader can see is somewhere else -- and only
     // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
@@ -1188,7 +1204,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
     const palette = l.overlayPalette(theme);
     overlays = l.overlayLayers(palette, overlayOptions(palette));
-    focusedApplied = focusedRouteId();
+    focusedApplied = focusRouteId();
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     styled = true;
@@ -1439,7 +1455,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const next = l.overlayLayers(palette, overlayOptions(palette));
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
-    focusedApplied = focusedRouteId();
+    focusedApplied = focusRouteId();
   }
 
   /** Selects (or clears with null) and marks it on the map; `fit` moves the camera to it. */

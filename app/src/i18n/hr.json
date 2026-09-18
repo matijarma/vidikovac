@@ -464,7 +464,6 @@
     "routeTitle": "Linija {short}",
     "showRoute": "Prikaži liniju",
     "lineFocusOn": "Samo ova linija na karti",
-    "lineFocusOff": "Cijela mreža na karti",
     "peekLoading": "Vozila se učitavaju…",
     "peekFollowing": "Praćenje: {title}",
     "closuresAndNotices": "Zatvaranja i obavijesti",

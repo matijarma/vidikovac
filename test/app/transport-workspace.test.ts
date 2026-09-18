@@ -248,8 +248,10 @@ describe('the transport workspace', () => {
     expect(LINE_FOCUS_STORAGE_KEY).toBe('kajima:line-focus:v1');
     expect(last().setLineFocus).toHaveBeenLastCalledWith(false);
     const off = q<HTMLButtonElement>('[data-action=toggle-line-focus]');
+    // A switch's name never moves; only aria-checked does. A label that
+    // flipped would announce the off state as "Cijela mreža na karti, off".
     expect(off.getAttribute('aria-checked')).toBe('false');
-    expect(text(off)).toBe('Cijela mreža na karti');
+    expect(text(off)).toBe('Samo ova linija na karti');
     // A vehicle detail carries the same row; a public screen carries none.
     last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
     expect(q<HTMLButtonElement>('[data-action=toggle-line-focus]').getAttribute('aria-checked')).toBe('false');

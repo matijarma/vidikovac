@@ -311,11 +311,13 @@ function actions(buttons: string[]): string {
 }
 
 const showOnMap = (i18n: I18n): string => button({ action: 'fit-selection', label: tr(i18n, 'showOnMap') });
-/** "Samo ova linija na karti" / "Cijela mreža na karti" (F5 section C): one
- *  switch under a route's or a vehicle's actions, saying what the map is
- *  doing right now rather than what pressing it would do -- a switch is read
- *  as a state, not as a command. The label is the whole answer, so the track
- *  beside it is decoration and carries no text of its own. Offered only where
+/** "Samo ova linija na karti" (F5 section C): one switch under a route's or a
+ *  vehicle's actions. Its name is constant and
+ *  `aria-checked` carries the state, because that is what a switch is: a
+ *  label that flipped with the state would have a screen reader announce
+ *  "Cijela mreža na karti, prekidač, isključeno" -- the whole network, off --
+ *  which says the opposite of what is true. The label is the whole answer, so
+ *  the track beside it is decoration and carries no text. Offered only where
  *  there is somewhere to write the answer -- a public screen has no finger to
  *  press it, and a surface with no device store (the lightweight path) would
  *  be showing a control whose choice nothing remembers, exactly as the
@@ -324,7 +326,7 @@ function lineFocusSwitch(i18n: I18n, on: boolean): string {
   // A stable id, like the follow button's: the sheet's body is swapped whole
   // on every poll and swapBody restores focus by id, so pressing Space on
   // this switch must not be what takes the caret off it.
-  return `<div class="t-actions"><button type="button" role="switch" id="t-line-focus" aria-checked="${on ? 'true' : 'false'}" data-action="toggle-line-focus" class="t-switch" data-testid="line-focus"><span class="t-switch-text">${esc(tr(i18n, on ? 'lineFocusOn' : 'lineFocusOff'))}</span><span class="t-switch-track" aria-hidden="true"></span></button></div>`;
+  return `<div class="t-actions"><button type="button" role="switch" id="t-line-focus" aria-checked="${on ? 'true' : 'false'}" data-action="toggle-line-focus" class="switch" data-testid="line-focus"><span class="switch-text">${esc(tr(i18n, 'lineFocusOn'))}</span><span class="switch-track" aria-hidden="true"></span></button></div>`;
 }
 /** "Natrag": the way out of every detail, a 44 px ghost, first in the head. */
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });
