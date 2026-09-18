@@ -95,6 +95,15 @@ const CHIP_TEXT_RATIO = PILL_TEXT_PX / PILL_HEIGHT_PX;
 const CHIP_PAD_EM = 0.6;
 const CHIP_GAP_PX = 2;
 
+// --- Line focus (F5). ---
+
+/** The other nineteen lines while one is in focus. Dimmed, never hidden: the
+ *  diagram is a picture of a network, and a single line floating in white
+ *  paper says nothing about where it goes. A fifth is the weakest ink that
+ *  still reads as a line at the phone's fit while leaving the focused one
+ *  unmistakably in front. */
+export const SCHEMA_FOCUS_DIM_ALPHA = 0.2;
+
 /** Structurally a subset of CanvasRenderingContext2D, like the existing
  *  SchematicContext, so tests can record actual paint calls without a GPU. */
 export interface SchemaContext extends SchematicContext {
@@ -139,6 +148,11 @@ export interface SchemaLayout extends VehicleLayout {
   viewport: SchemaViewport;
   labels: boolean;
   trams: boolean;
+  /** The reader's "only this line" switch (core/line-focus-store.ts, F5). */
+  lineFocus?: boolean;
+  /** The line in focus while that switch is on: the selected route, or the
+   *  route of the selected vehicle. Null focuses nothing. */
+  focusedRoute?: string | null;
   selectedRoute?: string | null;
   selectedStop?: string | null;
   screenStop?: string | null;
@@ -573,9 +587,16 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
     }
   }
   if (layout.trams) {
-    for (const line of schema.lines) {
+    // Line focus: the others first and faint, the one in focus last, so
+    // nothing crossing it is painted over its ink.
+    const focused = layout.lineFocus === true && layout.focusedRoute ? layout.focusedRoute : null;
+    const ordered = focused === null
+      ? schema.lines
+      : [...schema.lines.filter((l) => l.route !== focused), ...schema.lines.filter((l) => l.route === focused)];
+    for (const line of ordered) {
+      ctx.globalAlpha = focused !== null && line.route !== focused ? SCHEMA_FOCUS_DIM_ALPHA : 1;
       path(line.pts);
-      if (line.route === layout.selectedRoute) {
+      if (line.route === layout.selectedRoute || line.route === focused) {
         ctx.strokeStyle = tones.ink;
         ctx.lineWidth = line.width * scale + 2 * density;
         ctx.stroke();
@@ -584,6 +605,8 @@ export function paintSchema(ctx: SchemaContext, layout: SchemaLayout, tones: Sch
       ctx.lineWidth = line.width * scale;
       ctx.stroke();
     }
+    // Nothing below a line -- a stop ring, a name, a terminal -- is dimmed.
+    ctx.globalAlpha = 1;
     // The source has one ring per line/platform within a corridor. A
     // canonical named stop is its label/selection anchor, not another ring
     // invented halfway between the parallel lines.

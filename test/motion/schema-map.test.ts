@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSchemaMap, type SchemaFrame } from '../../app/src/motion/schema-map';
-import { LABEL_MIN_PX_PER_UNIT, PILL_EDGE_MARGIN_PX } from '../../app/src/motion/schema-paint';
+import { LABEL_MIN_PX_PER_UNIT, PILL_EDGE_MARGIN_PX, SCHEMA_FOCUS_DIM_ALPHA } from '../../app/src/motion/schema-paint';
 import { PILL_INKS } from '../../app/src/motion/pills';
 import { DENSITY } from '../../app/src/ui/canvas';
 import type { CityMapHandle, CityMapOptions, MapPoint } from '../../app/src/map/city-map';
@@ -301,6 +301,29 @@ it('merges two trams a pill apart into one cluster mark naming both lines, while
   expect([...(marks[0].ids ?? [])].sort()).toEqual(['a', 'b']);
   // One merged pill on the canvas is still two vehicles for a reader.
   expect(h.buttons().map((b) => b.dataset.vehicle)).toEqual(['a', 'b']);
+});
+
+it('line focus dims the other lines on the diagram instead of hiding them, and strokes the focused one last', async () => {
+  const h = harness({}, Promise.resolve(TWO_LINE_ART));
+  await flush();
+  h.handle.select!({ kind: 'route', id: '1' }); // drawn first in the artwork, so "last" is a real reordering
+  const before = h.staticCalls().length;
+  h.handle.setLineFocus!(true);
+  const ops = h.staticCalls().slice(before)
+    .filter((c) => c.op === 'globalAlpha' || (c.op === 'strokeStyle' && ['#cc706f', '#4a8f5a'].includes(String(c.args[0]))));
+  // The other line is still there, at a fifth of its ink; a hidden line on a
+  // diagram of nineteen would leave the focused one floating in white paper.
+  const dimAt = ops.findIndex((c) => c.op === 'globalAlpha' && c.args[0] === SCHEMA_FOCUS_DIM_ALPHA);
+  const otherAt = ops.findIndex((c) => c.op === 'strokeStyle' && c.args[0] === '#4a8f5a');
+  expect(dimAt).toBeGreaterThanOrEqual(0);
+  expect(dimAt).toBeLessThan(otherAt);
+  expect(ops.filter((c) => c.op === 'strokeStyle').at(-1)!.args[0]).toBe('#cc706f');
+  // Off again: the artwork's own order, both lines at full ink.
+  const back = h.staticCalls().length;
+  h.handle.setLineFocus!(false);
+  const plain = h.staticCalls().slice(back).filter((c) => c.op === 'strokeStyle' && ['#cc706f', '#4a8f5a'].includes(String(c.args[0])));
+  expect(plain.map((c) => c.args[0])).toEqual(['#cc706f', '#4a8f5a']);
+  expect(h.staticCalls().slice(back).some((c) => c.op === 'globalAlpha' && c.args[0] === SCHEMA_FOCUS_DIM_ALPHA)).toBe(false);
 });
 
 it('keeps a mark whose centre has just left the canvas, so a pill at the edge is clipped rather than culled', async () => {

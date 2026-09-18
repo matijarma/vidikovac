@@ -98,6 +98,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     (options.selectedRoute ? { kind: 'route', id: options.selectedRoute } : options.selectedStop ? { kind: 'stop', id: options.selectedStop } : null);
   let following = options.follow ?? null, stop = options.stop ?? null, padding = options.fitPadding ?? {};
   let modes = options.modes ?? null;
+  let lineFocus = options.lineFocus === true;
   let staticContext: CanvasRenderingContext2D | null = null, vehicleContext: CanvasRenderingContext2D | null = null;
   let origin: XY = { x: 0, y: 0 };
   const sceneListeners = new Set<() => void>();
@@ -136,6 +137,14 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     water: tone(container, '--tone-tint-transit', 'Canvas'),
   });
   const selectedVehicle = (): string | null => selection?.kind === 'vehicle' ? selection.id : null;
+  /** The line the diagram is about, the city map's rule exactly: the selected
+   *  route, or the route of the selected vehicle as the model draws it. */
+  const focusedRoute = (): string | null => {
+    if (selection?.kind === 'route') return selection.id;
+    const id = selectedVehicle();
+    if (id === null) return null;
+    return lastDrawn.find(v => v.id === id)?.routeId ?? null;
+  };
   /** The pill's own ink is the city map's (one badge on both maps, light or
    *  dark by the resolved theme this view already observes); the paper and
    *  ink around it stay the app's role tokens. */
@@ -166,7 +175,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   function layout(): SchemaLayout | null {
     if (!schema || !pan) return null;
     return { schema, viewport: viewport(), density, w: routesCanvas.width, h: routesCanvas.height, labels: labels(),
-      trams: trams(), selectedRoute: selection?.kind === 'route' ? selection.id : null,
+      trams: trams(), lineFocus, focusedRoute: lineFocus ? focusedRoute() : null,
+      selectedRoute: selection?.kind === 'route' ? selection.id : null,
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
       screenStop: screenStop()?.name, labelMinPx: interactive ? undefined : KIOSK_LABEL_MIN_PX,
       // The artwork names its lines by GTFS route id; a terminal's chips
@@ -416,6 +426,10 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     following: () => following,
     resize,
     setModes(next) { if (destroyed) return; modes = next; paintStatic(); paintMarks(); a11y?.reconcile(lastDrawn); refreshWords(); if (active()) loop.nudge(); },
+    setLineFocus(on) {
+      if (destroyed || on === lineFocus) return;
+      lineFocus = on; paintStatic(); paintMarks(); if (active()) loop.nudge();
+    },
     setFeedState(state) {
       if (destroyed) return;
       const wasDown = down; down = state === 'down';

@@ -106,6 +106,7 @@ export function createMapRenderer(options: CityMapOptions, deps: RendererDeps = 
     resize: () => send('resize', (h) => h.resize?.()),
     setModes: (modes) => send('modes', (h) => h.setModes?.(modes)),
     setEmphasis: (emphasis) => send('emphasis', (h) => h.setEmphasis?.(emphasis)),
+    setLineFocus: (on) => send('lineFocus', (h) => h.setLineFocus?.(on)),
     setClosuresVisible: (visible) => send('closures', (h) => h.setClosuresVisible?.(visible)),
     setFeedState: (state) => send('feed', (h) => h.setFeedState?.(state)),
     setStop: (stop) => send('stop', (h) => h.setStop?.(stop)),
