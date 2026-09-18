@@ -476,14 +476,18 @@ function paintNames(ctx: SchemaContext, plans: readonly NamePlan[], tones: Schem
   }
 }
 
-/** The number on a chip, in whichever tone the line's colour carries
- *  better. The tones come from computed style and need not be hex at all
- *  (`rgb(...)`, a keyword): what cannot be measured falls back to ink. */
+/** The number on a chip, in whichever tone the line's colour carries better.
+ *  The tones come from computed style, so they arrive in whatever form the
+ *  engine resolved them to -- `oklch()` for every current browser, since
+ *  tokens.css redefines the palette there; contrast.ts reads those. A colour
+ *  nobody can measure falls back to the paper tone, which is what a ZET line
+ *  colour carries in nearly every case and what the vehicle pills already
+ *  print (pills.ts PILL_INKS: near-white on the tram blue). */
 function chipTextTone(colour: string, tones: SchemaTones): string {
   try {
     return contrastRatio(colour, tones.halo) > contrastRatio(colour, tones.ink) ? tones.halo : tones.ink;
   } catch {
-    return tones.ink;
+    return tones.halo;
   }
 }
 

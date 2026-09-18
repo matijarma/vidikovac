@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AA_TEXT, contrastRatio, luminance } from '../../app/src/ui/contrast';
+import { AA_TEXT, contrastRatio, luminance, parseCssColour, parseHex } from '../../app/src/ui/contrast';
 import { deltaE, hexToLinear, mixOklab, parseOklch, toHex, type Linear } from './oklab';
 
 const TOKENS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'tokens.css'), 'utf8');
@@ -109,8 +109,29 @@ describe('WCAG contrast arithmetic', () => {
     expect(luminance('#000000')).toBe(0);
     expect(luminance('#808080')).toBeCloseTo(0.2159, 3);
   });
-  it('rejects a non-hex value loudly instead of returning NaN', () => {
-    expect(() => luminance('rgba(1,2,3,0.5)')).toThrow(/hex/);
+  it('reads the colour forms the app actually produces, not only the hex fallbacks', () => {
+    // tokens.css redefines the palette in OKLCH inside @supports, so this is
+    // what --tone-text-primary resolves to in every current browser, and what
+    // a canvas painter reading computed style is handed.
+    const ink = 'oklch(25.159% 0.03844 252.41)';
+    expect(parseCssColour(ink)).toEqual(parseOklch(ink)); // the port is the measured maths
+    expect(luminance('rgb(128, 128, 128)')).toBeCloseTo(luminance('#808080'), 9);
+    expect(luminance('rgb(100% 100% 100%)')).toBeCloseTo(1, 6);
+    expect(luminance('rgba(0, 0, 0, 0.5)')).toBe(0);
+  });
+  it('rejects a colour nobody here can measure, loudly, instead of returning NaN', () => {
+    expect(() => luminance('rebeccapurple')).toThrow(/unsupported colour/);
+    expect(() => parseHex('oklch(100% 0 0)')).toThrow(/hex/);
+  });
+  it('measures a ZET line colour against the real light tones, which is what the schema chips ask it', () => {
+    const ink = 'oklch(25.159% 0.03844 252.41)';   // --tone-text-primary
+    const paper = 'oklch(96.573% 0.00514 247.88)'; // --tone-surface-canvas
+    // The night lines' navy: unreadable in ink, plain in paper. Read as hex
+    // before this understood oklch, both tones threw and ink always won.
+    expect(Number(contrastRatio('#2f2483', ink).toFixed(2))).toBe(1.29);
+    expect(Number(contrastRatio('#2f2483', paper).toFixed(2))).toBe(11.18);
+    // And the other way for a line that is nearly paper itself (line 11).
+    expect(contrastRatio('#fff481', ink)).toBeGreaterThan(contrastRatio('#fff481', paper));
   });
   it('the slate pair psdlat shipped really fails AA', () => {
     expect(contrastRatio('#94a3b8', '#f1f5f9')).toBeLessThan(AA_TEXT);

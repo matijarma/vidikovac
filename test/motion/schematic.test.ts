@@ -611,6 +611,24 @@ describe('paintSchema (F4: flat names, a collision pass and terminal chips)', ()
     expect(inked(paint(LABEL_MIN_PX_PER_UNIT, { labelMinPx: 24 }))).toEqual(expect.arrayContaining(['Alfa', 'Beta']));
   });
 
+  it('picks a chip number tone against the theme tones as a browser resolves them, which is oklch and not hex', () => {
+    // What tokens.css renders inside its @supports block, and therefore what
+    // tone() hands the painter: --tone-text-primary and --tone-surface-canvas.
+    const tones: SchemaTones = {
+      ink: 'oklch(25.159% 0.03844 252.41)', halo: 'oklch(96.573% 0.00514 247.88)',
+      water: 'oklch(93.497% 0.00973 252.81)',
+    };
+    // A night line's navy (ZET 31-34) and line 11's near-paper yellow.
+    const lines = decodeSchema({ ...ART, lines: ART.lines.map((l, i) => ({ ...l, colour: i === 0 ? '#2f2483' : '#fff481' })) });
+    const { ctx, calls } = recorder();
+    paintSchema(ctx, layout(LABEL_MIN_PX_PER_UNIT, { schema: lines }), tones);
+    const fills = calls.filter((c) => c.op === 'set fillStyle').map((c) => c.args[0] as string);
+    const over = (colour: string): string => fills[fills.indexOf(colour) + 1]!;
+    // 1.29:1 against the ink, 11.18:1 against the paper.
+    expect(over('#2f2483')).toBe(tones.halo);
+    expect(over('#fff481')).toBe(tones.ink);
+  });
+
   it('marks a terminal with a disc over the ordinary ring and a chip per line ending there', () => {
     const calls = paint(LABEL_MIN_PX_PER_UNIT);
     // r (2) x scale (1.4) is under the 4 CSS px floor the disc is built on.
