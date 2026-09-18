@@ -233,6 +233,18 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('merges only where pills are drawn: below PILL_ZOOM every vehicle keeps its own dot, and the camera moving in merges them', async () => {
+    const SECOND: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.0002, title: '11', routeId: '11' };
+    const { map, frame, vehicles } = await harness({ points: [A, SECOND] });
+    map.zoom = 11; // dots alone: nothing to pile up, and one dot per cluster would empty the city
+    frame();
+    expect(((vehicles().calls.at(-1) as FC).features.map((f) => f.properties.id)).sort()).toEqual(['vehicle:1', 'vehicle:2']);
+    map.zoom = 15;
+    map.fire('move');
+    for (let i = 0; i < 8; i++) frame();
+    expect((vehicles().calls.at(-1) as FC).features.map((f) => f.properties.id)).toEqual(['cluster:vehicle:1,vehicle:2']);
+  });
+
   it('vehicles() answers the model\u2019s own estimate for the lists: a position between the reports, and the facing the two fixes east made evident', async () => {
     const { handle, frame } = await harness();
     handle.update([B], [CLOSURE]);

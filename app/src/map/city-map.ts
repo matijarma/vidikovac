@@ -907,8 +907,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (!model || !m || !styled || !l || !container.isConnected) return false;
     lastDrawn = model.step(t);
     // The pills are merged against the camera of this very frame, so a mark
-    // never merges with one the reader can see is somewhere else.
-    const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+    // never merges with one the reader can see is somewhere else -- and only
+    // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
+    // dot, nothing can pile up, and merging there would empty the city of the
+    // marks that say it is moving.
+    const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
     const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId() });
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
