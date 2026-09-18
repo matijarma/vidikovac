@@ -20,11 +20,12 @@ import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
-import { clusterPills, type Cluster, type PillPoint } from '../motion/pills';
+import { clusterPills, createLineColours, type Cluster, type PillPoint } from '../motion/pills';
+import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
-import type { BasemapProfile, BasemapStyleOptions, MapTheme, StyleLayerLike, StyleOp } from './basemap';
+import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 
@@ -280,6 +281,12 @@ const SORT_BUS = 1;
 const SORT_TRAM = 2;
 const SORT_CLUSTER = 3;
 
+/** The colour ZET prints a line in, from the table the schema build writes
+ *  beside the artefact (scripts/zet-schema.mjs, F5). A route the table does
+ *  not carry -- every bus, and a tram line added between two builds -- keeps
+ *  its mode's pinned ink. */
+const lineColour = createLineColours(LINE_COLOURS.colours);
+
 /** How `vehiclesToGeoJson` is asked to merge overlapping pills. */
 export interface VehicleGeoJsonOptions {
   /** [lon, lat] to CSS px on the live camera (MapLibre's own `map.project`).
@@ -300,6 +307,13 @@ export interface VehicleGeoJsonOptions {
    *  and with the collision pass no longer thinning anything, a busy hub would
    *  pile up worse than before. */
   symbolScale?: number;
+  /** The line the map is about (F5). A cluster of several routes has no one
+   *  route id and carries '' -- which, under a selection, is every route but
+   *  the lit one, so a merged mark standing partly *on* the lit line took the
+   *  stepped-back ink of the lines it is not. Named here, a cluster with any
+   *  member on that line answers with it, and the mark reads as what it
+   *  partly is. Absent, the '' of a mixed cluster stands as before. */
+  focusedRoute?: string;
 }
 
 /** A vehicle's mark as `clusterPills` measures it: its pill's centre on screen
@@ -314,10 +328,12 @@ interface VehiclePillPoint extends PillPoint {
  *  one mode, see below), the one route id they share or none at all, the
  *  members' best alpha, and no heading, because a merged mark has no one
  *  facing and draws no direction nose. */
-function clusterToFeature(cluster: Cluster<VehiclePillPoint>): VehicleFeature {
+function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: string): VehicleFeature {
   const members = cluster.members.map((m) => m.feature);
   const kind: VehicleKind = members[0]!.properties.kind;
   const routes = new Set(members.map((f) => f.properties.routeId));
+  const routeId = routes.size === 1 ? [...routes][0]!
+    : focusedRoute !== undefined && routes.has(focusedRoute) ? focusedRoute : '';
   const lon = members.reduce((sum, f) => sum + f.geometry.coordinates[0], 0) / members.length;
   const lat = members.reduce((sum, f) => sum + f.geometry.coordinates[1], 0) / members.length;
   return {
@@ -328,7 +344,7 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>): VehicleFeature {
       icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
       kind,
       short: cluster.label,
-      routeId: routes.size === 1 ? [...routes][0]! : '',
+      routeId,
       bearing: 0,
       hasHeading: false,
       alpha: Math.max(...members.map((f) => f.properties.alpha)),
@@ -407,7 +423,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   const merged: VehicleFeature[] = [...alone];
   for (const points of byKind.values()) {
     for (const group of clusterPills(points, { selectedId })) {
-      merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group));
+      merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
   }
   return { type: 'FeatureCollection', features: merged };
@@ -614,6 +630,10 @@ export interface CityMapOptions {
   /** Which kinds of city point are lit. null, the default, lights every one;
    *  a kiosk chapter passes the subset it is about (kiosk/mapview.ts). */
   emphasis?: readonly PlaceKind[] | null;
+  /** "Only this line on the map" at creation (core/line-focus-store.ts, F5).
+   *  Absent is off -- a surface that never asks for it, the kiosk among them,
+   *  draws the whole network as before. Changed live with setLineFocus. */
+  lineFocus?: boolean;
   /** false hides the closures until setClosuresVisible(true). */
   closures?: boolean;
   /** false: no pointer or keyboard handling and no controls (a public screen). */
@@ -675,6 +695,9 @@ export interface CityMapHandle {
   setModes?(modes: ReadonlySet<number> | null): void;
   /** The kinds of city point this chapter lights; null lights every one. */
   setEmphasis?(emphasis: readonly PlaceKind[] | null): void;
+  /** "Only this line on the map": the reader's own switch, per device. A
+   *  separate name from setEmphasis, which already means city-point kinds. */
+  setLineFocus?(on: boolean): void;
   setClosuresVisible?(visible: boolean): void;
   /** The feed's own state: anything but 'live' holds every vehicle where it is (an outage is no evidence of motion) until the feed is live again. */
   setFeedState?(state: 'live' | 'stale' | 'down'): void;
@@ -872,6 +895,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let routeFollowAt = -Infinity;
   let modes: ReadonlySet<number> | null = options.modes ?? null;
   let emphasis: readonly PlaceKind[] | null = options.emphasis ?? null;
+  let lineFocus = options.lineFocus === true;
+  /** The focused route the overlays on the style were last built for, so a
+   *  vehicle arriving (or leaving) re-derives them once, not every frame. */
+  let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
@@ -910,8 +937,31 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     options.onStatus?.(next);
   }
 
-  function overlayOptions(): OverlayOptions {
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null };
+  /** The line the map is about: the selected route, or the route of the
+   *  selected or followed vehicle, read off what the model is actually
+   *  drawing. A vehicle the model has not placed yet focuses nothing -- there
+   *  is no honest answer to "which line" until it has. */
+  function focusedRouteId(): string | null {
+    if (selection?.kind === 'route') return selection.id;
+    const id = selection?.kind === 'vehicle' ? selection.id : typeof following === 'string' ? following : null;
+    if (id === null) return null;
+    return lastDrawn.find((v) => v.id === id)?.routeId ?? null;
+  }
+
+  /** The route the pills and the network are lit for: under line focus the
+   *  focused one, otherwise the selected route alone (today's rule). */
+  function litRouteId(): string | null {
+    if (lineFocus) return focusedRouteId();
+    return selection?.kind === 'route' ? selection.id : null;
+  }
+
+  function overlayOptions(p: OverlayPalette): OverlayOptions {
+    const routeId = focusedRouteId();
+    const type = routeId === null ? undefined : net?.routes.get(routeId)?.type ?? ZET_ROUTES[routeId]?.type;
+    const focus = routeId === null
+      ? null
+      : { routeId, colour: lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus, focus };
   }
 
   /** The vehicle the clustering must leave standing: the selected one, or the
@@ -930,13 +980,17 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const m = map;
     if (!model || !m || !styled || !l || !container.isConnected) return false;
     lastDrawn = model.step(t);
+    // The selected vehicle's line becomes knowable the moment the model first
+    // places it, and stops being so when it goes quiet: one re-derive on the
+    // change, never a styleDiff per frame.
+    if (focusedRouteId() !== focusedApplied) applyOverlays();
     // The pills are merged against the camera of this very frame, so a mark
     // never merges with one the reader can see is somewhere else -- and only
     // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
     // dot, nothing can pile up, and merging there would empty the city of the
     // marks that say it is moving.
     const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId(), symbolScale: scale });
+    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId(), symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
     const changed = signature !== lastPushedSignature;
@@ -1132,7 +1186,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
-    overlays = l.overlayLayers(l.overlayPalette(theme), overlayOptions());
+    overlays = l.overlayLayers(l.overlayPalette(theme), overlayOptions(l.overlayPalette(theme)));
+    focusedApplied = focusedRouteId();
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     styled = true;
@@ -1379,9 +1434,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function applyOverlays(): void {
     const l = lib;
     if (!map || !styled || !l) return;
-    const next = l.overlayLayers(l.overlayPalette(theme), overlayOptions());
+    const next = l.overlayLayers(l.overlayPalette(theme), overlayOptions(l.overlayPalette(theme)));
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
+    focusedApplied = focusedRouteId();
   }
 
   /** Selects (or clears with null) and marks it on the map; `fit` moves the camera to it. */
@@ -1601,6 +1657,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setEmphasis,
+    setLineFocus(on) {
+      if (on === lineFocus) return;
+      lineFocus = on;
+      applyOverlays();
+    },
     setClosuresVisible(visible) {
       closuresVisible = visible;
       applyOverlays();

@@ -266,12 +266,13 @@ export function closureWidth(selectedId: string | null, base: number): Expr {
 }
 
 export const NETWORK_OPACITY: Expr = zoomInterpolate(10, 0.4, 14, 0.55, 17, 0.7);
-/** The rest of the network while one route is selected. */
+/** The rest of the network while one route is selected and line focus is off
+ *  (on, the other lines are hidden outright, not faded). */
 export const NETWORK_OPACITY_DIMMED = 0.14;
-/** The other routes' vehicles while one route is selected: still there, stepped back like their lines. */
+/** The other routes' vehicles while one line is lit: still there, stepped back like their lines. */
 export const VEHICLE_OPACITY_DIMMED = 0.35;
 
-/** A vehicle's opacity: its confidence, and a step back for every other route while one is selected. */
+/** A vehicle's opacity: its confidence, and a step back for every other route while one line is lit. */
 export function vehicleOpacity(selectedRoute: string | null): Expr {
   return selectedRoute === null ? ['get', 'alpha'] : ['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], selectedRoute], 1, VEHICLE_OPACITY_DIMMED]];
 }
@@ -328,6 +329,21 @@ export interface OverlayOptions {
    *  because the 30 px anchor label already does and the two stacked at
    *  Jelačić (R-KP25). */
   screenStopId?: string | null;
+  /** The line the map is about and the colour ZET prints it in (F5 section C):
+   *  the selected route, or the route of the selected/followed vehicle, which
+   *  city-map.ts resolves from what the model is drawing. Its colour comes
+   *  from the build's own table (data/zet-line-colours.json), with the mode's
+   *  pinned ink as the fallback for a route the table does not carry. Null
+   *  means nothing is in focus -- nothing is selected, or the selected vehicle
+   *  has not been drawn yet. */
+  focus?: { routeId: string; colour: string } | null;
+  /** The reader's "only this line" switch (core/line-focus-store.ts), off by
+   *  default here: a surface that never asks for it (the kiosk) draws the
+   *  whole network exactly as before. On, and with a `focus`, the rest of the
+   *  network is hidden rather than dimmed -- a line nobody asked about is not
+   *  a quieter line, it is one the reader is not looking for -- while every
+   *  pill still draws, so no tram ever disappears from the map. */
+  lineFocus?: boolean;
 }
 
 /** A pill layer. Overlap and ignore-placement are on for both the capsule and
@@ -458,19 +474,33 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
   const selectedRoute = sel?.kind === 'route' ? sel.id : null;
-  const alpha = vehicleOpacity(selectedRoute);
-  const inks = pillInks(p, selectedRoute);
+  // Line focus, once the switch is on and something is in focus: the one line
+  // is what the map draws, whether the reader asked for it by number or by
+  // tapping a tram on it. Off, the focus is still handed in (the selected
+  // route's own colour), but it changes nothing but that colour.
+  const focus = (options.lineFocus === true ? options.focus : null) ?? null;
+  /** The route the pills, the dots and the network layer are about. */
+  const litRoute = focus?.routeId ?? selectedRoute;
+  const alpha = vehicleOpacity(litRoute);
+  const inks = pillInks(p, litRoute);
   const filters = selectionFilters(sel);
+  /** The lit line's own geometry: the selection's, or the focused route's under a vehicle. */
+  const litLine: Expr = litRoute ? ['==', ['get', 'route'], litRoute] : NEVER;
+  /** The colour it is drawn in: ZET's own where the build's table knows the route, the mode's ink otherwise. */
+  const litColour: string | Expr = options.focus && options.focus.routeId === litRoute
+    ? options.focus.colour
+    : ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other];
   const kinds = vehicleKinds(modes);
   const round = { 'line-cap': 'round', 'line-join': 'round' };
   const visible = (on: boolean): Record<string, unknown> => ({ visibility: on ? 'visible' : 'none' });
   const closures = visible(options.closuresVisible !== false);
-  const dimmed = sel?.kind === 'route';
+  /** Under line focus the plain network is gone, not faded, so 0.14 never applies. */
+  const dimmed = focus === null && sel?.kind === 'route';
   // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
   const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
   /** A network is drawn for its mode when the modes admit it and, on the public screen, when the option set names it. */
-  const drawn = (kind: 'tram' | 'bus'): boolean => kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));
+  const drawn = (kind: 'tram' | 'bus'): boolean => focus === null && kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));
   const network = (id: string, kind: 'tram' | 'bus', color: string, width: Expr, opacity: Expr | number = NETWORK_OPACITY): StyleLayerLike => ({
     id,
     type: 'line',
@@ -538,8 +568,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     },
     network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.45, 13, 0.85, 16, 1.9)),
     tramNetwork,
-    { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelectedCasing], layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },
-    { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelected], layout: round, paint: { 'line-color': ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other], 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
+    { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },
+    { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': litColour, 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
     { id: LAYERS.closures, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closure, 'line-width': closureWidth(selectedClosure, 4) } },
     // A point with no `place` is the plain circle this map has always drawn:

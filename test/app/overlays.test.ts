@@ -3,9 +3,12 @@ import { OVERLAY_DARK, OVERLAY_LIGHT, basemapLayers, styleDiff } from '../../app
 import {
   BELOW_LABELS,
   LAYERS,
+  NETWORK_OPACITY,
+  NETWORK_OPACITY_DIMMED,
   NEVER,
   NOSE_MAX_ZOOM,
   NOSE_MIN_ZOOM,
+  VEHICLE_OPACITY_DIMMED,
   PILL_IMAGE_PREFIX,
   PILL_ZOOM,
   PLACE_FILTERS,
@@ -238,6 +241,29 @@ describe('filters and the selection', () => {
       expect(pillInks(p, '6').halo).toEqual(['case', ['==', ['get', 'routeId'], '6'], p.halo, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]);
       expect(lit.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, 0.35]]);
     }
+  });
+
+  it('line focus hides the rest of the network instead of dimming it and paints the one line in its ZET colour, every other pill still drawn and inverted; switched off, the network dims as before and the selected route keeps that colour', () => {
+    const focus = { routeId: '6', colour: '#cc706f' };
+    // The focused route may come from a vehicle, which on its own lights nothing.
+    const on = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: true });
+    for (const id of [LAYERS.networkTram, LAYERS.networkBus]) expect(on.find((l) => l.id === id)!.layout!.visibility, id).toBe('none');
+    const selected = on.find((l) => l.id === LAYERS.networkSelected)!;
+    expect(selected.filter).toEqual(['==', ['get', 'route'], '6']);
+    expect(selected.paint!['line-color']).toBe('#cc706f');
+    expect(on.find((l) => l.id === LAYERS.networkSelectedCasing)!.filter).toEqual(['==', ['get', 'route'], '6']);
+    // Every pill still draws; the ones off the line invert, as under a route selection.
+    expect(on.find((l) => l.id === LAYERS.vehicles)!.paint!['icon-color']).toEqual(pillInks(OVERLAY_LIGHT, '6').fill);
+    expect(on.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, VEHICLE_OPACITY_DIMMED]]);
+
+    const off = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'route', id: '6' }, focus, lineFocus: false });
+    expect(off.find((l) => l.id === LAYERS.networkTram)!.layout!.visibility).toBe('visible');
+    expect(off.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toBe(NETWORK_OPACITY_DIMMED);
+    expect(off.find((l) => l.id === LAYERS.networkSelected)!.paint!['line-color']).toBe('#cc706f');
+    // A vehicle with the switch off is what it always was: nothing emphasised.
+    const plain = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: false });
+    expect(plain.find((l) => l.id === LAYERS.networkSelected)!.filter).toEqual(NEVER);
+    expect(plain.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toEqual(NETWORK_OPACITY);
   });
 });
 // Four rules the product will not draw without. Two of them live where

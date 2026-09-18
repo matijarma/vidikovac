@@ -660,6 +660,31 @@ describe('selection and status', () => {
     expect(map.layout['closures']?.visibility).toBe('none');
   });
 
+  it('line focus follows the selected vehicle to its line: the network hides, the route draws in its ZET colour, and a cluster with a member on it is that line’s mark', async () => {
+    const LINE_COLOURS: Record<string, string> = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/src/data/zet-line-colours.json'), 'utf8')).colours;
+    const { map, handle, frame } = await harness({ loadNetwork: async () => NET, extra: { lineFocus: true } });
+    frame(); // the vehicle has to be drawn before its route can be focused
+    handle.select!({ kind: 'vehicle', id: 'vehicle:1' });
+    expect(map.layout['network-tram']?.visibility).toBe('none');
+    expect(map.layout['network-bus']?.visibility).toBe('none');
+    expect(map.filters['network-selected']).toEqual(['==', ['get', 'route'], '6']);
+    expect(map.paint['network-selected']?.['line-color']).toBe(LINE_COLOURS['6']);
+    // Off again: the whole network is back, and nothing but a route selection lights a line.
+    handle.setLineFocus!(false);
+    expect(map.layout['network-tram']?.visibility).toBe('visible');
+    expect(map.filters['network-selected']).toEqual(overlays.NEVER);
+
+    // F2 left a mixed cluster with routeId '' -- it took the inverted ink under
+    // the very route it carries. A member on the focused line now names it.
+    const tram = (id: string, short: string, lon: number): Drawn =>
+      ({ id, type: 0, routeId: short, short, p: toPlane(lon, 45.81), heading: null, speed: 0, confidence: 1, onShape: null });
+    const drawn = [tram('a', '6', 15.97), tram('b', '11', 15.971)];
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    expect(vehiclesToGeoJson(drawn, { project }).features[0]!.properties.routeId).toBe('');
+    expect(vehiclesToGeoJson(drawn, { project, focusedRoute: '11' }).features[0]!.properties.routeId).toBe('11');
+    expect(vehiclesToGeoJson(drawn, { project, focusedRoute: '2' }).features[0]!.properties.routeId).toBe('');
+  });
+
   it('a tap picks a vehicle over a stop over a closure, reports it through onSelect, and Escape on the map clears it', async () => {
     const { map, handle, container, selections } = await harness();
     map.rendered = [{ layer: { id: 'stops' }, properties: { id: '1_21', name: 'Kvaternikov trg' } }, { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1' } }];
