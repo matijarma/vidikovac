@@ -81,8 +81,9 @@ export interface Matcher {
   priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior;
   /** Pushes the fix into the track and matches it; returns the new match. */
   matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null): Match;
-  /** Stops strictly between two arcs of a geometry key (`p<path>` or `b<shape>`), for the speed estimate. */
-  stopsBetween(key: string, fromS: number, toS: number): number;
+  /** Stops strictly between two arcs of a geometry key (`p<path>` or
+   *  `b<shape>`), by id, for the speed estimate's per-stop dwell charge. */
+  stopsBetween(key: string, fromS: number, toS: number): string[];
 }
 
 interface Candidate {
@@ -412,19 +413,19 @@ export function createMatcher(net: GraphNetwork): Matcher {
     }
   }
 
-  function stopsBetween(key: string, fromS: number, toS: number): number {
+  function stopsBetween(key: string, fromS: number, toS: number): string[] {
     const idx = Number(key.slice(1));
-    if (!Number.isFinite(idx)) return 0;
-    if (key.startsWith('p')) return net.stopsOnPath(idx).filter((entry) => entry.s > fromS && entry.s < toS).length;
-    let count = 0;
+    if (!Number.isFinite(idx)) return [];
+    if (key.startsWith('p')) return net.stopsOnPath(idx).filter((entry) => entry.s > fromS && entry.s < toS).map((entry) => entry.stop.id);
+    const out: string[] = [];
     let cursor = fromS;
     for (;;) {
       const next = net.nextStop(idx, cursor);
       if (!next || next.s >= toS) break;
-      count++;
+      out.push(next.stop.id);
       cursor = next.s;
     }
-    return count;
+    return out;
   }
 
   return {

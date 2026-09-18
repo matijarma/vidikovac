@@ -164,8 +164,14 @@ export function runTick(input: TickInput): TickResult {
   const hindsightSign = emptySignCounts();
   if (engine) {
     const bands = zagrebBands(headerSec);
+    // What a stop is expected to hold a vehicle for: the learned median where
+    // it is thick, the timetable's where it is not, the planner's default
+    // otherwise. The speed estimator charges it per stop (F8) rather than a
+    // flat 20 s, and the learner prices its dwell samples with the same
+    // number, so the two never disagree about one platform.
+    const dwellOf = (stopId: string): number => engine.times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
     for (const track of all) {
-      track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween });
+      track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween, dwellOf });
       const update = track.tripId !== null ? tripUpdates[track.tripId] : undefined;
       const next: NextStopUpdate | null = update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec } : null;
       buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands);
@@ -174,7 +180,6 @@ export function runTick(input: TickInput): TickResult {
     // What this tick's fresh fixes teach (C1): cruise per edge, standing per
     // stop, each traversal or dwell once, counted into the pending aggregates
     // the Durable Object flushes once a minute.
-    const dwellOf = (stopId: string): number => engine.times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
     const travelOf = (pathIdx: number, fromS: number, toS: number, atSec: number): number | null => {
       const at = zagrebBands(atSec);
       return engine.learnedOnly.segmentSeconds(pathIdx, fromS, toS, at.hourBand, at.dayType);
