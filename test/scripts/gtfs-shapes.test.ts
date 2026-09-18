@@ -386,7 +386,7 @@ describe('the committed artefact', () => {
   // raw, 135,611 B gzip on the same feed -- 8 % and 8 % more, still 12 % and
   // 12 % inside the v2 pins, which therefore stand rather than being loosened
   // to fit what was just measured. F8b adds the seven synthetic paths the
-  // 40 m router could not build: 581,140 B raw, 136,406 B gzip -- another
+  // 40 m router could not build: 581,140 B raw, 136,408 B gzip -- another
   // 0.8 %, and still 11 % inside both pins, which again stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
@@ -476,9 +476,10 @@ describe('the committed artefact', () => {
     // (TERMINUS_TRIM_STOPS) and each still reaches a path that is a contiguous
     // run of its own stops, which is what the timetable mapping asks for.
     expect(withoutExact.map((p: any) => `${p.route}/${p.direction}(${p.stops.length})`)).toEqual(['1/0(14)', '1/1(15)', '1/1(9)']);
+    const SEP = '>'; // no stop id contains it, so a run of the joined text is a run of whole ids
     for (const pattern of withoutExact) {
       const runs = net.paths.filter((p) => p.shape === null && p.route === pattern.route && p.direction === pattern.direction)
-        .filter((p) => pattern.stops.join('').includes((p.stops ?? []).join('')));
+        .filter((p) => pattern.stops.join(SEP).includes((p.stops ?? []).join(SEP)));
       expect(runs.map((p) => p.id), `pattern ${pattern.route}/${pattern.direction}`).toHaveLength(1);
     }
     // Every one of the 52 reaches a path, and its own stops in order.
