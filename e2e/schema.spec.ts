@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
 import { APP_URL, provisionKiosk } from './helpers';
-import { schemaSnapshot } from './schema-fixtures';
+import { schemaSnapshot, TWO_TRAM_PATH_ROUTE, twoTramSnapshot } from './schema-fixtures';
 
 test('the transport switch draws moving trams on the SVG diagram and restores the city map', async ({ page }) => {
   const snapshots = await experienceSnapshots();
@@ -105,3 +105,69 @@ test('a kiosk keeps the schema setting through provisioning URL cleanup', async 
   expect(new URL(page.url()).hash).toBe('');
   expect(requested.some(u => /maplibre-(entry|gl-worker)/.test(u))).toBe(false);
 });
+
+// Round F on the diagram (F3 pills, F4 names and terminals), read through the
+// three attributes the schema renderer writes beside its long-standing
+// `data-labels`/`data-scale`/`data-frames`: `data-pills` (the label of every
+// pill the vehicle canvas just painted), `data-names` (the names the
+// collision pass placed on the last static repaint) and `data-chips` (the
+// terminal chips under them). See the comments at their write sites in
+// app/src/motion/schema-map.ts.
+test('the diagram paints numbered pills, names that give way and come back, and a terminal that ends in chips', async ({ page }) => {
+  const snapshots = await experienceSnapshots();
+  // Both trams on the diagram: the placer puts a tram on the schema line its
+  // own route names (shared/motion/schema.ts), so the pair reports the path's
+  // own line rather than the city map's two different numbers.
+  snapshots['zet-rt'] = twoTramSnapshot(FIXTURE_NOW.getTime(), [TWO_TRAM_PATH_ROUTE, TWO_TRAM_PATH_ROUTE]);
+  await installExperienceFixture(page, snapshots);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => localStorage.setItem('kajima:map-mode:v1', 'schema'));
+  await page.goto(FIXTURE_DASHBOARD.replace('#', '#layer=u-pokretu&'));
+  const canvas = page.getByTestId('schema-vehicles');
+  const diagram = page.getByTestId('schema-map');
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(2);
+  await page.clock.runFor(1000);
+
+  // At the whole-network fit the diagram is below the scale a name can be
+  // read at, so nothing is lettered: F4's pass draws none rather than all.
+  await expect(diagram).toHaveAttribute('data-labels', 'false');
+  await expect(diagram).toHaveAttribute('data-names', '0');
+  await expect(diagram).toHaveAttribute('data-chips', '0');
+
+  // Past the threshold, and on the pair: picking the line and then one of its
+  // trams in the sheet centres the diagram on that tram at no less than the
+  // scale a name is readable at (schema-map.ts fit('selection')), so the
+  // zooms below keep both marks under the middle of the canvas.
+  await page.getByTestId('transport-search').fill(TWO_TRAM_PATH_ROUTE);
+  await page.locator(`[data-action=select-route][data-id="${TWO_TRAM_PATH_ROUTE}"]`).first().click();
+  await page.locator('[data-testid=route-vehicles] button').first().click();
+  await page.clock.runFor(200);
+  await expect(diagram).toHaveAttribute('data-labels', 'true');
+  const near = await count(page, 'names');
+  expect(near, 'names begin at LABEL_MIN_PX_PER_UNIT').toBeGreaterThan(0);
+  expect(await count(page, 'chips'), 'a terminal in frame ends in numbered chips').toBeGreaterThan(0);
+
+  // The pills themselves: every mark on the vehicle canvas carries its line's
+  // number, whether it is one tram's pill or the pair merged into one.
+  const pills = ((await diagram.getAttribute('data-pills')) ?? '').split('|').filter(Boolean);
+  expect(pills.length, 'the pair is on the canvas').toBeGreaterThan(0);
+  for (const label of pills) expect(label).toContain(TWO_TRAM_PATH_ROUTE);
+
+  // Deeper in, the pass lets more names through: one skipped for want of room
+  // comes back on zoom-in, which is the whole point of F4's collision pass
+  // replacing the old all-or-nothing threshold.
+  await canvas.focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('+');
+  await page.clock.runFor(200);
+  expect(await count(page, 'names')).toBeGreaterThan(near);
+  expect(((await diagram.getAttribute('data-pills')) ?? '').split('|').filter(Boolean).length,
+    'the pair is still on the canvas at the deeper zoom').toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+/** One of the schema's counted attributes as a number. */
+async function count(page: import('@playwright/test').Page, name: 'names' | 'chips'): Promise<number> {
+  return Number((await page.getByTestId('schema-map').getAttribute(`data-${name}`)) ?? '-1');
+}
