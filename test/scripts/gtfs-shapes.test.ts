@@ -12,6 +12,7 @@ import {
   PATH_KEYS,
   ROUTE_KEYS,
   SCALE,
+  SERVED_STOP_MAX_METRES,
   SHAPE_KEYS,
   SNAP_METRES,
   STOP_KEYS,
@@ -23,6 +24,7 @@ import {
   decodeStopOnEdge,
   fromColumnar,
   main,
+  pathThroughStops,
   stopSequenceHash,
   toMetres,
 } from '../../scripts/gtfs-shapes.mjs';
@@ -383,7 +385,9 @@ describe('the committed artefact', () => {
   // Version 3 (F8) adds the served lists and the terminal flags: 576,279 B
   // raw, 135,611 B gzip on the same feed -- 8 % and 8 % more, still 12 % and
   // 12 % inside the v2 pins, which therefore stand rather than being loosened
-  // to fit what was just measured.
+  // to fit what was just measured. F8b adds the seven synthetic paths the
+  // 40 m router could not build: 581,140 B raw, 136,406 B gzip -- another
+  // 0.8 %, and still 11 % inside both pins, which again stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -433,7 +437,7 @@ describe('the committed artefact', () => {
     // platforms its own trips call at, and that list is a strict, arc-ordered
     // subset of what lies geometrically on its edges.
     const tramPaths = net.paths.filter((p) => net.routes.get(p.route)?.type === 0);
-    expect(tramPaths).toHaveLength(145);
+    expect(tramPaths).toHaveLength(152);
     for (const path of tramPaths) {
       const idx = net.paths.indexOf(path);
       expect(path.served?.length, `path ${path.id} has no served list`).toBeGreaterThan(1);
@@ -448,5 +452,141 @@ describe('the committed artefact', () => {
     expect(terminals.length).toBe(464);
     expect(terminals.length).toBeLessThan(net.stops.length / 2);
     expect(net.stops.find((s) => s.name === 'Trg bana J. Jelačića')!.terminal).toBe(false);
+  });
+
+  // F8b: no shapeless tram pattern is left without rails of its own. Before
+  // it, seven patterns of routes 2, 5 and 13 (13/0 with 356 trips a day, 13/1
+  // with 384, 5/1 with 162, 2/1 with 150) had no synthetic path at all, so
+  // their trips were matched onto whichever path of the route happened to lie
+  // nearest and planned by another pattern's timetable.
+  it('gives every shapeless tram pattern of the trip index a synthetic path over its own stops', () => {
+    const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
+    const index: any = JSON.parse(readFileSync(resolve(process.cwd(), 'app/public/data/zet-trips.json'), 'utf8'));
+    expect(index.feedVersion).toBe(net.feedVersion);
+    const tramRouteIds = new Set([...net.routes.entries()].filter(([, r]) => r.type === 0).map(([id]) => id));
+    const patterns = index.patterns.route
+      .map((route: string, i: number) => ({ route, direction: index.patterns.direction[i], shape: index.patterns.shape[i], stops: index.patterns.stops[i] as string[], trips: index.patterns.trips[i] }))
+      .filter((p: any) => p.shape === '' && tramRouteIds.has(p.route));
+    expect(patterns).toHaveLength(52);
+
+    const exactByStops = new Map(net.paths.filter((p) => p.shape === null).map((p) => [`${p.route}|${p.direction}|${(p.stops ?? []).join(',')}`, p] as const));
+    const withoutExact = patterns.filter((p: any) => !exactByStops.has(`${p.route}|${p.direction}|${p.stops.join(',')}`));
+    // The only three left are line 1's, where the rails past Zapadni kolodvor
+    // are drawn by no shape in the feed at all: the builder trims that stretch
+    // (TERMINUS_TRIM_STOPS) and each still reaches a path that is a contiguous
+    // run of its own stops, which is what the timetable mapping asks for.
+    expect(withoutExact.map((p: any) => `${p.route}/${p.direction}(${p.stops.length})`)).toEqual(['1/0(14)', '1/1(15)', '1/1(9)']);
+    for (const pattern of withoutExact) {
+      const runs = net.paths.filter((p) => p.shape === null && p.route === pattern.route && p.direction === pattern.direction)
+        .filter((p) => pattern.stops.join('').includes((p.stops ?? []).join('')));
+      expect(runs.map((p) => p.id), `pattern ${pattern.route}/${pattern.direction}`).toHaveLength(1);
+    }
+    // Every one of the 52 reaches a path, and its own stops in order.
+    for (const pattern of patterns) {
+      const exact = exactByStops.get(`${pattern.route}|${pattern.direction}|${pattern.stops.join(',')}`);
+      if (!exact) continue;
+      expect(exact.stops, `pattern ${pattern.route}/${pattern.direction}`).toEqual(pattern.stops);
+      const idx = net.paths.indexOf(exact);
+      expect(net.stopsOnPath(idx).map((e) => e.stop.id), `served of ${exact.id}`).toEqual(pattern.stops);
+    }
+  });
+});
+
+// F8b: the synthetic-path router over a miniature of the case that defeated
+// it on feed 000395. Two tracks of one line run 7.8 m apart; the platform in
+// the middle sits 39 m from the rail of the OTHER direction and 46.8 m from
+// its own. At the 40 m geometric radius the only rail it reaches is the one
+// it is not served from, and no chain exists; at SERVED_STOP_MAX_METRES it
+// reaches its own and the chain is the obvious one. That is Olipska 251_2
+// (39.4 m from the eastbound rail, 42.8 m from the westbound one it is
+// served from), which left seven patterns of routes 2, 5 and 13 pathless.
+const MINI_NORTH_X = 0;
+const MINI_SOUTH_X = 10; // 7.8 m east: past SNAP_METRES, so the two tracks stay separate edges
+const MINI_Y_END = 180; // ~200 m
+const MINI_MID_X = 60; // 46.8 m from the north track, 39.0 m from the south one
+const miniLonLat = (x: number, y: number) => ({ lon: ORIGIN[0] + x * SCALE, lat: ORIGIN[1] + y * SCALE });
+/** An edge's own polyline, in the metre plane, straight off the wire. */
+const edgePoints = (net: any, edge: number): { x: number; y: number }[] =>
+  decodeEdgeChain(edgesOf(net).map((e: any) => e.d))[edge].map(([x, y]: [number, number]) => toMetres(ORIGIN[0] + x * SCALE, ORIGIN[1] + y * SCALE));
+const MINI_STOPS = [
+  { id: 'M_a', name: 'Pocetak', ...miniLonLat(MINI_NORTH_X, 0) },
+  { id: 'M_mid', name: 'Olipska (mala)', ...miniLonLat(MINI_MID_X, 90) },
+  { id: 'M_off', name: 'Izvan tracnica', ...miniLonLat(520, 90) }, // ~406 m east of both tracks
+  { id: 'M_c', name: 'Kraj', ...miniLonLat(MINI_NORTH_X, MINI_Y_END) },
+];
+
+/** The mini feed: route MR draws both tracks, route MS runs them with no
+ *  shape_id, so its pattern needs a synthetic path. `withOffRails` puts a
+ *  stop 406 m from every rail in the middle of that pattern. */
+function makeMiniZip(opts: { withOffRails?: boolean } = {}): Uint8Array {
+  const shapeRows = [
+    ...[0, 90, MINI_Y_END].map((y, i) => `MR_north,${miniLonLat(MINI_NORTH_X, y).lat},${miniLonLat(MINI_NORTH_X, y).lon},${i + 1},\n`),
+    ...[MINI_Y_END, 90, 0].map((y, i) => `MR_south,${miniLonLat(MINI_SOUTH_X, y).lat},${miniLonLat(MINI_SOUTH_X, y).lon},${i + 1},\n`),
+  ].join('');
+  const called = opts.withOffRails ? ['M_a', 'M_mid', 'M_off', 'M_c'] : ['M_a', 'M_mid', 'M_c'];
+  return makeZip([
+    { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nMR,0,"90","Mali s oblikom",,0,,,\nMS,0,"91","Mali bez oblika",,0,,,\n', method: 8 },
+    { name: 'trips.txt', data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\nMR,wd,mr_n,,,0,,MR_north\nMR,wd,mr_s,,,1,,MR_south\nMS,wd,ms_1,,,0,,\n', method: 8 },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${shapeRows}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + MINI_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    {
+      name: 'stop_times.txt',
+      data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
+        called.map((id, i) => `ms_1,0${8 + i}:00:00,0${8 + i}:00:00,${id},${i + 1},,,\n`).join(''),
+      method: 8,
+    },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('the synthetic-path router', () => {
+  it('routes a hop the 40 m links cannot, over the served radius, and refuses a stop no rail reaches unless the overrides allow it', async () => {
+    const net = await buildNetwork(makeMiniZip(), { diagramBusCount: 0 });
+    const stops = stopsOf(net);
+    const byId = Object.fromEntries(stops.map((s: any) => [s.id, s]));
+    const shapes = shapesOf(net);
+    const north = shapes.find((s: any) => s.id === 'MR_north').e[0];
+    const south = shapes.find((s: any) => s.id === 'MR_south').e[0];
+    expect(north).not.toBe(south);
+
+    // The 40 m picture the wire carries: the middle platform reaches ONLY the
+    // rail of the other direction. Its own is 46.8 m away, inside the served radius.
+    expect(byId.M_mid.onEdge.map(([e]: [number, number]) => e)).toEqual([south]);
+    expect(distanceToPolyline(toMetres(MINI_STOPS[1].lon, MINI_STOPS[1].lat), edgePoints(net, north))).toBeGreaterThan(STOP_SHAPE_MAX_METRES);
+    expect(distanceToPolyline(toMetres(MINI_STOPS[1].lon, MINI_STOPS[1].lat), edgePoints(net, north))).toBeLessThan(SERVED_STOP_MAX_METRES);
+
+    // The path exists all the same, over the north track, and serves all three stops.
+    const [path] = pathsOf(net);
+    expect(path).toMatchObject({ route: 'MS', dir: 0, e: [north], stops: ['M_a', 'M_mid', 'M_c'] });
+    expect(path.served.map(([i]: [number, number]) => stops[i].id)).toEqual(['M_a', 'M_mid', 'M_c']);
+
+    // The same router over the same graph, handed the 40 m links, has no chain:
+    // the middle stop's only rail runs the other way.
+    const edgeUnits = decodeEdgeChain(edgesOf(net).map((e: any) => e.d));
+    const edgesRaw = edgesOf(net);
+    const lens = edgeUnits.map((units: [number, number][]) => polylineLength(units.map(([x, y]) => toMetres(ORIGIN[0] + x * SCALE, ORIGIN[1] + y * SCALE))));
+    const outgoing = new Map<number, number[]>();
+    edgesRaw.forEach((e: any, idx: number) => outgoing.set(e.from, [...(outgoing.get(e.from) ?? []), idx]));
+    const asLinks = (stop: any) => stop.onEdge.map(([edge, metres]: [number, number]) => ({ edge, s: metres }));
+    const at40 = [asLinks(byId.M_a), asLinks(byId.M_mid), asLinks(byId.M_c)];
+    expect(() => pathThroughStops(edgesRaw, outgoing, lens, at40, 'mini')).toThrow(/no route over the rail graph/);
+    // With its own rail in reach the chain is the north track, end to end.
+    const at60 = [at40[0], [...at40[1], { edge: north, s: lens[north] / 2 }], at40[2]];
+    expect(pathThroughStops(edgesRaw, outgoing, lens, at60, 'mini')).toEqual([north]);
+
+    // A stop no rail reaches within the served radius stops the build by name,
+    // and says where to allow it if that is really right.
+    await expect(buildNetwork(makeMiniZip({ withOffRails: true }), { diagramBusCount: 0 })).rejects.toThrow(
+      new RegExp(`M_off.*Izvan tracnica.*${SERVED_STOP_MAX_METRES} m.*gtfs-shapes-overrides\.json`),
+    );
+    // Allowlisted, the build routes past it: the path neither runs to it nor serves it.
+    const allowed = await buildNetwork(makeMiniZip({ withOffRails: true }), {
+      diagramBusCount: 0,
+      overrides: { unreachableStops: [{ id: 'M_off', name: 'Izvan tracnica', reason: 'Test: a platform off every drawn rail.' }] },
+    });
+    expect(pathsOf(allowed)[0].stops).toEqual(['M_a', 'M_mid', 'M_c']);
+    expect(allowed.report.unreachableAllowed).toEqual([
+      { path: expect.stringContaining('path:MS:0:'), route: 'MS', stop: 'M_off', name: 'Izvan tracnica', reason: 'Test: a platform off every drawn rail.' },
+    ]);
   });
 });

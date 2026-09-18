@@ -28,16 +28,17 @@ describe('the timetable over the committed artefacts', () => {
   it('maps every pattern to its own path and gives every tram path segments', () => {
     expect(net.feedVersion).toBe(index.feedVersion);
     const mapping = mapPatternsToPaths(net, index);
-    // Every shapeless pattern reaches a path of its own but one, which its
-    // route and direction has no synthetic path for at all (the builder could
-    // route none through its stops), and one which fell through to the route
-    // and direction's first -- the behaviour every shapeless pattern had.
+    // Every shapeless pattern now reaches a path of its own: nothing is left
+    // guessing (firstOfRouteAndDirection) or unmapped. Before F8b the seven
+    // patterns of routes 2, 5 and 13 whose stops the 40 m router could not
+    // chain counted 6 unmapped and 1 guessed. The three trimmed are line 1's,
+    // whose rails past Zapadni kolodvor no shape in the feed draws.
     expect(mapping.report).toEqual({
       byShape: 100,
-      exact: 42,
+      exact: 49,
       trimmed: 3,
-      firstOfRouteAndDirection: 1,
-      unmapped: 6,
+      firstOfRouteAndDirection: 0,
+      unmapped: 0,
       nonTram: 450,
     });
     // A pattern and its path must agree on route and direction.
@@ -51,18 +52,19 @@ describe('the timetable over the committed artefacts', () => {
 
     const times = scheduleTimes(net, index);
     const tram = net.paths.map((p, i) => [p, i] as const).filter(([p]) => net.routes.get(p.route)?.type === 0);
-    expect(tram).toHaveLength(145);
+    expect(tram).toHaveLength(152);
     const withSegments = tram.filter(([, i]) => hasSegments(times, i));
     const without = tram.filter(([, i]) => !hasSegments(times, i)).map(([p]) => p.id);
-    expect(times.report.pathsWithSegments).toBe(145);
+    expect(times.report.pathsWithSegments).toBe(152);
     expect(without, 'tram paths the timetable says nothing about').toEqual([]);
-    expect(withSegments).toHaveLength(145);
+    expect(withSegments).toHaveLength(152);
     expect(times.report.unusable).toBe(0);
-    // Four patterns name a stop their path cannot place -- line 1's trimmed
+    // Three patterns name a stop their path cannot place -- line 1's trimmed
     // off-graph terminus stretches. The segment spanning such a stop carries
     // its time, so those paths keep their timetable rather than losing it.
-    // (Olipska accounted for the other nine until the served radius grew to
-    // SERVED_STOP_MAX_METRES; a stop stop_times say is served is served.)
-    expect(times.report.clipped).toBe(4);
+    // (Olipska accounted for another nine until the served radius grew to
+    // SERVED_STOP_MAX_METRES; the fourth was the route-13 pattern that used to
+    // be handed a sibling path and now has its own, F8b.)
+    expect(times.report.clipped).toBe(3);
   });
 });
