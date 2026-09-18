@@ -40,7 +40,7 @@
 import { createInflateRaw } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -49,6 +49,9 @@ import { compareRouteIds, extractEntry, localFileDataOffset, parseCsv, readZipEn
 export const GTFS_URL = 'https://www.zet.hr/gtfs-scheduled/latest';
 export const OUTPUT_PATH = 'app/public/data/zet-network.json';
 export const META_OUTPUT_PATH = 'app/src/motion/network-meta.ts';
+// Build-time overrides, read from the script's own directory: the allowlist
+// of platforms the rail graph cannot reach (see the file's own _comment).
+export const OVERRIDES_PATH = 'scripts/gtfs-shapes-overrides.json';
 
 /** The wire version shared/motion/network.ts decodes; a cached version 2
  *  artefact must fail loudly there, never be misread. */
@@ -102,6 +105,21 @@ export const TERMINUS_STOP_MAX_METRES = 200;
 // there are drawn by no shape at all: one terminus and the stop after it,
 // which is how far line 1 runs on its own rails out of Zapadni kolodvor.
 export const TERMINUS_TRIM_STOPS = 2;
+// A hop between two consecutive stops of a shapeless pattern should run about
+// the way the street does. Over feed 000395's 984 such hops the routed chain
+// is at most 1.78x the straight line between the two platforms and at most
+// 189 m longer than it; the nine that come out 4.2 to 6.4x and 1.5 to 2.7 km
+// longer are all one thing -- the rail graph has no node where the line
+// turns, because no shape in the feed draws that turn, so the router goes the
+// long way round (Botanicki vrt to Zrinjevac on six paths of routes 6, 9 and
+// 17, which is how the artefact has stood since F8, and Subiceva to Trg
+// zrtava fasizma on three of route 13, where Subiceva street crosses Kralja
+// Zvonimira mid-edge and only the night line's two shapes draw the corridor).
+// The build REPORTS those hops by name -- the honest measure of what the
+// feed's shapes fail to draw -- and does not fail on them: the alternative is
+// the pathless pattern this task exists to end.
+export const HOP_DETOUR_FACTOR = 2; // past twice the straight line...
+export const HOP_DETOUR_EXCESS_METRES = 500; // ...and past half a kilometre longer
 // The diagram's second simplification pass, after the octilinear snap.
 export const DIAGRAM_SIMPLIFY_METRES = 120;
 
@@ -923,11 +941,15 @@ function routeBetween(edges, outgoing, lens, sources, targets) {
 
 /** The edge sequence visiting `stopLinks` (one array of {edge, s} candidates
  *  per stop) in order: the cheapest chain over every stop's candidates at
- *  once, not leg by leg, because a stop within 40 m of both tracks of a line
+ *  once, not leg by leg, because a stop within reach of both tracks of a line
  *  links to both, and the shorter first leg can land on the opposite track
- *  from which no leg to the next stop exists. Throws with the label when no
- *  chain visits every stop. */
-function pathThroughStops(edges, outgoing, lens, stopLinks, label, describe = (k) => `stop ${k}`) {
+ *  from which no leg to the next stop exists. The candidates are the stop's
+ *  links within SERVED_STOP_MAX_METRES (F8b): at the 40 m geometric radius
+ *  Olipska 251_2 reaches only the *opposite* rail, 39.4 m away, while the one
+ *  its line runs is 42.8 m off, and six patterns of routes 2, 5 and 13 had no
+ *  chain at all. Throws with the label when no chain visits every stop, the
+ *  error carrying `leg`, the index of the stop it could not reach. */
+export function pathThroughStops(edges, outgoing, lens, stopLinks, label, describe = (k) => `stop ${k}`) {
   let layer = stopLinks[0].map((link) => ({ cost: 0, link, legs: [] }));
   for (let k = 1; k < stopLinks.length; k++) {
     const next = [];
@@ -1222,10 +1244,12 @@ export async function streamTripEndpoints(buf, entry) {
 /**
  * Builds the version 2 artefact from a fully-loaded GTFS zip buffer.
  * @param {Uint8Array} zipBuf
- * @param {{ now?: () => Date, diagramBusCount?: number, fallbackMtime?: string | null, log?: (s: string) => void }} [opts]
+ * @param {{ now?: () => Date, diagramBusCount?: number, fallbackMtime?: string | null, log?: (s: string) => void,
+ *   overrides?: { unreachableStops?: ({ id: string, name?: string, reason?: string } | string)[] } }} [opts]
+ *   `overrides` is the parsed OVERRIDES_PATH file; main() reads it, tests pass their own.
  */
 export async function buildNetwork(zipBuf, opts = {}) {
-  const { now = () => new Date(), diagramBusCount = DIAGRAM_BUS_COUNT, fallbackMtime = null, log = () => {} } = opts;
+  const { now = () => new Date(), diagramBusCount = DIAGRAM_BUS_COUNT, fallbackMtime = null, log = () => {}, overrides = {} } = opts;
 
   const entries = readZipEntries(zipBuf);
   const findEntry = (name) => {
@@ -1306,7 +1330,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const edgePlane = edgeUnits.map((units) => units.map(unitsToMetres));
   const edgeCum = edgePlane.map(cumulative);
   const edgeLen = edgeCum.map((cum) => cum[cum.length - 1]);
-  const edgeBbox = edgePlane.map((plane) => bboxExpanded(plane, STOP_SHAPE_MAX_METRES));
+  // Wide enough for BOTH stop radii: the 40 m geometric links the wire
+  // carries and the 60 m links the synthetic-path router walks (F8b).
+  const edgeBbox = edgePlane.map((plane) => bboxExpanded(plane, SERVED_STOP_MAX_METRES));
   const outgoing = new Map();
   graph.edges.forEach((e, idx) => {
     const list = outgoing.get(e.from);
@@ -1395,7 +1421,11 @@ export async function buildNetwork(zipBuf, opts = {}) {
     stopPlane.push(unitsToMetres(stopUnits[i]));
     return { id: s.id, name: s.name, p: [stopPChain[2 * i], stopPChain[2 * i + 1]], on: [], onEdge: [], terminal: terminalStops.has(s.id) ? 1 : 0 };
   });
-  const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
+  const edgeLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres, within STOP_SHAPE_MAX_METRES
+  // The same, within SERVED_STOP_MAX_METRES: which rails a line's own stop
+  // may sit on, which is the question the synthetic-path router asks. A
+  // superset of edgeLinks, and never written to the wire (F8b).
+  const routerLinks = stops.map(() => []); // stopIdx -> [{ edge, s }] in metres
   const shapeLinks = stops.map(() => []); // stopIdx -> [{ shape, frac }]
 
   // Stop-transfer overrides: the sample trip's first and last stop of every
@@ -1414,10 +1444,12 @@ export async function buildNetwork(zipBuf, opts = {}) {
       const lastEdge = shape.e[shape.e.length - 1];
       if (first !== undefined) {
         edgeLinks[first].push({ edge: firstEdge, s: 0 });
+        routerLinks[first].push({ edge: firstEdge, s: 0 });
         overriddenEdge[first].add(firstEdge);
       }
       if (last !== undefined) {
         edgeLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
+        routerLinks[last].push({ edge: lastEdge, s: edgeLen[lastEdge] });
         overriddenEdge[last].add(lastEdge);
       }
     } else {
@@ -1437,6 +1469,8 @@ export async function buildNetwork(zipBuf, opts = {}) {
     for (let e = 0; e < graph.edges.length; e++) {
       if (overriddenEdge[si].has(e) || !inBbox(p, edgeBbox[e])) continue;
       const near = nearestOnPolyline(p, edgePlane[e], edgeCum[e]);
+      if (near.dist > SERVED_STOP_MAX_METRES) continue;
+      routerLinks[si].push({ edge: e, s: near.arc });
       if (near.dist <= STOP_SHAPE_MAX_METRES) edgeLinks[si].push({ edge: e, s: near.arc });
     }
     for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
@@ -1595,9 +1629,19 @@ export async function buildNetwork(zipBuf, opts = {}) {
   }
 
   // --- Synthetic paths for tram patterns whose trips carry no shape_id
-  // (line 1): the shortest path over the directed graph visiting the
-  // pattern's stops in order, one per distinct (route, direction, stop
-  // sequence). A stop the graph does not reach within 40 m fails the build.
+  // (lines 1, 2, 4, 5, 6, 7, 9, 12, 13, 14, 17): the shortest path over the
+  // directed graph visiting the pattern's stops in order, one per distinct
+  // (route, direction, stop sequence). The router walks the stops' links
+  // within SERVED_STOP_MAX_METRES, not the 40 m geometric ones (F8b): the
+  // question here is which rails the line's own stop sits on, the same
+  // question the served list answers. A stop with no rail within that radius
+  // -- and not a terminus the 200 m override reaches -- fails the build by
+  // name, unless `unreachableStops` in the overrides file says why it is
+  // right to route past it.
+  const allowedUnreachable = new Map(
+    (overrides.unreachableStops ?? []).map((entry) => [typeof entry === 'string' ? entry : entry.id, entry]),
+  );
+  const unreachableAllowed = [];
   const patterns = new Map(); // key -> { route, dir, stops }
   for (const tripId of shapelessTramTrips) {
     const seq = tripSequences.get(tripId);
@@ -1609,12 +1653,15 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const paths = [];
   const trimmed = [];
   const unroutable = [];
+  const longLegs = [];
   for (const pattern of [...patterns.values()].sort((a, b) => compareRouteIds(a.route, b.route) || a.dir - b.dir || a.stops.join().localeCompare(b.stops.join()))) {
     const label = `path:${pattern.route}:${pattern.dir}:${stopSequenceHash(pattern.stops)}`;
-    const links = pattern.stops.map((stopId, k) => {
+    const routedStops = [];
+    const links = [];
+    pattern.stops.forEach((stopId, k) => {
       const si = stopIndexById.get(stopId);
       if (si === undefined) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not in stops.txt`);
-      let list = edgeLinks[si];
+      let list = routerLinks[si];
       if (list.length === 0 && (k === 0 || k === pattern.stops.length - 1)) {
         // A terminus set back from the drawn rails: the nearest edge within the
         // terminus tolerance starts or ends the route (TERMINUS_STOP_MAX_METRES).
@@ -1629,8 +1676,20 @@ export async function buildNetwork(zipBuf, opts = {}) {
         }
         if (best) list = [{ edge: best.edge, s: best.s }];
       }
-      if (list.length === 0) throw new Error(`${label}: stop ${stopId} of route ${pattern.route} is not within ${STOP_SHAPE_MAX_METRES} m of any tram edge`);
-      return list;
+      if (list.length === 0) {
+        const allowed = allowedUnreachable.get(stopId);
+        if (!allowed) {
+          throw new Error(
+            `${label} (route ${pattern.route}): stop ${stopId} "${stops[si].name}" is more than ${SERVED_STOP_MAX_METRES} m ` +
+              `from every rail edge the feed's shapes draw. If the line really calls at a platform off the rails, name it in ` +
+              `unreachableStops in ${OVERRIDES_PATH} with the reason; otherwise the feed or the graph is wrong.`,
+          );
+        }
+        unreachableAllowed.push({ path: label, route: pattern.route, stop: stopId, name: stops[si].name, reason: typeof allowed === 'string' ? '' : (allowed.reason ?? '') });
+        return; // routed past: the path neither runs to it nor serves it
+      }
+      routedStops.push(stopId);
+      links.push(list);
     });
     // A terminus stretch no shape draws (line 1 leaving Zapadni kolodvor runs
     // rails only its own missing shape would carry) cannot be routed; up to
@@ -1638,12 +1697,13 @@ export async function buildNetwork(zipBuf, opts = {}) {
     // so in the report, and left to the twin as off-graph running. A gap in
     // the middle of a pattern is a data error and fails the build.
     let from = 0;
-    let to = pattern.stops.length - 1;
+    let to = routedStops.length - 1;
     let edgesOnPath = null;
+    if (to < 1) throw new Error(`${label} (route ${pattern.route}): fewer than two stops on the rail graph`);
     while (edgesOnPath === null) {
       try {
         edgesOnPath = pathThroughStops(graph.edges, outgoing, edgeLen, links.slice(from, to + 1), `${label} (route ${pattern.route})`, (k) => {
-          const stopId = pattern.stops[from + k];
+          const stopId = routedStops[from + k];
           const si = stopIndexById.get(stopId);
           const name = si === undefined ? "?" : stops[si].name;
           const on = links[from + k].map((l) => `${l.edge}@${Math.round(l.s)}m`).join(",");
@@ -1666,9 +1726,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
       }
     }
     if (edgesOnPath === undefined) continue;
-    const covered = pattern.stops.slice(from, to + 1);
-    if (from > 0 || to < pattern.stops.length - 1) {
-      trimmed.push({ id: label, leading: pattern.stops.slice(0, from), trailing: pattern.stops.slice(to + 1) });
+    const covered = routedStops.slice(from, to + 1);
+    if (from > 0 || to < routedStops.length - 1) {
+      trimmed.push({ id: label, leading: routedStops.slice(0, from), trailing: routedStops.slice(to + 1) });
     }
     // The served list of a synthetic path is its own routed stop sequence.
     // Its links are the ones the router walked, which for a terminus set
@@ -1678,9 +1738,24 @@ export async function buildNetwork(zipBuf, opts = {}) {
     for (let k = from; k <= to; k++) {
       const byEdge = new Map();
       for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
-      routed.set(pattern.stops[k], byEdge);
+      routed.set(routedStops[k], byEdge);
     }
-    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served: servedFor(label, pattern.route, edgesOnPath, covered, routed, covered) });
+    const served = servedFor(label, pattern.route, edgesOnPath, covered, routed, covered);
+    // The honest measure of what the feed's shapes fail to draw: a hop whose
+    // routed arc runs far past the straight line between its two platforms
+    // means the graph has no node where the line turns (HOP_DETOUR_FACTOR).
+    for (let k = 1; k < served.length; k++) {
+      const [prevIdx, prevDm] = served[k - 1];
+      const [thisIdx, thisDm] = served[k];
+      const along = (thisDm - prevDm) / 10;
+      const a = stopPlane[prevIdx];
+      const b = stopPlane[thisIdx];
+      const straight = Math.hypot(a.x - b.x, a.y - b.y);
+      if (along > straight * HOP_DETOUR_FACTOR && along - straight > HOP_DETOUR_EXCESS_METRES) {
+        longLegs.push({ path: label, route: pattern.route, from: stops[prevIdx].name, to: stops[thisIdx].name, along: round1(along), straight: round1(straight) });
+      }
+    }
+    paths.push({ id: label, route: pattern.route, dir: pattern.dir, e: edgesOnPath, stops: covered, served });
   }
 
   // Every tram shape is a path too: the union of the stops of every trip that
@@ -1754,6 +1829,8 @@ export async function buildNetwork(zipBuf, opts = {}) {
     paths: paths.length,
     trimmedPaths: trimmed,
     unroutablePaths: unroutable,
+    longLegs,
+    unreachableAllowed,
     residualPairs: graph.report.residualPairs,
     servedPaths: shapes.filter((sh) => sh.served.length > 0).length + paths.filter((pa) => pa.served.length > 0).length,
     servedEntries: shapes.reduce((n, sh) => n + sh.served.length, 0) + paths.reduce((n, pa) => n + pa.served.length, 0),
@@ -1813,7 +1890,13 @@ export async function main({
   const buf = new Uint8Array(await res.arrayBuffer());
   log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
 
-  const { report, ...artefact } = await buildNetwork(buf, { now, diagramBusCount, fallbackMtime, log });
+  // The overrides live beside the script, not beside its output: they belong
+  // to the build, so `cwd` (which tests point at a temp directory) must not
+  // move them. A missing file is an empty allowlist, which is the strict case.
+  const overridesFile = resolve(import.meta.dirname, '..', OVERRIDES_PATH);
+  const overrides = JSON.parse(await readFile(overridesFile, 'utf8').catch(() => '{}'));
+
+  const { report, ...artefact } = await buildNetwork(buf, { now, diagramBusCount, fallbackMtime, log, overrides });
 
   const target = resolve(cwd, out);
   await mkdir(dirname(target), { recursive: true });
@@ -1856,6 +1939,16 @@ export async function main({
     log(`Served stop dropped from ${d.path} (route ${d.route}): ${d.stop} "${d.name}" is ${d.metres === null ? 'not in stops.txt' : `${d.metres} m off the path`}`);
   }
   for (const u of report.unroutablePaths) log(`Synthetic path skipped, rails not drawn by any shape: ${u.reason}`);
+  for (const u of report.unreachableAllowed) {
+    log(`Stop routed past by allowlist (${OVERRIDES_PATH}): ${u.stop} "${u.name}" on ${u.path} (route ${u.route}) -- ${u.reason}`);
+  }
+  log(
+    `Synthetic paths: ${report.paths} built, ${report.unroutablePaths.length} patterns left without one, ` +
+      `${report.longLegs.length} hops routed past ${HOP_DETOUR_FACTOR}x the straight line (the graph draws no turn there)`,
+  );
+  for (const l of report.longLegs) {
+    log(`Long leg on ${l.path} (route ${l.route}): ${l.from} -> ${l.to} runs ${l.along} m of arc for ${l.straight} m of ground`);
+  }
   for (const t of report.trimmedPaths) {
     log(`Synthetic path ${t.id}: off-graph terminus stretch dropped, leading [${t.leading.join(", ")}], trailing [${t.trailing.join(", ")}]`);
   }
