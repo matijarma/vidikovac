@@ -320,6 +320,16 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     renderSheet();
   }
 
+  /** The switch's one effect: the live map draws the one line or the whole
+   *  network, and the sheet's own row says which. Idempotent, so the click and
+   *  the store's own re-render can both call it. */
+  function setLineFocus(on: boolean): void {
+    if (on === lineFocus) return;
+    lineFocus = on;
+    handle?.setLineFocus?.(on);
+    renderSheet();
+  }
+
   function setFollowing(vehicleId: string | null): void {
     following = vehicleId;
     if (vehicleId) {
@@ -331,16 +341,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   }
 
   // --- The stage: detents on the portrait phone, a column elsewhere -----------------
-  /** The switch's one effect: the live map draws the one line or the whole
-   *  network, and the sheet's own row says which. Idempotent, so the click and
-   *  the store's re-render can both call it. */
-  function setLineFocus(on: boolean): void {
-    if (on === lineFocus) return;
-    lineFocus = on;
-    handle?.setLineFocus?.(on);
-    renderSheet();
-  }
-
   function stageMode(): StageMode {
     if (kiosk() || deskMedia?.matches) return 'desk';
     if (landscapeMedia?.matches) return 'landscape';

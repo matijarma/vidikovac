@@ -318,7 +318,10 @@ const showOnMap = (i18n: I18n): string => button({ action: 'fit-selection', labe
  *  beside it is decoration and carries no text of its own. A public screen
  *  has no finger to press it and never renders it. */
 function lineFocusSwitch(i18n: I18n, on: boolean): string {
-  return `<div class="t-actions"><button type="button" role="switch" aria-checked="${on ? 'true' : 'false'}" data-action="toggle-line-focus" class="t-switch" data-testid="line-focus"><span class="t-switch-text">${esc(tr(i18n, on ? 'lineFocusOn' : 'lineFocusOff'))}</span><span class="t-switch-track" aria-hidden="true"></span></button></div>`;
+  // A stable id, like the follow button's: the sheet's body is swapped whole
+  // on every poll and swapBody restores focus by id, so pressing Space on
+  // this switch must not be what takes the caret off it.
+  return `<div class="t-actions"><button type="button" role="switch" id="t-line-focus" aria-checked="${on ? 'true' : 'false'}" data-action="toggle-line-focus" class="t-switch" data-testid="line-focus"><span class="t-switch-text">${esc(tr(i18n, on ? 'lineFocusOn' : 'lineFocusOff'))}</span><span class="t-switch-track" aria-hidden="true"></span></button></div>`;
 }
 /** "Natrag": the way out of every detail, a 44 px ghost, first in the head. */
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });

@@ -293,7 +293,10 @@ export function pillInks(p: OverlayPalette, selectedRoute: string | null): PillI
   return { fill: ['case', mine, fill, p.stopFill], text: ['case', mine, kindColor(p, 'text'), fill], halo: ['case', mine, p.halo, fill] };
 }
 
-/** The filters the selection layers carry for `selection`: NEVER on every layer while nothing is selected. */
+/** The filters the selection layers carry for `selection`: NEVER on every layer
+ *  while nothing is selected. The two network layers are the one pair
+ *  `overlayLayers` may widen past this: under line focus they carry the
+ *  focused route, which a vehicle selection names and this function cannot. */
 export function selectionFilters(selection: MapSelection | null): Record<string, Expr> {
   const routeId = selection?.kind === 'route' ? selection.id : null;
   const stopIds = selection?.kind === 'stop' ? [...new Set([selection.id, ...(selection.ids ?? [])])] : [];
@@ -499,7 +502,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
   const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
-  /** A network is drawn for its mode when the modes admit it and, on the public screen, when the option set names it. */
+  /** A network is drawn for its mode when nothing is in focus (line focus
+   *  leaves only the focused route's own layer), when the modes admit it and,
+   *  on the public screen, when the option set names it. */
   const drawn = (kind: 'tram' | 'bus'): boolean => focus === null && kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));
   const network = (id: string, kind: 'tram' | 'bus', color: string, width: Expr, opacity: Expr | number = NETWORK_OPACITY): StyleLayerLike => ({
     id,

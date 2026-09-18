@@ -99,6 +99,11 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   let following = options.follow ?? null, stop = options.stop ?? null, padding = options.fitPadding ?? {};
   let modes = options.modes ?? null;
   let lineFocus = options.lineFocus === true;
+  /** The focused route the static layer was last painted for: a selected
+   *  vehicle's line becomes knowable only once the model places it, and the
+   *  diagram follows that the way the city map does -- one repaint on the
+   *  change, never one per frame. */
+  let focusedPainted: string | null = null;
   let staticContext: CanvasRenderingContext2D | null = null, vehicleContext: CanvasRenderingContext2D | null = null;
   let origin: XY = { x: 0, y: 0 };
   const sceneListeners = new Set<() => void>();
@@ -198,6 +203,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   }
   function paintStatic(): void {
     const l = layout();
+    focusedPainted = lineFocus ? focusedRoute() : null;
     if (staticContext && l) {
       element.dataset.labels = String(l.labels);
       element.dataset.scale = String(l.viewport.scale);
@@ -247,6 +253,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   const loop = createLoop((time) => {
     if (!active() || !model || !element.isConnected) return false;
     lastDrawn = model.step(time);
+    if (lineFocus && focusedRoute() !== focusedPainted) paintStatic();
     followNow();
     const changed = paintMarks();
     frames++;

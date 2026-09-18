@@ -1186,7 +1186,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
-    overlays = l.overlayLayers(l.overlayPalette(theme), overlayOptions(l.overlayPalette(theme)));
+    const palette = l.overlayPalette(theme);
+    overlays = l.overlayLayers(palette, overlayOptions(palette));
     focusedApplied = focusedRouteId();
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
@@ -1434,7 +1435,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function applyOverlays(): void {
     const l = lib;
     if (!map || !styled || !l) return;
-    const next = l.overlayLayers(l.overlayPalette(theme), overlayOptions(l.overlayPalette(theme)));
+    const palette = l.overlayPalette(theme);
+    const next = l.overlayLayers(palette, overlayOptions(palette));
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
     focusedApplied = focusedRouteId();
