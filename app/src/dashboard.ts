@@ -14,6 +14,7 @@ import { createFeedStore } from './core/feed-store';
 import { FLAGS } from './core/flags';
 import { createKvartStore, kvartLabel, resolveKvart, type KvartChoice } from './core/kvart-store';
 import { loadLastRun, type LastRunSnapshot } from './core/lastrun';
+import { createLineFocusStore } from './core/line-focus-store';
 import { createMapModeStore, type MapModeStore } from './core/map-mode-store';
 import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './core/notify-store';
 import { createSavedStore, type SavedKind } from './core/saved-store';
@@ -171,6 +172,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const saved = createSavedStore({ storage: local });
   const notifyStore = createNotifyStore({ storage: local });
   const mapMode = deps.mapMode ?? createMapModeStore({ storage: local });
+  const lineFocus = createLineFocusStore({ storage: local });
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
   /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
   let stops: readonly ScreenStop[] | null = null;
@@ -415,7 +417,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
-      maps, schematic, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode, reducedMotion: deps.reducedMotion, lightweight,
+      maps, schematic, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
+      lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       kvart, kvartLabel: kvartLabel(i18n, kvart), kvartChoice: kvartStore.snapshot(), notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
@@ -1106,6 +1109,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   });
   const stopNotify = onChange(notifyStore.subscribe, () => { render(); paintShell(); });
   const stopMapMode = onChange(mapMode.subscribe, () => { if (!disposed) render(); });
+  const stopLineFocus = onChange(lineFocus.subscribe, () => { if (!disposed) render(); });
   const onMedia = (): void => {
     // Kvart is a workspace on both surfaces; resizing never changes the task.
     paintShell();
@@ -1156,6 +1160,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopSaved();
       stopNotify();
       stopMapMode();
+      stopLineFocus();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
       detachTimebandSync();

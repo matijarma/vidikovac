@@ -225,6 +225,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const folds = new Set<Fold>();
   let camera: MapCamera | null = null;
   let mapMode: MapMode = 'map';
+  /** "Only this line on the map" for this workspace. The device store owns it
+   *  wherever there is one (ctx.lineFocus); with none -- a unit context -- the
+   *  choice holds for this tab alone, at the store's own default. */
+  let lineFocus = true;
   let activeSlotId: string | null = null;
   let mapEpoch = 0;
   let status: MapStatus = 'loading';
@@ -327,6 +331,16 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   }
 
   // --- The stage: detents on the portrait phone, a column elsewhere -----------------
+  /** The switch's one effect: the live map draws the one line or the whole
+   *  network, and the sheet's own row says which. Idempotent, so the click and
+   *  the store's re-render can both call it. */
+  function setLineFocus(on: boolean): void {
+    if (on === lineFocus) return;
+    lineFocus = on;
+    handle?.setLineFocus?.(on);
+    renderSheet();
+  }
+
   function stageMode(): StageMode {
     if (kiosk() || deskMedia?.matches) return 'desk';
     if (landscapeMedia?.matches) return 'landscape';
@@ -575,7 +589,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
         const directions = new Map(onRoute.map((v): [string, string] => [v.id, vehicleDirection(i18n, net, v)]));
-        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
+        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), lineFocus, saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
         return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short })];
       }
       case 'stop': {
@@ -603,6 +617,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           delay: v.routeId === undefined ? undefined : delays().get(v.routeId),
           following: following === v.id,
           kiosk: k,
+          lineFocus,
           cast: c.cast,
         });
         return [html, `${vehicleTitle(i18n, v)} · ${direction}`];
@@ -678,6 +693,14 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       case 'toggle-map-mode':
         if (!kiosk() && !ctx().lightweight) ctx().mapMode?.set(mapMode === 'schema' ? 'map' : 'schema');
         break;
+      case 'toggle-line-focus': {
+        // The store, where there is one, brings the change back through the
+        // page's own re-render; the second call is then the no-op.
+        const next = !lineFocus;
+        ctx().lineFocus?.set(next);
+        setLineFocus(next);
+        break;
+      }
       case 'toggle-mode': {
         // The schema has one visible mode. Keep the geographic filters for the return to the city map.
         if (mapMode === 'schema') break;
@@ -821,6 +844,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         modes: modesArg(),
         closures: renderer === 'map' && closuresVisible,
         interactive: !kiosk(),
+        // The public screen keeps its own contract: the whole network, always.
+        lineFocus: kiosk() ? undefined : lineFocus,
         symbolScale: kiosk() ? KIOSK_SYMBOL_SCALE : 1,
         // The compact credit on the phone stage, where the sheet leaves the map little room; the full line on the desk and the kiosk.
         attributionCompact: !kiosk(),
@@ -879,6 +904,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       if (kiosk()) modes.delete(ROUTE_TYPE_BUS);
     }
     syncStage();
+    // The device's own switch, changed here or anywhere else on the page.
+    setLineFocus(c.lineFocus?.snapshot() ?? lineFocus);
     // The page's view mode changed elsewhere (its Escape, another domain): the detent follows it.
     const full = c.mapView?.full === true;
     if (full !== lastFull) {

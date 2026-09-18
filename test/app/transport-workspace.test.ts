@@ -55,7 +55,7 @@ function fakeMaps(initial: FakeState = {}) {
     const handle: FakeHandle = {
       options,
       update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(),
-      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(),
+      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(), setLineFocus: vi.fn(),
       status: () => status, network: () => net, vehicles: () => vehicles, selection: () => null, following: () => null, camera: () => null,
       set(state) {
         if (state.status) status = state.status;
@@ -226,6 +226,36 @@ describe('the transport workspace', () => {
     const privateMode = createMapModeStore({ storage: { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } } });
     privateMode.set('schema');
     expect(privateMode.snapshot()).toBe('schema');
+  });
+
+  it('offers "samo ova linija" under a selection, on by default, and the switch reaches the store and the map', async () => {
+    const { createLineFocusStore, LINE_FOCUS_STORAGE_KEY } = await import('../../app/src/core/line-focus-store');
+    const raw = new Map<string, string>();
+    const storage = { getItem: (key: string) => raw.get(key) ?? null, setItem: (key: string, value: string) => { raw.set(key, value); } };
+    const lineFocus = createLineFocusStore({ storage });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, selection: { kind: 'route', id: '6' } });
+    context.lineFocus = lineFocus;
+    // The store's own subscription re-renders the workspace, as the dashboard's does.
+    const stop = lineFocus.subscribe(() => { render(context); });
+    expect(last().options.lineFocus).toBe(true);
+    const on = q<HTMLButtonElement>('[data-action=toggle-line-focus]');
+    expect(on.getAttribute('role')).toBe('switch');
+    expect(on.getAttribute('aria-checked')).toBe('true');
+    expect(text(on)).toBe('Samo ova linija na karti');
+    on.click();
+    expect(raw.get('kajima:line-focus:v1')).toBe('false');
+    expect(LINE_FOCUS_STORAGE_KEY).toBe('kajima:line-focus:v1');
+    expect(last().setLineFocus).toHaveBeenLastCalledWith(false);
+    const off = q<HTMLButtonElement>('[data-action=toggle-line-focus]');
+    expect(off.getAttribute('aria-checked')).toBe('false');
+    expect(text(off)).toBe('Cijela mreža na karti');
+    // A vehicle detail carries the same row; a public screen carries none.
+    last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
+    expect(q<HTMLButtonElement>('[data-action=toggle-line-focus]').getAttribute('aria-checked')).toBe('false');
+    stop();
+    render(ctx({ maps, kiosk: true, selection: { kind: 'route', id: '6' } }).context);
+    expect(document.querySelector('[data-action=toggle-line-focus]')).toBeNull();
   });
 
   it('renders one persistent workspace: the overview lists the routes moving now from the map’s own estimate, trams then buses, both on by default, with the closures, ZET’s notices and the honesty note', () => {

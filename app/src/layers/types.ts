@@ -3,6 +3,7 @@ import type { MapSlots } from '../map/map-slots';
 import type { SchematicHost } from '../motion/schematic-host';
 import type { I18n } from '../i18n/i18n';
 import type { ExperienceActions } from '../core/contracts';
+import type { LineFocusStore } from '../core/line-focus-store';
 import type { MapModeStore } from '../core/map-mode-store';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
@@ -53,6 +54,10 @@ export interface LayerContext extends ExperienceActions {
   mapView?: { readonly full: boolean; toggle(): void };
   /** The device's live transit renderer preference. Absent on the lightweight path. */
   mapMode?: MapModeStore;
+  /** The device's "only this line on the map" preference, once a line or a
+   *  tram is selected (F5). Absent on the lightweight path and in unit
+   *  contexts; the workspace then keeps the choice for the tab alone. */
+  lineFocus?: LineFocusStore;
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
