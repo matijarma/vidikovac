@@ -149,6 +149,9 @@ export class TwinDO extends DurableObject<Env> {
   /** Everything learned so far: the tables plus the unflushed minute; the engine's times read it live (C1). */
   private learned: LearnedAggregates = emptyAggregates();
   private learnedLoaded = false;
+  /** This life loaded a rail graph other than the one the stored rows were
+   *  learned under, so nothing keyed by an edge index survives from before. */
+  private graphChanged = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -389,9 +392,12 @@ export class TwinDO extends DurableObject<Env> {
     if (!saved) return;
     const now = this.now();
     await this.ensureAssets(now);
-    // The minute the last life had not flushed yet is knowledge too.
+    // The minute the last life had not flushed yet is knowledge too -- but
+    // its EDGE keys name edges of the graph that life ran, so if this one
+    // loaded a different graph (F8c) only the stop dwells carry over, the
+    // same split adoptGraph makes in the tables.
     this.loadLearnedOnce();
-    mergeAggregates(this.learned, saved.pendingLearned);
+    mergeAggregates(this.learned, this.graphChanged ? { edges: {}, stops: saved.pendingLearned.stops } : saved.pendingLearned);
     this.advance(saved, null, now, await loadZetRoutes());
   }
 
@@ -434,7 +440,11 @@ export class TwinDO extends DurableObject<Env> {
       // must happen BEFORE loadLearnedOnce reads the tables.
       if (this.net) {
         const dropped = adoptGraph(this.ctx.storage, this.net.graphHash);
-        if (dropped !== null) logInfo('twin_graph_changed', { graph: this.net.graphHash, droppedEdgeRows: dropped });
+        if (dropped !== null) {
+          this.graphChanged = true;
+          this.learned.edges = {};
+          logInfo('twin_graph_changed', { graph: this.net.graphHash, droppedEdgeRows: dropped });
+        }
       }
     }
     if (this.net && this.index && !this.engine) {
@@ -480,6 +490,7 @@ export class TwinDO extends DurableObject<Env> {
     this.coldLoad = null;
     this.learned = emptyAggregates();
     this.learnedLoaded = false;
+    this.graphChanged = false;
   }
 
   /** What the twin has learned, for a test: cells per table and the median
