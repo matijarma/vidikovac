@@ -26,6 +26,14 @@
 .day-facts .tl[data-domain='safety'] { background: transparent; border: 0; padding-inline: var(--sp-1); }
 .day-facts .tl[data-variant='band'] .tl-title { font-size: var(--type-body); line-height: 1.35; }
 .day-more { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-1); }
+.day-opportunities{display:grid;gap:var(--sp-2);padding-top:var(--sp-3)}
+.day-opportunity{display:grid;gap:var(--sp-1);padding:var(--sp-3);border:1px solid var(--tone-stroke);border-radius:var(--r-md);text-decoration:none;color:var(--tone-text-primary)}
+.day-opportunity span{font-size:var(--type-secondary);color:var(--tone-text-muted)}
+.day-next-peek{display:none}
+.day-period{display:grid;gap:var(--sp-3);align-content:start;min-width:0;padding-top:var(--sp-3);border-top:1px solid var(--tone-stroke)}
+.day-period>h4{font-size:var(--type-head);color:var(--tone-text-primary)}
+@media(min-width:75rem){.day-overview{grid-template-columns:minmax(18rem,.75fr) minmax(0,1.7fr)}.day-agenda{grid-template-columns:repeat(2,minmax(0,1fr))}.day-period{padding-top:var(--sp-3)}.day-heading .day-title{font-size:2rem}}
+@media(max-width:47.99rem){.day-heading{padding-bottom:var(--sp-2)}.day-title{font-size:1.5rem}.day-date{font-size:var(--type-meta)}.day-weather-now strong{font-size:1.75rem}.day-heading .day-location{max-width:100%;font-size:var(--type-secondary)}.day-next-peek{display:grid;gap:var(--sp-1);margin:var(--sp-2) 0 var(--sp-5);padding:var(--sp-3) 0;border-block:1px solid var(--tone-stroke)}.day-next-peek .tl{padding:0;border:0;background:transparent;box-shadow:none}.day-next-peek .tl-title{font-size:var(--type-body);line-clamp:2;-webkit-line-clamp:2}.day-next-peek .tl-label,.day-next-peek .tl-context{font-size:var(--type-secondary)}.day-next-peek .tl-time{font-size:var(--type-head)}.day-facts .tl[data-domain=transit]{padding-block:var(--sp-2)}.day-facts .tl[data-domain=transit] .tl-value{font-size:var(--type-control)}}
 .day-times { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-3); }
 .day-time { min-height: var(--target); padding: 0 var(--sp-3); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); cursor: pointer; }
 .day-time[aria-pressed='true'] { background: var(--tone-text-primary); color: var(--tone-surface-1); font-weight: var(--weight-bold); }

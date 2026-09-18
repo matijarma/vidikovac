@@ -104,7 +104,7 @@ export interface CreateBeaconResponse {
 // ---- WebSocket: /ws/beacon/:beaconId (kiosk <-> BeaconDO) ------------------
 
 export type BeaconClientMessage =
-  | { t: 'auth'; hmac: string; presentationVersion?: 1 }
+  | { t: 'auth'; hmac: string; presentationVersion?: 1; capabilities?: string[] }
   | { t: 'presented'; version: 1; revision: number; status: 'displayed' | 'unavailable' }
   | { t: 'presentation-stop'; version: 1; revision: number }
   | { t: 'more' } // request the next code batch

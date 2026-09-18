@@ -6,6 +6,7 @@ import { teaserSubset } from '../worker/feed/registry';
 import type { ModuleId, ModuleSnapshot } from '../worker/feed/schema';
 import { FIXTURE_STOP } from './experience-fixtures';
 import { fulfillPublicMap } from '../scripts/review-maps.mjs';
+import {installCityFixture,cityEvents} from './city-fixtures';
 
 const tags = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
 
@@ -21,6 +22,8 @@ async function feeds(page: Page, realClock = true) {
     snapshot.validUntil = shift(snapshot.validUntil);
     snapshot.items = snapshot.items.map(item => ({ ...item, at: shift(item.at), until: shift(item.until) }));
   }
+  cityEvents(snapshots.dogadanja,Date.parse(snapshots['zet-rt'].sourceUpdatedAt!));
+  await installCityFixture(page,Date.parse(snapshots['zet-rt'].sourceUpdatedAt!));
   await page.route('**/api/teaser*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ generatedAt: new Date().toISOString(), modules: Object.values(snapshots).map(s => teaserSubset(s, FIXTURE_STOP)) }) }));
   await page.route('**/api/data/**', route => {
     const module = new URL(route.request().url()).pathname.split('/').at(-1) as ModuleId;
@@ -69,7 +72,7 @@ for (const theme of ['light', 'dark'] as const) {
         const out: string[] = [];
         const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
         const map = rect('.k-geography');
-        const board = rect('.k-local > [data-panel=promet]');
+        const board = rect('.k-local-facts');
         if (map.bottom > board.top + 1) out.push('transport board covers geography');
         const qr = rect('[data-testid=kiosk-qr]');
         if (qr.width < 239 || qr.height < 239) out.push('QR below scannable floor');
@@ -196,6 +199,18 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await b.getByTestId('stop-presentation').click();
     await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(b.getByTestId('session-label')).toHaveAttribute('data-state', 'live');
+    await b.locator('[data-action=presentation-close]').click();
+    await b.locator('.ki-tab[data-layer="u-pokretu"]').click();
+    await b.getByTestId('transport-search').fill('Gavella');
+    await b.locator('[data-action=select-place]').first().click();
+    await b.getByTestId('screen-control').click();
+    await b.getByTestId('present-view').click();
+    await expect(b.getByTestId('presentation-feedback')).toContainText('Prikazano');
+    await expect(kiosk.getByTestId('city-detail')).toContainText('Gavella');
+    await expect(kiosk.getByTestId('kiosk-map')).toHaveAttribute('inert','');
+    await kiosk.screenshot({path:'test-results/redesign/presented-city-place.png'});
+    await b.getByTestId('stop-presentation').click();
+    await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
   } finally {
     await Promise.all([kctx.close(), actx.close(), bctx.close()]);
   }

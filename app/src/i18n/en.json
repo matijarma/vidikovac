@@ -653,7 +653,7 @@
     "captureShort": "Application capture",
     "imageUnavailable": "The image could not load. The description and all actions below are still available.",
     "alt": {
-      "kiosk": "Public screen: a Zagreb map with ZET vehicles and neighbourhood information. The code is hidden in this example.",
+      "kiosk": "Public screen: Zagreb places on a map, culture, weather and neighbourhood information. The code is hidden in this example.",
       "phone": "Phone after scanning: routes, events and city information arranged through the day.",
       "desktop": "Desktop: local transport, weather and upcoming events, with direct access to every city information area.",
       "transport": "Transport: ZET vehicle map, route and stop search, and route status.",

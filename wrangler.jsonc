@@ -29,13 +29,15 @@
       { "name": "ROOM_DO", "class_name": "RoomDO" }, // one per session: both devices, expiry alarm
       { "name": "INDEX_DO", "class_name": "IndexDO" }, // singleton: code -> beacon | room
       { "name": "METRICS_DO", "class_name": "MetricsDO" }, // singleton: identifier-free counters
-      { "name": "TWIN_DO", "class_name": "TwinDO" } // singleton: the one observer of ZET's realtime feed (R-TE12 D1)
+      { "name": "TWIN_DO", "class_name": "TwinDO" },
+      { "name": "CATALOGUE_DO", "class_name": "CatalogueDO" } // serialized reference/schedule ingestion
     ]
   },
   // Never edit an existing tag; a new class arrives with a new tag (R-TE14).
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["BeaconDO", "RoomDO", "IndexDO", "MetricsDO"] },
-    { "tag": "v2", "new_sqlite_classes": ["TwinDO"] }
+    { "tag": "v2", "new_sqlite_classes": ["TwinDO"] },
+    { "tag": "v3", "new_sqlite_classes": ["CatalogueDO"] }
   ],
   "kv_namespaces": [
     { "binding": "FEED", "id": "8cb66336f0424a8ea1246bfc6a4ae29b" } // last-good copy of every feed module

@@ -77,7 +77,7 @@ export interface BeaconCreateInput {
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
 type ChallengeAttachment = { phase: 'challenge'; nonce: string; issuedAt: number; attempts: number };
-type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1 };
+type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1; capabilities?: string[] };
 type SocketAttachment = ChallengeAttachment | AuthedAttachment;
 
 type MetaRow = { key: string; value: string };
@@ -102,8 +102,9 @@ function frame(message: BeaconServerMessage): string {
 function parseClient(message: string | ArrayBuffer): BeaconClientMessage | null {
   if (typeof message !== 'string' || message.length > 512) return null;
   try {
-    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown };
-    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}) };
+    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown };
+    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}),
+      ...(Array.isArray(parsed.capabilities)&&parsed.capabilities.includes('city-v1')?{capabilities:['city-v1']}: {}) };
     if (parsed.version === 1 && Number.isSafeInteger(parsed.revision) && (parsed.revision as number) >= 0) {
       if (parsed.t === 'presented' && (parsed.status === 'displayed' || parsed.status === 'unavailable')) return { t: 'presented', version: 1, revision: parsed.revision as number, status: parsed.status };
       if (parsed.t === 'presentation-stop') return { t: 'presentation-stop', version: 1, revision: parsed.revision as number };
@@ -196,6 +197,7 @@ export class BeaconDO extends DurableObject<Env> {
       owner: p.roomId === null ? null : p.roomId === roomId ? 'self' : 'other',
       online: !this.isRevoked() && this.authenticatedSockets().length > 0,
       supported: this.presentationSockets().length > 0,
+      capabilities: this.presentationSockets().some(ws=>(ws.deserializeAttachment() as AuthedAttachment).capabilities?.includes('city-v1'))?['city-v1']:[],
     };
   }
 
@@ -218,6 +220,8 @@ export class BeaconDO extends DurableObject<Env> {
   private async sendPresentation(ws: WebSocket): Promise<void> {
     const p = this.presentationRecord();
     if ((ws.deserializeAttachment() as AuthedAttachment)?.presentationVersion !== 1) return;
+    const newSubject=p.target?.selection?.kind==='place'||p.target?.selection?.kind==='street';
+    if(newSubject&&!(ws.deserializeAttachment() as AuthedAttachment).capabilities?.includes('city-v1'))return;
     const token = p.roomId && p.expiresAt && p.expiresAt > this.now()
       ? await signDataToken(this.env, p.roomId, p.expiresAt) : undefined;
     // Signing yields: an older frame must not overtake a takeover or stop.
@@ -275,6 +279,7 @@ export class BeaconDO extends DurableObject<Env> {
     if (!binding || binding.expires_at <= this.now()) return result('not-allowed');
     if (this.isRevoked() || !this.authenticatedSockets().length) return result('unavailable');
     if (!this.presentationSockets().length) return result('unsupported');
+    if((command.target?.selection?.kind==='place'||command.target?.selection?.kind==='street')&&!this.stateFor(roomId).capabilities?.includes('city-v1'))return result('unsupported');
     const signature = JSON.stringify(command);
     const receipt = this.ctx.storage.sql.exec<{ signature: string }>('SELECT signature FROM presentation_requests WHERE room_id = ? AND request_id = ?', roomId, command.requestId).toArray()[0];
     if (receipt) {
@@ -407,7 +412,7 @@ export class BeaconDO extends DurableObject<Env> {
         this.rejectChallenge(ws, attachment, 'auth-required');
         return;
       }
-      await this.handleAuth(ws, attachment, parsed.hmac, parsed.presentationVersion);
+      await this.handleAuth(ws, attachment, parsed.hmac, parsed.presentationVersion,parsed.capabilities);
       return;
     }
     if (parsed === null) {
@@ -465,7 +470,7 @@ export class BeaconDO extends DurableObject<Env> {
     this.notifyPresentation();
   }
 
-  private async handleAuth(ws: WebSocket, attachment: ChallengeAttachment, hmac: string, presentationVersion?: 1): Promise<void> {
+  private async handleAuth(ws: WebSocket, attachment: ChallengeAttachment, hmac: string, presentationVersion?: 1,capabilities?:string[]): Promise<void> {
     if (this.isRevoked()) {
       ws.send(frame({ t: 'revoked' }));
       ws.close(CLOSE_REVOKED, 'revoked');
@@ -484,7 +489,7 @@ export class BeaconDO extends DurableObject<Env> {
       this.rejectChallenge(ws, attachment, 'auth-failed');
       return;
     }
-    const authed: AuthedAttachment = { phase: 'authed', ...(presentationVersion ? { presentationVersion } : {}) };
+    const authed: AuthedAttachment = { phase: 'authed', ...(presentationVersion ? { presentationVersion } : {}),...(capabilities?{capabilities}: {}) };
     ws.serializeAttachment(authed);
     await this.markOnline();
     await this.sendBatch(ws);

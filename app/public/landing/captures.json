@@ -16,7 +16,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-17T11:53:35.268Z"
+      "capturedAt": "2026-09-18T22:04:51.211Z"
     },
     {
       "name": "kiosk",
@@ -31,7 +31,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-17T11:53:42.186Z"
+      "capturedAt": "2026-09-18T22:04:58.574Z"
     },
     {
       "name": "kiosk",
@@ -46,7 +46,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-17T11:53:49.010Z"
+      "capturedAt": "2026-09-18T22:05:05.808Z"
     },
     {
       "name": "kiosk",
@@ -61,7 +61,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-17T11:53:56.001Z"
+      "capturedAt": "2026-09-18T22:05:13.098Z"
     },
     {
       "name": "phone",
@@ -76,7 +76,7 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:54:10.588Z"
+      "capturedAt": "2026-09-18T22:05:26.690Z"
     },
     {
       "name": "events",
@@ -91,7 +91,7 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-17T11:54:13.397Z"
+      "capturedAt": "2026-09-18T22:05:29.602Z"
     },
     {
       "name": "desktop",
@@ -106,7 +106,7 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:54:16.847Z"
+      "capturedAt": "2026-09-18T22:05:32.503Z"
     },
     {
       "name": "transport",
@@ -120,8 +120,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Promet",
-      "capturedAt": "2026-09-17T11:54:32.188Z"
+      "route": "/d/ Karta / Kretanje",
+      "capturedAt": "2026-09-18T22:05:51.939Z"
     },
     {
       "name": "peer",
@@ -136,7 +136,7 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-17T11:54:38.792Z"
+      "capturedAt": "2026-09-18T22:05:55.391Z"
     },
     {
       "name": "phone",
@@ -151,7 +151,7 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:54:47.510Z"
+      "capturedAt": "2026-09-18T22:06:00.993Z"
     },
     {
       "name": "events",
@@ -166,7 +166,7 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-17T11:54:50.458Z"
+      "capturedAt": "2026-09-18T22:06:03.770Z"
     },
     {
       "name": "desktop",
@@ -181,7 +181,7 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:54:53.959Z"
+      "capturedAt": "2026-09-18T22:06:06.717Z"
     },
     {
       "name": "transport",
@@ -195,8 +195,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Promet",
-      "capturedAt": "2026-09-17T11:55:09.146Z"
+      "route": "/d/ Karta / Kretanje",
+      "capturedAt": "2026-09-18T22:06:29.385Z"
     },
     {
       "name": "peer",
@@ -211,7 +211,7 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-17T11:55:17.219Z"
+      "capturedAt": "2026-09-18T22:06:32.607Z"
     },
     {
       "name": "phone",
@@ -226,7 +226,7 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:55:22.620Z"
+      "capturedAt": "2026-09-18T22:06:41.566Z"
     },
     {
       "name": "events",
@@ -241,7 +241,7 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-17T11:55:25.684Z"
+      "capturedAt": "2026-09-18T22:06:44.350Z"
     },
     {
       "name": "desktop",
@@ -256,7 +256,7 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:55:29.082Z"
+      "capturedAt": "2026-09-18T22:06:47.271Z"
     },
     {
       "name": "transport",
@@ -270,8 +270,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Promet",
-      "capturedAt": "2026-09-17T11:55:46.062Z"
+      "route": "/d/ Karta / Kretanje",
+      "capturedAt": "2026-09-18T22:07:06.642Z"
     },
     {
       "name": "peer",
@@ -286,7 +286,7 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-17T11:55:51.576Z"
+      "capturedAt": "2026-09-18T22:07:09.890Z"
     },
     {
       "name": "phone",
@@ -301,7 +301,7 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:55:57.337Z"
+      "capturedAt": "2026-09-18T22:07:17.546Z"
     },
     {
       "name": "events",
@@ -316,7 +316,7 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-17T11:56:00.262Z"
+      "capturedAt": "2026-09-18T22:07:20.410Z"
     },
     {
       "name": "desktop",
@@ -331,7 +331,7 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-17T11:56:03.814Z"
+      "capturedAt": "2026-09-18T22:07:23.299Z"
     },
     {
       "name": "transport",
@@ -345,8 +345,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Promet",
-      "capturedAt": "2026-09-17T11:56:41.740Z"
+      "route": "/d/ Karta / Kretanje",
+      "capturedAt": "2026-09-18T22:07:44.809Z"
     },
     {
       "name": "peer",
@@ -361,7 +361,7 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-17T11:56:49.826Z"
+      "capturedAt": "2026-09-18T22:07:48.084Z"
     },
     {
       "name": "frozen",
@@ -376,7 +376,7 @@
         "height": 844
       },
       "route": "/d/ genuinely expired snapshot",
-      "capturedAt": "2026-09-17T12:04:00.373Z"
+      "capturedAt": "2026-09-18T22:15:17.425Z"
     },
     {
       "name": "frozen",
@@ -391,7 +391,7 @@
         "height": 844
       },
       "route": "/d/ genuinely expired snapshot",
-      "capturedAt": "2026-09-17T12:04:03.164Z"
+      "capturedAt": "2026-09-18T22:15:19.755Z"
     },
     {
       "name": "frozen",
@@ -406,7 +406,7 @@
         "height": 844
       },
       "route": "/d/ genuinely expired snapshot",
-      "capturedAt": "2026-09-17T12:04:05.977Z"
+      "capturedAt": "2026-09-18T22:15:22.122Z"
     },
     {
       "name": "frozen",
@@ -421,7 +421,7 @@
         "height": 844
       },
       "route": "/d/ genuinely expired snapshot",
-      "capturedAt": "2026-09-17T12:04:08.858Z"
+      "capturedAt": "2026-09-18T22:15:24.408Z"
     }
   ]
 }

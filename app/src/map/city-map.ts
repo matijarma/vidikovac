@@ -80,7 +80,7 @@ const MIN_ICON_ALPHA = 0.55;
  *  what the dashboard's quake map and the kvart thumbnail's work points still
  *  ask for; a point with one is drawn by its own layer, with its own mark and
  *  its own honesty rule (map/overlays.ts). */
-export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat';
+export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat' | 'city';
 
 /** A value a place may carry alongside its name, flat, for a layer filter to
  *  read: an event's `source` and `phase`, a quake's `mag`, a pharmacy's
@@ -380,6 +380,8 @@ function signatureOf(fc: VehicleFeatureCollection): string {
  *  public selection may relay to a paired screen (worker/public-selection.ts);
  *  a vehicle or a closure stays on the device that picked it. */
 export type MapSelection =
+  | { kind: 'place'; id: string }
+  | { kind: 'street'; id: string }
   | { kind: 'route'; id: string }
   | { kind: 'stop'; id: string; ids?: readonly string[] }
   | { kind: 'vehicle'; id: string }
@@ -519,6 +521,8 @@ export interface CityMapOptions {
   fitPadding?: FitPadding;
   /** Pointer selection on the map: a vehicle, a stop, a closure, or nothing. */
   onSelect?: (selection: MapSelection | null) => void;
+  /** Resolves a rendered basemap label against verified street/settlement data. */
+  resolveStreet?: (name: string, point: {lon:number;lat:number}) => string | null;
   onStatus?: (status: MapStatus) => void;
   /** The network artefact settled: the decoded network, or null when it could not load. */
   onNetwork?: (net: Network | null) => void;
@@ -560,6 +564,7 @@ export interface CityMapHandle {
   setStop?(stop: ScreenStop | null): void;
   /** The district outline to draw, dashed; null clears it. */
   setOutline?(outline: MapOutline | null): void;
+  setCityPaths?(lines: MapLine[]): void;
   /** The inner city, the current selection, or the screen's stop. */
   fit?(target: 'city' | 'selection' | 'stop'): void;
   /** The covered part of the viewport every later fit keeps clear (the sheet's height on the phone stage). */
@@ -633,6 +638,7 @@ interface MapApi {
   fitBounds(bounds: [[number, number], [number, number]], options?: Record<string, unknown>): void;
   getCenter(): { lng: number; lat: number };
   getZoom(): number;
+  unproject?(point: {x:number;y:number}): {lng:number;lat:number};
   resize(): unknown;
   remove(): void;
 }
@@ -757,6 +763,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** The basemap and overlay layer lists as the live style carries them: what the next change is diffed against. */
   let basemap: StyleLayerLike[] = [];
   let overlays: StyleLayerLike[] = [];
+  let cityOverlays: StyleLayerLike[] = [];
+  let cityPaths: MapLine[] = [];
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
   let nextPushAt = -Infinity;
@@ -842,7 +850,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** Places and closures do not move: re-set at once on every update. */
   function applyStatic(): void {
     if (!styled || !lib) return;
-    setData(lib.SOURCES.places, pointsToGeoJson(points));
+    setData(lib.SOURCES.places, pointsToGeoJson(points.filter(p=>p.place!=='city')));
+    if (lib.CITY_POINTS) setData(lib.CITY_POINTS, pointsToGeoJson(points.filter(p=>p.place==='city')));
     setData(lib.SOURCES.closures, linesToGeoJson(lines));
   }
 
@@ -979,13 +988,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.network, geojson(net ? networkToGeoJson(net) : empty));
     created.addSource(l.SOURCES.stops, geojson(net ? stopsToGeoJson(net) : empty));
     created.addSource(l.SOURCES.closures, geojson(linesToGeoJson(lines)));
-    created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points)));
+    created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points.filter(p=>p.place!=='city'))));
+    if (l.CITY_POINTS) {
+      created.addSource(l.CITY_POINTS, geojson(pointsToGeoJson(points.filter(p=>p.place==='city'))));
+      created.addSource(l.CITY_PATHS, geojson(linesToGeoJson(cityPaths)));
+    }
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
     overlays = l.overlayLayers(l.overlayPalette(theme), overlayOptions());
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
+    if (l.cityLayers) {
+      cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
+      for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>);
+    }
     styled = true;
     // A resize or a deliberate presentation can arrive before the library or
     // style finishes loading. Apply the latest request before reporting ready,
@@ -1089,12 +1106,23 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       [point.x + HIT_TOLERANCE_PX, point.y + HIT_TOLERANCE_PX],
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
+    const place = l.CITY_LAYERS ? first(['city-place-dots','city-place-badges','city-place-labels']) : undefined;
+    if (place) return {kind:'place',id:String(place.properties.id)};
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
     if (vehicle) return { kind: 'vehicle', id: String(vehicle.properties.id) };
     const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
     if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: siblingPlatforms(String(platform.properties.name)) };
     const closure = closuresVisible ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;
     if (closure) return { kind: 'closure', id: String(closure.properties.id) };
+    if (options.resolveStreet && m.unproject) {
+      const labelLayers=basemap.filter(layer=>layer.type==='symbol'&&layer.id.startsWith('roads_labels')).map(layer=>layer.id);
+      const road=labelLayers.length?first(labelLayers):undefined;
+      const name=road?.properties['name:hr']??road?.properties.name;
+      if (typeof name==='string') {
+        const p=m.unproject(point),id=options.resolveStreet(name,{lon:p.lng,lat:p.lat});
+        if(id)return {kind:'street',id};
+      }
+    }
     return null;
   }
 
@@ -1170,6 +1198,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (typeof following === 'string' && next?.kind !== 'vehicle') following = null;
     if (following === true && next?.kind !== 'route') following = null;
     applyOverlays();
+    if(map&&styled&&lib?.cityLayers){
+      const nextLayers=lib.cityLayers(lib.overlayPalette(theme),next?.kind==='place'?next.id:null,scale);
+      applyOps(map,lib.styleDiff(cityOverlays,nextLayers));cityOverlays=nextLayers;
+    }
     if (opts.fit) fitSelection();
   }
 
@@ -1188,6 +1220,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (!map) { pendingSelectionFit = { padding }; return; }
     pendingSelectionFit = null;
     switch (sel.kind) {
+      case 'place': {
+        const point=points.find(p=>p.place==='city'&&p.id===sel.id);
+        if(point)fitCoordinates([[point.lon,point.lat]],16,padding);
+        return;
+      }
+      case 'street': return;
       case 'route': {
         if (!net) return;
         const coords: [number, number][] = [];
@@ -1240,6 +1278,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyBasemap();
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
+    if(lib?.cityLayers){
+      const next=lib.cityLayers(lib.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
+      applyOps(map,lib.styleDiff(cityOverlays,next));cityOverlays=next;
+    }
   }
 
   function setLocale(next: string): void {
@@ -1380,6 +1422,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setEmphasis,
+    setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,linesToGeoJson(next)); },
     setClosuresVisible(visible) {
       closuresVisible = visible;
       applyOverlays();

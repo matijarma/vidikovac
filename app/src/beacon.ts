@@ -65,6 +65,7 @@ export interface BeaconClientDeps {
   onStatus: (status: BeaconStatus) => void;
   onContext?: (screen: ScreenMetadata) => void;
   presentationVersion?: 1;
+  capabilities?: string[];
   onPaired?: (expiresAt: number) => void;
   onPresentation?: (presentation: ScreenPresentation) => void;
 }
@@ -113,7 +114,7 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
   function handle(message: BeaconServerMessage): void {
     switch (message.t) {
       case 'challenge':
-        void hmac(deps.credentials.secret, message.nonce).then((mac) => send({ t: 'auth', hmac: mac, ...(deps.presentationVersion ? { presentationVersion: deps.presentationVersion } : {}) }));
+        void hmac(deps.credentials.secret, message.nonce).then((mac) => send({ t: 'auth', hmac: mac, ...(deps.presentationVersion ? { presentationVersion: deps.presentationVersion } : {}),...(deps.capabilities?{capabilities:deps.capabilities}: {}) }));
         return;
       case 'paired': deps.onPaired?.(message.expiresAt); return;
       case 'presentation': deps.onPresentation?.(message.presentation); return;

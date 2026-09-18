@@ -20,6 +20,8 @@ import { iconMarkup } from '../ui/icons';
 import { lineBadge } from './blocks';
 import { kvartMenuMarkup } from './chrome';
 import { distanceKm } from './text';
+import { dynamicPlaces, sourceForPlaceId } from '../city/discovery';
+import { ct } from '../city/strings';
 
 export type KvartMode = 'workspace' | 'aside';
 
@@ -205,7 +207,15 @@ function stopChip(i18n: I18n, ctx: LayerContext, ref: SavedRef): string {
 
 function savedSection(i18n: I18n, ctx: LayerContext): string {
   const list = ctx.saved?.list() ?? [];
-  const chips = list.map((ref) => (ref.kind === 'route' ? routeChip(i18n, ref) : stopChip(i18n, ctx, ref))).join('');
+  const chips = list.map((ref) => {
+    if(ref.kind==='route')return routeChip(i18n,ref);
+    if(ref.kind==='stop')return stopChip(i18n,ctx,ref);
+    const p=ctx.city?[...ctx.city.places,...dynamicPlaces(ctx.city,ctx.now)].find(p=>p.id===ref.id):null;
+    const source=sourceForPlaceId(ref.id);
+    if(!p&&source)ctx.ensureCity?.([source]);
+    const name=p?.name??ct(i18n,ctx.city?.loading?'loading':'selected');
+    return `<li data-key="place:${escapeAttribute(ref.id)}"><button class="kv-chip" data-action="nav" data-layer="u-pokretu" data-selection="${escapeAttribute(JSON.stringify(ref))}">${iconMarkup('map-pin')}<span>${escapeHtml(name)}</span></button><button class="kv-chip-x btn-quiet" data-action="unsave" data-kind="place" data-id="${escapeAttribute(ref.id)}" aria-label="${escapeAttribute(i18n.t('kvart.removeStop',{name}))}">${iconMarkup('x')}</button></li>`;
+  }).join('');
   const add = `<li data-key="add"><button type="button" class="kv-chip kv-chip-add" data-action="search" data-testid="saved-add-stop">${escapeHtml(i18n.t('kvart.addStop'))}</button></li>`;
   const hint = list.length === 0 ? `<p class="kv-saved-hint" data-testid="saved-empty">${escapeHtml(i18n.t('kvart.savedEmpty'))}</p>` : '';
   return `<div class="kv-sec" data-key="saved"><p class="kicker">${escapeHtml(i18n.t('kvart.saved'))}</p><ul class="kv-saved" role="list">${chips}${add}</ul>${hint}</div>`;

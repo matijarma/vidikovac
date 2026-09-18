@@ -24,6 +24,7 @@ import '../ui/toast.css';
 import '../ui/panel.css';
 import '../ui/layers.css';
 import '../ui/overview.css';
+import '../ui/city.css';
 import '../ui/dashboard.css';
 import '../ui/kvart.css';
 import '../ui/dialog.css';

@@ -8,11 +8,11 @@ import type { PresentationResult, PresentationState, ScreenPresentation } from '
 import { provision, connectBeaconDirect, connectRoom, kioskAnswer, KIOSK_NET_KEY } from './helpers';
 
 const testEnv = env as unknown as Env;
-async function screen() {
+async function screen(capabilities:string[] = []) {
   const { beaconId, secret } = await provision();
   const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
   const challenge = await kiosk.inbox.nextOfType('challenge');
-  kiosk.ws.send(JSON.stringify({ t: 'auth', hmac: await kioskAnswer(secret, String(challenge.nonce)), presentationVersion: 1 }));
+  kiosk.ws.send(JSON.stringify({ t: 'auth', hmac: await kioskAnswer(secret, String(challenge.nonce)), presentationVersion: 1,capabilities }));
   const batch = (await kiosk.inbox.nextOfType('codes')).batch as CodeSlot[];
   const initial = (await kiosk.inbox.nextOfType('presentation')).presentation as ScreenPresentation;
   const stub = beaconStub(testEnv, beaconId);
@@ -29,6 +29,18 @@ async function screen() {
 }
 
 describe('screen-owned explicit presentation', () => {
+  it('negotiates city subjects without sending unknown selections to an old screen',async()=>{
+    for(const capabilities of [[],['city-v1']]){
+      const s=await screen(capabilities),a=await s.scanner(0);
+      const result=await s.stub.present(a.scan.roomId,{version:1,requestId:'city-test',expectedRevision:0,action:'present',target:{layer:'u-pokretu',selection:{kind:'place',id:'culture-a'}}});
+      if(capabilities.length){
+        expect(result.error).toBeUndefined();expect(result.state.status).toBe('pending');
+        const frame=await s.kiosk.inbox.nextOfType('presentation');
+        expect((frame.presentation as ScreenPresentation).target?.selection).toEqual({kind:'place',id:'culture-a'});
+      }else expect(result.error).toBe('unsupported');
+      a.phone.ws.close(1000,'done');s.kiosk.ws.close(1000,'done');
+    }
+  });
   it('scanning leaves the public overview, delivers only public context and waits for a screen ack', async () => {
     const s = await screen();
     const { phone, scan, state } = await s.scanner(0);

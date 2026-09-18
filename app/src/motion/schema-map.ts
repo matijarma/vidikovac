@@ -55,6 +55,7 @@ async function loadArtwork(signal: AbortSignal): Promise<unknown> {
 export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {}): CityMapHandle {
   const container = options.container, doc = deps.documentRef ?? container.ownerDocument;
   const now = deps.now ?? Date.now, interactive = options.interactive !== false;
+  const publicDisplay=!interactive||options.basemapProfile==='prozor';
   const i18n = createDefaultI18n(options.locale ?? 'hr');
   const abort = new AbortController();
   const element = doc.createElement('div');
@@ -117,7 +118,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     return namedStops.get(name) ?? null;
   };
   const screenStop = (): SchemaStop | null => stopForId(stop?.id);
-  const labels = (): boolean => interactive ? (pan?.snapshot().scale ?? 0) >= LABEL_MIN_PX_PER_UNIT : screenStop() !== null;
+  const labels = (): boolean => publicDisplay ? screenStop() !== null : (pan?.snapshot().scale ?? 0) >= LABEL_MIN_PX_PER_UNIT;
   const tones = (): SchemaTones => ({
     ink: tone(container, '--tone-text-primary', 'CanvasText'),
     halo: tone(container, '--tone-surface-canvas', 'Canvas'),
@@ -147,7 +148,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     return { schema, viewport: viewport(), density, w: routesCanvas.width, h: routesCanvas.height, labels: labels(),
       trams: trams(), selectedRoute: selection?.kind === 'route' ? selection.id : null,
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
-      screenStop: screenStop()?.name, labelMinPx: interactive ? undefined : KIOSK_LABEL_MIN_PX };
+      screenStop: screenStop()?.name, labelMinPx: publicDisplay ? KIOSK_LABEL_MIN_PX : undefined };
   }
   function marks(drawn: readonly Drawn[]): VehicleMark[] {
     return placer && pan && trams() ? schemaMarks(placer, drawn, { ...viewport(), density, symbolScale: options.symbolScale }) : [];
@@ -216,7 +217,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   }, { now, raf: deps.raf, cancel: deps.cancel, setTimer: options.setTimer, clearTimer: options.clearTimer, reducedMotion: options.reducedMotion });
 
   function kioskFit(): void {
-    if (!pan || interactive) return;
+    if (!pan || !publicDisplay) return;
     const at = screenStop();
     if (at) centreOn(at, KIOSK_LABEL_SCALE);
     else pan.fit();

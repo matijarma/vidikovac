@@ -9,8 +9,16 @@ import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '..
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
-import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
+import { parseSelection, publicItemKey, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
+import { createCityStore, type CityStore } from './core/city-store';
+import { discover,dynamicPlaces,type CityGroup,GROUP_SOURCES,CATEGORY_SOURCE } from './city/discovery';
+import { placeDetail,placesMarkup,streetDetail } from './city/markup';
+import { locatedEvents } from '../../shared/city/events';
+import { ct, type CityWord } from './city/strings';
+import { reconcile } from './ui/dom/reconcile';
+import type { MapSelection } from './map/city-map';
+import { matchStreet } from '../../shared/city/geo';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
 import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/lastrun';
@@ -35,7 +43,7 @@ import { mountInvitation, type InvitationHandle, type InvitationModel } from './
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
-import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
+import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
 import { DEFAULT_STOP_ID } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
@@ -62,6 +70,7 @@ export const MAJOR_LABELS_LAYER = 'roads_labels_major';
 export const LASTRUN_DOWN_RETRY_MS = 3_600_000;
 
 export interface KioskDeps {
+  cityStore?: CityStore;
   i18n: I18n;
   hash: string;
   /** T5.3: the same controller entries/kiosk.ts already resolved (solar by
@@ -160,6 +169,7 @@ function noticeMarkup(kind: 'expired' | 'revoked', s: KioskStrings): string {
 }
 
 export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
+  const cityStore=deps.cityStore??createCityStore();
   const { i18n } = deps;
   const locale = deps.locale ?? i18n.getLocale();
   const s = kioskStrings(locale);
@@ -238,6 +248,73 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let acknowledgedStatus: 'displayed' | 'unavailable' | null = null;
   let presentationLoaded = false;
   let pairingNoticeUntil = 0;
+  let exploring=false;
+  let exploreUntil=0;
+  let localSelection:MapSelection|null=null;
+  let localGroup:CityGroup='living';
+  let localCategory='';
+  let localQuery='';
+  let localLimit=20;
+  function paintExplore():void {
+    const slot=element.querySelector<HTMLElement>('.k-discovery-slot');
+    element.dataset.exploring=String(exploring);
+    if(!slot)return;
+    if(!exploring){slot.replaceChildren();return;}
+    const city=cityStore.snapshot(),events=locatedEvents(teaser.find(m=>m.module==='dogadanja')?.items??[],city.places,now());
+    const p=localSelection?.kind==='place'?[...city.places,...dynamicPlaces(city,now())].find(p=>p.id===localSelection!.id):null;
+    const street=localSelection?.kind==='street'?city.streets.find(s=>s.id===localSelection!.id):null;
+    const transportSelection:PublicSelection|null=localSelection?.kind==='route'||localSelection?.kind==='stop'?{kind:localSelection.kind,id:localSelection.id}:
+      localSelection?.kind==='vehicle'||localSelection?.kind==='closure'?{kind:'item',module:localSelection.kind==='vehicle'?'zet-rt':'prometnice',id:publicItemKey(localSelection.kind==='vehicle'?'zet-rt':'prometnice',localSelection.id)}:null;
+    const result=discover(city,teaser.find(m=>m.module==='dogadanja')?.items??[],{group:localGroup,category:localCategory,window:'week',query:localQuery,center:stop??{lon:15.97726,lat:45.81286},radius:5000,now:now()});
+    const categories:CityWord[]=localGroup==='useful'?['water','toilet','sport','dogs','recycling','market','wifi','cycle-parking','garage','charging']:
+      localGroup==='heritage'?['heritage','streets']:localGroup==='culture'?['activeVenues','allVenues']:localGroup==='transport'?['bikes','rail','air']:[];
+    const next=document.createElement('div');
+    next.innerHTML=`<button class="btn-ghost" data-key="leave" data-action="kiosk-leave">${ct(i18n,'leave')}</button>${p?placeDetail(i18n,p,city,events):street?streetDetail(i18n,street):transportSelection?`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button>${selectionCard({...pairedContext(),selection:transportSelection})}</article>`:
+      `<div data-key="browse"><label for="kiosk-city-search">${ct(i18n,'search')}</label><input id="kiosk-city-search" class="city-search" type="search" value="${escapeAttribute(localQuery)}" autocomplete="off">
+      <div class="city-groups">${(['living','culture','useful','heritage','transport'] as CityGroup[]).map(g=>`<button class="city-group" data-key="${g}" data-action="kiosk-group" data-group="${g}" aria-pressed="${localGroup===g}">${ct(i18n,g==='living'?'all':g==='transport'?'movement':g)}</button>`).join('')}</div>
+      <div class="city-filters">${categories.map(c=>{const key=c==='activeVenues'?'':c==='allVenues'?'culture':c;return `<button class="city-filter" data-action="kiosk-category" data-category="${key}" aria-pressed="${localCategory===key}">${ct(i18n,c)}</button>`;}).join('')}</div>
+      ${placesMarkup(i18n,result.places,result.events,localLimit)}
+      ${result.streets.slice(0,localLimit).map(s=>`<button class="city-row" data-key="${escapeAttribute(s.id)}" data-action="select-street" data-id="${escapeAttribute(s.id)}"><span><strong>${escapeHtml(s.name)}</strong><span class="city-meta">${escapeHtml(s.settlement)}</span></span></button>`).join('')}
+      ${result.streets.length>localLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}
+      ${city.loading?`<p role="status">${ct(i18n,'loading')}</p>`:!result.places.length&&!result.streets.length?`<p>${ct(i18n,'noResults')}</p>`:''}</div>`}`;
+    // Public exploration does not save a stranger's preference on the venue device.
+    next.querySelectorAll('[data-action=city-save],[data-action=city-copy]').forEach(e=>e.remove());
+    // Third-party pages belong on the visitor's device, not in a public kiosk tab.
+    next.querySelectorAll<HTMLElement>('a[href],[data-action=nav]').forEach(link=>{
+      const text=document.createElement('div');text.className=link.className;text.innerHTML=link.innerHTML;link.replaceWith(text);
+    });
+    reconcile(slot,next);
+  }
+  function endExplore():void {exploring=false;localSelection=null;localGroup='living';localCategory='';localQuery='';localLimit=20;paintExplore();paintMap();element.querySelector<HTMLElement>('[data-action=kiosk-explore]')?.focus();}
+  function exploreSelection(sel:MapSelection|null):void {
+    if(phase!=='invitation'||presentation?.target)return;
+    exploring=true;exploreUntil=now()+90_000;localSelection=sel;
+    if(sel?.kind==='stop')void ensureStops();
+    paintExplore();
+  }
+  element.addEventListener('click',event=>{
+    if(phase!=='invitation'||presentation?.target)return;
+    const target=(event.target as Element)?.closest<HTMLElement>('[data-action]');
+    if(!target)return;
+    const action=target.dataset.action;
+    if(action==='kiosk-explore'){exploreSelection(null);void cityStore.ensure(['culture','heritage','streets','settlements']);}
+    if(action==='kiosk-leave')endExplore();
+    if(action==='clear-selection'){exploreSelection(null);paintMap();}
+    if(action==='select-place'){exploreSelection({kind:'place',id:target.dataset.id!});paintMap();mapAdapter.handle()?.select?.(localSelection,{fit:true});}
+    if(action==='select-street')exploreSelection({kind:'street',id:target.dataset.id!});
+    if(action==='kiosk-group'){localGroup=target.dataset.group as CityGroup;localCategory='';localLimit=20;localSelection=null;void cityStore.ensure(GROUP_SOURCES[localGroup]);paintExplore();paintMap();}
+    if(action==='kiosk-category'){localCategory=target.dataset.category??'';localLimit=20;void cityStore.ensure(CATEGORY_SOURCE[localCategory]??[]);paintExplore();paintMap();}
+    if(action==='city-more'){localLimit+=20;paintExplore();}
+  });
+  element.addEventListener('input',event=>{
+    const target=event.target as HTMLInputElement;
+    if(!exploring||phase!=='invitation'||presentation?.target||target.id!=='kiosk-city-search')return;
+    localQuery=target.value;localLimit=20;exploreUntil=now()+90_000;
+    if(localQuery)void cityStore.ensure(Object.values(CATEGORY_SOURCE).flat());
+    paintExplore();paintMap();
+  });
+  element.addEventListener('pointerdown',()=>{if(exploring)exploreUntil=now()+90_000;});
+  element.addEventListener('keydown',e=>{if(exploring){exploreUntil=now()+90_000;if(e.key==='Escape')endExplore();}});
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
   let essentialsIdle: unknown = null;
@@ -334,7 +411,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const until = document.createElement('span');
     until.className = 'k-session-until';
     until.textContent = presentation?.target
-      ? i18n.t('presentation.showing', { name: presentationTargetLabel(i18n, presentation.target) })
+      ? i18n.t('presentation.showing', { name: presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()) })
       : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
     const layer = document.createElement('span');
     layer.className = 'k-session-layer';
@@ -432,6 +509,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const composition = compositionOf(layout);
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
+      city:cityStore.snapshot(),localSelection,localGroup,localCategory,localQuery,exploring,
+      onSelect:exploreSelection,
+      resolveStreet:(name,point)=>matchStreet(name,point,cityStore.snapshot().streets,cityStore.snapshot().settlements)?.id??null,
       phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,
       target: presentation?.target ?? undefined,
@@ -443,6 +523,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
     if (!container) return;
+    container.inert=phase!=='invitation'||Boolean(presentation?.target);
     mapContainer = container;
     if (container.parentElement !== host) {
       host.appendChild(container);
@@ -511,12 +592,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
 
   function invitationModel(): InvitationModel {
-    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout) };
+    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot() };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
     const target = presentation?.target;
-    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops, ...(target ? { target } : {}) };
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops,city:cityStore.snapshot(), ...(target ? { target } : {}) };
   }
   /** Both tiers of one module: the session copy, unless it is no longer live and the teaser holds a live one. */
   function mergedSnapshots(): Partial<Record<ModuleId, ModuleSnapshot>> {
@@ -533,9 +614,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintedMinute = Math.floor(now() / 60_000);
     invitation?.update(invitationModel());
     paired?.update(pairedContext());
+    if(presentation?.target)showSessionLabel(presentation.expiresAt);
     paintWeather();
     paintStrip();
     paintMap();
+    paintExplore();
     if (!basics.hidden) paintEssentials();
     fitAll();
     acknowledgePresentation();
@@ -772,6 +855,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     beacon = makeBeacon({
       credentials: creds,
       presentationVersion: 1,
+      capabilities:['city-v1'],
       onCodes: (batch, serverNow) => { if (current()) rotation.setBatch(batch, serverNow); },
       onContext: (screen) => { if (current()) applyScreen(screen); },
       onUnlocked: ({ roomId, ticket }) => { if (current()) openSession(roomId, ticket); },
@@ -793,7 +877,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         if (status === 'offline') showAlert(s.status.offline, 'beacon');
         else if (status === 'replaced') showAlert(i18n.t('presentation.replaced'), 'beacon');
         else if (status === 'connecting' && beaconWasLive) showAlert(s.status.reconnecting, 'beacon');
-        else if (status === 'live') { beaconWasLive = true; clearAlert('beacon'); }
+        else if (status === 'live') { beaconWasLive = true; clearAlert('beacon');void cityStore.start().then(()=>cityStore.ensure(['heritage'])); }
       },
     });
     beacon.connect();
@@ -834,6 +918,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       return;
     }
     presentation = next;
+    exploring=false;localSelection=null;localQuery='';localCategory='';localLimit=20;paintExplore();
     presentationLoaded = false;
     pairingNoticeUntil = 0;
     headMid.textContent = '';
@@ -843,6 +928,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     unlockedToken = next.dataToken ?? null;
     sessionSnapshots = {};
     selection = next.target.selection ?? null;
+    if(selection?.kind==='place')void cityStore.ensure(['culture','heritage','water','toilets','dogs','sport','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);
+    if(selection?.kind==='street')void cityStore.ensure(['streets','settlements']);
     activeLayer = next.target.layer === 'kvart' ? 'grad-sada' : next.target.layer;
     setPhase('paired');
     showSessionLabel(next.expiresAt);
@@ -1060,6 +1147,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   });
 
   const codeTimer = setTimer(() => {
+    if(exploring&&now()>=exploreUntil)endExplore();
     paintClock();
     paintProgress();
     if (presentation?.target && presentation.expiresAt !== null && rotation.serverNow() >= presentation.expiresAt) {
@@ -1088,11 +1176,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
     else void refreshSessionData();
   }, REFRESH_MS);
+  const stopCity=cityStore.subscribe(()=>{if(!disposed){paintLocal();paintExplore();}});
 
   return {
     element,
     phase: () => phase,
     destroy() {
+      stopCity();cityStore.destroy();
       disposed = true;
       rotation.stop();
       clearTimer(refreshTimer);

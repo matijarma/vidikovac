@@ -1,0 +1,56 @@
+import {test,expect} from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import {experienceSnapshots,installExperienceFixture,FIXTURE_DASHBOARD} from './experience-fixtures';
+import {cityEvents,installCityFixture,CITY_VENUE} from './city-fixtures';
+import {fulfillPublicMap} from '../scripts/review-maps.mjs';
+
+for(const light of [false,true])test(`city discovery: accessible venue, event, heritage and street paths${light?' without a map':''}`,async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(light=>{localStorage.setItem('vidikovac-theme','light');localStorage.setItem('vidikovac-lagano',light?'1':'0');},light);
+  const snapshots=await experienceSnapshots();cityEvents(snapshots.dogadanja);
+  const session=await installExperienceFixture(page,snapshots);await installCityFixture(page);
+  await page.route('**/maps/**',route=>fulfillPublicMap(route));
+  await page.goto(FIXTURE_DASHBOARD);
+  await page.locator('.ki-tab[data-layer=u-pokretu]').first().click();
+  const search=page.getByTestId('transport-search');await search.fill('Gavella');
+  await expect(page.locator(`[data-action=select-place][data-id=${CITY_VENUE.id}]`)).toBeVisible();
+  await search.press('Enter');
+  await expect(page.getByTestId('city-detail')).toContainText('Gavella');
+  await page.locator('.city-event').getByText('Večer u Gavelli').click();
+  await expect(page.getByTestId('event-detail')).toContainText('Večer u Gavelli');
+  expect(session.events.filter(e=>e.t==='present')).toEqual([]);
+  await page.locator('.ki-tab[data-layer=u-pokretu]').first().click();
+  await search.fill('Ilica');await page.locator('[data-action=select-street]').first().click();
+  await expect(page.getByTestId('street-story')).toContainText('Opis imena iz izvornog registra.');
+  await search.fill('Povijesna');await page.locator('[data-action=select-place]').first().click();
+  await expect(page.getByTestId('city-detail')).toContainText('Obuhvat zaštite, ne ulaz');
+  await page.locator('[data-action=city-group][data-group=transport]').click();
+  await page.locator('[data-action=city-category][data-category=bikes]').click();
+  await page.locator('[data-action=bike-mode][data-mode=return]').click();
+  await expect(page.locator('[data-id=bajs-test-bike] .city-row-value')).toContainText('0');
+  await expect(page.locator('[data-id=bajs-test-bike] .city-row-value')).toContainText('mjesta za povrat');
+  const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations;
+  expect(violations.filter(v=>v.impact==='serious'||v.impact==='critical').map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+  if(light)expect(await page.locator('canvas').count()).toBe(0);
+});
+
+test('a saved city selection survives refresh and is presented only explicitly',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  const snapshots=await experienceSnapshots();cityEvents(snapshots.dogadanja);
+  const session=await installExperienceFixture(page,snapshots);await installCityFixture(page);
+  await page.route('**/maps/**',route=>fulfillPublicMap(route));
+  await page.goto(FIXTURE_DASHBOARD);
+  await page.locator('.ki-domains [data-layer=u-pokretu]').click();
+  await page.getByTestId('transport-search').fill('Gavella');await page.locator('[data-action=select-place]').first().click();
+  await page.locator('[data-action=city-save]').click();
+  await expect(page.locator('[data-action=city-save]')).toHaveText('Spremljeno');
+  await page.clock.fastForward(65_000);
+  await expect(page.getByTestId('city-detail')).toContainText('Gavella');
+  expect(session.events.filter(e=>e.t==='present')).toEqual([]);
+  await page.getByTestId('screen-control').click();await page.getByTestId('present-view').click();
+  await expect.poll(()=>session.events.filter(e=>e.t==='present').length).toBe(1);
+  expect(session.events.find(e=>e.t==='present')).toMatchObject({command:{target:{layer:'u-pokretu',selection:{kind:'place',id:CITY_VENUE.id}}}});
+  session.acknowledgePresentation();await expect(page.getByTestId('presentation-feedback')).toContainText('Prikazano');
+  session.expire();await expect(page.getByTestId('session-label')).toHaveAttribute('data-state','frozen');
+});

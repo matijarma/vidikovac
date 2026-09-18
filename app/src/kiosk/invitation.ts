@@ -29,6 +29,10 @@ import { frontPanels, PANEL_IDS, panelMarkup, type PanelId } from './front';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
+import type { CityState } from '../../../shared/city/types';
+import { locatedEvents,activeVenues } from '../../../shared/city/events';
+import { distanceM,located } from '../../../shared/city/geo';
+import { ct } from '../city/strings';
 
 export interface InvitationDeps {
   strings: KioskStrings;
@@ -40,6 +44,7 @@ export interface InvitationDeps {
 }
 
 export interface InvitationModel {
+  city?:CityState;
   modules: readonly ModuleSnapshot[];
   stop: ScreenStop | null;
   now: number;
@@ -83,14 +88,13 @@ function panelShell(id: PanelId): string {
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const { strings: s, i18n, locale, lightweight } = deps;
   const element = document.createElement('section');
-  element.className = 'k-front';
+  element.className = 'k-front k-city-window';
   element.dataset.testid = 'kiosk-invitation';
-  element.innerHTML = `<div class="k-local"><div class="k-geography"></div>${panelShell('promet')}</div>
+  element.innerHTML = `<div class="k-local"><div class="k-geography"></div>
+      <div class="k-local-facts">${panelShell('around')}${panelShell('city')}${panelShell('promet')}</div></div>
     <aside class="k-overview">${panelShell('weather')}${panelShell('tonight')}
-      <div class="k-neighborhood"><div class="k-context-stack">${panelShell('around')}${panelShell('city')}</div>
-        <div class="k-panel--card">${cardMarkup(s, deps.codeBase)}</div>
-      </div>
-    </aside>`;
+      <div class="k-discovery-slot"></div><div class="k-panel--card">${cardMarkup(s, deps.codeBase)}</div>
+    </aside><button type="button" class="k-explore btn-ghost" data-action="kiosk-explore">${ct(i18n,'preview')}</button>`;
   host.appendChild(element);
   const field: FieldHandle = mountField(element.querySelector<HTMLElement>('.k-geography')!, { lightweight });
   const panels = Object.fromEntries(PANEL_IDS.map((id) => [id, element.querySelector<HTMLElement>(`[data-panel="${id}"]`)!])) as Record<PanelId, HTMLElement>;
@@ -108,6 +112,29 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
 
   function paint(model: InvitationModel): void {
     const built = frontPanels({ modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale, lightweight, composition: model.composition });
+    // Small mobility context, not a whole departure board dominating city life.
+    built.promet.rows=built.promet.rows.slice(0,model.composition==='wide'?2:1);
+    if(model.city){
+      const events=locatedEvents(model.modules.find(m=>m.module==='dogadanja')?.items??[],model.city.places,model.now);
+      const venues=activeVenues(events,model.city.places).sort((a,b)=>model.stop?distanceM(model.stop,a.place as {lon:number;lat:number})-distanceM(model.stop,b.place as {lon:number;lat:number}):0);
+      if(venues.length){
+        built.tonight.rows=venues.slice(0,model.composition==='portrait'?3:model.composition==='compact'?1:2).map(v=>({
+          key:v.place.id,lead:String(v.count),title:v.place.name,sub:v.events[0].item.title,
+        }));
+        built.tonight.meta=ct(i18n,'week');
+        built.tonight.note=undefined;
+      }
+      if(!built.tonight.rows.length){
+        const ref=model.stop??{lon:15.97726,lat:45.81286};
+        const p=model.city.places.filter(p=>['culture','heritage'].includes(p.category)&&located(p))
+          .sort((a,b)=>distanceM(ref,{lon:a.lon!,lat:a.lat!})-distanceM(ref,{lon:b.lon!,lat:b.lat!}))[0];
+        if(p){built.tonight.kicker=ct(i18n,'quiet');built.tonight.meta=undefined;built.tonight.rows=[{key:p.id,title:p.name,sub:p.description?.slice(0,160)??p.address}];built.tonight.note=undefined;built.tonight.credit=model.city.manifest?.sources.find(s=>s.id===p.sourceId)?.name??p.sourceId;}
+      }
+    }
+    if(model.composition==='compact'){
+      built.tonight.rows=built.tonight.rows.slice(0,1);
+      built.tonight.note=undefined;
+    }
     for (const id of PANEL_IDS) {
       const html = panelMarkup(built[id]);
       if (html === lastHtml[id]) continue;

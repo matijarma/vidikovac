@@ -2,6 +2,7 @@ import type { FetchContext } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
 import { parseHrDate, type Precision } from '../../hr-date';
 import { pageTotal } from '../../payload';
+import { eventLocation } from '../../../city/event-location';
 
 // Kulturpunkt (kulturpunkt.hr), WordPress REST, custom post type
 // kp_22_announcement, CC BY-SA 3.0 HR -- this is the reason the whole
@@ -91,6 +92,9 @@ export interface KulturpunktEvent {
     source: 'kulturpunkt';
     category: KulturpunktCategory;
     precision: Precision;
+    venueHint?: string;
+    venueTags?: string;
+    city?: string;
   };
 }
 
@@ -129,6 +133,7 @@ export async function fetchKulturpunkt(ctx: FetchContext): Promise<KulturpunktRe
         source: 'kulturpunkt',
         category: categoryFromClassList(row.class_list ?? []),
         precision: parsed.precision,
+        ...eventLocation(excerptText, row.class_list ?? []),
       },
     });
   }
