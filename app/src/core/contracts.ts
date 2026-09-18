@@ -9,6 +9,7 @@ import type { MobilitySnapshot, WasteSnapshot } from './mobility';
 import type { LastRunSnapshot } from './lastrun';
 import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
+import type { CityState } from '../../../shared/city/types';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -49,6 +50,10 @@ export interface CastState {
 
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
+  city?: CityState;
+  ensureCity?: (ids: readonly string[]) => void;
+  /** Disposes persistent workspace listeners when the owning surface ends. */
+  onDispose?: (dispose:()=>void)=>void;
   view?: ViewState;
   screen?: ScreenContext;
   errors?: FeedErrors;

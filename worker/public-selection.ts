@@ -5,6 +5,8 @@ import { LAYERS, type LayerId } from './protocol';
 export type PublicSelection =
   | { kind: 'route'; id: string }
   | { kind: 'stop'; id: string }
+  | { kind: 'place'; id: string }
+  | { kind: 'street'; id: string }
   | { kind: 'item'; id: string; module: ModuleId };
 
 const ID = /^[0-9A-Za-z_-]{1,32}$/;
@@ -44,6 +46,9 @@ export function parseSelection(params: unknown): PublicSelection | null {
   const p = params as Record<string, unknown>;
   if (Object.keys(p).some((k) => !['kind', 'id', 'module'].includes(k))) return null;
   if (typeof p.id !== 'string') return null;
+  if ((p.kind === 'place' || p.kind === 'street') && /^[0-9A-Za-z_-]{1,80}$/.test(p.id) && p.module === undefined) {
+    return { kind: p.kind, id: p.id };
+  }
   if ((p.kind === 'route' || p.kind === 'stop') && ID.test(p.id) && p.module === undefined) {
     return { kind: p.kind, id: p.id };
   }

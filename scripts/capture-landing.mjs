@@ -4,7 +4,6 @@
 import { chromium } from 'playwright';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { localNetworkHeaders } from './local-network.mjs';
 import { fulfillPublicMap } from './review-maps.mjs';
 
@@ -20,6 +19,8 @@ mkdirSync(output, { recursive: true });
 mkdirSync(raw, { recursive: true });
 const records = [];
 const browser = await chromium.launch({ headless: true });
+// Chromium's image encoder keeps capture tooling self-contained.
+const encoder=await browser.newPage();
 
 const variants = [
   { locale: 'hr', theme: 'light' }, { locale: 'hr', theme: 'dark' },
@@ -62,10 +63,9 @@ async function preferences(page, { locale, theme }, reload = true) {
 }
 
 async function layer(page, id) {
-  const tab = page.locator(`.ki-tab[data-layer="${id}"]:visible`).first();
+  const tab = page.locator(`.ki-tab[data-layer="${id}"]:visible, .ki-domains [data-layer="${id}"]:visible`).first();
   if (await tab.count()) await tab.click();
   else if (id === 'grad-sada') await page.locator('.ki-wordmark[data-layer=grad-sada]').click();
-  else if (id === 'u-pokretu') await page.getByTestId('status-search').click();
   else {
     await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
     await page.locator(`[data-testid="dir-${id}"]`).click();
@@ -107,15 +107,18 @@ async function capture(page, name, variant, widths, route) {
     if (!await map.isVisible()) continue;
     await page.waitForFunction(el => el.dataset.mapStatus === 'ready', await map.elementHandle(), { timeout: 30_000 });
   }
-  await page.screenshot({ path: resolve(raw, `${file}.png`), fullPage: false });
+  const png=await page.screenshot({ path: resolve(raw, `${file}.png`), fullPage: false });
   await style.evaluate((el) => el.remove());
   for (const width of widths) {
-    const result = spawnSync('ffmpeg', [
-      '-hide_banner', '-loglevel', 'error', '-y', '-i', resolve(raw, `${file}.png`),
-      '-vf', `scale=${width}:-1:flags=lanczos`, '-c:v', 'libwebp', '-quality', '78',
-      '-compression_level', '6', resolve(output, `${file}-${width}.webp`),
-    ], { windowsHide: true, encoding: 'utf8' });
-    if (result.status !== 0) throw new Error(`WebP conversion failed: ${result.stderr}`);
+    const bytes=await encoder.evaluate(async({png,width})=>{
+      const image=new Image();image.src='data:image/png;base64,'+png;await image.decode();
+      const canvas=new OffscreenCanvas(width,Math.round(width*image.height/image.width)),ctx=canvas.getContext('2d');
+      ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
+      const blob=await canvas.convertToBlob({type:'image/webp',quality:.78});
+      if(blob.type!=='image/webp')throw new Error('WebP encoding unavailable');
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    },{png:png.toString('base64'),width});
+    writeFileSync(resolve(output,`${file}-${width}.webp`),Buffer.from(bytes));
   }
   records.push({ name, locale, theme, widths, viewport: page.viewportSize(), route, capturedAt: new Date().toISOString() });
   console.log(`Captured ${file}`);
@@ -175,8 +178,9 @@ try {
     await layer(phone, 'grad-sada');
     await capture(phone, 'desktop', variant, [720, 1280], '/d/ Sada');
     await layer(phone, 'u-pokretu');
+    await phone.locator('[data-action=city-group][data-group=transport]').click();
     await phone.waitForTimeout(3000);
-    await capture(phone, 'transport', variant, [720, 1280], '/d/ Promet');
+    await capture(phone, 'transport', variant, [720, 1280], '/d/ Karta / Kretanje');
     await preferences(peer, variant);
     await peer.getByTestId('session-label').waitFor();
     await capture(peer, 'peer', variant, [390, 780], '/d/ actual five-minute peer session');

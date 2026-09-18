@@ -110,6 +110,7 @@ export function createMapRenderer(options: CityMapOptions, deps: RendererDeps = 
     setFeedState: (state) => send('feed', (h) => h.setFeedState?.(state)),
     setStop: (stop) => send('stop', (h) => h.setStop?.(stop)),
     setOutline: (outline) => send('outline', (h) => h.setOutline?.(outline)),
+    setCityPaths: lines => send('city-paths',h=>h.setCityPaths?.(lines)),
     fit: (target) => send('fit', (h) => h.fit?.(target)),
     setFitPadding: (padding) => send('padding', (h) => h.setFitPadding?.(padding)),
     camera: () => current?.camera?.() ?? null,

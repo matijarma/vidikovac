@@ -1,0 +1,92 @@
+import { describe,it,expect } from 'vitest';
+import { parseAir,parseBikes,parseConsultations } from '../../worker/city/live';
+import { normalizeReference } from '../../worker/city/normalize';
+import { REFERENCE_SOURCES } from '../../worker/city/sources';
+import { matchStreet } from '../../shared/city/geo';
+import { activeVenues,locatedEvents,resolveVenues } from '../../shared/city/events';
+import { departuresFrom,scheduleInstant } from '../../worker/city/schedules';
+import { parseSelection } from '../../worker/public-selection';
+import { emptyCity,type Place } from '../../shared/city/types';
+import { discover,dynamicPlaces } from '../../app/src/city/discovery';
+import type { FeedItem } from '../../worker/feed/schema';
+import {referenceDate} from '../../app/src/city/markup';
+import {bikeAvailability} from '../../shared/city/bikes';
+const now=Date.parse('2026-09-18T12:00:00Z');
+const place:Place={id:'culture-1',name:'Gavella',category:'culture',lon:15.97,lat:45.81,sourceId:'culture',sourceRecord:'1'};
+const event:FeedItem={id:'e1',module:'dogadanja',tier:'session',kind:'event',title:'Predstava',dateBasis:'event',at:'2026-09-18T18:00:00Z',data:{source:'kulturpunkt',venueHint:'U Gavelli predstava',precision:'time'}};
+describe('city source truth',()=>{
+  it('distinguishes rent/return counts, disabled stations and stale inventory',()=>{
+    const bike={...place,sourceId:'bajs',facts:{fresh:true,operational:true,returning:true,bikes:4,docks:0}};
+    expect(bikeAvailability(bike,'rent')).toBe('4');
+    expect(bikeAvailability(bike,'return')).toBe('0');
+    expect(bikeAvailability({...bike,facts:{...bike.facts,operational:false}},'rent')).toBe('—');
+    expect(bikeAvailability({...bike,facts:{...bike.facts,fresh:false}},'return')).toBe('?');
+  });
+  it('formats the original HTTP modification date without presenting a cut-off header',()=>{
+    expect(referenceDate('Tue, 24 Jun 2025 16:11:04 GMT')).toBe('2025-06-24');
+    expect(referenceDate('2026-09-10T11:22:12.000Z')).toBe('2026-09-10');
+    expect(referenceDate('unavailable')).toBe('');
+  });
+  it('keeps zero and missing bike counts distinct and joins station IDs',()=>{
+    const info={data:{stations:[{station_id:'a',name:'Trg',lat:45.81,lon:15.97},{station_id:'b',name:'Park',lat:45.8,lon:15.9}]}};
+    const rows=parseBikes(info,{data:{stations:[{station_id:'a',num_bikes_available:0,num_docks_available:4,is_installed:true,is_renting:true,is_returning:false,last_reported:now/1000}]}});
+    expect(rows[0]).toMatchObject({bikes:0,docks:4,returning:false});expect(rows[1].bikes).toBeNull();
+  });
+  it('air coordinates are swapped into lon/lat and null is not good',()=>{
+    expect(parseAir([{id:155,kod:'RH0101',naziv:'Zagreb',x:45.8,y:15.9,indeks:null,vrijeme:null}])[0]).toMatchObject({lon:15.9,lat:45.8,index:null,observedAt:undefined});
+  });
+  it('consultation needs open status and active dates',()=>{
+    const c={id:1,statusSavjetovanja:'Otvoren',pocetakSavjetovanja:'2026-09-01',zavrsetakSavjetovanja:'2026-09-30'};
+    expect(parseConsultations([c,{...c,id:2,statusSavjetovanja:'Zatvoren'}],new Date(now).toISOString())).toHaveLength(1);
+  });
+  it('fountain active flag is not working status; internal fields are stripped',()=>{
+    const source=REFERENCE_SOURCES.find(s=>s.id==='water')!;
+    const body=JSON.stringify({type:'FeatureCollection',features:[{id:1,geometry:{type:'Point',coordinates:[15.97,45.81]},properties:{objectid:1,lokacija:'Trg',aktivan_da_ne:'DA',status_odrz:'nije u funkciji',created_user:'staff',broj_vodomjera:'private'}}]});
+    const p=normalizeReference(source,body,new Date(now).toISOString()).data.places[0];
+    expect(p.facts).toEqual({maintenance:'nije u funkciji'});expect(JSON.stringify(p)).not.toContain('private');
+  });
+  it('rejects incomplete geographic pages',()=>{
+    expect(()=>normalizeReference(REFERENCE_SOURCES[0],JSON.stringify({type:'FeatureCollection',features:[],exceededTransferLimit:true}),new Date(now).toISOString())).toThrow();
+  });
+});
+describe('place and time',()=>{
+  it('uses verified aliases without inventing coordinates',()=>{
+    expect(resolveVenues(event,[place])).toEqual([place.id]);
+    expect(resolveVenues({...event,data:{...event.data,venueHint:'U nepoznatom klubu'}},[place])).toEqual([]);
+    expect(resolveVenues({...event,data:{...event.data,city:'Split'}},[place])).toEqual([]);
+    expect(resolveVenues({...event,data:{source:'kulturpunkt',venueTags:'gavella'}},[place])).toEqual([]);
+  });
+  it('deduplicates exact venue/start/title announcements, never independent performances',()=>{
+    const events=locatedEvents([event,{...event,id:'e2'},{...event,id:'e3',at:'2026-09-19T18:00:00Z'}],[place],now);
+    expect(events).toHaveLength(2);expect(activeVenues(events,[place])[0].count).toBe(2);
+  });
+  it('ongoing exhibitions remain one known program, expired events leave',()=>{
+    const rows=locatedEvents([{...event,at:'2026-09-01T12:00:00Z',until:'2026-09-30T12:00:00Z'},{...event,id:'past',at:'2026-09-17T12:00:00Z'}],[place],now);
+    expect(rows).toHaveLength(1);expect(rows[0].ongoing).toBe(true);
+  });
+  it('quiet venues are searchable but not default event pins',()=>{
+    const city={...emptyCity(),places:[place]},o={group:'living' as const,category:'',window:'week' as const,query:'',center:{lon:15.97,lat:45.81},radius:5000,now};
+    expect(discover(city,[],o).places).toHaveLength(0);
+    expect(discover(city,[],{...o,query:'Gavella'}).places).toHaveLength(1);
+  });
+  it('never shows stale bike counts as available now',()=>{
+    const city={...emptyCity(),live:{schema:1 as const,generatedAt:new Date(now).toISOString(),sources:[],air:[],consultations:[],bikes:[{id:'1',name:'Trg',lon:15.97,lat:45.81,bikes:3,docks:2,capacity:5,installed:true,renting:true,returning:true,observedAt:new Date(now-900000).toISOString()}]}};
+    expect(dynamicPlaces(city,now)[0].facts?.bikes).toBe('?');
+  });
+  it('street names require exactly one matching settlement',()=>{
+    const stories=[{id:'1',name:'Ilica',description:'a',settlement:'Zagreb',settlementId:'1'},{id:'2',name:'Ilica',description:'b',settlement:'Drugo',settlementId:'2'}];
+    expect(matchStreet('Ilica',{lon:15.97,lat:45.81},stories,[])).toBeNull();
+    expect(matchStreet('Ilica',{lon:15.97,lat:45.81},stories,[{id:'1',name:'Zagreb',polygons:[[[[15,45],[17,45],[17,47],[15,47],[15,45]]]]}])?.id).toBe('1');
+  });
+  it('new public references remain bounded and reject private parameters',()=>{
+    expect(parseSelection({kind:'place',id:'culture-abc'})).toEqual({kind:'place',id:'culture-abc'});
+    expect(parseSelection({kind:'street',id:'123',lat:45})).toBeNull();
+  });
+  it('GTFS uses service day and expires without inventing arrivals',()=>{
+    const at=scheduleInstant('2026-09-18',25*3600);
+    expect(new Date(at).toISOString()).toBe('2026-09-18T23:00:00.000Z');
+    const part={schema:1 as const,operator:'hz' as const,generatedAt:new Date(now).toISOString(),days:['2026-09-18'],validUntil:'2026-09-19T04:00:00Z',stops:{a:{name:'Zagreb',lon:15.9,lat:45.8,runs:[[1,25*3600,'t','r','r','Sesvete'] as [number,number,string,string,string,string]]}}};
+    expect(departuresFrom(part,'hz','a',now).departures[0].at).toBe(new Date(at).toISOString());
+    expect(departuresFrom(part,'hz','a',now+86400000).status).toBe('down');
+  });
+});

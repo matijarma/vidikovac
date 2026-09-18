@@ -16,6 +16,46 @@ Ovaj popis je jedini izvor istine o tome odakle Vidikovac uzima podatke, pod koj
 | `ckan-geo` | Grad Zagreb, samo dva prostorna sloja: gradske četvrti (izvedeni centroidi poligona, ne lokacije sjedišta) i zborna mjesta civilne zaštite (izvorne točke), s neovisnom dostupnošću | https://services8.arcgis.com/Usi0jGQwMmBUpFjr/arcgis/rest/services/Gradske_cetvrti/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson i https://data.zagreb.hr/dataset/d736c146-6497-4915-894b-41bdf51267b0/resource/d30eb215-3ce2-48f8-88b2-6ffac82d46b5/download/zborna_mjesta_civilne_zatite_grada_zagreba-1.geojson | Otvorena dozvola (OD) prema skupovima na data.zagreb.hr ("Gradske četvrti - prostorna jedinica mjesne samouprave", "Zborna mjesta civilne zaštite"); ArcGIS servis Grada za četvrti sam ne navodi licencu | 86400 / 2592000 | Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup '{naziv}', posljednja izmjena {datum} |
 | `dogadanja` | Šest izvora zagrebačkih događanja: Kulturpunkt (najave), Skupština Grada Zagreba (rokovnik sjednica), Kvartovske novosti (mjesna samouprava), Plan komunalnih aktivnosti, ZET (obavijesti), Etnografski muzej (događanja i izložbe) -- puni popis, uključujući dva izvora isključena zbog robots.txt (Guru za kulturu, YouTube Atom feed Skupštine), u odjeljku niže | https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement (predstavnička adresa; svaki od šest izvora ima svoju, vidi worker/feed/modules/dogadanja/*.ts) | Više licenci (CC BY-SA 3.0 HR za Kulturpunkt; Otvorena dozvola ili uvjeti ponovne uporabe zagreb.hr za Skupštinu, Kvartovske novosti, Plan komunalnih aktivnosti i ZET; Etnografski muzej ne navodi licencu) | 900 / 86400 | Šest izvora zagrebačkih događanja: Kulturpunkt (CC BY-SA 3.0 HR), Skupština Grada Zagreba, kvartovske novosti, plan komunalnih aktivnosti i ZET (Otvorena dozvola), Etnografski muzej; licenca i poveznica navedeni uz svaku stavku prema polju "source" |
 
+### Gradski katalog i uvjeti, nadogradnja 18. rujna 2026.
+
+Novi izvori nisu dodatne vrijednosti `ModuleId`: referentni katalog i
+kratkotrajni podaci imaju odvojene `/api/city/*` rute. Izvršni popis URL-ova,
+licenci i adaptera je `worker/city/sources.ts`; isti popis gradi javnu
+stranicu `/izvori` bez JavaScripta.
+
+| Izvori | Upotreba | Granica tvrdnje |
+|---|---|---|
+| Kulturne ustanove, Grad Zagreb | Mjesta i spajanje s poznatim događanjima | Sedam kalendarskih dana uključujući danas; broj je poznati program, ne sav program ustanove. Tematska oznaka sama nije lokacijski dokaz. |
+| Zdenci i pojilice s pitkom vodom | Karta i popis | Održavanje i vrsta iz registra; nema provjere uživo. Zapisi iz preklapajućih vodenih skupova unutar 8 m prikazuju se jednom. |
+| Javni WC-i, igrališta, površine za pse, reciklažna dvorišta, tržnice, Wi-Fi, stalci, garaže, punionice | Kategorije, pretraga, detalji, spremanje | Kapacitet nije broj slobodnih mjesta; radno vrijeme nije potvrda otvorenosti. Za podržane zapise bez naziva koriste se generičke oznake, ne izmišljeni nazivi. |
+| Biciklističke staze | Karta i popis dionica | Objavljena geometrija; nema izračuna biciklističke rute. |
+| Registar ulica i poligoni naselja | Izvorne priče, pretraga i klik na naziv na karti | Samo objavljeni opisi; točno podudaranje imena i jednog naselja. |
+| Registar kulturnih dobara i Geoportal Ministarstva kulture | Baština i zaštićeni obuhvat | Spajanje registarskom oznakom; obuhvat nije ulaz ni jamstvo pristupa. WFS može djelomično zakazati; nepovezani zapisi ostaju bez koordinata. |
+| BAJS / nextbike GBFS v2 | Bicikli i mjesta za povrat | CC0-1.0; predmemorija 60 s, brojevi u UI-u ne stariji od 180 s. Nedostajući podatak nije nula. |
+| Informacijski sustav zaštite zraka RH | Preliminarni indeks i tvari po postaji | Indeks: predmemorija 3600 s, granična starost 6 h; detalj tvari 600 s. Nije ocjena cijeloga grada; uvjeti ponovne uporabe nisu navedeni. |
+| DHMZ hidrološki bilten | Izvorni tekst o Savi s datumom biltena | Predmemorija 3600 s, granična starost 48 h; nije lokalna poplavna uzbuna ni zamjena CAP upozorenjima. |
+| eSavjetovanja | Aktivna nacionalna savjetovanja | Predmemorija 12 h; traži se otvoren status i aktivni datumi. Dohvat nije datum objave, zapisi nisu nužno zagrebački. |
+| ZET i HŽPP GTFS | Planirani polasci stajališta | Raspored, ne ETA; prethodni i sljedećih 14 servisnih dana, s iznimkama i satima nakon ponoći. Terminali i zabrana ukrcaja nisu polasci. HŽPP resurs ne navodi uvjete ponovne uporabe. |
+
+Referentni izvori provjeravaju se dnevno, jedan po alarmu. Pogreška čuva
+zadnju dobru kopiju uz `stale`; izvor bez uspješnog dohvata tri dana također
+postaje zastario. Izvorni datum izmjene ostaje odvojen. HTTP 304 ne briše
+oznaku djelomičnog pokrića. Fragmenti imaju SHA-256 identitet i učitavaju se
+po potrebi; vozni red preuzima se po dijelu koji sadrži traženo stajalište.
+Stari R2 fragmenti ostaju najmanje sedam dana nakon zamjene manifesta.
+
+Gradski skupovi zadržavaju navedenu Otvorenu dozvolu; geometrija Ministarstva
+kulture zaseban navod izvora. Javna dostupnost i atribucija ne dodjeljuju
+dodatnu licencu. Katalog se isporučuje javnim JSON-om i statičkim resursima
+aplikacije, pa je strojno čitljiv, ali nije dodatni otvoreno licencirani skup
+na `/open`. Pretraga, spremljena mjesta i precizna lokacija ostaju na uređaju;
+prezentacija šalje samo ograničeni identifikator zapisa.
+
+Istekle rezervacije gradskih prostora nisu događanja. Nepotvrđeni pelud,
+rasporedi otpada i zauzetost parkirališta uživo ostaju isključeni. Ugrađeni
+katalog služi prvom pokretanju i lokalnom razvoju; nije obećanje da su sva
+mjesta u Zagrebu pokrivena.
+
 ### Statički skupovi
 
 Skupovi koje Worker nikad ne dohvaća: lokalna skripta ih čita jednom i pretvara u građevne artefakte aplikacije, koji se dalje poslužuju kao statičke datoteke. Nisu moduli iz `worker/feed/schema.ts`, pa nemaju TTL ni `maxStale`; atribucija je ista kao za modul istog izdavača.

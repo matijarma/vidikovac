@@ -19,6 +19,7 @@ import type { CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
+import { fakeCityStore } from '../city/fake-store';
 
 stubSessionStorage();
 stubLocalStorage();
@@ -109,6 +110,7 @@ function mount(opts: MountOptions = {}) {
   const ticks: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => (opts.snapshot ?? snapshotOf)(module));
   const handle = mountDashboard(root, {
+    cityStore:fakeCityStore(),
     i18n: createDefaultI18n('hr'), session: session.client, now, fetchData: fetchData as never,
     label: 'Kavana Velebit', mapFactory: opts.mapFactory as never, lightweight: opts.lightweight ?? false,
     loadNetwork: opts.loadNetwork ?? (async () => null), matchMedia: () => ({ matches: Boolean(opts.wide) }),
@@ -156,7 +158,7 @@ describe('shell and navigation', () => {
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(root.querySelectorAll('[data-testid=session-label]')).toHaveLength(1);
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('data-layer')).toBe('sigurnost');
-    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Promet', 'Događanja', 'Još']);
+    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Karta', 'Događanja', 'Još']);
     expect(root.querySelector('.ki-tabs [data-layer=kultura]')).not.toBeNull();
     expect(root.querySelectorAll('.ki-side-link')).toHaveLength(0);
     const options = [...root.querySelectorAll<HTMLOptionElement>('[data-testid=kvart-select] option')];
@@ -275,7 +277,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
-    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Transit', 'Events', 'More']);
+    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Map', 'Events', 'More']);
     scanner.handle.destroy();
 
     const peer = mount();
@@ -724,6 +726,7 @@ describe('the full map view (transport)', () => {
     expect(dash.dataset.view).toBe('map');
     expect(mapFactory).toHaveBeenCalledTimes(1);
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
+    click(root,'[data-action=city-group][data-group=transport]');
     const mode = root.querySelector<HTMLButtonElement>('[data-testid=map-mode-toggle]')!;
     mode.focus();
     mode.click();
@@ -747,10 +750,13 @@ describe('the full map view (transport)', () => {
     await flush();
     desk.handle.selectLayer('u-pokretu');
     await flush();
+    expect(mapFactory.mock.calls.find(([o])=>o.container.dataset.testid==='map-canvas')?.[0].renderer).toBe('map');
+    click(desk.root,'[data-action=city-group][data-group=transport]');
+    await flush();
     const thumb = desk.root.querySelector('[data-testid=kvart-map-canvas]');
     expect(thumb).toBeNull();
     expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'kvart-map-canvas')).toHaveLength(0);
-    expect(mapFactory.mock.calls.find(([o]) => o.container.dataset.testid === 'map-canvas')?.[0].renderer).toBe('schema');
+    expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas').at(-1)?.[0].renderer).toBe('schema');
     click(desk.root, '[data-testid=map-mode-toggle]');
     expect(desk.root.querySelector('[data-testid=kvart-map-canvas]')).toBe(thumb);
     expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'kvart-map-canvas')).toHaveLength(0);
@@ -1129,7 +1135,7 @@ describe('the status line', () => {
     const desk = mount({ wide: true });
     expect(keys(desk.root)).toEqual(['wordmark', 'kvart', 'space', 'clock', 'session', 'more', 'domains']);
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
-    expect([...desk.root.querySelectorAll('.ki-domains [data-layer]')].map(el => el.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost']);
+    expect([...desk.root.querySelectorAll('.ki-domains [data-layer]')].map(el => el.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
     expect(desk.root.querySelector('[data-testid=status-search]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=tab-more]'), 'the desk has no tab bar').toBeNull();
     expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
@@ -1227,7 +1233,7 @@ describe('the status line', () => {
     session.join();
     click(root, '.ki-domains [data-layer=u-pokretu]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
-    expect(root.querySelector('#u-pokretu-light-search')).not.toBeNull();
+    expect(root.querySelector('[data-testid=transport-search]')).not.toBeNull();
     expect(session.sent).toEqual([]);
   });
 });

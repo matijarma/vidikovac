@@ -70,7 +70,7 @@ export async function installExperienceFixture(
   const requests: string[] = [];
   const events: Record<string, unknown>[] = [];
   const sockets: { send(message: string): void }[] = [];
-  let presentation: PresentationState = { version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true };
+  let presentation: PresentationState = { version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true,capabilities:['city-v1'] };
   const joined: RoomServerMessage = {
     t: 'joined', role: options.role ?? 'scanner', expiresAt: now + 600_000, serverNow: now,
     resumeToken: 'fixture-resume', dataToken: 'fixture-data-token', participants: 1,

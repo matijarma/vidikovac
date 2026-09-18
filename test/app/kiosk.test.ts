@@ -20,6 +20,8 @@ import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/lay
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
+import { fakeCityStore } from '../city/fake-store';
+import { emptyCity } from '../../shared/city/types';
 
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -54,7 +56,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -99,6 +101,7 @@ function mount(opts: MountOptions = {}) {
   let repaint: (() => void) | null = null;
   const themeFake = fakeThemeController(opts.themeInitial ?? 'solar');
   const handle = mountKiosk(root, {
+    cityStore:opts.cityStore??fakeCityStore(),
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
@@ -142,6 +145,27 @@ const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s
 const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelector<HTMLElement>(sel);
 
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
+
+describe('public city exploration',()=>{
+  it('keeps search focus and scroll across city refreshes, returns at 90 seconds, and yields to remote presentation',async()=>{
+    const cityStore=fakeCityStore({...emptyCity(),places:[{id:'culture-a',name:'Gavella',category:'culture',sourceId:'culture',sourceRecord:'a',lon:15.97,lat:45.81}]});
+    let now=NOW;
+    const k=mount({stored:STORED,cityStore,now:()=>now});await flush();
+    q(k.root,'[data-action=kiosk-explore]')!.click();
+    const search=q(k.root,'#kiosk-city-search') as HTMLInputElement;
+    search.focus();search.value='Gavella';search.dispatchEvent(new Event('input',{bubbles:true}));
+    const slot=q(k.root,'.k-discovery-slot')!;slot.scrollTop=50;
+    cityStore.set({...cityStore.snapshot()});
+    expect(q(k.root,'#kiosk-city-search')).toBe(search);expect(document.activeElement).toBe(search);expect(slot.scrollTop).toBe(50);
+    now+=89_000;k.tick(CODE_TICK_MS);expect(q(k.root,'.kiosk')?.dataset.exploring).toBe('true');
+    now+=1_000;k.tick(CODE_TICK_MS);expect(q(k.root,'.kiosk')?.dataset.exploring).toBe('false');
+    q(k.root,'[data-action=kiosk-explore]')!.click();
+    k.handlers.onPresentation?.({version:1,revision:1,target:{layer:'u-pokretu',selection:{kind:'place',id:'culture-a'}},expiresAt:now+600000,dataToken:'dt'});
+    await flush();cityStore.set({...cityStore.snapshot()});
+    expect(q(k.root,'.kiosk')?.dataset.exploring).toBe('false');expect(text(q(k.root,'[data-testid=city-detail]'))).toContain('Gavella');
+    k.handle.destroy();
+  });
+});
 
 describe('clipboard copy', () => {
   it('copies the current visible code, including after rotation', async () => {
@@ -468,18 +492,18 @@ describe('invitation: the screen a passer-by sees', () => {
     // The front page: tonight across the top left, the lines, the field and the surroundings under it, the forecast, the city and the card on the right (kiosk/invitation.ts).
     const front = q(k.root, '[data-testid=kiosk-invitation]')!;
     expect(front.classList.contains('k-front')).toBe(true);
-    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-local', 'k-overview']);
+    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-local', 'k-overview','k-explore btn-ghost']);
     expect(q(front, '.k-local .k-geography .k-field')).not.toBeNull();
-    expect(q(front, '.k-local > [data-panel=promet]')).not.toBeNull();
+    expect(q(front, '.k-local-facts > [data-panel=promet]')).not.toBeNull();
     const column = q(front, '.k-overview')!;
     expect(column.tagName).toBe('ASIDE');
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-neighborhood']);
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-discovery-slot','k-panel--card']);
     expect(q(column, '.k-panel--card [data-testid=kiosk-invite]')).not.toBeNull();
     // The lines panel: the stop's routes as rows with their badges, the state word and the vehicles near, capped at eight of the stop's nine; the kicker names the count beyond.
     const promet = q(front, '[data-testid=kiosk-panel-promet]')!;
     expect(promet.dataset.say).toBe('transit');
     const rows = [...promet.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-fr')];
-    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11', 'line:12', 'line:13', 'line:14', 'line:17']);
+    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11']);
     expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
     expect(text(q(rows[0]!, '.k-fr-sub'))).toBe('kasni 2 min · 1 vozilo u blizini');
     expect(rows[0]!.dataset.tone).toBe('late');
@@ -813,9 +837,9 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
     // The lines panel lists the stop's own routes from the stop alone, each with the honest "no data" word; every other panel has no row to show yet.
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(6);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(2);
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr .k-fr-sub'))).toBe('Nema podataka o kašnjenju · nijedno vozilo u blizini');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(6);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(2);
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-note'))).toBe('Učitavanje podataka ZET-a…');
     for (const id of ['around', 'city', 'tonight']) expect(text(q(k.root, `[data-testid=kiosk-panel-${id}] .k-panel-note`)), id).toBe('učitavanje podataka');
     expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-note'))).toBe('Učitavanje podataka DHMZ-a…');
@@ -1030,7 +1054,7 @@ describe('the invitation composition: the card, the header group, the strip', ()
     const k = mount({ stored: STORED });
     await flush();
     const column = q(k.root, '[data-testid=kiosk-invitation] .k-overview')!;
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-neighborhood']);
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-discovery-slot','k-panel--card']);
     const weather = q(k.root, '.k-head .k-clock-row [data-testid=kiosk-weather]')!;
     expect(weather.hidden).toBe(false);
     expect(weather.dataset.state).toBe('live');
@@ -1073,7 +1097,7 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect(q(k.root, '[data-testid=kiosk-temp]')).toBeNull();
     // The rest of the screen is unaffected: the strip still speaks and the lines panel still lists the stop.
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(6);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(2);
   });
   it('builds the hostname sentence from codeBase, never from a literal', async () => {
     const k = mount({ stored: STORED, codeBase: 'https://example.test' });
@@ -1191,8 +1215,8 @@ describe('the field, the column and the one map', () => {
     expect(options.selectedStop).toBeUndefined();
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
-    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
-    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: STOP });
+    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(mapMode==='schema'?STOP.routes:[]);
+    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: true, stop: STOP });
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
     const host = q(k.root, '[data-testid=kiosk-map-host]')!;
@@ -1268,9 +1292,9 @@ describe('the field, the column and the one map', () => {
     await flush();
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     const rows = [...promet.querySelectorAll<HTMLElement>('li.k-fr')];
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(2);
     // A box that holds five rows of eight (happy-dom lays nothing out: the box is stubbed at 300 px and each shown row costs 60).
-    let height = 300;
+    let height = 100;
     Object.defineProperty(promet, 'clientHeight', { get: () => height, configurable: true });
     Object.defineProperty(promet, 'scrollHeight', { get: () => rows.filter((el) => !el.hidden).length * 60, configurable: true });
     k.tick(CODE_TICK_MS);

@@ -10,6 +10,7 @@ export interface Env {
   INDEX_DO: DurableObjectNamespace;
   METRICS_DO: DurableObjectNamespace;
   TWIN_DO: DurableObjectNamespace;
+  CATALOGUE_DO?: DurableObjectNamespace;
   RL_SCAN: RateLimiter;
   RL_DATA: RateLimiter;
   RL_OPEN: RateLimiter;

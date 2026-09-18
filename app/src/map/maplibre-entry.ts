@@ -12,3 +12,4 @@ import '../core/map-worker';
 export { AttributionControl, LngLatBounds, Map, NavigationControl, ScaleControl } from 'maplibre-gl';
 export * from './basemap';
 export * from './overlays';
+export * from './city-layers';

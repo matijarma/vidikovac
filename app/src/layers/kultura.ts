@@ -17,6 +17,8 @@ import { dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
+import { eventVenueLinks } from '../city/day';
+import { deduplicateEvents } from '../../../shared/city/events';
 
 /** One default page of agenda rows; the chips and the search narrow the list first, so a filter always covers every match. */
 const AGENDA_PAGE = 12;
@@ -149,6 +151,7 @@ export function ongoingEvents(items: readonly FeedItem[], now: number): FeedItem
 const OUTSIDE_ZAGREB = /\b(split|hvar|rijek|osijek|zadar|dubrovnik|pul|varazdin|sibenik|karlov[ac]|sis[ak]|koprivnic|cakov|vukovar|vinkovc|bjelovar|pozeg|rovinj|porec|makarsk|trogir|korcul|opatij|umag|krk)[a-z]{0,2}\b/;
 
 export function venueOutsideZagreb(item: FeedItem): boolean {
+  if (item.data?.city && normalise(String(item.data.city)) !== 'zagreb') return true;
   // An organiser's home city is not the event's location. Neither are street
   // names such as Avenija Dubrovnik or Ulica grada Vukovara city segments.
   const place = normalise(dataText(item, 'venue'));
@@ -301,14 +304,14 @@ function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
   const dl = `<dl class="detail-facts">${facts.filter(([, v]) => v).map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl>`;
   const summary = typeof item.summary === 'string' && item.summary ? `<p class="detail-summary">${escapeHtml(item.summary)}</p>` : '';
   const calendar = canExportCalendarItem(item);
-  const actions = `<div class="ev-actions">${itemActions(i18n, item, { calendar })}${item.link ? externalLink(item.link, i18n.t('common.openSource')) : ''}</div>`;
+  const actions = `<div class="ev-actions">${eventVenueLinks(ctx,item)}${itemActions(i18n, item, { calendar })}${item.link ? externalLink(item.link, i18n.t('common.openSource')) : ''}</div>`;
   return `<article class="detail ev-detail" data-key="detail-${escapeAttribute(item.id)}" data-testid="event-detail"><h3 class="detail-title" id="ws-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3><p class="ev-when">${escapeHtml(sentence(when))}</p>${dl}${summary}${actions}${calendar ? '' : `<p class="sec-note">${escapeHtml(i18n.t('events.noCalendar'))}</p>`}</article>`;
 }
 
 export function renderKultura(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const dogadanja = ctx.snapshots.dogadanja;
-  const all = cultureEvents(dogadanja);
+  const all = deduplicateEvents(cultureEvents(dogadanja),ctx.city?.places??[]);
   const query = ctx.view?.filters.q ?? '';
   const category = ctx.view?.filters.category ?? '';
   const inZagreb = all.filter((item) => !venueOutsideZagreb(item));
@@ -342,7 +345,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
       (state || `<ul class="rows agenda" role="list" data-testid="agenda">${agendaRows(i18n, filtered.slice(0, shown), ctx)}</ul>${moreButton(i18n, 'events', shown, filtered.length, AGENDA_PAGE)}`),
   });
   const selected = findSelected(dogadanja, ctx.view?.selection);
-  const detail = selected && all.includes(selected) ? eventDetail(i18n, selected, ctx) : null;
+  const detail = selected && CULTURE_EVENT_SOURCES.includes(dataText(selected,'source') as DogadanjaSourceId) ? eventDetail(i18n, selected, ctx) : null;
   const list = agenda + ongoingSection(i18n, ongoingShown, ctx) + undatedSection(i18n, undated.filter(keep), ctx) + outsideSection(i18n, outside.filter(keep), ctx);
   const down = downSources(dogadanja);
   const notes = [coverageText(i18n, dogadanja), down.length ? i18n.t('status.sourcesDown', { list: down.join(', ') }) : '']

@@ -1,5 +1,5 @@
 /** A saved line or stop, referenced by kind and the worker's own public id. */
-export type SavedKind = 'route' | 'stop';
+export type SavedKind = 'route' | 'stop' | 'place';
 export interface SavedRef {
   kind: SavedKind;
   id: string;
@@ -25,12 +25,12 @@ export interface SavedStoreDeps {
 // The worker's own ID rule (worker/public-selection.ts `ID`): a saved ref is
 // then always a valid PublicSelection with no further sanitising, and one
 // that never qualifies is discarded on read rather than carried around.
-const ID = /^[0-9A-Za-z_-]{1,32}$/;
+const ID = /^[0-9A-Za-z_-]{1,80}$/;
 
 function isSavedRef(value: unknown): value is SavedRef {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return (v.kind === 'route' || v.kind === 'stop') && typeof v.id === 'string' && ID.test(v.id);
+  return (v.kind === 'route' || v.kind === 'stop' || v.kind === 'place') && typeof v.id === 'string' && ID.test(v.id);
 }
 
 function sameRef(a: SavedRef, b: SavedRef): boolean {

@@ -19,6 +19,8 @@ import '../ui/base.css';
 import '../ui/signage.css';
 import '../ui/qr.css';
 import '../ui/kiosk.css';
+import '../ui/city.css';
+import '../ui/kiosk-city.css';
 
 const { i18n, theme } = bootPage({ page: 'kiosk' });
 const root = document.querySelector<HTMLElement>('#kiosk')!;

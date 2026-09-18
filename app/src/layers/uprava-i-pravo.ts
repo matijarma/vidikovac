@@ -19,6 +19,7 @@ import { bars } from '../ui/graphics';
 import { iconMarkup } from '../ui/icons';
 import { filterBySource, sourceStatusEmptyText } from './kultura';
 import type { LayerContext } from './types';
+import { consultationsMarkup } from '../city/conditions';
 
 /** One default page of Gazette acts; the search field narrows the list first, so a search always covers every act. */
 const ACTS_PAGE = 10;
@@ -265,7 +266,7 @@ export function renderUpravaIPravo(ctx: LayerContext): HTMLElement {
   const selected = findSelected(glasnik, ctx.view?.selection) ?? findSelected(dogadanja, ctx.view?.selection);
   const detail = selected && (selected.module === 'glasnik' || cityWorkEvents(dogadanja).includes(selected)) ? detailFor(i18n, selected, ctx) : null;
   // Sessions and gazette side by side on a desk, the long works register below them.
-  const list = `<div class="cv-grid">${sessionsSection(i18n, ctx)}${gazetteSection(i18n, ctx)}${worksSection(i18n, ctx)}</div>`;
+  const list = `<div class="cv-grid">${sessionsSection(i18n, ctx)}${gazetteSection(i18n, ctx)}${worksSection(i18n, ctx)}${consultationsMarkup(ctx)}</div>`;
   // The domain's name is the tab's; it stays for assistive technology and the focus after a switch, not as a repeated title.
   return createElementFromHTML(`<section class="layer ws ws-civic" id="layer-uprava-i-pravo" data-layer="uprava-i-pravo" data-reconcile aria-labelledby="layer-title-uprava-i-pravo">
 <h2 class="layer-title visually-hidden" id="layer-title-uprava-i-pravo" tabindex="-1">${escapeHtml(i18n.t('layers.uprava-i-pravo'))}</h2>

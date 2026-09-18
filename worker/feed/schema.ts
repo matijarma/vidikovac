@@ -169,5 +169,5 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // district key is the one every geocoded sub-fetcher can carry (only
   // komunalne.ts does today, R-DG6): districtOf from the item's own
   // coordinates, never guessed for an item without one.
-  event: ['source', 'category', 'venue', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district'],
+  event: ['source', 'category', 'venue', 'venueHint', 'venueTags', 'city', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district'],
 };

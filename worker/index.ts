@@ -9,6 +9,8 @@ import { handleOpen } from './routes/open';
 import { handleStats } from './routes/stats';
 import { handleScreens } from './routes/screens';
 import { handleMaps } from './routes/maps';
+import { handleCity } from './routes/city';
+import { catalogueStub } from './do/catalogue-do';
 import { warmFeeds } from './feed/cache';
 import { twinStub } from './do/twin-do';
 import { staticWatchDeps, watchStaticFeed } from './feed/static-watch';
@@ -22,6 +24,7 @@ export { RoomDO } from './do/room-do';
 export { IndexDO } from './do/index-do';
 export { MetricsDO } from './metrics-do';
 export { TwinDO } from './do/twin-do';
+export { CatalogueDO } from './do/catalogue-do';
 export { json } from './http';
 
 export type RouteHandler = (
@@ -33,7 +36,7 @@ export type RouteHandler = (
 
 // Order matters only for overlapping prefixes; each handler returns null when
 // the path is not its own. Static assets answer everything the Worker declines.
-const ROUTES: RouteHandler[] = [handleFeed, handlePairing, handleAdmin, handleScreens, handleMaps, handleOpen, handleStats];
+const ROUTES: RouteHandler[] = [handleCity, handleFeed, handlePairing, handleAdmin, handleScreens, handleMaps, handleOpen, handleStats];
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -59,6 +62,7 @@ export default {
     // The twin's alarm chain is self-rearming; the five-minute cron is only
     // its watchdog, restarting a chain an isolate reset may have dropped.
     await Promise.all([
+      catalogueStub(env)?.ensureRunning(),
       warmFeeds(env, ctx),
       twinStub(env).ensureRunning().catch((error) => logError('twin_watchdog_failed', error)),
       // Once an hour (its own clock in KV): has ZET published a static GTFS newer than our artefacts?

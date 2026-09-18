@@ -84,7 +84,7 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   section.setAttribute('data-reconcile', '');
   const zet = snapshots['zet-rt'];
   const closures = snapshots.prometnice;
-  if (ctx.lightweight) {
+  if (ctx.lightweight && !ctx.city) {
     panels.appendChild(renderLightweight(ctx, zet, closures));
     return section;
   }
