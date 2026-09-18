@@ -391,7 +391,10 @@ describe('the committed artefact', () => {
   // 12 % inside the v2 pins, which therefore stand rather than being loosened
   // to fit what was just measured. F8b adds the seven synthetic paths the
   // 40 m router could not build: 581,140 B raw, 136,408 B gzip -- another
-  // 0.8 %, and still 11 % inside both pins, which again stand.
+  // 0.8 %, and still 11 % inside both pins, which again stand. F8c nodes
+  // three crossings (six edges become twelve) and shortens nine plans:
+  // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
+  // Both pins stand again.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -405,7 +408,20 @@ describe('the committed artefact', () => {
     expect(parsed.feedVersion).toBe(FEED_VERSION);
     for (const wireOn of parsed.stops.on) for (const [, scaled] of wireOn) expect(scaled).toBeLessThanOrEqual(BUS_ON_FRAC_SCALE);
 
+    // F8c: the artefact names the rail graph its edge indices belong to, and
+    // the name is a function of those edges. Recomputed here from the WIRE
+    // columns, not the decoded floats, because that is what the builder
+    // hashes -- and independently of the builder's own helper.
+    expect(parsed.graphHash).toMatch(/^[0-9a-f]{16}$/);
+    const recomputed = createHash('sha256');
+    for (let i = 0; i < parsed.edges.from.length; i++) recomputed.update(`${parsed.edges.from[i]}:${parsed.edges.to[i]}:${parsed.edges.d[i].join(',')}
+`);
+    expect(parsed.graphHash).toBe(recomputed.digest('hex').slice(0, 16));
+
     const net = decodeNetwork(parsed);
+    expect(net.graphHash).toBe(parsed.graphHash);
+    expect(net.edges).toHaveLength(293); // F8c: 287 plus two halves for each of the three junctions noded
+    expect(net.paths.filter((p) => p.shape === null)).toHaveLength(52); // F8b's seven brought this to 52; F8c moved none
     expect(net.routes.size).toBeGreaterThan(100); // the real ZET feed has 154 routes
     const trams = [...net.routes.entries()].filter(([, r]) => r.type === 0);
     expect(trams.length).toBeGreaterThanOrEqual(15);
@@ -458,6 +474,55 @@ describe('the committed artefact', () => {
     expect(net.stops.find((s) => s.name === 'Trg bana J. Jelačića')!.terminal).toBe(false);
   });
 
+
+  // F8c: no synthetic path plans a hop the long way round any more, except
+  // the one the graph cannot express and the overrides file names with its
+  // reason. Before F8c nine hops of routes 6, 9, 13 and 17 ran 4.2 to 6.4
+  // times the straight line between their two platforms -- the rail graph had
+  // no node where the line turned, because no shape in the feed draws that
+  // turn -- and a plan 2 km long for 300 m of ground puts a phantom tram on
+  // rails other lines share, where the ordering law then constrains real ones.
+  it('plans no hop the long way round, bar the turns the overrides file says the feed cannot draw', () => {
+    const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
+    const overrides = JSON.parse(readFileSync(resolve(process.cwd(), 'scripts/gtfs-shapes-overrides.json'), 'utf8'));
+    const long: string[] = [];
+    for (const path of net.paths) {
+      if (path.shape !== null) continue; // a shape path runs geometry that was drawn, not routed
+      const served = path.served ?? [];
+      for (let k = 1; k < served.length; k++) {
+        const a = net.stops[served[k - 1].stop];
+        const b = net.stops[served[k].stop];
+        const along = served[k].s - served[k - 1].s;
+        const straight = Math.hypot(a.p.x - b.p.x, a.p.y - b.p.y);
+        if (along > straight * HOP_DETOUR_FACTOR && along - straight > HOP_DETOUR_EXCESS_METRES) {
+          long.push(`${path.route} ${a.name} -> ${b.name} (${Math.round(along)} m of arc for ${Math.round(straight)} m of ground)`);
+        }
+      }
+    }
+    // Each one left is allowlisted by the two platforms' names, with a reason.
+    const allowed = overrides.longLegs as { from: string; to: string; reason: string }[];
+    expect(allowed.every((entry) => entry.reason.length > 60)).toBe(true);
+    expect(long).toEqual([
+      '6 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
+      '9 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
+    ]);
+    for (const leg of long) expect(allowed.some((entry) => leg.includes(`${entry.from} -> ${entry.to}`)), leg).toBe(true);
+
+    // And the three crossings that were noded are nodes: route 13 turns out
+    // of Šubićeva into Kralja Zvonimira, and route 6 out of the southbound
+    // centre track into Mihanovićeva, in a few hundred metres rather than two
+    // kilometres of arc.
+    const hop = (pathId: string, from: string, to: string) => {
+      const path = net.paths.find((p) => p.id === pathId)!;
+      const served = path.served!;
+      const k = served.findIndex((entry, i) => i > 0 && net.stops[served[i - 1].stop].name === from && net.stops[entry.stop].name === to);
+      expect(k, `${pathId} does not run ${from} -> ${to}`).toBeGreaterThan(0);
+      return served[k].s - served[k - 1].s;
+    };
+    expect(hop('path:13:1:129fd87e', 'Šubićeva', 'Trg žrt. fašizma')).toBeLessThan(400); // was 1779 m
+    expect(hop('path:13:0:096d3646', 'Trg žrt. fašizma', 'Šubićeva')).toBeLessThan(700); // was 2122 m
+    expect(hop('path:6:0:840b2879', 'Zrinjevac', 'Botanički vrt')).toBeLessThan(900); // was 3261 m
+  });
 
   // F8b: no shapeless tram pattern is left without rails of its own. Before
   // it, seven patterns of routes 2, 5 and 13 (13/0 with 356 trips a day, 13/1
