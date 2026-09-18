@@ -6,16 +6,20 @@
 // thresholds are unit-tested in node, and a theme flip on the live map is
 // styleDiff(overlayLayers(light), overlayLayers(dark)) through setPaintProperty.
 //
-// Declutter is scale-aware (never a pile of squares): below PILL_ZOOM every
-// vehicle is a small dot in its mode's colour; from there numbered pills
-// join, thinned by MapLibre's collision pass with the dots still underneath
-// so no vehicle ever vanishes. The direction nose draws inside its own band
-// alone: from NOSE_MIN_ZOOM (or the public screen's own overlapZoom,
-// ProzorOptions) to NOSE_MAX_ZOOM, past which the rails say the direction
-// themselves. The selected or followed vehicle draws at every zoom. Stop
-// names come in by rank, the busiest corners first, one per named stop, and
-// yield to the vehicles above them.
-import { PILL_BASE_WIDTHS_PX, PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX } from '../motion/pills';
+// Declutter is scale-aware (never a pile of squares) and, since round F, never
+// silent: below PILL_ZOOM every vehicle is a small dot in its mode's colour;
+// from there numbered pills join and *always draw* -- overlap and
+// ignore-placement are on at every zoom, so no pill is ever dropped by the
+// collision pass and no pill ever pushes a stop name off the map. What keeps a
+// busy corner readable instead is the cluster: city-map.ts merges pills whose
+// boxes overlap on screen (motion/pills.ts) into one feature carrying
+// `cluster`, the joined label and its members' ids before the source is
+// pushed, so MapLibre only ever sees marks that fit. The direction nose draws
+// inside its own band alone (NOSE_MIN_ZOOM to NOSE_MAX_ZOOM, or the public
+// screen's own overlapZoom for its lower edge). The selected or followed
+// vehicle draws at every zoom. Stop names come in by rank, the busiest corners
+// first, one per named stop.
+import { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX, pillImageId, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -85,12 +89,10 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
-/** Pill geometry in CSS px: one capsule per label length, 1 to 4 characters.
- *  Hoisted to motion/pills.ts (F1) so the schema paints the same pill;
- *  re-exported here under their long-standing names. */
-export { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX };
-export const PILL_WIDTHS_PX: readonly number[] = PILL_BASE_WIDTHS_PX;
-export const PILL_MAX_CHARS = PILL_WIDTHS_PX.length;
+/** Pill geometry in CSS px, and the cluster label's cap: hoisted to
+ *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
+ *  under their long-standing names. */
+export { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX };
 /** The direction nose: an isosceles triangle ahead of the pill, drawn under it. */
 export const NOSE_LENGTH_PX = 8;
 export const NOSE_WIDTH_PX = 9;
@@ -142,8 +144,8 @@ export interface OverlayImage { id: string; image: SdfImage }
  *  is the figure (the `figure` palette keys, 3 to 5 px), the bus lines and the
  *  stops off the screen's routes step aside, trams draw as plates and buses as
  *  the pills, the screen's stop is the largest mark on the map, the seat is
- *  never lit, and the fixed 14.5 overlap zoom follows the field's own zoom
- *  (R-KP2). Absent, every surface draws exactly as before. */
+ *  never lit, and the nose's lower edge and the stop names follow the field's
+ *  own zoom (R-KP2). Absent, every surface draws exactly as before. */
 export interface ProzorOptions {
   /** Which network lines are drawn; the kiosk passes ['tram']. */
   networkKinds: readonly ('tram' | 'bus')[];
@@ -151,7 +153,9 @@ export interface ProzorOptions {
   stopRoutes: readonly string[] | null;
   /** Stops labelled only from this rank (kiosk 4; today's gate is rank 2 at the overlap zoom). */
   stopLabelMinRank: number;
-  /** The zoom from which the screen's stop names and the direction noses draw (today's fixed 14.5). */
+  /** The zoom from which the screen's stop names and the direction noses draw
+   *  (the field's own zoom, R-KP2; NOSE_MIN_ZOOM elsewhere). Its name is
+   *  older than the rule: pills place unconditionally at every zoom now. */
   overlapZoom: number;
   /** Collision padding around a major street name, in the tile pixels
    *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
@@ -162,10 +166,14 @@ export interface ProzorOptions {
   labelPadding: number;
 }
 
-/** Every SDF image the overlays reference, generated once per map. */
+/** Every SDF image the overlays reference, generated once per map. One pill
+ *  and one plate per label length a *cluster* can take, not only a route
+ *  number's four: a merged mark writes "6·11·12·14 +2" and must have a capsule
+ *  that long to write it in. */
 export function overlayImages(): OverlayImage[] {
-  const pills = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PILL_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
-  const plates = PILL_WIDTHS_PX.map((w, i) => ({ id: `${PLATE_IMAGE_PREFIX}${i + 1}`, image: sdfRoundedRect(w, PILL_HEIGHT_PX, PLATE_RADIUS_PX) }));
+  const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
+  const pills = lengths.map((n) => ({ id: pillImageId(n), image: sdfRoundedRect(pillWidthPx(n), PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
+  const plates = lengths.map((n) => ({ id: pillImageId(n, true), image: sdfRoundedRect(pillWidthPx(n), PILL_HEIGHT_PX, PLATE_RADIUS_PX) }));
   return [
     ...pills,
     ...plates,
@@ -186,14 +194,20 @@ type Expr = unknown[];
 export const NEVER: Expr = ['literal', false];
 
 const zoomInterpolate = (...stops: number[]): Expr => ['interpolate', ['linear'], ['zoom'], ...stops];
-/** The label length clamped to the pill sizes: '' (route unknown) takes the smallest pill. */
-const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS, ['max', 1, ['length', ['get', 'short']]]];
+/** The label length clamped to the pill sizes, pills.ts's pillChars as an
+ *  expression: '' (route unknown) takes the smallest pill, a cluster label
+ *  past the cap the widest. */
+const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS_CLUSTER, ['max', 1, ['length', ['get', 'short']]]];
 const PILL_IMAGE: Expr = ['concat', PILL_IMAGE_PREFIX, ['to-string', PILL_CHARS]];
 /** The public screen's mark: a tram takes the plate of its label's length, anything else the pill. */
 const PLATE_OR_PILL_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
 const NOSE_OFFSET: Expr = ['match', PILL_CHARS, ...NOSE_OFFSETS_PX.slice(0, -1).flatMap((px, i) => [i + 1, ['literal', [px, 0]]]), ['literal', [NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1], 0]]];
-/** Trams over buses over unknown: the draw and placement order pills use. */
-const SORT_KEY: Expr = ['-', 10, ['get', 'sort']];
+/** A cluster over a tram over a bus over an unknown: the `sort` the vehicle
+ *  source writes (city-map.ts), read straight. With overlap allowed MapLibre
+ *  draws the *higher* sort key last, over the rest -- where under the old
+ *  collision rule the same number decided who survived placement. Nothing is
+ *  dropped any more, so this is now purely who covers whom. */
+const SORT_KEY: Expr = ['get', 'sort'];
 
 function kindColor(p: OverlayPalette, role: 'fill' | 'text'): Expr {
   return role === 'fill'
@@ -316,7 +330,16 @@ export interface OverlayOptions {
   screenStopId?: string | null;
 }
 
-function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: number, s: number, inks: PillInks, image: Expr): StyleLayerLike {
+/** A pill layer. Overlap and ignore-placement are on for both the capsule and
+ *  the number, at every zoom and on every surface: a vehicle the map knows
+ *  about is a vehicle the map draws (plan section A), and a pill that ignores
+ *  placement also stops pushing the stop name beneath it off the map. What
+ *  keeps the picture readable is upstream -- the overlapping marks arrive
+ *  already merged into one cluster feature -- and a cluster says so with a
+ *  ring: the selection ink at twice a pill's own halo width. Every vehicle
+ *  feature carries `cluster` (city-map.ts writes false on a single), so the
+ *  case never meets a missing property. */
+function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -327,20 +350,22 @@ function pillLayer(id: string, filter: Expr, overlap: boolean | Expr, minzoom: n
       'icon-image': image,
       'icon-size': s,
       'icon-rotation-alignment': 'viewport',
-      'icon-allow-overlap': overlap,
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
       'icon-padding': 1,
       'text-field': ['get', 'short'],
       'text-font': [MAP_FONTS.medium],
       'text-size': 12 * s,
-      'text-allow-overlap': overlap,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
       'text-rotation-alignment': 'viewport',
       'text-optional': false,
       'symbol-sort-key': SORT_KEY,
     },
     paint: {
       'icon-color': inks.fill,
-      'icon-halo-color': inks.halo,
-      'icon-halo-width': 1,
+      'icon-halo-color': ['case', ['get', 'cluster'], p.selection, inks.halo],
+      'icon-halo-width': ['case', ['get', 'cluster'], 2, 1],
       'icon-opacity': 1,
       'text-color': inks.text,
       'text-opacity': 1,
@@ -443,9 +468,6 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const dimmed = sel?.kind === 'route';
   // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
-  // Every vehicle remains a dot. Number plates must earn collision-free
-  // room; unconditional terminal labels turned busy stops into blue blobs.
-  const overlap = false;
   const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
   /** A network is drawn for its mode when the modes admit it and, on the public screen, when the option set names it. */
   const drawn = (kind: 'tram' | 'bus'): boolean => kinds.includes(kind) && (prozor === null || prozor.networkKinds.includes(kind));
@@ -582,7 +604,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       { filter: kindFilter(modes) },
     ),
     noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, s, alpha),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, inks, mark),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark),
     // Stop names: on the public screen the hubs alone (rank from the option
     // set), from the field's zoom and never below it -- as the layer's own
     // minzoom, which MapLibre reads against the camera's fractional zoom,
@@ -646,7 +668,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
     noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s, alpha),
-    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], true, 0, s, pillInks(p, null), mark),
+    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], 0, s, p, pillInks(p, null), mark),
     {
       id: LAYERS.selectionRing,
       type: 'symbol',

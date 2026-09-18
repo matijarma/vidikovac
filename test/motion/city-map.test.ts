@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
-import { createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
+import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
+import { PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
 import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
@@ -85,10 +86,22 @@ class FakeMap {
   }
   getCenter() { return this.center; }
   getZoom(): number { return this.zoom; }
+  /** A camera stand-in for the pill clustering: ten thousand CSS px per degree
+   *  from a fixed origin, so a test can say in pixels how far apart two
+   *  vehicles are drawn without a real projection. */
+  project([lon, lat]: [number, number]): { x: number; y: number } { return { x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 }; }
   remove(): void { this.removed = true; }
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
 const lib = { ...basemap, ...overlays, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
+
+/** Every SDF image the overlays put on a map, in order: one pill and one plate
+ *  for each label length a cluster can take, then the four shared marks. */
+const OVERLAY_IMAGE_IDS = [
+  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => `vehicle-pill-${i + 1}`),
+  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => `vehicle-plate-${i + 1}`),
+  'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
+];
 
 const T0 = Date.parse('2026-09-12T10:00:00Z');
 const FRAME_MS = 1000 / 60;
@@ -201,6 +214,23 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(fc.features[1]!.properties).toMatchObject({ kind: 'bus', short: '109', bearing: 0, hasHeading: false, sort: 1 });
     expect(fc.features[1]!.properties.alpha).toBeLessThan(fc.features[0]!.properties.alpha);
     expect(fc.features[2]!.properties).toMatchObject({ short: '', bearing: 180, hasHeading: false, held: true });
+  });
+
+  it('merges pills that overlap on screen into one cluster mark, leaves a vehicle standing on its own alone, and never absorbs the selected one', () => {
+    const tram = (id: string, short: string, lon: number): Drawn =>
+      ({ id, type: 0, routeId: short, short, p: toPlane(lon, 45.81), heading: { x: 1, y: 0 }, speed: 5, confidence: 1, onShape: null });
+    const drawn = [tram('a', '6', 15.97), tram('b', '11', 15.971), tram('c', '2', 15.99)];
+    // A camera stand-in: ten thousand CSS px per degree, so b is drawn 10 px from a (their pills overlap) and c 200 px away (its own).
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    const fc = vehiclesToGeoJson(drawn, { project });
+    expect(fc.features.map((f) => f.properties.id).sort()).toEqual(['c', 'cluster:a,b']);
+    const cluster = fc.features.find((f) => f.properties.cluster)!;
+    expect(cluster.properties).toMatchObject({ short: '6\u00b711', n: 2, ids: ['a', 'b'], kind: 'tram', sort: 3, hasHeading: false, held: false });
+    expect(cluster.geometry.coordinates[0]).toBeCloseTo(15.9705, 4); // the members' own centroid
+    // The selected (or followed) vehicle keeps its own mark, whatever overlaps it.
+    expect(vehiclesToGeoJson(drawn, { project, selectedId: 'a' }).features.map((f) => f.properties.id).sort()).toEqual(['a', 'b', 'c']);
+    // With no camera to project with, nothing is merged: every vehicle is its own mark, as before.
+    expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.id)).toEqual(['a', 'b', 'c']);
   });
 
   it('vehicles() answers the model\u2019s own estimate for the lists: a position between the reports, and the facing the two fixes east made evident', async () => {
@@ -325,7 +355,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
     map.fire('styleimagemissing', { id: 'townhall' });
     expect(map.images.get('townhall')).toBe(image);
     map.fire('styleimagemissing', {});
-    expect(map.images.size).toBe(14); // the thirteen overlay images and the one stand-in
+    expect(map.images.size).toBe(OVERLAY_IMAGE_IDS.length + 1); // the overlay images and the one stand-in
   });
 });
 
@@ -343,11 +373,7 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('closures')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
     expect(ids[ids.length - 1]).toBe('selection-ring');
-    expect([...map.images.keys()]).toEqual([
-      'vehicle-pill-1', 'vehicle-pill-2', 'vehicle-pill-3', 'vehicle-pill-4',
-      'vehicle-plate-1', 'vehicle-plate-2', 'vehicle-plate-3', 'vehicle-plate-4',
-      'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
-    ]);
+    expect([...map.images.keys()]).toEqual(OVERLAY_IMAGE_IDS);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect(map.images.get('vehicle-plate-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
@@ -382,7 +408,11 @@ describe('the basemap and the overlays on it', () => {
     expect(JSON.stringify(map.filters['stops'])).not.toContain('"6"');
     expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, overlays.NOSE_MAX_ZOOM]);
     expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
-    expect(map.layout['vehicles']?.['icon-allow-overlap']).not.toBe(true); // Collision is retained at every zoom; no changed paint op is necessary.
+    // A pill is never dropped, at any zoom and under any option set: the layer
+    // went on with overlap and ignore-placement already true, and nothing the
+    // kiosk changes can turn them off again.
+    expect((map.layers.find((l) => l.id === 'vehicles') as { layout: Record<string, unknown> }).layout['icon-allow-overlap']).toBe(true);
+    expect(map.layout['vehicles']?.['icon-allow-overlap']).toBeUndefined();
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
     // Back to no option set: today's drawing, thresholds and the profile's own padding included.
     handle.setProzor!(null);
@@ -402,7 +432,7 @@ describe('the basemap and the overlays on it', () => {
     // so this assertion never again needs an edit when a basemap task changes the palette
     // (fix round 1, T1.2 finding: test/motion/* must pass without edits).
     expect(map.paint['background']?.['background-color']).toBe(basemap.flavorFor('dark').background);
-    expect(map.paint['vehicles']?.['icon-halo-color']).toBe(basemap.OVERLAY_DARK.halo);
+    expect(map.paint['vehicles']?.['icon-halo-color']).toEqual(['case', ['get', 'cluster'], basemap.OVERLAY_DARK.selection, basemap.OVERLAY_DARK.halo]);
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/dark');
     expect(map.layers).toHaveLength(layersBefore);
     document.documentElement.setAttribute('data-theme-resolved', 'light');
@@ -610,5 +640,24 @@ describe('selection and status', () => {
     container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(selections[2]).toBeNull();
     expect(handle.selection!()).toBeNull();
+  });
+
+  it('a tap on a cluster eases the camera onto its members while no tap could tell them apart, and picks the nearest member once one could', async () => {
+    const SECOND: MapPoint = { ...A, id: 'vehicle:2', lon: A.lon + 0.001, lat: 45.811, title: '11', routeId: '11' };
+    const { map, handle, frame, selections } = await harness({ points: [A, SECOND] });
+    frame();
+    const members = handle.vehicles!();
+    expect(members).toHaveLength(2);
+    map.rendered = [{ layer: { id: 'vehicles' }, properties: { id: 'cluster:vehicle:1,vehicle:2', cluster: true, n: 2, ids: ['vehicle:1', 'vehicle:2'], short: '6·11' } }];
+    map.zoom = 15;
+    map.fire('click', { point: { x: 10, y: 10 } });
+    expect(selections).toEqual([]); // nothing is chosen for the reader; the camera goes in on the members
+    expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'fitBounds', options: { maxZoom: CLUSTER_ZOOM_IN_UNTIL } });
+    // Close in there is no camera left to spend, and the tap means the pill under it.
+    map.zoom = 18;
+    const second = members.find((v) => v.id === 'vehicle:2')!;
+    map.fire('click', { point: map.project([second.lon, second.lat]) });
+    expect(selections).toEqual([{ kind: 'vehicle', id: 'vehicle:2' }]);
+    expect(map.filters['vehicle-selected']).toEqual(['==', ['get', 'id'], 'vehicle:2']);
   });
 });

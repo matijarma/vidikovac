@@ -20,6 +20,7 @@ import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
+import { clusterPills, type Cluster, type PillPoint } from '../motion/pills';
 import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { tr } from '../transport/strings';
@@ -180,12 +181,24 @@ export interface VehicleFeatureCollection {
       hasHeading: boolean;
       /** Confidence carried as opacity, floored at MIN_ICON_ALPHA. */
       alpha: number;
-      /** Draw order: trams over buses, so a busy stop never buries a tram. */
+      /** Draw order (overlays.ts SORT_KEY, higher over lower): a cluster over
+       *  a tram over a bus, so a busy stop never buries a tram and a merged
+       *  mark is never half-hidden under one of the marks it stands for. */
       sort: number;
       held: boolean;
+      /** True on a merged mark. Written on every feature, never left off a
+       *  single: the pill layer's cluster ring is a `case` on this property,
+       *  and a MapLibre `case` on a missing property is a runtime error. */
+      cluster: boolean;
+      /** A cluster's members, and how many; absent on a single. */
+      ids?: string[];
+      n?: number;
     };
   }[];
 }
+
+/** One feature of the vehicle source. */
+export type VehicleFeature = VehicleFeatureCollection['features'][number];
 
 export const isVehicleReport = (p: MapPoint): boolean => p.at !== undefined;
 
@@ -260,6 +273,65 @@ export function vehicleLabel(v: { short?: string; routeId?: string }): string {
   return ZET_ROUTES[v.routeId]?.shortName || v.routeId;
 }
 
+/** Draw order among the vehicle marks (overlays.ts reads `sort` straight as
+ *  the symbol sort key, and with overlap allowed the higher one covers the
+ *  lower). A cluster last, because it stands for the marks beneath it. */
+const SORT_BUS = 1;
+const SORT_TRAM = 2;
+const SORT_CLUSTER = 3;
+
+/** How `vehiclesToGeoJson` is asked to merge overlapping pills. */
+export interface VehicleGeoJsonOptions {
+  /** [lon, lat] to CSS px on the live camera (MapLibre's own `map.project`).
+   *  Absent, nothing is merged and every vehicle is its own mark, exactly as
+   *  before -- clustering is a screen-space question and there is no screen
+   *  without a camera. A point the camera cannot place (null) keeps its own
+   *  mark too, rather than joining a group it was never measured against. */
+  project?: (lonLat: [number, number]) => { x: number; y: number } | null;
+  /** The selected or followed vehicle: never absorbed into a cluster, so a
+   *  tap never loses the mark it was aimed at (motion/pills.ts). */
+  selectedId?: string | null;
+}
+
+/** A vehicle's mark as `clusterPills` measures it: its pill's centre on screen
+ *  and the label written in it, with the feature it came from riding along. */
+interface VehiclePillPoint extends PillPoint {
+  feature: VehicleFeature;
+}
+
+/** One merged mark for a group of overlapping pills: the members' joined label
+ *  ("6·11"), their ids, their centroid, and the properties a layer still has
+ *  to be able to read -- `kind` so the mode colours and the mode filters work
+ *  unchanged (a group with a tram in it is a tram), the one route id the group
+ *  shares or none at all, the members' best alpha, and no heading, because a
+ *  merged mark has no one facing and draws no direction nose. */
+function clusterToFeature(cluster: Cluster<VehiclePillPoint>): VehicleFeature {
+  const members = cluster.members.map((m) => m.feature);
+  const kind: VehicleKind = members.some((f) => f.properties.kind === 'tram') ? 'tram' : members[0]!.properties.kind;
+  const routes = new Set(members.map((f) => f.properties.routeId));
+  const lon = members.reduce((sum, f) => sum + f.geometry.coordinates[0], 0) / members.length;
+  const lat = members.reduce((sum, f) => sum + f.geometry.coordinates[1], 0) / members.length;
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lon, lat] },
+    properties: {
+      id: cluster.id,
+      icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
+      kind,
+      short: cluster.label,
+      routeId: routes.size === 1 ? [...routes][0]! : '',
+      bearing: 0,
+      hasHeading: false,
+      alpha: Math.max(...members.map((f) => f.properties.alpha)),
+      sort: SORT_CLUSTER,
+      held: false,
+      cluster: true,
+      ids: members.map((f) => f.properties.id),
+      n: members.length,
+    },
+  };
+}
+
 /**
  * The model's output as the vehicle source: one feature per vehicle (the
  * model evicts what has gone quiet, R-F2, so everything it draws is fresh),
@@ -267,9 +339,16 @@ export function vehicleLabel(v: { short?: string; routeId?: string }): string {
  * model knows it (decision 5: the nose is drawn only then; the bearing
  * otherwise follows the track so a tram's mark still lies along its rails)
  * and its confidence as alpha.
+ *
+ * With a `project` (the live camera's), tram and bus marks whose pills would
+ * overlap on screen leave as one cluster feature instead of a pile: the pill
+ * layer draws every mark it is given, so the thinning happens here, where the
+ * app knows what the marks mean, rather than in MapLibre's collision pass,
+ * which only knew that two boxes touched. An untyped mark ('other') is never
+ * merged -- it has no number to join a label with.
  */
-export function vehiclesToGeoJson(drawn: readonly Drawn[]): VehicleFeatureCollection {
-  const features: VehicleFeatureCollection['features'] = [];
+export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJsonOptions = {}): VehicleFeatureCollection {
+  const features: VehicleFeature[] = [];
   for (const v of drawn) {
     const kind = vehicleKind(v.type);
     features.push({
@@ -284,12 +363,30 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[]): VehicleFeatureCollec
         bearing: bearingOf(v.heading ?? v.track),
         hasHeading: v.heading !== null,
         alpha: MIN_ICON_ALPHA + (1 - MIN_ICON_ALPHA) * Math.min(1, Math.max(0, v.confidence)),
-        sort: kind === 'tram' ? 2 : 1,
+        sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
         held: v.held === true,
+        cluster: false,
       },
     });
   }
-  return { type: 'FeatureCollection', features };
+  const project = options.project;
+  if (!project) return { type: 'FeatureCollection', features };
+
+  const points: VehiclePillPoint[] = [];
+  const alone: VehicleFeature[] = [];
+  for (const feature of features) {
+    const at = feature.properties.kind === 'other' ? null : project(feature.geometry.coordinates);
+    if (!at) {
+      alone.push(feature);
+      continue;
+    }
+    points.push({ id: feature.properties.id, x: at.x, y: at.y, label: feature.properties.short, feature });
+  }
+  const merged: VehicleFeature[] = [...alone];
+  for (const group of clusterPills(points, { selectedId: options.selectedId ?? null })) {
+    merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group));
+  }
+  return { type: 'FeatureCollection', features: merged };
 }
 
 export interface NetworkFeatureCollection {
@@ -372,7 +469,7 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
  *  always registers -- the same discipline as the schematic's signature. */
 function signatureOf(fc: VehicleFeatureCollection): string {
   return fc.features
-    .map((f) => `${f.properties.id}:${f.geometry.coordinates[0].toFixed(7)},${f.geometry.coordinates[1].toFixed(7)},${f.properties.bearing},${f.properties.hasHeading ? 1 : 0},${f.properties.alpha.toFixed(2)}`)
+    .map((f) => `${f.properties.id}:${f.geometry.coordinates[0].toFixed(7)},${f.geometry.coordinates[1].toFixed(7)},${f.properties.bearing},${f.properties.hasHeading ? 1 : 0},${f.properties.alpha.toFixed(2)},${f.properties.short}`)
     .join('|');
 }
 
@@ -633,6 +730,10 @@ interface MapApi {
   fitBounds(bounds: [[number, number], [number, number]], options?: Record<string, unknown>): void;
   getCenter(): { lng: number; lat: number };
   getZoom(): number;
+  /** [lon, lat] to CSS px on the current camera; how the pills are clustered
+   *  and how a tap on a cluster finds the member nearest to it. Optional so a
+   *  stand-in without a camera still satisfies this slice. */
+  project?(lonLat: [number, number]): { x: number; y: number };
   resize(): unknown;
   remove(): void;
 }
@@ -667,6 +768,12 @@ const FIT_PADDING_PX = 40;
 const FIT_ROOM_PX = 2 * FIT_PADDING_PX;
 /** Route follow refits the selected route's vehicles at most this often, so the camera settles between moves. */
 const ROUTE_FOLLOW_MS = 5000;
+/** A tap on a cluster below this zoom moves the camera onto its members
+ *  instead of choosing one of them for the reader: while the pills are merged
+ *  the tap cannot mean one vehicle, and half a step from the map's own maximum
+ *  (basemap.ts MAP_MAX_ZOOM, 18) is the last point where there is still camera
+ *  left to spend. At or above it the tap picks the member nearest to it. */
+export const CLUSTER_ZOOM_IN_UNTIL = 17.5;
 
 /** The kiosk adapter's shorthand as a selection: the route wins when both are given. */
 export function viewSelection(route: string | null | undefined, stopId: string | null | undefined): MapSelection | null {
@@ -783,25 +890,36 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null };
   }
 
+  /** The vehicle the clustering must leave standing: the selected one, or the
+   *  one the camera is following. */
+  function keptVehicleId(): string | null {
+    if (selection?.kind === 'vehicle') return selection.id;
+    return typeof following === 'string' ? following : null;
+  }
+
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
   function draw(t: number): boolean {
     // Detached (the dashboard swapped layers and took the workspace along):
     // paint nothing, report no change, let the loop park; the next render's
     // update() nudges it awake.
     const l = lib;
-    if (!model || !map || !styled || !l || !container.isConnected) return false;
+    const m = map;
+    if (!model || !m || !styled || !l || !container.isConnected) return false;
     lastDrawn = model.step(t);
-    const fc = vehiclesToGeoJson(lastDrawn);
+    // The pills are merged against the camera of this very frame, so a mark
+    // never merges with one the reader can see is somewhere else.
+    const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId() });
     container.dataset.frames = String(loop.frames());
     const signature = signatureOf(fc);
     const changed = signature !== lastPushedSignature;
     if (changed && t >= nextPushAt - PUSH_TOLERANCE_MS) {
-      map.getSource(l.SOURCES.vehicles)?.setData(fc);
+      m.getSource(l.SOURCES.vehicles)?.setData(fc);
       lastPushedSignature = signature;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
       // park, when the old grid is long behind us.
       nextPushAt = nextPushAt + SOURCE_UPDATE_INTERVAL_MS > t ? nextPushAt + SOURCE_UPDATE_INTERVAL_MS : t + SOURCE_UPDATE_INTERVAL_MS;
-      if (following === true) followRoute(fc);
+      if (following === true) followRoute();
       else if (following) followCamera(fc);
     }
     return changed;
@@ -823,13 +941,16 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     map.easeTo({ center: feature.geometry.coordinates, duration: reduced ? 0 : SOURCE_UPDATE_INTERVAL_MS, easing: (x: number) => x, essential: true });
   }
 
-  /** Route follow: the selected route's vehicles kept in frame, refitted at most every ROUTE_FOLLOW_MS. */
-  function followRoute(fc: VehicleFeatureCollection): void {
+  /** Route follow: the selected route's vehicles kept in frame, refitted at
+   *  most every ROUTE_FOLLOW_MS. Read off the model's own output rather than
+   *  the pushed source: a clustered feature belongs to several routes at once
+   *  and would drop half the route out of the frame. */
+  function followRoute(): void {
     const sel = selection;
     if (!map || sel?.kind !== 'route') return;
     const t = now();
     if (t - routeFollowAt < ROUTE_FOLLOW_MS) return;
-    const coords = fc.features.filter((f) => f.properties.routeId === sel.id).map((f) => f.geometry.coordinates);
+    const coords = lastDrawn.filter((v) => v.routeId === sel.id).map((v) => toLonLat(v.p));
     if (coords.length === 0) return;
     routeFollowAt = t;
     fitCoordinates(coords, FOCUS_ZOOM);
@@ -964,6 +1085,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('sourcedata', onSourceData);
     created.on('webglcontextlost', () => setStatus('unavailable'));
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
+    created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
     if (interactive) bindPointer(created);
     created.once('load', () => onLoad(l, created));
@@ -1063,6 +1185,16 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return { center: [c.lng, c.lat], zoom: m.getZoom() };
   }
 
+  /** The camera moved (a drag, a wheel, one of the wrapper's own eases). Which
+   *  pills overlap is a screen-space question, so the same vehicles standing
+   *  still merge at one zoom and separate at the next: the next frame has to
+   *  push again even though nothing in the model changed, and the loop has to
+   *  be awake to draw it. */
+  function onCameraMove(): void {
+    lastPushedSignature = '';
+    loop.nudge();
+  }
+
   /** A move a person made (drag, wheel, keyboard) ends a follow; the wrapper's own easeTo carries no originalEvent. */
   function onMoveEnd(event: MapEventLike): void {
     if (!event.originalEvent || !map) return;
@@ -1080,8 +1212,63 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return ids.length > 1 ? ids : undefined;
   }
 
+  /** A cluster mark's members, or null when the picked feature is one vehicle.
+   *  MapLibre hands an array property back as an array (it JSON-tags the value
+   *  through its own tile encoding and parses it again on the way out), so the
+   *  ids the source wrote are the ids read here. */
+  function clusterMembers(properties: Record<string, unknown>): string[] | null {
+    if (properties.cluster !== true) return null;
+    const ids = properties.ids;
+    return Array.isArray(ids) ? ids.map(String) : [];
+  }
+
+  /** Where the model currently draws each of these vehicles; one that has gone
+   *  since the frame the tap hit is simply left out. */
+  function memberCoordinates(ids: readonly string[]): [number, number][] {
+    const coords: [number, number][] = [];
+    for (const id of ids) {
+      const v = lastDrawn.find((d) => d.id === id);
+      if (v) coords.push(toLonLat(v.p));
+    }
+    return coords;
+  }
+
+  /** A tap on a merged mark. While the members are a few pixels apart no tap
+   *  can mean one of them, so the camera goes in on them instead of guessing
+   *  (CLUSTER_ZOOM_IN_UNTIL); close in, the pills are apart and the tap means
+   *  the one under it. Nothing is selected on the way in: a selection the
+   *  reader did not aim at is worse than one more tap. */
+  function openCluster(m: MapApi, ids: readonly string[], point: { x: number; y: number }): void {
+    const coords = memberCoordinates(ids);
+    if (coords.length === 0) return;
+    if (m.getZoom() < CLUSTER_ZOOM_IN_UNTIL) {
+      fitCoordinates(coords, CLUSTER_ZOOM_IN_UNTIL);
+      return;
+    }
+    let nearest: string | null = null;
+    let best = Infinity;
+    for (const id of ids) {
+      const v = lastDrawn.find((d) => d.id === id);
+      if (!v) continue;
+      const at = m.project?.(toLonLat(v.p));
+      const distance = at ? Math.hypot(at.x - point.x, at.y - point.y) : 0;
+      if (distance < best) {
+        best = distance;
+        nearest = id;
+      }
+    }
+    if (!nearest) return;
+    const picked: MapSelection = { kind: 'vehicle', id: nearest };
+    select(picked);
+    options.onSelect?.(picked);
+  }
+
+  /** What a tap landed on: one of the map's selectable things, or a cluster of
+   *  vehicles, which is not a selection but a request to look closer. */
+  type Picked = MapSelection | { kind: 'cluster'; ids: string[] };
+
   /** The mark under a tap, by priority: a vehicle over a stop over a closure; nothing under it clears. */
-  function pick(m: MapApi, point: { x: number; y: number }): MapSelection | null {
+  function pick(m: MapApi, point: { x: number; y: number }): Picked | null {
     const l = lib;
     if (!l) return null;
     const box = [
@@ -1090,7 +1277,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
-    if (vehicle) return { kind: 'vehicle', id: String(vehicle.properties.id) };
+    if (vehicle) {
+      const members = clusterMembers(vehicle.properties);
+      return members ? { kind: 'cluster', ids: members } : { kind: 'vehicle', id: String(vehicle.properties.id) };
+    }
     const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
     if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: siblingPlatforms(String(platform.properties.name)) };
     const closure = closuresVisible ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;
@@ -1103,6 +1293,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     m.on('click', (event) => {
       if (!styled || !event.point) return;
       const picked = pick(m, event.point);
+      if (picked?.kind === 'cluster') {
+        openCluster(m, picked.ids, event.point);
+        return;
+      }
       select(picked);
       options.onSelect?.(picked);
     });
@@ -1282,7 +1476,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       centreOn(target);
     } else if (target === true) {
       routeFollowAt = -Infinity;
-      if (selection?.kind === 'route') followRoute(vehiclesToGeoJson(lastDrawn));
+      if (selection?.kind === 'route') followRoute();
       else fitSelection();
     }
     loop.nudge();
