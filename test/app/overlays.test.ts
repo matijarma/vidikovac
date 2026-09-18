@@ -4,9 +4,10 @@ import {
   BELOW_LABELS,
   LAYERS,
   NEVER,
+  NOSE_MAX_ZOOM,
+  NOSE_MIN_ZOOM,
   PILL_IMAGE_PREFIX,
   PILL_MAX_CHARS,
-  PILL_OVERLAP_ZOOM,
   PILL_ZOOM,
   PLACE_FILTERS,
   PLATE_IMAGE_PREFIX,
@@ -43,22 +44,34 @@ describe('the overlay layer list', () => {
     expect(firstSymbolLayer(basemapLayers('light'))).toBe('address_label');
   });
 
-  it('declutters by scale: dots at every zoom, pills from PILL_ZOOM thinned by collision, everything from PILL_OVERLAP_ZOOM, the selected vehicle always', () => {
-    expect(PILL_ZOOM).toBeLessThan(PILL_OVERLAP_ZOOM);
+  it('declutters by scale: dots at every zoom, pills from PILL_ZOOM, the selected vehicle always, and the direction nose inside its band alone', () => {
+    expect(PILL_ZOOM).toBeLessThan(NOSE_MIN_ZOOM);
     expect(layerById(LAYERS.vehicleDots).minzoom).toBeUndefined();
     const pills = layerById(LAYERS.vehicles);
     expect(pills.minzoom).toBe(PILL_ZOOM);
-    expect(pills.layout!['icon-allow-overlap']).toBe(false);
-    expect(pills.layout!['text-allow-overlap']).toBe(false);
     expect(pills.layout!['text-optional']).toBe(false); // number and pill are one mark
-    expect(layerById(LAYERS.vehicleNoses).minzoom).toBe(PILL_OVERLAP_ZOOM);
+    // The band (section D): from 16.5 the rails themselves say the direction.
+    expect([NOSE_MIN_ZOOM, NOSE_MAX_ZOOM]).toEqual([14.5, 16.5]);
+    const noses = layerById(LAYERS.vehicleNoses);
+    expect([noses.minzoom, noses.maxzoom]).toEqual([14.5, 16.5]);
+    const selectedNose = layerById(LAYERS.vehicleSelectedNose);
+    expect(selectedNose.minzoom).toBeUndefined(); // the selected vehicle's nose has no lower edge
+    expect(selectedNose.maxzoom).toBe(16.5);
     const selected = layerById(LAYERS.vehicleSelected);
     expect(selected.minzoom).toBeUndefined();
     expect(selected.layout!['icon-allow-overlap']).toBe(true);
     // Pills are upright in the viewport; only the nose turns with the heading, compass minus ninety.
     expect(pills.layout!['icon-rotation-alignment']).toBe('viewport');
-    expect(layerById(LAYERS.vehicleNoses).layout!['icon-rotate']).toEqual(['-', ['get', 'bearing'], 90]);
-    expect(layerById(LAYERS.vehicleNoses).layout!['icon-rotation-alignment']).toBe('map');
+    expect(noses.layout!['icon-rotate']).toEqual(['-', ['get', 'bearing'], 90]);
+    expect(noses.layout!['icon-rotation-alignment']).toBe('map');
+  });
+
+  it('draws the network under the marks on it: a hairline out of town, under 2.5 px in the city (section C)', () => {
+    const layers = overlayLayers(OVERLAY_LIGHT);
+    expect(layers.find((l) => l.id === LAYERS.networkTram)!.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 10, 0.6, 13, 1.1, 16, 2.4]);
+    expect(layers.find((l) => l.id === LAYERS.networkBus)!.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 10, 0.45, 13, 0.85, 16, 1.9]);
+    // The opacity ramp is untouched by the thinning.
+    expect(layers.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toEqual(['interpolate', ['linear'], ['zoom'], 10, 0.4, 14, 0.55, 17, 0.7]);
   });
 
   it('generates one SDF pill and one plate per label length up to PILL_MAX_CHARS, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
@@ -131,7 +144,8 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(image).toContain('"length",["get","short"]');
       expect(pills.layout!['icon-allow-overlap']).toBe(false);
       expect(pills.layout!['text-allow-overlap']).toBe(false);
-      expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6);
+      expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6); // the kiosk's own threshold stays its own
+      expect(by(LAYERS.vehicleNoses).maxzoom).toBe(NOSE_MAX_ZOOM);
       expect(JSON.stringify(by(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
       // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
       const screenStop = by(LAYERS.screenStop);

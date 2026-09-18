@@ -9,11 +9,12 @@
 // Declutter is scale-aware (never a pile of squares): below PILL_ZOOM every
 // vehicle is a small dot in its mode's colour; from there numbered pills
 // join, thinned by MapLibre's collision pass with the dots still underneath
-// so no vehicle ever vanishes; from PILL_OVERLAP_ZOOM (or the public screen's
-// own overlapZoom, ProzorOptions) every pill and its nose draw
-// unconditionally. The selected or followed vehicle draws at every zoom.
-// Stop names come in by rank, the busiest corners first, one per named stop,
-// and yield to the vehicles above them.
+// so no vehicle ever vanishes. The direction nose draws inside its own band
+// alone: from NOSE_MIN_ZOOM (or the public screen's own overlapZoom,
+// ProzorOptions) to NOSE_MAX_ZOOM, past which the rails say the direction
+// themselves. The selected or followed vehicle draws at every zoom. Stop
+// names come in by rank, the busiest corners first, one per named stop, and
+// yield to the vehicles above them.
 import { PILL_BASE_WIDTHS_PX, PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
@@ -74,8 +75,14 @@ export const OUTLINE_WIDTH_PX = 2;
 
 /** Pills appear (dots alone below): just under basemap.ts's CITY_ZOOM, so the opening view and one step out still read numbers. */
 export const PILL_ZOOM = 12.5;
-/** Every pill and nose draws, collision or not; two trams at one stop are two trams. */
-export const PILL_OVERLAP_ZOOM = 14.5;
+/** The direction nose's band (plan section D). Below the lower edge the marks
+ *  are too dense and too small for a triangle to say anything; from the upper
+ *  one the rails themselves draw four pixels and more apart, and the rail a
+ *  tram sits on already says which way it faces -- a nose there is a second
+ *  arrow saying what the map has just said. The public screen keeps its own
+ *  lower edge (ProzorOptions.overlapZoom, R-KP2). */
+export const NOSE_MIN_ZOOM = 14.5;
+export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
 /** Pill geometry in CSS px: one capsule per label length, 1 to 4 characters.
@@ -144,7 +151,7 @@ export interface ProzorOptions {
   stopRoutes: readonly string[] | null;
   /** Stops labelled only from this rank (kiosk 4; today's gate is rank 2 at the overlap zoom). */
   stopLabelMinRank: number;
-  /** The zoom from which pills place unconditionally and noses draw (today's fixed 14.5). */
+  /** The zoom from which the screen's stop names and the direction noses draw (today's fixed 14.5). */
   overlapZoom: number;
   /** Collision padding around a major street name, in the tile pixels
    *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
@@ -347,6 +354,8 @@ function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number,
     type: 'symbol',
     source: SOURCES.vehicles,
     ...(minzoom > 0 ? { minzoom } : {}),
+    // The band's upper edge is the same on every surface: past it the rails say the direction themselves.
+    maxzoom: NOSE_MAX_ZOOM,
     filter,
     layout: {
       'icon-image': NOSE_IMAGE,
@@ -432,8 +441,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const visible = (on: boolean): Record<string, unknown> => ({ visibility: on ? 'visible' : 'none' });
   const closures = visible(options.closuresVisible !== false);
   const dimmed = sel?.kind === 'route';
-  // The public screen's thresholds follow the field's own zoom (R-KP2); every other surface keeps the fixed one.
-  const overlapZoom = prozor?.overlapZoom ?? PILL_OVERLAP_ZOOM;
+  // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
+  const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
   // Every vehicle remains a dot. Number plates must earn collision-free
   // room; unconditional terminal labels turned busy stops into blue blobs.
   const overlap = false;
@@ -453,7 +462,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   // the network's own weight and opacity, as always.
   const tramNetwork = prozor
     ? network(LAYERS.networkTram, 'tram', p.figure, zoomInterpolate(14, 3, 15, 5, 16, 6), p.figureOpacity)
-    : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 1, 13, 1.8, 16, 4.5));
+    : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
   const stops = routeStopsFilter(modes, prozor ? prozor.stopRoutes : null);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
@@ -505,7 +514,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       layout: round,
       paint: { 'line-color': p.other, 'line-width': OUTLINE_WIDTH_PX * s, 'line-dasharray': [...OUTLINE_DASH], 'line-opacity': 0.8 },
     },
-    network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.7, 13, 1.4, 16, 3.5)),
+    network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.45, 13, 0.85, 16, 1.9)),
     tramNetwork,
     { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelectedCasing], layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },
     { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: filters[LAYERS.networkSelected], layout: round, paint: { 'line-color': ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other], 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
@@ -572,7 +581,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: kindFilter(modes) },
     ),
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), overlapZoom, s, alpha),
+    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, s, alpha),
     pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), overlap, PILL_ZOOM, s, inks, mark),
     // Stop names: on the public screen the hubs alone (rank from the option
     // set), from the field's zoom and never below it -- as the layer's own

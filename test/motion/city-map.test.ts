@@ -380,14 +380,14 @@ describe('the basemap and the overlays on it', () => {
     handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1, labelPadding: 48 });
     expect(JSON.stringify(map.filters['stops'])).toContain('"17"');
     expect(JSON.stringify(map.filters['stops'])).not.toContain('"6"');
-    expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, 24]);
+    expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, overlays.NOSE_MAX_ZOOM]);
     expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
     expect(map.layout['vehicles']?.['icon-allow-overlap']).not.toBe(true); // Collision is retained at every zoom; no changed paint op is necessary.
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
     // Back to no option set: today's drawing, thresholds and the profile's own padding included.
     handle.setProzor!(null);
     expect(map.layout['network-bus']?.visibility).toBe('visible');
-    expect(map.zoomRanges['vehicle-noses']).toEqual([overlays.PILL_OVERLAP_ZOOM, 24]);
+    expect(map.zoomRanges['vehicle-noses']).toEqual([overlays.NOSE_MIN_ZOOM, overlays.NOSE_MAX_ZOOM]);
     expect(map.zoomRanges['stop-labels']).toEqual([overlays.STOP_LABEL_ZOOM, 24]);
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(basemap.PROZOR_LABEL_PADDING_PX);
     handle.destroy();
