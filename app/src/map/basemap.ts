@@ -25,6 +25,7 @@
 // directly in node.
 import { layers as protomapsLayers, namedFlavor, type Flavor } from '@protomaps/basemaps';
 import { MAP_CONFIG } from '../core/contracts';
+import { PILL_INKS } from '../motion/pills';
 
 export type MapTheme = 'light' | 'dark';
 
@@ -429,12 +430,7 @@ export interface OverlayPalette {
  * literals, so these are the token hexes written out; tokens.css stays
  * their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
-  tram: '#0751bf',
-  tramText: '#f7faff',
-  bus: '#34465c',
-  busText: '#f7faff',
-  other: '#47586d',
-  otherText: '#fbfcfe',
+  ...PILL_INKS.light, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#0751bf',
   routeBus: '#34465c',
   figure: '#142334', // --palette-light-text-primary, the ink
@@ -442,7 +438,6 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   stopFill: '#f1f4f7',
   stopStroke: '#47586d',
   label: '#142334',
-  halo: '#fbfcfe',
   closure: '#b72d39',
   closureCasing: '#fbfcfe',
   place: '#b8731a',
@@ -454,12 +449,7 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
 });
 
 export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
-  tram: '#84b5ff',
-  tramText: '#102236',
-  bus: '#b8c9dc',
-  busText: '#102236',
-  other: '#b8c5d5',
-  otherText: '#111922',
+  ...PILL_INKS.dark, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#84b5ff',
   routeBus: '#b8c9dc',
   figure: '#b8c5d5', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
@@ -467,7 +457,6 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   stopFill: '#111922',
   stopStroke: '#b8c5d5',
   label: '#f1f4f7',
-  halo: '#111922',
   closure: '#ff9aa5',
   closureCasing: '#111922',
   place: '#f0c060',

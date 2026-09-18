@@ -14,6 +14,7 @@
 // unconditionally. The selected or followed vehicle draws at every zoom.
 // Stop names come in by rank, the busiest corners first, one per named stop,
 // and yield to the vehicles above them.
+import { PILL_BASE_WIDTHS_PX, PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -77,9 +78,11 @@ export const PILL_ZOOM = 12.5;
 export const PILL_OVERLAP_ZOOM = 14.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
-/** Pill geometry in CSS px: one capsule per label length, 1 to 4 characters. */
-export const PILL_HEIGHT_PX = 18;
-export const PILL_WIDTHS_PX: readonly number[] = [18, 24, 31, 38];
+/** Pill geometry in CSS px: one capsule per label length, 1 to 4 characters.
+ *  Hoisted to motion/pills.ts (F1) so the schema paints the same pill;
+ *  re-exported here under their long-standing names. */
+export { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX };
+export const PILL_WIDTHS_PX: readonly number[] = PILL_BASE_WIDTHS_PX;
 export const PILL_MAX_CHARS = PILL_WIDTHS_PX.length;
 /** The direction nose: an isosceles triangle ahead of the pill, drawn under it. */
 export const NOSE_LENGTH_PX = 8;
@@ -88,12 +91,6 @@ const NOSE_OFFSETS_PX: readonly number[] = [12, 14, 17, 20];
 export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;
 
-export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
-/** The tram's plate on the public screen (plan D4, the badge rule: a tram is
- *  a plate, a bus a capsule): the pill's box with the corners barely rounded,
- *  one per label length like the pills. */
-export const PLATE_IMAGE_PREFIX = 'vehicle-plate-';
-export const PLATE_RADIUS_PX = 3;
 export const NOSE_IMAGE = 'vehicle-nose';
 export const RING_IMAGE = 'selection-ring';
 
