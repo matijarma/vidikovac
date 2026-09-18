@@ -254,6 +254,10 @@ describe('the transport workspace', () => {
     last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:1' });
     expect(q<HTMLButtonElement>('[data-action=toggle-line-focus]').getAttribute('aria-checked')).toBe('false');
     stop();
+    // No device store to write to (the lightweight path, a unit context): no
+    // switch is offered at all, the way the map-mode button is not.
+    render(ctx({ maps, selection: { kind: 'route', id: '6' } }).context);
+    expect(document.querySelector('[data-action=toggle-line-focus]')).toBeNull();
     render(ctx({ maps, kiosk: true, selection: { kind: 'route', id: '6' } }).context);
     expect(document.querySelector('[data-action=toggle-line-focus]')).toBeNull();
   });

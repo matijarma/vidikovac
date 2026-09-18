@@ -315,8 +315,11 @@ const showOnMap = (i18n: I18n): string => button({ action: 'fit-selection', labe
  *  switch under a route's or a vehicle's actions, saying what the map is
  *  doing right now rather than what pressing it would do -- a switch is read
  *  as a state, not as a command. The label is the whole answer, so the track
- *  beside it is decoration and carries no text of its own. A public screen
- *  has no finger to press it and never renders it. */
+ *  beside it is decoration and carries no text of its own. Offered only where
+ *  there is somewhere to write the answer -- a public screen has no finger to
+ *  press it, and a surface with no device store (the lightweight path) would
+ *  be showing a control whose choice nothing remembers, exactly as the
+ *  map-mode button is withheld there. */
 function lineFocusSwitch(i18n: I18n, on: boolean): string {
   // A stable id, like the follow button's: the sheet's body is swapped whole
   // on every poll and swapBody restores focus by id, so pressing Space on
@@ -374,8 +377,10 @@ export interface VehicleDetailData {
   delay: number | undefined;
   following: boolean;
   kiosk: boolean;
-  /** Whether the map is showing this line alone (core/line-focus-store.ts). */
-  lineFocus: boolean;
+  /** Whether the map is showing this line alone (core/line-focus-store.ts);
+   *  null where there is no device store to write the choice to, and the
+   *  switch is then not offered at all. */
+  lineFocus: boolean | null;
   cast?: CastState;
 }
 
@@ -403,7 +408,7 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
     (d.kiosk ? '' : actions([follow, route])) +
-    (d.kiosk ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
+    (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
     (d.following ? `<p class="t-hint" data-testid="following-note">${esc(tr(i18n, 'followingNote'))}</p>` : '')
   );
 }
@@ -420,8 +425,10 @@ export interface RouteDetailData {
   kiosk: boolean;
   /** The stop-sequence fold is open: every stop shown. */
   stopsOpen: boolean;
-  /** Whether the map is showing this line alone (core/line-focus-store.ts). */
-  lineFocus: boolean;
+  /** Whether the map is showing this line alone (core/line-focus-store.ts);
+   *  null where there is no device store to write the choice to, and the
+   *  switch is then not offered at all. */
+  lineFocus: boolean | null;
   /** Whether this route is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
   cast?: CastState;
@@ -465,7 +472,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
     `<p class="t-note">${esc(tr(i18n, 'noArrivals'))}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
-    (d.kiosk ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
+    (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
     `<section class="t-block">${sectionHead(tr(i18n, 'routeVehicles'), 4)}${vehicles}</section>` +
     `<section class="t-block">${sectionHead(tr(i18n, 'routeStops'), 4)}${stops}</section>`
   );

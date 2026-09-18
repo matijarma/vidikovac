@@ -255,6 +255,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     return input.ctx;
   }
   const kiosk = (): boolean => ctx().kiosk === true;
+  /** The state the detail's line-focus switch shows, or null where there is no
+   *  device store to write a change to and the switch is not offered at all
+   *  (the lightweight path, a unit context) -- the map-mode button's own rule.
+   *  The map still focuses there; only the control is withheld. */
+  const lineFocusRow = (): boolean | null => (ctx().lineFocus ? lineFocus : null);
   /** null while every mode is on: the map then also draws vehicles of a type nobody knows. */
   const modesArg = (): ReadonlySet<number> | null => (
     mapMode === 'schema' ? new Set([ROUTE_TYPE_TRAM]) : ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes)
@@ -589,7 +594,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
         const directions = new Map(onRoute.map((v): [string, string] => [v.id, vehicleDirection(i18n, net, v)]));
-        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), lineFocus, saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
+        const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), lineFocus: lineFocusRow(), saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
         return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short })];
       }
       case 'stop': {
@@ -617,7 +622,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           delay: v.routeId === undefined ? undefined : delays().get(v.routeId),
           following: following === v.id,
           kiosk: k,
-          lineFocus,
+          lineFocus: lineFocusRow(),
           cast: c.cast,
         });
         return [html, `${vehicleTitle(i18n, v)} · ${direction}`];
