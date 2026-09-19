@@ -600,7 +600,7 @@ describe('the one map, through the additive adapter', () => {
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
     // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2), the street names' padding R-KP17's own on the wall's field.
-    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1, labelPadding: 24 });
+    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24 });
     // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
     expect(setProzor).toHaveBeenCalledTimes(1);
     expect(setProzor).toHaveBeenLastCalledWith(options.prozor);

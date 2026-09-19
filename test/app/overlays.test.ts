@@ -3,6 +3,7 @@ import { OVERLAY_DARK, OVERLAY_LIGHT, basemapLayers, styleDiff } from '../../app
 import {
   BELOW_LABELS,
   BODY_ZOOM,
+  CITY_STOP_ZOOM,
   LAYERS,
   NETWORK_OPACITY,
   NETWORK_OPACITY_DIMMED,
@@ -206,7 +207,7 @@ describe('the overlay layer list', () => {
 // capsules began here and are now every surface's rule, pinned by the block
 // above.)
 describe('the kiosk overlay set (prozor)', () => {
-  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
+  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
 
   it('never labels the screen’s own stop from the hub tier: its anchor label already names it (R-KP25)', () => {
     const labels = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1' }).find((l) => l.id === LAYERS.stopLabels)!;
@@ -233,6 +234,16 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(stops.paint!['circle-radius']).toBe(6);
       expect(stops.paint!['circle-color']).toBe(p.figure);
       expect(stops.paint!['circle-stroke-width']).toBe(0);
+      // With stopRadius the same dots grow with the camera instead: 1.5 at the whole-city
+      // window's own floor, 5 at street level, on a one-pixel stroke of the same ink, so a
+      // three-pixel bead on a city full of stops is still a mark and still tappable.
+      const ramped = overlayLayers(p, { scale: 2, prozor: { ...PROZOR, stopRadius: true } }).find((l) => l.id === LAYERS.stops)!;
+      expect(ramped.paint!['circle-radius']).toEqual(['interpolate', ['linear'], ['zoom'], CITY_STOP_ZOOM, 3, 15.5, 10]);
+      expect(CITY_STOP_ZOOM).toBe(12.7);
+      expect(ramped.paint!['circle-stroke-width']).toBe(1);
+      expect(ramped.paint!['circle-stroke-color']).toBe(p.figure);
+      expect(ramped.paint!['circle-stroke-opacity']).toBe(p.figureOpacity);
+      expect(ramped.minzoom).toBe(stops.minzoom);
       // Their names: hubs only (rank 4 and up), from the field's zoom, never below it; the same routes filter as the dots.
       const labels = by(LAYERS.stopLabels);
       expect(labels.minzoom).toBe(14.6);

@@ -653,7 +653,7 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number): ProzorOptions {
   const buses = stop?.routes.some(id => routeType(id) === 3);
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
 }
 
 export interface KioskMapInput {

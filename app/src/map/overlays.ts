@@ -101,6 +101,11 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
+/** The lower end of the public screen's own stop ramp (ProzorOptions
+ *  stopRadius): the floor of the whole-city window (kiosk/mapview.ts
+ *  FIELD_MIN_ZOOM), a fifth above STOP_ZOOM, so the smallest ring the ramp
+ *  states is the smallest ring the window ever draws. */
+export const CITY_STOP_ZOOM = 12.7;
 /** The vehicle bodies appear. At Zagreb's latitude (map/scale.ts) a 32 m tram
  *  is 38 px here, 77 at 17 and 154 at 18, against a 24 px two-character pill;
  *  a 12 m bus 14, 29 and 58 px. A zoom earlier the body is shorter than the
@@ -185,6 +190,12 @@ export interface ProzorOptions {
    *  (the field's own zoom, R-KP2; NOSE_MIN_ZOOM elsewhere). Its name is
    *  older than the rule: pills place unconditionally at every zoom now. */
   overlapZoom: number;
+  /** The stops of the screen's routes as rings that grow with the camera
+   *  rather than one fixed dot: on the whole-city window (kiosk/mapview.ts
+   *  CITY_WINDOW, z12.7) a dot sized for street level is a bead every few
+   *  pixels across the whole picture, and at street level a city-sized dot is
+   *  a crumb. false keeps the fixed dot. */
+  stopRadius: boolean;
   /** Collision padding around a major street name, in the tile pixels
    *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
    *  The kiosk raises it in step with the ground a field shows beyond the
@@ -652,19 +663,23 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     ),
     circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5 }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
     // On the public screen the stops of the screen's own routes are filled
-    // dots in the figure colour, no stroke: beads on the rails, not rings
-    // competing with the screen's stop. Elsewhere the hollow ring as always.
+    // dots in the figure colour: beads on the rails, not rings competing with
+    // the screen's stop. With stopRadius they grow with the camera instead of
+    // holding one size -- 1.5 at the whole-city window's own floor, 5 at
+    // street level -- and carry a one-pixel stroke of the same ink, which is
+    // what keeps a three-pixel bead legible over the street grid. Elsewhere
+    // the hollow ring as always.
     circle(
       LAYERS.stops,
       SOURCES.stops,
       prozor
         ? {
-            'circle-radius': 3 * s,
+            'circle-radius': prozor.stopRadius ? zoomInterpolate(CITY_STOP_ZOOM, 1.5 * s, 15.5, 5 * s) : 3 * s,
             'circle-color': p.figure,
             'circle-stroke-color': p.figure,
-            'circle-stroke-width': 0,
+            'circle-stroke-width': prozor.stopRadius ? 1 : 0,
             'circle-opacity': p.figureOpacity,
-            'circle-stroke-opacity': 0,
+            'circle-stroke-opacity': prozor.stopRadius ? p.figureOpacity : 0,
           }
         : {
             'circle-radius': zoomInterpolate(STOP_ZOOM, 1.5 * s, 14, 2.6 * s, 16, 4.5 * s),
