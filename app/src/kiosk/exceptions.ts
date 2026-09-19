@@ -47,14 +47,25 @@ export interface RouteException {
  * them: what is running late before what is running early, trams before buses
  * before the routes the table does not know, then the largest first. The
  * caller takes as many as its box holds and counts the rest.
+ *
+ * `stopRoutes` is the screen's own stop's routes, and they come first whatever
+ * the rest of the city is doing: a screen standing at Trg bana Jelačića under
+ * a header that names the stop was printing two late buses that do not call
+ * there, which reads as the stop's own board and is not one. The order WITHIN
+ * each group is unchanged, and the list is still the whole city -- what the
+ * caller counts as "+N linija kasni" is every exception there is, not only
+ * the ones this stop can see. The header's ticker passes nothing: city news
+ * is city news wherever the screen stands.
  */
-export function rankedExceptions(modules: readonly ModuleSnapshot[]): RouteException[] {
+export function rankedExceptions(modules: readonly ModuleSnapshot[], stopRoutes: readonly string[] | null = null): RouteException[] {
   const zet = byModule(modules)['zet-rt'];
   if (!isLive(zet)) return [];
+  const own = new Set(stopRoutes ?? []);
   return [...routeDelays(zet)]
     .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) >= EXCEPTION_MIN_S && Math.abs(seconds) <= EXCEPTION_MAX_S)
     .map(([routeId, seconds]) => ({ routeId, seconds, type: routeType(routeId) ?? UNKNOWN_ROUTE_TYPE, kind: kindOfRoute(routeId) }))
-    .sort((a, b) => Number(a.seconds < 0) - Number(b.seconds < 0) || a.type - b.type || Math.abs(b.seconds) - Math.abs(a.seconds))
+    .sort((a, b) => Number(!own.has(a.routeId)) - Number(!own.has(b.routeId))
+      || Number(a.seconds < 0) - Number(b.seconds < 0) || a.type - b.type || Math.abs(b.seconds) - Math.abs(a.seconds))
     .map(({ routeId, seconds, kind }) => ({ routeId, seconds, kind }));
 }
 

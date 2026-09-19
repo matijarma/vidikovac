@@ -312,10 +312,12 @@ function linesRows(input: FrontInput, board: LinesBoard): FrontRow[] {
 
 /** The card's own reading of the city's exceptions (kiosk/exceptions.ts holds
  *  the filter and the order the header's line reads too): as many rows as the
- *  box was given, and how many were left over for the meta to count. */
+ *  box was given, and how many were left over for the meta to count. A screen
+ *  set to a stop reads its own lines first -- the count of the rest stays the
+ *  city's, because a closed street two quarters away is still news on a wall. */
 export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: number } {
   const { strings: s, i18n } = input;
-  const all = rankedExceptions(input.modules);
+  const all = rankedExceptions(input.modules, input.stop?.routes ?? null);
   const cap = EXCEPTION_LINES[input.composition ?? 'wide'];
   const rows = all.slice(0, Math.max(1, Math.min(input.prometLines ?? cap, cap))).map(({ routeId, seconds, kind }) => {
     const kindWord = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';

@@ -112,6 +112,32 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(rows.map((row) => row.key)).toEqual(['line:6', 'line:109', 'line:X9']);
   });
 
+  // A screen standing at a stop, under a header that names it, was printing
+  // two late buses that do not call there: it reads as the stop's own board
+  // and it is not one. Its own lines come first; the count behind them is
+  // still the city's, because a late line elsewhere is still news on a wall.
+  it('puts the screen stop’s own lines first, and counts the rest of the city all the same', () => {
+    const modules = [snap('zet-rt', [
+      route('109', 900), // a bus, the latest in the city, but not this stop's
+      route('6', 300),   // a tram this stop is on
+      route('11', 200),  // a tram this stop is on, less late
+      route('2', 600),   // a tram, later than both, but not this stop's
+    ])];
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11'] };
+    const own = exceptionRows(input(modules, { stop, composition: 'portrait' }));
+    expect(own.rows.map((row) => row.key)).toEqual(['line:6', 'line:11', 'line:2']);
+    // Within the stop's own lines and within the rest, the city order is untouched.
+    expect(own.more).toBe(1);
+    expect(prometPanel(input(modules, { stop, prometMode: 'exceptions', composition: 'portrait' })).meta).toContain('+1 linija kasni');
+    // With no stop configured the card is the city's, in the city's own order.
+    const city = exceptionRows(input(modules, { composition: 'portrait' }));
+    expect(city.rows.map((row) => row.key)).toEqual(['line:2', 'line:6', 'line:11']);
+    expect(city.more).toBe(1);
+    // A stop whose lines are all running to time does not push anything ahead of the news.
+    const calm = { ...stop, routes: ['31', '32'] };
+    expect(exceptionRows(input(modules, { stop: calm, composition: 'portrait' })).rows.map((row) => row.key)).toEqual(['line:2', 'line:6', 'line:11']);
+  });
+
   it('caps the card per composition and counts the rest for the meta', () => {
     const modules = [snap('zet-rt', [route('6', 900), route('11', 600), route('12', 400), route('13', 200)])];
     expect(exceptionRows(input(modules)).rows).toHaveLength(3);
