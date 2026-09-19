@@ -53,6 +53,10 @@
 .k-explore { position: absolute; left: calc(var(--k-pad) * 1.4); top: calc(var(--k-pad) * 1.4); z-index: 3; background: var(--k-surface); box-shadow: var(--tone-shadow-soft); font-size: var(--k-hint-size); min-height: 48px; }
 .k-discovery-slot:empty { display: none; }
 .kiosk[data-exploring=true] .k-city-window [data-panel='tonight'], .kiosk[data-exploring=true] .k-city-window [data-panel='weather'] { display: none; }
+/* And once a subject is open, the screen's own stop board steps aside too: the
+   card the person asked for is the column, and it comes back when they go
+   back. Four arrival rows and their note leave the slot 68 px otherwise. */
+.kiosk[data-exploring=true][data-explore-subject='1'] .k-city-window [data-panel='promet'] { display: none; }
 .kiosk[data-exploring=true] .k-discovery-slot { flex: 1; min-height: 0; overflow: auto; padding: var(--k-gap); background: var(--k-surface); border-radius: var(--k-radius-s); }
 .kiosk .k-discovery-slot .city-detail .city-actions { display: none; }
 .kiosk .k-discovery-slot .city-row strong { font-size: var(--k-sup-size); }

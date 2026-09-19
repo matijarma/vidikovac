@@ -1959,6 +1959,11 @@ describe('arrivals on the public screen', () => {
     expect(text(card)).toContain('linija 6, 11, 12');
     const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
     expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    // The card is the column while it is open (kiosk-city.css hides the screen's
+    // own board behind this flag); going back gives the board the rail again.
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('1');
+    q(k.root, '[data-action=kiosk-leave]')!.click();
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('0');
     k.handle.destroy();
   });
 

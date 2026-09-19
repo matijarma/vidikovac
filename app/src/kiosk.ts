@@ -261,6 +261,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintExplore():void {
     const slot=element.querySelector<HTMLElement>('.k-discovery-slot');
     element.dataset.exploring=String(exploring);
+    // A tapped subject is the answer this person asked for, and the rail is
+    // theirs while its card is open (kiosk-city.css): under a four-row
+    // arrivals board the discovery slot was a 68 px sliver.
+    element.dataset.exploreSubject=exploring&&localSelection?'1':'0';
     if(!slot)return;
     if(!exploring){slot.replaceChildren();return;}
     const city=cityStore.snapshot(),events=locatedEvents(teaser.find(m=>m.module==='dogadanja')?.items??[],city.places,now());
