@@ -64,6 +64,8 @@ export interface FeedItem {
    *  because neither is a scalar; times relative to `sourceUpdatedAt`. See
    *  shared/motion/wire.ts. */
   motion?: VehicleMotion;
+  /** One-line machine-condensed reading of the item (worker/feed/brief.ts, WP6). */
+  brief?: string;
 }
 
 export type SnapshotStatus = 'live' | 'stale' | 'down';

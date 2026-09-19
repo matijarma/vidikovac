@@ -1,17 +1,15 @@
-// The kiosk frame's pure builders (kiosk/frame.ts): the header's weather
-// group and the safety strip's verdict, trail and pharmacy. Nothing counts
-// down and nothing is a tile any more (R-KP11, R-KP23): the column is
-// say.ts's.
+// The kiosk frame's pure builders (kiosk/frame.ts): the safety strip's
+// verdict, trail and pharmacy. Nothing counts down and nothing is a tile any
+// more (R-KP11, R-KP23); weather is the front page's own card (T3), never a
+// header group, so nothing here reads DHMZ.
 import { describe, expect, it } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from '../../app/src/kiosk/frame';
+import { frameStrip, stripMarkup } from '../../app/src/kiosk/frame';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { clock } from '../../app/src/kiosk/format';
-import { sunToday } from '../../app/src/kiosk/local';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb, well before sunset
-const EVENING = Date.parse('2026-09-11T20:32:00Z'); // 22:32 in Zagreb, well after sunset
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6'] };
 const attr = { text: 'Izvor: test', url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' };
 const i18n = createDefaultI18n('hr');
@@ -36,66 +34,6 @@ const CALM_MODULES: ModuleSnapshot[] = [
   snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } })]),
   snap('emsc', []),
 ];
-
-describe('headerWeather', () => {
-  it('is null while dhmz-now has no snapshot yet: the clock stands alone', () => {
-    expect(headerWeather([], s, 'hr', NOW)).toBeNull();
-  });
-  it('is null while the source is down', () => {
-    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, status: 'down' as const, items: [] } : m));
-    expect(headerWeather(modules, s, 'hr', NOW)).toBeNull();
-  });
-  it('reports live with the icon, the temperature and today\'s sunset before it passes', () => {
-    const weather = headerWeather(CALM_MODULES, s, 'hr', NOW)!;
-    expect(weather.state).toBe('live');
-    expect(weather.icon).toBe('sun');
-    expect(weather.temperature).toBe('21 °C');
-    expect(weather.sun.kind).toBe('sunset');
-    expect(weather.sun.time).toBe(sunToday(NOW).sunset);
-  });
-  it('reports stale from the snapshot\'s own status, the observation unchanged', () => {
-    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, status: 'stale' as const } : m));
-    expect(headerWeather(modules, s, 'hr', NOW)!.state).toBe('stale');
-  });
-  it('shows the glyph and the sun alone when the observation carries no numeric reading, never a dash', () => {
-    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, items: [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { data: { weather: 'vedro' } })] } : m));
-    const weather = headerWeather(modules, s, 'hr', NOW)!;
-    expect(weather.temperature).toBeNull();
-    expect(weather.icon).toBe('sun');
-  });
-  it('switches to tomorrow\'s sunrise once the sunset has passed', () => {
-    const weather = headerWeather(CALM_MODULES, s, 'hr', EVENING)!;
-    expect(weather.sun.kind).toBe('sunrise');
-    expect(weather.sun.time).toBe(sunToday(EVENING + 24 * 3_600_000).sunrise);
-  });
-});
-
-describe('weatherGroupMarkup', () => {
-  it('is empty for null: the caller keeps the group hidden', () => {
-    expect(weatherGroupMarkup(null, s)).toBe('');
-  });
-  it('draws the icon, the temperature and the sun line for a live reading', () => {
-    const markup = weatherGroupMarkup(headerWeather(CALM_MODULES, s, 'hr', NOW), s);
-    expect(markup).toContain('#icon-sun');
-    expect(markup).toContain('data-testid="kiosk-temp"');
-    expect(markup).toContain('21 °C');
-    expect(markup).toContain('k-sun');
-    expect(markup).not.toContain('k-chip--stale');
-  });
-  it('marks a stale reading with the stale chip', () => {
-    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, status: 'stale' as const } : m));
-    const markup = weatherGroupMarkup(headerWeather(modules, s, 'hr', NOW), s);
-    expect(markup).toContain('k-chip--stale');
-    expect(markup).toContain('zastarjelo');
-  });
-  it('never prints a dash or the k-temp element when there is no reading', () => {
-    const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-now' ? { ...m, items: [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { data: { weather: 'vedro' } })] } : m));
-    const markup = weatherGroupMarkup(headerWeather(modules, s, 'hr', NOW), s);
-    expect(markup).not.toContain('kiosk-temp');
-    expect(markup).not.toContain('—');
-    expect(markup).not.toMatch(/ - /);
-  });
-});
 
 describe('frameStrip', () => {
   it('reads calm from safetyState when every source answers with nothing current', () => {

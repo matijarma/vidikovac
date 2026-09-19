@@ -31,18 +31,15 @@
    the credit tier.
 
    Frame (plan "Frame", R-KP1): the header carries the brand, the ink stop
-   chip, the date, the theme button, the clock and -- when `dhmz-now`
-   answers -- the weather group beside it (D11: weather is status, never a
-   tile). The strip is one fixed row: the shield label, the safetyState
-   verdict pill, the trail, the pharmacy and the /hitno link; nothing counts
-   down any more. Between them the invitation's stage has no padding: the
-   front page (kiosk/invitation.ts, kiosk/front.ts) is a grid of surface
-   panels on hairlines -- tonight's events, the forecast, the city, the
-   stop's lines, the surroundings -- with the map (kiosk/field.ts) one panel
-   among them, nothing on the picture but MapLibre's own attribution, and
-   the accent-filled, QR-bound invitation card at the column's foot. The
-   paired compositions (kiosk/paired.ts) keep their own block/row/story
-   grammar and the stage's padding.
+   chip, the city's news line (.k-ticker, kiosk/ticker.ts), the date, the
+   theme button and the clock. The strip is one fixed row: the shield label,
+   the safetyState verdict pill, the trail, the pharmacy and the /hitno link;
+   nothing counts down any more. Between them the stage holds the front page,
+   whose layout is ui/kiosk-city.css: the map (kiosk/field.ts) edge to edge
+   in the left column with nothing on the picture but MapLibre's own
+   attribution, and the aside of weather, the network's exceptions and
+   tonight over the accent-filled, QR-bound card. The paired compositions
+   (kiosk/paired.ts) keep their own block/row/story grammar.
 
    Icons: the Lucide sprite base.css draws as .icon; --k-icon-size (28/22)
    sizes an inline glyph, --k-icon-lg (48/36) the header's condition icon
@@ -114,9 +111,12 @@
   --k-strip-h: calc(72px * var(--k-zoom));
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
-  --k-side-w: calc(520px * var(--k-sign-zoom));
+  /* The front page's aside: the QR's 240 px plus the column of words beside it (ui/kiosk-city.css). */
+  --k-side-w: calc(600px * var(--k-sign-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
+  --k-code-size: calc(36px * var(--k-sign-zoom));
+  --k-ticker-size: calc(26px * var(--k-zoom));
   /* The card's own measures on the sign scale: its gap, its lead (the supporting tier) and its hint (the hint tier).
      1 at the design sizes, so these equal --k-gap, --k-sup-size and --k-hint-size there; above Full HD the wall's type
      doubles (--k-zoom 2 at 4K) while the card stops at 1.35, and words that followed the type would not fit the side
@@ -143,9 +143,11 @@
   --k-strip-h: calc(56px * var(--k-zoom));
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
-  --k-side-w: calc(440px * var(--k-sign-zoom));
+  --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
   --k-qr: calc(240px * var(--k-sign-zoom));
+  --k-code-size: calc(32px * var(--k-sign-zoom));
+  --k-ticker-size: calc(20px * var(--k-zoom));
   --k-card-gap: calc(14px * var(--k-sign-zoom));
   --k-card-lead: calc(22px * var(--k-sign-zoom));
   --k-card-hint: calc(20px * var(--k-sign-zoom));
@@ -195,49 +197,30 @@
 /* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the clock. A glyph alone (kajimafix 03.1); its sentence lives in the name and the tooltip. */
 .k-theme { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); cursor: pointer; }
 .k-theme .k-icon { color: inherit; }
-/* The weather group: a condition glyph, the reading, a stale mark and the
-   sunset-until-it-passes-then-sunrise glyph + time (D11). Hidden while
-   dhmz-now loads or is down -- the clock stands alone, never a dash. */
-.k-weather { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.5); }
 .kiosk .k-weather-icon { width: var(--k-icon-lg); height: var(--k-icon-lg); flex: none; color: var(--k-amber); }
 .k-temp { font-size: var(--k-main-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.k-sun { display: inline-flex; align-items: center; gap: 0.25em; font-size: var(--k-hint-size); color: var(--k-ink-2); }
-.k-sun .k-icon { color: var(--k-amber); }
 
 .k-alert { position: absolute; top: calc(var(--k-head-h) + var(--k-gap) * 0.5); right: var(--k-pad); z-index: 5; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-size); font-weight: 600; box-shadow: var(--k-shadow); }
 .k-alert[hidden] { display: none; }
 
 .k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
-/* The invitation is a window in the wall, not a widget: no room around the
-   field, the column's own hairline and padding are its frame. The wizard,
-   the notices and the paired compositions keep the stage's padding
-   (kiosk.ts writes data-phase on the root). */
-.kiosk[data-phase='invitation'] .k-stage { padding: var(--k-pad); }
-.k-head .k-weather { display: none; }
 
-/* --- Compositions: the front page's panels, the paired main and side ----
-   The front page (kiosk/invitation.ts) is a grid of surface panels on a
-   hairline ground: the tonight panel across the top left, under it the
-   bottom row of the lines, the map and the surroundings, and the right
-   column of the forecast, the city and the card. The 1 px gaps over the
-   hairline ground are the panels' joints; no panel has a radius or a
-   shadow. Rows 1.1 : 1 give tonight's events the larger share of a wall. */
-.k-front { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--k-gap); min-height: 0; }
-.k-local { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
-.k-geography { min-width: 0; min-height: 0; display: grid; border-radius: var(--k-radius); overflow: hidden; border: 1px solid var(--k-line); }
-.k-overview { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
-.k-neighborhood { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; height: calc(430px * var(--k-sign-zoom)); }
-.k-context-stack { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: var(--k-gap); min-width: 0; min-height: 0; }
-.kiosk[data-size='wide'] .k-front { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
-.kiosk[data-size='wide'] .k-neighborhood { height: calc(330px * var(--k-zoom)); grid-template-columns: minmax(0,1fr) calc(430px * var(--k-sign-zoom)); }
-.kiosk[data-size='wide'] .k-neighborhood .k-invite { grid-template-columns: var(--k-qr) minmax(0,1fr); grid-template-rows: var(--k-qr) auto; grid-template-areas: 'qr side' 'code code'; }
-.kiosk[data-size='wide'] .k-neighborhood .k-invite-side { display: grid; grid-area: side; grid-template-areas: 'lead' 'hint'; grid-template-rows: auto 1fr; align-items: start; gap: var(--sp-3); }
-.kiosk[data-size='wide'] .k-neighborhood .k-hint { align-self: end; }
-.kiosk[data-size='wide'] .k-context-stack .k-panel { padding-block: calc(var(--k-gap) * 0.4); }
-.kiosk[data-size='wide'] .k-context-stack .k-fr { padding-block: calc(var(--k-gap) * 0.2); }
-.kiosk[data-size='wide'] .k-context-stack .k-panel-head { margin-bottom: 0; }
-.kiosk[data-size='wide'] .k-context-stack [data-panel='city'] .k-fr-sub { display: none; }
+/* The header's middle: the city's news, one item at a time (kiosk/ticker.ts).
+   One line, the kicker in the action colour, the sentence ellipsised rather
+   than wrapped -- a header that grows a second row moves the whole page. The
+   session pill and the return button own this space when they are here; the
+   controller removes the ticker rather than stacking it under them. */
+.k-ticker { display: flex; align-items: baseline; gap: calc(var(--k-gap) * 0.5); min-width: 0; max-width: 100%; font-size: var(--k-ticker-size); }
+.k-ticker-kicker { flex: none; font-size: 0.75em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-action); }
+.k-ticker-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; color: var(--k-ink); }
+.k-ticker[data-swap='1'] { animation: k-ticker-in 220ms var(--ease-enter) both; }
+@keyframes k-ticker-in { from { opacity: 0; } }
+
+/* --- Compositions: the paired main and side -----------------------------
+   The front page's own layout is ui/kiosk-city.css (the window: the map
+   beside the aside, in four drawings); what follows is the paired
+   compositions' main-and-side frame, which has not changed this wave. */
 .k-paired { display: grid; grid-template-columns: minmax(0, 1fr) calc(320px * var(--k-sign-zoom)); gap: var(--k-gap); }
 .k-present-local { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
 .k-present-board { padding: var(--k-gap) var(--k-pad); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); }
@@ -313,8 +296,9 @@
    Every panel is the same grammar (kiosk/front.ts): a head with the kicker
    in the domain's colour and a meta line beside it, then rows of a lead
    cell (a time, a distance, a day word or a line badge), a title and one
-   line of context; a figure above the rows where a number is the point
-   (tomorrow's range); a foot line under them (the last departures); the
+   line of context; a figure above the rows where a reading is the point
+   (the weather card's observation); a foot line under them (the last
+   departures); the
    credit last. Rows a panel does not hold whole are hidden from the foot up
    by measurement (kiosk/invitation.ts fit); nothing is clipped mid-row.
    Titles run to two lines at most and are then cut by the sheet: a list row
@@ -330,7 +314,7 @@
 .k-panel[data-panel='city'] .k-panel-kicker { color: var(--k-action); }
 .k-panel[data-panel='promet'] .k-panel-kicker { color: var(--k-action); }
 .k-panel[data-panel='around'] .k-panel-kicker { color: var(--k-amber); }
-/* The rows: hairlines between, none above the first; tonight's run in two columns on a wall. */
+/* The rows: hairlines between, none above the first; the paired board's run in two columns on a wall. */
 .k-panel-rows { display: grid; flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; column-gap: var(--k-pad); min-width: 0; margin: 0; padding: 0; list-style: none; }
 .k-panel[data-panel='promet'] .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .k-fr { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: calc(var(--k-gap) * 0.7); align-items: start; min-width: 0; padding-block: calc(var(--k-gap) * 0.45); border-top: 1px solid var(--k-line); }
@@ -348,9 +332,6 @@
 .k-fr[data-tone='early'] .k-fr-sub { color: var(--k-amber); }
 .k-fr[data-tone='ontime'] .k-fr-sub { color: var(--k-green); }
 .k-fr[data-tone='unknown'] .k-fr-sub { color: var(--k-ink-3); }
-/* The figure: tomorrow's range at the main tier, its sentence under it in three lines at most. */
-.k-panel-figure { font-size: var(--k-main-size); font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; color: var(--k-ink); font-variant-numeric: tabular-nums; }
-.k-panel-text { display: -webkit-box; overflow: hidden; margin-top: calc(var(--k-gap) * 0.3); margin-bottom: calc(var(--k-gap) * 0.4); font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 /* A sentence in place of rows: loading, a source that does not answer (rose), a true empty. */
 .k-panel-note { font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
 .k-panel-note[data-state='down'] { color: var(--k-rose); }
@@ -365,86 +346,59 @@
 .k-panel--card { min-width: 0; align-self: end; }
 .k-panel[data-panel='promet'] { background: var(--k-surface); }
 .k-panel[data-panel='promet'] .k-panel-head { padding-bottom: calc(var(--k-gap) * 0.5); border-bottom: 1px solid var(--k-line); }
-.k-context-stack .k-panel { padding: calc(var(--k-gap) * 0.75); }
-.k-context-stack .k-fr { display: block; }
-.k-context-stack .k-fr-lead { display: flex; gap: 0.4em; min-width: 0; margin-bottom: calc(var(--k-gap) * 0.25); font-size: var(--k-label-size); color: var(--k-action); }
-.k-context-stack .k-fr-title { font-size: var(--k-hint-size); }
-.k-context-stack .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
-.k-context-stack .k-panel-meta { display: none; }
-.k-context-stack .k-panel-credit { padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); }
-.k-panel[data-panel='weather'] { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--k-pad); align-items: start; background: var(--k-action-soft); border-color: transparent; }
+/* The weather card (kiosk/front.ts weatherPanel): the head across, the
+   observation on the left, today's and tomorrow's ranges abreast beside it.
+   A range is a figure -- never broken over two lines and never clipped -- so
+   the observation keeps its condition word on its own line rather than taking
+   the width the ranges need. The narrative is the ticker's; nothing here
+   wraps to a paragraph. */
+.k-panel[data-panel='weather'] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--k-pad); align-items: start; padding-block: calc(var(--k-gap) * 0.6); background: var(--k-action-soft); border-color: transparent; }
 .k-panel[data-panel='weather'] > .k-panel-head { grid-column: 1 / -1; margin-bottom: calc(var(--k-gap) * 0.3); }
-.k-panel[data-panel='weather'] > .k-panel-credit { display: none; }
-.k-weather-current { min-width: 0; }
-.k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.3); }
+.k-panel[data-panel='weather'] > .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--k-gap) * 0.4); border-left: 1px solid var(--k-line); padding-left: calc(var(--k-gap) * 0.5); }
+.k-panel[data-panel='weather'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 0; }
+.k-panel[data-panel='weather'] .k-fr { display: block; }
+.k-panel[data-panel='weather'] .k-fr-lead { min-width: 0; font-size: var(--k-label-size); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--k-ink-3); }
+/* A range is a figure, read at a glance: never broken over two lines and never
+   wider than the half of the card it shares with the reading. */
+.k-panel[data-panel='weather'] .k-fr-title { font-size: var(--k-hint-size); white-space: nowrap; }
+/* The reading and its condition word: one line where the card is a column of its own, two where the ranges stand beside them. */
+.k-weather-current { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: calc(var(--k-gap) * 0.5); min-width: 0; }
+.k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.1); white-space: nowrap; }
 .k-weather-current .k-weather-main { flex-wrap: wrap; gap: calc(var(--k-gap) * 0.4); }
-.k-weather-current .k-condition { flex-basis: 100%; font-size: var(--k-hint-size); }
-.k-weather-current .k-meta { margin-top: calc(var(--k-gap) * 0.4); }
-.k-weather-current > .k-condition { font-size: var(--k-hint-size); line-height: 1.25; }
-.k-panel[data-panel='weather'] { padding-block: calc(var(--k-gap) * 0.6); }
-.k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.1); }
+.k-weather-current .k-condition { flex-basis: 100%; margin-left: 0; font-size: var(--k-hint-size); line-height: 1.25; }
 .k-panel[data-panel='tonight'] { padding-block: calc(var(--k-gap) * 0.4); }
 .k-panel[data-panel='tonight'] .k-fr { padding-block: calc(var(--k-gap) * 0.3); }
 .k-panel[data-panel='tonight'] .k-fr-title { font-size: calc(var(--k-sup-size) * 0.88); }
 .k-panel[data-panel='tonight'] .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
 .k-panel[data-panel='tonight'] .k-fr-lead { font-size: var(--k-hint-size); }
-.k-panel[data-panel='tonight'] .k-fr:not(:first-child) .k-fr-title { -webkit-line-clamp: 1; line-clamp: 1; }
-.k-weather-outlook { border-left: 1px solid var(--k-line); padding-left: var(--k-pad); min-width: 0; }
-.k-weather-day { font-size: var(--k-label-size); font-weight: 700; color: var(--k-ink-2); margin-bottom: calc(var(--k-gap) * 0.2) !important; }
-.k-weather-outlook .k-panel-figure { font-size: var(--k-sup-size); }
-.k-weather-outlook .k-panel-text { font-size: var(--k-credit-size); -webkit-line-clamp: 2; line-clamp: 2; }
 .kiosk[data-size='compact']:not([data-portrait='1']) .k-panel { padding: calc(var(--k-gap) * 0.65) var(--k-gap); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-fr-sub { display: none; }
-/* 1366x768 is its own composition: map over a board and local context;
-   weather, an upcoming event and a horizontal invitation alongside. */
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-front { grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.6fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) calc(264px * var(--k-zoom)); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-local,
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-overview,
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood { display: contents; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-geography { grid-column: 1 / 3; grid-row: 1 / 3; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] { grid-column: 1; grid-row: 3; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-panel-rows { grid-template-columns: 1fr; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-fr-title { font-size: var(--k-hint-size); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-local > [data-panel='promet'] .k-fr-sub { font-size: var(--k-credit-size); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack { grid-column: 2; grid-row: 3; }
-.kiosk[data-size='compact']:not([data-portrait='1']) [data-panel='weather'] { grid-column: 3; grid-row: 1; }
-.kiosk[data-size='compact']:not([data-portrait='1']) [data-panel='tonight'] { grid-column: 3; grid-row: 2; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood > .k-panel--card { grid-column: 3; grid-row: 3; align-self: stretch; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-invite { height: 100%; grid-template-columns: var(--k-qr) minmax(0,1fr); grid-template-rows: 1fr auto 1fr; grid-template-areas: 'qr lead' 'qr code' 'qr hint'; column-gap: var(--k-gap); padding: calc(12px * var(--k-zoom)); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-invite > .k-qr { align-self: center; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-neighborhood .k-hint { align-self: end; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-panel-credit { font-size: var(--k-credit-size); white-space: normal; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-panel-head { margin-bottom: 0; }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-context-stack .k-fr { padding-block: calc(var(--k-gap) * 0.3); }
-
-/* --- The invitation card: the QR beside the lead and the hint, the code spanning (R-KP21) ---
-   Two rows: the 240 px QR in the first column with the lead over the hint
-   beside it, then the code with its bar across both. The first row is at
-   least the QR's height and grows if the side column outgrows it: the card
-   never clips. Padded by the card gap, its rows 0.6 of it apart: the card's
-   height is part of the column's budget (above). The lead sits at the
-   supporting tier, weight 800, wrapping freely beside the QR: at the main
-   tier across the card it took two lines and cost the column a statement.
-   Everything the card is made of follows the sign scale (--k-card-*: the
-   card is a thing a person walks up to, like its QR), so on a 4K wall, where
-   the type doubles and the card stops at 1.35, the lead and the hint keep
-   the card's own proportions instead of overflowing the side column; at
-   the design sizes and up to 2560 x 1440 the two scales are one. */
-.k-invite { display: grid; grid-template-columns: var(--k-qr); grid-template-rows: auto var(--k-qr) auto auto; grid-template-areas: 'lead' 'qr' 'code' 'hint'; gap: calc(var(--k-card-gap) * 0.5); box-sizing: border-box; min-height: 0; padding: calc(var(--k-card-gap) * 0.7); border-radius: var(--k-radius-s); background: var(--k-action); color: var(--k-action-ink); }
+/* --- The invitation card: the QR and one column of words -----------------
+   The card is the QR and, beside or under it, one column at one left edge --
+   the lead, the typed address, then the code over its remaining-time bar at
+   the column's foot. Stood up here, for the narrow rails the paired
+   compositions and a phone give it; the window lays it on its side, where
+   there is room (ui/kiosk-city.css). The code is a fixed size per
+   composition (--k-code-size), never a container query: a code that grows
+   and shrinks with its box reads as a decoration, and a wide letter must
+   never leave the card. Everything the card is made of follows the sign
+   scale (--k-card-*: the card is a thing a person walks up to, like its QR),
+   so on a 4K wall, where the type doubles and the card stops at 1.35, the
+   card keeps its own proportions instead of overflowing its column. */
+.k-invite { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'side'; justify-items: center; gap: var(--k-card-gap); box-sizing: border-box; min-height: 0; padding: calc(var(--k-card-gap) * 0.7); border-radius: var(--k-radius-s); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
-/* The lead and the hint share the side column: the lead at its head, the hint at its foot, over the QR's own height. */
-.k-invite-side { display: contents; }
-.k-lead { grid-area: lead; font-size: calc(21px * var(--k-sign-zoom)); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+.k-invite-side { grid-area: side; display: flex; flex-direction: column; gap: calc(var(--k-card-gap) * 0.45); min-width: 0; width: 100%; }
+.k-lead { font-size: var(--k-card-lead); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-card-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-card-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
-.k-hint { grid-area: hint; min-width: 0; font-size: calc(15px * var(--k-sign-zoom)); line-height: 1.3; }
+.k-hint { min-width: 0; font-size: var(--k-card-hint); line-height: 1.3; }
 /* The typed address, whole: beside a 240 px QR it wraps at the break points
    the markup gives it (after each dot, before the path) and, as the last
    resort, anywhere -- a typed address is useless ellipsised. */
 .k-hint-host { display: block; font-weight: 700; overflow-wrap: anywhere; }
-.k-invite > .k-invite-code { grid-area: code; display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; min-inline-size: 0; container-type: inline-size; }
+/* The code and its bar close the column; the words above it take the slack. */
+.k-invite-code { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: auto; }
 .k-code-box { position: relative; min-width: 0; }
 .k-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; align-items: center; }
 .k-code-copy { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid currentColor; border-radius: var(--r-sm); background: transparent; color: inherit; cursor: pointer; }
@@ -457,21 +411,22 @@
 @keyframes k-code-in { from { opacity: 0; } }
 @keyframes k-code-out { to { opacity: 0; } }
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-code-out 180ms var(--ease-exit) both; }
-/* Wide letters (W, M, Q) must never leave the card: the size follows the code column, capped at the tier (D17). */
-/* The pairing code is the one monospace object (tokens.css): every glyph the same width, so the widest code (W and M letters) measures the same as the narrowest and the cap below never clips it. */
-.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; justify-content: space-between; font-size: 28px; font-size: clamp(20px, 11cqi, calc(36px * var(--k-sign-zoom))); font-weight: 700; letter-spacing: 0.015em; line-height: 1.15; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; user-select: text; }
+/* The pairing code is the one monospace object (tokens.css): every glyph the
+   same width, so the widest code measures the same as the narrowest and the
+   fixed size below can never clip it. Left-aligned, its two groups a third of
+   a space apart -- a code is read, not spread across a card. */
+.k-code { font-family: var(--font-mono); display: flex; align-items: baseline; justify-content: flex-start; gap: 0.35em; font-size: var(--k-code-size); font-weight: 700; letter-spacing: 0.015em; line-height: 1.15; white-space: nowrap; color: inherit; font-variant-numeric: tabular-nums; user-select: text; }
 .k-code[data-state='waiting'] { color: var(--k-ink-3); }
-/* The code's separator is a dimmed middle dot; the 8 px bar fills paper over a quarter-paper track on the accent (kajimafix 03.4). */
-.k-code-dash { margin: 0 0.15em; opacity: 0.4; }
-.k-progress { height: calc(3px * var(--k-sign-zoom)); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
+/* The code's separator is a dimmed middle dot; the bar fills paper over a quarter-paper track on the accent (kajimafix 03.4). */
+.k-code-dash { opacity: 0.4; }
+.k-progress { height: calc(3px * var(--k-sign-zoom)); margin-top: calc(var(--k-card-gap) * 0.4); overflow: hidden; border-radius: 999px; background: color-mix(in oklab, var(--k-action-ink) 25%, var(--k-action)); }
 .k-progress-bar { width: 100%; height: 100%; transform-origin: left; border-radius: 999px; background: var(--k-action-ink); transition: transform 1s linear; }
-/* The same card, stood up: the lead, the QR, the hint, the code, one under the other (the side wrapper dissolves; see the portrait section). */
-.kiosk[data-size='handheld'] .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'lead' 'qr' 'hint' 'code'; margin-top: var(--k-gap); background: var(--k-surface); color: var(--k-ink); }
-.kiosk[data-size='handheld'] .k-invite .k-hint { align-self: start; color: var(--k-ink-2); }
+/* On a phone the card is paper, not accent: the page is already a column of cards. */
+.kiosk[data-size='handheld'] .k-invite { background: var(--k-surface); color: var(--k-ink); }
+.kiosk[data-size='handheld'] .k-invite .k-hint { color: var(--k-ink-2); }
 .kiosk[data-size='handheld'] .k-code { color: var(--k-action); }
 .kiosk[data-size='handheld'] .k-code[data-state='waiting'] { color: var(--k-ink-3); }
 .kiosk[data-size='handheld'] .k-qr { width: min(var(--k-qr), 100%); height: auto; aspect-ratio: 1; }
-.kiosk[data-size='handheld'] .k-invite-code { margin-top: 0; }
 
 /* --- Blocks: the paired compositions' own grammar (unchanged this wave) --- */
 .k-block { position: relative; display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
@@ -708,22 +663,12 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Lightweight: system type, no shadows, the lines board is the field --- */
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
 :root[data-lagano='1'] .k-field { background: var(--k-surface); }
-/* Under lagano the field is the lines board (R-L2) and holds ten rows and the overflow line (R-V1): the bottom row takes the larger share. */
-:root[data-lagano='1'] .k-front { grid-template-rows: minmax(0, 1fr); }
-:root[data-lagano='1'] .k-local { grid-template-rows: minmax(0, 1fr) auto; }
 :root[data-lagano='1'] .k-map { background: var(--k-surface); }
 
-/* --- Portrait: the front page stacked, the paired main region on top ----------
+/* --- Portrait: the paired main region on top ----------------------------
    A 1080 x 1920 totem (kiosk/layout.ts: the compact tokens at zoom 1 there,
-   data-portrait='1'). Tonight's events take the top, the bottom row keeps its
-   three panels at a third each, the column becomes a row at the foot.
-   Compact tiers and the compact QR: these rules place blocks and set no token. */
-.kiosk[data-portrait='1'] .k-front { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr); }
-.kiosk[data-portrait='1'] .k-overview { grid-template-rows: auto minmax(0, 1fr) auto; }
-.kiosk[data-portrait='1'] .k-neighborhood { grid-template-columns: minmax(0, 1fr) auto; height: auto; min-height: calc(420px * var(--k-zoom)); }
-.kiosk[data-portrait='1'] .k-context-stack { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
-.kiosk[data-portrait='1'] .k-bottom { grid-column: 1; grid-row: 2; }
-.kiosk[data-portrait='1'] .k-bottom .k-field { min-height: calc(340px * var(--k-zoom)); }
+   data-portrait='1'). The front page's own totem drawing is in
+   ui/kiosk-city.css; these rules place the paired blocks and the header. */
 .kiosk[data-portrait='1'] .k-paired { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .kiosk[data-portrait='1'] .k-paired .k-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--k-gap); }
 .kiosk[data-portrait='1'] .k-paired .k-side > * { margin-top: 0; }
@@ -732,20 +677,6 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-present-local .k-map { height: 300px; flex: none; }
 .kiosk[data-size='handheld'] .k-present-board .k-line-list { grid-template-columns: 1fr; }
 .kiosk[data-portrait='1'] .k-basics-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* The totem's column is a row under the bottom panels: the forecast over the city on the left, the card on the right. */
-.kiosk[data-portrait='1'] .k-column { grid-column: 1; grid-row: 3; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto minmax(0, 1fr); }
-.kiosk[data-portrait='1'] .k-column > [data-panel='weather'] { grid-column: 1; grid-row: 1; }
-.kiosk[data-portrait='1'] .k-column > [data-panel='city'] { grid-column: 1; grid-row: 2; }
-.kiosk[data-portrait='1'] .k-column > .k-panel--card { grid-column: 2; grid-row: 1 / span 2; }
-/* The totem's card keeps the lead across the card over the QR-hint row: beside the statements its height IS their room (the
-   column's one row is as tall as the card), so the taller drawing holds the three statements the totem shows, where the
-   wall's two-row card (above) would cost one. A phone stands the same pieces up. In both the side wrapper dissolves
-   (display: contents) and the lead and the hint take their own areas; the lead keeps the wall's tier. */
-.kiosk[data-portrait='1'] .k-invite { grid-template-columns: var(--k-qr); grid-template-rows: auto var(--k-qr) auto auto; grid-template-areas: 'lead' 'qr' 'code' 'hint'; }
-.kiosk[data-portrait='1'] .k-invite-side, .kiosk[data-size='handheld'] .k-invite-side { display: contents; }
-.kiosk[data-portrait='1'] .k-lead, .kiosk[data-size='handheld'] .k-lead { grid-area: lead; }
-.kiosk[data-portrait='1'] .k-hint, .kiosk[data-size='handheld'] .k-hint { grid-area: hint; }
-.kiosk[data-portrait='1'] .k-hint { align-self: end; }
 /* The portrait header is 1044 px wide: the date and the sub-brand leave in every mode and the chip narrows, so the
    clock group keeps its sunset time on screen. */
 .kiosk[data-portrait='1'] .k-date { display: none; }
@@ -755,11 +686,11 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
-  .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'] { animation: none; }
+  .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'], .kiosk .k-ticker[data-swap='1'] { animation: none; }
   .kiosk .k-code-ghost { display: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
-:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'], :root[data-lagano='1'] .k-ticker[data-swap='1'] { animation: none; }
 :root[data-lagano='1'] .k-code-ghost { display: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
@@ -769,8 +700,7 @@ button.k-strip-verdict { cursor: pointer; }
    separate handheld composition: a phone gets the invitation every screen
    gets, drawn at phone sizes -- the header, a --k-map-band map band, the
    statements in flow beneath it (every candidate: a phone scrolls), the card
-   in its one-column form with its 240 px QR, the safety strip, and the
-   provisioning address as a footnote at the foot. The stage keeps its
+   in its one-column form with its 240 px QR and the safety strip. The stage keeps its
    padding here (a phone is a page, not a wall), the page scrolls instead of
    cropping and the wizard's grids fall into as many columns as fit. Zoom is
    1 here. */
@@ -783,6 +713,8 @@ button.k-strip-verdict { cursor: pointer; }
   --k-side-w: 100%;
   --k-paired-side-w: 100%;
   --k-qr: 240px;
+  --k-code-size: 32px;
+  --k-ticker-size: 16px;
   --k-display-size: 40px;
   --k-clock-size: 24px;
   --k-main-size: 24px;
@@ -799,7 +731,7 @@ button.k-strip-verdict { cursor: pointer; }
   --k-card-gap: 12px;
   --k-card-lead: 18px;
   --k-card-hint: 18px;
-  --k-map-band: 280px;
+  --k-map-band: 420px;
   --k-block-min: 160px;
   --k-arc-w: 280px;
   --k-arc-h: 157px;
@@ -824,15 +756,11 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
 
 /* The front page on a phone: the panels in one column on the canvas, each
-   its own surface with the kiosk radius, the map a 280 px band among them
-   (a glance, not a stage), the card last; the page scrolls, so no row is
-   ever hidden (fit measures a box of auto height as holding everything). */
-.kiosk[data-size='handheld'] .k-front, .kiosk[data-size='handheld'] .k-local, .kiosk[data-size='handheld'] .k-overview, .kiosk[data-size='handheld'] .k-neighborhood, .kiosk[data-size='handheld'] .k-context-stack { display: flex; flex-direction: column; gap: var(--k-gap); background: transparent; }
-.kiosk[data-size='handheld'] .k-neighborhood { height: auto; }
+   its own surface with the kiosk radius, the map a --k-map-band window among
+   them, the card last; the page scrolls, so no row is ever hidden (fit
+   measures a box of auto height as holding everything). */
 .kiosk[data-size='handheld'] .k-panel[data-panel='promet'] .k-panel-rows { grid-template-columns: 1fr; }
 .kiosk[data-size='handheld'] .k-panel--card { align-self: stretch; }
-.kiosk[data-size='handheld'] .k-invite { justify-items: center; }
-.kiosk[data-size='handheld'] .k-lead, .kiosk[data-size='handheld'] .k-hint { text-align: center; }
 .kiosk[data-size='handheld'] .k-panel { overflow: visible; border-radius: var(--k-radius); }
 .kiosk[data-size='handheld'] .k-panel[data-panel='tonight'] .k-panel-rows { grid-template-columns: minmax(0, 1fr); }
 .kiosk[data-size='handheld'] .k-panel[data-panel='tonight'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 1px solid var(--k-line); }
@@ -850,12 +778,6 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-setup-actions { flex-wrap: wrap; gap: var(--k-gap); }
 .kiosk[data-size='handheld'] .k-setup-actions > * + * { margin-left: 0; }
 .kiosk[data-size='handheld'] .k-btn { max-width: 100%; }
-
-/* The provisioning address (kiosk.ts provisionMarkup): a footnote for the hand
-   that set the screen up, under the invitation rather than in place of it. */
-.kiosk[data-size='handheld'] .k-provision { display: block; margin-top: var(--k-gap); padding: var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.kiosk[data-size='handheld'] .k-provision-title { font-size: var(--k-sup-size); font-weight: 700; line-height: 1.3; color: var(--k-ink-2); }
-.kiosk[data-size='handheld'] .k-provision-url { display: inline-block; min-height: 44px; margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-hint-size); font-weight: 600; line-height: 1.35; color: var(--k-action); overflow-wrap: anywhere; }
 
 /* Setup is a short, ordinary form, never a wall-sized field of choices. */
 .k-setup { max-width: 62rem; margin-inline: auto; }

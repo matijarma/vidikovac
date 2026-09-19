@@ -98,7 +98,8 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   const head = kicker(title, nearbyCountLine(board, strings, locale));
   if (board.state === 'loading') return `${head}<p class="k-board-note">${escapeHtml(strings.lines.loading)}</p>`;
   if (board.state === 'down') return `${head}<p class="k-board-note" data-state="down">${escapeHtml(strings.lines.unavailable)}</p>`;
-  if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(stop ? strings.lines.noneNearby : strings.lines.noStop)}</p>`;
+  // Without a stop the board is the lines seen nearby, so an empty one says so in the same words.
+  if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(strings.lines.noneNearby)}</p>`;
   const more = board.more > 0 ? `<p class="k-line-more">${escapeHtml(plural(locale, strings.lines.more, board.more))}</p>` : '';
   const stale = board.state === 'stale' ? ` · ${strings.paired.stale}` : '';
   return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;

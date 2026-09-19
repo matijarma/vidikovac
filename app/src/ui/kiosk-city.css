@@ -1,79 +1,106 @@
-/* Whole-city window. Geography, culture and local life share the frame.
-   Transit is compact context, never the identity of the entire display. */
-.kiosk .k-city-window{position:relative;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:calc(20px * var(--k-zoom));padding:calc(20px * var(--k-zoom));height:100%;min-height:0}
-.kiosk[data-size=wide] .k-city-window{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
-.kiosk .k-city-window .k-local{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:calc(16px * var(--k-zoom));min-height:0}
-.kiosk .k-city-window .k-geography{min-width:0;min-height:0;border-radius:var(--r-lg);overflow:hidden}
-.kiosk .k-city-window .k-local-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(12px * var(--k-zoom));align-items:start}
-.kiosk .k-city-window .k-overview{display:flex;flex-direction:column;gap:calc(14px * var(--k-zoom));min-height:0}
-.kiosk .k-city-window .k-panel{padding:calc(12px * var(--k-zoom));min-width:0}
-.kiosk .k-city-window .k-local-facts .k-panel{background:transparent;border:0;border-top:1px solid var(--k-line);border-radius:0}
-.kiosk .k-city-window .k-local-facts .k-panel-rows{display:grid;grid-template-columns:1fr;gap:calc(8px * var(--k-zoom))}
-.kiosk .k-city-window .k-local-facts .k-fr{padding:0;display:block}
-.kiosk .k-city-window .k-local-facts [data-panel=promet] .k-fr{display:flex;align-items:start;gap:var(--sp-2)}
-.kiosk .k-city-window .k-local-facts [data-panel=promet] .k-fr-lead{flex:none;width:auto;min-width:0}
-.kiosk .k-city-window .k-local-facts .k-fr-title{font-size:calc(22px * var(--k-zoom));line-height:1.25;-webkit-line-clamp:2}
-.kiosk .k-city-window .k-local-facts .k-fr-lead,.kiosk .k-city-window .k-local-facts .k-fr-sub{font-size:calc(16px * var(--k-zoom))}
-.kiosk .k-city-window .k-local-facts .k-panel-meta,.kiosk .k-city-window .k-local-facts .k-panel-foot{display:none}
-.kiosk .k-city-window .k-local-facts .k-panel-credit{font-size:calc(14px * var(--k-zoom))}
-.kiosk .k-city-window [data-panel=tonight]{flex:1;min-height:0}
-.kiosk .k-city-window [data-panel=tonight] .k-panel-rows{display:grid;grid-template-columns:1fr;gap:calc(16px * var(--k-zoom))}
-.kiosk .k-city-window [data-panel=tonight] .k-fr-title{font-size:calc(26px * var(--k-zoom));-webkit-line-clamp:2}
-.kiosk .k-city-window [data-panel=tonight] .k-fr-sub{font-size:calc(18px * var(--k-zoom));-webkit-line-clamp:2}
-.kiosk .k-city-window [data-panel=tonight] .k-fr-lead{min-width:2em;font-size:calc(25px * var(--k-zoom));color:var(--k-violet)}
-.kiosk .k-city-window .k-panel--card{width:100%;margin-top:auto}
-.kiosk .k-city-window .k-invite{min-height:0;grid-template-columns:calc(244px * var(--k-sign-zoom)) minmax(0,1fr);grid-template-rows:auto auto;grid-template-areas:'qr side' 'code code';gap:calc(12px * var(--k-sign-zoom));padding:calc(14px * var(--k-sign-zoom))}
-.kiosk .k-city-window .k-invite-side{display:flex;grid-area:side;flex-direction:column;justify-content:space-between;gap:var(--sp-3);min-width:0}
-.kiosk .k-city-window .k-invite-side .k-lead,.kiosk .k-city-window .k-invite-side .k-hint{grid-area:auto}
-.kiosk .k-city-window .k-qr{box-sizing:content-box;width:calc(244px * var(--k-sign-zoom));height:calc(244px * var(--k-sign-zoom))}
-.kiosk .k-city-window .k-lead{font-size:calc(24px * var(--k-sign-zoom));line-height:1.25}
-.kiosk .k-city-window .k-hint{font-size:calc(16px * var(--k-sign-zoom))}
-.kiosk .k-city-window .k-code{font-size:clamp(22px,10cqi,calc(44px * var(--k-sign-zoom)))}
-.k-explore{position:absolute;left:calc(34px * var(--k-zoom));top:calc(34px * var(--k-zoom));z-index:3;background:var(--k-surface);box-shadow:var(--tone-shadow-soft);font-size:calc(18px * var(--k-zoom));min-height:48px}
-.k-discovery-slot:empty{display:none}
-.kiosk[data-exploring=true] .k-city-window [data-panel=tonight],.kiosk[data-exploring=true] .k-city-window [data-panel=weather]{display:none}
-.kiosk[data-exploring=true] .k-discovery-slot{flex:1;min-height:0;overflow:auto;padding:calc(12px * var(--k-zoom));background:var(--k-surface);border-radius:var(--r-md)}
-.kiosk .k-discovery-slot .city-detail .city-actions{display:none}
-.kiosk .k-discovery-slot .city-row strong{font-size:calc(22px * var(--k-zoom))}
-.kiosk .k-discovery-slot .city-meta{font-size:calc(16px * var(--k-zoom))}
-.kiosk .k-discovery-slot .k-select-main{font-size:calc(24px * var(--k-zoom))}
-.kiosk .city-search{display:block;box-sizing:border-box;width:100%;min-height:48px;font:inherit;padding:var(--sp-3);margin-block:var(--sp-2);color:var(--tone-text-primary);background:var(--tone-surface-1);border:1px solid var(--k-line);border-radius:var(--r-md)}
-.kiosk[data-mode=unlocked] .k-map-canvas{pointer-events:none}
-.kiosk[data-mode=unlocked] .k-map-canvas .maplibregl-control-container{display:none}
-.kiosk .k-present-board .city-detail{padding:var(--k-pad);font-size:var(--k-hint-size);max-height:100%;overflow:auto}
-.kiosk .k-present-board .city-detail h3{font-size:var(--k-main-size)}
-.kiosk .k-present-board .city-actions,.kiosk .k-present-board .city-detail>button{display:none}
-.kiosk .k-present-board .city-meta{font-size:var(--k-credit-size)}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window{grid-template-columns:minmax(0,1.5fr) minmax(440px,1fr);grid-template-rows:minmax(0,1fr);padding:12px;gap:12px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local{display:grid}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-overview{display:flex}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-geography{grid-column:auto;grid-row:auto}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts{grid-template-columns:1fr 1fr}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts [data-panel=promet]{grid-column:1/-1}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts [data-panel=promet] .k-panel-rows{grid-template-columns:1fr}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts [data-panel=promet] .k-fr{display:flex;gap:12px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts [data-panel=promet] .k-panel-head,.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-local-facts [data-panel=promet] .k-panel-credit{display:none}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window [data-panel=tonight] .k-fr-title{font-size:22px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window [data-panel=tonight]{min-height:140px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window [data-panel=weather]{padding-block:8px;flex-shrink:0}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window [data-panel=weather] .k-panel-head{display:none}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-invite{min-height:0}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-weather-current .k-temp{font-size:28px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-weather-outlook .k-panel-text{display:none}
-.kiosk[data-portrait='1'] .k-city-window{display:flex;flex-direction:column;padding:24px;gap:24px}
-.kiosk[data-portrait='1'] .k-city-window .k-local{flex:1;min-height:42%;display:grid;grid-template-rows:minmax(0,1fr) auto}
-.kiosk[data-portrait='1'] .k-city-window .k-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;flex:0 0 auto}
-.kiosk[data-portrait='1'] .k-city-window [data-panel=weather]{grid-column:1/-1}
-.kiosk[data-portrait='1'] .k-city-window [data-panel=tonight]{grid-column:1;min-height:380px}
-.kiosk[data-portrait='1'] .k-city-window .k-panel--card{grid-column:2;align-self:end}
-.kiosk[data-portrait='1'] .k-city-window .k-invite{grid-template-columns:244px minmax(0,1fr);grid-template-rows:auto auto;grid-template-areas:'qr side' 'code code'}
-.kiosk[data-portrait='1'] .k-city-window .k-invite-side{display:flex}
-.kiosk[data-portrait='1'][data-exploring=true] .k-discovery-slot{grid-column:1;max-height:480px}
-.kiosk[data-size=handheld] .k-city-window{display:flex;flex-direction:column;height:auto;padding:16px}
-.kiosk[data-size=handheld] .k-city-window .k-geography{height:340px}
-.kiosk[data-size=handheld] .k-city-window .k-local-facts{grid-template-columns:1fr}
-.kiosk[data-size=handheld] .k-city-window .k-invite{grid-template-columns:1fr;grid-template-rows:auto auto auto;grid-template-areas:'side' 'qr' 'code';justify-items:center}
-.kiosk[data-size=handheld] .k-city-window .k-invite-side{grid-column:1;grid-row:auto}
-.kiosk[data-size=handheld] .k-explore{position:static}
-.kiosk[data-size=handheld] .k-city-window .k-local-facts .k-fr-title{font-size:18px}
-.kiosk[data-lightweight=true] .k-city-window .k-local{min-height:0}
+/* The whole-city window: the front page's one layout (kiosk/invitation.ts).
+   The map IS the page -- the left column, edge to edge -- and the aside says
+   the three things a map cannot: the sky, the network's exceptions and what
+   is on tonight, over the card that hands the city to a phone. Four drawings
+   of one grammar; this sheet places the boxes and sizes their type, kiosk.css
+   owns the panel, card and type grammar underneath. */
+
+/* --- The wall (1920 x 1080) and, on the same grammar, 1366 x 768 ---------- */
+.kiosk .k-city-window { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) var(--k-side-w); grid-template-rows: minmax(0, 1fr); gap: var(--k-gap); height: 100%; min-height: 0; }
+/* One cell: the field stretches to the whole column, and the map host fills the field. */
+.kiosk .k-city-window .k-geography { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--k-line); border-radius: var(--k-radius); }
+/* The aside spends its height on the events card: the weather and the
+   exceptions take what they need, the card sits at the foot, and everything
+   between the two is tonight's -- which is why the events row budget is the
+   measured room (kiosk/invitation.ts) and never a constant. */
+.kiosk .k-city-window .k-overview { display: flex; flex-direction: column; gap: calc(var(--k-gap) * 0.8); min-width: 0; min-height: 0; }
+.kiosk .k-city-window .k-overview > * { flex: none; }
+.kiosk .k-city-window [data-panel='tonight'] { flex: 1 1 auto; min-height: 0; }
+.kiosk .k-city-window .k-panel--card { margin-top: 0; align-self: stretch; }
+/* The window has the room to lay the card on its side: the QR beside the words. */
+.kiosk .k-city-window .k-invite { grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-areas: 'qr side'; justify-items: stretch; }
+
+/* The events card: the venue's own count in the lead, its name, the first
+   thing on there -- then the dated events those venues do not cover. Its rows
+   are set close: the room is the card's whole point and its floor is two. */
+.kiosk .k-city-window [data-panel='tonight'] .k-fr { padding-block: calc(var(--k-gap) * 0.2); }
+.kiosk .k-city-window [data-panel='tonight'] .k-fr-lead { min-width: 1.6em; color: var(--k-violet); }
+.kiosk .k-city-window [data-panel='tonight'] .k-fr-title { -webkit-line-clamp: 1; line-clamp: 1; }
+
+/* Where the weather card is half the aside wide, or a phone's column, the
+   reading cannot stand beside the ranges: they take the whole width under it. */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'],
+.kiosk[data-size='handheld'] .k-city-window [data-panel='weather'] { grid-template-columns: minmax(0, 1fr); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'] > .k-panel-rows,
+.kiosk[data-size='handheld'] .k-city-window [data-panel='weather'] > .k-panel-rows { padding-left: 0; border-left: 0; }
+/* Nothing stands beside the reading there, so the condition word joins it. */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-weather-current .k-condition,
+.kiosk[data-size='handheld'] .k-city-window .k-weather-current .k-condition { flex-basis: auto; }
+
+/* The promet card is exceptions only: a badge and the delay word, one per row.
+   Up to three of them, so the rows are set close and the head carries no rule
+   of its own -- the height the card saves is the events card's floor. */
+.kiosk .k-city-window [data-panel='promet'] { padding-block: calc(var(--k-gap) * 0.6); }
+.kiosk .k-city-window [data-panel='promet'] .k-panel-head { padding-bottom: 0; border-bottom: 0; margin-bottom: calc(var(--k-gap) * 0.3); }
+/* The counts are a summary, not attribution (the credit names ZET): one line,
+   ellipsised, never three wrapped lines eating the card's head. */
+.kiosk .k-city-window [data-panel='promet'] .k-panel-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kiosk .k-city-window [data-panel='promet'] .k-panel-rows { grid-template-columns: minmax(0, 1fr); }
+.kiosk .k-city-window [data-panel='promet'] .k-fr { padding-block: calc(var(--k-gap) * 0.25); }
+.kiosk .k-city-window [data-panel='promet'] .k-fr-title { font-size: var(--k-sup-size); }
+
+/* --- Istraži grad: the button over the map, the results in the aside ------ */
+.k-explore { position: absolute; left: calc(var(--k-pad) * 1.4); top: calc(var(--k-pad) * 1.4); z-index: 3; background: var(--k-surface); box-shadow: var(--tone-shadow-soft); font-size: var(--k-hint-size); min-height: 48px; }
+.k-discovery-slot:empty { display: none; }
+.kiosk[data-exploring=true] .k-city-window [data-panel='tonight'], .kiosk[data-exploring=true] .k-city-window [data-panel='weather'] { display: none; }
+.kiosk[data-exploring=true] .k-discovery-slot { flex: 1; min-height: 0; overflow: auto; padding: var(--k-gap); background: var(--k-surface); border-radius: var(--k-radius-s); }
+.kiosk .k-discovery-slot .city-detail .city-actions { display: none; }
+.kiosk .k-discovery-slot .city-row strong { font-size: var(--k-sup-size); }
+.kiosk .k-discovery-slot .city-meta { font-size: var(--k-hint-size); }
+.kiosk .k-discovery-slot .k-select-main { font-size: var(--k-main-size); }
+.kiosk .city-search { display: block; box-sizing: border-box; width: 100%; min-height: 48px; font: inherit; padding: var(--sp-3); margin-block: var(--sp-2); color: var(--tone-text-primary); background: var(--tone-surface-1); border: 1px solid var(--k-line); border-radius: var(--r-md); }
+.kiosk[data-mode=unlocked] .k-map-canvas { pointer-events: none; }
+.kiosk[data-mode=unlocked] .k-map-canvas .maplibregl-control-container { display: none; }
+.kiosk .k-present-board .city-detail { padding: var(--k-pad); font-size: var(--k-hint-size); max-height: 100%; overflow: auto; }
+.kiosk .k-present-board .city-detail h3 { font-size: var(--k-main-size); }
+.kiosk .k-present-board .city-actions, .kiosk .k-present-board .city-detail > button { display: none; }
+.kiosk .k-present-board .city-meta { font-size: var(--k-credit-size); }
+
+/* --- 1366 x 768: the same window, but the aside is 613 px tall and the card
+       takes two fifths of it, so the sky and the exceptions stand abreast and
+       the events card keeps the rest (its floor is two rows). ------------- */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'] { grid-column: 1; grid-row: 1; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='promet'] { grid-column: 2; grid-row: 1; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='tonight'] { grid-column: 1 / -1; grid-row: 2; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-discovery-slot { grid-column: 1 / -1; grid-row: 2; }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-panel--card { grid-column: 1 / -1; grid-row: 3; }
+
+/* --- The totem (1080 x 1920): the map on top, the two small cards abreast,
+       the events across, the card at the foot. ---------------------------- */
+/* The map takes the totem's top 55 %: a share of the stage, not of what the
+   cards leave, so the picture is the page here as on a wall. */
+.kiosk[data-portrait='1'] .k-city-window { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 55%) auto minmax(0, 1fr) auto; }
+.kiosk[data-portrait='1'] .k-city-window .k-geography { grid-column: 1 / -1; grid-row: 1; }
+.kiosk[data-portrait='1'] .k-city-window .k-overview { display: contents; }
+.kiosk[data-portrait='1'] .k-city-window [data-panel='weather'] { grid-column: 1; grid-row: 2; }
+.kiosk[data-portrait='1'] .k-city-window [data-panel='promet'] { grid-column: 2; grid-row: 2; }
+.kiosk[data-portrait='1'] .k-city-window [data-panel='tonight'] { grid-column: 1 / -1; grid-row: 3; }
+.kiosk[data-portrait='1'] .k-city-window .k-discovery-slot { grid-column: 1 / -1; grid-row: 3; }
+.kiosk[data-portrait='1'] .k-city-window .k-panel--card { grid-column: 1 / -1; grid-row: 4; align-self: start; }
+/* The totem's card is as tall as its QR and no taller: the code follows the
+   hint and the bar follows the code, rather than being pushed to a foot the
+   words never reach. The room this frees is the events card's. */
+.kiosk[data-portrait='1'] .k-city-window .k-invite-code { margin-top: 0; }
+
+/* --- A phone: the same page in one column, scrolling ---------------------- */
+.kiosk[data-size='handheld'] .k-city-window { display: flex; flex-direction: column; gap: var(--k-gap); height: auto; }
+.kiosk[data-size='handheld'] .k-city-window .k-overview { display: flex; flex-direction: column; gap: var(--k-gap); }
+.kiosk[data-size='handheld'] .k-city-window .k-geography { flex: none; height: var(--k-map-band); }
+.kiosk[data-size='handheld'] .k-city-window [data-panel='tonight'] { flex: none; }
+/* A phone's column is 358 px: the card stands up again, as it does in the paired rails. */
+.kiosk[data-size='handheld'] .k-city-window .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'side'; justify-items: center; }
+.kiosk[data-size='handheld'] .k-explore { position: static; }
+
+/* Under lagano the field is the lines board (R-L2), not a map: it takes the column's height. */
+.kiosk[data-lightweight=true] .k-city-window .k-geography { min-height: 0; }

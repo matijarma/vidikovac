@@ -857,7 +857,6 @@
       "more_other": "{count} more lines",
       "unavailable": "ZET is not answering right now.",
       "loading": "Loading ZET data…",
-      "noStop": "This screen has no stop selected.",
       "modelNote": "Vehicle positions are estimates from ZET reports; a line’s delay is not an arrival time.",
       "vehiclesMoving_one": "{count} vehicle moving",
       "vehiclesMoving_other": "{count} vehicles moving"
@@ -890,7 +889,6 @@
       "today": "today",
       "tomorrow": "tomorrow",
       "tonight": "Tonight in the city",
-      "forecast": "Tomorrow",
       "allDay": "all day",
       "tonightMore_one": "{count} more event",
       "tonightMore_other": "{count} more events"
@@ -908,7 +906,21 @@
       "acts_other": "{count} acts",
       "actLead": "act",
       "kvartLead": "district",
-      "worksLead": "works"
+      "worksLead": "works",
+      "linesRegular": "Lines are running to schedule",
+      "closures_one": "{count} closure",
+      "closures_other": "{count} closures",
+      "notices_one": "{count} ZET notice",
+      "notices_other": "{count} ZET notices",
+      "moreLate_one": "+{count} line late",
+      "moreLate_other": "+{count} lines late"
+    },
+    "ticker": {
+      "weather": "Weather",
+      "transit": "Transit",
+      "works": "Works",
+      "tonight": "Tonight",
+      "city": "City"
     },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
@@ -1025,7 +1037,6 @@
       "endsAfterSession": "The open session runs to its end; the screen then stops issuing codes."
     },
     "setup": {
-      "handheld": "Open this address on the screen you are setting up.",
       "title": "Start a city screen",
       "intro": "One button and the screen shows Zagreb live. A district and a stop are optional, chosen later in the screen’s own settings.",
       "search": "Search stops by name",
