@@ -591,7 +591,10 @@ describe('paintPills (F3: the schema draws numbered marks, not rectangles -- a t
 
 describe('schemaVehicleMarks / clusterSchemaMarks: the direction of travel rides with the mark, for the arrows of an opposed merge', () => {
   const VIEWPORT: SchemaMarkViewport = { x: 0, y: 0, scale: 1, width: 300, height: 200, density: 1 };
-  const tram = (id: string): Drawn => drawn({ id, p: CENTRE, type: GTFS_TRAM, onShape: 0, path: 0, s: 100, routeId: 'R', short: '6' });
+  /** A tram whose facing the integrator has decided: the schema reads only
+   *  that the heading is known (decision 5), never its geographic value. */
+  const tram = (id: string, heading: Drawn['heading'] = { x: 1, y: 0 }): Drawn =>
+    drawn({ id, p: CENTRE, type: GTFS_TRAM, heading, onShape: 0, path: 0, s: 100, routeId: 'R', short: '6' });
   const placerOf = (placement: Omit<SchemaPlacement, 'colour' | 'line'>) => ({
     place: (): SchemaPlacement => ({ colour: '#cc706f', line: 'R', ...placement }),
   });
@@ -613,6 +616,17 @@ describe('schemaVehicleMarks / clusterSchemaMarks: the direction of travel rides
     const [chord] = schemaVehicleMarks(placerOf({ x: 100, y: 50, sign: 1, chord: true }), [tram('a')], VIEWPORT);
     expect(chord).toMatchObject({ id: 'a', pill: 'single', angle: 0 });
     expect(chord).not.toHaveProperty('dir');
+  });
+
+  it('gives a tram whose facing is undecided no direction either, track or not (decision 5: the rails say the line, not which way it goes), so a merge with a tram that knows is not two-way -- the same rule the city map’s clusterToFeature applies', () => {
+    const [undecided] = schemaVehicleMarks(placerOf({ x: 100, y: 50, track: { x: 3, y: 4 }, sign: 1, chord: false }), [tram('a', null)], VIEWPORT);
+    expect(undecided).toMatchObject({ id: 'a', pill: 'single', angle: 0 });
+    expect(undecided).not.toHaveProperty('dir');
+    const [known] = schemaVehicleMarks(placerOf({ x: 100, y: 50, track: { x: 3, y: 4 }, sign: -1, chord: false }), [tram('b')], VIEWPORT);
+    const [merged] = clusterSchemaMarks([undecided, known], VIEWPORT);
+    expect(merged).toMatchObject({ pill: 'cluster', ids: ['a', 'b'], twoWay: false });
+    expect(merged.dir!.x).toBeCloseTo(-0.6);
+    expect(merged.dir!.y).toBeCloseTo(-0.8);
   });
 
   it('calls a cluster two-way when two members head against each other (a negative dot product), and gives it the first member’s direction; one way, or no directions at all, is not two-way', () => {

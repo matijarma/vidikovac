@@ -206,9 +206,13 @@ export function schemaInFrame(p: XY, viewport: SchemaViewport & { symbolScale?: 
 /** The direction of travel on the artwork: the placer's forward tangent
  *  turned by the leg's sign and normalised, so the dot product of two marks'
  *  directions is the cosine between their headings. A chord has no tangent
- *  and gets none. */
-function travelDirection(p: SchemaPlacement): XY | undefined {
-  if (!p.track) return undefined;
+ *  and gets none; nor does a tram whose facing the integrator has not
+ *  decided (decision 5: `heading` is null under its confidence threshold) --
+ *  the rails say which line it is on, not which way it goes, so the sign is
+ *  applied only to a known heading, as SchemaPlacement.track's own rule
+ *  says, and the same gate the city map's clusterToFeature keeps. */
+function travelDirection(p: SchemaPlacement, v: Drawn): XY | undefined {
+  if (!p.track || v.heading === null) return undefined;
   const len = Math.hypot(p.track.x, p.track.y);
   return len > 0 ? { x: (p.track.x * p.sign) / len, y: (p.track.y * p.sign) / len } : undefined;
 }
@@ -228,7 +232,7 @@ export function schemaVehicleMarks(placer: SchemaPlacer, drawn: readonly Drawn[]
     const p = placer.place(v.path, v.s);
     if (!p || (v.routeId !== undefined && p.line !== v.routeId) || !schemaInFrame(p, viewport)) continue;
     const label = vehicleLabel(v);
-    const dir = travelDirection(p);
+    const dir = travelDirection(p, v);
     marks.push({
       id: v.id, kind: 'tram', ...schemaPoint(p, viewport, density),
       w: pillWidthPx(pillChars(label)) * size, h: PILL_HEIGHT_PX * size,
