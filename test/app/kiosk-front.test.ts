@@ -106,6 +106,12 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(rows.map((row) => row.tone)).toEqual(['late', 'late', 'late']);
   });
 
+  it('puts a route the table has no type for after the buses, never before the trams', () => {
+    const modules = [snap('zet-rt', [route('X9', 600), route('109', 300), route('6', 200)])];
+    const { rows } = exceptionRows(input(modules, { composition: 'portrait' }));
+    expect(rows.map((row) => row.key)).toEqual(['line:6', 'line:109', 'line:X9']);
+  });
+
   it('caps the card per composition and counts the rest for the meta', () => {
     const modules = [snap('zet-rt', [route('6', 900), route('11', 600), route('12', 400), route('13', 200)])];
     expect(exceptionRows(input(modules)).rows).toHaveLength(3);

@@ -492,7 +492,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(k.root.querySelectorAll('[data-testid=kiosk-live]')).toHaveLength(1);
     // The front page: the map the whole left column, the aside of weather, the network's exceptions and tonight over the card (kiosk/invitation.ts).
     const front = q(k.root, '[data-testid=kiosk-invitation]')!;
-    expect(front.classList.contains('k-city-window')).toBe(true);
+    expect(front.className).toBe('k-city-window');
     expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-geography', 'k-overview','k-explore btn-ghost']);
     expect(q(front, '.k-geography .k-field')).not.toBeNull();
     const column = q(front, '.k-overview')!;
@@ -583,6 +583,25 @@ describe('invitation: the screen a passer-by sees', () => {
     now += 2 * TICKER_PERIOD_MS;
     k.tick(CODE_TICK_MS);
     expect(ticker.dataset.key).toBe(firstKey);
+  });
+  it('the pairing notice borrows the header\u2019s middle and gives it back: the ticker returns when the notice expires', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    const headMid = q(k.root, '[data-testid=kiosk-head-mid]')!;
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).not.toBeNull();
+    // A phone pairs: the notice speaks, and it speaks as a status region, so the ticker stands aside.
+    k.handlers.onPaired!();
+    expect(text(headMid)).toBe('Pogled je otvoren na tvom uređaju.');
+    expect(headMid.getAttribute('role')).toBe('status');
+    k.tick(CODE_TICK_MS);
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).toBeNull();
+    // Four and a half seconds later the notice is done -- and takes its role with it, or the middle reads as taken for the life of the screen.
+    now += 5_000;
+    k.tick(CODE_TICK_MS);
+    expect(headMid.getAttribute('role')).toBeNull();
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).not.toBeNull();
+    expect(text(q(headMid, '.k-ticker-kicker')).length).toBeGreaterThan(0);
   });
   it('stores fresher screen metadata from the beacon beside the same secret and names the stop, nothing else', () => {
     const k = mount({ hash: '#BEACON01.tajna' });

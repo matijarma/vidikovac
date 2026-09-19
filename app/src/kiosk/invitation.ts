@@ -104,7 +104,7 @@ function panelShell(id: PanelId): string {
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const { strings: s, i18n, locale, lightweight } = deps;
   const element = document.createElement('section');
-  element.className = 'k-front k-city-window';
+  element.className = 'k-city-window';
   element.dataset.testid = 'kiosk-invitation';
   element.innerHTML = `<div class="k-geography"></div>
     <aside class="k-overview">${FRONT_PANEL_IDS.map(panelShell).join('')}

@@ -342,6 +342,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
   }
+  /** "Povezano": the pairing notice owns the header's middle for a few seconds,
+   *  and it owns the status role with it. The two are cleared together -- the
+   *  role is what tells the ticker the middle is taken, so a role left behind
+   *  is a screen that never says another word between its brand and its
+   *  clock. */
+  function clearPairingNotice(): void {
+    pairingNoticeUntil = 0;
+    if (headMid.getAttribute('role') !== 'status') return;
+    headMid.textContent = '';
+    headMid.removeAttribute('role');
+  }
+
   /** The header's one line of city news (kiosk/ticker.ts): a kicker and one
    *  sentence, the item chosen by the clock alone, crossfaded on a swap and
    *  changed instantly under reduced motion. The middle of the header belongs
@@ -778,6 +790,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     element.dataset.phase = next;
     element.dataset.mode = next === 'paired' ? 'unlocked' : 'teaser';
     clearStage();
+    clearPairingNotice();
     if (next === 'paired') closeEssentials(false);
     else removeSessionLabel();
     if (next === 'setup') mountSetupPhase();
@@ -921,6 +934,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     presentationLoaded = false;
     pairingNoticeUntil = 0;
     headMid.textContent = '';
+    headMid.removeAttribute('role');
     sessionLabel = null;
     if (!next.target) { endSession(); presentation = next; return; }
     session?.close(); session = null;
@@ -1149,16 +1163,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if(exploring&&now()>=exploreUntil)endExplore();
     paintClock();
     paintProgress();
+    // The notice's own end comes before the repaint that reads the middle: the
+    // second it stops speaking is the second the ticker has the room back.
+    if (pairingNoticeUntil > 0 && now() >= pairingNoticeUntil) clearPairingNotice();
     paintTicker();
     if (presentation?.target && presentation.expiresAt !== null && rotation.serverNow() >= presentation.expiresAt) {
       presentation = { ...presentation, target: null, dataToken: undefined };
       endSession();
     }
     if (presentation?.target) acknowledgePresentation();
-    if (pairingNoticeUntil > 0 && now() >= pairingNoticeUntil) {
-      pairingNoticeUntil = 0;
-      if (phase === 'invitation') headMid.textContent = '';
-    }
     // The column names the ZET time in a context: it repaints when the minute turns, never every second.
     const minute = Math.floor(now() / 60_000);
     if (minute !== paintedMinute && invitation) {

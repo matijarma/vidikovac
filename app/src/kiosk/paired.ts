@@ -22,6 +22,7 @@ import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
 import { frontPanels, panelMarkup } from './front';
+import { kindOfRoute } from './exceptions';
 import { columnsFor } from '../experience/timeband';
 import { districtLabel } from './districts';
 import type { CityState } from '../../../shared/city/types';
@@ -371,12 +372,6 @@ function renderSada(ctx: PairedContext): PairedMarkup {
     main: panels.map(id => `<section class="k-panel" data-panel="${id}">${panelMarkup(front[id])}</section>`).join(''),
     side: ctx.size === 'compact' ? localSummary : warnings ? warningsBlock(ctx, true) : closuresBlock(ctx, 2, true),
   };
-}
-
-/** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */
-function kindOfRoute(routeId: string): 'tram' | 'bus' | 'other' {
-  const type = routeType(routeId);
-  return type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
 }
 
 function renderPromet(ctx: PairedContext): PairedMarkup {

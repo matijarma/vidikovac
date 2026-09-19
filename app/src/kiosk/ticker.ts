@@ -26,7 +26,8 @@ import { delayWord } from '../layers/shared';
 import type { I18n } from '../i18n/i18n';
 import { dataText } from '../panels/panel';
 import { clock, dayKey, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
-import { byModule, isLive, nextSession, plausibleDelay, routeDelays, windowOf } from './local';
+import { byModule, isLive, nextSession, windowOf } from './local';
+import { GAZETTE_CONTENTS_TITLE, rankedExceptions, zetNotices } from './exceptions';
 import { fill, type KioskStrings } from './strings';
 
 /** One item on the line: a stable identity, a kicker word and one sentence. */
@@ -42,8 +43,6 @@ export interface TickerItem {
 /** How long one item stands before the next takes its place. */
 export const TICKER_PERIOD_MS = 8_000;
 
-/** A route median inside this band is on time, not an exception (layers/shared.ts delayWord). */
-const ON_TIME_S = 15;
 /** How many of each kind the line carries before the city starts repeating itself. */
 const LATE_LINES = 3;
 const ZET_NOTICES = 2;
@@ -51,10 +50,6 @@ const CLOSURES = 3;
 const WORKS = 2;
 const EVENTS = 3;
 const KVART_NEWS = 2;
-/** A ZET notice is worth the line while it is this fresh (front.ts uses the same window). */
-const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
-/** The gazette's first row is the issue's own table of contents, not an act. */
-const GAZETTE_CONTENTS_TITLE = 'Sadržaj';
 
 /** The item's one sentence: the worker's condensed reading when it has made
  *  one, else the item's own title -- or, where the title is only a label (a
@@ -69,22 +64,17 @@ function dogadanjaFrom(modules: readonly ModuleSnapshot[], source: string): Feed
   return (isLive(snap) ? snap.items : []).filter((item) => dataText(item, 'source') === source);
 }
 
-/** The routes whose median delay a rider would notice, worst first. */
+/** The routes whose median a rider would notice, in the card's own order
+ *  (kiosk/exceptions.ts): late before early, trams first, then the largest. */
 function lateLines(modules: readonly ModuleSnapshot[], strings: KioskStrings, i18n: I18n): TickerItem[] {
-  const zet = byModule(modules)['zet-rt'];
-  if (!isLive(zet)) return [];
-  return [...routeDelays(zet)]
-    .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) > ON_TIME_S)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+  return rankedExceptions(modules)
     .slice(0, LATE_LINES)
-    .map(([routeId, seconds]) => ({ key: `route:${routeId}`, kicker: strings.ticker.transit, text: `${routeId} ${delayWord(i18n, seconds)}` }));
+    .map(({ routeId, seconds }) => ({ key: `route:${routeId}`, kicker: strings.ticker.transit, text: `${routeId} ${delayWord(i18n, seconds)}` }));
 }
 
 /** ZET's own notices about the network, newest first while they are fresh. */
-function zetNotices(modules: readonly ModuleSnapshot[], now: number, strings: KioskStrings): TickerItem[] {
-  return dogadanjaFrom(modules, 'zet-promet')
-    .filter((item) => item.at && Date.parse(item.at) <= now && now - Date.parse(item.at) <= ZET_NOTICE_WINDOW_MS)
-    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))
+function noticeLines(modules: readonly ModuleSnapshot[], now: number, strings: KioskStrings): TickerItem[] {
+  return zetNotices(modules, now)
     .slice(0, ZET_NOTICES)
     .map((item) => ({ key: `zet:${item.id}`, kicker: strings.ticker.transit, text: sentence(item) }));
 }
@@ -180,7 +170,7 @@ export function tickerItems(
   const locale = i18n.getLocale();
   const all = [
     ...lateLines(modules, strings, i18n),
-    ...zetNotices(modules, now, strings),
+    ...noticeLines(modules, now, strings),
     ...closures(modules, now, strings),
     ...works(modules, strings),
     ...tonight(modules, city, now, strings),

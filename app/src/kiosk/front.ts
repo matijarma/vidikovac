@@ -24,10 +24,10 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayMonth, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
 import {
   byModule, cleanCondition, closuresByDistance, isLive, lastDeparturesAhead, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
-  plausibleDelay, routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
+  routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
 } from './local';
 import { delayWord } from '../layers/shared';
-import { routeType } from './stops';
+import { GAZETTE_CONTENTS_TITLE, kindOfRoute, rankedExceptions, zetNotices } from './exceptions';
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
 import { districtLabel } from './districts';
@@ -241,8 +241,6 @@ export function weatherPanel(input: FrontInput): FrontPanel {
 
 const ASSEMBLY_SOURCE = 'Skupština Grada Zagreba';
 const CITY_SOURCE = 'Grad Zagreb';
-/** The gazette's first row is its own table of contents, not an act. */
-const GAZETTE_CONTENTS_TITLE = 'Sadržaj';
 /** How many of the issue's acts the panel names; the fitter hides what the box does not hold. */
 const GAZETTE_ACTS = 3;
 const KVART_NEWS = 3;
@@ -286,18 +284,7 @@ export function cityPanel(input: FrontInput): FrontPanel {
 
 /** The lines the panel lists before "+N": the stop's routes in rider order, trams first. */
 const PROMET_LINES = 8;
-/** A ZET notice is worth the panel while it is fresh. */
-const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
 
-/** Under three minutes a median is a timetable breathing, not an exception: a
- *  card that names it says nothing a rider would change a plan over, and the
- *  count beside it ("+N linija kasni") would be the whole network. */
-const EXCEPTION_MIN_S = 180;
-/** Past half an hour a median is an outlier the feed has not caught up with --
- *  a broken trip update, a vehicle parked mid-route -- and not an exception a
- *  rider can plan around. routeDelays has already dropped the impossible ones
- *  (plausibleDelay); this is where news stops and noise starts. */
-const EXCEPTION_MAX_S = 30 * 60;
 /** The most exceptions a card will name before the rest are the ticker's and
  *  the meta's. A card, not a board: the aside's height belongs to the events
  *  card, whose two-row floor comes first, so kiosk/invitation.ts measures the
@@ -323,21 +310,14 @@ function linesRows(input: FrontInput, board: LinesBoard): FrontRow[] {
   });
 }
 
-/** The city's exceptions in the order a rider reads them: what is running late
- *  before what is running early, trams before buses, then the largest first --
- *  and how many the card had no room for, which the meta counts. Medians the
- *  feed cannot mean (routeDelays' own plausibility, then half an hour) are not
- *  exceptions at all: a card that says "281 rani 74 min" is saying nothing. */
+/** The card's own reading of the city's exceptions (kiosk/exceptions.ts holds
+ *  the filter and the order the header's line reads too): as many rows as the
+ *  box was given, and how many were left over for the meta to count. */
 export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: number } {
   const { strings: s, i18n } = input;
-  const delays = routeDelays(byModule(input.modules)['zet-rt']);
-  const all = [...delays]
-    .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) >= EXCEPTION_MIN_S && Math.abs(seconds) <= EXCEPTION_MAX_S)
-    .map(([routeId, seconds]) => ({ routeId, seconds, type: routeType(routeId) ?? -1 }))
-    .sort((a, b) => Number(a.seconds < 0) - Number(b.seconds < 0) || a.type - b.type || Math.abs(b.seconds) - Math.abs(a.seconds));
+  const all = rankedExceptions(input.modules);
   const cap = EXCEPTION_LINES[input.composition ?? 'wide'];
-  const rows = all.slice(0, Math.max(1, Math.min(input.prometLines ?? cap, cap))).map(({ routeId, seconds, type }) => {
-    const kind = type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
+  const rows = all.slice(0, Math.max(1, Math.min(input.prometLines ?? cap, cap))).map(({ routeId, seconds, kind }) => {
     const kindWord = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
     const toneRaw = delayTone(i18n, seconds);
     return {
@@ -348,14 +328,6 @@ export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: numb
     } satisfies FrontRow;
   });
   return { rows, more: all.length - rows.length };
-}
-
-/** ZET's own fresh notices about the network. */
-function zetNotices(input: FrontInput): FeedItem[] {
-  const dogadanja = byModule(input.modules).dogadanja;
-  return (isLive(dogadanja) ? dogadanja.items : [])
-    .filter((item) => dataText(item, 'source') === 'zet-promet' && item.at && input.now - Date.parse(item.at) <= ZET_NOTICE_WINDOW_MS && Date.parse(item.at) <= input.now)
-    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!));
 }
 
 /**
@@ -376,7 +348,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
   const supplied = input.prometRows;
   const late = exceptions && !supplied && !input.lightweight ? exceptionRows(input) : { rows: [], more: 0 };
   const rows: FrontRow[] = supplied ?? (input.lightweight ? [] : exceptions ? late.rows : linesRows(input, board));
-  const notices = zetNotices(input);
+  const notices = zetNotices(input.modules, now);
   if (!exceptions && !supplied && notices[0]) {
     // The newest ZET notice as the board's last row: what the network says about itself.
     const notice = notices[0];
@@ -385,7 +357,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
   // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
   const departures = exceptions ? [] : lastDeparturesAhead(input.lastRun, stop, now);
   const foot = departures.length > 0
-    ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindOfRoute(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
+    ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
     : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
   const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
@@ -410,8 +382,9 @@ export function prometPanel(input: FrontInput): FrontPanel {
   };
 }
 
-function kindOfRoute(board: ReturnType<typeof linesAtStop>, routeId: string): 'tram' | 'bus' | 'other' {
-  return board.rows.find((row) => row.routeId === routeId)?.kind ?? 'other';
+/** The mode a departure's route is drawn in, as the board beside it read it. */
+function kindAtStop(board: LinesBoard, routeId: string): 'tram' | 'bus' | 'other' {
+  return board.rows.find((row) => row.routeId === routeId)?.kind ?? kindOfRoute(routeId);
 }
 
 // --- around ---------------------------------------------------------------------------

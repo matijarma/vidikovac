@@ -42,9 +42,16 @@ describe('tickerItems: the city in one line at a time', () => {
     expect(items.map((t) => t.key)).toEqual(['route:11', 'route:6']);
   });
 
-  it('counts an early line as an exception too and ignores an implausible median', () => {
-    const items = tickerItems([snap('zet-rt', [route('4', -120), route('9', 40_000)])], null, NOW, s, i18n);
-    expect(items.map((t) => t.text)).toEqual(['4 rani 2 min']);
+  it('shares the exceptions card\u2019s thresholds: an outlier never leads the header, and neither does a two-minute median', () => {
+    // 74 minutes is a trip update nobody closed; two minutes is the timetable breathing; three minutes is news.
+    const items = tickerItems([snap('zet-rt', [route('281', -4_440), route('9', 40_000), route('6', 120), route('4', 180)])], null, NOW, s, i18n);
+    expect(items.map((t) => t.text)).toEqual(['4 kasni 3 min']);
+  });
+
+  it('counts an early line as an exception too, in the card\u2019s order: late first, then trams, then the largest', () => {
+    const items = tickerItems([snap('zet-rt', [route('109', 300), route('11', 200), route('6', 900), route('2', -300)])], null, NOW, s, i18n);
+    expect(items.map((t) => t.key)).toEqual(['route:6', 'route:11', 'route:109']);
+    expect(items.map((t) => t.text)).toEqual(['6 kasni 15 min', '11 kasni 3 min', '109 kasni 5 min']);
   });
 
   it('names a ZET notice, and a closure as a closure with the hour it ends, both under PROMET', () => {
