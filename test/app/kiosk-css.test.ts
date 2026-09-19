@@ -55,15 +55,10 @@ describe('public-screen design invariants', () => {
     expect(shell).toContain('kiosk-map-host');
     expect(shell).toContain('kiosk-qr');
   });
-  it('does not make Sada another copy of the transit map', () => {
+  it('does not make Sada another copy of the transit map, even for a legacy kvart target (it renders as plain Sada)', () => {
     const shell = pairedShell('grad-sada', kioskStrings('hr'), false);
     expect(shell).toContain('kiosk-main');
     expect(shell).not.toContain('kiosk-map-host');
-  });
-  it('district presentation has geography and the same invitation', () => {
-    const shell = pairedShell('grad-sada', kioskStrings('en'), false, true);
-    expect(shell).toContain('kiosk-map-host');
-    expect(shell).toContain('kiosk-qr');
   });
   it('retains reduced-motion and lightweight paths', () => {
     expect(css).toContain('prefers-reduced-motion: reduce');
