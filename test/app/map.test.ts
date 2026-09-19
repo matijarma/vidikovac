@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { districtBySlug } from '../../app/src/kiosk/districts';
 import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
 import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
+import { BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM, BIKE_SPENT_BADGES, BIKE_SPENT_OPACITY, cityLayers } from '../../app/src/map/city-layers';
 import * as basemap from '../../app/src/map/basemap';
 import {
   createCityMap,
@@ -271,6 +272,91 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
 // view carries no selection and no padding -- the enlarged screen-stop ring is
 // the anchor. The paired phase keeps today's Promet contract (R-KP8). Pure: no
 // map, no DOM, no clock.
+// The city's own places on the public screen's window: a BAJS station is one
+// dot among a hundred at city zoom and a thing to walk to once the camera is
+// in a neighbourhood, so its mark and its count follow the camera; a station
+// with no bike, none to rent or a source gone quiet recedes behind the ones a
+// person can use. Every other kind of city place is untouched.
+describe('the city places’ marks', () => {
+  /** Enough of the MapLibre expression language to read these layers back. */
+  function evaluate(expr: unknown, props: Record<string, unknown>, zoom: number): unknown {
+    if (!Array.isArray(expr)) return expr;
+    const [op, ...rest] = expr as [string, ...unknown[]];
+    const ev = (x: unknown) => evaluate(x, props, zoom);
+    switch (op) {
+      case 'literal': return rest[0];
+      case 'zoom': return zoom;
+      case 'get': return props[rest[0] as string];
+      case '*': return (rest as unknown[]).reduce((n, x) => (n as number) * (ev(x) as number), 1);
+      case '==': return ev(rest[0]) === ev(rest[1]);
+      case '>': return (ev(rest[0]) as number) > (ev(rest[1]) as number);
+      case 'all': return rest.every((x) => ev(x) === true);
+      case 'in': return (ev(rest[1]) as unknown[]).includes(ev(rest[0]));
+      case 'min': return Math.min(...rest.map((x) => ev(x) as number));
+      case '+': return rest.reduce((n: number, x) => n + (ev(x) as number), 0);
+      case 'sqrt': return Math.sqrt(ev(rest[0]) as number);
+      case 'case': {
+        for (let i = 0; i + 1 < rest.length; i += 2) if (ev(rest[i]) === true) return ev(rest[i + 1]);
+        return ev(rest[rest.length - 1]);
+      }
+      case 'interpolate': {
+        const flat = rest.slice(2);
+        const stops: [number, unknown][] = [];
+        for (let i = 0; i + 1 < flat.length; i += 2) stops.push([flat[i] as number, flat[i + 1]]);
+        if (zoom <= stops[0]![0]) return ev(stops[0]![1]);
+        const last = stops[stops.length - 1]!;
+        if (zoom >= last[0]) return ev(last[1]);
+        for (let i = 0; i + 1 < stops.length; i++) {
+          const [z0, a] = stops[i]!, [z1, b] = stops[i + 1]!;
+          if (zoom >= z0 && zoom <= z1) return (ev(a) as number) + (((ev(b) as number) - (ev(a) as number)) * (zoom - z0)) / (z1 - z0);
+        }
+        return Number.NaN;
+      }
+      default: throw new Error(`unhandled expression ${op}`);
+    }
+  }
+  const layers = cityLayers(basemap.overlayPalette('light'), null, 2);
+  const byId = (id: string) => layers.find((l) => l.id === id)!;
+  const bike = (badge: string) => ({ category: 'bikes', badge, eventCount: 0, priority: 2 });
+  const venue = { category: 'culture', badge: '3', eventCount: 3, priority: 0 };
+
+  it('sizes a BAJS station and its count from the camera: small on the whole city, a thing to walk to in a neighbourhood', () => {
+    expect([BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM]).toEqual([13, 14]);
+    const radius = byId('city-place-dots').paint!['circle-radius'];
+    const size = byId('city-place-badges').layout!['text-size'];
+    // At the screen's symbol scale 2: 5 and 8 px before the scale, 9 and 12 for the count.
+    expect(evaluate(radius, bike('7'), 13)).toBe(10);
+    expect(evaluate(radius, bike('7'), 14)).toBe(16);
+    expect(evaluate(size, bike('7'), 13)).toBe(18);
+    expect(evaluate(size, bike('7'), 14)).toBe(24);
+    // Below the far stop and above the near one the ramp holds its ends; between them it interpolates.
+    expect(evaluate(radius, bike('7'), 12.7)).toBe(10);
+    expect(evaluate(radius, bike('7'), 16)).toBe(16);
+    expect(evaluate(radius, bike('7'), 13.5)).toBe(13);
+    // Every other kind of place keeps exactly the mark it had, at every zoom.
+    for (const zoom of [12.7, 13, 13.5, 14, 16]) {
+      expect(evaluate(radius, venue, zoom), `venue @${zoom}`).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
+      expect(evaluate(radius, { category: 'cluster', badge: '+4', eventCount: 0 }, zoom), `cluster @${zoom}`).toBe(36);
+      expect(evaluate(radius, { category: 'water', badge: '', eventCount: 0 }, zoom), `plain @${zoom}`).toBe(16);
+      expect(evaluate(size, venue, zoom), `venue text @${zoom}`).toBe(24);
+    }
+  });
+
+  it('lets a station with nothing to give recede: no bike, none to rent, or a source gone quiet', () => {
+    expect(BIKE_SPENT_BADGES).toEqual(['0', '—', '?']);
+    const dots = byId('city-place-dots').paint!, badges = byId('city-place-badges').paint!;
+    for (const badge of BIKE_SPENT_BADGES) {
+      expect(evaluate(dots['circle-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+      expect(evaluate(dots['circle-stroke-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+      expect(evaluate(badges['text-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+    }
+    expect(evaluate(dots['circle-opacity'], bike('7'), 14)).toBe(1);
+    expect(evaluate(dots['circle-opacity'], bike('0'), 14)).toBe(BIKE_SPENT_OPACITY);
+    // A "0" that is not a station's count is not a spent station: only the bikes read this.
+    expect(evaluate(dots['circle-opacity'], { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(1);
+  });
+});
+
 describe('the field camera and the paired camera', () => {
   const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6'], district: 'donji-grad' };
   const LAT = 45.815;

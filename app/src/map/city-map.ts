@@ -1415,7 +1415,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     if (l.cityLayers) {
       cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale,cityLabels);
-      for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>);
+      // Under the vehicles. A BAJS station stands still and a tram does not:
+      // appended on top, a standing teal dot sat over the plate of a passing
+      // cluster, hiding the one mark on this map that is about right now.
+      // Only the selection ring stays over them, so what a person just tapped
+      // is never hidden by a pill crossing it.
+      for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>, layer.id === l.CITY_SELECTION ? undefined : l.LAYERS.vehicleDots);
     }
     styled = true;
     // A resize or a deliberate presentation can arrive before the library or

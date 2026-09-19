@@ -882,6 +882,24 @@ describe('selection and status', () => {
     expect(wall.map.queries[0]).toEqual([[72, 72], [128, 128]]);
   });
 
+  it('puts the city’s places UNDER the vehicles and its selection ring over them: a standing dot never hides a passing pill', async () => {
+    const { map } = await harness({ lib: cityLib });
+    const at = (id: string) => map.layers.findIndex((l) => l.id === id);
+    const dots = at('vehicle-dots');
+    expect(dots).toBeGreaterThan(0);
+    // Everything the city publishes goes in below the first vehicle layer, in its own order.
+    for (const id of ['city-path-lines', 'city-place-dots', 'city-place-badges', 'city-place-labels']) {
+      expect(at(id), id).toBeGreaterThan(-1);
+      expect(at(id), id).toBeLessThan(dots);
+    }
+    expect(at('city-path-lines')).toBeLessThan(at('city-place-dots'));
+    expect(at('city-place-dots')).toBeLessThan(at('city-place-badges'));
+    expect(at('city-place-badges')).toBeLessThan(at('city-place-labels'));
+    // The ring marking what a person just tapped stays over every vehicle.
+    expect(at('city-place-selection')).toBeGreaterThan(at('vehicles'));
+    expect(at('city-place-selection')).toBeGreaterThan(dots);
+  });
+
   it('draws the city places’ names or not as the surface asked, and turns them on and off on the one live map', async () => {
     const { map, handle } = await harness({ lib: cityLib, extra: { cityLabels: false } });
     const labels = map.layers.find((l) => l.id === 'city-place-labels')!;

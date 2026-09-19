@@ -770,20 +770,24 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   if (route) points = points.filter(point => point.routeId === route);
   if (input.stop) points.push({...stopPlace(input.stop),...(input.city?{title:''}:{})});
   const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
+  /** The whole-city window's own rules -- no names on the city's places, every
+   *  BAJS station and every active venue as a badge, the pharmacy's street
+   *  address dropped -- belong to the INVITATION nobody has touched. A person
+   *  exploring has asked a question and gets discover()'s named answer, and a
+   *  paired presentation is a phone putting ONE subject on the wall, which
+   *  must be named there: both keep the names and the points they always had. */
+  const cityWindow = input.phase === 'invitation' && !input.exploring;
   /** The frame is a neighbourhood, not the whole city: the details that only
    *  make sense close up (the pharmacy's street address) are worth their room. */
-  const closeUp = field.zoom >= CITY_DETAIL_ZOOM;
+  const closeUp = !cityWindow || field.zoom >= CITY_DETAIL_ZOOM;
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp));
   if(input.city){
-    // Exploring, a person has asked a question, and discover() answers it with
-    // the few places a group or a query is about, named. Otherwise the window
-    // carries what the city publishes about itself all the time: every BAJS
-    // station and every venue with something on, as badges alone.
-    if(input.exploring){
+    if(cityWindow)points.push(...cityWindowPoints(input.city,input.snapshots.dogadanja?.items??[],input.now));
+    else{
       const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
         center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
       points.push(...result.points);
-    } else points.push(...cityWindowPoints(input.city,input.snapshots.dogadanja?.items??[],input.now));
+    }
     const pick=input.selection?.kind==='place'?input.selection:input.localSelection?.kind==='place'?input.localSelection:null;
     const p=pick?[...input.city.places,...dynamicPlaces(input.city,input.now)].find(p=>p.id===pick.id):null;
     if(p&&p.lon!==undefined&&p.lat!==undefined&&!points.some(x=>x.id===p.id))points.push({id:p.id,title:p.name,lon:p.lon,lat:p.lat,place:'city',props:{category:p.category,badge:'',eventCount:0,priority:0}});
@@ -837,8 +841,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     locale: input.locale,
     outline: input.renderer !== 'schema' ? outline : null,
     // The names of the city's own places are a reader's, not a passer-by's:
-    // off on the window, on the moment somebody explores.
-    cityLabels: Boolean(input.exploring),
+    // off on the window, on the moment somebody explores and on every paired
+    // presentation, whose one subject has to be named on the wall.
+    cityLabels: !cityWindow,
     prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM), buses),
   };
   // The invitation IS the transit picture: the network, the stops and the

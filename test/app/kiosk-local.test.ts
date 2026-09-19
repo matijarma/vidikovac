@@ -781,6 +781,31 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
+  // The window's rules are the INVITATION's. A paired presentation is a phone
+  // putting one subject on the wall, and the wall has to name it.
+  it('a paired presentation keeps the city’s names on and the points it always had: the presented place is named', () => {
+    const { calls, factory, adapter, maps } = stub();
+    const paired = { ...base, phase: 'paired' as const, selection: { kind: 'place' as const, id: 'culture-1' } };
+    requestKioskMap(maps, paired, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options.cityLabels).toBe(true);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+    // discover()'s own points, named -- not the window's nameless badges.
+    const city = (options.points as { id: string; title: string; place?: string }[]).filter((p) => p.place === 'city');
+    expect(city.find((p) => p.id === 'culture-1')!.title).toBe('Kino Europa');
+    expect(city.find((p) => p.id === 'bajs-b1')!.title).toBe('Trg bana Jelacica');
+    // The camera is on the place and the picture is about it alone, as before this round.
+    expect(options.center).toEqual([15.9738, 45.8105]);
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set());
+    expect((options.prozor as { networkKinds: string[] }).networkKinds).toEqual([]);
+    // The invitation beside it is still the nameless window.
+    const invitation = stub();
+    requestKioskMap(invitation.maps, base, invitation.adapter);
+    const first = invitation.factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(first.cityLabels).toBe(false);
+    expect((first.points as { id: string; title: string }[]).find((p) => p.id === 'culture-1')!.title).toBe('');
+  });
+
   it('cityWindowPoints reads the live BAJS rows and the week\u2019s venues, and nothing a source did not place', () => {
     expect(cityWindowPoints(CITY, EVENTS, NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
     // A station whose own source is not live cannot claim a count: bikeAvailability says so.
