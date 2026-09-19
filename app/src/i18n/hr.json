@@ -903,7 +903,6 @@
       "more_other": "još {count} linija",
       "unavailable": "ZET trenutačno ne odgovara.",
       "loading": "Učitavanje podataka ZET-a…",
-      "noStop": "Zaslon nema odabranu stanicu.",
       "modelNote": "Položaj vozila je procjena iz očitanja ZET-a; kašnjenje linije nije vrijeme dolaska.",
       "vehiclesMoving_one": "{count} vozilo u pokretu",
       "vehiclesMoving_few": "{count} vozila u pokretu",
@@ -963,7 +962,21 @@
       "acts_other": "{count} akata",
       "actLead": "akt",
       "kvartLead": "kvart",
-      "worksLead": "radovi"
+      "worksLead": "radovi",
+      "linesRegular": "Linije voze po redu",
+      "closures_one": "{count} zatvaranje",
+      "closures_few": "{count} zatvaranja",
+      "closures_other": "{count} zatvaranja",
+      "notices_one": "{count} obavijest ZET-a",
+      "notices_few": "{count} obavijesti ZET-a",
+      "notices_other": "{count} obavijesti ZET-a"
+    },
+    "ticker": {
+      "weather": "Vrijeme",
+      "transit": "Promet",
+      "works": "Radovi",
+      "tonight": "Večeras",
+      "city": "Grad"
     },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",
@@ -1082,7 +1095,6 @@
       "endsAfterSession": "Otvorena sesija traje do svog kraja; zaslon zatim prestaje izdavati kodove."
     },
     "setup": {
-      "handheld": "Ovu adresu otvori na zaslonu koji postavljaš.",
       "title": "Postavi privremeni zaslon",
       "intro": "Odaberi lokaciju i pokreni pregled grada. Zaslon radi samostalno; skeniranje otvara grad na vlastitom uređaju.",
       "step1": "Korak 1 od 2",

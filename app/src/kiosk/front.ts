@@ -24,8 +24,10 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayMonth, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
 import {
   byModule, cleanCondition, closuresByDistance, isLive, lastDeparturesAhead, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
-  routeDelays, sourceState, worksInKvart, type SourceState,
+  routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
 } from './local';
+import { summariseRoutes } from '../layers/route-summary';
+import { routeType } from './stops';
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
 import { districtLabel } from './districts';
@@ -50,7 +52,16 @@ export interface FrontInput {
   /** R-L2: no map under lagano, so the field is the lines board and the promet panel does not repeat the lines. */
   lightweight: boolean;
   composition?: Composition;
+  /** What the promet panel says: the stop's line board (the paired
+   *  compositions, the default) or the city's exceptions (the front card). */
+  prometMode?: PrometMode;
+  /** Rows in place of the mode's own: a stop's arrivals, once settings can
+   *  choose one (WP5b). The panel keeps its kicker, meta and credit. */
+  prometRows?: FrontRow[];
 }
+
+/** The two readings of transit a panel can carry (prometPanel). */
+export type PrometMode = 'lines' | 'exceptions';
 
 /** One row of a panel's list: a lead cell (a time, a distance, a badge), a title, one line of context. */
 export interface FrontRow {
@@ -187,30 +198,31 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   const { strings: s, now, locale } = input;
   const snap = byModule(input.modules)['dhmz-forecast'];
   const state = sourceState(snap);
-  const tomorrow = forecastFor(snap, zagrebDayAfter(now, 1));
   const today = forecastFor(snap, dayKey(now));
-  // Tomorrow is the figure: people plan by it; today's range stands under it (the header already says the weather now).
-  const lead = tomorrow ?? today;
-  const leadIsTomorrow = lead === tomorrow;
+  const tomorrow = forecastFor(snap, zagrebDayAfter(now, 1));
+  // The card is the reading and the two ranges. DHMZ's narrative is a
+  // sentence, not a figure: the header ticker says it (kiosk/ticker.ts).
   const observed = weatherNow(input.modules, s, locale);
   const glyph = weatherIcon(observed.condition);
-  const observation = `<div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(observed.temperature ?? (observed.state === 'loading' ? s.weather.loading : s.weather.noReading))}</span></div><p class="k-condition">${escapeHtml(observed.condition)}</p><p class="k-meta">${escapeHtml(`DHMZ · ${observed.observedAt || s.paired.noData}${observed.state === 'stale' ? ` · ${s.paired.stale}` : ''}`)}</p>`;
-  const hasRange = lead && dataNumber(lead, 'tmin') !== null && dataNumber(lead, 'tmax') !== null;
-  const forecast = lead
-    ? `<p class="k-weather-day">${escapeHtml(leadIsTomorrow ? s.say.tomorrow : s.say.today)}</p><p class="${hasRange ? 'k-panel-figure' : 'k-panel-text'}">${escapeHtml(rangeOf(lead, s, locale))}</p>${lead.summary ? `<p class="k-panel-text">${escapeHtml(lead.summary)}</p>` : conditionWord(lead) ? `<p class="k-panel-text">${escapeHtml(conditionWord(lead))}</p>` : ''}`
-    : `<p class="k-weather-day">${escapeHtml(s.say.forecast)}</p><p class="k-panel-text">${escapeHtml(state === 'loading' ? s.weather.loading : state === 'down' ? s.paired.sourceDown : s.paired.rangeUnknown)}</p>`;
-  const figure = `<div class="k-weather-current">${observation}</div><div class="k-weather-outlook">${forecast}</div>`;
+  // A source that is loading or down says so; only a live observation without a
+  // number says "bez očitanja temperature". Never a dash (PRODUCT.md, principle 4).
+  const reading = observed.temperature ?? (observed.state === 'loading' ? s.weather.loading : observed.state === 'down' ? s.weather.unavailable : s.weather.noReading);
+  const figure = `<div class="k-weather-current"><div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(reading)}</span></div>${observed.condition ? `<p class="k-condition">${escapeHtml(observed.condition)}</p>` : ''}</div>`;
   const rows: FrontRow[] = [];
-  if (leadIsTomorrow && today) {
-    rows.push({ key: 'forecast:today', lead: s.paired.today, title: rangeOf(today, s, locale), sub: conditionWord(today) || today.summary || undefined });
+  for (const [key, day, item] of [['today', s.say.today, today], ['tomorrow', s.say.tomorrow, tomorrow]] as const) {
+    if (item) rows.push({ key: `forecast:${key}`, lead: day, title: rangeOf(item, s, locale), sub: conditionWord(item) || undefined });
   }
+  const note = rows.length > 0 ? undefined : state === 'loading' ? s.weather.loading : state === 'down' ? s.paired.sourceDown : s.paired.rangeUnknown;
   return {
     id: 'weather',
     kicker: input.i18n.t('layers.zrak-i-nebo'),
-    meta: undefined,
-    rows: [],
+    // The source and the clock it read at, where every other panel puts its
+    // meta; under a kicker that says VRIJEME the word "opaženo" is a wasted
+    // line on a 254 px card, so the meta is the hour alone. No second credit.
+    meta: [`DHMZ${observed.observedMs === null ? '' : ` · ${clock(observed.observedMs)}`}`, observed.state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
+    rows,
+    note,
     figureMarkup: figure,
-    credit: 'DHMZ',
     state,
   };
 }
@@ -267,45 +279,102 @@ const PROMET_LINES = 8;
 /** A ZET notice is worth the panel while it is fresh. */
 const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
 
-function routeKind(kind: 'tram' | 'bus' | 'other'): 'tram' | 'bus' | 'other' { return kind; }
+/** A route median inside this band is on time, not an exception a card names. */
+const ON_TIME_S = 15;
+/** How many late lines the exceptions card names before the rest are the
+ *  ticker's. A card, not a board: the aside's height belongs to the events
+ *  card, which fills what these leave (kiosk/invitation.ts). */
+const EXCEPTION_LINES: Readonly<Record<Composition, number>> = { wide: 1, compact: 1, portrait: 2, handheld: 3 };
 
-export function prometPanel(input: FrontInput): FrontPanel {
-  const { strings: s, i18n, now, locale, stop } = input;
-  const zet = byModule(input.modules)['zet-rt'];
-  const state = sourceState(zet);
-  const board = linesAtStop(input.modules, stop, i18n, PROMET_LINES);
-  const delays = routeDelays(zet);
-  const rows: FrontRow[] = input.lightweight ? [] : board.rows.map((row) => {
-    const delay = delays.get(row.routeId);
-    const toneRaw = delayTone(i18n, delay);
+/** The stop's line board: one row per route with its state word and the
+ *  vehicles near, plus ZET's newest notice and the last departures. */
+function linesRows(input: FrontInput, board: LinesBoard): FrontRow[] {
+  const { strings: s, i18n, locale } = input;
+  const delays = routeDelays(byModule(input.modules)['zet-rt']);
+  return board.rows.map((row) => {
+    const toneRaw = delayTone(i18n, delays.get(row.routeId));
     const kindWord = row.kind === 'tram' ? s.lines.tram : row.kind === 'bus' ? s.lines.bus : '';
     const near = row.nearby > 0 ? plural(locale, s.lines.nearby, row.nearby) : s.lines.noneNearby;
     return {
       key: `line:${row.routeId}`,
-      leadMarkup: kBadge(row.label, routeKind(row.kind), `${kindWord} ${row.label}`.trim()),
+      leadMarkup: kBadge(row.label, row.kind, `${kindWord} ${row.label}`.trim()),
       title: routeEnds(row.longName) || row.longName,
       sub: [row.word || s.say.transitNoData, near].join(' · '),
       tone: toneRaw === 'none' ? 'unknown' : toneRaw,
     };
   });
-  // The newest ZET notice as the board's last row: what the network says about itself.
+}
+
+/** The city's late lines: the routes whose median a rider would notice, the
+ *  worst first and then in rider order, trams before buses. */
+function exceptionRows(input: FrontInput): FrontRow[] {
+  const { strings: s, i18n } = input;
+  const delays = routeDelays(byModule(input.modules)['zet-rt']);
+  const worst = [...delays]
+    .filter(([, seconds]) => Math.abs(seconds) > ON_TIME_S)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, EXCEPTION_LINES[input.composition ?? 'wide']);
+  return summariseRoutes(worst.map(([routeId]) => ({ routeId, label: routeId, type: routeType(routeId) ?? -1 })), delays, i18n)
+    .map((row) => {
+      const kind = row.type === 0 ? 'tram' : row.type === 3 ? 'bus' : 'other';
+      const kindWord = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
+      const toneRaw = delayTone(i18n, delays.get(row.routeId));
+      return {
+        key: `line:${row.routeId}`,
+        leadMarkup: kBadge(row.label, kind, `${kindWord} ${row.label}`.trim()),
+        title: row.word,
+        tone: toneRaw === 'none' ? 'unknown' : toneRaw,
+      };
+    });
+}
+
+/** ZET's own fresh notices about the network. */
+function zetNotices(input: FrontInput): FeedItem[] {
   const dogadanja = byModule(input.modules).dogadanja;
-  const notice = (isLive(dogadanja) ? dogadanja.items : [])
-    .filter((item) => dataText(item, 'source') === 'zet-promet' && item.at && now - Date.parse(item.at) <= ZET_NOTICE_WINDOW_MS && Date.parse(item.at) <= now)
-    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))[0];
-  if (notice) rows.push({ key: `notice:${notice.id}`, lead: 'ZET', title: notice.title, sub: `${s.say.zet} · ${clock(notice.at)}` });
+  return (isLive(dogadanja) ? dogadanja.items : [])
+    .filter((item) => dataText(item, 'source') === 'zet-promet' && item.at && input.now - Date.parse(item.at) <= ZET_NOTICE_WINDOW_MS && Date.parse(item.at) <= input.now)
+    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!));
+}
+
+/**
+ * Transit, in one of two readings. `lines` is the stop's board -- the paired
+ * compositions' Promet, a row per route with its state word, the newest ZET
+ * notice and the last departures from 20:00 (R-KP6, R-KP14). `exceptions` is
+ * the front page's card: only what departs from the timetable -- the late
+ * lines, the closures counted, ZET's notices counted -- and "Linije voze po
+ * redu" when the network has nothing to report. A caller that has a stop's
+ * arrivals passes them as `prometRows` and the card becomes that board.
+ */
+export function prometPanel(input: FrontInput): FrontPanel {
+  const { strings: s, i18n, now, locale, stop } = input;
+  const zet = byModule(input.modules)['zet-rt'];
+  const state = sourceState(zet);
+  const exceptions = input.prometMode === 'exceptions';
+  const board = linesAtStop(input.modules, stop, i18n, PROMET_LINES);
+  const supplied = input.prometRows;
+  const rows: FrontRow[] = supplied ?? (input.lightweight ? [] : exceptions ? exceptionRows(input) : linesRows(input, board));
+  const notices = zetNotices(input);
+  if (!exceptions && !supplied && notices[0]) {
+    // The newest ZET notice as the board's last row: what the network says about itself.
+    const notice = notices[0];
+    rows.push({ key: `notice:${notice.id}`, lead: 'ZET', title: notice.title, sub: `${s.say.zet} · ${clock(notice.at)}` });
+  }
   // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
-  const departures = lastDeparturesAhead(input.lastRun, stop, now);
+  const departures = exceptions ? [] : lastDeparturesAhead(input.lastRun, stop, now);
   const foot = departures.length > 0
     ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindOfRoute(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
     : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
   const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
-  // The count near the stop and the lines beyond the cap; the ZET time goes with the credit, where the source is named.
-  const meta = state === 'live' || state === 'stale'
-    ? [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ')
-    : '';
-  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : !stop ? s.lines.noStop : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
+  const closed = closuresByDistance(byModule(input.modules).prometnice, null, now).length;
+  // The exceptions card counts what it does not list; the board names the vehicles near and the lines beyond its cap.
+  const meta = state === 'loading' || state === 'down'
+    ? ''
+    : exceptions
+      ? [closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
+      : [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ');
+  const empty = exceptions ? s.front.linesRegular : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
+  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
   return {
     id: 'promet',
     kicker: s.say.transit,
@@ -365,17 +434,20 @@ export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
   const all = { tonight: tonightPanel(input), weather: weatherPanel(input), city: cityPanel(input), promet: prometPanel(input), around: aroundPanel(input) };
   const compact = input.composition === 'compact';
   const handheld = input.composition === 'handheld';
+  // The weather card's two rows are today's range and tomorrow's; the
+  // exceptions card counts against nothing, having no board to be a part of.
+  const lineBoard = input.prometMode !== 'exceptions';
   const caps: Record<PanelId, number> = handheld
-    ? { tonight: 5, weather: 0, city: 3, promet: 6, around: 3 }
-    : { tonight: compact ? 1 : 2, weather: 0, city: 1, promet: compact ? 3 : 6, around: 1 };
+    ? { tonight: 5, weather: 2, city: 3, promet: 6, around: 3 }
+    : { tonight: compact ? 1 : 2, weather: 2, city: 1, promet: compact ? 3 : 6, around: 1 };
   for (const id of PANEL_IDS) {
     const p = all[id];
-    const total = id === 'promet' && input.stop ? input.stop.routes.length : p.rows.length;
+    const total = id === 'promet' && input.stop && lineBoard ? input.stop.routes.length : p.rows.length;
     p.rows = p.rows.slice(0, caps[id]);
     if (id === 'city' && p.rows.length) {
       p.credit = [...new Set(p.rows.map(row => row.key.startsWith('session:') ? ASSEMBLY_SOURCE : row.key === 'gazette' || row.key.startsWith('act:') ? input.strings.paired.acts : CITY_SOURCE))].join(' · ');
     }
-    if (total > p.rows.length && (id === 'promet' || id === 'tonight')) {
+    if (total > p.rows.length && ((id === 'promet' && lineBoard) || id === 'tonight')) {
       p.meta = `${p.rows.length} / ${total}${p.meta ? ` · ${p.meta}` : ''}`;
     }
   }

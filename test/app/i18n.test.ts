@@ -33,6 +33,9 @@ const DEAD_KEYS = [
   'overview.weatherKicker', 'overview.closuresNone', 'overview.closuresNow_one', 'overview.quakeRecent', 'overview.warningsUnknown',
   'transit.tram', 'transit.bus', 'transit.closuresTitle', 'directory.title', 'export.ics', 'export.geojson', 'time.labelEvent',
   'common.tagline', 'common.showAll', 'common.openLayer', 'common.seconds_one', 'attribution.updated', 'attribution.adapted',
+  // T3: the kiosk sets itself up with one button (no address to open on the
+  // wall) and a screen without a stop simply has no such note to print.
+  'kiosk.setup.handheld', 'kiosk.lines.noStop',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';
@@ -47,7 +50,7 @@ describe('catalogs', () => {
     expect(en.transport.trams).toBe('Trams');
     expect(hr.transport.vehiclesNow_few).toBe('{count} vozila u pokretu');
     expect(hr.kiosk.invite.lead).toBe('Skeniraj za 10 minuta grada.');
-    expect(hr.kiosk.setup.handheld).toBe('Ovu adresu otvori na zaslonu koji postavljaš.');
+    expect(hr.kiosk.ticker.transit).toBe('Promet');
     expect(hr.kiosk.lines.nearby_few).toBe('{count} vozila u blizini');
     expect(hr.shared.closuresNone).toBe('Nema zatvorenih prometnica.');
     expect(en.shared.closuresNone).toBe('No road closures.');

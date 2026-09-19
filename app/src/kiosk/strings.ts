@@ -71,7 +71,6 @@ export interface KioskStrings {
     more: PluralForms;
     unavailable: string;
     loading: string;
-    noStop: string;
     modelNote: string;
     vehiclesMoving: PluralForms;
   };
@@ -103,6 +102,21 @@ export interface KioskStrings {
     actLead: string;
     kvartLead: string;
     worksLead: string;
+    /** The promet card's sentence when the network has no exception to report. */
+    linesRegular: string;
+    /** "2 zatvaranja": the closures the promet card counts rather than lists. */
+    closures: PluralForms;
+    /** "1 obavijest ZET-a": ZET's own fresh notices, counted. */
+    notices: PluralForms;
+  };
+  /** The header ticker's five kicker words (kiosk/ticker.ts), printed uppercase
+   *  by the sheet: the weather, the network, the works, tonight, the city. */
+  ticker: {
+    weather: string;
+    transit: string;
+    works: string;
+    tonight: string;
+    city: string;
   };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
    *  transit's three value states, its "N vozila u blizini" plural and its
@@ -303,18 +317,21 @@ function build(code: SupportedLocale): KioskStrings {
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
     lines: {
-      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'noStop', 'modelNote']),
+      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'modelNote']),
       nearby: forms('lines', 'nearby'),
       more: forms('lines', 'more'),
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
     front: {
-      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead']),
+      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead', 'linesRegular']),
       eventsToday: forms('front', 'eventsToday'),
       eventsTomorrow: forms('front', 'eventsTomorrow'),
       acts: forms('front', 'acts'),
+      closures: forms('front', 'closures'),
+      notices: forms('front', 'notices'),
     },
+    ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
     say: {
       ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
       nearby: forms('say', 'nearby'),
