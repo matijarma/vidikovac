@@ -1215,7 +1215,9 @@ describe('the field, the column and the one map', () => {
     expect(options.selectedStop).toBeUndefined();
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
-    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(mapMode==='schema'?STOP.routes:[]);
+    // The invitation is the transit picture on either renderer now: the gate that emptied the
+    // geographic map whenever the default 'living' group was active is gone.
+    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
     expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: true, stop: STOP });
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
