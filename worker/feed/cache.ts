@@ -135,8 +135,10 @@ async function refresh(
       clock,
       spec.twin ? twinPublish(env) : undefined,
       // briefAll itself decides whether a brief is possible (binding, test
-      // environment) and never rejects, so a module always sees the seam.
-      (texts, kind) => briefAll(env, texts, kind),
+      // environment) and never rejects, so a module always sees the seam. Its
+      // KV writes ride the same ExecutionContext as this module's own, so
+      // remembering a brief never delays the fetch that produced it.
+      (texts, kind) => briefAll(env, texts, kind, (promise) => ctx.waitUntil(promise)),
     ));
     // A composite module is stale when one of its sources is; the twin's module
     // is not (R-TE5): its status is the twin's, its source's silence its own.

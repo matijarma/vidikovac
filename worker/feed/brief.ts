@@ -61,6 +61,24 @@ export const BRIEF_MAX_UNCACHED = 8;
 export const BRIEF_MAX_CHARS = 140;
 /** A word this long is specific enough that sharing it proves the answer read the text. */
 const SIGNIFICANT_TOKEN_LETTERS = 5;
+
+/**
+ * How many distinct significant words a brief must share with its source.
+ *
+ * One is enough almost everywhere. The gazette is the exception: an act title
+ * is largely a proper noun beside a legal noun, so a single shared word can be
+ * carried by the street or the institution alone while the rest of the
+ * sentence is invented -- the live probe's "Trakošćanska za sve" became a story
+ * about flooded lakes on the strength of one shared name. Acts are also the
+ * one kind read by the large model, whose answers in the probe shared two to
+ * five words with their own title, so asking for two costs nothing real and
+ * closes the one-word hole. Stemming was considered and refused: it would have
+ * matched "Novoselca" to "Novoselac" and published a fabricated NBA career.
+ */
+export function briefMinSharedTokens(kind: BriefKind): number {
+  return kind === 'akt' ? 2 : 1;
+}
+
 /**
  * Below this, a text is already the one line the ticker wants and is never
  * sent to the model. Measured, not guessed: in the first live probe eleven of
@@ -144,13 +162,17 @@ export async function briefKey(kind: BriefKind, text: string): Promise<string> {
 const MARKDOWN = /[*_`#[\]]/;
 const QUOTE_MARKS = '"\'„“”«»';
 
-/** The model is told not to quote; when it does anyway, the sentence inside is still usable. */
+/**
+ * The model is told not to quote; when it does anyway the sentence inside is
+ * still usable. Each end is stripped on its own, so an answer that opens a
+ * quote and never closes it -- or closes one it never opened -- is unwrapped
+ * exactly like a properly paired one.
+ */
 function unquote(value: string): string {
-  const last = value.length - 1;
-  if (last >= 1 && QUOTE_MARKS.includes(value[0]) && QUOTE_MARKS.includes(value[last])) {
-    return value.slice(1, last).trim();
-  }
-  return value;
+  let line = value;
+  if (line.length > 0 && QUOTE_MARKS.includes(line[0])) line = line.slice(1);
+  if (line.length > 0 && QUOTE_MARKS.includes(line[line.length - 1])) line = line.slice(0, -1);
+  return line.trim();
 }
 
 function significantTokens(text: string): Set<string> {
@@ -163,21 +185,31 @@ function significantTokens(text: string): Set<string> {
 
 /**
  * The answer, or null when it is not one readable line drawn from the source.
- * The token test is the one that catches an invented answer: a sentence that
- * shares no substantial word with the text it claims to condense is about
+ *
+ * Two of these rules carry the weight. The length rule is not decoration: the
+ * prompt asks for a sentence shorter than the text, and in the first live probe
+ * eleven of seventeen answers came back longer, so an answer that shortens
+ * nothing is refused here rather than merely discouraged there -- the ticker
+ * then shows the original, which is no worse and is at least the source's own
+ * words. The token test is what catches an invented answer: a sentence sharing
+ * too few substantial words with the text it claims to condense is about
  * something else, however well it reads.
  */
-export function acceptBrief(raw: string, source: string): string | null {
+export function acceptBrief(raw: string, source: string, kind: BriefKind): string | null {
   const line = unquote(raw.trim());
   if (line === '') return null;
   if (line.length > BRIEF_MAX_CHARS) return null;
+  // A brief exists to be shorter than what it condenses; one that is not is a
+  // restatement, and the item reads better with its own text.
+  if (line.length >= source.trim().length) return null;
   if (/[\r\n]/.test(line)) return null;
   if (MARKDOWN.test(line)) return null;
   const sourceTokens = significantTokens(source);
+  let shared = 0;
   for (const token of significantTokens(line)) {
-    if (sourceTokens.has(token)) return line;
+    if (sourceTokens.has(token)) shared += 1;
   }
-  return null;
+  return shared >= briefMinSharedTokens(kind) ? line : null;
 }
 
 /** Workers AI text generation answers `{ response }`; anything else is no answer. */
@@ -228,12 +260,26 @@ async function generate(ai: AiRunner, kind: BriefKind, text: string): Promise<st
   return responseText(result);
 }
 
+/** Hands a background write to the runtime, so it outlives the response without delaying it. */
+export type BriefWaitUntil = (promise: Promise<unknown>) => void;
+
 /**
  * One brief per text that has one, keyed by the text exactly as it was given.
  * A text with no entry in the returned map has no brief this refresh: it was
  * refused, it failed, or it is beyond this refresh's cap. Never rejects.
+ *
+ * `waitUntil` is the caller's ExecutionContext hook (worker/feed/cache.ts).
+ * Remembering a brief is bookkeeping for the next refresh and never something
+ * this one should wait on, so these KV writes go there exactly as the feed
+ * cache's own writes do. Without it -- a unit test, a fixture run -- they are
+ * awaited here instead, so the same call stays correct off a Worker.
  */
-export async function briefAll(env: Env, texts: readonly string[], kind: BriefKind): Promise<Map<string, string>> {
+export async function briefAll(
+  env: Env,
+  texts: readonly string[],
+  kind: BriefKind,
+  waitUntil?: BriefWaitUntil,
+): Promise<Map<string, string>> {
   const briefs = new Map<string, string>();
   const ai = env.AI as unknown as AiRunner | undefined;
   // No binding (a unit test, a `wrangler dev` without it) and the test
@@ -254,11 +300,15 @@ export async function briefAll(env: Env, texts: readonly string[], kind: BriefKi
       else if (cached !== '') briefs.set(text, cached);
     }
 
+    const writes: Promise<void>[] = [];
     await Promise.allSettled(uncached.slice(0, BRIEF_MAX_UNCACHED).map(async ({ text, key }) => {
-      const brief = await generate(ai, kind, text).then((raw) => acceptBrief(raw, text)).catch(() => null);
-      await remember(env, key, brief);
+      const brief = await generate(ai, kind, text).then((raw) => acceptBrief(raw, text, kind)).catch(() => null);
+      const write = remember(env, key, brief);
+      if (waitUntil) waitUntil(write); else writes.push(write);
       if (brief !== null) briefs.set(text, brief);
     }));
+    // Empty whenever a waitUntil was given: those writes are already off this path.
+    await Promise.allSettled(writes);
   } catch {
     // Whatever went wrong, the feed keeps its original texts.
   }

@@ -20,6 +20,7 @@ import {
   acceptBrief,
   briefAll,
   briefKey,
+  briefMinSharedTokens,
 } from '../../worker/feed/brief';
 
 // The brief module is the only place in the Worker that calls Workers AI, and
@@ -45,6 +46,10 @@ class KvStub {
   puts: { key: string; body: string; expirationTtl?: number }[] = [];
   /** Set to make every read throw, the way a KV outage would. */
   failReads = false;
+  /** Set to make every write throw; a deferred write must still not reject. */
+  failWrites = false;
+  /** While set, a write parks here until the test releases it, the way a real one takes time. */
+  gate: Promise<void> | null = null;
 
   async get(key: string, _type?: string): Promise<unknown> {
     if (this.failReads) throw new Error('kv down');
@@ -53,6 +58,8 @@ class KvStub {
   }
 
   async put(key: string, body: string, options?: { expirationTtl?: number }): Promise<void> {
+    if (this.gate) await this.gate;
+    if (this.failWrites) throw new Error('kv down');
     this.store.set(key, { body, expirationTtl: options?.expirationTtl });
     this.puts.push({ key, body, expirationTtl: options?.expirationTtl });
   }
@@ -75,6 +82,16 @@ function makeEnv(run?: (model: string, input: unknown) => Promise<unknown>, appE
 
 const answers = (text: string) => async () => ({ response: text });
 
+/**
+ * Stands in for the ExecutionContext the cache layer passes: collects the
+ * background writes so a test can assert both that they did NOT delay the
+ * call and that they do land once the runtime drains them.
+ */
+function collector(): { deferred: Promise<unknown>[]; waitUntil: (promise: Promise<unknown>) => void } {
+  const deferred: Promise<unknown>[] = [];
+  return { deferred, waitUntil: (promise) => { deferred.push(promise); } };
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -96,43 +113,147 @@ afterEach(() => {
 });
 
 describe('acceptBrief', () => {
-  it('accepts a single short line that shares a significant word with the source', () => {
-    expect(acceptBrief(GOOD, ACT)).toBe(GOOD);
+  it('accepts a single short line that shares significant words with the source', () => {
+    expect(acceptBrief(GOOD, ACT, 'akt')).toBe(GOOD);
   });
 
   it('refuses a line that shares no word of five letters or more with the source', () => {
-    expect(acceptBrief(UNRELATED, ACT)).toBeNull();
+    expect(acceptBrief(UNRELATED, ACT, 'akt')).toBeNull();
   });
 
   it('refuses an empty answer, a second line and anything past 140 characters', () => {
-    expect(acceptBrief('   ', ACT)).toBeNull();
-    expect(acceptBrief(`${GOOD}\nI još jedan redak o toplinskoj energiji.`, ACT)).toBeNull();
-    expect(acceptBrief(`${'Koncesija za distribuciju toplinske energije u Zagrebu, '.repeat(3)}kraj.`, ACT)).toBeNull();
+    expect(acceptBrief('   ', ACT, 'akt')).toBeNull();
+    expect(acceptBrief(`${GOOD}\nI još jedan redak o toplinskoj energiji.`, ACT, 'akt')).toBeNull();
+    expect(acceptBrief(`${'Koncesija za distribuciju toplinske energije u Zagrebu, '.repeat(3)}kraj.`, ACT, 'akt')).toBeNull();
   });
 
   it('refuses markdown and a preamble list, and unwraps a quoted sentence', () => {
-    expect(acceptBrief(`**${GOOD}**`, ACT)).toBeNull();
-    expect(acceptBrief(`- ${GOOD} [1]`, ACT)).toBeNull();
-    expect(acceptBrief(`"${GOOD}"`, ACT)).toBe(GOOD);
+    expect(acceptBrief(`**${GOOD}**`, ACT, 'akt')).toBeNull();
+    expect(acceptBrief(`- ${GOOD} [1]`, ACT, 'akt')).toBeNull();
+    expect(acceptBrief(`"${GOOD}"`, ACT, 'akt')).toBe(GOOD);
+  });
+
+  // The model is told not to quote at all, so when it does it is already
+  // disobeying; an unclosed quote is the same disobedience, not a different
+  // answer, and the sentence between the marks is still the brief.
+  it('unwraps a stray opening or closing quote, not only a matched pair', () => {
+    expect(acceptBrief(`"${GOOD}`, ACT, 'akt')).toBe(GOOD);
+    expect(acceptBrief(`${GOOD}"`, ACT, 'akt')).toBe(GOOD);
+    expect(acceptBrief(`\u201e${GOOD}\u201c`, ACT, 'akt')).toBe(GOOD);
   });
 
   it('folds case and Croatian diacritics when it compares words', () => {
     const shouting = 'Koncesija se daje na PODRUČJU centralnog toplinskog sustava.';
-    expect(acceptBrief(shouting, ACT)).toBe(shouting);
+    expect(acceptBrief(shouting, ACT, 'akt')).toBe(shouting);
+  });
+
+  // The prompt asks for a sentence shorter than the text; the first live probe
+  // showed asking is not enough, so the rule is enforced here for every kind.
+  it('refuses an answer that is no shorter than the text it condensed', () => {
+    const padded = `${ACT} donesena je.`;
+    expect(acceptBrief(padded, ACT, 'akt')).toBeNull();
+    expect(acceptBrief(ACT, ACT, 'akt')).toBeNull();
+    const notice = 'Autobusi u subotu mijenjaju trase zbog radova';
+    expect(acceptBrief(`${notice} na cesti.`, notice, 'obavijest')).toBeNull();
+    // One character shorter is enough: the rule is "shorter", not "much shorter".
+    expect(acceptBrief('Autobusi u subotu mijenjaju trase zbog rada', notice, 'obavijest')).toBe(
+      'Autobusi u subotu mijenjaju trase zbog rada',
+    );
+  });
+
+  // A gazette title is mostly one proper noun beside one legal noun, so a
+  // single shared word can be carried by the institution alone while the rest
+  // is invented. Every other kind keeps the single-word rule.
+  it('asks a gazette act for two shared words and everything else for one', () => {
+    expect(briefMinSharedTokens('akt')).toBe(2);
+    for (const kind of ['prognoza', 'obavijest', 'novost', 'radovi'] as const) {
+      expect(briefMinSharedTokens(kind)).toBe(1);
+    }
+    const one = 'Nova toplinske mreže u sustavu.';
+    expect(acceptBrief(one, ACT, 'akt')).toBeNull();
+    expect(acceptBrief(one, ACT, 'obavijest')).toBe(one);
+  });
+
+  // The three acts of the gazette issue the large model actually read, with
+  // its answers verbatim (task report, gazette round). If a rule here ever
+  // starts refusing real, good output, this is the test that says so.
+  it('accepts the gazette answers the large model really produced', () => {
+    const pairs: [string, string][] = [
+      [
+        'Odluka o davanju koncesije za obavljanje energetske djelatnosti distribucije toplinske '
+          + 'energije na području centralnog toplinskog sustava Grada Zagreba',
+        'Grad Zagreb dodjeljuje koncesiju za distribuciju toplinske energije.',
+      ],
+      [
+        'Odluka o smanjenju uporabe proizvoda od plastike i poticanju održivih praksi u Gradu Zagrebu',
+        'Grad Zagreb smanjuje uporabu proizvoda od plastike i potiče održive prakse za građane.',
+      ],
+      [
+        'Odluka o dopuni Odluke o načinu upravljanja i korištenja sportskih građevina u vlasništvu Grada Zagreba',
+        'Dopuna uređuje upravljanje i korištenje sportskih građevina u vlasništvu Grada Zagreba.',
+      ],
+    ];
+    for (const [title, brief] of pairs) {
+      expect(brief.length, title).toBeLessThan(title.length);
+      expect(acceptBrief(brief, title, 'akt'), title).toBe(brief);
+    }
+  });
+
+  // And the two DHMZ narratives the small model read, under the one-word rule.
+  it('accepts the forecast answers the small model really produced', () => {
+    const pairs: [string, string][] = [
+      [
+        'Pretežno sunčano, ujutro na širem području grada magla, a prema večeri umjerena naoblaka. '
+          + 'Vjetar uglavnom slab. Najniža temperatura zraka od 11 do 14 °C. Najviša dnevna oko 27, na Sljemenu oko 20 °C.',
+        'Pretežno sunčano, ujutro na širem području grada magla, a prema večeri umjerena naoblaka.',
+      ],
+      [
+        'Promjenjivo oblačno uz sve češća sunčana razdoblja i uglavnom bez oborine. Navečer razvedravanje. '
+          + 'Vjetar uglavnom slab. Najviša dnevna temperatura oko 25, na Sljemenu oko 18 °C.',
+        'Vremenska prognoza za Zagreb predviđa promjenjivo oblačno vrijeme uz sve češća sunčana razdoblja i uglavnom bez oborine.',
+      ],
+    ];
+    for (const [narrative, brief] of pairs) {
+      expect(acceptBrief(brief, narrative, 'prognoza'), narrative).toBe(brief);
+    }
   });
 });
 
 describe('briefAll', () => {
   it('calls the model once on a cache miss and stores the brief for thirty days', async () => {
     const env = makeEnv(answers(GOOD));
-    const briefs = await briefAll(env, [ACT], 'akt');
+    const { deferred, waitUntil } = collector();
+    let release!: () => void;
+    kv.gate = new Promise<void>((resolve) => { release = resolve; });
+    const briefs = await briefAll(env, [ACT], 'akt', waitUntil);
 
     expect(briefs.get(ACT)).toBe(GOOD);
     expect(calls).toHaveLength(1);
     expect(calls[0].model).toBe(BRIEF_MODEL_AKT);
+    // The brief is in hand while the write is still parked: remembering it is
+    // the runtime's errand, not something the refresh that produced it waits on.
+    expect(kv.puts).toHaveLength(0);
+    expect(deferred).toHaveLength(1);
+
+    release();
+    await Promise.all(deferred);
     const key = await briefKey('akt', ACT);
     expect(key).toMatch(/^brief:v3:[0-9a-f]{64}$/);
     expect(kv.puts).toEqual([{ key, body: JSON.stringify({ brief: GOOD }), expirationTtl: BRIEF_TTL_SECONDS }]);
+  });
+
+  it('awaits its own writes when no ExecutionContext is offered', async () => {
+    const env = makeEnv(answers(GOOD));
+    await briefAll(env, [ACT], 'akt');
+    expect(kv.puts).toHaveLength(1);
+  });
+
+  it('keeps a deferred write from ever failing the refresh', async () => {
+    const env = makeEnv(answers(GOOD));
+    const { deferred, waitUntil } = collector();
+    kv.failWrites = true;
+    expect((await briefAll(env, [ACT], 'akt', waitUntil)).get(ACT)).toBe(GOOD);
+    await expect(Promise.all(deferred)).resolves.toBeDefined();
   });
 
   it('answers a second refresh from KV without calling the model', async () => {
@@ -178,13 +299,19 @@ ${ACT}`)}`);
   });
 
   it('gives up on a call that outruns the four-second ceiling and caches the failure', async () => {
-    // Only the clock the ceiling uses is faked: the SHA-256 digest of the
-    // cache key resolves off the event loop, so setImmediate below has to
-    // stay real for the call to have been started before time is advanced.
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const env = makeEnv(() => new Promise(() => {}));
+    // The clock is faked from inside the stubbed call, which is the one moment
+    // that is deterministic: the cache key's digest and the KV read are behind
+    // us, and the ceiling's timer has not been created yet. No turn counting.
+    let started: () => void;
+    const reached = new Promise<void>((resolve) => { started = resolve; });
+    const env = makeEnv(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      started();
+      return new Promise(() => {});
+    });
+
     const pending = briefAll(env, [ACT], 'akt');
-    for (let turn = 0; turn < 8; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    await reached;
     await vi.advanceTimersByTimeAsync(BRIEF_TIMEOUT_MS + 10);
 
     expect((await pending).size).toBe(0);
@@ -273,10 +400,12 @@ ${ACT}`)}`);
   });
 
   it('condenses a short act title, which the one-line floor would otherwise skip', async () => {
-    const env = makeEnv(answers('Zagreb mijenja pravila o zakupu javnih površina.'));
-    const shortAct = 'Odluka o zakupu javnih površina';
+    const plain = 'Zagreb uređuje zakup javnih površina.';
+    const env = makeEnv(answers(plain));
+    const shortAct = 'Odluka o zakupu javnih površina u Gradu Zagrebu';
     expect(shortAct.length).toBeLessThan(BRIEF_MIN_SOURCE_CHARS);
-    expect((await briefAll(env, [shortAct], 'akt')).get(shortAct)).toBe('Zagreb mijenja pravila o zakupu javnih površina.');
+    expect(plain.length).toBeLessThan(shortAct.length);
+    expect((await briefAll(env, [shortAct], 'akt')).get(shortAct)).toBe(plain);
     expect(calls).toHaveLength(1);
   });
 
