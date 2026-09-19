@@ -574,7 +574,7 @@ export class TwinDO extends DurableObject<Env> {
     if (this.net && this.index && !this.engine) {
       this.loadLearnedOnce();
       // The owner's dwell defaults, read from the same ASSETS binding as the
-      // two artefacts; a malformed file leaves the list empty and is logged.
+      // two artefacts; a malformed file leaves the list empty, and says so.
       const overrides = await twinOverridesSource(this.env)();
       this.dwellOverrides = overrides.overrides;
       this.dwellOverridesError = overrides.error;
