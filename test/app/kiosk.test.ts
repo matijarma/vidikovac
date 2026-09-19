@@ -867,12 +867,41 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
-    // The Sada column holds the warnings and the closures only, and a session owns the header's middle: no ticker beside the pill.
+    // The Sada *rail* holds the warnings and the closures only -- Vrijeme's own
+    // block belongs to the zrak-i-nebo layer -- and a session owns the header's
+    // middle: no ticker beside the pill.
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=k-weather]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-ticker]')).toBeNull();
     expect(text(q(k.root, '[data-testid=k-warnings]'))).toContain('Grmljavina');
     expect(k.fetchData).toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-invitation]')).toBeNull();
+  });
+  // Ruling 18: the header's weather group is gone for good (WP3), so the paired
+  // Sada must carry the city's weather itself. It does -- renderSada's main
+  // column is front.ts's own cards, and the VRIJEME card is the observation as
+  // its figure with today's and tomorrow's ranges under it, capped at the two
+  // rows the paired column holds. This case is the proof that the one weather
+  // a paired screen shows is really on the screen.
+  it('the paired Sada carries the city weather itself: the observation as the figure, today and tomorrow as its two rows', async () => {
+    const withForecast = [...MODULES, snap('dhmz-forecast', [
+      item('dhmz-forecast', 'f-today', 'forecast', 'Prognoza 11.9.', { at: '2026-09-11T00:00:00Z', data: { tmin: 16, tmax: 25 } }),
+      item('dhmz-forecast', 'f-tomorrow', 'forecast', 'Prognoza 12.9.', { at: '2026-09-12T00:00:00Z', data: { tmin: 13, tmax: 27 } }),
+      item('dhmz-forecast', 'f-later', 'forecast', 'Prognoza 13.9.', { at: '2026-09-13T00:00:00Z', data: { tmin: 12, tmax: 26 } }),
+    ])];
+    const k = await pairedKiosk({ modules: withForecast });
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe('grad-sada');
+    const weather = q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-main] [data-panel=weather]')!;
+    expect(weather).not.toBeNull();
+    expect(text(q(weather, '.k-panel-kicker'))).toBe('Vrijeme');
+    // The reading the header used to carry, now inside the card.
+    expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
+    expect(text(q(weather, '.k-condition'))).toBe('vedro');
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
+    // Sized for the paired column: two ranges, never the whole forecast run.
+    const rows = [...weather.querySelectorAll('.k-panel-rows .k-fr')];
+    expect(rows.map((row) => text(row.querySelector('.k-fr-lead')))).toEqual(['danas', 'sutra']);
+    expect(rows.map((row) => text(row.querySelector('.k-fr-title')))).toEqual(['16 do 25 °C', '13 do 27 °C']);
+    expect(q(weather, '.k-panel-note')).toBeNull();
   });
   it('on a calm day the Sada column gives the closures the whole column and shows no warnings block: green notices stay one line on the strip', async () => {
     const calm = MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Zeleno upozorenje za vjetar', { severity: 'minor' })]) : m));
