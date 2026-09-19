@@ -33,12 +33,13 @@ import { join } from 'node:path';
 import { vehicleFixes } from '../app/src/motion/fixes';
 import { createIntegrator } from '../app/src/motion/integrator';
 import { dist, toPlane } from '../shared/motion/geo';
-import { BUCKETS, emptyCounts, emptySignCounts, HORIZONS_S, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
+import { BUCKETS, emptyCounts, emptySignCounts, gradeFix, HORIZONS_S, SIGN_BAND_M, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
 import { parseDwellOverrides, pushDwellRecent, trimDwellRecent } from '../shared/motion/dwell';
+import { junctionsOnPath } from '../shared/motion/junction';
 import { recordEvidence } from '../shared/motion/learn';
 import { HEADWAY_M } from '../shared/motion/order';
 import { decodeNetwork, type GraphNetwork, type Path } from '../shared/motion/network';
-import { emptyPlanCounts, evalFreePlan, evalPathPlan, PLAN_EVENTS, type PlanCounts } from '../shared/motion/plan';
+import { emptyPlanCounts, evalFreePlan, evalPathPlan, PLAN_EVENTS, STAND_SCATTER_M, type PlanCounts } from '../shared/motion/plan';
 import { lastFix, type PathKnot, type Plan } from '../shared/motion/track';
 import { decodeTripIndex, type TripIndex } from '../shared/motion/trips';
 import type { FeedPayload } from '../worker/feed/payload';
@@ -239,6 +240,37 @@ export interface PhantomReport {
   unusedPaths: number;
 }
 
+/** The 30 s graded fixes split by the state the graded plan was in. Each
+ *  cell carries its own denominator, so a row reads as "of the fixes graded
+ *  in this situation, this share had the plan 50 m or more ahead" -- a
+ *  share, not a count, which is the only way to tell a situation that goes
+ *  wrong often from one that is merely common. */
+export interface AheadSplit {
+  /** Age of the plan's own anchor fix at the moment that plan was published. */
+  anchorAge: Record<'lt10' | 'lt20' | 'lt30' | 'ge30', { graded: number; ahead: number }>;
+  /** Whether that anchor was a standing vehicle (its last interval inside the GPS scatter). */
+  motion: Record<'standing' | 'moving', { graded: number; ahead: number }>;
+  /** Whether a rail node of degree > 2 lay inside the 30 s of travel the plan booked. */
+  junction: Record<'ahead_of_node' | 'no_node', { graded: number; ahead: number }>;
+}
+
+function emptyAheadSplit(): AheadSplit {
+  const pair = (): { graded: number; ahead: number } => ({ graded: 0, ahead: 0 });
+  return {
+    anchorAge: { lt10: pair(), lt20: pair(), lt30: pair(), ge30: pair() },
+    motion: { standing: pair(), moving: pair() },
+    junction: { ahead_of_node: pair(), no_node: pair() },
+  };
+}
+
+/** What the harness remembers about each plan it published, so a fix graded
+ *  against that plan 30 s later can say what situation the plan was in. */
+interface PublishedContext {
+  anchorAgeSec: number;
+  standing: boolean;
+  junctionAhead: boolean;
+}
+
 export interface ReplayReport {
   frames: number;
   droppedFrames: number;
@@ -271,6 +303,12 @@ export interface ReplayReport {
   tickMs: { p50: number | null; p95: number | null };
   /** What the planner had to intervene about over the whole run (F11). */
   plan: PlanCounts;
+  /** Why the plan was AHEAD of the tram at 30 s, split three ways (F11
+   *  review, item 3). Without this the residual "ahead" share is a number
+   *  with no situation attached to it. */
+  aheadSplit: AheadSplit;
+  /** Dwell candidates the stationarity gate refused, by why (F11 review, item 4). */
+  dwellDropped: { oneFix: number; movedThrough: number };
   /** What the run taught the engine, so a table can say whether the learned
    *  layers had anything to answer with by the end (F11). */
   learned: { edgeCells: number; stopCells: number; nodeCells: number; recentStops: number; dwellSamples: number; waitSamples: number; nodePasses: number };
@@ -762,6 +800,10 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
   const firstMovingSec = new Map<string, number>();
   const tickMs: number[] = [];
   const planTotals = emptyPlanCounts();
+  const aheadSplit = emptyAheadSplit();
+  const dwellDropped = { oneFix: 0, movedThrough: 0 };
+  /** Per vehicle, per published header: what state that plan was published in. */
+  const publishedContext = new Map<string, Map<number, PublishedContext>>();
   const learnedTotals = { dwellSamples: 0, waitSamples: 0, nodePasses: 0 };
   let previousBehind: Map<string, string | null> | null = null;
 
@@ -796,7 +838,9 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     learnedTotals.dwellSamples += result.learned.dwells.length;
     learnedTotals.waitSamples += result.learned.waits.length;
     learnedTotals.nodePasses += result.learned.passes.length;
-    for (const event of PLAN_EVENTS) planTotals[event] += result.plan[event];
+    dwellDropped.oneFix += result.learned.dwellDropped.oneFix;
+    dwellDropped.movedThrough += result.learned.dwellDropped.movedThrough;
+    for (const kind of ['tram', 'bus'] as const) for (const event of PLAN_EVENTS) planTotals[event] += result.plan[kind][event];
 
     for (const horizon of HORIZONS_S) for (const bucket of BUCKETS) hindsightTotals[horizon][bucket] += result.hindsight[horizon][bucket];
     for (const horizon of HORIZONS_S) for (const bucket of SIGN_BUCKETS) hindsightSignTotals[horizon][bucket] += result.hindsightSign[horizon][bucket];
@@ -818,6 +862,61 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     const snapshot = snapshotOf(state, headerSec, fresh);
     options.onSnapshot?.(snapshot);
     grader.observe(snapshot);
+
+    // F11 review, item 3: attribute the plans that end up AHEAD of their
+    // tram. Two halves. First, remember the state every plan published this
+    // tick was in -- how old its anchor fix already was, whether that anchor
+    // was a standing vehicle, and whether a junction node lies inside the
+    // 30 s of travel the plan books. Second, re-grade this tick's fresh
+    // fixes at 30 s with the twin's own gradeFix over the twin's own ring,
+    // so the split and the headline share are one measurement, and count
+    // each graded fix into all three splits, ahead or not.
+    for (const track of Object.values(state.tracks)) {
+      const fix = lastFix(track);
+      if (!track.plan || track.plan.on === 'free' || !fix) continue;
+      const prev = track.fixes.length >= 2 ? track.fixes[track.fixes.length - 2] : null;
+      const sameArc = prev !== null && prev.arc !== undefined && fix.arc !== undefined && prev.arc.key === fix.arc.key;
+      const moved =
+        prev === null ? Number.POSITIVE_INFINITY : sameArc ? Math.abs(fix.arc!.s - prev.arc!.s) : Math.hypot(fix.x - prev.x, fix.y - prev.y);
+      const knots = track.plan.knots;
+      const sNow = evalPathPlan(knots, 0);
+      const sThen = evalPathPlan(knots, 30);
+      const junctionAhead =
+        track.plan.on === 'path' && junctionsOnPath(engine.net, track.plan.pathIdx).some((node) => node.s > sNow - 0.5 && node.s <= sThen + 0.5);
+      const byHeader = publishedContext.get(track.id) ?? new Map<number, PublishedContext>();
+      byHeader.set(headerSec, { anchorAgeSec: Math.max(0, headerSec - fix.atSec), standing: moved < STAND_SCATTER_M, junctionAhead });
+      // The twin keeps seven published plans per vehicle; keep the same depth.
+      if (byHeader.size > 8) {
+        for (const key of [...byHeader.keys()].sort((a, b) => a - b).slice(0, byHeader.size - 8)) byHeader.delete(key);
+      }
+      publishedContext.set(track.id, byHeader);
+    }
+    for (const id of fresh) {
+      const track = state.tracks[id];
+      const fix = track ? lastFix(track) : null;
+      const ring = state.published[id];
+      if (!fix || !ring || ring.length === 0) continue;
+      const grade = gradeFix(engine.net, fix, ring).find((g) => g.horizon === 30);
+      if (!grade) continue;
+      // The plan gradeFix chose: the newest published at least 30 s before the fix.
+      let chosen: number | null = null;
+      for (const entry of ring) if (entry.headerSec <= fix.atSec - 30 && (chosen === null || entry.headerSec > chosen)) chosen = entry.headerSec;
+      const context = chosen === null ? undefined : publishedContext.get(id)?.get(chosen);
+      if (!context) continue;
+      const isAhead = grade.signedM >= SIGN_BAND_M;
+      const age = context.anchorAgeSec;
+      const ageKey = age < 10 ? 'lt10' : age < 20 ? 'lt20' : age < 30 ? 'lt30' : 'ge30';
+      const cells = [
+        aheadSplit.anchorAge[ageKey],
+        aheadSplit.motion[context.standing ? 'standing' : 'moving'],
+        aheadSplit.junction[context.junctionAhead ? 'ahead_of_node' : 'no_node'],
+      ];
+      for (const cell of cells) {
+        cell.graded++;
+        if (isAhead) cell.ahead++;
+      }
+    }
+    for (const id of [...publishedContext.keys()]) if (!state.tracks[id]) publishedContext.delete(id);
 
     // The client: frames up to this poll's landing, then the poll folds.
     // Nothing is drawn before the first payload lands (a page opens on an
@@ -911,6 +1010,8 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     neverMoved: firstSeenSec.size - firstMovingDelays.length,
     tickMs: { p50: numericPercentile(tickMs, 0.5), p95: numericPercentile(tickMs, 0.95) },
     plan: planTotals,
+    aheadSplit,
+    dwellDropped,
     learned: {
       edgeCells: Object.keys(engine.learned.edges).length,
       stopCells: Object.keys(engine.learned.stops).length,
@@ -1040,5 +1141,24 @@ export function formatTable(report: ReplayReport): string {
       `${report.learned.dwellSamples} dwell samples, ${report.learned.waitSamples} junction waits of ${report.learned.nodePasses} passes, ` +
       `${report.learned.recentStops} platforms in the recent window`,
   );
+  const refused = report.dwellDropped.oneFix + report.dwellDropped.movedThrough;
+  const candidates = report.learned.dwellSamples + refused;
+  lines.push(
+    `dwell candidates:        ${report.learned.dwellSamples} kept, ${refused} refused by the stationarity gate ` +
+      `(${report.dwellDropped.oneFix} with ONE fix in the zone = ambiguous, ${report.dwellDropped.movedThrough} with two or more that all moved = pass-through)` +
+      (candidates > 0 ? `; ambiguous share of all candidates ${fmtShare(report.dwellDropped.oneFix / candidates)}` : ''),
+  );
+  lines.push('');
+  lines.push('why the plan was ahead at 30 s (share of the fixes graded in each situation that had the plan >=50 m ahead):');
+  const splitRow = (label: string, cell: { graded: number; ahead: number }): string =>
+    `  ${label.padEnd(26)} ${cell.graded > 0 ? fmtShare(cell.ahead / cell.graded).padStart(6) : '   n/a'}  (${cell.ahead} of ${cell.graded})`;
+  lines.push(splitRow('anchor age <10 s:', report.aheadSplit.anchorAge.lt10));
+  lines.push(splitRow('anchor age 10-20 s:', report.aheadSplit.anchorAge.lt20));
+  lines.push(splitRow('anchor age 20-30 s:', report.aheadSplit.anchorAge.lt30));
+  lines.push(splitRow('anchor age >=30 s:', report.aheadSplit.anchorAge.ge30));
+  lines.push(splitRow('anchor standing:', report.aheadSplit.motion.standing));
+  lines.push(splitRow('anchor moving:', report.aheadSplit.motion.moving));
+  lines.push(splitRow('junction within 30 s:', report.aheadSplit.junction.ahead_of_node));
+  lines.push(splitRow('no junction within 30 s:', report.aheadSplit.junction.no_node));
   return lines.join('\n');
 }

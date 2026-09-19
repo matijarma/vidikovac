@@ -221,17 +221,30 @@ export interface NodePassEvidence {
   atSec: number;
 }
 
+/** Dwell candidates the stationarity gate refused, split by WHY (F11
+ *  review, item 4). `movedThrough` is a proven pass-through: two or more
+ *  fixes inside the zone, every consecutive pair further apart than the dead
+ *  zone. `oneFix` is the ambiguous half: a single fix inside the zone, which
+ *  proves neither a stand nor a pass. Those two are not the same kind of
+ *  loss, and the second is where the gate's SURVIVORSHIP BIAS lives. */
+export interface DwellDropped {
+  oneFix: number;
+  movedThrough: number;
+}
+
 export interface Evidence {
   edges: EdgeEvidence[];
   dwells: DwellEvidence[];
   waits: NodeWaitEvidence[];
   passes: NodePassEvidence[];
+  /** Dwell candidates the gate refused, for the measurement only. */
+  dwellDropped: DwellDropped;
   /** Report time of the newest fix mined; the next extraction starts after it. */
   upTo: number;
 }
 
 export function emptyEvidence(upTo = 0): Evidence {
-  return { edges: [], dwells: [], waits: [], passes: [], upTo };
+  return { edges: [], dwells: [], waits: [], passes: [], dwellDropped: { oneFix: 0, movedThrough: 0 }, upTo };
 }
 
 interface ArcFix {
@@ -300,6 +313,19 @@ export function extractEvidence(net: GraphNetwork, track: Track, sinceSec: numbe
   // dwell sample of whatever the interval happened to exceed the travel by,
   // and the table learned a standing time from trams that never stood --
   // the learner poisoning of D1.
+  //
+  // The gate is NOT free, and the bias runs one way (F11 review, item 4). It
+  // refuses two different things: a proven pass-through, which was never a
+  // dwell, and a candidate with a SINGLE fix inside the zone, which proves
+  // nothing either way. At ZET's two-in-three refresh a SHORT dwell is
+  // exactly the one most likely to leave a single fix in the zone -- a tram
+  // that stood 8 s is reported once there, a tram that stood 40 s three
+  // times. So the samples that survive skew LONG, and the dwell table then
+  // reads DWELL_PLAN_QUANTILE of an already-long-skewed set: the two
+  // compound. `evidence.dwellDropped` counts both refusals so the size of
+  // the effect is measurable rather than asserted (the replay prints it).
+  // Correcting it needs a censored-data estimator, not a looser gate: a
+  // looser gate is the D1 poisoning back.
   const pooledCruise = pooledDs >= MIN_CRUISE_BASELINE_M && pooledDt > 0 ? pooledDs / pooledDt : null;
   const travelBetween = (fromS: number, toS: number, atSec: number): number | null => {
     const learnedTravel = travelOf?.(pathIdx, fromS, toS, atSec) ?? null;
@@ -322,7 +348,11 @@ export function extractEvidence(net: GraphNetwork, track: Track, sinceSec: numbe
       if (!before || !after) continue;
       if (before.atStop || after.atStop || before.s >= S - STOP_ZONE_M || after.s <= S + STOP_ZONE_M) continue;
       if (after.fix.atSec <= sinceSec) continue;
-      if (!stationaryRun(onPath, first, lastIdx)) continue;
+      if (!stationaryRun(onPath, first, lastIdx)) {
+        if (lastIdx > first) evidence.dwellDropped.movedThrough++;
+        else evidence.dwellDropped.oneFix++;
+        continue;
+      }
       const interval = after.fix.atSec - before.fix.atSec;
       const travel = travelBetween(before.s, after.s, after.fix.atSec);
       if (travel === null) continue;

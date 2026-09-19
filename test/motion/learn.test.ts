@@ -36,8 +36,11 @@ import { corridorSpec, syntheticNetwork } from './synthetic-network';
 // the stop zone -- two fixes the vehicle did not move between -- and at a
 // two-in-three refresh a 20 s dwell often leaves only one fix in the zone,
 // so the old run of 24 trams over half an hour left every platform with
-// fewer than LEARN_MIN_SAMPLES. The trams-per-platform density (one every
-// 400 m) is the same; there are simply more of them, for longer.
+// fewer than LEARN_MIN_SAMPLES. The fleet is DENSER as well as longer-running:
+// a 40 s headway at 10 m/s puts a tram every 400 m where the old 60 s headway
+// put one every 600 m. That is a learning fixture, not an ordering one -- no
+// assertion here is about headway -- but it is not the same world, and saying
+// "the same density" would have been wrong.
 describe('learning from the corridor', () => {
   const net = syntheticNetwork(corridorSpec());
   const start = 1_800_000_000;

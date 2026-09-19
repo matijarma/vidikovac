@@ -20,7 +20,7 @@ import { dist } from './geo';
 import type { GraphNetwork } from './network';
 import { DEAD_ZONE_M, STOP_ZONE_M } from './speed';
 import type { DayType, TimesProvider } from './times';
-import { lastFix, type FreeKnot, type NextStop, type PathKnot, type PlaneFix, type Track } from './track';
+import { lastFix, type FreeKnot, type NextStop, type PathKnot, type PlaneFix, type Track, type VehicleKind } from './track';
 
 /** How far back a plan reaches: a client whose clock runs behind the twin's
  *  by a poll still finds a knot to stand on. */
@@ -117,6 +117,16 @@ export type PlanCounts = Record<PlanEvent, number>;
 
 export function emptyPlanCounts(): PlanCounts {
   return { floor: 0, junction_wait: 0, stand_fix: 0, eta_bound_skipped: 0 };
+}
+
+/** The same counters kept apart by vehicle kind. A tram and a bus meet
+ *  different rules -- a bus may overtake and reverse, and its plan runs a
+ *  shape rather than a path, so it books no junction wait at all -- and a
+ *  single total would hide which of the two an intervention was about. */
+export type PlanCountsByKind = Record<VehicleKind, PlanCounts>;
+
+export function emptyPlanCountsByKind(): PlanCountsByKind {
+  return { tram: emptyPlanCounts(), bus: emptyPlanCounts() };
 }
 
 export interface NextStopUpdate {
@@ -285,9 +295,13 @@ function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwell
   const pastThePoint = track.match.s > stop.s + DEAD_ZONE_M;
   if (pastThePoint) {
     // Moving NOW, judged at the same scatter `standing` is judged at: a tram
-    // that covered more than a GPS scatter over its last interval and lies
-    // past the stop point has left, whatever it did before that.
-    const movingNow = run.length >= 2 && separation(fixes[fixes.length - 2], last) >= STAND_SCATTER_M;
+    // that covered more than a GPS scatter over its LAST interval and lies
+    // past the stop point has left, whatever it did before that. The guard
+    // is on `fixes`, which is what the interval is read from -- `run` counts
+    // only the fixes inside this stop's zone, so guarding on it read a tram
+    // cruising through the zone from 80 m before it as a stand, purely
+    // because only one of its reports landed in the zone (F11 review).
+    const movingNow = fixes.length >= 2 && separation(fixes[fixes.length - 2], last) >= STAND_SCATTER_M;
     if (movingNow) return null;
     if (counts) counts.stand_fix++;
   }

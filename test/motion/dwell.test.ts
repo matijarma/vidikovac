@@ -33,11 +33,16 @@ function twoLineSpec(): SynthSpec {
     routes: [
       { id: '1', type: 0, paths: [{ id: '1_0', direction: 0, edges: [0, 1], served: ['S0', 'S600', 'S1800'] }] },
       { id: '2', type: 0, paths: [{ id: '2_0', direction: 0, edges: [0], served: ['S0', 'S605'] }] },
+      // A bus route over the same rails, whose BAY carries the same place
+      // name as the tram platforms. In Zagreb that is the normal case:
+      // "Crnomerec" is three tram platforms and eleven bus bays.
+      { id: '109', type: 3, busShapes: [{ id: 'B109', pts: straight(0, 1200, -30) }] },
     ],
     stops: [
       { id: 'S0', name: 'Alfa', edge: 0, s: 0, terminal: true },
       { id: 'S600', name: 'Beta', edge: 0, s: 600 },
       { id: 'S605', name: 'Beta', edge: 0, s: 605 },
+      { id: 'S610BUS', name: 'Beta', edge: 0, s: 610 },
       { id: 'S1800', name: 'Gama', edge: 1, s: 600, terminal: true },
     ],
   };
@@ -121,6 +126,21 @@ describe('the dwell table', () => {
     expect(byName.defaultSec('S600')).toBe(55);
     expect(byName.defaultSec('S605')).toBe(55);
     expect(byName.defaultSec('S0')).toBe(DWELL_DEFAULT_S);
+    // F11 review, item 2: a NAME is a place, and a place is usually several
+    // platforms of several modes. S610BUS carries the name but no tram path
+    // calls there, so the entry must not reach it: the dwell table also
+    // feeds the speed estimator's per-stop charge, and a 55 s terminus
+    // layover charged against a bus bay would push a BUS plan ahead of its
+    // bus. A platform id still matches whatever it names.
+    expect(byName.defaultSec('S610BUS')).toBe(DWELL_DEFAULT_S);
+    const byBusId = createDwellTable({
+      net,
+      schedule,
+      aggregates,
+      recent,
+      overrides: parseDwellOverrides([{ stop: 'S610BUS', defaultSec: 55, reason: 'test: an id is not a guess' }]),
+    });
+    expect(byBusId.defaultSec('S610BUS')).toBe(55);
     // Without pin the measured estimate still speaks: the override is only the default.
     expect(byName.plannedSec('S600', NOW, BAND, DAY)).toBeGreaterThan(30);
     expect(byName.plannedSec('S600', NOW, BAND, DAY)).toBeLessThan(55);
@@ -167,7 +187,7 @@ describe('the dwell table', () => {
     expect(row).toMatchObject({ name: 'Beta', defaultSec: 33, recent: 0, lastSampleSec: null });
     expect(row?.override).toMatchObject({ defaultSec: 33, pin: false, route: null });
     expect(row?.p50).toBeGreaterThan(30);
-    expect(row?.p70).toBeGreaterThan(30);
+    expect(row?.pPlan).toBeGreaterThan(30);
   });
 
   it('fails loudly on a malformed entry, printing it', () => {
@@ -211,6 +231,58 @@ describe('the committed override file', () => {
     };
     const known = new Set<string>([...artefact.stops.id, ...artefact.stops.name]);
     for (const entry of entries) expect(known.has(entry.stop), `override names ${entry.stop}, which the network does not know`).toBe(true);
+  });
+
+  // F11 review, item 2. The seed is written by NAME, which is what an owner
+  // can read -- but a Zagreb place name covers tram platforms and bus bays
+  // alike, and the dwell table feeds the speed estimator's per-stop charge
+  // as well as the planner. So what the seed actually RESOLVES TO against
+  // the committed network has to be checked, not assumed: every platform it
+  // reaches must be one a tram path calls at, and none may be a bus bay.
+  it('resolves the seed to tram platforms only, and names the entries it cannot place', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { decodeNetwork } = await import('../../shared/motion/network');
+    const raw = JSON.parse(await readFile(new URL('../../app/public/data/zet-network.json', import.meta.url), 'utf8')) as unknown;
+    const real = decodeNetwork(raw);
+    const overrides = parseDwellOverrides(
+      JSON.parse(await readFile(new URL('../../app/public/data/stop-dwell-overrides.json', import.meta.url), 'utf8')) as unknown,
+    );
+    expect(overrides).toHaveLength(20); // the twenty tram termini the seed was derived from
+
+    // Every platform some tram path calls at, and every platform of any name
+    // the seed uses -- the two sets the matching has to tell apart.
+    const servedByTram = new Set<string>();
+    real.paths.forEach((path, pathIdx) => {
+      if (real.routes.get(path.route)?.type !== 0) return;
+      for (const entry of real.stopsOnPath(pathIdx)) servedByTram.add(entry.stop.id);
+    });
+    const seedNames = new Set(overrides.map((entry) => entry.stop));
+    const platformsOfSeedNames = real.stops.filter((stop) => seedNames.has(stop.name)).map((stop) => stop.id);
+    // The places the seed names carry far more platforms than trams use.
+    expect(platformsOfSeedNames.length).toBeGreaterThan(100);
+
+    const table = createDwellTable({ net: real, schedule: { segmentSeconds: () => null, dwellSeconds: () => null }, aggregates: emptyAggregates(), overrides });
+    const matched = platformsOfSeedNames.filter((id) => table.defaultSec(id) === 60);
+    const busBays = matched.filter((id) => !servedByTram.has(id));
+    expect(busBays, `the seed reached ${busBays.length} platforms no tram path calls at`).toEqual([]);
+    // And a second angle on the same question, since "served" is derived
+    // from the artefact the filter itself reads: all but one of the matched
+    // platforms lie on the RAIL GRAPH, which a bus bay never does. The one
+    // exception is 317_1, Zapadni kolodvor -- line 1's terminus, which the
+    // F8 builder trimmed off the rails, so it carries no `onEdge` link while
+    // still standing in its path's served list. Pinned by name so a second
+    // such platform would fail here rather than pass unnoticed.
+    const byId = new Map(real.stops.map((stop) => [stop.id, stop] as const));
+    const offRail = matched.filter((id) => (byId.get(id)?.onEdge ?? []).length === 0);
+    expect(offRail, `the seed reached ${offRail.length} platforms that lie on no rail edge`).toEqual(['317_1']);
+    expect(matched.length).toBe(61);
+    // ...which is far fewer than the names alone would have matched.
+    expect(matched.length).toBeLessThan(platformsOfSeedNames.length / 2);
+
+    // And every one of the twenty places a platform: the seed has no dead
+    // lines. An entry that placed none would be reported here rather than
+    // silently dropped, which is what /stats shows the operator.
+    expect(table.unmatchedOverrides).toEqual([]);
   });
 });
 

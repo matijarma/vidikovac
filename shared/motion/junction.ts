@@ -50,7 +50,15 @@ export const JUNCTION_WAIT_QUANTILE = 0.5;
 /** Passes a cell needs before its share means anything -- the learner's own
  *  bar for a histogram (times.ts LEARN_MIN_SAMPLES), for the same reason:
  *  ten traversals separate a crossing that holds trams from one that does
- *  not, and fewer would let one stuck tram write the rule of an hour. */
+ *  not, and fewer would let one stuck tram write the rule of an hour.
+ *
+ *  The denominator is not unbiased, and it is worth knowing which way: a
+ *  pass is counted only when the crossing is bracketed by two CLEAN fixes
+ *  (neither at a platform), so a crossing that sits close behind a platform
+ *  loses passes it would otherwise have counted, which pushes p(stop) UP
+ *  there. The waits are bracketed the same way, so the two move together and
+ *  the share is the honest share OF WHAT WAS OBSERVED -- but at a crossing
+ *  right after a stop it is observed less often than it happens. */
 export const JUNCTION_MIN_PASSES = 10;
 
 /** A wait longer than this is a blockage or a fault, not a signal cycle; the

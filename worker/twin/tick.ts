@@ -15,10 +15,10 @@
 import { dist, toPlane } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
-import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
+import { extractEvidence, recordEvidence, type DwellDropped, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
 import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCounts, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCounts } from '../../shared/motion/plan';
+import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
 import { junctionWaitsAt } from '../../shared/motion/junction';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
@@ -55,10 +55,13 @@ export interface TickResult {
   hindsight: HindsightCounts;
   /** The same graded fixes by sign: plan ahead of the fix, within 50 m, behind (F7). */
   hindsightSign: HindsightSignCounts;
-  /** The evidence this tick mined from the fresh fixes (C1, F11), already counted into the state's pending aggregates. */
-  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[]; waits: NodeWaitEvidence[]; passes: NodePassEvidence[] };
-  /** What the planner had to intervene about this tick (F11): `twin_plan`. */
-  plan: PlanCounts;
+  /** The evidence this tick mined from the fresh fixes (C1, F11), already
+   *  counted into the state's pending aggregates, plus the dwell candidates
+   *  the stationarity gate refused (measurement only, never stored). */
+  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[]; waits: NodeWaitEvidence[]; passes: NodePassEvidence[]; dwellDropped: DwellDropped };
+  /** What the planner had to intervene about this tick, by vehicle kind
+   *  (F11): `twin_plan`, dim1 the event, dim2 the kind. */
+  plan: PlanCountsByKind;
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -137,8 +140,8 @@ export function runTick(input: TickInput): TickResult {
   // and must not grow the state it was handed.
   const dwellRecent: DwellRecent = {};
   for (const [stopId, samples] of Object.entries(input.state.dwellRecent ?? {})) dwellRecent[stopId] = [...samples];
-  const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [] };
-  const planCounts = emptyPlanCounts();
+  const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [], dwellDropped: { oneFix: 0, movedThrough: 0 } };
+  const planCounts = emptyPlanCountsByKind();
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
@@ -220,7 +223,7 @@ export function runTick(input: TickInput): TickResult {
         dwell: dwellPlanner,
         junctions,
         publishedArcS: publishedArcAt(input.state.published[track.id], track, headerSec),
-        counts: planCounts,
+        counts: planCounts[track.kind],
       });
     }
     // The register reads ZET's TripUpdates too: two trips whose next stops
@@ -242,6 +245,8 @@ export function runTick(input: TickInput): TickResult {
       learned.dwells.push(...evidence.dwells);
       learned.waits.push(...evidence.waits);
       learned.passes.push(...evidence.passes);
+      learned.dwellDropped.oneFix += evidence.dwellDropped.oneFix;
+      learned.dwellDropped.movedThrough += evidence.dwellDropped.movedThrough;
       learnedUpTo[id] = evidence.upTo;
     }
     recordEvidence(pendingLearned, learned);

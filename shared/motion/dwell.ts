@@ -46,6 +46,11 @@ import { borrowCount, borrowQuantile, LEARN_MIN_SAMPLES, type TimesProvider } fr
  *  invented one; beyond it the number stops being a dwell. */
 export const DWELL_PLAN_QUANTILE = 0.9;
 
+/** The quantile as a column heading, derived rather than written out: the
+ *  constant is tuned, and a label that said "p70" after it moved to 0.9
+ *  would be a lie on the operator's own page. */
+export const DWELL_PLAN_QUANTILE_LABEL = `p${Math.round(DWELL_PLAN_QUANTILE * 100)}`;
+
 /** Recent samples kept per platform. Thirty covers a whole rush hour on any
  *  line that runs every two minutes and still fits in the state row. */
 export const DWELL_RECENT_N = 30;
@@ -175,9 +180,10 @@ export interface DwellRow {
   /** What the table plans when nothing is measured: the override, the timetable, the default. */
   defaultSec: number;
   override: { defaultSec: number; pin: boolean; route: string | null; reason: string } | null;
-  /** The banded histogram at the median and at DWELL_PLAN_QUANTILE, or null where the cell is thin. */
+  /** The banded histogram at the median and at DWELL_PLAN_QUANTILE (the
+   *  column DWELL_PLAN_QUANTILE_LABEL names), or null where the cell is thin. */
   p50: number | null;
-  p70: number | null;
+  pPlan: number | null;
   /** Samples of the banded cell the two quantiles were read from. */
   samples: number;
   /** Samples inside the recent window. */
@@ -240,11 +246,25 @@ export function createDwellTable(input: DwellTableInput): DwellTable {
     if (list) list.push(stop.id);
     else idsByName.set(stop.name, [stop.id]);
   }
-  /** The platforms a route's own paths call at (the served lists, F8). */
+  /** The platforms a route's own paths call at (the served lists, F8), and
+   *  the union of those over every TRAM route. A stop NAME in the override
+   *  file is a place, and a place in Zagreb is usually several platforms of
+   *  several modes: "Črnomerec" is three tram platforms and a dozen bus
+   *  bays, "Dubrava" six and eight. A name-scoped entry therefore matches
+   *  only the platforms some tram path actually calls at -- the dwell table
+   *  feeds the speed estimator's per-stop charge as well as the planner, so
+   *  a terminus layover pinned onto a bus bay would push a BUS plan ahead of
+   *  its bus, which is the error the round forbids. A platform id still
+   *  matches whatever it names: an id is not a guess. */
   const servedByRoute = new Map<string, Set<string>>();
+  const servedByTram = new Set<string>();
   net.paths.forEach((path, pathIdx) => {
     const set = servedByRoute.get(path.route) ?? new Set<string>();
-    for (const entry of net.stopsOnPath(pathIdx)) set.add(entry.stop.id);
+    const isTram = net.routes.get(path.route)?.type === 0;
+    for (const entry of net.stopsOnPath(pathIdx)) {
+      set.add(entry.stop.id);
+      if (isTram) servedByTram.add(entry.stop.id);
+    }
     servedByRoute.set(path.route, set);
   });
 
@@ -252,7 +272,7 @@ export function createDwellTable(input: DwellTableInput): DwellTable {
   const unmatched: DwellOverride[] = [];
   for (const entry of overrides) {
     const byId = stopById.has(entry.stop);
-    const targets = byId ? [entry.stop] : idsByName.get(entry.stop) ?? [];
+    const targets = byId ? [entry.stop] : (idsByName.get(entry.stop) ?? []).filter((id) => servedByTram.has(id));
     const scoped = entry.route === undefined ? targets : targets.filter((id) => servedByRoute.get(entry.route!)?.has(id));
     if (scoped.length === 0) {
       unmatched.push(entry);
@@ -324,7 +344,7 @@ export function createDwellTable(input: DwellTableInput): DwellTable {
           defaultSec: defaultSec(stopId),
           override: override === null ? null : { defaultSec: override.defaultSec, pin: override.pin === true, route: override.route ?? null, reason: override.reason },
           p50: bandedAt(stopId, hourBand, dayType, 0.5),
-          p70: bandedAt(stopId, hourBand, dayType, quantile),
+          pPlan: bandedAt(stopId, hourBand, dayType, quantile),
           samples: borrowCount(aggregates.stops, (band, day) => stopKey(stopId, band, day), hourBand, dayType, minSamples),
           recent: window.length,
           lastSampleSec: window.length > 0 ? window[window.length - 1][0] : null,

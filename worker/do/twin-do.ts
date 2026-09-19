@@ -22,7 +22,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import type { OrderReport } from '../../shared/motion/order';
-import { emptyPlanCounts, PLAN_EVENTS, type PlanCounts } from '../../shared/motion/plan';
+import { emptyPlanCountsByKind, PLAN_EVENTS, type PlanCountsByKind } from '../../shared/motion/plan';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
@@ -113,8 +113,8 @@ export interface TickReport {
   learned: { edges: number; dwells: number; waits: number; passes: number };
   /** True when this tick flushed the pending aggregates into SQLite (once a minute). */
   learnedFlushed: boolean;
-  /** What the planner had to intervene about this tick (F11). */
-  plan: PlanCounts;
+  /** What the planner had to intervene about this tick, by kind (F11). */
+  plan: PlanCountsByKind;
 }
 
 /** What the cold start cost: decoding the two static assets, in milliseconds. */
@@ -159,9 +159,15 @@ function hindsightSignEntries(counts: HindsightSignCounts): MetricsEntry[] {
  *  D8 fix kept at its platform, and an ETA bound the planner refused to
  *  believe. Counters like the register's -- a tick's events, which MetricsDO
  *  sums over the hour. */
-function planEntries(counts: PlanCounts | null): MetricsEntry[] {
+function planEntries(counts: PlanCountsByKind | null): MetricsEntry[] {
   if (!counts) return [];
-  return PLAN_EVENTS.filter((event) => counts[event] > 0).map((event) => ({ event: 'twin_plan' as const, dim1: event, dim2: 'tram', count: counts[event] }));
+  const entries: MetricsEntry[] = [];
+  for (const kind of ['tram', 'bus'] as const) {
+    for (const event of PLAN_EVENTS) {
+      if (counts[kind][event] > 0) entries.push({ event: 'twin_plan', dim1: event, dim2: kind, count: counts[kind][event] });
+    }
+  }
+  return entries;
 }
 
 /** The ordering register's pass as metric cells (E3): one entry per counter
@@ -284,7 +290,7 @@ export class TwinDO extends DurableObject<Env> {
       stateBytes: 0,
       learned: { edges: 0, dwells: 0, waits: 0, passes: 0 },
       learnedFlushed: false,
-      plan: emptyPlanCounts(),
+      plan: emptyPlanCountsByKind(),
     });
 
     // A retried or early alarm inside the floor: no second fetch (R-TE8).
@@ -351,7 +357,7 @@ export class TwinDO extends DurableObject<Env> {
     feed: ReturnType<typeof decodeFeed> | null,
     nowMs: number,
     routes: ZetRoutes,
-  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: TickReport['learned']; learnedFlushed: boolean; plan: PlanCounts } {
+  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: TickReport['learned']; learnedFlushed: boolean; plan: PlanCountsByKind } {
     const headerTs = feed?.headerTs ?? prev.headerTs;
     // The joins for every trip in view: the frame's trips plus the tracks already followed.
     const tripIds = new Set<string>();

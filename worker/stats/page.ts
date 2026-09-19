@@ -3,6 +3,7 @@
 // `default-src 'none'`). Rounding and folding happen only in the City export
 // (worker/stats/export.ts); this page is where the operator sees the truth.
 import type { MetricsDailyRow } from '../metrics-do';
+import { DWELL_PLAN_QUANTILE_LABEL } from '../../shared/motion/dwell';
 import type { TwinTables } from '../do/twin-do';
 import { escapeHtml } from '../open/html';
 
@@ -131,7 +132,7 @@ function dwellTable(twin: TwinTables | null | undefined): string {
         `<td class="num">${secs(r.defaultSec)}</td>` +
         `<td class="num${r.override === null ? ' dim' : ''}">${r.override === null ? '&mdash;' : `${secs(r.override.defaultSec)}${r.override.pin ? ' (fiksno)' : ''}${r.override.route === null ? '' : ` · linija ${escapeHtml(r.override.route)}`}`}</td>` +
         `<td class="num${r.p50 === null ? ' dim' : ''}">${secs(r.p50)}</td>` +
-        `<td class="num${r.p70 === null ? ' dim' : ''}">${secs(r.p70)}</td>` +
+        `<td class="num${r.pPlan === null ? ' dim' : ''}">${secs(r.pPlan)}</td>` +
         `<td class="num${r.samples === 0 ? ' dim' : ''}">${fmt(r.samples)}</td>` +
         `<td class="num${r.recent === 0 ? ' dim' : ''}">${fmt(r.recent)}</td>` +
         `<td class="num">${clock(r.lastSampleSec)}</td>` +
@@ -143,7 +144,7 @@ function dwellTable(twin: TwinTables | null | undefined): string {
     `<h3>${heading}</h3>` +
     `<div class="scroll" tabindex="0" role="region" aria-label="${heading}"><table class="tbl"><thead><tr>` +
     `<th scope="col">Stajalište</th><th scope="col">Peron</th><th scope="col" class="num">Polazno</th><th scope="col" class="num">Ručno</th>` +
-    `<th scope="col" class="num">p50</th><th scope="col" class="num">p70</th><th scope="col" class="num">Uzoraka</th>` +
+    `<th scope="col" class="num">p50</th><th scope="col" class="num">${DWELL_PLAN_QUANTILE_LABEL}</th><th scope="col" class="num">Uzoraka</th>` +
     `<th scope="col" class="num">Nedavnih</th><th scope="col" class="num">Zadnji</th><th scope="col" class="num">Planira se</th>` +
     `</tr></thead><tbody>${body}</tbody></table></div>` +
     more
@@ -452,7 +453,7 @@ export function renderStatsPage(view: StatsView): string {
     matrixTable('Registar redoslijeda po događaju', 'Događaj', pivot(rows, 'twin_order', 'dim1', 'dim2'), 'registar još nije ništa zapisao') +
     `<h3>Zahvati planera</h3><p class="lede">Što je planer morao ispraviti, po otkucaju: <em>floor</em> je sidro koje je unutar raspršenja GPS-a iza već objavljenog plana, pa plan kreće od objavljenog luka umjesto da se vrati unatrag; <em>junction_wait</em> je čekanje upisano na križanju na kojem tramvaji doista staju; <em>stand_fix</em> je tramvaj zadržan na peronu kojeg bi staro pravilo otpustilo; <em>eta_bound_skipped</em> je ZET-ova najava „već si otišao” za prvo sljedeće stajalište koju planer nije povjerovao.</p>` +
     matrixTable('Zahvati planera po vrsti', 'Zahvat', pivot(rows, 'twin_plan', 'dim1', 'dim2'), 'planer još nije morao zahvatiti') +
-    `<h3>Tablica zadržavanja i križanja</h3><p class="lede">Ovo nisu brojači nego ono čime planer računa <em>sada</em>: za svaki peron o kojem se nešto zna polazna vrijednost (ručna, pa vozni red, pa 20 s), ručni unos iz <code>app/public/data/stop-dwell-overrides.json</code>, naučena razdioba po satu i vrsti dana (p50 i p70), koliko je uzoraka u zadnjih 90 minuta i kada je zadnji, te na kraju sekunde koje planer stvarno knjiži. Ručni unos uredi u toj datoteci i objavi — između nje i blizanca nema koraka gradnje.${view.twin && view.twin.unmatched.length > 0 ? ` <b>Unosa bez perona: ${fmt(view.twin.unmatched.length)}</b> (${escapeHtml(view.twin.unmatched.map((u) => u.stop).join(', '))}) — stajalište je preimenovano ili je u imenu tipfeler.` : ''}</p>` +
+    `<h3>Tablica zadržavanja i križanja</h3><p class="lede">Ovo nisu brojači nego ono čime planer računa <em>sada</em>: za svaki peron o kojem se nešto zna polazna vrijednost (ručna, pa vozni red, pa 20 s), ručni unos iz <code>app/public/data/stop-dwell-overrides.json</code>, naučena razdioba po satu i vrsti dana (p50 i ${DWELL_PLAN_QUANTILE_LABEL}), koliko je uzoraka u zadnjih 90 minuta i kada je zadnji, te na kraju sekunde koje planer stvarno knjiži. Ručni unos uredi u toj datoteci i objavi — između nje i blizanca nema koraka gradnje.${view.twin && view.twin.unmatched.length > 0 ? ` <b>Unosa bez perona: ${fmt(view.twin.unmatched.length)}</b> (${escapeHtml(view.twin.unmatched.map((u) => u.stop).join(', '))}) — stajalište je preimenovano ili je u imenu tipfeler.` : ''}</p>` +
     dwellTable(view.twin) +
     junctionTable(view.twin) +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
