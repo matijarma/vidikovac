@@ -169,7 +169,11 @@
 .t-prose { margin: 0; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); max-inline-size: 68ch; }
 .t-status { color: var(--tone-state-warning); }
 .t-block { display: flex; flex-direction: column; gap: var(--sp-2); }
-.t-block + .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
+/* A general sibling, not an adjacent one: the stop's arrivals block and its
+   lines block have the platform count and the map action between them, and the
+   hairline that separates two sections must not depend on nothing standing in
+   between. */
+.t-block ~ .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
 .t-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .t-fold { align-self: flex-start; }
 

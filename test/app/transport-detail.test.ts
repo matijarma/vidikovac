@@ -82,6 +82,9 @@ describe('the stop sheet says what comes next, first', () => {
   const stop = (arrivals: ArrivalRow[], arrivalsStatus: ArrivalsStatus = 'live'): string =>
     stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map([['11', 2]]), delays: new Map(), isScreenStop: false, kiosk: false, arrivals, arrivalsStatus });
 
+  /** One row's own markup, by its trip id. */
+  const rowOf = (html: string, tripId: string): string => html.split(`data-key="${tripId}|`)[1]!.split('</li>')[0]!;
+
   it('puts the arrivals section above the platform count and the lines, with a live countdown, a clock row and one note', () => {
     const html = stop([
       row({ tripId: 't0', atMs: NOW + 20_000, minutes: 0 }),
@@ -104,6 +107,32 @@ describe('the stop sheet says what comes next, first', () => {
     // The retired sentence is gone, and the platform count and lines still stand.
     expect(html).not.toContain('ZET ne objavljuje dolaske');
     expect(html).toContain('3 perona');
+  });
+
+  it('counts down for every row inside the horizon, whatever stands behind it, and keeps the clock for the rest', () => {
+    const html = stop([
+      row({ tripId: 'near', headsign: 'Črnomerec', atMs: NOW + 4 * 60_000, live: false, minutes: 4 }),
+      row({ tripId: 'far', headsign: 'Črnomerec', atMs: NOW + 14 * 60_000, live: false, minutes: null }),
+      row({ tripId: 'tracked', atMs: NOW + 4 * 60_000, live: true, minutes: 4 }),
+    ]);
+    // Inside the horizon the question is how long the wait is, and the timetable
+    // answers it too: said as a wait, marked as the timetable, with no live dot.
+    const near = rowOf(html, 'near');
+    expect(near).toContain('za 4 min');
+    expect(near).toContain('po redu vožnje');
+    expect(near).not.toContain('t-live');
+    expect(near).not.toContain('data-live');
+    // The same wait with a vehicle behind it: the dot and the live tone.
+    const tracked = rowOf(html, 'tracked');
+    expect(tracked).toContain('za 4 min');
+    expect(tracked).toContain('data-live="true"');
+    expect(tracked).toContain('aria-label="uživo"');
+    expect(tracked).not.toContain('po redu vožnje');
+    // Beyond it a countdown would be a guess dressed as a fact: 10:14 UTC is 12:14 in Zagreb.
+    const far = rowOf(html, 'far');
+    expect(far).toContain('12:14');
+    expect(far).not.toContain('za 1');
+    expect(far).toContain('po redu vožnje');
   });
 
   it('says nothing comes in the next hour when the boards are answering and empty, and names the outage when every board is down', () => {

@@ -506,15 +506,19 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
   return routes.find((r) => r.id === routeId)?.type ?? -1;
 }
 
-/** A row's time at the row's end: the countdown with the live dot where a
- *  tracked vehicle carries the trip, the clock time otherwise. `sada` at zero:
- *  a tram due in under half a minute is the one pulling in, not "za 0 min". */
+/** A row's time at the row's end. Inside the countdown horizon every row says
+ *  how long the wait is, because that is the question, and `sada` at zero: a
+ *  tram due in under half a minute is the one pulling in, not "za 0 min".
+ *  Beyond the horizon a countdown would be a guess dressed as a fact, so the
+ *  row shows the clock. What the number is worth is said beside it, not in it:
+ *  only a trip a tracked vehicle carries gets the live dot and the live tone,
+ *  and a row off the timetable alone carries "po redu vožnje" on its second
+ *  line whether it is counting down or showing a time. */
 function arrivalTime(i18n: I18n, row: ArrivalRow): string {
-  if (row.live && row.minutes !== null) {
-    const word = row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes });
-    return `<span class="t-eta" data-live="true"><span class="t-live" role="img" aria-label="${attr(i18n.t('arrivals.live'))}"></span>${esc(word)}</span>`;
-  }
-  return `<span class="t-eta"><time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time></span>`;
+  if (row.minutes === null) return `<span class="t-eta"><time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time></span>`;
+  const word = row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes });
+  const dot = row.live ? `<span class="t-live" role="img" aria-label="${attr(i18n.t('arrivals.live'))}"></span>` : '';
+  return `<span class="t-eta"${row.live ? ' data-live="true"' : ''}>${dot}${esc(word)}</span>`;
 }
 
 /** The arrivals list: the board's own row (blocks.ts signRow) with the line
