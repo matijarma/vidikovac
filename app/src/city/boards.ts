@@ -6,7 +6,9 @@
 // wants all of them at once.
 //
 // Fetching and remembering only. What the boards mean is arrivals.ts's job,
-// and when to ask is the caller's: this module never polls by itself.
+// and when to ask is the caller's: this module never polls by itself, and a
+// caller that must go quiet (a frozen session, say) simply stops calling
+// `ensure` -- the cache has no gate of its own.
 
 import type { DepartureBoard } from '../../../shared/city/types';
 
@@ -27,7 +29,9 @@ export interface BoardCache {
    *  the first answer for it has landed. */
   get(operator: BoardOperator, stopId: string): DepartureBoard | undefined;
   /** Fetch every platform whose copy is missing or past the TTL. `onChange`
-   *  fires once per platform that settled, so a surface can re-render. */
+   *  fires once per platform that settled, so a surface can re-render. Every
+   *  caller that asked for a platform is notified, not only the one whose
+   *  call started the request. */
   ensure(operator: BoardOperator, stopIds: readonly string[], onChange?: () => void): void;
   destroy(): void;
 }
@@ -53,30 +57,54 @@ export function createBoardCache(options: BoardCacheOptions = {}): BoardCache {
 
   const boards = new Map<string, DepartureBoard>();
   const times = new Map<string, number>();
-  const pending = new Set<string>();
+  /** Per in-flight platform, everyone waiting to hear that it settled. One
+   *  request serves every surface that asked for it, so one request has to
+   *  answer all of them: keeping only the first caller's callback silently
+   *  left the others un-rendered. */
+  const waiting = new Map<string, Set<() => void>>();
   let disposed = false;
 
   const keyOf = (operator: BoardOperator, stopId: string): string => `${operator}:${stopId}`;
 
   function load(operator: BoardOperator, stopId: string, onChange?: () => void): void {
     const key = keyOf(operator, stopId);
-    if (disposed || pending.has(key) || now() - (times.get(key) ?? -Infinity) < ttlMs) return;
-    pending.add(key);
-    const settle = (board: DepartureBoard): void => {
-      if (disposed) return;
-      boards.set(key, board);
-      times.set(key, now());
-      onChange?.();
-    };
-    void fetchImpl(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`, { signal: AbortSignal.timeout(timeoutMs) })
+    const listeners = waiting.get(key);
+    if (listeners) {
+      // Already in flight: join the answer rather than asking again.
+      if (onChange) listeners.add(onChange);
+      return;
+    }
+    if (disposed || now() - (times.get(key) ?? -Infinity) < ttlMs) return;
+    waiting.set(key, new Set(onChange ? [onChange] : []));
+    // An explicit controller rather than AbortSignal.timeout: the timer is
+    // then ours to stop the moment the answer is in, instead of one per
+    // request ticking on to twelve seconds after it is no longer wanted.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('schedule-timeout')), timeoutMs);
+    void fetchImpl(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('schedule-down');
         const body: unknown = await response.json();
         if (!isBoard(body)) throw new Error('schedule-malformed');
-        settle(body);
+        return body;
       })
-      .catch(() => { settle(downBoard(operator, stopId, now())); })
-      .finally(() => pending.delete(key));
+      // Every failure -- refused, unreachable, timed out, not a board -- is
+      // the same answer to a reader: this platform is down.
+      .catch(() => downBoard(operator, stopId, now()))
+      .then((board) => {
+        clearTimeout(timer);
+        const heard = waiting.get(key) ?? new Set<() => void>();
+        waiting.delete(key);
+        if (disposed) return;
+        // The board is stored BEFORE anyone is told about it. A listener that
+        // throws used to land in the catch above and demote a good board to a
+        // down placeholder, firing twice on the way; nothing a listener does
+        // can reach the store from here. One surface's render fault is its
+        // own to fix, and must not starve the next surface's callback.
+        boards.set(key, board);
+        times.set(key, now());
+        for (const listener of heard) { try { listener(); } catch { /* the surface's fault, not the cache's */ } }
+      });
   }
 
   return {
@@ -88,7 +116,7 @@ export function createBoardCache(options: BoardCacheOptions = {}): BoardCache {
       disposed = true;
       boards.clear();
       times.clear();
-      pending.clear();
+      waiting.clear();
     },
   };
 }

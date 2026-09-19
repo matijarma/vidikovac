@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBoardCache } from '../../app/src/city/boards';
 import type { DepartureBoard } from '../../shared/city/types';
 
@@ -13,12 +13,12 @@ const board = (stopId: string): DepartureBoard => ({
 function fakeFetch() {
   const calls: string[] = [];
   const pending = new Map<string, (r: { ok: boolean; body?: unknown; fail?: boolean }) => void>();
-  const impl = vi.fn((url: string, init?: { signal?: AbortSignal }): Promise<Response> => {
+  const impl = vi.fn((url: string, init: { signal: AbortSignal }): Promise<Response> => {
     calls.push(url);
     return new Promise((resolve, reject) => {
       pending.set(url, (r) => {
         if (r.fail) reject(new Error('network'));
-        else resolve({ ok: r.ok, json: async () => r.body, signal: init?.signal } as unknown as Response);
+        else resolve({ ok: r.ok, json: async () => r.body } as unknown as Response);
       });
     });
   });
@@ -31,6 +31,8 @@ function fakeFetch() {
 }
 
 const url = (stopId: string): string => `/api/city/departures?operator=zet&stop=${stopId}`;
+
+afterEach(() => { vi.useRealTimers(); });
 
 // The 60 s board memo, lifted out of the transport workspace so the phone
 // sheet, the desktop board and the kiosk share one cache instead of three.
@@ -120,10 +122,72 @@ describe('createBoardCache', () => {
     expect(changed).not.toHaveBeenCalled();
   });
 
-  it('gives every request a timeout signal, the caller\'s or the default', () => {
+  it('notifies every caller that asked for a platform, not just the first', async () => {
     const f = fakeFetch();
-    createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW, timeoutMs: 5_000 }).ensure('zet', ['100_1']);
-    const init = f.impl.mock.calls[0][1]!;
-    expect(init.signal).toBeInstanceOf(AbortSignal);
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW });
+    const sheet = vi.fn();
+    const kiosk = vi.fn();
+    // Two surfaces want the same platform while one request is in flight.
+    cache.ensure('zet', ['100_1'], sheet);
+    cache.ensure('zet', ['100_1'], kiosk);
+    expect(f.calls).toEqual([url('100_1')]);
+    await f.settle(url('100_1'), { ok: true, body: board('100_1') });
+    expect(sheet).toHaveBeenCalledTimes(1);
+    expect(kiosk).toHaveBeenCalledTimes(1);
+
+    // The listeners are spent with the request: the next one notifies only who asks again.
+    const later = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW });
+    later.ensure('zet', ['100_2'], sheet);
+    await f.settle(url('100_2'), { ok: true, body: board('100_2') });
+    expect(sheet).toHaveBeenCalledTimes(2);
+    expect(kiosk).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the board it fetched when a listener throws, and does not fire twice', async () => {
+    const f = fakeFetch();
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW });
+    const broken = vi.fn(() => { throw new Error('render blew up'); });
+    const fine = vi.fn();
+    cache.ensure('zet', ['100_1'], broken);
+    cache.ensure('zet', ['100_1'], fine);
+    await f.settle(url('100_1'), { ok: true, body: board('100_1') });
+    // The good board stands: a render fault must never demote it to a placeholder.
+    expect(cache.get('zet', '100_1')).toMatchObject({ stopId: '100_1', status: 'live' });
+    expect(broken).toHaveBeenCalledTimes(1);
+    // One surface's fault does not starve the other's callback.
+    expect(fine).toHaveBeenCalledTimes(1);
+    expect(f.calls).toHaveLength(1);
+  });
+
+  it('abandons a request at the timeout: the default one, and the one the caller set', () => {
+    vi.useFakeTimers();
+    const f = fakeFetch();
+    createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW }).ensure('zet', ['100_1']);
+    const slow = f.impl.mock.calls[0][1].signal;
+    expect(slow.aborted).toBe(false);
+    vi.advanceTimersByTime(11_999);
+    expect(slow.aborted).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(slow.aborted).toBe(true);
+
+    createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW, timeoutMs: 1_000 }).ensure('zet', ['100_2']);
+    const quick = f.impl.mock.calls[1][1].signal;
+    vi.advanceTimersByTime(999);
+    expect(quick.aborted).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(quick.aborted).toBe(true);
+  });
+
+  it('stops the timeout clock once the answer is in, so a settled request leaves no timer behind', async () => {
+    vi.useFakeTimers();
+    const f = fakeFetch();
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => NOW });
+    cache.ensure('zet', ['100_1']);
+    const signal = f.impl.mock.calls[0][1].signal;
+    await f.settle(url('100_1'), { ok: true, body: board('100_1') });
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(60_000);
+    expect(signal.aborted).toBe(false);
+  });
+
 });
