@@ -633,16 +633,16 @@ describe('the one map, through the additive adapter', () => {
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
   });
-  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s map panel and grows in step with the ground a panel shows beyond it -- more on the totem, whose panel is taller than the wall’s -- in whole pixels, never below 24, and 24 for a box not yet laid out or a phone’s band', () => {
+  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s map panel and grows in step with the ground a panel shows beyond it -- more on the totem and on a phone’s band, both taller for their width than the wall’s -- in whole pixels, never below 24, and 24 for a box not yet laid out', () => {
     expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
-    // The totem's panel: 360 x 340 px at the same 1500 m span shows 1.24 of the wall's ground, so 30.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(30);
+    // The totem's panel: 1042 x 968 px at the same 1500 m span shows 1.33 of the wall's ground, so 32.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(32);
     // The compact wall's field is a little taller than the wide one's for its width: a pixel more, not the same 24 by fiat.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(25);
+    expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(26);
     // A wall wider than 16:9 (a 3840 x 2160 panel's 3138 x 1900 field) shows less ground north to south than the design wall: the ruling's literal, never less.
     expect(labelPadding(3138, 1900, FIELD_SPAN_M)).toBe(24);
-    // The phone's band spans half the ground across and a quarter of the wall's field in all.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBe(24);
+    // The phone's band is taller than it is wide: at 1400 m across it shows half again the wall's ground north to south, so 35.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBe(35);
     expect(labelPadding(1400, 0, FIELD_SPAN_M)).toBe(24);
     expect(labelPadding(0, 0, FIELD_SPAN_M)).toBe(24);
   });

@@ -106,19 +106,18 @@ export function compositionOf(decision: Pick<LayoutDecision, 'size' | 'totem'>):
 /** The map panel's width in CSS px at each composition's design size, the
  *  camera's input before anything is laid out (kiosk/mapview.ts fieldZoom);
  *  the map host's measured width replaces it from the first paint after
- *  layout. The front page (kiosk/invitation.ts) puts the map in the bottom
- *  row's middle cell: wide, 1400 px less the column, split 1 : 1.15 : 0.75
- *  with the lines and the surroundings, about 555 px; compact, 926 px split
- *  the same, about 367; the totem's 1080 split three ways, 360; a phone's
- *  band the stage's 358. Being out by a hundred pixels moves the derived
- *  zoom by about a quarter, which is why the measurement, not this table,
- *  wins once it exists. */
-export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.freeze({ wide: 555, compact: 367, portrait: 360, handheld: 358 });
+ *  layout. The front page (kiosk/invitation.ts) gives the map the whole left
+ *  column; these are the boxes Chrome measured at each design size on 19 Sept
+ *  2026 (review.local/shots.mjs): 1250 beside the 600 px aside, 794 beside the
+ *  compact 520, the totem's full 1042 across, a phone's 356 band. Being out by
+ *  a hundred pixels moves the derived zoom by about a quarter, which is why
+ *  the measurement, not this table, wins once it exists. */
+export const FIELD_DESIGN_WIDTH: Readonly<Record<Composition, number>> = Object.freeze({ wide: 1250, compact: 794, portrait: 1042, handheld: 356 });
 
 /** The map panel's height in CSS px at each composition's design size, beside
  *  the width: together they say how much ground the panel shows, which sets
  *  the street names' collision padding (kiosk/mapview.ts labelPadding) before
- *  the map host is measured. Wide: the bottom row of a 888 px stage split
- *  1.1 : 1, about 423; compact: 624 split the same, 297; the totem's bottom
- *  row at its minimum, 340; a phone's 280 px band (kiosk.css --k-map-band). */
-export const FIELD_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = Object.freeze({ wide: 423, compact: 297, portrait: 340, handheld: 280 });
+ *  the map host is measured, and measured the same way: 870 between the wall's
+ *  header and strip, 610 at compact, the totem's upper 55 % at 968, and a
+ *  phone's 420 px band (kiosk.css --k-map-band). */
+export const FIELD_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = Object.freeze({ wide: 870, compact: 610, portrait: 968, handheld: 420 });

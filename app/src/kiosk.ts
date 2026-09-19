@@ -8,7 +8,7 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
-import { CODE_URL_BASE, codeUrl, formatCode, speakableCode } from './code';
+import { codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, publicItemKey, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
@@ -38,7 +38,7 @@ import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '.
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
-import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from './kiosk/frame';
+import { frameStrip, stripMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
@@ -47,6 +47,7 @@ import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedCo
 import { mountSetup, type SetupHandle } from './kiosk/setup';
 import { DEFAULT_STOP_ID } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
+import { tickerIndex, tickerItems, type TickerItem } from './kiosk/ticker';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
@@ -61,6 +62,8 @@ export const ESSENTIALS_IDLE_MS = 90_000;
 export const PROGRESS_STEPS = 10;
 /** A slot change crossfades the code digits: the old ones fade out beside the new for this long. */
 export const CODE_SWAP_MS = 180;
+/** A ticker item changes with a crossfade of this length; instant under reduced motion and lagano. */
+export const TICKER_SWAP_MS = 220;
 /** The MapLibre layer whose placed names the e2e counts (contract 3): the prozor profile keeps at most eight major street names in the field. */
 export const MAJOR_LABELS_LAYER = 'roads_labels_major';
 /** A down last-run answer is asked for again on the first paint this long
@@ -130,7 +133,7 @@ function shellMarkup(s: KioskStrings): string {
     <header class="k-head">
       <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)}</p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
-      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time><div class="k-weather" data-testid="kiosk-weather" hidden></div></div></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
     <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
@@ -142,24 +145,6 @@ function shellMarkup(s: KioskStrings): string {
     </section>
     <footer class="k-strip" data-testid="safety-strip"></footer>
     <div class="k-park" hidden></div>`;
-}
-
-/** The one-time provisioning URL for a screen, minted on the same base as the
- *  QR's scan URL (production, unless the entry says otherwise), the shape
- *  parseProvisionHash reads back: `/kiosk/#<beaconId>.<secret>`. */
-function provisionUrl(creds: BeaconCredentials, base: string = CODE_URL_BASE): string {
-  return `${base.replace(/\/$/, '')}/kiosk/#${creds.beaconId}.${creds.secret}`;
-}
-
-/** /kiosk/ on a phone, once a screen exists: the address that provisions the
- *  wall, as a footnote under the invitation the phone already shows. There is
- *  no separate handheld composition -- a phone gets the invitation every
- *  screen gets, drawn with the handheld tokens (kiosk.css) -- so this is an
- *  `aside` with an `h2` and the page's one `h1` stays the invitation's lead on
- *  every device (e2e/a11y.spec.ts). */
-function provisionMarkup(i18n: I18n, url: string): string {
-  return `<h2 class="k-provision-title">${escapeHtml(i18n.t('kiosk.setup.handheld'))}</h2>
-    <a class="k-provision-url" data-testid="handheld-link" href="${escapeAttribute(url)}">${escapeHtml(url)}</a>`;
 }
 
 function noticeMarkup(kind: 'expired' | 'revoked', s: KioskStrings): string {
@@ -207,7 +192,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const dateEl = q('[data-testid=kiosk-date]');
   const themeBtn = q<HTMLButtonElement>('[data-testid=kiosk-theme]');
   const clockEl = q('[data-testid=kiosk-clock]');
-  const weatherEl = q('[data-testid=kiosk-weather]');
   const stage = q('[data-testid=kiosk-stage]');
   const basics = q('[data-testid=kiosk-essentials]');
   const basicsHeading = q('#ess-title');
@@ -240,8 +224,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let swapTimer: unknown = null;
   let setup: SetupHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  /** The provisioning footnote a phone carries under the invitation. */
-  let provision: HTMLElement | null = null;
+  /** The header's news line; built when the middle is free, removed when the session pill or the return button needs it. */
+  let ticker: HTMLElement | null = null;
+  let tickerSwap: unknown = null;
+  /** What the last built list was read from: the visible copy of the sources, the city catalogue and the minute. */
+  let tickerFrom: { modules: readonly ModuleSnapshot[]; city: unknown; minute: number } | null = null;
+  let tickerList: TickerItem[] = [];
   let paired: PairedHandle | null = null;
   let presentation: ScreenPresentation | null = null;
   let acknowledgedRevision = -1;
@@ -354,21 +342,43 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clockEl.setAttribute('datetime', new Date(t).toISOString());
     }
   }
-  /** The header's weather group (D11): a condition glyph, the reading and the
-   *  sunset-then-sunrise line, hidden while dhmz-now loads or is down -- the
-   *  clock stands alone, never a dash. Shares the strip's module choice: the
-   *  session's own copy once paired, the open teaser otherwise. The one
-   *  weather on the screen: the column says what matters here, never the
-   *  weather. */
-  function paintWeather(): void {
-    const weather = headerWeather(currentSafetyModules(), s, locale, now());
-    const markup = weatherGroupMarkup(weather, s);
-    if (weatherEl.innerHTML !== markup) weatherEl.innerHTML = markup;
-    weatherEl.hidden = weather === null;
-    if (weather) weatherEl.dataset.state = weather.state;
-    else delete weatherEl.dataset.state;
+  /** The header's one line of city news (kiosk/ticker.ts): a kicker and one
+   *  sentence, the item chosen by the clock alone, crossfaded on a swap and
+   *  changed instantly under reduced motion. The middle of the header belongs
+   *  first to the session pill and the return button: while either is there
+   *  the ticker is not. The list itself is rebuilt only when the sources, the
+   *  city catalogue or the minute change; the second hand only picks from it. */
+  function paintTicker(): void {
+    const taken = sessionLabel !== null || headMid.hasAttribute('role') || headMid.querySelector('[data-testid=kiosk-stop-presentation]') !== null;
+    if (taken || phase !== 'invitation') { ticker?.remove(); ticker = null; return; }
+    const modules = currentSafetyModules();
+    const city = cityStore.snapshot();
+    const minute = Math.floor(now() / 60_000);
+    if (!tickerFrom || tickerFrom.modules !== modules || tickerFrom.city !== city || tickerFrom.minute !== minute) {
+      tickerFrom = { modules, city, minute };
+      tickerList = tickerItems(modules, city, now(), s, i18n);
+    }
+    const index = tickerIndex(tickerList.length, now());
+    if (index < 0) { ticker?.remove(); ticker = null; return; }
+    if (!ticker) {
+      ticker = document.createElement('p');
+      ticker.className = 'k-ticker';
+      ticker.dataset.testid = 'kiosk-ticker';
+      headMid.appendChild(ticker);
+    }
+    const item = tickerList[index]!;
+    if (ticker.dataset.key === item.key) return;
+    // The first item is simply there; only a change from one sentence to another is a swap.
+    const swapping = ticker.dataset.key !== undefined;
+    ticker.dataset.key = item.key;
+    ticker.innerHTML = `<span class="k-ticker-kicker">${escapeHtml(item.kicker)}</span><span class="k-ticker-text">${escapeHtml(item.text)}</span>`;
+    if (!swapping || reducedMotion || lightweight) return;
+    const swapped = ticker;
+    swapped.dataset.swap = '1';
+    if (tickerSwap !== null) clearTimer(tickerSwap);
+    tickerSwap = oneShot(() => { tickerSwap = null; delete swapped.dataset.swap; }, TICKER_SWAP_MS);
   }
-  /** The modules the strip and the header weather group both read from: the
+  /** The modules the strip and the ticker both read from: the
    *  session's own copy once paired (fresher, when it has one), the open
    *  teaser otherwise -- the same choice paintStrip has always made. */
   function currentSafetyModules(): ModuleSnapshot[] {
@@ -615,7 +625,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     invitation?.update(invitationModel());
     paired?.update(pairedContext());
     if(presentation?.target)showSessionLabel(presentation.expiresAt);
-    paintWeather();
+    paintTicker();
     paintStrip();
     paintMap();
     paintExplore();
@@ -758,7 +768,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     parkMap();
     setup?.destroy(); setup = null;
     invitation?.destroy(); invitation = null;
-    provision?.remove(); provision = null;
+    ticker?.remove(); ticker = null;
     paired?.destroy(); paired = null;
     notice?.remove(); notice = null;
   }
@@ -773,23 +783,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (next === 'setup') mountSetupPhase();
     else if (next === 'invitation') {
       invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase });
-      // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
-      if (layout.size === 'handheld' && credentials) mountProvision();
     }
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, onShell: paintCode });
     else mountNotice(next);
     paintContext();
     paintLocal();
     paintCode();
-  }
-  /** The provisioning address at the foot of a phone's stage (provisionMarkup). */
-  function mountProvision(): void {
-    if (!credentials) return;
-    provision = document.createElement('aside');
-    provision.className = 'k-provision';
-    provision.dataset.testid = 'handheld-link-block';
-    provision.innerHTML = provisionMarkup(i18n, provisionUrl(credentials, deps.codeBase));
-    stage.appendChild(provision);
   }
   function mountNotice(kind: 'expired' | 'revoked'): void {
     notice = document.createElement('section');
@@ -1150,6 +1149,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if(exploring&&now()>=exploreUntil)endExplore();
     paintClock();
     paintProgress();
+    paintTicker();
     if (presentation?.target && presentation.expiresAt !== null && rotation.serverNow() >= presentation.expiresAt) {
       presentation = { ...presentation, target: null, dataToken: undefined };
       endSession();
@@ -1188,6 +1188,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(refreshTimer);
       clearTimer(codeTimer);
       if (swapTimer !== null) { clearTimer(swapTimer); swapTimer = null; }
+      if (tickerSwap !== null) { clearTimer(tickerSwap); tickerSwap = null; }
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
       disarmExpiry();
       disarmEssentialsIdle();
