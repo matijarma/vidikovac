@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OVERLAY_DARK, OVERLAY_LIGHT, basemapLayers, styleDiff } from '../../app/src/map/basemap';
 import {
   BELOW_LABELS,
+  BODY_ZOOM,
   LAYERS,
   NETWORK_OPACITY,
   NETWORK_OPACITY_DIMMED,
@@ -16,6 +17,7 @@ import {
   SOURCES,
   WORKS_ONGOING_PHASE,
   firstSymbolLayer,
+  kindFilter,
   overlayImages,
   overlayLayers,
   pillInks,
@@ -33,6 +35,9 @@ import { DISTRICTS } from '../../app/src/kiosk/districts';
 import { ASSEMBLY_CAP, assemblyPoints, placedEvents, quakePoints, seatPoint } from '../../app/src/kiosk/mapview';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
+import { metresPerPixel } from '../../app/src/map/scale';
+import { PROJECTION_LAT_DEG } from '../../shared/motion/geo';
+import { VEHICLE_WIDTH_M } from '../../shared/motion/vehicle';
 
 const layerById = (id: string) => overlayLayers(OVERLAY_LIGHT).find((l) => l.id === id)!;
 
@@ -80,6 +85,38 @@ describe('the overlay layer list', () => {
     expect(pills.layout!['icon-rotation-alignment']).toBe('viewport');
     expect(noses.layout!['icon-rotate']).toEqual(['-', ['get', 'bearing'], 90]);
     expect(noses.layout!['icon-rotation-alignment']).toBe('map');
+  });
+
+  it('lays a vehicle body under the pills from zoom 16: a flat-ended line on its own source, right before the dots, the mode ink metres wide, dimmed with the dots and hidden with the mode', () => {
+    const layers = overlayLayers(OVERLAY_LIGHT);
+    const ids = layers.map((l) => l.id);
+    // Over the rails and the stop rings, under every dot, nose and pill.
+    expect(ids.indexOf(LAYERS.vehicleBodies)).toBe(ids.indexOf(LAYERS.vehicleDots) - 1);
+    expect(LAYERS.vehicleBodies).toBe('vehicle-bodies');
+    expect(BODY_ZOOM).toBe(16);
+    const body = layerById(LAYERS.vehicleBodies);
+    expect(body).toMatchObject({ type: 'line', source: SOURCES.bodies, minzoom: BODY_ZOOM });
+    expect(SOURCES.bodies).not.toBe(SOURCES.vehicles); // one LineString per vehicle, beside the point source the pills read
+    // A vehicle ends flat: round caps would add a width to the length.
+    expect(body.layout).toEqual({ 'line-cap': 'butt', 'line-join': 'round' });
+    expect(body.filter).toEqual(kindFilter(null));
+    expect(body.paint!['line-color']).toEqual(['match', ['get', 'kind'], 'tram', OVERLAY_LIGHT.tram, 'bus', OVERLAY_LIGHT.bus, OVERLAY_LIGHT.other]);
+    expect(body.paint!['line-opacity']).toEqual(['*', ['get', 'alpha'], 0.9]);
+    // Metres as pixels: the width doubles with every zoom, so it is one exponential ramp between two pinned zooms.
+    const width = body.paint!['line-width'] as unknown[];
+    expect(width.slice(0, 4)).toEqual(['interpolate', ['exponential', 2], ['zoom'], 16]);
+    expect(width[4]).toBeCloseTo(VEHICLE_WIDTH_M / metresPerPixel(16, PROJECTION_LAT_DEG), 9);
+    expect(width[5]).toBe(22);
+    expect(width[6]).toBeCloseTo(VEHICLE_WIDTH_M / metresPerPixel(22, PROJECTION_LAT_DEG), 9);
+    expect(width[4]).toBeCloseTo(3, 1); // 3 px at 16, 6 at 17, 12 at 18
+    expect(width[6] as number).toBeCloseTo(64 * (width[4] as number), 6);
+    // Line focus steps the other lines' bodies back with their dots, and the mode toggle hides them with their pills.
+    const lit = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'route', id: '6' } }).find((l) => l.id === LAYERS.vehicleBodies)!;
+    expect(lit.paint!['line-opacity']).toEqual(['*', ['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, VEHICLE_OPACITY_DIMMED]], 0.9]);
+    const trams = overlayLayers(OVERLAY_LIGHT, { modes: new Set([ROUTE_TYPE_TRAM]) }).find((l) => l.id === LAYERS.vehicleBodies)!;
+    expect(trams.filter).toEqual(['in', ['get', 'kind'], ['literal', ['tram']]]);
+    // The public screen's scale never widens a body: a metre is a metre on every surface.
+    expect(overlayLayers(OVERLAY_LIGHT, { scale: 2 }).find((l) => l.id === LAYERS.vehicleBodies)!.paint!['line-width']).toEqual(width);
   });
 
   it('draws the network under the marks on it: a hairline out of town, under 2.5 px in the city (section C)', () => {

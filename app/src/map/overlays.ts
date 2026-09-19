@@ -18,11 +18,17 @@
 // inside its own band alone (NOSE_MIN_ZOOM to NOSE_MAX_ZOOM, or the public
 // screen's own overlapZoom for its lower edge). The selected or followed
 // vehicle draws at every zoom. Stop names come in by rank, the busiest corners
-// first, one per named stop.
+// first, one per named stop. From BODY_ZOOM a body of the mode's one length
+// (shared/motion/vehicle.ts, built by motion/bodies.ts) lies under each pill,
+// metres wide, so the map shows how long a tram is where the street is wide
+// enough to show it.
+import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
+import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
 import { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX, pillImageId, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
+import { metresPerPixel } from './scale';
 import { sdfRing, sdfRoundedRect, sdfSquareRing, sdfTriangle, type SdfImage } from './sdf';
 
 export const SOURCES = Object.freeze({
@@ -31,6 +37,7 @@ export const SOURCES = Object.freeze({
   closures: 'closures',
   places: 'places',
   vehicles: 'vehicles',
+  bodies: 'bodies',
   screenStop: 'screen-stop',
   outline: 'outline',
 });
@@ -49,6 +56,7 @@ export const LAYERS = Object.freeze({
   stops: 'stops',
   stopsSelected: 'stops-selected',
   screenStop: 'screen-stop',
+  vehicleBodies: 'vehicle-bodies',
   vehicleDots: 'vehicle-dots',
   vehicleNoses: 'vehicle-noses',
   vehicles: 'vehicles',
@@ -89,6 +97,21 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
+/** The vehicle bodies appear. At Zagreb's latitude (map/scale.ts) a 32 m tram
+ *  is 38 px here, 77 at 17 and 154 at 18, against a 24 px two-character pill;
+ *  a 12 m bus 14, 29 and 58 px. A zoom earlier the body is shorter than the
+ *  pill over it and says nothing. Between here and NOSE_MAX_ZOOM the nose
+ *  still draws ahead of the pill, on top of the body. */
+export const BODY_ZOOM = 16;
+/** A body carries the dots' opacity at nine tenths: its confidence, stepped
+ *  back under line focus with the rest of its line, and a little of the
+ *  street still reading through a 32 m stroke. */
+export const BODY_OPACITY = 0.9;
+/** A body's width in pixels: its metres at the city's own latitude, one
+ *  exponential ramp because the ground a pixel covers halves with every zoom
+ *  (3 px at 16, 6 at 17, 12 at 18). Not scaled by the surface's symbol
+ *  scale: a metre is a metre on every screen. */
+const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM, VEHICLE_WIDTH_M / metresPerPixel(BODY_ZOOM, PROJECTION_LAT_DEG), 22, VEHICLE_WIDTH_M / metresPerPixel(22, PROJECTION_LAT_DEG)];
 /** Pill geometry in CSS px, and the cluster label's cap: hoisted to
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
@@ -643,6 +666,21 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // The screen's own stop: on the public screen the largest ring on the map
     // (R-KP4: 9 x s, a 2 x s halo), the anchor the whole picture is about.
     circle(LAYERS.screenStop, SOURCES.screenStop, { 'circle-radius': (prozor ? 9 : 7) * s, 'circle-color': p.screenStop, 'circle-stroke-color': p.halo, 'circle-stroke-width': prozor ? 2 * s : 2 }),
+    // The bodies: over the rails and the stop rings, under every dot, nose and
+    // pill. Flat-ended, because a vehicle ends flat and a round cap would add
+    // a width to the length; the pill inks, so a body is its pill's colour
+    // laid on the street; the mode filter, so the toggles hide bodies with
+    // their pills. The selected vehicle's body is in here too -- the ring
+    // marks it, and it needs no layer of its own.
+    {
+      id: LAYERS.vehicleBodies,
+      type: 'line',
+      source: SOURCES.bodies,
+      minzoom: BODY_ZOOM,
+      filter: kindFilter(modes),
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: { 'line-color': kindColor(p, 'fill'), 'line-width': BODY_WIDTH, 'line-opacity': ['*', alpha, BODY_OPACITY] },
+    },
     circle(
       LAYERS.vehicleDots,
       SOURCES.vehicles,

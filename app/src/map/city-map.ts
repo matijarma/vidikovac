@@ -20,10 +20,12 @@ import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
+import { bodiesToGeoJson } from '../motion/bodies';
 import { clusterPills, createLineColours, type Cluster, type PillPoint } from '../motion/pills';
 import LINE_COLOURS from '../data/zet-line-colours.json';
-import type { Network } from '../../../shared/motion/network';
+import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
+import { markAlpha, vehicleKind, type VehicleKind } from './vehicle-mark';
 import { tr } from '../transport/strings';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
@@ -71,11 +73,6 @@ export const SOURCE_UPDATE_HZ = 12;
 const SOURCE_UPDATE_INTERVAL_MS = 1000 / SOURCE_UPDATE_HZ;
 /** A frame that lands within a millisecond of the 12 Hz grid is that tick. */
 const PUSH_TOLERANCE_MS = 1;
-
-/** Icon opacity floor: a vehicle the model is unsure of (a single fix, a
- *  free-plane guess) still has to be visible -- the same floor the schematic
- *  uses, so both renderers read alike. */
-const MIN_ICON_ALPHA = 0.55;
 
 /** What a drawn point IS, when it is more than an untyped place. A point with
  *  no `place` keeps the one plain circle this map has always drawn, which is
@@ -162,7 +159,10 @@ export interface LineFeatureCollection {
   }[];
 }
 
-export type VehicleKind = 'tram' | 'bus' | 'other';
+/** A vehicle's kind by GTFS route type and its confidence as alpha live in
+ *  vehicle-mark.ts, shared with the body builder; the kind keeps its
+ *  long-standing home here for the pages that read it. */
+export { vehicleKind, type VehicleKind };
 
 export interface VehicleFeatureCollection {
   type: 'FeatureCollection';
@@ -180,7 +180,7 @@ export interface VehicleFeatureCollection {
       bearing: number;
       /** True when the model knows which way the vehicle faces (decision 5). */
       hasHeading: boolean;
-      /** Confidence carried as opacity, floored at MIN_ICON_ALPHA. */
+      /** Confidence carried as opacity, floored at vehicle-mark.ts's MIN_ICON_ALPHA. */
       alpha: number;
       /** Draw order (overlays.ts SORT_KEY, higher over lower): a cluster over
        *  a tram over a bus, so a busy stop never buries a tram and a merged
@@ -259,10 +259,6 @@ export function bearingOf(dir: { x: number; y: number } | null | undefined): num
   if (!dir) return 0;
   const deg = (Math.atan2(dir.x, dir.y) * 180) / Math.PI;
   return Math.round(((deg % 360) + 360) % 360);
-}
-
-export function vehicleKind(type: number): VehicleKind {
-  return type === ROUTE_TYPE_TRAM ? 'tram' : type === ROUTE_TYPE_BUS ? 'bus' : 'other';
 }
 
 /** The number on the front of the vehicle: the network's own short name,
@@ -388,7 +384,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
         routeId: v.routeId ?? '',
         bearing: bearingOf(v.heading ?? v.track),
         hasHeading: v.heading !== null,
-        alpha: MIN_ICON_ALPHA + (1 - MIN_ICON_ALPHA) * Math.min(1, Math.max(0, v.confidence)),
+        alpha: markAlpha(v.confidence),
         sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
         held: v.held === true,
         cluster: false,
@@ -901,6 +897,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // win, so 'load' consults this instead of starting unconditionally.
   let paused = false;
   let net: Network | null = null;
+  /** The same object as `net` when it carries the rail graph -- what
+   *  loadNetwork() (shared/motion/network.ts) always decodes -- typed so the
+   *  bodies can read a path's geometry; the option's type is the phase A
+   *  superset, so the graph is checked for, as the integrator checks. */
+  let graph: GraphNetwork | null = null;
   let model: Model | null = null;
   let lib: MaplibreModule | null = null;
   let map: MapApi | null = null;
@@ -943,6 +944,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let cityPaths: MapLine[] = [];
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
+  /** Whether the bodies source last received bodies rather than the empty collection; see pushBodies. */
+  let bodiesShown = false;
   let nextPushAt = -Infinity;
   let observer: MutationObserver | null = null;
   const strings = { getLocale: () => locale };
@@ -1032,8 +1035,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //               selected mark's own `vehicle-selected-nose` is deliberately
   //               not counted: it is a second layer with its own zoom range,
   //               and mixing the two would hide which of them the band moved.
+  //   data-bodies how many `vehicle-bodies` features MapLibre renders: the
+  //               body's zoom floor (overlays.ts BODY_ZOOM) and the push that
+  //               stops below it are both claims about what is on the screen.
   //
-  // Both reads come from ONE queryRenderedFeatures over those three layers --
+  // All three reads come from ONE queryRenderedFeatures over those four layers --
   // the call placedNames() already makes, scoped to the vehicles source -- on
   // MapLibre's `idle`, the one moment it has finished painting what it was
   // given. It is taken only when the answer can have changed: the camera's
@@ -1066,18 +1072,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     renderProbeKey = key;
     // Asking MapLibre about a layer the style does not carry fires an error
     // event, which onMapError logs as a bug; placedNames() guards the same way.
-    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses]
+    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies]
       .filter((id) => !m.getLayer || m.getLayer(id));
     // By feature id, so a mark queried twice (a point on a tile seam) is one
     // pill, and in id order, so the attribute is stable frame to frame.
     const pills = new Map<string, string>();
     let noses = 0;
+    let bodies = 0;
     for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
       if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
+      else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies++;
       else pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
     }
     container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
     container.dataset.noses = String(noses);
+    container.dataset.bodies = String(bodies);
   }
 
   /** `data-focus`: what line focus did, read back off the live style once the
@@ -1129,6 +1138,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
       fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
+      pushBodies(m, l);
       lastPushedSignature = signature;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
       // park, when the old grid is long behind us.
@@ -1138,6 +1148,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     }
     writeMarkProbe(m, fc);
     return changed;
+  }
+
+  /** The bodies go with the pills on the frames that push, from BODY_ZOOM up.
+   *  Below it the layer draws nothing whatever the source holds, so the
+   *  source is emptied once and then left alone -- one setData per push
+   *  again the moment the camera comes back in, not one per push for a
+   *  layer that is not drawing. */
+  function pushBodies(m: MapApi, l: MaplibreModule): void {
+    const shown = m.getZoom() >= l.BODY_ZOOM;
+    if (!shown && !bodiesShown) return;
+    m.getSource(l.SOURCES.bodies)?.setData(shown ? bodiesToGeoJson(lastDrawn, graph) : { type: 'FeatureCollection', features: [] });
+    bodiesShown = shown;
   }
 
   const loop: Loop = createLoop(draw, {
@@ -1201,6 +1223,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     ]);
     if (disposed) return;
     net = network;
+    graph = network && 'paths' in network ? (network as GraphNetwork) : null;
     model = createIntegrator(net);
     model.update(pointsToFixes(points), now());
     options.onNetwork?.(net);
@@ -1326,6 +1349,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       created.addSource(l.CITY_PATHS, geojson(linesToGeoJson(cityPaths)));
     }
     created.addSource(l.SOURCES.vehicles, geojson(empty));
+    created.addSource(l.SOURCES.bodies, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
     const palette = l.overlayPalette(theme);

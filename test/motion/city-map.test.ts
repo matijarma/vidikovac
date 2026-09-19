@@ -410,7 +410,7 @@ describe('the map for people who cannot see it (R-F5), and its credit', () => {
 });
 
 describe('the basemap and the overlays on it', () => {
-  it('builds the same-origin vector style for the document\u2019s theme at the opening zoom, puts the network and closures under the first label layer and everything else on top, one SDF image set, seven sources', async () => {
+  it('builds the same-origin vector style for the document\u2019s theme at the opening zoom, puts the network and closures under the first label layer and everything else on top, one SDF image set, eight sources', async () => {
     document.documentElement.setAttribute('data-theme-resolved', 'dark');
     const { map } = await harness();
     const style = map.options.style as { sources: Record<string, { tiles: string[] }>; name: string };
@@ -426,7 +426,8 @@ describe('the basemap and the overlays on it', () => {
     expect([...map.images.keys()]).toEqual(OVERLAY_IMAGE_IDS);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect(map.images.get('vehicle-plate-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
-    expect([...map.sources.keys()].sort()).toEqual(['closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
+    expect([...map.sources.keys()].sort()).toEqual(['bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
+    expect(map.getSource('bodies')!.data).toEqual({ type: 'FeatureCollection', features: [] });
   });
 
   it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint, zoom ranges and the street names’ padding), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
@@ -489,6 +490,71 @@ describe('the basemap and the overlays on it', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(map.paint['background']?.['background-color']).toBe(basemap.flavorFor('light').background);
     expect(map.sprite).toBe('https://zagreb.example/maps/sprites/light');
+  });
+});
+
+describe('the vehicle bodies under the pills', () => {
+  type BodyFC = { features: { geometry: { type: string; coordinates: [number, number][] }; properties: Record<string, unknown> }[] };
+  const EMPTY = { type: 'FeatureCollection', features: [] };
+
+  it('pushes one LineString per vehicle with every pill push from BODY_ZOOM up, empties the source once below it and leaves it alone until the camera comes back', async () => {
+    const { map, handle, frame, vehicles } = await harness();
+    const bodies = () => map.getSource('bodies')!;
+    map.zoom = 17;
+    handle.update([B], [CLOSURE]); // two fixes east: the facing is evident, so the body knows which way to lie
+    for (let i = 0; i < 10; i++) frame();
+    const fc = bodies().calls.at(-1) as BodyFC;
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0]!.geometry.type).toBe('LineString');
+    expect(fc.features[0]!.properties).toEqual({ id: 'vehicle:1', kind: 'tram', routeId: '6', alpha: expect.any(Number) });
+    // One tram length, on the plane the model reckons in.
+    const [a, b] = fc.features[0]!.geometry.coordinates.map(([lon, lat]) => toPlane(lon, lat));
+    expect(Math.hypot(b!.x - a!.x, b!.y - a!.y)).toBeCloseTo(32, 6);
+    // Pushed on the pills' 12 Hz grid, never on its own.
+    expect(bodies().calls.length).toBe(vehicles().calls.length);
+    expect(bodies().calls.length).toBeGreaterThan(0);
+    // Out to 15: the layer would not draw them anyway, so the source is emptied
+    // once, on the next push of the 12 Hz grid, and then skipped while the
+    // pills go on being pushed.
+    map.zoom = 15;
+    map.fire('move');
+    const before = bodies().calls.length;
+    for (let i = 0; i < 6; i++) frame();
+    expect(bodies().calls.slice(before)).toEqual([EMPTY]);
+    const emptied = bodies().calls.length;
+    const pills = vehicles().calls.length;
+    for (let i = 0; i < 12; i++) frame();
+    expect(vehicles().calls.length).toBeGreaterThan(pills);
+    expect(bodies().calls.length).toBe(emptied);
+    // Back in: the bodies return with the next push.
+    map.zoom = 16;
+    map.fire('move');
+    for (let i = 0; i < 6; i++) frame();
+    expect(bodies().calls.length).toBeGreaterThan(emptied);
+    expect((bodies().calls.at(-1) as BodyFC).features).toHaveLength(1);
+  });
+
+  it('below BODY_ZOOM from the start nothing is ever pushed to the bodies source: it was created empty and stays so', async () => {
+    const { map, handle, frame, vehicles } = await harness();
+    map.zoom = 15;
+    handle.update([B], [CLOSURE]);
+    for (let i = 0; i < 10; i++) frame();
+    expect(vehicles().calls.length).toBeGreaterThan(0);
+    expect(map.getSource('bodies')!.calls).toEqual([]);
+  });
+
+  it('data-bodies counts the bodies MapLibre rendered, from the same census as the pills and the noses', async () => {
+    const { map, container, frame } = await harness();
+    frame();
+    map.rendered = [
+      { layer: { id: 'vehicle-bodies' }, properties: { id: 'vehicle:1' } },
+      { layer: { id: 'vehicle-bodies' }, properties: { id: 'vehicle:2' } },
+      { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1', short: '6' } },
+    ];
+    map.fire('idle');
+    expect(container.dataset.bodies).toBe('2');
+    expect(container.dataset.pills).toBe('6');
+    expect(container.dataset.noses).toBe('0');
   });
 });
 

@@ -13,7 +13,9 @@ export interface XY {
   y: number;
 }
 
-const PROJECTION_LAT_DEG = 45.8;
+/** The plane's reference latitude, exported for a layer that turns metres
+ *  into pixels at the city's own latitude (app/src/map/overlays.ts). */
+export const PROJECTION_LAT_DEG = 45.8;
 const EARTH_RADIUS_M = 6378137; // WGS84 equatorial radius; good enough at city scale
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;

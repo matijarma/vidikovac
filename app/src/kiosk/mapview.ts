@@ -45,6 +45,7 @@ import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import type { ProzorOptions } from '../map/overlays';
+import { EARTH_CIRCUMFERENCE_M, metresPerPixel } from '../map/scale';
 import { vehicleFixes } from '../motion/fixes';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
@@ -74,13 +75,10 @@ export const HANDHELD_SPAN_M = 1400;
 export const FIELD_MIN_ZOOM = 13.5;
 /** ...nor past the overzoom ceiling KIOSK_MAX_ZOOM explains. */
 export const FIELD_MAX_ZOOM = KIOSK_MAX_ZOOM;
-/** Metres of equator per tile row, as MapLibre counts (512 px tiles). */
-const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
-
-/** Metres per CSS pixel at a zoom and latitude (512 px tiles, as MapLibre counts). */
-export function metresPerPixel(zoom: number, lat: number): number {
-  return (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-}
+/** The ground a pixel covers is map/scale.ts's, shared with the overlay
+ *  layers that state a width in metres; re-exported under the name this
+ *  module has always offered. */
+export { metresPerPixel };
 
 /** The zoom at which `spanM` of ground fills `widthPx` of box at `lat`, the
  *  inverse of metresPerPixel, clamped to the archive's readable range (R-KP2).
