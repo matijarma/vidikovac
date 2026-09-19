@@ -499,14 +499,18 @@ describe('the committed artefact', () => {
         }
       }
     }
-    // Each one left is allowlisted by the two platforms' names, with a reason.
-    const allowed = overrides.longLegs as { from: string; to: string; reason: string }[];
+    // Each one left is allowlisted by its route and its two platforms, with a
+    // reason: the same detour appearing on a third line would still fail.
+    const allowed = overrides.longLegs as { route: string; from: string; to: string; reason: string }[];
+    expect(allowed.every((entry) => typeof entry.route === 'string' && entry.route.length > 0)).toBe(true);
     expect(allowed.every((entry) => entry.reason.length > 60)).toBe(true);
     expect(long).toEqual([
       '6 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
       '9 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
     ]);
-    for (const leg of long) expect(allowed.some((entry) => leg.includes(`${entry.from} -> ${entry.to}`)), leg).toBe(true);
+    for (const leg of long) {
+      expect(allowed.some((entry) => leg.startsWith(`${entry.route} `) && leg.includes(`${entry.from} -> ${entry.to}`)), leg).toBe(true);
+    }
 
     // And the three crossings that were noded are nodes: route 13 turns out
     // of Šubićeva into Kralja Zvonimira, and route 6 out of the southbound
@@ -793,5 +797,97 @@ describe('noding a crossing a pattern needs', () => {
     expect(net.graphHash).toMatch(/^[0-9a-f]{16}$/);
     expect(net.graphHash).toBe(graphHashOf(edgesOf(net)));
     expect((await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).graphHash).not.toBe(net.graphHash);
+  });
+});
+
+// F8c review: the same two tracks crossing, but with the east-west one drawn
+// the OTHER way, so turning onto it at the crossing heads away from the stop
+// the leg has to reach. The crossing is still found -- it is a real 90-degree
+// meeting of two edges that pass within reach of the leg's platforms -- and
+// then pruned, because no path turns there. That is the branch where nothing
+// is kept: the artefact must ship the plain graph AND the plain graph's stop
+// links, and the leg that still detours must fail the build unless the
+// overrides file names it.
+const XP_NS: [number, number][] = [[2, 600], [1, 200], [-1, -600]]; // crosses y = 0 at x = 0.5
+const XP_WE: [number, number][] = [[-600, 0], [600, 0]]; // west to east: the turn leads away from X_b
+const XP_BY: [number, number][] = [[1, 200], [-900, 200], [-900, 0], [-600, 0]]; // joins the east-west track's START
+const XP_STOPS = [
+  { id: 'X_a', name: 'Sjever', ...xjLonLat(1, 300) },
+  { id: 'X_b', name: 'Zapad', ...xjLonLat(-300, 0) }, // reachable only the long way round, crossing or no crossing
+];
+const XP_ALLOWED = {
+  longLegs: [{ route: 'XQ', from: 'Sjever', to: 'Zapad', reason: 'Test: the only crossing between them leads the other way, so no node can express this turn.' }],
+};
+
+/** `withPattern: false` drops the shapeless route, so no leg is reported, no
+ *  crossing is looked for and the graph is derived exactly once -- the plain
+ *  reading of the same rails to compare the stop links against. */
+function makePrunedZip(opts: { withPattern?: boolean } = {}): Uint8Array {
+  const withPattern = opts.withPattern !== false;
+  const rows = (id: string, pts: [number, number][]) =>
+    pts.map(([x, y], i) => { const p = xjLonLat(x, y); return `${id},${p.lat},${p.lon},${i + 1},\n`; }).join('');
+  return makeZip([
+    { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nXP,0,"94","Crta s oblikom",,0,,,\nXQ,0,"95","Crta bez oblika",,0,,,\n', method: 8 },
+    {
+      name: 'trips.txt',
+      data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\nXP,wd,xp_ns,,,0,,XP_ns\nXP,wd,xp_we,,,1,,XP_we\nXP,wd,xp_by,,,0,,XP_by\n' + (withPattern ? 'XQ,wd,xq_1,,,0,,\n' : ''),
+      method: 8,
+    },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows('XP_ns', XP_NS)}${rows('XP_we', XP_WE)}${rows('XP_by', XP_BY)}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + XP_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    {
+      name: 'stop_times.txt',
+      data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' + (withPattern ? 'xq_1,08:00:00,08:00:00,X_a,1,,,\nxq_1,08:05:00,08:05:00,X_b,2,,,\n' : ''),
+      method: 8,
+    },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('a crossing no pattern turns at', () => {
+  it('is pruned, leaves the plain graph and ITS stop links in the artefact, and the leg it did not repair fails the build unless the overrides file allows it', async () => {
+    // Without an allowlist entry the build refuses the leg by name and says
+    // where to allow it -- the condition the whole repair is held to.
+    await expect(buildNetwork(makePrunedZip(), { diagramBusCount: 0 })).rejects.toThrow(
+      /Sjever -> Zapad.*gtfs-shapes-overrides\.json/s,
+    );
+    await expect(buildNetwork(makePrunedZip(), { diagramBusCount: 0, overrides: { longLegs: [] } })).rejects.toThrow(/still route past 2x the straight line/);
+    // An entry whose route does not match is no entry at all.
+    await expect(
+      buildNetwork(makePrunedZip(), { diagramBusCount: 0, overrides: { longLegs: [{ ...XP_ALLOWED.longLegs[0], route: 'XP' }] } }),
+    ).rejects.toThrow(/Sjever -> Zapad/);
+
+    const net = await buildNetwork(makePrunedZip(), { diagramBusCount: 0, overrides: XP_ALLOWED });
+    // One crossing was found and none kept: nothing turns there.
+    expect(net.report.junctionsConsidered).toBe(1);
+    expect(net.report.junctions).toEqual([]);
+    expect(net.report.longLegs).toEqual([]);
+    expect(net.report.longLegsAllowed).toEqual([
+      { path: expect.stringContaining('path:XQ:0:'), route: 'XQ', from: 'Sjever', to: 'Zapad', along: expect.any(Number), straight: expect.any(Number), allowed: XP_ALLOWED.longLegs[0].reason },
+    ]);
+    expect(net.edges.from).toHaveLength(4); // the plain graph, not the six-edge one the prune pass looked at
+
+    // ...and the stop links index THAT graph. Against the same rails read
+    // once, with no pattern to report a leg and so no second derivation at
+    // all: the wire is identical stop for stop.
+    const plain = await buildNetwork(makePrunedZip({ withPattern: false }), { diagramBusCount: 0 });
+    expect(plain.report.junctionsConsidered).toBe(0);
+    expect(net.stops.id).toEqual(plain.stops.id);
+    expect(net.stops.onEdge).toEqual(plain.stops.onEdge);
+    expect(net.stops.on).toEqual(plain.stops.on);
+    expect(net.graphHash).toBe(plain.graphHash);
+
+    // And measured, not just compared: every link lands on the edge it names,
+    // within the geometric radius of the stop it belongs to.
+    const stops = stopsOf(net);
+    for (const stop of stops) {
+      expect(stop.onEdge.length, `stop ${stop.id} lost its rails`).toBeGreaterThan(0);
+      for (const [edge, metres] of stop.onEdge) {
+        const plane = edgePoints(net, edge);
+        const here = toMetres(XP_STOPS.find((s) => s.id === stop.id)!.lon, XP_STOPS.find((s) => s.id === stop.id)!.lat);
+        expect(distanceToPolyline(here, plane), `stop ${stop.id} on edge ${edge}`).toBeLessThanOrEqual(STOP_SHAPE_MAX_METRES);
+        expect(metres, `arc of ${stop.id} on edge ${edge}`).toBeLessThanOrEqual(polylineLength(plane) + 1);
+      }
+    }
   });
 });

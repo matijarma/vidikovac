@@ -1683,19 +1683,27 @@ export async function buildNetwork(zipBuf, opts = {}) {
           return wire;
         });
     };
+    // Held here, not written onto the shared `stops` rows: this derivation may
+    // be the one on a graph the build goes on to discard (the prune pass
+    // below), and an edge index from a graph that was not shipped is a stop
+    // sitting on the wrong rail, or on no rail at all. The chosen derivation's
+    // links are copied onto the rows once, after the graph is settled.
+    const stopOnEdge = [];
+    const stopOn = [];
     for (let si = 0; si < stops.length; si++) {
-      stops[si].onEdge = encodeEdgeLinks(edgeLinks[si]);
+      stopOnEdge.push(encodeEdgeLinks(edgeLinks[si]));
       let prev = 0;
       const byShape = new Map();
       for (const link of shapeLinks[si]) if (!byShape.has(link.shape)) byShape.set(link.shape, link.frac);
-      prev = 0;
-      stops[si].on = [...byShape]
-        .sort((a, b) => a[0] - b[0])
-        .map(([shape, frac]) => {
-          const wire = [shape - prev, Math.round(frac * BUS_ON_FRAC_SCALE)];
-          prev = shape;
-          return wire;
-        });
+      stopOn.push(
+        [...byShape]
+          .sort((a, b) => a[0] - b[0])
+          .map(([shape, frac]) => {
+            const wire = [shape - prev, Math.round(frac * BUS_ON_FRAC_SCALE)];
+            prev = shape;
+            return wire;
+          }),
+      );
     }
 
     // --- Served stops (F8): per path, the platforms its own trips call at, in
@@ -1961,7 +1969,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
     }
     servedDropped.sort((a, b) => a.path.localeCompare(b.path) || a.stop.localeCompare(b.stop));
 
-    return { edgeUnits, shapes, planeByShapeIdx, paths, trimmed, unroutable, longLegs, unreachableAllowed, servedProjected, servedUnordered, servedDropped };
+    return { edgeUnits, shapes, planeByShapeIdx, stopOn, stopOnEdge, paths, trimmed, unroutable, longLegs, unreachableAllowed, servedProjected, servedUnordered, servedDropped };
   }
 
   // --- F8c: node the crossings the reported long legs need, and only those.
@@ -2108,6 +2116,12 @@ export async function buildNetwork(zipBuf, opts = {}) {
   }
 
   const { edgeUnits, shapes, planeByShapeIdx, paths, trimmed, unroutable, unreachableAllowed, servedProjected, servedUnordered, servedDropped } = derived;
+  // The graph is settled: the stops take the links of THAT derivation, and of
+  // no other one the prune pass may have made along the way.
+  for (let si = 0; si < stops.length; si++) {
+    stops[si].onEdge = derived.stopOnEdge[si];
+    stops[si].on = derived.stopOn[si];
+  }
 
   // --- The octilinear diagram: one line per shape of every diagram-cut route.
   const rawLines = [];
