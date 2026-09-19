@@ -689,9 +689,9 @@ export interface CityMapOptions {
    *  stop rings are small at city zoom. Default HIT_TOLERANCE_PX. */
   hitTolerancePx?: number;
   /** Which basemap this surface reads: 'prozor' for the public screen, whose
-   *  ground is two landuse tones under hairline streets with the neighbourhood
-   *  names promoted and every label sized from a stated viewing geometry
-   *  (map/basemap.ts). Default 'default'. */
+   *  ground is two landuse tones under hairline streets, with no POI, no
+   *  neighbourhood name and every label that remains sized from a stated
+   *  viewing geometry (map/basemap.ts). Default 'default'. */
   basemapProfile?: BasemapProfile;
   /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. Changed live with setProzor. */
   prozor?: ProzorOptions;

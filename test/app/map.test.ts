@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { districtBySlug } from '../../app/src/kiosk/districts';
-import { CITY_WINDOW, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
 import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
 import * as basemap from '../../app/src/map/basemap';
 import {
@@ -324,6 +324,21 @@ describe('the field camera and the paired camera', () => {
     // The same window is what the field view hands back for a screen with neither.
     const none = fieldView({ stop: null, district: null, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M });
     expect(none).toEqual({ ...cityWindowView(1300, 880), emphasis: KIOSK_EMPHASIS, outline: true });
+  });
+
+  it('fits a configured district\u2019s own rings through the window\u2019s arithmetic: its middle, the tighter axis, the same clearance', () => {
+    // A box a shade over a kilometre each way, in a field with room for it.
+    const ring: [number, number][] = [[15.96, 45.8], [15.98, 45.8], [15.98, 45.81], [15.96, 45.81], [15.96, 45.8]];
+    const fit = outlineView({ id: 'x', polygons: [[ring]] }, 1300, 880);
+    expect(fit.center).toEqual([15.97, 45.805]);
+    const ppm = 1 / metresPerPixel(fit.zoom, 45.805);
+    const acrossPx = ((15.98 - 15.96) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((45.805 * Math.PI) / 180) * ppm;
+    const upPx = ((45.81 - 45.8) / 360) * EARTH_CIRCUMFERENCE_M * ppm;
+    // The tighter axis touches the clearance, the looser one has room to spare.
+    expect(Math.max(acrossPx / (1300 - 2 * CITY_WINDOW_PADDING_PX), upPx / (880 - 2 * CITY_WINDOW_PADDING_PX))).toBeCloseTo(1, 6);
+    expect(CITY_WINDOW_PADDING_PX).toBe(24);
+    // Never past the overzoom ceiling: a pinhead of a quarter does not take the camera to z19.
+    expect(outlineView({ id: 'x', polygons: [[[[15.97, 45.8], [15.9701, 45.8], [15.9701, 45.8001], [15.97, 45.8], [15.97, 45.8]]]] }, 1300, 880).zoom).toBe(FIELD_MAX_ZOOM);
   });
 
   it('frames a configured district on its seat until its outline lands, and a configured stop keeps its own centred camera', () => {

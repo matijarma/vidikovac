@@ -529,7 +529,7 @@ export interface BasemapStyleOptions {
   /** false drops every `places_*` layer (city, region, country names): a kvart-sized thumbnail has no room for "Zagreb" over its streets. Default true. */
   placeLabels?: boolean;
   /** 'prozor' draws the public screen's ground: two landuse tones, hairline
-   *  streets, faint blocks, the neighbourhood names promoted, and nothing that
+   *  streets, faint blocks, no POI and no neighbourhood name, and nothing that
    *  cannot reach the readability floor; 'default' (the phone, the desk, the
    *  kvart thumbnail) is the house pass alone. */
   profile?: BasemapProfile;

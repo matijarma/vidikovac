@@ -131,8 +131,8 @@ export function busesVisible(zoom: number): boolean {
 }
 
 /** The screen is the one surface read from three metres, so it is the one
- *  surface on the prozor basemap: two landuse tones, hairline streets, the
- *  neighbourhood names kept, no POIs and no minor labels (map/basemap.ts). */
+ *  surface on the prozor basemap: two landuse tones, hairline streets, no
+ *  POIs, no minor labels and no neighbourhood names (map/basemap.ts). */
 export const KIOSK_BASEMAP_PROFILE: BasemapProfile = 'prozor';
 
 /** Which kinds of city point the kiosk lights, both phases (R-KP9): placed
@@ -548,7 +548,9 @@ export function kvartOutline(slug: string | null | undefined): MapOutline | null
 export interface KioskView extends KioskMapView {
   zoom: number;
   emphasis: readonly PlaceKind[];
-  /** The quarter's dashed outline is always drawn on the kiosk (R-KP9). */
+  /** The kiosk's camera never suppresses the quarter's dashed outline: what
+   *  decides whether one is drawn is whether the screen was configured for a
+   *  gradska cetvrt at all (requestKioskMap). */
   outline: true;
 }
 
@@ -768,7 +770,10 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   if (route) points = points.filter(point => point.routeId === route);
   if (input.stop) points.push({...stopPlace(input.stop),...(input.city?{title:''}:{})});
   const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', field.zoom >= CITY_DETAIL_ZOOM));
+  /** The frame is a neighbourhood, not the whole city: the details that only
+   *  make sense close up (the pharmacy's street address) are worth their room. */
+  const closeUp = field.zoom >= CITY_DETAIL_ZOOM;
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp));
   if(input.city){
     // Exploring, a person has asked a question, and discover() answers it with
     // the few places a group or a query is about, named. Otherwise the window
