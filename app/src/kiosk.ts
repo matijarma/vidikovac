@@ -515,9 +515,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     disarmEssentialsIdle();
     if (basics.hidden) return;
     basics.hidden = true;
+    showStage();
+    if (restoreFocus) element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')?.focus();
+  }
+  /** The stage back from under a full-screen overlay -- the basics panel or
+   *  Postavke. Both hide it the same way and both must give it back the same
+   *  way, because what happens next is not the same: the basics panel closes
+   *  into a screen that was already drawn, while Postavke closes on the DO's
+   *  answer and the very next thing the kiosk does is move the camera. */
+  function showStage(): void {
     stage.hidden = false;
     if (mapContainer && mapContainer.parentElement !== park) resumeMap();
-    if (restoreFocus) element.querySelector<HTMLButtonElement>('[data-testid=kiosk-essentials-open]')?.focus();
   }
 
   // --- The one map and the local content --------------------------------------
@@ -534,10 +542,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     park.appendChild(mapContainer);
     mapAdapter.handle()?.pause();
   }
-  /** Motion may run again only if the feed allows it: the hold is re-asserted after every resume. */
+  /** The map's box is only real while the stage is on screen. An overlay hides
+   *  the stage outright, so for as long as one is open MapLibre measures a box
+   *  of nothing -- and a camera moved against that box puts its subject about a
+   *  third of the field from the middle instead of in it. Postavke closes on
+   *  exactly that beat (applyScreen: the panel closes, then paintMap pushes the
+   *  new view), so every resume re-measures first, the same way a re-parented
+   *  container does. Motion may run again only if the feed allows it: the hold
+   *  is re-asserted after every resume. */
   function resumeMap(): void {
     const handle = mapAdapter.handle();
     if (!handle) return;
+    handle.resize?.();
     handle.resume();
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
@@ -588,9 +604,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     container.inert=phase!=='invitation'||Boolean(presentation?.target);
     mapContainer = container;
     if (container.parentElement !== host) {
+      // The box changed while the container sat outside the layout; resumeMap re-measures it.
       host.appendChild(container);
-      // The box changed while the container sat outside the layout.
-      mapAdapter.handle()?.resize?.();
       resumeMap();
     }
     element.dataset.live = '1';
@@ -902,8 +917,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       forget: startOver,
       onOpen: () => { stage.hidden = true; mapAdapter.handle()?.pause(); },
       onClose: (restoreFocus) => {
-        stage.hidden = false;
-        if (mapContainer && mapContainer.parentElement !== park) resumeMap();
+        showStage();
         if (restoreFocus) settingsBtn.focus();
       },
       setTimeout: oneShot,

@@ -1735,6 +1735,45 @@ describe('the field, the column and the one map', () => {
     expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [seat.lon, seat.lat] }));
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Maksimir');
   });
+  // The camera above is pushed on the beat Postavke closes, and while the
+  // panel was open the stage -- and with it the map's box -- was hidden. A
+  // MapLibre transform measured behind the panel is 0 x 0, and a move against
+  // it lands the subject about a third of the field off centre (seen on the
+  // real map: correct after a reload, wrong after a save). The order is the
+  // whole fix, so the order is what this case holds.
+  it('re-measures the map before it moves it when Postavke closes: a box behind the panel is no box at all', async () => {
+    const order: string[] = [];
+    const handle = {
+      update: vi.fn(), destroy: vi.fn(), setFeedState: vi.fn(),
+      pause: () => { order.push('pause'); },
+      resume: () => { order.push('resume'); },
+      resize: () => { order.push('resize'); },
+      setView: vi.fn(() => { order.push('setView'); }),
+    };
+    const k = mount({ stored: STORED_CITY, mapFactory: vi.fn(() => handle) as never });
+    await flush();
+    q(k.root, '[data-testid=kiosk-settings]')!.click();
+    await flush();
+    // The panel is over the stage and the map is held.
+    expect(order).toContain('pause');
+    expect(q(k.root, '.k-stage')!.hidden).toBe(true);
+    const box = q(k.root, '[data-testid=kiosk-settings-panel]')!;
+    const chosen = q(box, 'input[name=settings-stop][value=106_1]') as HTMLInputElement;
+    chosen.checked = true;
+    chosen.dispatchEvent(new Event('change', { bubbles: true }));
+    q(box, '[data-testid=settings-save]')!.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledWith('106_1', 'zagreb');
+    order.length = 0;
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'zagreb' });
+    await flush();
+    expect(box.hidden).toBe(true);
+    expect(handle.setView).toHaveBeenCalled();
+    expect(order).toContain('resize');
+    expect(order).toContain('setView');
+    expect(order.indexOf('resize')).toBeLessThan(order.indexOf('setView'));
+    // And the stage is back, so the box the resize read is the real one.
+    expect(q(k.root, '.k-stage')!.hidden).toBe(false);
+  });
 });
 
 // T4.4: /kiosk/ opened on a phone. A handheld (kiosk/layout.ts, below
