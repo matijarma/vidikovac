@@ -167,12 +167,13 @@ export const QUAKE_RADIUS_PER_MAG_PX = 3;
 export interface OverlayImage { id: string; image: SdfImage }
 
 /** The public screen's overlay set (plan D4, R-KP4): present, the tram network
- *  is the figure (the `figure` palette keys, 3 to 5 px), the bus lines and the
- *  stops off the screen's routes step aside, the screen's stop is the largest
- *  mark on the map, the seat is never lit, and the nose's lower edge and the
- *  stop names follow the field's own zoom (R-KP2). Absent, every surface draws
- *  exactly as before. (Trams as plates and buses as pills began here under D4
- *  and are now every surface's rule: MARK_IMAGE.) */
+ *  is a thin neutral rail (the `rail` palette key, 1.2 to 3 px on the kiosk),
+ *  the bus lines and the stops off the screen's routes step aside, the
+ *  screen's stop is the largest mark on the map, the seat is never lit, and
+ *  the nose's lower edge and the stop names follow the field's own zoom
+ *  (R-KP2). Absent, every surface draws exactly as before. (Trams as plates
+ *  and buses as pills began here under D4 and are now every surface's rule:
+ *  MARK_IMAGE.) */
 export interface ProzorOptions {
   /** Which network lines are drawn; the kiosk passes ['tram']. */
   networkKinds: readonly ('tram' | 'bus')[];

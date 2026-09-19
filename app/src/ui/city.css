@@ -10,6 +10,8 @@
 .city-row-main{display:grid;gap:var(--sp-1);min-width:0}
 .city-row strong{font-size:var(--type-body);line-height:1.35}
 .city-row-value{color:var(--tone-events);font-variant-numeric:tabular-nums;font-weight:700}
+/* BAJS availability: the digits stay the row's own ink (the teal fails 4.5:1 as text on every surface, test/app/contrast.test.ts); a small dot before the figure carries --tone-bike instead, so the list and the map agree on one colour for the mode without a text-contrast failure (owner ruling, round F "kiosk window"). */
+.city-bike-count::before{content:'';display:inline-block;inline-size:.4rem;block-size:.4rem;margin-inline-end:.4rem;border-radius:50%;background:var(--tone-bike);vertical-align:.12em}
 .city-kicker{font-size:var(--type-secondary);color:var(--tone-events);font-weight:700}
 .city-meta{display:block;font-size:var(--type-secondary);color:var(--tone-text-muted);line-height:1.45}
 .city-browse,.city-detail{display:grid;gap:var(--sp-3);min-width:0}

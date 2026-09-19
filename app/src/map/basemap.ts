@@ -286,9 +286,10 @@ const DARK_OVERRIDES: Partial<Flavor> = {
 
 // --- The prozor ground (plan D3, D12; R-KP3) --------------------------------
 //
-// Under the figure the public screen draws over it (the tram rails, the
-// vehicles, the screen's stop: map/overlays.ts), the basemap is the ground and
-// nothing on it competes. Upstream paints landuse as eleven layers from twenty
+// Under what the public screen draws over it -- the tram network's own rail,
+// the vehicle marks and the screen's own stop dots (the `figure` palette key:
+// map/overlays.ts) -- the basemap is the ground and nothing on it competes.
+// Upstream paints landuse as eleven layers from twenty
 // flavour keys; here the whole of it collapses onto two tones -- one green for
 // everything planted, the canvas for everything else -- with the buildings
 // one step off the canvas as faint blocks. Applied over the house palette
@@ -733,7 +734,8 @@ const zoomSize = (...stops: number[]): ZoomExpr => ['interpolate', ['linear'], [
 /** Line widths in CSS px across the field's own zoom range (13.5…15.5, the
  *  clamp of kiosk/mapview.ts's fieldZoom): a hairline, a line, a heavier
  *  line. Under 1 px MapLibre still draws a crisp translucent hairline; above
- *  it the majors stay thinner than the 3 to 5 px rails of the figure. */
+ *  it the majors stay thinner than the kiosk's own 1.2 to 3 px tram rail
+ *  (`rail`, overlays.ts's tramNetwork). */
 const PROZOR_MINOR_WIDTH = zoomSize(13.5, 0.8, 15.5, 1.2);
 const PROZOR_MAJOR_WIDTH = zoomSize(13.5, 1.6, 15.5, 2.4);
 const PROZOR_HIGHWAY_WIDTH = zoomSize(13.5, 2, 15.5, 3);
