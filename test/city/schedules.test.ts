@@ -53,18 +53,27 @@ describe('rolling GTFS import',()=>{
     expect(Date.parse(board.departures[0].at)).toBe(now-14*60_000);
   });
 
-  it('counts its twelve rows from the first one still inside the window, so the future is not starved',()=>{
+  // The twelve rows are twelve rows of FUTURE. The scheduled past rides on top
+  // of that count rather than eating into it: it is there so a late trip has a
+  // row to be matched to, and a busy platform must not pay for it with the
+  // departures a rider is actually waiting for.
+  it('keeps twelve future rows at a one-minute headway, with the scheduled past on top',()=>{
     const day='2026-09-18';
-    // A platform every two minutes: seven rows of scheduled past, and the cap
-    // still leaves the rider five rows of future.
-    const runs=Array.from({length:20},(_,i):[number,number,string,string,string,string]=>[1,11*3600+46*60+i*120,`t${i}`,'r','1','Sesvete']);
+    const runs=Array.from({length:40},(_,i):[number,number,string,string,string,string]=>[1,11*3600+46*60+i*60,`t${i}`,'r','1','Sesvete']);
     const part={schema:1 as const,operator:'zet' as const,generatedAt:'2026-09-18T00:00:00Z',days:[day],validUntil:'2026-09-19T04:00:00Z',
       stops:{a:{name:'Trg',lon:15.97,lat:45.81,runs}}};
     const now=scheduleInstant(day,12*3600);
     const board=departuresFrom(part,'zet','a',now);
-    expect(board.departures).toHaveLength(12);
+    const future=board.departures.filter(d=>Date.parse(d.at)>=now);
+    const past=board.departures.filter(d=>Date.parse(d.at)<now);
+    expect(future).toHaveLength(12);
+    expect(future[0].tripId).toBe('t14');
+    // Fourteen minutes of past at this headway, none of it older than the window.
+    expect(past).toHaveLength(14);
+    expect(past.every(d=>Date.parse(d.at)>=now-DEPARTURES_PAST_WINDOW_MS)).toBe(true);
+    // Sorted as one list, past first.
+    expect(board.departures.map(d=>d.at)).toEqual([...board.departures].sort((x,y)=>x.at.localeCompare(y.at)).map(d=>d.at));
     expect(board.departures[0].tripId).toBe('t0');
-    expect(board.departures.filter(d=>Date.parse(d.at)>=now)).toHaveLength(5);
   });
 
   it('rejects malformed, unsupported and expired archives',async()=>{
