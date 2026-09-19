@@ -8,7 +8,11 @@
 //      (F2, design D);
 //   3. line focus hides the rest of the network and lights the selected line
 //      in ZET's own colour (F5, design C);
-//   4. the switch puts the network back and remembers the choice.
+//   4. the switch puts the network back and remembers the choice;
+//   5. from zoom 16 a tram is drawn as a body under its number (vehicle
+//      bodies, September 2026): none at 15, one per tram at 17;
+//   6. two trams of one number passing each other merge into one pill with an
+//      arrow each way, on the city map at every zoom and on the diagram.
 //
 // The evidence is the same shape motion.spec.ts uses: a `zet-rt` snapshot
 // carrying a plan, injected at the browser's network layer, over the real
@@ -17,18 +21,20 @@
 //
 // The assertions read the read-only `data-*` attributes the city map writes
 // for exactly this (`data-frames` has stood there since T11): `data-zoom`,
-// `data-pills`, `data-noses` and `data-focus`. `data-pills` and `data-noses`
-// are read off the SCREEN -- one queryRenderedFeatures over the two pill
-// layers and the nose layer, taken when MapLibre goes idle -- so "both
-// numbers are there" is a statement about what was drawn, not about the
-// collection that was handed to it. See the probe block in
-// app/src/map/city-map.ts for what each costs and when it is taken.
+// `data-pills`, `data-noses`, `data-bodies`, `data-twoway` and `data-focus`.
+// All but the first and last are read off the SCREEN -- one
+// queryRenderedFeatures over the pill, nose, body and two-way layers, taken
+// when MapLibre goes idle -- so "both numbers are there" is a statement about
+// what was drawn, not about the collection that was handed to it. See the
+// probe block in app/src/map/city-map.ts for what each costs and when it is
+// taken.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
-import { twoTramSnapshot, TWO_TRAM_ROUTES } from './schema-fixtures';
+import type { ModuleSnapshot } from '../worker/feed/schema';
+import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
 
 const root = resolve(import.meta.dirname, '..');
 /** The table scripts/zet-schema.mjs writes beside the artefact (F5): what ZET
@@ -47,28 +53,32 @@ function numbersIn(pills: string | null): string[] {
   return (pills ?? '').split('|').filter(Boolean).flatMap((label) => label.split('·')).sort();
 }
 
-function probe(page: Page, name: 'zoom' | 'pills' | 'noses' | 'focus'): Promise<string | null> {
+function probe(page: Page, name: 'zoom' | 'pills' | 'noses' | 'bodies' | 'twoway' | 'focus'): Promise<string | null> {
   return page.locator(MAP).getAttribute(`data-${name}`);
 }
 
 /**
- * The dashboard with two trams on one real path, on a clock that runs.
+ * The dashboard with a `zet-rt` scene over the real geometry, on a clock
+ * that runs, open on the transport group with the scene's numbers on screen.
  *
  * `installExperienceFixture` installs Playwright's fake clock and stops it;
  * every scenario here drives the MapLibre camera, whose eases and whose 12 Hz
  * push both live on rAF, so the clock is resumed and the snapshot is rebuilt
  * at fulfil time (the route registered last wins) -- the plan is then always
  * fresh however long the run takes, and the two marks never stop 20 m apart.
+ *
+ * `numbers` is what the pill census must list before anything is measured:
+ * every line number the scene's pills carry, as numbersIn() reads them.
  */
-async function openTwoTrams(page: Page, routes: readonly [string, string] = TWO_TRAM_ROUTES): Promise<void> {
+async function openScene(page: Page, scene: (time: number) => ModuleSnapshot, numbers: readonly string[]): Promise<void> {
   const snapshots = await experienceSnapshots();
-  snapshots['zet-rt'] = twoTramSnapshot(FIXTURE_NOW.getTime(), routes);
+  snapshots['zet-rt'] = scene(FIXTURE_NOW.getTime());
   await installExperienceFixture(page, snapshots);
   const started = Date.now();
   await page.route('**/api/data/zet-rt', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify(twoTramSnapshot(FIXTURE_NOW.getTime() + (Date.now() - started), routes)),
+    body: JSON.stringify(scene(FIXTURE_NOW.getTime() + (Date.now() - started))),
   }));
   // The basemap's vector tiles live in an R2 bucket that is empty on a
   // developer's machine, so every one of them is a slow 503 from the single
@@ -93,7 +103,12 @@ async function openTwoTrams(page: Page, routes: readonly [string, string] = TWO_
   // says nothing until the style is up, the model has stepped and MapLibre
   // has painted.
   await expect.poll(() => probe(page, 'pills').then(numbersIn), { timeout: 30_000 })
-    .toEqual([routes[0], routes[1]].sort());
+    .toEqual([...numbers].sort());
+}
+
+/** Round F's pair: two trams on one real path, 20 m apart, two numbers. */
+function openTwoTrams(page: Page, routes: readonly [string, string] = TWO_TRAM_ROUTES): Promise<void> {
+  return openScene(page, (time) => twoTramSnapshot(time, routes), routes);
 }
 
 /** One MapLibre keyboard step in (+1 zoom, no rounding), settled. */
@@ -123,6 +138,9 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   // it is at, with no rounding, so 14 -> 15 -> 16 -> 17.
   await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('14.00');
   await zoomIn(page, '15.00');
+  // Below the body's floor (overlays.ts BODY_ZOOM 16) a 32 m tram is shorter
+  // than the pill over it, so no body is drawn -- and none is pushed either.
+  await expect.poll(() => probe(page, 'bodies'), { timeout: 20_000 }).toBe('0');
   await zoomIn(page, '16.00');
   await zoomIn(page, '17.00');
   // Both numbers on the map, 20 m apart at ~0.83 m per px, counted from the
@@ -135,6 +153,9 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   // Past the band's upper edge (overlays.ts NOSE_MAX_ZOOM 16.5) the rails say
   // the direction themselves, so no nose is drawn at all.
   await expect.poll(() => probe(page, 'noses'), { timeout: 20_000 }).toBe('0');
+  // And each tram lies on its rail as a body of the one tram length: two
+  // bodies, whatever the two pills over them merged into.
+  await expect.poll(() => probe(page, 'bodies'), { timeout: 20_000 }).toBe('2');
 
   // And back into the band the way a reader gets there: pick the line, which
   // fits its whole nine kilometres and so zooms well out, then one of its
@@ -173,5 +194,42 @@ test('line focus draws one line in ZET ink, and the switch puts the network back
   // The whole network is back, and the selected line keeps ZET's own ink.
   await expect.poll(() => probe(page, 'focus'), { timeout: 20_000 }).toBe(`${ROUTE_A} visible ${colour}`);
   expect(await page.evaluate(() => localStorage.getItem('kajima:line-focus:v1'))).toBe('false');
+  expect(errors).toEqual([]);
+});
+
+test('two trams of one number passing each other read as one pill with an arrow each way, on the map and on the diagram', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  // One number: the pair merges into a single "6" at every zoom here, so the
+  // census lists the line once (pills.ts clusterLabel folds equal numbers).
+  await openScene(page, opposedTramSnapshot, [TWO_TRAM_PATH_ROUTE]);
+  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('14.00');
+
+  // Nothing is selected, so neither tram is held out of the merge; the two
+  // face opposite ways along the same street, so the one merged mark carries
+  // the fore arrow (`data-twoway` counts the fore layer alone).
+  await zoomIn(page, '15.00');
+  await expect.poll(() => probe(page, 'twoway'), { timeout: 20_000 }).toBe('1');
+  await zoomIn(page, '16.00');
+  await zoomIn(page, '17.00');
+  // Above the nose band the arrows stay: the rails cannot say which way a
+  // merged pair goes. The single nose keeps to its band, so none is drawn.
+  await expect.poll(() => probe(page, 'twoway'), { timeout: 20_000 }).toBe('1');
+  await expect.poll(() => probe(page, 'noses'), { timeout: 20_000 }).toBe('0');
+
+  // The same pair on the diagram, through the switch the way schema.spec.ts
+  // throws it. The two directions of one line share one artwork line with
+  // opposite signs, so the merged mark's members head against each other
+  // there too (schema-paint.ts clusterSchemaMarks).
+  await page.locator('.t-map-menu > summary').click();
+  const toggle = page.getByTestId('map-mode-toggle');
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('.t-map-menu > summary').click();
+  await expect(page.getByTestId('schema-vehicles')).toBeVisible();
+  await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'ready');
+  await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(2);
+  await expect.poll(() => page.getByTestId('schema-map').getAttribute('data-twoway'), { timeout: 20_000 }).toBe('1');
   expect(errors).toEqual([]);
 });

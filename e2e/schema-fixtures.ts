@@ -59,6 +59,32 @@ const twoTramReference = matched.find(s => s.name === TWO_TRAM_STOP) ?? referenc
 /** A few metres short of the stop, so both marks sit on it rather than past it. */
 const twoTramStart = Math.max(0, twoTramReference.s - 30);
 
+/** Where the pair's own path ends, as the feed would write it. */
+const twoTramHeadsign = matched.at(-1)?.name ?? '6';
+
+/** One tram item on a real path, `runM` metres along it in the plan's 90 s
+ *  (0 is a tram that stands). The snapshot envelope around it is the same
+ *  for every scene here. */
+function tramItem(id: string, routeId: string, pathIndex: number, s: number, runM: number, headsign: string, stamp: string): ModuleSnapshot['items'][number] {
+  const p = net.paths[pathIndex];
+  const [itemLon, itemLat] = toLonLat(net.toPathPoint(pathIndex, s));
+  return {
+    id, module: 'zet-rt', kind: 'vehicle', tier: 'open',
+    title: `Tramvaj ${routeId}`, at: stamp,
+    geo: { type: 'Point', coordinates: [itemLon, itemLat] },
+    data: { routeId, routeType: 0, confidence: .9, speed: runM / 90, headsign },
+    motion: { path: p.id, plan: [[0, s], [90, Math.min(p.len, s + runM)]] },
+  };
+}
+
+function snapshotOf(stamp: string, items: ModuleSnapshot['items']): ModuleSnapshot {
+  return {
+    module: 'zet-rt', tier: 'open', status: 'live', fetchedAt: stamp, sourceUpdatedAt: stamp,
+    attribution: { text: 'ZET, test evidence over committed geometry', url: 'https://www.zet.hr', licence: 'Otvorena dozvola' },
+    items,
+  };
+}
+
 /**
  * Two trams on one real path, TWO_TRAM_GAP_M apart, creeping forwards
  * together so the gap between them never changes. Same rule as
@@ -67,21 +93,42 @@ const twoTramStart = Math.max(0, twoTramReference.s - 30);
  */
 export function twoTramSnapshot(time: number, routes: readonly [string, string] = TWO_TRAM_ROUTES): ModuleSnapshot {
   const stamp = new Date(time).toISOString();
-  const headsign = matched.at(-1)?.name ?? '6';
-  const item = (routeId: string, nth: number): ModuleSnapshot['items'][number] => {
-    const s = twoTramStart + nth * TWO_TRAM_GAP_M;
-    const [itemLon, itemLat] = toLonLat(net.toPathPoint(index, s));
-    return {
-      id: `vehicle:round-f-${nth + 1}`, module: 'zet-rt', kind: 'vehicle', tier: 'open',
-      title: `Tramvaj ${routeId}`, at: stamp,
-      geo: { type: 'Point', coordinates: [itemLon, itemLat] },
-      data: { routeId, routeType: 0, confidence: .9, speed: TWO_TRAM_RUN_M / 90, headsign },
-      motion: { path: path.id, plan: [[0, s], [90, Math.min(path.len, s + TWO_TRAM_RUN_M)]] },
-    };
-  };
-  return {
-    module: 'zet-rt', tier: 'open', status: 'live', fetchedAt: stamp, sourceUpdatedAt: stamp,
-    attribution: { text: 'ZET, test evidence over committed geometry', url: 'https://www.zet.hr', licence: 'Otvorena dozvola' },
-    items: [item(routes[0], 0), item(routes[1], 1)],
-  };
+  return snapshotOf(stamp, routes.map((routeId, nth) =>
+    tramItem(`vehicle:round-f-${nth + 1}`, routeId, index, twoTramStart + nth * TWO_TRAM_GAP_M, TWO_TRAM_RUN_M, twoTramHeadsign, stamp)));
+}
+
+/** The same line's path the other way through the pair's stop, and where on
+ *  it the first tram's own spot falls. The two directions' rails run a few
+ *  metres across the street from each other (shared/motion/network.ts: the
+ *  other platform is 3 m away), so a tram put here shares the first one's
+ *  pill box at every zoom the round reads. */
+const opposedIndex = net.paths.findIndex((p, i) => p.route === path.route && p.direction !== path.direction && matchSchemaPath(schema, net, i).placeable);
+if (opposedIndex < 0) throw new Error('Schema E2E: no real line 6 path the other way');
+const opposedProjection = net.projectOntoPath(opposedIndex, net.toPathPoint(index, twoTramStart));
+const opposedHeadsign = matchSchemaPath(schema, net, opposedIndex).stops.at(-1)?.name ?? path.route;
+/** How far the other direction's rail may lie from the first tram for the
+ *  pair to still be "at the same place": a street's width of tram tracks,
+ *  well inside the 24 px pill box at zoom 17 (0.42 m/px) and a loud failure
+ *  if a rebuilt network ever routes the return through another street. */
+const OPPOSED_MAX_ACROSS_M = 10;
+if (opposedProjection.d > OPPOSED_MAX_ACROSS_M) {
+  throw new Error(`Schema E2E: the line 6 return path is ${opposedProjection.d.toFixed(1)} m from the pair's spot`);
+}
+
+/**
+ * Two trams of ONE number at one spot, each on its own direction of the same
+ * real line: the owner's passing-at-a-stop case, which the city map and the
+ * diagram both merge into a single "6" whose members face opposite ways. Both
+ * stand still -- moving, they would part at two walking paces and the merge
+ * would last five seconds at zoom 17, and the fixture's own refresh (the
+ * snapshot is rebuilt at fulfil time) would then pull each mark back against
+ * the integrator's no-reverse rule. A standing tram keeps its heading: the
+ * integrator reads it off the rails, not off the speed.
+ */
+export function opposedTramSnapshot(time: number): ModuleSnapshot {
+  const stamp = new Date(time).toISOString();
+  return snapshotOf(stamp, [
+    tramItem('vehicle:opposed-1', path.route, index, twoTramStart, 0, twoTramHeadsign, stamp),
+    tramItem('vehicle:opposed-2', path.route, opposedIndex, opposedProjection.s, 0, opposedHeadsign, stamp),
+  ]);
 }

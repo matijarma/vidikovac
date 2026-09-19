@@ -149,7 +149,8 @@ Ručna tablica je **`app/public/data/stop-dwell-overrides.json`**, imovina koja 
 | `JUNCTION_ZONE_M` / `JUNCTION_STOP_SHARE` / `JUNCTION_WAIT_QUANTILE` / `JUNCTION_MIN_PASSES` / `MAX_JUNCTION_WAIT_S` (`junction.ts`, F11) | 60 m / 0,4 / 0,5 / 10 / 300 s | Šezdeset metara je otprilike gdje ZET-ov signal stoji pred križanjem, plus dva rasipanja GPS-a za očitanje koje javlja da vozilo stoji. Ispod udjela 0,4 čekanje je iznimka i knjižiti ga značilo bi zadržati šest planova od deset iza tramvaja koji su prošli bez zaustavljanja (prolaz na 0,25 knjižio je 21 % više čekanja za 0,5 % regresija i 0,7 % križanja, uz ocjenu po predznaku istu do desetine boda). Knjiži se **medijan**, ne 0,9 kao kod zadržavanja, jer je čekanje već uvjetovano time da se stalo -- inače bi se isti plan nagnuo kasno dvaput. Deset prolazaka je ista granica koju učenje traži za svaki histogram. Čekanje dulje od 300 s je zapreka, ne ciklus semafora. |
 | `SILENCE_HOLD_S` / `SILENCE_HALFLIFE_S` / `EVICT_S` (`plan.ts`) | 30 / 60 / 300 s | Tri otkucaja tišine su obično kašnjenje; potom se pouzdanost prepolavlja svake minute i gasi na pet, kad se vozilo izbacuje (R-F2 nepromijenjen). |
 | `CONFIDENCE_ON_GEOMETRY` / `CONFIDENCE_SINGLE_FIX` / `CONFIDENCE_FREE_CAP` (`plan.ts`) | 0,9 / 0,6 / 0,5 | Spoj na graf s poviješću je gotovo siguran; jedno očitanje na geometriji već zna smjer (spoj s indeksom); slobodna ravnina nikad ne prelazi pola. |
-| `HEADWAY_M` / `SILENT_AFTER_S` (`order.ts`) | 35 m / 20 s | Jedan tramvaj dug: TMK 2200 je 32 m, Crotramov niskopodni 35 m preko odbojnika. Vozilo koje šuti dva otkucaja feeda ima ustajao dokaz i nikoga ne sputava. |
+| `VEHICLE_LENGTH_M` / `VEHICLE_WIDTH_M` (`shared/motion/vehicle.ts`) | 32 m tramvaj, 12 m autobus / 2,5 m | Jedna duljina po vrsti, ne modeli flote: TMK 2200 je 32 m; solo ZET-ov autobus 12 m (zglobni su 18, vlasnik je odabrao jedan broj). Ista se duljina crta pod oznakom od zumiranja 16 i ulazi u razmak reda; širina je tijelo crte pod pločicom. Autobusi razmaka nemaju, jer se pretječu. |
+| `HEADWAY_M` / `SILENT_AFTER_S` (`order.ts`) | duljina tramvaja + 3 m = 35 m / 20 s | Jedan tramvaj plus odbojnici: `VEHICLE_LENGTH_M.tram` (32 m) i 3 m, koliko je Crotramov niskopodni dulji preko odbojnika. Vrijednost je ostala 35, pa ponavljanje ne zna za promjenu. Vozilo koje šuti dva otkucaja feeda ima ustajao dokaz i nikoga ne sputava. |
 | `ORDER_ESTABLISH_M` / `ORDER_WITNESSES` (`order.ts`, E3) | 60 m / 2 | ZET-ov GPS pada unutar tridesetak metara od tračnice na kojoj je, pa je 60 m dva rasipanja i šum ga ne može izmisliti između dvaju tramvaja koji stoje nos uz rep. Jedno čitanje je čitanje, dva uzastopna su dokaz: pisanje iz jednog čitanja je upravo ono lepršanje koje je stari parni zakon proizvodio svaki put kad bi se dva plana križala (D5). |
 | `CONCESSION_FIXES` / `CONCESSION_NEAR_STOP_M` / `SWAP_LIMIT_M` (`order.ts`, R-TE52) | 3 / 40 m / 300 m | Tri proturječna svježa sljedbenikova očitanja uz posluženo stajalište ili kraj staze su stvarna zamjena: nigdje drugdje tramvaj ne silazi s jednog kolosijeka. Odnos u kojem je sljedbenikovo očitanje više od dva razmaka stajališta ispred vođina nije zamjena nego odnos koji je prestao značiti (vođa je pod istim brojem vozila počeo iduću vožnju na početku kruga), pa se odbacuje i uspostavlja iznova -- na živom feedu je sljedbenik šest kilometara dalje ovako bio zadržavan na luku nula minutama (16. rujna). |
 | `WITNESS_TTL_S` (`order.ts`) | 60 s | Svjedoci moraju biti **uzastopna** svježa očitanja, pa stariji ionako ne može ničemu doprinijeti; bez ovoga bi dan vrijedan svakog tramvaja koji je ikad prošao pokraj svakog drugog jahao u retku stanja bez svrhe. |
@@ -245,6 +246,33 @@ pravilom skupina i s prstenom oko skupine.
 ispod toga oznake su pregusto da bi se smjer čitao, iznad toga svaki tramvaj sjedi na svojoj tračnici i
 smjer se vidi iz same pruge. Javni zaslon donju granicu uzima iz vlastitog zumiranja polja (R-KP2).
 Odabrano ili praćeno vozilo crta se na svakom zumiranju, ali i njegov nos ostaje u istom pojasu.
+
+**Tijelo vozila.** Od zumiranja `BODY_ZOOM` = 16 svako vozilo pod svojom oznakom nosi tijelo: crtu široku
+`VEHICLE_WIDTH_M` = 2,5 m i dugu `VEHICLE_LENGTH_M` -- 32 m za svaki tramvaj, 12 m za svaki autobus
+(`shared/motion/vehicle.ts`). Nisu to modeli flote nego jedna duljina po vrsti: karta izgleda kao da zna koliko
+je tramvaj dug. Tijelo je **centrirano na oznaci**, jer nitko ne zna gdje na vozilu sjedi antena, pa nijedan
+kraj nije pouzdaniji od drugoga. Tramvajsko tijelo prati krivulju svoje tračnice (isječak staze
+`polyline.slice` oko luka `s`, na okretištu odrezan), autobusno je ravan odsječak duž smjera -- 12 m se ne
+savija vidljivo -- a oznaka koja ne zna kamo leži tijela nema. Širina i duljina su u metrima, ne u pikselima:
+`line-width` raste s `metresPerPixel` (`app/src/map/scale.ts`), pa je tramvaj 38 px na 16, 77 px na 17 i
+154 px na 18, autobus 14, 29 i 58 px, uz pločicu od 24 px; zumiranje ranije tijelo bi bilo kraće od pločice nad
+njim i ne bi govorilo ništa. Tijelo nosi tintu svoje vrste, prigušuje se s „samo ovom linijom” i nestaje s
+prekidačem vrste kao i pločica; ispod `BODY_ZOOM` izvor se gurne prazan jednom i dalje preskače. Ista je
+duljina i **najmanji razmak** interpolacije: `HEADWAY_M` = duljina tramvaja + 3 m, na žici (zakon reda) i na
+klijentu (strop sljedbenika), pa dva tijela nikad ne ulaze jedno u drugo. Autobusi tog zakona nemaju, jer se
+pretječu. Shema tijela **ne crta**: dijagram nije u mjerilu i jedinica po metru mijenja se na svakom
+zagradku stajališta, pa bi 32 m od dionice do dionice disalo.
+
+**Skupina koja se mimoilazi.** Dva tramvaja istog broja spojena u jednu oznaku i dalje su jedna pločica „6”
+s prstenom skupine, i po tome se od jednog tramvaja razlikuju samo prstenom. Kad se članovi voze u
+**suprotnim smjerovima** (dva člana sa znanim smjerom razmaknuta više od `TWO_WAY_MIN_DEG` = 120°),
+oznaka dobiva mali trokut nosa sa svake strane, duž pruge u oba smjera (`vehicle-twoway-fore` i `-aft`,
+isti trokut kao nos, drugi zaokrenut za 180°). Crta se **na svakom zumiranju** od `PILL_ZOOM` naviše, i
+iznad pojasa nosa, jer tračnica ne može reći kamo ide spojeni par. Skupina u istom smjeru ne mijenja
+ništa. Na shemi vrijedi isto: smjer vožnje po dionici (`track × sign`, samo kad integrator zna smjer)
+putuje s oznakom, skupina je dvosmjerna kad je skalarni umnožak dvaju smjerova negativan, a slikar uz rub
+pločice crta dva trokuta nosovih razmjera (`NOSE_LENGTH_PX` × `NOSE_WIDTH_PX` iz `pills.ts`) u tinti
+pločice s oreolom papira.
 
 **Nazivi stajališta vodoravno.** Na shemi nazivi teku vodoravno i presijecaju obojene linije na prstenu
 stajališta, a oznake vozila se crtaju **preko** teksta (vlasnikova odluka od 18. rujna, potvrđena protiv

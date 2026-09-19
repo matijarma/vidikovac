@@ -582,6 +582,23 @@ describe('the vehicle bodies under the pills', () => {
     expect(container.dataset.pills).toBe('6');
     expect(container.dataset.noses).toBe('0');
   });
+
+  it('a body across a tile seam is one body: the census counts vehicles, not the pieces MapLibre cut a line into', async () => {
+    const { map, container, frame } = await harness();
+    frame();
+    // queryRenderedFeatures answers per tile, so a 32 m line lying over a
+    // seam comes back once from each side -- the same feature twice.
+    map.rendered = [
+      { layer: { id: 'vehicle-bodies' }, properties: { id: 'vehicle:1' } },
+      { layer: { id: 'vehicle-bodies' }, properties: { id: 'vehicle:1' } },
+      { layer: { id: 'vehicle-bodies' }, properties: { id: 'vehicle:2' } },
+      { layer: { id: 'vehicle-twoway-fore' }, properties: { id: 'cluster:1,2' } },
+      { layer: { id: 'vehicle-twoway-fore' }, properties: { id: 'cluster:1,2' } },
+    ];
+    map.fire('idle');
+    expect(container.dataset.bodies).toBe('2');
+    expect(container.dataset.twoway).toBe('1');
+  });
 });
 
 describe('the two-way arrows on an opposed merge', () => {

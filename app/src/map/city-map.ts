@@ -1060,14 +1060,17 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //               selected mark's own `vehicle-selected-nose` is deliberately
   //               not counted: it is a second layer with its own zoom range,
   //               and mixing the two would hide which of them the band moved.
-  //   data-bodies how many `vehicle-bodies` features MapLibre renders: the
+  //   data-bodies how many vehicles `vehicle-bodies` renders a body for: the
   //               body's zoom floor (overlays.ts BODY_ZOOM) and the push that
   //               stops below it are both claims about what is on the screen.
-  //   data-twoway how many `vehicle-twoway-fore` features MapLibre renders:
-  //               one per opposed merge on the screen. The fore layer alone --
-  //               the aft one draws the same marks turned about, and counting
-  //               both would say two for one pair. data-noses keeps to
-  //               `vehicle-noses`, so the nose band's edges are still read
+  //               By vehicle, not by feature: MapLibre answers per tile, and
+  //               a 32 m line over a tile seam comes back once from each side
+  //               (the round-F pair at zoom 17 read three bodies for two).
+  //   data-twoway how many opposed merges `vehicle-twoway-fore` renders an
+  //               arrow for, by mark id for the same reason. The fore layer
+  //               alone -- the aft one draws the same marks turned about, and
+  //               counting both would say two for one pair. data-noses keeps
+  //               to `vehicle-noses`, so the nose band's edges are still read
   //               off one layer.
   //
   // All of these come from ONE queryRenderedFeatures over those layers --
@@ -1105,22 +1108,23 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // event, which onMapError logs as a bug; placedNames() guards the same way.
     const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies, l.LAYERS.vehicleTwoWayFore]
       .filter((id) => !m.getLayer || m.getLayer(id));
-    // By feature id, so a mark queried twice (a point on a tile seam) is one
-    // pill, and in id order, so the attribute is stable frame to frame.
+    // By feature id, so a mark queried twice (a point on a tile seam, a line
+    // across one) is one pill, one body, one arrow; the pills in id order, so
+    // the attribute is stable frame to frame.
     const pills = new Map<string, string>();
+    const bodies = new Set<string>();
+    const twoWay = new Set<string>();
     let noses = 0;
-    let bodies = 0;
-    let twoWay = 0;
     for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
       if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
-      else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies++;
-      else if (feature.layer.id === l.LAYERS.vehicleTwoWayFore) twoWay++;
+      else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies.add(String(feature.properties.id));
+      else if (feature.layer.id === l.LAYERS.vehicleTwoWayFore) twoWay.add(String(feature.properties.id));
       else pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
     }
     container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
     container.dataset.noses = String(noses);
-    container.dataset.bodies = String(bodies);
-    container.dataset.twoway = String(twoWay);
+    container.dataset.bodies = String(bodies.size);
+    container.dataset.twoway = String(twoWay.size);
   }
 
   /** `data-focus`: what line focus did, read back off the live style once the
