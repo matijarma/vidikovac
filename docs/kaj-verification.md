@@ -1335,6 +1335,8 @@ Isti okviri, prije (`ee94037` **s povratnom vezom**) i poslije (F11):
 | poznati smjer | 100,0 % | 100,0 % | drži | *100,0 %* |
 | otkucaj p50 / p95 | 14,44 / 24,87 ms | 32,92 / 49,07 ms | p50 raste | *13,86 / 49,62 ms* |
 
+**Popravak I2 iz završnog pregleda grane (svjedok iz TripUpdatea više ne nadglasava očitanja koja mu proturječe), isti prozor i ista naredba:** ustupci 77 → **58**, zamjene 32 → **27**, vidljiva križanja 5.895 → **3.175** (−46,1 %), prekršaji redoslijeda prema očitanjima 1.884 → **313** (−83,4 %), preticanja 17 → **1**, regresije 19.996 → 19.645 (−1,8 %), držanja 14.282 → 13.737, 30 s ispred 15,9 → 15,8 % — ZET-ov `next_stop` ide stajalište ispred zakašnjelog tramvaja, pa je par u kojem se najava i dva očitanja razilaze proturječje, a ne bolji dokaz.
+
 #### Gdje plan još uvijek bježi ispred tramvaja
 
 Cilj E4 traži udio „50 m ili više ispred” na 30 s od 10 % ili niže. F11 daje **15,9 %**. Ograničenja
