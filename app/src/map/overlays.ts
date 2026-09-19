@@ -203,6 +203,12 @@ export interface ProzorOptions {
    *  field of twice the ground still places at most eight names (contract 3);
    *  symbol-spacing is no lever for that count and stays the ruling's. */
   labelPadding: number;
+  /** Ruling 29: false drops the promoted major street names outright
+   *  (basemap.ts roads_labels_major). The promotion to a flat 22 px is sized
+   *  for the wall's 2.8 km field; on a picture of the whole city those same
+   *  names are the loudest thing on it and the route plates have to share
+   *  their pixels. Default true -- only the kiosk's far window turns it off. */
+  majorStreetNames?: boolean;
 }
 
 /** Every SDF image the overlays reference, generated once per map. One pill

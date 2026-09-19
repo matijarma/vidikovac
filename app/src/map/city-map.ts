@@ -1773,7 +1773,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  a silent regression on the surface that flips theme twice a day. The
    *  kiosk set's street-name padding rides along (basemap.ts roads_labels_major). */
   function basemapOptions(): BasemapStyleOptions {
-    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding } : {}) };
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding, majorStreetNames: prozor.majorStreetNames !== false } : {}) };
   }
 
   /** Re-derives the basemap for the current theme and options and applies what moved: a face flip, a locale switch, a changed prozor set. */

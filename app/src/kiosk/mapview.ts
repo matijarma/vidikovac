@@ -157,13 +157,23 @@ export const STOP_LABEL_MIN_RANK = 4;
  *  half readable. Under this zoom, therefore, only the busiest corners are
  *  named; a quarter (z14.3) and a stop (z15.5) are close enough that the
  *  ranked set is the picture's, and they keep rank 4. */
-export const STOP_LABEL_THIN_ZOOM = 13.5;
+export const THIN_NAMES_ZOOM = 13.5;
 export const STOP_LABEL_MIN_RANK_FAR = 6;
 export const OVERLAP_ZOOM_MARGIN = 0.1;
 
-/** Which rank carries a name at this field zoom (STOP_LABEL_THIN_ZOOM). */
+/** Which rank carries a name at this field zoom (THIN_NAMES_ZOOM). */
 export function stopLabelMinRank(fieldZoomNow: number): number {
-  return fieldZoomNow < STOP_LABEL_THIN_ZOOM ? STOP_LABEL_MIN_RANK_FAR : STOP_LABEL_MIN_RANK;
+  return fieldZoomNow < THIN_NAMES_ZOOM ? STOP_LABEL_MIN_RANK_FAR : STOP_LABEL_MIN_RANK;
+}
+
+/** Ruling 29: whether the basemap's promoted major street names are drawn at
+ *  all (basemap.ts roads_labels_major). Their promotion to a flat 22 px is
+ *  derived for the wall's 2.8 km field; the whole-city window is four times
+ *  that ground and the same names read as its subject, over the route plates
+ *  that are it. Below the same line Ruling 28 thins the stop names on, the
+ *  street names go entirely; from a quarter's frame up nothing changes. */
+export function majorStreetNames(fieldZoomNow: number): boolean {
+  return fieldZoomNow >= THIN_NAMES_ZOOM;
 }
 
 export type FeedState = 'live' | 'stale' | 'down';
@@ -724,7 +734,7 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  so the stop's routes, the measured field's threshold, its padding and the
  *  camera's own band reach the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: stopLabelMinRank(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: stopLabelMinRank(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
 }
 
 export interface KioskMapInput {

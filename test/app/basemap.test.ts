@@ -424,6 +424,17 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       const wider = byId(basemapLayers(theme, { profile: 'prozor', labelPadding: 48 }), 'roads_labels_major');
       expect(wider.layout!['text-padding']).toBe(48);
       expect(wider.layout!['symbol-spacing']).toBe(360);
+      // Ruling 29: every size above is derived for the wall's 2.8 km field, so
+      // on a window four times that ground the names go rather than shrink --
+      // a 22 px street name there is the picture's subject, over the plates
+      // that are it. Only that layer goes: the ground, the streets themselves
+      // and the Sava's own labels are what the window is read from.
+      const far = basemapLayers(theme, { profile: 'prozor', majorStreetNames: false });
+      expect(far.map((l) => l.id)).not.toContain('roads_labels_major');
+      expect(far.map((l) => l.id)).toContain('water_label_lakes');
+      expect(far.map((l) => l.id)).toEqual(layers.map((l) => l.id).filter((id) => id !== 'roads_labels_major'));
+      // The default is unchanged, and so is the profile without the option.
+      expect(basemapLayers(theme, { profile: 'prozor', majorStreetNames: true }).map((l) => l.id)).toEqual(layers.map((l) => l.id));
       expect(street.layout!['text-font']).toEqual([MAP_FONTS.medium]);
       expect(PROZOR_MAJOR_ROAD_DETAILS).toEqual(['motorway', 'trunk', 'primary', 'secondary']);
       const filter = JSON.stringify(street.filter);

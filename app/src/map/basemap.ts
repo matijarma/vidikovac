@@ -538,6 +538,11 @@ export interface BasemapStyleOptions {
    *  it for a field that shows more ground than the wall's
    *  (overlays.ts ProzorOptions.labelPadding). */
   labelPadding?: number;
+  /** Ruling 29: false drops `roads_labels_major` from the prozor profile.
+   *  The promotion below is derived for a field 2.8 km across; a field that
+   *  holds the whole city reads those 22 px names as its subject, over the
+   *  route plates that are. Default true. */
+  majorStreetNames?: boolean;
 }
 
 // --- Reading a map from three metres ---------------------------------------
@@ -795,7 +800,7 @@ function street(layer: StyleLayerLike, color: string, opacity: number, width: Zo
  * Ilica five times; and it keeps the water labels at the promoted sizes,
  * because the Sava is the best orientation cue this city has.
  */
-function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number): StyleLayerLike | null {
+function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number, majorStreetNames: boolean): StyleLayerLike | null {
   if (prozorDrops(layer.id)) return null;
   const streets = PROZOR_STREETS[theme];
   if (PROZOR_MINOR_ROADS.has(layer.id)) return street(layer, streets.minor, streets.minorOpacity, PROZOR_MINOR_WIDTH);
@@ -817,6 +822,13 @@ function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, lab
       // Allotments and playgrounds at upstream's 0.7 would be a third tone between the green and the ground.
       return { ...layer, paint: { ...(layer.paint ?? {}), 'fill-opacity': 1 } };
     case 'roads_labels_major':
+      // Ruling 29: everything below is derived for the wall's 2.8 km field.
+      // A field that holds the whole city (Črnomerec to Maksimir, z12.7) is
+      // four times that ground, and the same 22 px names become the picture's
+      // subject -- the route plates, which ARE the subject, end up sharing
+      // their pixels with a street name. There, the names go entirely; from
+      // the quarter's own frame up they are exactly as derived.
+      if (!majorStreetNames) return null;
       // Upstream's legacy kind filter rewritten as an expression (a legacy
       // filter may not nest), narrowed to the four classes above. MapLibre
       // reads symbol-spacing and text-padding in TILE pixels at the tile's
@@ -856,7 +868,7 @@ export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}
   for (const raw of upstream) {
     if (options.placeLabels === false && raw.id.startsWith('places_')) continue;
     const house = houseLayer(raw);
-    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX) : house;
+    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX, options.majorStreetNames !== false) : house;
     if (layer) out.push(layer);
   }
   return out;
