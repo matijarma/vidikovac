@@ -298,6 +298,16 @@ describe('12 Hz source updates, not one per frame', () => {
     expect(Number(container.dataset.frames)).toBeGreaterThanOrEqual(59);
   });
 
+  it('takes the clustering pass only on the frames that push: a fleet that has stopped moving pushes nothing at all', async () => {
+    const { frame, vehicles } = await harness();
+    // The one report is half a minute old; the model converges onto it and
+    // then has nothing left to say, so the loop parks.
+    for (let i = 0; i < 300; i++) frame();
+    const before = vehicles().calls.length;
+    for (let i = 0; i < 120; i++) frame();
+    expect(vehicles().calls.length - before).toBe(0);
+  });
+
   it('under reduced motion steps once a second on the injected timer pair, with no frame requests and no global setTimeout (R-F6)', async () => {
     const globalTimer = vi.spyOn(globalThis, 'setTimeout');
     try {

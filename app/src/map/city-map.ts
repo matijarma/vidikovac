@@ -506,11 +506,20 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
 
 /** Coarse enough that convergence noise never keeps the loop awake, fine
  *  enough (a centimetre, a degree, a hundredth of alpha) that real motion
- *  always registers -- the same discipline as the schematic's signature. */
-function signatureOf(fc: VehicleFeatureCollection): string {
-  return fc.features
+ *  always registers -- the same discipline as the schematic's signature.
+ *
+ *  It is taken over the *unclustered* marks, and `selectedId` is the second
+ *  half of the question: the merged collection a frame would push is a pure
+ *  function of these features, the camera (a move clears the signature in
+ *  onCameraMove), the map's fixed symbol scale and the one vehicle the
+ *  clustering must leave standing. So a frame can decide whether to push
+ *  without running the clustering pass first. An empty fleet keeps its empty
+ *  signature, selected vehicle or not: there is nothing to push either way. */
+function signatureOf(fc: VehicleFeatureCollection, selectedId: string | null): string {
+  if (fc.features.length === 0) return '';
+  return `${selectedId ?? ''}|${fc.features
     .map((f) => `${f.properties.id}:${f.geometry.coordinates[0].toFixed(7)},${f.geometry.coordinates[1].toFixed(7)},${f.properties.bearing},${f.properties.hasHeading ? 1 : 0},${f.properties.alpha.toFixed(2)},${f.properties.short}`)
-    .join('|');
+    .join('|')}`;
 }
 
 /** What the map can have selected. Route and stop are the two kinds the
@@ -1100,18 +1109,25 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // places it, and stops being so when it goes quiet: one re-derive on the
     // change, never a styleDiff per frame.
     if (focusRouteId() !== focusedApplied) applyOverlays();
-    // The pills are merged against the camera of this very frame, so a mark
-    // never merges with one the reader can see is somewhere else -- and only
-    // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
-    // dot, nothing can pile up, and merging there would empty the city of the
-    // marks that say it is moving.
-    const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-    const fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: keptVehicleId(), symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+    // What a frame costs when nothing is pushed: one feature per vehicle and
+    // the string over it. The clustering is a screen-space pass over every
+    // mark, and it runs where its result is used -- inside the push below --
+    // not sixty times a second to answer a question the plain marks already
+    // answer (signatureOf).
+    const kept = keptVehicleId();
     container.dataset.frames = String(loop.frames());
-    const signature = signatureOf(fc);
+    const signature = signatureOf(vehiclesToGeoJson(lastDrawn), kept);
     const changed = signature !== lastPushedSignature;
     const pushing = changed && t >= nextPushAt - PUSH_TOLERANCE_MS;
+    let fc: VehicleFeatureCollection | null = null;
     if (pushing) {
+      // The pills are merged against the camera of this very frame, so a mark
+      // never merges with one the reader can see is somewhere else -- and only
+      // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
+      // dot, nothing can pile up, and merging there would empty the city of the
+      // marks that say it is moving.
+      const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       lastPushedSignature = signature;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
@@ -1120,7 +1136,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (following === true) followRoute();
       else if (following) followCamera(fc);
     }
-    writeMarkProbe(m, pushing ? fc : null);
+    writeMarkProbe(m, fc);
     return changed;
   }
 
