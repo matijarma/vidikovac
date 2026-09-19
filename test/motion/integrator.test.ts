@@ -381,6 +381,28 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(bare.b).toBeCloseTo(800, 6);
   }, 30_000);
 
+  it('releases a wire leader whose own plan has fallen a swap limit behind it', () => {
+    // The register withdraws `behind` the tick a relation ends, but a wire
+    // that is a poll stale (or a twin that has not caught up) can still name
+    // a leader the follower has long since left 400 m behind. The client
+    // holds the wire's order through a crossing of the plans -- that is what
+    // it is for -- but not through THIS: a ceiling that far back would freeze
+    // the mark until the twin next spoke. It is dropped until the wire
+    // re-asserts it, which the next poll does if the register still means it.
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('B', '1_0', still(T0, 400), 8), pathFix('A', '1_0', still(T0, 300), 8, { behind: 'B' })], T0);
+    integrator.step(T0);
+    // A's plan is now 500 m past B's, well beyond SWAP_LIMIT_M, and the wire
+    // still names B. A must reach its own plan rather than stall at B - 35.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('B', '1_0', still(t1, 400), 8), pathFix('A', '1_0', still(t1, 900), 8, { behind: 'B' })], t1);
+    let out = new Map<string, Drawn>();
+    for (let k = 0; k <= 60 * 120; k++) out = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+    expect(out.get('A')!.s!).toBeGreaterThan(899);
+    expect(out.get('B')!.s!).toBeCloseTo(400, 1);
+  }, 30_000);
+
   it('keeps pace with an eight-metre-a-second plan on a once-a-second loop', () => {
     const net = syntheticNetwork(corridorSpec());
     const integrator = createIntegrator(net);

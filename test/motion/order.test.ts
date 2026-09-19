@@ -42,6 +42,29 @@ describe('order.ts over the corridor', () => {
     expect(mapArc(east, 700, back)).toBeNull();
   });
 
+  it('maps an arc onto the occurrence nearest a reference arc, not the first one', () => {
+    // A circuit: line 6's path runs its own edges twice in one trip. The
+    // first occurrence of the edge is a whole lap behind the second, so a
+    // ceiling read from it sits a kilometre back and freezes the follower
+    // (the F9 review's finding); the occurrence nearest the reader's own arc
+    // is the one on the stretch the two share.
+    const circuit = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 0, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 500 }, { x: 0, y: 500 }, { x: 0, y: 0 }] },
+      ],
+      routes: [{ id: '6', type: 0, paths: [{ id: 'C6', direction: 0, edges: [0, 1, 0, 1], served: ['S0'] }] }],
+      stops: [{ id: 'S0', edge: 0, s: 0, terminal: true }],
+    });
+    const laps = circuit.paths[circuit.paths.findIndex((p) => p.id === 'C6')];
+    const lap = laps.offsets[2];
+    expect(mapArc(laps, lap + 300, laps)).toBeCloseTo(300, 6);
+    expect(mapArcNear(laps, lap + 300, laps, lap + 200)).toBeCloseTo(lap + 300, 6);
+    expect(mapArcNear(laps, lap + 300, laps, 200)).toBeCloseTo(300, 6);
+    // Still null where the edge is not run at all.
+    expect(mapArcNear(east, 2000, north, 0)).toBeNull();
+  });
+
   it('pairs two vehicles when either one is on rails the other runs', () => {
     // Both on the trunk, and one past the junction while the other is still
     // on the trunk the first one's path also runs: still the same rails.

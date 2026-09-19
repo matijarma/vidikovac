@@ -522,7 +522,20 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         v.leader = null; // the leader fell silent and was evicted: the relation ends with it
         continue;
       }
-      if (onRails(leader)) add(v, leader);
+      if (!onRails(leader)) continue;
+      // The register withdraws `behind` the tick a relation ends (E3), so a
+      // wire leader is normally current. A poll that is stale, or a twin that
+      // has not caught up, can still name one the follower is a long way past:
+      // a ceiling that far back would freeze the mark until the twin next
+      // spoke. Beyond the register's own SWAP_LIMIT_M the client lets go, and
+      // the next poll re-asserts the relation if the register still means it.
+      const leaderPlan =
+        leader.geom!.path === v.geom!.path ? leader.targetS : mapArcNear(graph.paths[leader.geom!.path!], leader.targetS, graph.paths[v.geom!.path!], v.targetS);
+      if (leaderPlan !== null && leaderPlan < v.targetS - SWAP_LIMIT_M) {
+        v.leader = null;
+        continue;
+      }
+      add(v, leader);
     }
 
     for (const a of onRailsNow) {
@@ -558,14 +571,20 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
 
   /** The arc a mark may not pass this frame: one tram length behind the
    *  nearer of its leader's own mark and its leader's plan, read on the
-   *  follower's path. A leader whose arc does not map onto that path
-   *  constrains nothing -- the two have diverged there, and a constraint
-   *  that cannot be stated in the follower's frame is not one. */
+   *  follower's path at the occurrence nearest the follower's own arc. A
+   *  leader whose arc does not map onto that path constrains nothing -- the
+   *  two have diverged there, and a constraint that cannot be stated in the
+   *  follower's frame is not one. */
   function ceilingFor(v: VehicleState): number {
     let ceiling = Number.POSITIVE_INFINITY;
     for (const leader of v.aheadOf) {
       const ahead = Math.min(leader.s, leader.targetS) - HEADWAY_M;
-      const here = leader.geom!.path === v.geom!.path ? ahead : mapArc(graph!.paths[leader.geom!.path!], ahead, graph!.paths[v.geom!.path!]);
+      // Occurrence-aware (E3): on a path that runs an edge twice -- every
+      // circuit and balloon in this network -- the FIRST occurrence puts the
+      // ceiling a whole lap behind the mark and freezes it. The mark's own
+      // arc is the reference, and the occurrence nearest it is the one on the
+      // stretch the two actually share.
+      const here = leader.geom!.path === v.geom!.path ? ahead : mapArcNear(graph!.paths[leader.geom!.path!], ahead, graph!.paths[v.geom!.path!], v.s);
       if (here !== null && here < ceiling) ceiling = here;
     }
     return ceiling;
