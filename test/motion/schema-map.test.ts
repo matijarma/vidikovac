@@ -326,17 +326,30 @@ it('line focus dims the other lines on the diagram instead of hiding them, and s
   expect(h.staticCalls().slice(back).some((c) => c.op === 'globalAlpha' && c.args[0] === SCHEMA_FOCUS_DIM_ALPHA)).toBe(false);
 });
 
-it('keeps a mark whose centre has just left the canvas, so a pill at the edge is clipped rather than culled', async () => {
-  const h = harness();
-  await flush();
-  key(h.canvas(), '+'); // one step in: the artwork is now wider than the viewport
-  for (let i = 0; i < 4; i++) key(h.canvas(), 'ArrowRight', true); // pan hard left, to the clamp
-  h.frame();
-  const mark = h.frames.at(-1)!.marks.find((m) => m.id === 'tram');
+it('keeps a mark whose centre has just left the canvas, so a pill at the edge is clipped rather than culled, and reaches twice as far where the kiosk paints the pill twice as wide', async () => {
+  /** The tram's mark after `zooms` steps in and `pans` steps left, to the clamp. */
+  const edgeMark = async (extra: Partial<CityMapOptions>, zooms: number, pans: number) => {
+    const h = harness(extra);
+    await flush();
+    for (let i = 0; i < zooms; i++) key(h.canvas(), '+'); // in: the artwork is now wider than the viewport
+    for (let i = 0; i < pans; i++) key(h.canvas(), 'ArrowRight', true); // pan hard left
+    h.frame();
+    return h.frames.at(-1)!.marks.find((m) => m.id === 'tram');
+  };
+  const mark = await edgeMark({}, 1, 4);
   expect(mark).toBeDefined();
   const cssX = mark!.x / DENSITY;
   expect(cssX).toBeLessThan(0);
   expect(cssX).toBeGreaterThan(-PILL_EDGE_MARGIN_PX);
+  // A step further in the centre is past the phone's margin: no ink left on the canvas, so no mark.
+  expect(await edgeMark({}, 2, 1)).toBeUndefined();
+  // The same centre on the public screen, where every pill is painted at
+  // symbolScale 2: half of a doubled capsule still lies on the glass, and a
+  // flat 56 CSS px blinked a wide cluster out with ink showing (M3).
+  const kiosk = await edgeMark({ symbolScale: 2 }, 2, 1);
+  expect(kiosk).toBeDefined();
+  expect(kiosk!.x / DENSITY).toBeLessThan(-PILL_EDGE_MARGIN_PX);
+  expect(kiosk!.x / DENSITY).toBeGreaterThan(-2 * PILL_EDGE_MARGIN_PX);
 });
 
 it('keeps the selection while the model still draws the vehicle, even after its mark leaves the canvas', async () => {

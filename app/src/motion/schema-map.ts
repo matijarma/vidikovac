@@ -235,7 +235,10 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     marks,
     inFrame(v) {
       const p = placeVehicle(v);
-      return Boolean(p && pan && trams() && schemaInFrame(p, viewport()));
+      // The mark viewport, not the bare one: the list's membership rule has
+      // to be the canvas's own, symbol scale (and with it the edge margin)
+      // included, or the kiosk lists a pill it no longer paints.
+      return Boolean(p && pan && trams() && schemaInFrame(p, markViewport()));
     },
     paintStatic(ctx) { const l = layout(); if (l) paintSchema(ctx, l, tones()); },
     onChange(listener) { sceneListeners.add(listener); return () => { sceneListeners.delete(listener); }; },

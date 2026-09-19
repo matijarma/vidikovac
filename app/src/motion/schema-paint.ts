@@ -186,10 +186,14 @@ export function schemaPoint(p: XY, viewport: SchemaViewport, density = 1): XY {
 /** The exact same visibility rule serves the canvas and accessible list.
  *  The viewport is grown by PILL_EDGE_MARGIN_PX on every side: a pill whose
  *  centre has just left the canvas is still half on it, and the canvas
- *  itself is what clips it. */
-export function schemaInFrame(p: XY, viewport: SchemaViewport): boolean {
+ *  itself is what clips it. The margin is stated in the CSS px the pill
+ *  geometry is, and the pill is painted at `symbolScale` -- so on the kiosk,
+ *  where every capsule is twice as wide, the margin doubles with it. Flat, a
+ *  wide cluster pill blinked out on the public screen with ink still showing
+ *  (M3), which is exactly what this margin exists to stop. */
+export function schemaInFrame(p: XY, viewport: SchemaViewport & { symbolScale?: number }): boolean {
   const screen = schemaPoint(p, viewport);
-  const m = PILL_EDGE_MARGIN_PX;
+  const m = PILL_EDGE_MARGIN_PX * (viewport.symbolScale ?? 1);
   return screen.x >= -m && screen.x <= viewport.width + m && screen.y >= -m && screen.y <= viewport.height + m;
 }
 
