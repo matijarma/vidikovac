@@ -1588,7 +1588,7 @@ Ništa nije gurnuto ni spojeno u `main`: objava je `git push` u `main` i traži 
 | Preglednik | `npx playwright test` (chromium + mobile) | `8ecef34` | **101 prolaz / 14 padova**, svih 14 okolišnih ili zajedničkih s `main` -- razvrstano niže |
 | Pristupačnost | `npm run e2e:a11y` | `8ecef34` | **18 od 20**; padaju ista dva slučaja iz `a11y.spec.ts` |
 | Vizualna matrica | `npm run review:visual` | `2410303` / `b606d96` (grana R) | **93 površine, 0 nalaza**. U integracijskom stablu nije ponovno vožena: kapija drži poslužitelj i port, a spoj grane M ne dira nijednu iscrtanu površinu. |
-| Ponavljanje snimljenog dana | `node scripts/replay-twin.mjs recordings/2026/09/17` | `8e3d049` (+ val popravaka izmjeren na prozoru) | tablica u sljedećem odjeljku |
+| Ponavljanje snimljenog dana | `node scripts/replay-twin.mjs recordings/2026/09/17` | `e59f85c` (svih 7.972 okvira 17. rujna) | slike unatrag **0**, fantomska stajališta **0**, vidljiva križanja 12.244, prekršaji redoslijeda 1.218; cijela tablica u sljedećem odjeljku |
 
 **Razvrstavanje padova u pregledniku.** Ovaj stroj nema lokalnu R2 kopiju arhive pločica, pa svaka
 karta vrati `data-map-status="tiles-failed"`; sve što čeka na iscrtane slike karte tu istekne. Isti je
@@ -1604,7 +1604,7 @@ mjereno, a ne pretpostavljeno.
 | `e2e/mobile.spec.ts:312`, `e2e/mobile.spec.ts:372` | pločice |
 | `e2e/a11y-session.spec.ts:140` (svijetla i tamna tema) | pločice |
 | `e2e/a11y.spec.ts:246` (`/d/` u sesiji) | pločice |
-| `e2e/a11y.spec.ts:225` (`/kiosk/` ploča linija) | **krhko jednako na grani i na čistom `main`** (3 od 8 prolaza na obje strane). Uzrok je isti izostanak pločica: kad svaka pločica vrati 503, MapLibre-ov stil prelazi u `errored`/`loading` i događaj `load` se može propustiti, pa `styled` nikad ne postane istinit i spremnik ostane `unavailable`. To je ujedno latentni proizvodni nalaz (redak u „Otvorene točke”). |
+| `e2e/a11y.spec.ts:225` (`/kiosk/` ploča linija) | **krhko jednako na grani i na čistom `main`** (pada 3 od 8 pokretanja na objema). Uzrok je isti izostanak pločica: kad svaka pločica vrati 503, MapLibre-ov stil prelazi u `errored`/`loading` i događaj `load` se može propustiti, pa `styled` nikad ne postane istinit i spremnik ostane `unavailable`. To je ujedno latentni proizvodni nalaz (redak u „Otvorene točke”). |
 | `e2e/experience.spec.ts:191` (pretraga prijevoza bez WebGL-a) | **crven na samom `main`**: 3 od 3 pada na čistom `b43f343`. Uzvodna zadana skupina `cityGroup = 'living'` nikad ne iscrta listu pretrage prijevoza. Nije regresija ovog kruga. |
 
 Nijedan slučaj ne pada na grani, a prolazi uzvodno; to je bio uvjet za kapiju i zadovoljen je
@@ -1613,66 +1613,77 @@ zasebnim usporednim prolazom (zadatak R-fix2).
 #### Cijeli snimljeni dan, prije i poslije kruga F
 
 Polazna tablica je `replay-fullday-baseline-cd7495c.txt`: motor **prije kruga F** (`cd7495c`, artefakt
-v2), svih **7.972 okvira** 17. rujna 2026., 473 vozila. Stupac „poslije” je ista datoteka okvira kroz
-integrirano stablo. **Čitaju se veličina i smjer, ne pripisivanje**: između dvaju stupaca stoji cijeli
-krug (posluženi popis stajališta, čvorovi na križanjima, klijent koji ne crta unatrag, registar
-redoslijeda, planer i tablica zadržavanja) i, kod dijela mjera, drukčiji harness. Kontrolirana razlika
-koja mjeri jedan zahvat je uvijek tablica prozora u odjeljku tog zadatka.
+v2), svih **7.972 okvira** 17. rujna 2026., 473 vozila. Sljedeća dva stupca su ista datoteka okvira
+kroz integrirano stablo: prije vala popravaka završnog pregleda (`8e3d049`) i poslije njega
+(`e59f85c`, ono što se objavljuje). **Čitaju se veličina i smjer, ne pripisivanje**: između prvog i
+zadnjeg stupca stoji cijeli krug (posluženi popis stajališta, čvorovi na križanjima, klijent koji ne
+crta unatrag, registar redoslijeda, planer i tablica zadržavanja) i, kod dijela mjera, drukčiji
+harness -- polazna tablica je vožena **bez povratne veze učenja**. Kontrolirana razlika koja mjeri
+jedan zahvat je uvijek tablica prozora u odjeljku tog zadatka.
 
-| Mjera (cijeli dan) | prije kruga F (`cd7495c`) | poslije (`8e3d049`) | promjena |
-|---|---|---|---|
-| **slike unatrag (klijent)** | 41.223.762 od 112.221.628 | **0** | nestale |
-| **vidljiva križanja (klijent)** | 38.228 | **23.149** | **−39,4 %** |
-| **fantomska stajališta** | 6.410 od 10.599 | **0** od 11.004 | nestala |
-| **regresije među planovima** | 218.265 od 842.298 | 85.387 od 841.568 | −60,9 % |
-| prekršaji redoslijeda prema očitanjima | 9.356 od 5.022.158 | 6.974 od 4.495.247 | −25,5 % |
-| 10 s: ispred / unutar / iza | 23,7 / 54,2 / 22,1 % | 13,8 / 56,8 / 29,4 % | −9,9 p. b. ispred |
-| 30 s: ispred / unutar / iza | 28,2 / 38,8 / 33,0 % | 17,3 / 40,1 / 42,6 % | −10,9 p. b. ispred |
-| 60 s: ispred / unutar / iza | 29,1 / 29,5 / 41,4 % | 17,9 / 29,8 / 52,3 % | −11,2 p. b. ispred |
-| razred p95 na 10 s | ≥200 m | **<200 m** | prvi pomak razreda p95 |
-| razred p50 (10 / 30 / 60 s) | <50 / <100 / <200 m | isto | drži |
-| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | 1,1 % / 1,8 s / 58.863 | −6,7 p. b. |
-| preticanja (blizanac) | 11.204 | 86 | −99,2 %, ali **definicija se promijenila u F10** |
-| vožnje unatrag u planu | 0 | 0 | drži |
-| ustupci / zamjene | 6.960 / — | 309 / 170 | −95,6 % ustupaka |
-| poznati smjer / nepoznate vožnje | 100,0 % / 0,0 % | 100,0 % / 0,0 % | drži |
-| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 811 / 1.781 s | +35 s p50 |
-| otkucaj p50 / p95 | 123,03 / 304,87 ms | 41,94 / 60,73 ms | −66 % / −80 % |
+| Mjera (cijeli dan) | prije kruga F (`cd7495c`) | integrirano, prije vala popravaka (`8e3d049`) | **isporučeno (`e59f85c`)** | ukupna promjena |
+|---|---|---|---|---|
+| **slike unatrag (klijent)** | 41.223.762 od 112.221.628 | 0 | **0** | nestale |
+| **vidljiva križanja (klijent)** | 38.228 | 23.149 | **12.244** | **−68,0 %** |
+| **fantomska stajališta** | 6.410 od 10.599 | 0 od 11.004 | **0** od 11.004 | nestala |
+| **prekršaji redoslijeda prema očitanjima** | 9.356 od 5.022.158 | 6.974 od 4.495.247 | **1.218** od 4.498.137 | **−87,0 %** |
+| **regresije među planovima** | 218.265 od 842.298 | 85.387 od 841.568 | **83.443** od 841.568 | −61,8 % |
+| 10 s: ispred / unutar / iza | 23,7 / 54,2 / 22,1 % | 13,8 / 56,8 / 29,4 % | **13,7** / 56,9 / 29,4 % | −10,0 p. b. ispred |
+| 30 s: ispred / unutar / iza | 28,2 / 38,8 / 33,0 % | 17,3 / 40,1 / 42,6 % | **17,2** / 40,2 / 42,6 % | −11,0 p. b. ispred |
+| 60 s: ispred / unutar / iza | 29,1 / 29,5 / 41,4 % | 17,9 / 29,8 / 52,3 % | **17,8** / 29,8 / 52,4 % | −11,3 p. b. ispred |
+| razred p95 na 10 s | ≥200 m | <200 m | **<200 m** | prvi pomak razreda p95 |
+| razred p50 (10 / 30 / 60 s) | <50 / <100 / <200 m | isto | isto | drži |
+| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | 1,1 % / 1,8 s / 58.863 | **1,1 % / 1,8 s / 56.576** | −6,7 p. b. |
+| preticanja (blizanac) | 11.204 | 86 | **8** | −99,9 %, ali **definicija se promijenila u F10** |
+| vožnje unatrag u planu | 0 | 0 | **0** | drži |
+| ustupci / zamjene | 6.960 / — | 309 / 170 | **269 / 143** | −96,1 % ustupaka |
+| poznati smjer / nepoznate vožnje | 100,0 % / 0,0 % | 100,0 % / 0,0 % | **100,0 % / 0,0 %** | drži |
+| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 811 / 1.781 s | **811 / 1.781 s** | +35 s p50 |
+| otkucaj p50 / p95 | 123,03 / 304,87 ms | 41,94 / 60,73 ms | **39,35 / 49,51 ms** | −68 % / −84 % |
 
-Sažetak se vodi **slikama unatrag (0)** i **vidljivim križanjima (−39 %)**, ne preticanjima: preticanje
+Sažetak se vodi **slikama unatrag (0)** i **vidljivim križanjima (−68 %)**, ne preticanjima: preticanje
 je u F10 redefinirano (registar broji obrat priznatog odnosa, stari parni zakon brojao je svako
-proturječje dvaju planova), pa −99,2 % uspoređuje dvije različite stvari.
+proturječje dvaju planova), pa −99,9 % uspoređuje dvije različite stvari.
 
-**Val popravaka završnog pregleda (`8a284a8` → `e59f85c`) nije u stupcu gore.** Izmjeren je na
-kontroliranom prozoru od 2.216 okvira (`task-M-final-fix-report.md`), gdje popravak I2 -- ZET-ov
-svjedok koji proturječi očitanjima više ne uspostavlja odnos -- daje: prekršaji redoslijeda
-1.884 → **313** (−83,4 %), vidljiva križanja 5.895 → **3.175** (−46,1 %), preticanja 17 → 1,
-ustupci/zamjene 77/32 → 58/27, regresije 19.996 → 19.645, slike unatrag i dalje **0**, udio „ispred”
-na 30 s 15,9 → 15,8 %. Na cijelom danu očekuje se ista vrsta pomaka u istom smjeru; puni prolaz na
-`e59f85c` vozio se dok je ovaj odjeljak pisan i upisuje se kad završi.
+**Što je val popravaka završnog pregleda donio na punom danu** (`8e3d049` → `e59f85c`, treći prema
+četvrtom stupcu). Jedan zahvat nosi gotovo sve: popravak I2, ZET-ov svjedok koji proturječi
+očitanjima više ne uspostavlja odnos. Vidljiva križanja 23.149 → **12.244** (−47,1 %), prekršaji
+redoslijeda 6.974 → **1.218** (−82,5 %), preticanja 86 → **8**, ustupci/zamjene 309/170 → 269/143,
+regresije −2,3 %, otkucaj p95 60,73 → 49,51 ms; udio „ispred” se ne miče (17,3 → 17,2 % na 30 s), što
+je i očekivano -- I2 dira red, ne plan. Isti je zahvat na kontroliranom prozoru od 2.216 okvira
+(`task-M-final-fix-report.md`) dao prekršaje 1.884 → 313 (−83,4 %) i križanja 5.895 → 3.175 (−46,1 %):
+prozor i puni dan slažu se u predznaku i veličini.
 
 **Dva praga plana nisu postignuta i to se ne zaokružuje:**
 
-- **„Ispred” na 30 s: 15,9 % prema traženih ≤ 10 %.** Broj je s kontroliranog prozora (stari motor
-  *s* povratnom vezom učenja protiv novoga, dakle pošteno usporedivo); val popravaka ga je pomaknuo
-  na 15,8 %, a na cijelom danu iznosi 17,3 %. Implementator F11 je prošao cijeli raspon triju knobova
-  (0,65 → 0,90) i cijeli raspon vrijedi 2,0 postotna boda: prag se ovim konstantama ne može doseći.
-  Ostatak je pripisan mjerenjem: **75 % svih „ispred” ima sidro mlađe od 10 s, a 66 % sidro u pokretu**
-  -- tramvaj koji vozi na svježem očitanju i zatim **stane**. To je meta idućeg kruga: predvidjeti
-  stajanje, a ne stajanje opisati nakon što je počelo. Udio uz križanje nije robustan (predznak se
-  između prozora i punog dana okreće) i ne nosi zaključak.
-- **Vidljiva križanja: 23.149 na dan (3.175 u prozoru poslije vala popravaka) prema pragu od 0.**
-  Prihvaćeno za ovaj krug kao izmjereno. Registar po konstrukciji **odbija urediti par čija su
-  očitanja unutar 60 m** (`ORDER_ESTABLISH_M`): dva rasipanja GPS-a ne mogu reći tko je prvi, a
-  izmišljeni red je gori od nikakvog. Preostala križanja su uglavnom taj pojas i ostaju meta idućeg
-  kruga, uz semantiku guranja (I4).
+- **„Ispred” na 30 s: 15,8 % prema traženih ≤ 10 %.** Broj je s kontroliranog prozora (stari motor
+  *s* povratnom vezom učenja protiv novoga, dakle pošteno usporedivo; 15,9 % prije vala popravaka);
+  na cijelom danu iznosi **17,2 %**. Zadatak F11 je prošao cijeli raspon triju konstanti (0,65 → 0,90)
+  i cijeli taj raspon vrijedi 2,0 postotna boda: prag se ovim konstantama ne može doseći. Ostatak je
+  pripisan mjerenjem: **76 % svih „ispred” ima sidro mlađe od 10 s, a 64 % sidro u pokretu**
+  (66 % u kontroliranom prozoru) -- tramvaj koji vozi na svježem očitanju i zatim **stane**. To je meta
+  idućeg kruga: predvidjeti stajanje, a ne stajanje opisati nakon što je počelo. Udio uz križanje nije
+  robustan (predznak se između prozora i punog dana okreće: 21,1 % prema 17,3 % u prozoru, 17,2 %
+  prema 18,2 % na punom danu) i ne nosi zaključak.
+- **Vidljiva križanja: 12.244 na dan prema pragu od 0.** Prihvaćeno za ovaj krug kao izmjereno.
+  Registar po konstrukciji **odbija urediti par čija su očitanja unutar 60 m** (`ORDER_ESTABLISH_M`):
+  dva rasipanja GPS-a ne mogu reći tko je prvi, a izmišljeni red je gori od nikakvog. Preostala
+  križanja su uglavnom taj pojas i ostaju meta idućeg kruga, uz semantiku guranja (I4).
+
+**Zahvati planera i naučeno na kraju dana** (`e59f85c`, za usporedbu s `/stats` nakon objave):
+objavljeni pod 600.269, čekanja na križanjima 101.585, popravci stanja 97.633, odbijenih ZET-ovih
+vremena 274.168; naučeno 4.252 ćelije bridova, 4.755 stajališta i 1.317 čvorova, 53.164 uzorka
+zadržavanja, 7.491 čekanje na križanju od 24.559 prolazaka, 78 perona u prozoru od 90 minuta.
+Provjera mirovanja odbila je 9.444 kandidata (4.150 dvosmislenih s jednim očitanjem u zoni,
+5.294 dokazana prolaska), dakle 6,6 % dvosmislenih od svih kandidata -- manje nego u prozoru
+(10,2 %), jer cijeli dan nosi više dugih zadržavanja na okretištima.
 
 #### Pogledom, poslije objave (vlasnik)
 
 Popis je spojen iz oba završna pregleda. Ništa od ovoga stroj ne može potvrditi umjesto vlasnika.
 
 1. **Ilica, Črnomerec do Trga, deset minuta, na obje karte.** Svaki tramvaj nosi svoj broj ili sjedi u
-   skupini koja taj broj ispisuje; nijedan ne ide unatrag; nijedna dva se ne križaju na jednom
+   skupini koja taj broj ispisuje; nijedan ne ide unatrag; nijedan par se ne križa na jednom
    kolosijeku; tramvaj koji čeka na semaforu ima oznaku koja čeka, a ne prolazi kroz križanje.
 2. **Okretišta i ručna tablica.** Stoje li oznake na okretištima onoliko koliko doista stoje? Ako ne,
    upiši broj u `app/public/data/stop-dwell-overrides.json` (sjeme je dvadeset okretišta na 60 s) i
@@ -1680,7 +1691,7 @@ Popis je spojen iz oba završna pregleda. Ništa od ovoga stroj ne može potvrdi
 3. **Zbijeni parovi na Jelačiću i u Draškovićevoj.** Ondje tramvaji stoje nos uz rep: ostaju li u
    redoslijedu i drže li razmak, ili se dvije oznake preklope i zamijene mjesta?
 4. **Linija 13 na Šubićevoj × Zvonimirovoj i linije 6/9 od Botaničkog vrta do Zrinjevca.** Prvo je
-   križanje koje je krug čvorio: vozi li 13 ravno kroz njega? Drugo je imenovana iznimka gradnje
+   križanje na kojem je krug dodao čvor: vozi li 13 ravno kroz njega? Drugo je imenovana iznimka gradnje
    (dva kolosijeka koja se nikad ne sijeku): tramvaji 6 i 9 ondje idu dužim putem nego u stvarnosti
    i to je poznato, ali treba vidjeti koliko je ružno.
 5. **Parovi unutar 60 m.** Registar ih namjerno ne uređuje. Koliko se često vidi da dvije oznake
@@ -1695,7 +1706,7 @@ Popis je spojen iz oba završna pregleda. Ništa od ovoga stroj ne može potvrdi
    pravoj udaljenosti, nazivi na shemi ne leže jedan preko drugoga, vlastito stajalište je uvijek
    imenovano. Uz `prefers-reduced-motion`: petlja crta jednom u sekundi i oznaka i dalje ne skače.
 9. **Linija 14, fokus uključen i isključen.** Odaberi 14: vidi se samo ona, u svojoj ZET-ovoj boji,
-   a svako drugo vozilo i dalje nosi broj. Prekini prekidačem -- vraća se cijela mreža. Osvježi
+   a svako drugo vozilo i dalje nosi broj. Isključi prekidač -- vraća se cijela mreža. Osvježi
    stranicu: izbor se pamti po uređaju.
 10. **Dijagram.** Nazivi vodoravno preko linija s oznakama preko njih; okretišta verzalom ispod
     koluta, s čipovima linija; dodir na skupinu otvara njezine članove.
