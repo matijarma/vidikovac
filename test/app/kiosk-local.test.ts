@@ -17,7 +17,7 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, STOP_LABEL_MIN_RANK, STOP_LABEL_MIN_RANK_FAR, STOP_LABEL_THIN_ZOOM, stopLabelMinRank } from '../../app/src/kiosk/mapview';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
@@ -726,6 +726,34 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect(options.prozor).toMatchObject({ networkKinds: ['tram'], stopRoutes: null, stopRadius: true });
     expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
     expect((options.lines as unknown[]).length).toBe(1);
+  });
+
+  // Ruling 28. A stop's rank is how many routes call there, so the scale runs
+  // upwards and rank 4 is the 41 tram corners the window named -- forty-odd
+  // names among a dozen route plates, fighting for the same pixels. Under
+  // STOP_LABEL_THIN_ZOOM only the busiest corners (rank 6, 22 of them) keep a
+  // name; a quarter and a stop are framed close enough to hold rank 4.
+  it('names only the busiest corners while the field holds the whole city, and every ranked hub once it holds a quarter', () => {
+    const { factory, calls, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const far = (factory.mock.calls[0]![0] as { prozor: { stopLabelMinRank: number } }).prozor;
+    expect(FIELD_MIN_ZOOM).toBeLessThan(STOP_LABEL_THIN_ZOOM);
+    expect(far.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK_FAR);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopLabelMinRank: STOP_LABEL_MIN_RANK_FAR }));
+    // A quarter's own frame (z14.3 on a wall) is past the line, and so is a stop's.
+    const near = stub();
+    requestKioskMap(near.maps, { ...base, district: 'trnje' }, near.adapter);
+    const opts = near.factory.mock.calls[0]![0] as { zoom: number; prozor: { stopLabelMinRank: number } };
+    expect(opts.zoom).toBeGreaterThanOrEqual(STOP_LABEL_THIN_ZOOM);
+    expect(opts.prozor.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK);
+  });
+
+  it('reads the rank straight off the field zoom, on either side of the line', () => {
+    expect(stopLabelMinRank(STOP_LABEL_THIN_ZOOM - 0.01)).toBe(STOP_LABEL_MIN_RANK_FAR);
+    expect(stopLabelMinRank(STOP_LABEL_THIN_ZOOM)).toBe(STOP_LABEL_MIN_RANK);
+    expect(stopLabelMinRank(STOP_LABEL_THIN_ZOOM + 0.01)).toBe(STOP_LABEL_MIN_RANK);
+    // Higher rank is fewer names, not more: the ruling thins the window.
+    expect(STOP_LABEL_MIN_RANK_FAR).toBeGreaterThan(STOP_LABEL_MIN_RANK);
   });
 
   it('keeps every tram in the city on the window, not only the lines of the screen\u2019s own stop, and still narrows to a relayed route', () => {

@@ -149,7 +149,22 @@ export const KIOSK_EMPHASIS: readonly PlaceKind[] = Object.freeze(['event', 'qua
  *  unconditional pill placement) a tenth under the field's derived zoom, so
  *  the compact and the portrait drawings keep their noses too (R-KP2). */
 export const STOP_LABEL_MIN_RANK = 4;
+/** Ruling 28. A stop's rank is how many routes call there (city-map.ts
+ *  stopsToGeoJson), so the scale runs upwards: rank 4 is the 41 tram corners
+ *  the window used to name, rank 6 the 22 real interchanges. On the wall's
+ *  whole-city window those 41 names sit among a dozen route plates and the
+ *  two fight for the same pixels -- the plates win and the names are left
+ *  half readable. Under this zoom, therefore, only the busiest corners are
+ *  named; a quarter (z14.3) and a stop (z15.5) are close enough that the
+ *  ranked set is the picture's, and they keep rank 4. */
+export const STOP_LABEL_THIN_ZOOM = 13.5;
+export const STOP_LABEL_MIN_RANK_FAR = 6;
 export const OVERLAP_ZOOM_MARGIN = 0.1;
+
+/** Which rank carries a name at this field zoom (STOP_LABEL_THIN_ZOOM). */
+export function stopLabelMinRank(fieldZoomNow: number): number {
+  return fieldZoomNow < STOP_LABEL_THIN_ZOOM ? STOP_LABEL_MIN_RANK_FAR : STOP_LABEL_MIN_RANK;
+}
 
 export type FeedState = 'live' | 'stale' | 'down';
 
@@ -705,7 +720,7 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  so the stop's routes, the measured field's threshold, its padding and the
  *  camera's own band reach the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: stopLabelMinRank(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
 }
 
 export interface KioskMapInput {
