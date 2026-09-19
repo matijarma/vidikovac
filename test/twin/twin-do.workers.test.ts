@@ -150,7 +150,8 @@ describe('TwinDO', () => {
   it('writes what the ordering register did into one twin_order batch per tick', async () => {
     // Two trams on the trunk, the leader 400 m ahead and both moving: by the
     // second frame the register has written the relation, and every tick
-    // reports it (E3). dim1 is the register's own vocabulary, dim2 the kind.
+    // reports what it DID (E3) -- dim1 the register's own event vocabulary,
+    // dim2 the kind.
     const script = [0, 1, 2].map((k) =>
       frame(T0 + 10 * k, [tram('a', 't1a', '1', 1000 + 80 * k, T0 + 10 * k - 2), tram('b', 't1b', '1', 600 + 80 * k, T0 + 10 * k - 2)]),
     );
@@ -168,10 +169,12 @@ describe('TwinDO', () => {
     }
     const after = await orderRows();
     expect(after.reduce((sum, r) => sum + r.count, 0)).toBeGreaterThan(before);
-    expect(after.every((r) => ['relation', 'established', 'dropped', 'hold', 'push', 'concession', 'swap'].includes(r.dim1))).toBe(true);
+    expect(after.every((r) => ['established', 'dropped', 'hold', 'push', 'concession', 'swap'].includes(r.dim1))).toBe(true);
     expect(after.every((r) => r.dim2 === 'tram')).toBe(true);
-    expect(after.some((r) => r.dim1 === 'relation')).toBe(true);
     expect(after.some((r) => r.dim1 === 'established')).toBe(true);
+    // The standing count of relations is a gauge and this table sums over the
+    // hour, so it is never written as a counter cell.
+    expect(after.some((r) => r.dim1 === 'relation')).toBe(false);
   });
 
   it('treats a 304 and a repeated header as no new evidence but still re-plans: validUntil moves, the plan stands, nothing new is recorded; an upstream error keeps the last payload', async () => {

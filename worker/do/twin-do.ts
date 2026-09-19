@@ -133,11 +133,17 @@ function hindsightSignEntries(counts: HindsightSignCounts): MetricsEntry[] {
 }
 
 /** The ordering register's pass as metric cells (E3): one entry per counter
- *  that moved, in the same batched write as the hindsight histograms. */
+ *  that moved, in the same batched write as the hindsight histograms.
+ *
+ *  `report.relations` is deliberately NOT among them. It is a gauge -- how
+ *  many relations stand at the end of this pass -- and MetricsDO sums what it
+ *  is given over the hour, which would make "relations" a meaningless running
+ *  total of a standing count. The deltas (`established` and `dropped`) are
+ *  what a counter can honestly carry; the standing count is derivable from
+ *  them and is on the tick report either way. */
 function orderEntries(report: OrderReport | null): MetricsEntry[] {
   if (!report) return [];
   const counts: [string, number][] = [
-    ['relation', report.relations],
     ['established', report.established],
     ['dropped', report.dropped],
     ['hold', report.holds],

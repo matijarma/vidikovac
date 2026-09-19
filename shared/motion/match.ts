@@ -2,7 +2,7 @@
 // route's polylines (a bus) a reported fix puts the vehicle. The trip's own
 // path is the prior; geometry only decides where the prior is silent or has
 // been proven wrong twice. Nothing here draws anything: the match is the
-// planner's anchor (plan.ts) and the ordering law's frame (laws.ts).
+// planner's anchor (plan.ts) and the ordering register's frame (order.ts).
 //
 // Rules (plan "Engine core", R-TE22, the reviewer's A10):
 //   - candidates come from the edges within NEAR_M of the fix, on-path first;

@@ -309,7 +309,7 @@ interface PathFrames {
 }
 
 function pathFrames(paths: readonly Path[]): PathFrames {
-  // First occurrence wins, exactly as laws.ts's `to.edges.indexOf(edge)`
+  // First occurrence wins, exactly as order.ts's `mapArc` does
   // does: no path in the artefact runs an edge twice today, but a measurement
   // that judged a law must map arcs the way that law does.
   const edgeIndex: Map<number, number>[] = paths.map((path) => {

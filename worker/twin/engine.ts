@@ -1,6 +1,6 @@
 // The engine core, assembled once per loaded network and trip index: the
 // matcher (match.ts), the timetable as a TimesProvider (times.ts) and the
-// network itself, which the planner (plan.ts) and the laws (laws.ts) read
+// network itself, which the planner (plan.ts) and the register (order.ts) read
 // directly. The Durable Object builds one when both static assets have
 // loaded and rebuilds it when either changes; a tick without an engine
 // (no geometry loaded) still publishes free-plane plans (tick.ts).

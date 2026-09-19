@@ -165,6 +165,9 @@ export function deserializeState(body: string): TwinState {
       // cold restore over one must not throw, it starts the register clean
       // and the next tick's fixes write it again within two fixes.
       order: track.order && typeof track.order.leader !== 'undefined' && track.order.witnesses ? track.order : newOrderState(),
+      // Added with the register (shared/motion/match.ts FOLD_FIXES); a row
+      // written before it has no such field, and undefined + 1 is NaN.
+      againstCount: track.againstCount ?? 0,
     };
   }
   return { ...stored, tracks, published: stored.published ?? {}, learnedUpTo: stored.learnedUpTo ?? {}, pendingLearned: stored.pendingLearned ?? emptyAggregates() };

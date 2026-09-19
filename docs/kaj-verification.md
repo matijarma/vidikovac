@@ -581,7 +581,7 @@ Promjena vožnje (okretanje na okretištu) nije regresija i preskače se.
 pola otkucaja, pa razlika u trenutku javljanja dvaju vozila iz istog okvira ne može lažirati
 prekršaj. Oba se očitanja i oba objavljena plana preslikaju na jednu putanju; broji se kad
 objavljeni redoslijed proturječi redoslijedu očitanja, a očitanja su razmaknuta više od jedne
-duljine tramvaja (35 m, `HEADWAY_M` iz `shared/motion/laws.ts`; bliži par nema redoslijed koji
+duljine tramvaja (35 m, `HEADWAY_M` iz `shared/motion/order.ts`; bliži par nema redoslijed koji
 bi se mogao prekršiti).
 
 **Fantomska stajališta.** Po putanji: koliko stajališta geometrijski leži na njezinim bridovima

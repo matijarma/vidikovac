@@ -1,10 +1,12 @@
-// The ordering register's geometry (R-TE7, E3): where a vehicle sits on the
-// rail graph, how one vehicle's arc reads in another's frame, and whether two
-// vehicles are on the same rails at all. Both halves of the engine ask those
-// questions -- the twin's law (laws.ts) of the plans it is about to publish,
-// the client's integrator (app/src/motion/integrator.ts) of the marks it is
-// about to draw -- so the answers live in one DOM-free module (R-TE15) that
-// depends on nothing but the decoded network's `Path`.
+// The ordering register and the geometry it is built on (R-TE7, E3): where a
+// vehicle sits on the rail graph, how one vehicle's arc reads in another's
+// frame, whether two vehicles are on the same rails at all -- and, in the
+// second half of this file, who is established behind whom. Both halves of
+// the engine ask the geometric questions: the register below, of the plans
+// the twin is about to publish, and the client's integrator
+// (app/src/motion/integrator.ts), of the marks it is about to draw. So they
+// live in one DOM-free module (R-TE15) that depends on nothing but the
+// decoded network's `Path` and the plan's own evaluator.
 //
 // A path is a sequence of directed edges plus the arc each of them starts at;
 // an arc is a distance along that sequence. Two paths that run the same edge
@@ -73,10 +75,18 @@ export function onSharedRails(a: Placed, b: Placed): boolean {
  * `b`'s path does not run `a`'s current edge at all -- then the two share no
  * rails where `a` stands, whatever they may share elsewhere.
  *
- * This is the key a relation is filed under (E3): keying it to the leader's
- * current edge instead drops the relation every time either of them crosses
- * one of the metre-long edges a noded junction leaves behind, and a relation
- * that has to be established afresh at every junction is no relation at all.
+ * This is the shape of the key a relation is filed under (E3): keying it to
+ * the leader's current edge instead drops the relation every time either of
+ * them crosses one of the metre-long edges a noded junction leaves behind,
+ * and a relation that has to be established afresh at every junction is no
+ * relation at all.
+ *
+ * The register itself asks the cheaper question -- `onSharedRails`, which is
+ * exactly "this stretch is non-empty one way round or the other" and costs
+ * two array scans instead of a walk -- because nothing downstream reads WHICH
+ * edges are shared, only whether any are. This function stays exported and
+ * tested as the statement of what that test means, and for any caller that
+ * one day does need the run itself.
  */
 export function sharedStretch(a: Placed, b: Placed): { edges: number[] } | null {
   const edges: number[] = [];
@@ -107,6 +117,11 @@ export function sharedStretch(a: Placed, b: Placed): { edges: number[] } | null 
  *  The caller always has a reference arc on `to` (its own position, or the
  *  arc it last read the other at), and the occurrence nearest that reference
  *  is the one on the stretch the two actually share.
+ *
+ *  `from` and `to` may be the same path, and then this is not the identity:
+ *  it is "which lap is this arc on, read from where I am", which is the
+ *  question a circuit makes worth asking and the one the identity would get
+ *  wrong. A path that runs each edge once answers it with `s` either way.
  */
 export function mapArcNear(from: Path, s: number, to: Path, nearS: number): number | null {
   const { edge, arc } = edgeAt(from, s);

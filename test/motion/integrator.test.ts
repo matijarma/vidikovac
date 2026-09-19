@@ -381,6 +381,46 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(bare.b).toBeCloseTo(800, 6);
   }, 30_000);
 
+  it('reads its ceiling on the lap it is actually running, not the one it ran ten minutes ago', () => {
+    // A circuit: line 6's path runs the same two edges twice in one trip, a
+    // lap apart along the arc. The follower is on its SECOND lap; its leader
+    // runs a one-lap path over the same rails. Mapping the leader's arc by
+    // the FIRST occurrence of its edge puts the ceiling a whole lap behind
+    // the mark, which is a ceiling the follower can never pass: it would
+    // stand still until the twin next spoke (E3, the F9 review's finding).
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 0, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 500 }, { x: 0, y: 500 }, { x: 0, y: 0 }] },
+      ],
+      routes: [
+        { id: '6', type: 0, paths: [{ id: 'C6', direction: 0, edges: [0, 1, 0, 1], served: ['S0'] }] },
+        { id: '7', type: 0, paths: [{ id: 'S7', direction: 0, edges: [0, 1], served: ['S0'] }] },
+      ],
+      stops: [{ id: 'S0', edge: 0, s: 0, terminal: true }],
+    });
+    const lap = net.paths[net.paths.findIndex((p) => p.id === 'C6')].offsets[2];
+    expect(lap).toBeCloseTo(3000, 6);
+    const integrator = createIntegrator(net);
+    // The leader stands at 400 m on its own path; the follower is at 3200 m
+    // on its second lap -- the same rails, 200 m behind it on the ground --
+    // and its plan asks it forward 400 m over the next minute and a half.
+    integrator.update(
+      [
+        pathFix('L', 'S7', still(T0, 400), 0),
+        pathFix('F', 'C6', [[T0, lap + 200], [T0 + 90_000, lap + 600]], 6, { behind: 'L' }),
+      ],
+      T0,
+    );
+    let out = new Map<string, Drawn>();
+    for (let k = 0; k <= 60 * 120; k++) out = new Map(integrator.step(T0 + k * FRAME_MS).map((d) => [d.id, d]));
+    // It runs up to one tram length behind the leader ON ITS OWN LAP, and
+    // nowhere near the arc the first occurrence would have given it.
+    expect(out.get('F')!.s!).toBeGreaterThan(lap + 300);
+    expect(out.get('F')!.s!).toBeLessThanOrEqual(lap + 400 - HEADWAY_M + 1e-6);
+    expect(out.get('L')!.s!).toBeCloseTo(400, 1);
+  }, 30_000);
+
   it('releases a wire leader whose own plan has fallen a swap limit behind it', () => {
     // The register withdraws `behind` the tick a relation ends, but a wire
     // that is a poll stale (or a twin that has not caught up) can still name

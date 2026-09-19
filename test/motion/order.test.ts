@@ -99,9 +99,9 @@ function planFix(x: number, atSec: number, y = 0): PlaneFix {
 }
 
 /** Builds a tram's fixes and its plan for `header` (the tick seen 2 s later). */
-function feed(net: GraphNetwork, matcher: Matcher, track: Track, shapeId: string, direction: 0 | 1, fixes: [x: number, atSec: number][], header: number): Track {
+function feed(net: GraphNetwork, matcher: Matcher, track: Track, shapeId: string, direction: 0 | 1, fixes: [x: number, atSec: number, y?: number][], header: number): Track {
   const prior = matcher.priorFor(shapeId, track.routeId, direction);
-  for (const [x, at] of fixes) matcher.matchFix(track, planFix(x, at), prior, null);
+  for (const [x, at, y] of fixes) matcher.matchFix(track, planFix(x, at, y ?? 0), prior, null);
   track.speed = estimateSpeed(track.fixes);
   buildPlan(track, net, times, null, header + 2, header, BANDS);
   return track;
@@ -302,31 +302,191 @@ describe('the ordering register', () => {
     for (const knot of D.plan!.on === 'path' ? D.plan!.knots : []) expect(knot[1]).toBeGreaterThanOrEqual(1000 - 1e-6);
   });
 
-  it('pushes a stale leader forward from the follower fix time on, and never moves its anchor', () => {
+  it('pushes a stale leader forward from the follower fix time on, and never before it', () => {
     const matcher = createMatcher(net);
     const A = tram('A');
     const B = tram('B');
-    feed(net, matcher, A, '1_0', 0, [[950, 1975], [1000, 1985]], 1990);
-    feed(net, matcher, B, '1_0', 0, [[500, 1980], [600, 1990]], 1990);
+    feed(net, matcher, A, '1_0', 0, [[1000, 1965], [1050, 1975]], 1980);
+    feed(net, matcher, B, '1_0', 0, [[500, 1970], [600, 1980]], 1980);
+    enforceOrder([A, B], net, 1982, 1980);
+    feed(net, matcher, A, '1_0', 0, [[1150, 1985]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[700, 1990]], 1990);
     enforceOrder([A, B], net, 1992, 1990);
-    feed(net, matcher, A, '1_0', 0, [[1050, 1995]], 2000);
-    feed(net, matcher, B, '1_0', 0, [[700, 2000]], 2000);
-    enforceOrder([A, B], net, 2002, 2000);
     expect(B.order.leader).toBe('A');
-    // A falls silent at 1050 m while B's fresh fix lands at 1230 m, past it.
+
+    // A falls silent at 1150 m, twenty-five seconds before this header, and
+    // its own plan already carries knots inside those twenty-five seconds
+    // (it was approaching T1200). B's fresh fix lands at 1230 m, past A's
+    // plan. The push may raise A only from B's fix time on: that fix is a
+    // lower bound on where A was FROM THEN ON, and says nothing whatever
+    // about where A was fifteen seconds earlier (D6's teleport).
     feed(net, matcher, B, '1_0', 0, [[1230, 2010]], 2010);
     buildPlan(A, net, times, null, 2012, 2010, BANDS);
-    const anchor = [...(A.plan!.on === 'path' ? A.plan!.knots[0] : [0, 0])] as [number, number];
+    const before = (A.plan!.on === 'path' ? A.plan!.knots : []).map((k) => [...k] as [number, number]);
+    const anchor = before[0];
+    const middle = before.filter((k) => k[0] > anchor[0] && k[0] < 0);
+    // The scenario only tests the time bound if there IS a knot between the
+    // anchor and the follower's fix time; assert the world before the rule.
+    expect(middle.length).toBeGreaterThan(0);
     expect(planAt(A, 2010, 2010)).toBeLessThan(planAt(B, 2010, 2010));
+
     const report = enforceOrder([A, B], net, 2012, 2010);
     expect(report.pushes).toBe(1);
-    // The anchor is A's own fix at 1995 and is untouched: the push says where
-    // A must have been from 2010 on, not where it was fifteen seconds before.
-    expect((A.plan!.on === 'path' ? A.plan!.knots[0] : [0, 0])[0]).toBe(anchor[0]);
-    expect((A.plan!.on === 'path' ? A.plan!.knots[0] : [0, 0])[1]).toBeCloseTo(anchor[1], 6);
-    expect(planAt(A, 1995, 2010)).toBeCloseTo(1050, 0);
-    expect(planAt(A, 2010, 2010)).toBeGreaterThanOrEqual(planAt(B, 2010, 2010) + HEADWAY_M - 1e-6);
+    const after = A.plan!.on === 'path' ? A.plan!.knots : [];
+    // (a) the anchor is A's own fix and is untouched.
+    expect(after[0][0]).toBe(anchor[0]);
+    expect(after[0][1]).toBeCloseTo(anchor[1], 6);
+    // (b) so is every knot between it and B's fix.
+    for (const [t, s] of middle) expect(evalPathPlan(after, t)).toBeCloseTo(s, 6);
+    // (c) from B's fix on, A is a tram length ahead of B.
+    for (const t of [2010, 2020, 2040]) expect(planAt(A, t, 2010)).toBeGreaterThanOrEqual(planAt(B, t, 2010) + HEADWAY_M - 1e-6);
     expect(isMonotone(A)).toBe(true);
+  });
+
+  it('leaves the anchor alone even when the follower fix falls in the leader own anchor second', () => {
+    // The time bound alone does not protect the anchor when the two fixes
+    // round onto the same relative second: `knot[0] < tFrom` is then false
+    // for the anchor itself, and only the loop starting at the second knot
+    // keeps A's own reported position from being overwritten by B's.
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const B = tram('B');
+    feed(net, matcher, A, '1_0', 0, [[1100, 1975], [1150, 1985]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[1000, 1980], [1050, 1990]], 1990);
+    enforceOrder([A, B], net, 1992, 1990);
+    feed(net, matcher, A, '1_0', 0, [[1220, 1995]], 2000);
+    feed(net, matcher, B, '1_0', 0, [[1150, 2000]], 2000);
+    enforceOrder([A, B], net, 2002, 2000);
+    expect(B.order.leader).toBe('A');
+
+    // Both report inside the same second before the header, B a tenth later:
+    // A's anchor and the push's lower time bound are both tRel 0.
+    feed(net, matcher, A, '1_0', 0, [[1250, 2009.6]], 2010);
+    feed(net, matcher, B, '1_0', 0, [[1290, 2009.7]], 2010);
+    const anchorBefore = [...(A.plan!.on === 'path' ? A.plan!.knots[0] : [0, 0])] as [number, number];
+    expect(anchorBefore[0]).toBeCloseTo(0, 6); // tRel -0: the same second as the follower's fix
+    expect(anchorBefore[1]).toBeCloseTo(1250, 0);
+    const report = enforceOrder([A, B], net, 2012, 2010);
+    expect(report.pushes).toBe(1);
+    const after = A.plan!.on === 'path' ? A.plan!.knots : [];
+    expect(after[0][1]).toBeCloseTo(1250, 0);
+    expect(isMonotone(A)).toBe(true);
+  });
+
+  it('swaps at once when the follower fix has left the shared stretch ahead of its leader', () => {
+    // Route 2 turns north at the junction; route 1 carries straight on. A
+    // follower whose own fix is no longer on its leader's path at all, while
+    // it reads ahead of it, has run out of the stretch in front of the tram
+    // it is supposed to be behind. No ordering of these rails allows that,
+    // and it is decided on the spot rather than after three fixes.
+    const matcher = createMatcher(net);
+    const L = tram('L', '1');
+    const F = tram('F', '2');
+    feed(net, matcher, L, '1_0', 0, [[1100, 1965], [1200, 1975]], 1980);
+    feed(net, matcher, F, '2_0', 0, [[900, 1970], [1000, 1980]], 1980);
+    enforceOrder([L, F], net, 1982, 1980);
+    feed(net, matcher, L, '1_0', 0, [[1300, 1990]], 1990);
+    feed(net, matcher, F, '2_0', 0, [[1100, 1990]], 1990);
+    enforceOrder([L, F], net, 1992, 1990);
+    expect(F.order.leader).toBe('L');
+    feed(net, matcher, L, '1_0', 0, [[1400, 2000]], 2000);
+    feed(net, matcher, F, '2_0', 0, [[1450, 2000]], 2000);
+    expect(enforceOrder([L, F], net, 2002, 2000).swaps).toBe(0); // 50 m apart: still nothing to decide
+    expect(F.order.leader).toBe('L');
+
+    // F is now fifty metres up the north branch, which route 1 never runs,
+    // and a hundred metres ahead of L read on F's own path.
+    feed(net, matcher, L, '1_0', 0, [[1450, 2010]], 2010);
+    feed(net, matcher, F, '2_0', 0, [[1535.4, 2010, 35.4]], 2010);
+    expect(F.match.s).toBeGreaterThan(1500);
+    expect(F.match.edge).toBe(2);
+    const report = enforceOrder([L, F], net, 2012, 2010);
+    expect(report.swaps).toBe(1);
+    expect(report.concessions).toBe(0);
+    expect(F.order.leader).toBeNull();
+    expect(L.order.leader).toBe('F');
+  });
+
+  it('re-files a follower onto a nearer leader that comes between them, without reversing anything', () => {
+    // The wire carries ONE leader per vehicle, so a queue of three whose
+    // members all point at the tram in front of the queue leaves its middle
+    // pair with no headway at all. A nearer leader takes the relation over;
+    // the order itself is not reversed, which still takes a concession.
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const M = tram('M');
+    const B = tram('B');
+    feed(net, matcher, A, '1_0', 0, [[1300, 1965], [1400, 1975]], 1980);
+    feed(net, matcher, B, '1_0', 0, [[700, 1970], [800, 1980]], 1980);
+    enforceOrder([A, B], net, 1982, 1980);
+    feed(net, matcher, A, '1_0', 0, [[1450, 1990]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[850, 1990]], 1990);
+    enforceOrder([A, B], net, 1992, 1990);
+    expect(B.order.leader).toBe('A');
+
+    // M joins the trunk between the two.
+    feed(net, matcher, M, '1_0', 0, [[1000, 1990], [1100, 2000]], 2000);
+    feed(net, matcher, A, '1_0', 0, [[1500, 2000]], 2000);
+    feed(net, matcher, B, '1_0', 0, [[900, 2000]], 2000);
+    enforceOrder([A, B, M], net, 2002, 2000);
+    expect(B.order.leader).toBe('A'); // one reading of the new pair is not yet evidence
+    feed(net, matcher, A, '1_0', 0, [[1550, 2010]], 2010);
+    feed(net, matcher, M, '1_0', 0, [[1200, 2010]], 2010);
+    feed(net, matcher, B, '1_0', 0, [[950, 2010]], 2010);
+    enforceOrder([A, B, M], net, 2012, 2010);
+    expect(M.order.leader).toBe('A');
+    expect(B.order.leader).toBe('M');
+    expect(A.order.leader).toBeNull();
+  });
+
+  it('forgets a witness nobody has refreshed, so it can never stand in for a fresh one', () => {
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const B = tram('B');
+    feed(net, matcher, A, '1_0', 0, [[1000, 1975], [1050, 1980]], 1980);
+    feed(net, matcher, B, '1_0', 0, [[600, 1975], [700, 1980]], 1980);
+    enforceOrder([A, B], net, 1982, 1980);
+    expect(A.order.witnesses['B'].n).toBe(1);
+
+    // Two minutes later the pair meets again. The old reading is not the
+    // first of two CONSECUTIVE fresh fixes any more, so it counts for
+    // nothing and this reading is the first.
+    feed(net, matcher, A, '1_0', 0, [[1200, 2100]], 2100);
+    feed(net, matcher, B, '1_0', 0, [[900, 2100]], 2100);
+    enforceOrder([A, B], net, 2102, 2100);
+    expect(A.order.witnesses['B'].n).toBe(1);
+    expect(B.order.leader).toBeNull();
+    // And the next fresh reading is the second, as it always was.
+    feed(net, matcher, A, '1_0', 0, [[1300, 2110]], 2110);
+    feed(net, matcher, B, '1_0', 0, [[1000, 2110]], 2110);
+    enforceOrder([A, B], net, 2112, 2110);
+    expect(B.order.leader).toBe('A');
+  });
+
+  it('breaks a ring of relations the same way whichever end it is read from', () => {
+    // Nothing in the register writes a cycle -- a relation is only ever
+    // written for a follower that has none -- but a restored state row could
+    // carry one, and a sweep that recursed into it would never return.
+    const build = (): [Track, Track] => {
+      const matcher = createMatcher(net);
+      const A = tram('A');
+      const B = tram('B');
+      feed(net, matcher, A, '1_0', 0, [[1000, 1980], [1100, 1990]], 1990);
+      feed(net, matcher, B, '1_0', 0, [[700, 1980], [800, 1990]], 1990);
+      A.order.leader = 'B';
+      B.order.leader = 'A';
+      return [A, B];
+    };
+    const forwards = build();
+    const report = enforceOrder(forwards, net, 1992, 1990);
+    expect(report.dropped).toBe(1);
+    // The ring is entered at the oldest fix, then by id, and the relation
+    // that closes it is the one dropped: A keeps its leader, B loses its.
+    expect([forwards[0].order.leader, forwards[1].order.leader]).toEqual(['B', null]);
+    // Read from the other end, the same ring breaks at the same place.
+    const backwards = build();
+    enforceOrder([backwards[1], backwards[0]], net, 1992, 1990);
+    expect([backwards[0].order.leader, backwards[1].order.leader]).toEqual(['B', null]);
   });
 
   it('drops a relation the two fixes contradict by more than two stop spacings, and leaves the plans alone', () => {
@@ -351,7 +511,7 @@ describe('the ordering register', () => {
     expect([2020, 2040, 2070].map((t) => planAt(Q, t, 2020))).toEqual(before);
   });
 
-  it('leaves a pair within a tram length, and a silent pair, untouched, and buses out of it', () => {
+  it('writes nothing and moves nothing for a pair inside the establishing gap', () => {
     const matcher = createMatcher(net);
     const E = tram('E');
     const F = tram('F');
