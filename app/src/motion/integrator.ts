@@ -61,6 +61,10 @@ export interface Fix {
   direction?: 0 | 1;
   headsign?: string;
   nextStopId?: string;
+  /** The twin's planned arrival at `nextStopId`, epoch ms (fixes.ts scales
+   *  the wire's epoch seconds). Absent where the plan reaches no stop, and
+   *  where the id beside it is ZET's stop rather than the twin's own. */
+  nextStopEtaMs?: number;
   delaySeconds?: number;
   /** The geometry the plan runs on: a graph path id or a bus shape id. */
   path?: string;
@@ -108,8 +112,15 @@ export interface Drawn {
   lastSnapAt?: number;
   /** The trip's headsign from the twin's join, when known. */
   headsign?: string;
+  /** The realtime trip id from the twin's join, when known: what an arrivals
+   *  board matches a scheduled departure against (WP5). */
+  tripId?: string;
   /** The next stop's id from the twin, when known. */
   nextStopId?: string;
+  /** ZET's reported delay at that stop, seconds; negative is early. */
+  delaySeconds?: number;
+  /** The twin's own planned arrival at that stop, epoch ms. */
+  nextStopEtaMs?: number;
 }
 
 export interface Model {
@@ -186,6 +197,8 @@ interface VehicleState {
   type: number;
   headsign?: string;
   nextStopId?: string;
+  delaySeconds?: number;
+  nextStopEtaMs?: number;
   geom: Geometry | null;
   plan: FixPlan | null;
   /** When the current plan (or bare fix) arrived, epoch ms: its age fades the confidence. */
@@ -322,6 +335,8 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         type: meta.type,
         headsign: fix.headsign,
         nextStopId: fix.nextStopId,
+        delaySeconds: fix.delaySeconds,
+        nextStopEtaMs: fix.nextStopEtaMs,
         geom: onPath ? geom : null,
         plan: fix.plan ?? null,
         planAt: now,
@@ -349,6 +364,8 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     v.type = meta.type;
     v.headsign = fix.headsign;
     v.nextStopId = fix.nextStopId;
+    v.delaySeconds = fix.delaySeconds;
+    v.nextStopEtaMs = fix.nextStopEtaMs;
     v.speed = fix.speed ?? 0;
     v.confidence = fix.confidence ?? CONFIDENCE_FREE_CAP;
     v.held = fix.held === true;
@@ -695,7 +712,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         if (v.holding) drawn.holding = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
         if (v.headsign !== undefined) drawn.headsign = v.headsign;
+        if (v.tripId !== undefined) drawn.tripId = v.tripId;
         if (v.nextStopId !== undefined) drawn.nextStopId = v.nextStopId;
+        if (v.delaySeconds !== undefined) drawn.delaySeconds = v.delaySeconds;
+        if (v.nextStopEtaMs !== undefined) drawn.nextStopEtaMs = v.nextStopEtaMs;
         out.push(drawn);
       }
       return out;

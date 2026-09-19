@@ -22,6 +22,8 @@ function parseTime(iso: string | undefined): number | null {
  * fetch time, then `now`. Plan knot times on the wire are seconds relative to
  * the snapshot's source time (the twin's header); they leave here as absolute
  * epoch milliseconds, so the integrator evaluates them against its own clock.
+ * The next-stop ETA is the exception: the twin publishes a planned arrival in
+ * epoch seconds, so it is only scaled, never re-based.
  */
 export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number): Fix[] {
   if (!snapshot) return [];
@@ -36,6 +38,7 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
     const type = dataNumber(item, 'routeType');
     const rawDirection = dataNumber(item, 'direction');
     const direction: 0 | 1 | undefined = rawDirection === 0 ? 0 : rawDirection === 1 ? 1 : undefined;
+    const nextStopEtaSec = dataNumber(item, 'nextStopEtaSec');
     const fix: Fix = {
       id: item.id,
       lon,
@@ -48,6 +51,10 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
       direction,
       headsign: dataText(item, 'headsign') || undefined,
       nextStopId: dataText(item, 'nextStopId') || undefined,
+      // The one wire time that is absolute already: the twin plans an arrival
+      // at that stop, not an offset from the header, so it is only scaled to
+      // milliseconds while the plan knots are resolved against the origin.
+      nextStopEtaMs: nextStopEtaSec === null ? undefined : nextStopEtaSec * 1000,
       delaySeconds: dataNumber(item, 'delaySeconds') ?? undefined,
       speed: dataNumber(item, 'speed') ?? undefined,
       confidence: dataNumber(item, 'confidence') ?? undefined,

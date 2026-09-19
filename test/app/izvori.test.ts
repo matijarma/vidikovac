@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import izvori from '../../app/src/data/izvori.json';
-import { DOGADANJA_DROPPED, DOGADANJA_SOURCES, renderIzvoriHtml } from '../../app/src/izvori-render';
+import { DOGADANJA_DROPPED, DOGADANJA_SOURCES, OBRADA, renderIzvoriHtml } from '../../app/src/izvori-render';
 
 const registryMissing = await import('../../worker/feed/registry').then(
   () => false,
@@ -95,6 +95,19 @@ describe('renderIzvoriHtml', () => {
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');
   });
+  // WP6: the kiosk ticker shows a machine-condensed line, not the source's
+  // own sentence. The page that names every source has to say so, and say
+  // that the original title and link are still there.
+  it('says the ticker lines are machine-condensed and the original stays', () => {
+    const html = renderIzvoriHtml();
+    expect(html).toContain('izvor-obrada');
+    expect(html).toContain(OBRADA.naslov);
+    expect(OBRADA.tekst).toMatch(/strojno saže/i);
+    expect(OBRADA.tekst).toMatch(/poveznica/i);
+    // Still nine source articles: the note is a section, not a tenth source.
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+  });
+
   it('escapes the values instead of trusting the JSON', () => {
     const html = renderIzvoriHtml([
       { module: 'emsc', naziv: '<script>x</script>', tier: 'open', url: 'https://x.test/"onload="1', text: 'a & b', licence: 'l' },

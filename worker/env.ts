@@ -17,6 +17,10 @@ export interface Env {
   MAPS?: R2Bucket;
   /** Raw ZET realtime frames for replay (worker/twin/record.ts); absent in a worktree without the bucket. */
   RECORDINGS?: R2Bucket;
+  /** Workers AI, used only for the kiosk ticker's one-line briefs
+   *  (worker/feed/brief.ts). Optional: unit tests and a `wrangler dev`
+   *  without the binding must keep working, and briefs are then skipped. */
+  AI?: Ai;
   /** Unset means production. Test bypasses require exactly "test". */
   APP_ENV?: string;
   // Runtime values, all optional: code falls back to the defaults in config.ts.

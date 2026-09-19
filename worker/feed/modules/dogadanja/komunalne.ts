@@ -1,5 +1,6 @@
 import type { FetchContext } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
+import { briefRows } from '../../payload';
 import { districtOf } from '../../geo/districts';
 import { parseHrDate, type Precision } from '../../hr-date';
 import type { AreaSlug } from '../../../pairing/areas';
@@ -56,6 +57,11 @@ function isKnownStatus(value: string): value is KomunalniStatus {
   return (KNOWN_STATUSES as readonly string[]).includes(value);
 }
 
+/** The register's own word for works that are happening now: the only ones the ticker has a reason to name. */
+const ONGOING_STATUS: KomunalniStatus = 'U tijeku';
+/** How many ongoing works the kiosk ticker can show, and so how many are condensed (WP6). */
+export const KOMUNALNE_BRIEF_COUNT = 3;
+
 const COORD_PRECISION = 1e5;
 function roundCoord(value: number): number {
   return Math.round(value * COORD_PRECISION) / COORD_PRECISION;
@@ -97,6 +103,8 @@ export interface KomunalneEvent {
   /** The location text (Lokacija) -- this register has no separate project name. */
   title: string;
   summary: string;
+  /** One-line machine-condensed reading of `summary` (worker/feed/brief.ts, WP6). */
+  brief?: string;
   /** ISO 8601, Europe/Zagreb midnight -- the register's own last-change date. Always day precision (see file header). */
   at: string;
   dateBasis: 'updated';
@@ -170,6 +178,15 @@ export async function fetchKomunalne(ctx: FetchContext): Promise<KomunalneResult
       },
     });
   }
+
+  // Aktivnost is a works description written for a register, not for a wall.
+  // The most recently changed ongoing works are the ones the ticker names;
+  // every other row, and every row without a brief, keeps its own text (WP6).
+  const ongoing = items
+    .filter((item) => item.data.status === ONGOING_STATUS)
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .slice(0, KOMUNALNE_BRIEF_COUNT);
+  await briefRows(ctx, ongoing, (item) => item.summary, 'radovi');
 
   return { items, droppedCount, totalItems: items.length };
 }

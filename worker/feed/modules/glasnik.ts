@@ -1,6 +1,6 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
-import { compactData } from '../payload';
+import { briefRows, compactData } from '../payload';
 import { zagrebIso } from '../time';
 
 // The gazette gateway answers { servis, timestamp, message, data }. Reading it
@@ -11,6 +11,11 @@ import { zagrebIso } from '../time';
 
 export const GLASNIK_API = 'https://www1.zagreb.hr/sluzbeni-glasnik-gateway/api/v1/';
 export const GLASNIK_ACT_URL = 'https://www1.zagreb.hr/sluzbeni-glasnik/#/app/akt/';
+
+/** How many of the newest issue's acts the kiosk ticker can show, and so how many are condensed (WP6). */
+export const GLASNIK_BRIEF_COUNT = 3;
+/** The issue's own table of contents is a heading, not an act, and is never briefed. */
+const CONTENTS_TITLE = /^sadr[žz]aj\b/i;
 
 const MONTHS: Record<string, number> = {
   siječnja: 1,
@@ -137,5 +142,10 @@ export async function fetchGlasnik(ctx: FetchContext): Promise<FeedPayload> {
       item: { godina: issue.yearId, broj: issue.issueId, godinaOd: '', godinaDo: '', tekst: '', tip: 1 },
     }),
   });
-  return parseAkti(await response.json(), issue);
+  const payload = parseAkti(await response.json(), issue);
+  // An act title is one long legal sentence; the ticker gets the reading of
+  // the first few, and every act keeps its own title and link regardless.
+  const acts = payload.items.filter((item) => !CONTENTS_TITLE.test(item.title)).slice(0, GLASNIK_BRIEF_COUNT);
+  await briefRows(ctx, acts, (item) => item.title, 'akt');
+  return payload;
 }

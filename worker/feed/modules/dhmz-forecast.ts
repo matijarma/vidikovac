@@ -1,6 +1,6 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload } from '../payload';
-import { compactData } from '../payload';
+import { briefRows, compactData } from '../payload';
 import { parseXml, xmlArray, xmlText } from '../xml';
 import { zagrebIso } from '../time';
 
@@ -94,5 +94,9 @@ export async function fetchDhmzForecast(ctx: FetchContext): Promise<FeedPayload>
     tomorrow = { items: [] };
   }
   const seen = new Set(today.items.map((item) => item.id));
-  return { ...today, items: [...today.items, ...tomorrow.items.filter((item) => !seen.has(item.id))] };
+  const items = [...today.items, ...tomorrow.items.filter((item) => !seen.has(item.id))];
+  // zg_text is a paragraph of narrative; the ticker shows one line of it for
+  // today and one for tomorrow, and the card keeps the paragraph (WP6).
+  await briefRows(ctx, items.filter((item) => item.summary), (item) => item.summary ?? '', 'prognoza');
+  return { ...today, items };
 }
