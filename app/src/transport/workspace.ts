@@ -791,7 +791,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // waiting here wants both. The merge itself is arrivalsAt's.
         ensureBoards('zet', group.ids);
         const next = arrivalsAt(boardsFor('zet', group.ids), vehicles, c.now, { stopIds: group.ids });
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, arrivalsStatus: next.status });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, arrivalsStatus: next.status, frozenAt: c.frozenAt });
         return [html, `${tr(i18n, 'stop')} ${group.name}`];
       }
       case 'vehicle': {

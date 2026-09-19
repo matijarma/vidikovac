@@ -372,7 +372,8 @@
     "live": "live",
     "scheduled": "scheduled",
     "note": "Estimated from ZET’s own vehicle data; the rest follow the timetable.",
-    "none": "No departures in the next hour.",
+    "none": "No announced departures.",
+    "frozen": "The session ended before the timetable arrived.",
     "down": "The timetable is unavailable right now."
   },
   "transport": {

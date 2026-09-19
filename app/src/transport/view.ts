@@ -20,6 +20,7 @@ import { closureWords as workerClosureWords } from '../../../worker/feed/modules
 import type { CastState } from '../core/contracts';
 import type { SavedRef } from '../core/saved-store';
 import { lineBadge, signRow } from '../experience/blocks';
+import { snapshotLine } from '../experience/chrome';
 import { delayTone, type DelayTone } from '../experience/delay';
 import { castReasonText } from '../experience/kvart';
 import { zagrebDateTime, zagrebTime } from '../format';
@@ -497,6 +498,10 @@ export interface StopDetailData {
   /** How much of the answer is trustworthy: 'none' is "no board in hand yet",
    *  'down' is "every platform's board failed". */
   arrivalsStatus: ArrivalsStatus;
+  /** The moment the view froze (LayerContext.frozenAt), when it has. A frozen
+   *  sheet never says "uživo" -- the live marker reads the shell's own snapshot
+   *  sentence instead -- and never waits for a board that will not come. */
+  frozenAt?: number;
 }
 
 /** The GTFS type behind an arrival row, read off the stop's own lines: the
@@ -510,15 +515,25 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
  *  how long the wait is, because that is the question, and `sada` at zero: a
  *  tram due in under half a minute is the one pulling in, not "za 0 min".
  *  Beyond the horizon a countdown would be a guess dressed as a fact, so the
- *  row shows the clock. What the number is worth is said beside it, not in it:
- *  only a trip a tracked vehicle carries gets the live dot and the live tone,
- *  and a row off the timetable alone carries "po redu vožnje" on its second
- *  line whether it is counting down or showing a time. */
-function arrivalTime(i18n: I18n, row: ArrivalRow): string {
-  if (row.minutes === null) return `<span class="t-eta"><time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time></span>`;
-  const word = row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes });
-  const dot = row.live ? `<span class="t-live" role="img" aria-label="${attr(i18n.t('arrivals.live'))}"></span>` : '';
-  return `<span class="t-eta"${row.live ? ' data-live="true"' : ''}>${dot}${esc(word)}</span>`;
+ *  row shows a clock.
+ *
+ *  What the number is worth is said beside it, not in it, and in BOTH forms: a
+ *  tracked row's clock is the schedule plus ZET's delay, not the timetable
+ *  moment, so it keeps the live marker exactly as its countdown would; and a
+ *  row off the timetable alone carries "po redu vožnje" on its second line
+ *  whether it counts down or shows a time. An unlabelled clock would read as
+ *  the timetable and make the note under the list say the wrong thing about it.
+ *
+ *  Frozen, the marker stays -- the figure did come off a tracked vehicle -- but
+ *  it says the shell's own snapshot sentence (chrome.ts snapshotLine, "podaci
+ *  od 13:57") and loses the live tone with it. */
+function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
+  const time = row.minutes === null
+    ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
+    : esc(row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes }));
+  if (!row.live) return `<span class="t-eta">${time}</span>`;
+  const label = frozenAt === undefined ? i18n.t('arrivals.live') : snapshotLine(i18n, frozenAt);
+  return `<span class="t-eta"${frozenAt === undefined ? ' data-live="true"' : ''}><span class="t-live" role="img" aria-label="${attr(label)}"></span>${time}</span>`;
 }
 
 /** The arrivals list: the board's own row (blocks.ts signRow) with the line
@@ -532,15 +547,19 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
       lead: badge(row.routeName, routeTypeAt(d.routes, row.routeId), 'm'),
       title: row.headsign || row.routeName,
       sub: row.live ? '' : i18n.t('arrivals.scheduled'),
-      trail: arrivalTime(i18n, row),
+      trail: arrivalTime(i18n, row, d.frozenAt),
       key: `${row.tripId}|${row.atMs}`,
     }))
     .join('');
+  // 'none' is "no board in hand", which live means "still on its way" and
+  // frozen means "the session ended first, and none is coming": a frozen sheet
+  // that said "učitavanje" would say it for good.
+  const empty = d.arrivalsStatus === 'none'
+    ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
+    : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
   const body = d.arrivals.length > 0
     ? `<ul class="t-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
-    : d.arrivalsStatus === 'none'
-      ? `<p class="t-empty">${esc(i18n.t('status.loading'))}</p>`
-      : `<p class="t-empty">${esc(i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none'))}</p>`;
+    : `<p class="t-empty">${esc(empty)}</p>`;
   return `<section class="t-block" data-testid="stop-arrivals">${sectionHead(i18n.t('arrivals.title'), 4)}${body}</section>`;
 }
 

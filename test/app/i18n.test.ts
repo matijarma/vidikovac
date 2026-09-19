@@ -33,6 +33,10 @@ const DEAD_KEYS = [
   'overview.weatherKicker', 'overview.closuresNone', 'overview.closuresNow_one', 'overview.quakeRecent', 'overview.warningsUnknown',
   'transit.tram', 'transit.bus', 'transit.closuresTitle', 'directory.title', 'export.ics', 'export.geojson', 'time.labelEvent',
   'common.tagline', 'common.showAll', 'common.openLayer', 'common.seconds_one', 'attribution.updated', 'attribution.adapted',
+  // WP5: the stop sheet now says what comes next, so the sentence that said
+  // ZET publishes no arrivals is retired. It may not come back beside rows
+  // that carry arrival times.
+  'transport.noArrivals',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';

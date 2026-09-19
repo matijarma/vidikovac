@@ -389,7 +389,8 @@
     "live": "uživo",
     "scheduled": "po redu vožnje",
     "note": "Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.",
-    "none": "Nema polazaka u sljedećih sat vremena.",
+    "none": "Nema najavljenih polazaka.",
+    "frozen": "Sesija je završila prije nego što je red vožnje stigao.",
     "down": "Vozni red trenutačno nije dostupan."
   },
   "transport": {
