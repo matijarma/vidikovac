@@ -270,8 +270,8 @@ describe('BeaconDO screen-set', () => {
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' }));
     expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje' });
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'trnje' }));
-    // The window is per socket: the second frame lands only once it has passed.
-    await kiosk.inbox.expectSilence(100);
+    // The window is per socket: the second frame is answered, not acted on.
+    expect((await kiosk.inbox.nextOfType('error')).error).toBe('screen-set-rate');
     kiosk.ws.close(1000, 'done');
   });
 
@@ -295,6 +295,9 @@ describe('BeaconDO screen-set', () => {
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'trnje' }));
     expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje' });
     kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'maksimir' }));
+    // Answered, so the panel can say which of the two it is -- and nothing else:
+    // no meta written, no batch minted.
+    expect((await kiosk.inbox.nextOfType('error')).error).toBe('screen-set-rate');
     await kiosk.inbox.expectSilence(200);
     await runInDurableObject(stub, (instance: BeaconDO) => {
       expect(instance.screenMetadata()).toMatchObject({ area: 'trnje' });

@@ -64,6 +64,8 @@ export interface BeaconClientDeps {
   onRevoked: () => void;
   onStatus: (status: BeaconStatus) => void;
   onContext?: (screen: ScreenMetadata) => void;
+  /** The DO refused a frame this client sent (its `error` word, e.g. 'bad-stop'). */
+  onError?: (error: string) => void;
   presentationVersion?: 1;
   capabilities?: string[];
   onPaired?: (expiresAt: number) => void;
@@ -130,6 +132,9 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
         return;
       case 'unlocked':
         deps.onUnlocked({ roomId: message.roomId, ticket: message.ticket, expiresAt: message.expiresAt });
+        return;
+      case 'error':
+        deps.onError?.(message.error);
         return;
       case 'revoked':
         setStatus('revoked');

@@ -35,6 +35,7 @@ function boot() {
   const onUnlocked = vi.fn();
   const onRevoked = vi.fn();
   const onStatus = vi.fn();
+  const onError = vi.fn();
   const client = createBeaconClient({
     credentials: { beaconId: 'BEACON01', secret: 'tajna' },
     createSocket: (url) => { const s = new FakeSocket(url); sockets.push(s); return s; },
@@ -42,9 +43,9 @@ function boot() {
     hmac: async (secret, nonce) => `mac(${secret}|${nonce})`,
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimeout: () => {},
-    onCodes, onUnlocked, onRevoked, onStatus,
+    onCodes, onUnlocked, onRevoked, onStatus, onError,
   });
-  return { client, sockets, timers, onCodes, onUnlocked, onRevoked, onStatus };
+  return { client, sockets, timers, onCodes, onUnlocked, onRevoked, onStatus, onError };
 }
 const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
 
@@ -85,6 +86,22 @@ describe('createBeaconClient', () => {
     expect(onCodes).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ code: 'C0000000' })]), 1_000_000);
     client.requestMore();
     expect(sockets[0]!.json(0)).toEqual({ t: 'more' });
+  });
+  it('sends the screen the settings panel chose, and surfaces the DO\u2019s refusal of it', () => {
+    const { client, sockets, onError } = boot();
+    client.connect();
+    sockets[0]!.emit('open');
+    client.setScreen('106_1', 'trnje');
+    expect(sockets[0]!.json(0)).toEqual({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' });
+    client.setScreen(null, 'zagreb');
+    expect(sockets[0]!.json(1)).toEqual({ t: 'screen-set', version: 1, stopId: null, area: 'zagreb' });
+    // The DO's error frame is a word for the caller, never a status change or a reconnect.
+    sockets[0]!.server({ t: 'error', error: 'bad-stop' });
+    expect(onError).toHaveBeenCalledWith('bad-stop');
+    sockets[0]!.server({ t: 'error', error: 'screen-set-rate' });
+    expect(onError).toHaveBeenCalledWith('screen-set-rate');
+    expect(client.status()).toBe('connecting');
+    expect(sockets).toHaveLength(1);
   });
   it('reports unlocked and revoked, and status changes', () => {
     const { client, sockets, onUnlocked, onRevoked, onStatus } = boot();

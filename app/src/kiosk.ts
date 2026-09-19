@@ -780,14 +780,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     notice?.remove(); notice = null;
   }
   function setPhase(next: KioskPhase): void {
+    // Postavke belong to the composition that was on the stage: whatever
+    // replaces it -- a grant, a notice, the start screen -- gets the stage
+    // back at once, never behind a panel waiting out its 90 s.
+    closeSettings(false);
     phase = next;
     // The sheet reads the phase for the stage's room: the invitation is edge to edge, the wizard and the notices keep their padding.
     element.dataset.phase = next;
     element.dataset.mode = next === 'paired' ? 'unlocked' : 'teaser';
     clearStage();
-    if (next === 'paired') { closeEssentials(false); closeSettings(false); }
+    if (next === 'paired') closeEssentials(false);
     else removeSessionLabel();
-    if (next === 'setup') { closeSettings(false); mountStartPhase(); }
+    if (next === 'setup') mountStartPhase();
     else if (next === 'invitation') {
       invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase });
       // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
@@ -906,6 +910,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       capabilities:['city-v1'],
       onCodes: (batch, serverNow) => { if (current()) rotation.setBatch(batch, serverNow); },
       onContext: (screen) => { if (current()) applyScreen(screen); },
+      onError: (error) => { if (current()) settings?.refused(error); },
       onUnlocked: ({ roomId, ticket }) => { if (current()) openSession(roomId, ticket); },
       onPaired: () => {
         if (!current() || phase !== 'invitation') return;
@@ -1010,6 +1015,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     area = screen.area ?? null;
     paintContext();
     settings?.paint();
+    // The panel is waiting for exactly this: the screen it asked for.
+    settings?.applied();
     armExpiry();
     // The screen follows its stop at once (the field's name, the camera, the last-run table dropped), then asks for that stop's own teaser.
     paintLocal();

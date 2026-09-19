@@ -505,9 +505,13 @@ describe('settings: the panel on the screen itself', () => {
     q(box, '[data-testid=settings-save]')!.click();
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
     expect(k.beacon.setScreen).toHaveBeenCalledWith('200_1', 'trnje');
-    expect(box.hidden).toBe(true);
+    // The panel waits for the answer rather than claiming the change itself.
+    expect(box.hidden).toBe(false);
+    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(true);
+    expect(text(q(box, '[data-testid=settings-save]'))).toBe('Spremanje…');
     // Nothing is painted from the panel: the DO's answer is what re-frames the screen.
     k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOPS[2]!, area: 'trnje' });
+    expect(box.hidden).toBe(true);
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!).screen).toMatchObject({ area: 'trnje', stop: { id: '200_1' } });
   });
@@ -531,7 +535,44 @@ describe('settings: the panel on the screen itself', () => {
     q(box, '[data-testid=settings-save]')!.click();
     expect(k.beacon.setScreen).not.toHaveBeenCalled();
     expect(box.hidden).toBe(false);
-    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Bez veze sa zaslonom; kod se ne može izdati');
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
+    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a refused pair and a repeat inside the DO\u2019s window each keep the panel open with their own sentence', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    const box = panel(k)!;
+    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
+    saveBtn.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    // An error word that belongs to something else on the socket is not this panel's.
+    k.handlers.onError?.('bad-frame');
+    expect(saveBtn.disabled).toBe(true);
+    k.handlers.onError?.('bad-stop');
+    expect(box.hidden).toBe(false);
+    expect(saveBtn.disabled).toBe(false);
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio odabir. Odaberi područje i stajalište ponovno.');
+    saveBtn.click();
+    k.handlers.onError?.('screen-set-rate');
+    expect(box.hidden).toBe(false);
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa spremi ponovno.');
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it('an expiring screen takes the stage back from an open panel, so the notice is what shows', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(true);
+    k.timers.find((t) => t.ms === SCREEN.expiresAt! - NOW && !t.cleared)!.fn();
+    expect(k.handle.phase()).toBe('expired');
+    expect(panel(k)!.hidden).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(false);
+    expect(text(q(k.root, '[data-testid=kiosk-notice]'))).toContain('Ovaj privremeni zaslon je istekao.');
+    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
   });
 
   it('closes on Escape, on the close button and after 90 seconds untouched', async () => {

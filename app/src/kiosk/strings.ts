@@ -258,7 +258,12 @@ export interface KioskStrings {
     hint: string;
     close: string;
     save: string;
+    saving: string;
     saved: string;
+    /** The three ways a save does not land: no socket, a refusal, a repeat inside the DO's window. */
+    saveOffline: string;
+    saveRefused: string;
+    saveBusy: string;
     area: string;
     areaWhole: string;
     areaHint: string;
@@ -372,7 +377,8 @@ function build(code: SupportedLocale): KioskStrings {
       results: forms('setup', 'results'),
     },
     settings: group('settings', [
-      'open', 'title', 'hint', 'close', 'save', 'saved', 'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
+      'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',
+      'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
       'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
     ]),
   };

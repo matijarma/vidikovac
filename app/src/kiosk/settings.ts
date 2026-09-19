@@ -6,7 +6,10 @@
 // The area and the stop are one saved pair: pressing Spremi sends a single
 // `screen-set` frame over the beacon socket, and the DO's answer re-frames the
 // wall through applyScreen() -- nothing here paints the map or the header
-// itself. The theme is the header button's own cycle and applies at once.
+// itself. The panel waits for that answer: it closes when the screen it asked
+// for arrives (applied), and stays open with a sentence when the DO refuses or
+// drops the frame (refused). The theme is the header button's own cycle and
+// applies at once.
 import type { ScreenStop } from '../core/contracts';
 import { CITY_AREA } from '../../../worker/pairing/areas';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -23,6 +26,9 @@ const SETTINGS_STOP_LIMIT = 8;
 const SETTINGS_SEARCH_LIMIT = 12;
 /** Trg bana Jelačića: where "nearest first" starts from when the area is the whole city. */
 const CITY_CENTRE = { lon: 15.97726, lat: 45.81286 };
+/** The DO's answers to a `screen-set` (worker/do/beacon-do.ts setScreen); any
+ *  other error word on the socket belongs to something else and is ignored. */
+const SCREEN_SET_ERRORS = ['bad-area', 'bad-stop', 'screen-set-rate'] as const;
 
 /** What the panel reads about the screen every time it opens or repaints. */
 export interface SettingsScreen {
@@ -60,6 +66,11 @@ export interface SettingsHandle {
    *  the area and the stop are the person's own unsaved edit and are read
    *  only when the panel opens. */
   paint(): void;
+  /** A screen arrived from the DO: if it is the pair this panel asked for, the
+   *  save landed and the panel is done. Any other screen is someone else's. */
+  applied(): void;
+  /** The DO answered the frame this panel sent with a refusal or a drop. */
+  refused(error: string): void;
   destroy(): void;
 }
 
@@ -150,6 +161,8 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   let selectedStopId: string | null = null;
   let destroyed = false;
   let idle: unknown = null;
+  /** The pair sent to the DO and not yet answered; one save is in flight at a time. */
+  let requested: { stopId: string | null; area: string } | null = null;
 
   function showError(text: string): void { errorEl.textContent = text; errorEl.hidden = false; }
   function clearError(): void { errorEl.hidden = true; errorEl.textContent = ''; }
@@ -247,14 +260,37 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     disarmIdle();
     if (element.hidden) return;
     element.hidden = true;
+    endSave();
     hideConfirm();
     deps.onClose?.(restoreFocus);
   }
 
+  function endSave(): void {
+    requested = null;
+    saveBtn.disabled = false;
+    saveBtn.textContent = s.settings.save;
+  }
   function save(): void {
+    if (requested) return;
     clearError();
-    if (!deps.save(selectedStopId, area())) { showError(s.status.offline); return; }
+    const next = { stopId: selectedStopId, area: area() };
+    if (!deps.save(next.stopId, next.area)) { showError(s.settings.saveOffline); return; }
+    requested = next;
+    saveBtn.disabled = true;
+    saveBtn.textContent = s.settings.saving;
+  }
+  function applied(): void {
+    if (!requested) return;
+    const current = deps.screen();
+    if (current.area !== requested.area || current.stopId !== requested.stopId) return;
+    endSave();
     close();
+  }
+  function refused(error: string): void {
+    if (!requested || !(SCREEN_SET_ERRORS as readonly string[]).includes(error)) return;
+    endSave();
+    showError(error === 'screen-set-rate' ? s.settings.saveBusy : s.settings.saveRefused);
+    armIdle();
   }
 
   areaSelect.addEventListener('change', () => { armIdle(); renderStops(); });
@@ -286,6 +322,8 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     close,
     isOpen: () => !element.hidden,
     paint: () => { if (!element.hidden) { paintTheme(); paintScreenRow(); } },
+    applied,
+    refused,
     destroy() {
       destroyed = true;
       disarmIdle();

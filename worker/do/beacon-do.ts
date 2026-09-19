@@ -51,7 +51,7 @@ const STOP_ID_SHAPE = /^[0-9A-Za-z_-]{1,32}$/;
 // generously since the exact byte count is the admin route's concern, not
 // BeaconDO's — only the character set and a sane length are enforced here.
 const SECRET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16,64}$/;
-/** One 'screen-set' per socket per this window; the rest are dropped unanswered (a settings panel must not be a way to mint batches). */
+/** One 'screen-set' per socket per this window; the rest are answered 'screen-set-rate' and change nothing (a settings panel must not be a way to mint batches). */
 export const SCREEN_SET_MIN_MS = 5_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -609,9 +609,11 @@ export class BeaconDO extends DurableObject<Env> {
    * the kiosk re-frames itself through applyScreen() and nothing else.
    *
    * Only an authenticated kiosk socket reaches this, at most once every
-   * SCREEN_SET_MIN_MS: a repeat inside the window is dropped in silence,
-   * never answered, so a stuck panel can neither rewrite the meta in a loop
-   * nor pull code batches.
+   * SCREEN_SET_MIN_MS: a repeat inside the window writes nothing and mints
+   * nothing, so a stuck panel can neither rewrite the meta in a loop nor pull
+   * code batches. It is still answered -- with 'screen-set-rate', one small
+   * frame -- because a panel that hears nothing at all cannot tell a refusal
+   * from a screen that has stopped listening.
    */
   private async setScreen(ws: WebSocket, attachment: AuthedAttachment, stopId: string | null, area: string): Promise<void> {
     if (this.isRevoked()) return;
@@ -619,7 +621,10 @@ export class BeaconDO extends DurableObject<Env> {
     const stop = stopId === null ? null : screenStop(stopId);
     if (stopId !== null && !stop) { ws.send(frame({ t: 'error', error: 'bad-stop' })); return; }
     const now = this.now();
-    if (attachment.screenSetAt !== undefined && now - attachment.screenSetAt < SCREEN_SET_MIN_MS) return;
+    if (attachment.screenSetAt !== undefined && now - attachment.screenSetAt < SCREEN_SET_MIN_MS) {
+      ws.send(frame({ t: 'error', error: 'screen-set-rate' }));
+      return;
+    }
     ws.serializeAttachment({ ...attachment, screenSetAt: now } satisfies AuthedAttachment);
     this.ctx.storage.transactionSync(() => {
       this.setMeta('area', area);
