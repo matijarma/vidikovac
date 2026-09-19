@@ -6,6 +6,7 @@
 // (no geometry loaded) still publishes free-plane plans (tick.ts).
 
 import { createDwellTable, type DwellOverride, type DwellRecent, type DwellTable } from '../../shared/motion/dwell';
+import { createJunctionTable, type JunctionTable } from '../../shared/motion/junction';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import { createMatcher, type Matcher } from '../../shared/motion/match';
 import type { GraphNetwork } from '../../shared/motion/network';
@@ -34,6 +35,9 @@ export interface Engine {
   /** The live recent window the table reads; the twin appends every measured
    *  dwell here, and it is persisted beside the histograms. */
   dwellRecent: DwellRecent;
+  /** Where the rails branch and how long a tram waits there (F11): the
+   *  planner books the median wait at a crossing trams actually stop at. */
+  junctions: JunctionTable;
   matcher: Matcher;
   /** The path id each pattern of the index runs, resolved once here so a
    *  trip's join carries it and the matcher's prior and the timetable pick
@@ -66,6 +70,7 @@ export function createEngine(net: GraphNetwork, index: TripIndex, learned: Learn
     learned,
     dwell: createDwellTable({ net, schedule, aggregates: learned, overrides: options.overrides ?? [], recent: dwellRecent }),
     dwellRecent,
+    junctions: createJunctionTable({ net, aggregates: learned }),
     matcher: createMatcher(net),
     patternPathIds: mapPatternsToPaths(net, index).pathIdOf,
   };

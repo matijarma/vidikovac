@@ -32,20 +32,23 @@ import { metricsStub, recordMetric } from '../metrics';
 import type { MetricsEntry } from '../metrics-do';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { createEngine, type Engine } from '../twin/engine';
-import { patternPathResolver, type PatternPathResolver } from '../../shared/motion/times';
+import { patternPathResolver, zagrebBands, type PatternPathResolver } from '../../shared/motion/times';
 import { decodeFeed } from '../twin/feed-decode';
 import { BUCKETS, horizonKey, type HindsightCounts, type HindsightSignCounts, HORIZONS_S, SIGN_BUCKETS } from '../../shared/motion/hindsight';
 import { emptyAggregates, emptyHistogram, histogramMedian, isEmptyAggregates, mergeAggregates, mergeHistograms, parseKey, recordEvidence, type LearnedAggregates } from '../../shared/motion/learn';
+import { pushDwellRecent, trimDwellRecent, type DwellOverride, type DwellRecent } from '../../shared/motion/dwell';
 import { indexRowsFromIndex } from '../twin/index-load';
 import {
   INDEX_RECHECK_MS,
   LEARN_FLUSH_MS,
   adoptGraph,
   ensureSchema,
+  flushDwellRecent,
   flushLearned,
   indexCheckedAt,
   indexFeedVersion,
   learnFlushedAt,
+  loadDwellRecent,
   loadLatestState,
   loadLearned,
   lookupTrips,
@@ -56,7 +59,7 @@ import {
 } from '../twin/persist';
 import { buildPayload, type TripJoin } from '../twin/publish';
 import { recordFrame, type RecordOutcome } from '../twin/record';
-import { twinIndexSource, twinNetworkSource, twinUpstream } from '../twin/seams';
+import { twinIndexSource, twinNetworkSource, twinOverridesSource, twinUpstream } from '../twin/seams';
 import { emptyState, type TwinState } from '../twin/state';
 import { runTick } from '../twin/tick';
 import { TWIN_DO_NAME } from '../twin/twin-name';
@@ -89,8 +92,9 @@ export interface TickReport {
   hindsightSamples: number;
   /** Bytes of the state row written this tick. */
   stateBytes: number;
-  /** Evidence mined this tick (C1): cruise samples per edge, standing samples per stop. */
-  learned: { edges: number; dwells: number };
+  /** Evidence mined this tick (C1, F11): cruise samples per edge, standing
+   *  samples per stop, junction waits and the node passes beside them. */
+  learned: { edges: number; dwells: number; waits: number; passes: number };
   /** True when this tick flushed the pending aggregates into SQLite (once a minute). */
   learnedFlushed: boolean;
 }
@@ -171,6 +175,11 @@ export class TwinDO extends DurableObject<Env> {
   /** Everything learned so far: the tables plus the unflushed minute; the engine's times read it live (C1). */
   private learned: LearnedAggregates = emptyAggregates();
   private learnedLoaded = false;
+  /** The rolling window of measured dwells, by reference: the engine's dwell
+   *  table reads THIS object, and every tick appends to it (F11). */
+  private dwellRecent: DwellRecent = {};
+  /** The owner's hand-edited dwell defaults, read once per life. */
+  private dwellOverrides: DwellOverride[] = [];
   /** This life loaded a rail graph other than the one the stored rows were
    *  learned under, so nothing keyed by an edge index survives from before. */
   private graphChanged = false;
@@ -245,7 +254,7 @@ export class TwinDO extends DurableObject<Env> {
       order: null,
       hindsightSamples: 0,
       stateBytes: 0,
-      learned: { edges: 0, dwells: 0 },
+      learned: { edges: 0, dwells: 0, waits: 0, passes: 0 },
       learnedFlushed: false,
     });
 
@@ -312,7 +321,7 @@ export class TwinDO extends DurableObject<Env> {
     feed: ReturnType<typeof decodeFeed> | null,
     nowMs: number,
     routes: ZetRoutes,
-  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: { edges: number; dwells: number }; learnedFlushed: boolean } {
+  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: TickReport['learned']; learnedFlushed: boolean } {
     const headerTs = feed?.headerTs ?? prev.headerTs;
     // The joins for every trip in view: the frame's trips plus the tracks already followed.
     const tripIds = new Set<string>();
@@ -326,6 +335,10 @@ export class TwinDO extends DurableObject<Env> {
     // and the pending minute in the state row; once a minute the pending
     // minute reaches the tables in one transaction and the row starts over.
     recordEvidence(this.learned, result.learned);
+    // The rolling window the dwell table reads lives here, beside the
+    // aggregates, for the same reason: the engine holds it by reference.
+    for (const dwell of result.learned.dwells) pushDwellRecent(this.dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
+    this.dwellRecent = trimDwellRecent(this.dwellRecent, Math.floor(nowMs / 1000));
     const learnedFlushed = this.flushLearnedIfDue(result.state, nowMs);
     this.state = result.state;
     this.payload = result.payload;
@@ -352,7 +365,7 @@ export class TwinDO extends DurableObject<Env> {
       tripIds: tripIds.size,
       hindsightSamples,
       stateBytes,
-      learned: { edges: result.learned.edges.length, dwells: result.learned.dwells.length },
+      learned: { edges: result.learned.edges.length, dwells: result.learned.dwells.length, waits: result.learned.waits.length, passes: result.learned.passes.length },
       learnedFlushed,
     };
   }
@@ -368,7 +381,16 @@ export class TwinDO extends DurableObject<Env> {
       markLearnFlushed(sql, nowMs);
       return false;
     }
-    if (nowMs - flushedAt < LEARN_FLUSH_MS || isEmptyAggregates(state.pendingLearned)) return false;
+    if (nowMs - flushedAt < LEARN_FLUSH_MS) return false;
+    const nowSec = Math.floor(nowMs / 1000);
+    // The rolling dwell window rides the same cadence: only the samples taken
+    // since the last flush are written, and the ones that left the window are
+    // deleted, so a minute costs a handful of row writes (F11).
+    const wroteRecent = flushDwellRecent(this.ctx.storage, state.dwellRecent, Math.floor(flushedAt / 1000), nowSec) > 0;
+    if (isEmptyAggregates(state.pendingLearned) && !wroteRecent) {
+      markLearnFlushed(sql, nowMs);
+      return false;
+    }
     flushLearned(this.ctx.storage, state.pendingLearned);
     state.pendingLearned = emptyAggregates();
     markLearnFlushed(sql, nowMs);
@@ -420,8 +442,20 @@ export class TwinDO extends DurableObject<Env> {
     // loaded a different graph (F8c) only the stop dwells carry over, the
     // same split adoptGraph makes in the tables.
     this.loadLearnedOnce();
-    mergeAggregates(this.learned, this.graphChanged ? { edges: {}, stops: saved.pendingLearned.stops } : saved.pendingLearned);
-    this.advance(saved, null, now, await loadZetRoutes());
+    mergeAggregates(this.learned, this.graphChanged ? { stops: saved.pendingLearned.stops } : saved.pendingLearned);
+    // The rolling dwell window: what SQLite kept, plus whatever the last
+    // life had in its state row but had not flushed, newest thirty per
+    // platform inside the window (F11).
+    const nowSec = Math.floor(now / 1000);
+    const restored = loadDwellRecent(this.ctx.storage.sql, nowSec);
+    for (const [stopId, samples] of Object.entries(saved.dwellRecent ?? {})) {
+      const seen = new Set((restored[stopId] ?? []).map(([at]) => at));
+      for (const [at, seconds] of samples) if (!seen.has(at)) pushDwellRecent(restored, stopId, at, seconds);
+    }
+    const trimmed = trimDwellRecent(restored, nowSec);
+    for (const key of Object.keys(this.dwellRecent)) delete this.dwellRecent[key];
+    Object.assign(this.dwellRecent, trimmed);
+    this.advance({ ...saved, dwellRecent: { ...trimmed } }, null, now, await loadZetRoutes());
   }
 
   /** Loads the trip index and the network once, re-checks them hourly, and
@@ -472,7 +506,10 @@ export class TwinDO extends DurableObject<Env> {
     }
     if (this.net && this.index && !this.engine) {
       this.loadLearnedOnce();
-      this.engine = createEngine(this.net, this.index, this.learned);
+      // The owner's dwell defaults, read from the same ASSETS binding as the
+      // two artefacts; a malformed file leaves the list empty and is logged.
+      this.dwellOverrides = await twinOverridesSource(this.env)();
+      this.engine = createEngine(this.net, this.index, this.learned, { overrides: this.dwellOverrides, dwellRecent: this.dwellRecent });
       this.coldLoad = cold;
       logInfo('twin_assets_loaded', { networkMs: cold.networkMs, indexMs: cold.indexMs, edges: this.net.edges.length, trips: this.index.tripsById.size });
     }
@@ -486,7 +523,31 @@ export class TwinDO extends DurableObject<Env> {
     mergeAggregates(fromTables, this.learned);
     this.learned.edges = fromTables.edges;
     this.learned.stops = fromTables.stops;
+    this.learned.nodes = fromTables.nodes;
+    this.learned.nodePasses = fromTables.nodePasses;
     this.learnedLoaded = true;
+  }
+
+  /** What the engine's two F11 tables hold right now, for /stats and for a
+   *  test: the dwell rows and the junction rows at the given instant. */
+  tablesForTest(nowSec: number): { dwell: number; recentStops: number; junctions: number; overrides: number } {
+    const bands = zagrebBands(nowSec);
+    return {
+      dwell: this.engine ? this.engine.dwell.rows(nowSec, bands.hourBand, bands.dayType).length : 0,
+      recentStops: Object.keys(this.dwellRecent).length,
+      junctions: this.engine ? this.engine.junctions.rows(bands.hourBand, bands.dayType).length : 0,
+      overrides: this.dwellOverrides.length,
+    };
+  }
+
+  /** The rolling dwell window as the twin holds it, for a restore test. */
+  dwellRecentForTest(): DwellRecent {
+    return this.dwellRecent;
+  }
+
+  /** The junction cells the twin holds, for a restore and graph-change test. */
+  junctionCellsForTest(): { nodes: number; passes: number } {
+    return { nodes: Object.keys(this.learned.nodes).length, passes: Object.keys(this.learned.nodePasses).length };
   }
 
   // ---- test seams ------------------------------------------------------------
@@ -513,6 +574,8 @@ export class TwinDO extends DurableObject<Env> {
     this.coldLoad = null;
     this.learned = emptyAggregates();
     this.learnedLoaded = false;
+    this.dwellRecent = {};
+    this.dwellOverrides = [];
     this.graphChanged = false;
   }
 

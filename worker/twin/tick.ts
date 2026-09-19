@@ -15,9 +15,10 @@
 import { dist, toPlane } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
-import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
+import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
+import { dwellPlannerAt, pushDwellRecent, trimDwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
+import { buildPlan, CONFIDENCE_FREE_CAP, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
 import { zagrebBands } from '../../shared/motion/times';
@@ -53,8 +54,8 @@ export interface TickResult {
   hindsight: HindsightCounts;
   /** The same graded fixes by sign: plan ahead of the fix, within 50 m, behind (F7). */
   hindsightSign: HindsightSignCounts;
-  /** The evidence this tick mined from the fresh fixes (C1), already counted into the state's pending aggregates. */
-  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[] };
+  /** The evidence this tick mined from the fresh fixes (C1, F11), already counted into the state's pending aggregates. */
+  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[]; waits: NodeWaitEvidence[]; passes: NodePassEvidence[] };
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -123,8 +124,14 @@ export function runTick(input: TickInput): TickResult {
   const tracks: Record<string, Track> = { ...input.state.tracks };
   const published = { ...input.state.published };
   const learnedUpTo = { ...input.state.learnedUpTo };
-  const pendingLearned = { edges: { ...input.state.pendingLearned.edges }, stops: { ...input.state.pendingLearned.stops } };
-  const learned: TickResult['learned'] = { edges: [], dwells: [] };
+  const pendingLearned = {
+    edges: { ...input.state.pendingLearned.edges },
+    stops: { ...input.state.pendingLearned.stops },
+    nodes: { ...(input.state.pendingLearned.nodes ?? {}) },
+    nodePasses: { ...(input.state.pendingLearned.nodePasses ?? {}) },
+  };
+  const dwellRecent = { ...(input.state.dwellRecent ?? {}) };
+  const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [] };
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
@@ -188,12 +195,14 @@ export function runTick(input: TickInput): TickResult {
   const hindsightSign = emptySignCounts();
   if (engine) {
     const bands = zagrebBands(headerSec);
-    // What a stop is expected to hold a vehicle for: the learned median where
-    // it is thick, the timetable's where it is not, the planner's default
-    // otherwise. The speed estimator charges it per stop (F8) rather than a
-    // flat 20 s, and the learner prices its dwell samples with the same
-    // number, so the two never disagree about one platform.
-    const dwellOf = (stopId: string): number => engine.times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
+    // What a stop is expected to hold a vehicle for: the owner's override,
+    // the rolling recent window, the learned band, the timetable, the default
+    // -- the dwell table's one answer (F11). The speed estimator charges it
+    // per stop (F8) rather than a flat 20 s, the planner books it, and the
+    // learner prices the other stops inside a dwell sample with it, so no two
+    // parts of the engine disagree about one platform.
+    const dwellPlanner = dwellPlannerAt(engine.dwell, headerSec, bands.hourBand, bands.dayType);
+    const dwellOf = (stopId: string): number => dwellPlanner.plannedSec(stopId);
     for (const track of all) {
       track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween, dwellOf });
       const update = track.tripId !== null ? tripUpdates[track.tripId] : undefined;
@@ -217,9 +226,15 @@ export function runTick(input: TickInput): TickResult {
       const evidence = extractEvidence(engine.net, track, learnedUpTo[id] ?? 0, dwellOf, travelOf);
       learned.edges.push(...evidence.edges);
       learned.dwells.push(...evidence.dwells);
+      learned.waits.push(...evidence.waits);
+      learned.passes.push(...evidence.passes);
       learnedUpTo[id] = evidence.upTo;
     }
     recordEvidence(pendingLearned, learned);
+    // The same dwell samples also join the rolling window the table reads
+    // first (F11): the histograms are about the hour band, the window is
+    // about the last ninety minutes.
+    for (const dwell of learned.dwells) pushDwellRecent(dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
     // Grade this tick's fresh fixes against what was published before, then
     // remember this tick's plans for the fixes still to come.
     for (const id of fresh) {
@@ -241,7 +256,19 @@ export function runTick(input: TickInput): TickResult {
     published[track.id] = ring;
   }
 
-  const state: TwinState = { headerTs, etag: input.state.etag, tickAtMs: nowMs, tracks, tripUpdates, published, learnedUpTo, pendingLearned };
+  const state: TwinState = {
+    headerTs,
+    etag: input.state.etag,
+    tickAtMs: nowMs,
+    tracks,
+    tripUpdates,
+    published,
+    learnedUpTo,
+    pendingLearned,
+    // Samples that fell out of the window go here, not in an alarm: the tick
+    // is the only place the state is rewritten.
+    dwellRecent: trimDwellRecent(dwellRecent, nowSec),
+  };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
   return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned };
 }

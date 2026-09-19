@@ -23,7 +23,7 @@ import { simulate } from './simulator';
 import { corridorSpec, syntheticNetwork } from './synthetic-network';
 
 // C1: what the twin learns from the fixes it matches, and how the planner
-// hears it. Twenty-four trams a minute apart run the corridor for half an
+// hears it. Seventy-two trams forty seconds apart run the corridor for an
 // hour at 10 m/s with 20 s at every platform, while the timetable the twin
 // was handed says twice that: after the run the learned edge medians sit
 // near the cruise, the learned dwell near the platform time, the wrapper
@@ -31,6 +31,13 @@ import { corridorSpec, syntheticNetwork } from './synthetic-network';
 // it is thin, no edge or dwell is counted twice across ticks, a pair from
 // inside a stop zone teaches nothing, a dwell is priced only off travel the
 // learner can trust, and a histogram survives the SQLite round trip.
+//
+// The fleet grew with F11. A dwell sample now needs a STATIONARY PAIR inside
+// the stop zone -- two fixes the vehicle did not move between -- and at a
+// two-in-three refresh a 20 s dwell often leaves only one fix in the zone,
+// so the old run of 24 trams over half an hour left every platform with
+// fewer than LEARN_MIN_SAMPLES. The trams-per-platform density (one every
+// 400 m) is the same; there are simply more of them, for longer.
 describe('learning from the corridor', () => {
   const net = syntheticNetwork(corridorSpec());
   const start = 1_800_000_000;
@@ -39,8 +46,8 @@ describe('learning from the corridor', () => {
 
   it('learns edge times near the cruise and dwell near the platform time, counts nothing twice, and the wrapper prefers learned medians where they are thick', () => {
     const sim = simulate(net, ['1_0', '2_0'], {
-      trams: 24,
-      headwaySec: 60,
+      trams: 72,
+      headwaySec: 40,
       cruiseMs: 10,
       dwellSec: 20,
       noiseM: 8,
@@ -48,7 +55,7 @@ describe('learning from the corridor', () => {
       latencyMinSec: 2,
       latencyMaxSec: 25,
       tickSec: 10,
-      durationSec: 1800,
+      durationSec: 3600,
       seed: 5,
       startSec: start,
     });
@@ -126,11 +133,21 @@ describe('learning from the corridor', () => {
 
     // A stand at D300 (zone 1760..1840) between clean fixes: one 40 m pair is too short a baseline to price
     // the travel, so it teaches no dwell; the fleet's learned edge prices it, and 34 s less 12 s of travel stood.
+    // F11: the two fixes at 1800 and 1802 are the STATIONARY PAIR the sample now needs -- without them the
+    // interval would be the same and the tram might simply have crossed the zone between two reports.
     const stood = newTrack('stood', '2', 't', 'tram');
-    stood.fixes = [fixAt(1700, 1000, false), fixAt(1740, 1004, false), fixAt(1800, 1012, true), fixAt(1860, 1038, false)];
+    stood.fixes = [fixAt(1700, 1000, false), fixAt(1740, 1004, false), fixAt(1800, 1012, true), fixAt(1802, 1022, true), fixAt(1860, 1038, false)];
     expect(extractEvidence(net, stood, Number.NEGATIVE_INFINITY, () => 20).dwells).toHaveLength(0);
     const priced = extractEvidence(net, stood, Number.NEGATIVE_INFINITY, () => 20, (_path, fromS, toS) => (toS - fromS) / 10);
     expect(priced.dwells).toEqual([{ stopId: 'D300', seconds: expect.closeTo(22, 5), atSec: 1038 }]);
+
+    // F11, the other half of the same rule: a PASS-THROUGH writes no dwell sample. The same clean bounds,
+    // the same interval, but every fix inside D300's zone moved more than the dead zone, so the tram never
+    // stood -- and before the check the learner wrote whatever the interval exceeded the travel by, which is
+    // how a platform nobody stands at grew a standing time (D1).
+    const passing = newTrack('passing', '2', 't', 'tram');
+    passing.fixes = [fixAt(1700, 1000, false), fixAt(1770, 1007, true), fixAt(1830, 1013, true), fixAt(1900, 1020, false)];
+    expect(extractEvidence(net, passing, Number.NEGATIVE_INFINITY, () => 20, (_path, fromS, toS) => (toS - fromS) / 10).dwells).toHaveLength(0);
 
     const h = emptyHistogram();
     addSample(h, 30);

@@ -4,8 +4,9 @@
 // one indexed lookup when the decoded index is not in memory. Plain SQL over
 // the storage the Durable Object hands in; no Cloudflare import.
 
+import { DWELL_RECENT_N, DWELL_RECENT_WINDOW_S, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import { toPlane } from '../../shared/motion/geo';
-import { emptyAggregates, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
+import { emptyAggregates, emptyHistogram, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
 import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
@@ -124,6 +125,33 @@ export function ensureSchema(sql: SqlStorage): void {
        PRIMARY KEY (stop, band, daytype)
      )`,
   );
+  // F11: the waits short of a junction node, and the passes of that node in
+  // the same cell, so p(stop) is a share. Keyed by NODE INDEX, which only
+  // means something inside one rail graph -- adoptGraph drops these with the
+  // edge rows, for exactly the reason it drops those.
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS node_wait (
+       node INTEGER NOT NULL,
+       band INTEGER NOT NULL,
+       daytype INTEGER NOT NULL,
+       hist TEXT NOT NULL,
+       n INTEGER NOT NULL,
+       passes INTEGER NOT NULL,
+       PRIMARY KEY (node, band, daytype)
+     )`,
+  );
+  // F11: the rolling window of individual dwell samples, beside the banded
+  // histograms. Rows, not a histogram: the window answers "what is this
+  // platform doing in the last ninety minutes", which a cell summed over a
+  // whole hour band and a whole day type cannot.
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS stop_dwell_recent (
+       stop TEXT NOT NULL,
+       at INTEGER NOT NULL,
+       seconds REAL NOT NULL,
+       PRIMARY KEY (stop, at)
+     )`,
+  );
 }
 
 // ---- tick state -------------------------------------------------------------
@@ -170,7 +198,17 @@ export function deserializeState(body: string): TwinState {
       againstCount: track.againstCount ?? 0,
     };
   }
-  return { ...stored, tracks, published: stored.published ?? {}, learnedUpTo: stored.learnedUpTo ?? {}, pendingLearned: stored.pendingLearned ?? emptyAggregates() };
+  const pendingLearned = stored.pendingLearned ?? emptyAggregates();
+  return {
+    ...stored,
+    tracks,
+    published: stored.published ?? {},
+    learnedUpTo: stored.learnedUpTo ?? {},
+    // A row written before F11 carries neither the junction tables nor the
+    // rolling dwell window; both start empty and fill within a minute.
+    pendingLearned: { edges: pendingLearned.edges ?? {}, stops: pendingLearned.stops ?? {}, nodes: pendingLearned.nodes ?? {}, nodePasses: pendingLearned.nodePasses ?? {} },
+    dwellRecent: stored.dwellRecent ?? {},
+  };
 }
 
 /** Writes the tick's state and keeps only the newest STATE_ROWS_KEPT rows. */
@@ -309,7 +347,8 @@ export function markLearnFlushed(sql: SqlStorage, atMs: number): void {
  * builder nodes a crossing where a line turns and renumbers everything after
  * it, so a histogram for "edge 137" would then be about a different piece of
  * track. On a change every edge-keyed row goes and the new name is recorded;
- * `stop_dwell` is keyed by stop id, which no rebuild renumbers, so it stays.
+ * `stop_dwell` and `stop_dwell_recent` are keyed by stop id, which no rebuild
+ * renumbers, so they stay; `node_wait` is keyed by node index and goes too.
  * Returns the rows dropped, or null when the graph is the one already
  * recorded (nothing to do, nothing to say).
  */
@@ -320,7 +359,10 @@ export function adoptGraph(storage: DurableObjectStorage, graphHash: string): nu
   let dropped = 0;
   storage.transactionSync(() => {
     dropped = sql.exec<{ c: number }>('SELECT count(*) AS c FROM edge_time').one().c;
+    dropped += sql.exec<{ c: number }>('SELECT count(*) AS c FROM node_wait').one().c;
     sql.exec('DELETE FROM edge_time');
+    // F11: node_wait is keyed by node index, which the same rebuild renumbers.
+    sql.exec('DELETE FROM node_wait');
     metaSet(sql, 'graph_hash', graphHash);
   });
   return dropped;
@@ -340,8 +382,60 @@ export function loadLearned(sql: SqlStorage): LearnedAggregates {
   for (const row of sql.exec<{ stop: string; band: number; daytype: number; hist: string }>('SELECT stop, band, daytype, hist FROM stop_dwell').toArray()) {
     agg.stops[`${row.stop}|${row.band}|${row.daytype}`] = parseHistogram(row.hist);
   }
+  for (const row of sql.exec<{ node: number; band: number; daytype: number; hist: string; passes: number }>(
+    'SELECT node, band, daytype, hist, passes FROM node_wait',
+  ).toArray()) {
+    const key = `${row.node}|${row.band}|${row.daytype}`;
+    agg.nodes[key] = parseHistogram(row.hist);
+    agg.nodePasses[key] = Number.isFinite(row.passes) && row.passes > 0 ? Math.floor(row.passes) : 0;
+  }
   return agg;
 }
+
+/** The rolling dwell window from SQLite: the newest DWELL_RECENT_N samples
+ *  per platform inside the window, so a cold start plans from what the last
+ *  ninety minutes measured rather than from the timetable. */
+export function loadDwellRecent(sql: SqlStorage, nowSec: number): DwellRecent {
+  const recent: DwellRecent = {};
+  for (const row of sql.exec<{ stop: string; at: number; seconds: number }>(
+    'SELECT stop, at, seconds FROM stop_dwell_recent WHERE at > ? ORDER BY at ASC',
+    nowSec - DWELL_RECENT_WINDOW_S,
+  ).toArray()) {
+    const list = recent[row.stop] ?? (recent[row.stop] = []);
+    list.push([row.at, row.seconds]);
+    if (list.length > DWELL_RECENT_N) list.splice(0, list.length - DWELL_RECENT_N);
+  }
+  return recent;
+}
+
+/**
+ * The samples taken since the last flush into `stop_dwell_recent`, and the
+ * ones that fell out of the window out of it, in one transaction beside the
+ * histograms. Only rows newer than `sinceSec` are written: the window itself
+ * stays whole in memory and in the state row, and re-writing all thirty
+ * samples of every platform once a minute would be a row write per sample
+ * per minute for nothing.
+ */
+export function flushDwellRecent(storage: DurableObjectStorage, recent: DwellRecent, sinceSec: number, nowSec: number): number {
+  const sql = storage.sql;
+  let rows = 0;
+  storage.transactionSync(() => {
+    for (const [stopId, samples] of Object.entries(recent)) {
+      for (const [at, seconds] of samples) {
+        if (at <= sinceSec) continue;
+        sql.exec('INSERT OR REPLACE INTO stop_dwell_recent (stop, at, seconds) VALUES (?, ?, ?)', stopId, at, seconds);
+        rows++;
+      }
+    }
+    sql.exec('DELETE FROM stop_dwell_recent WHERE at <= ?', nowSec - DWELL_RECENT_WINDOW_S);
+  });
+  return rows;
+}
+
+/** The window as the twin keeps it: newest first per platform, inside the
+ *  window. Re-exported here so the Durable Object has one import for both
+ *  halves of the round trip. */
+export { trimDwellRecent };
 
 /** Merges the pending aggregates into the tables in one transaction; returns the rows written. */
 export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggregates): number {
@@ -364,6 +458,32 @@ export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggr
       const existing = sql.exec<{ hist: string }>('SELECT hist FROM stop_dwell WHERE stop = ? AND band = ? AND daytype = ?', parsed.id, parsed.hourBand, parsed.dayType).toArray()[0];
       const merged = existing ? mergeHistograms(parseHistogram(existing.hist), h) : h;
       sql.exec('INSERT OR REPLACE INTO stop_dwell (stop, band, daytype, hist, n) VALUES (?, ?, ?, ?, ?)', parsed.id, parsed.hourBand, parsed.dayType, serializeHistogram(merged), histogramCount(merged));
+      rows++;
+    }
+    // F11: the junction cells. A cell can gain passes without gaining waits
+    // (trams sailed through this minute), so the two are merged separately
+    // and the row is written whenever either moved.
+    const nodeKeys = new Set([...Object.keys(pending.nodes ?? {}), ...Object.keys(pending.nodePasses ?? {})]);
+    for (const key of nodeKeys) {
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      const node = Number(parsed.id);
+      if (!Number.isInteger(node)) continue;
+      const existing = sql
+        .exec<{ hist: string; passes: number }>('SELECT hist, passes FROM node_wait WHERE node = ? AND band = ? AND daytype = ?', node, parsed.hourBand, parsed.dayType)
+        .toArray()[0];
+      const fresh = pending.nodes?.[key] ?? emptyHistogram();
+      const hist = existing ? mergeHistograms(parseHistogram(existing.hist), fresh) : fresh;
+      const passes = (existing?.passes ?? 0) + (pending.nodePasses?.[key] ?? 0);
+      sql.exec(
+        'INSERT OR REPLACE INTO node_wait (node, band, daytype, hist, n, passes) VALUES (?, ?, ?, ?, ?, ?)',
+        node,
+        parsed.hourBand,
+        parsed.dayType,
+        serializeHistogram(hist),
+        histogramCount(hist),
+        passes,
+      );
       rows++;
     }
   });
