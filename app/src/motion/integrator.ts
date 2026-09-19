@@ -552,11 +552,16 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           const pathB = graph.paths[b.geom!.path!];
           if (!onSharedRails({ path: pathB, s: b.s }, { path: pathA, s: a.s })) continue;
           // The two plans read in one frame; a pair whose paths have diverged
-          // at both arcs has no common frame and no order to keep.
+          // at both arcs has no common frame and no order to keep. The
+          // occurrence is taken nearest the OTHER mark's own arc, as
+          // everywhere else in this file (mapArcNear, the F9 review's
+          // finding): on a path that laps its own rails the first occurrence
+          // is a whole circuit away. Inert on today's artefact -- no path
+          // runs an edge twice -- and right the day one does (M6).
           let planA = a.targetS;
-          let planB = pathA === pathB ? b.targetS : mapArc(pathB, b.targetS, pathA);
+          let planB = pathA === pathB ? b.targetS : mapArcNear(pathB, b.targetS, pathA, a.s);
           if (planB === null) {
-            const mapped = mapArc(pathA, a.targetS, pathB);
+            const mapped = mapArcNear(pathA, a.targetS, pathB, b.s);
             if (mapped === null) continue;
             planA = mapped;
             planB = b.targetS;

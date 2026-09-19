@@ -4,6 +4,7 @@ import type { Env } from '../../worker/env';
 import { TwinDO, twinStub } from '../../worker/do/twin-do';
 import { metricsStub, zagrebDayHour } from '../../worker/metrics';
 import { FEED_TICK_MS, TICK_CUSHION_MS, TICK_MIN_DELAY_MS, nextTickAt } from '../../worker/twin/clock';
+import { LEARN_FLUSH_MS } from '../../worker/twin/persist';
 import { setTwinIndexSourceForTest, setTwinNetworkSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { recordingKey } from '../../worker/twin/record';
 import { evalPathPlan } from '../../shared/motion/plan';
@@ -311,5 +312,31 @@ describe('TwinDO', () => {
     expect(free.motion && isFreeMotion(free.motion as never)).toBe(true);
     expect(free.data).toMatchObject({ headsign: 'Kraj 1_0' }); // the join needs no geometry
     expect(await runInDurableObject(blind, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({ outcome: 'ok', networkLoaded: false, indexLoaded: true });
+  });
+
+  // The review's I5. The serialized state row measured 1.42 MB at the
+  // morning peak against the Durable Object's ~2 MB row cap, and nothing in
+  // production ever saw the number: one line a minute, beside the flush.
+  it('logs how big the state row is, once a minute beside the learning flush', async () => {
+    const script = [0, 1].map((k) => frame(T0 + 10 * k, [tram('a', 't1a', '1', 400 + 100 * k, T0 + 10 * k - 3)]));
+    setTwinUpstreamForTest(scriptedUpstream(script).upstream);
+    const stub = freshTwin();
+    const logged = vi.spyOn(console, 'log');
+    try {
+      await pinClock(stub, T0 * 1000 + 2_000);
+      await stub.publish(); // the first tick only starts the flush clock
+      expect(logged.mock.calls.flat().filter((line) => String(line).includes('twin_state_size'))).toHaveLength(0);
+      // A minute and a second on: the flush is due, and the line goes with it.
+      await pinClock(stub, (T0 + 10) * 1000 + 2_000 + LEARN_FLUSH_MS + 1_000);
+      const report = await stub.tick();
+      expect(report.learnedFlushed).toBe(true);
+      const lines = logged.mock.calls.flat().map(String).filter((line) => line.includes('twin_state_size'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/twin_state_size bytes=\d+ vehicles=1$/);
+      // The same number the tick report carries, so /stats and the log agree.
+      expect(lines[0]).toContain(`bytes=${report.stateBytes}`);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

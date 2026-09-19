@@ -391,6 +391,12 @@ export class TwinDO extends DurableObject<Env> {
     this.state = result.state;
     this.payload = result.payload;
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
+    // Once a minute, on the same cadence as the flush: how big the serialized
+    // row actually is, against the Durable Object's ~2 MB row cap (I5). The
+    // round's own replay measured 1.42 MB at the morning peak and production
+    // has never measured it at all; `published` is the part that grows with
+    // the fleet, and shrinking it is the next round's work.
+    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length });
 
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);
