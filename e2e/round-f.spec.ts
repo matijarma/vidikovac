@@ -1,7 +1,7 @@
 // Round F in a real browser: the rendering stream F1-F5 landed, proved on the
 // city map rather than in a jsdom stand-in.
 //
-// Four claims, one scenario each:
+// Four claims, in two scenarios:
 //   1. two trams 20 m apart keep BOTH numbers -- two pills or one cluster
 //      whose label lists both (F2, design A);
 //   2. the direction nose keeps to its band -- drawn at 15.5, gone at 17
@@ -18,8 +18,9 @@
 // The assertions read the read-only `data-*` attributes the city map writes
 // for exactly this (`data-frames` has stood there since T11): `data-zoom`,
 // `data-pills`, `data-noses` and `data-focus`. See the comment block above
-// `writeProbe()` in app/src/map/city-map.ts for what each one costs and why
-// it is written where it is.
+// the probe block in app/src/map/city-map.ts (`writeMarkProbe`,
+// `writeNoseProbe`, `writeFocusProbe`) for what each costs and why it is
+// written where it is.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

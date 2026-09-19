@@ -995,7 +995,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //
   // `data-frames` has been written on this container since T11 for one
   // reason: a browser-level proof has to read what the renderer did without
-  // diffing pixels. Round F adds three more of the same kind. None of them
+  // diffing pixels. Round F adds three more of the same kind here, and a
+  // fourth (`data-focus`) beside applyOverlays(). None of them
   // changes what is drawn, each is a string, and each is written where the
   // renderer already holds the answer:
   //

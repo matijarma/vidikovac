@@ -34,7 +34,8 @@ export function schemaSnapshot(time: number): ModuleSnapshot {
 
 /** Round F's own case, in metres along the same real line 6 path: close
  *  enough that the two pills overlap at the zooms a reader actually uses, so
- *  the map has to keep both numbers (a cluster) rather than drop one. 20 m is
+ *  the map has to keep both numbers -- as one cluster, or as two pills side by
+ *  side once the camera is close enough -- rather than drop one. 20 m is
  *  a tram length -- two trams nose to tail at a stop. */
 export const TWO_TRAM_GAP_M = 20;
 /** The lines the two trams report. The city map draws a vehicle where its
