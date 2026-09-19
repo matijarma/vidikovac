@@ -440,6 +440,32 @@ try {
     await context.close();
   }
 
+  // The screen as the one-button start actually makes it: no stop, no district,
+  // the whole-city window. The schema scene above keeps its stop because the
+  // diagram's crop is built around one; this one has none on purpose.
+  {
+    const { provisionKiosk } = await loader.ssrLoadModule('/e2e/helpers.ts');
+    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: 'light', locale: 'hr-HR' });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const { kioskUrl } = await provisionKiosk(context.request, base);
+    await page.goto(kioskUrl);
+    await page.getByTestId('kiosk-invitation').waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-testid=kiosk-map]')?.getAttribute('data-map-status') === 'ready');
+    const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+    const blocking = audit.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
+    for (const violation of blocking) findings.push({ scene: 'kiosk-window', problem: violation.id, targets: violation.nodes.map(n => n.target) });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    if (overflow > 1) findings.push({ scene: 'kiosk-window', problem: 'geometry', overflow });
+    const file = 'kiosk-window.png';
+    await page.screenshot({ path: resolve(output, file) });
+    records.push({ scene: 'kiosk-window', file, overflow, seriousOrCritical: blocking.length });
+    if (errors.length) findings.push({ scene: 'kiosk-window', problem: 'page-errors', errors });
+    console.log(`kiosk-window: overflow=${overflow}, axe=${blocking.length}`);
+    await context.close();
+  }
+
   // The lightweight face of Promet at the phone size: no stage, no canvas, a scrolling list.
   {
     const context = await browser.newContext({ viewport: PHONE, colorScheme: 'light', locale: 'hr-HR' });

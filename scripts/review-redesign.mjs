@@ -18,6 +18,14 @@ try {
   const { teaserSubset } = await loader.ssrLoadModule('/worker/feed/registry.ts');
   const snapshots = await fixtures.experienceSnapshots(process.env.REVIEW_STATE ?? 'ready');
   const now = Date.parse(snapshots['zet-rt'].sourceUpdatedAt);
+  // What the one-button start makes, and so what the review must look at first:
+  // a whole-city screen with no stop at all. The stop scene below is the other
+  // half of the round -- a screen somebody later set a stop on in Postavke.
+  const CITY_SCREEN = { kind: 'temporary', expiresAt: now + 86_400_000, stop: null, area: 'zagreb' };
+  const STOP_SCREEN = { kind: 'temporary', expiresAt: now + 86_400_000, stop: fixtures.FIXTURE_STOP, area: 'zagreb' };
+  // The screen every socket reports right now; a scene moves it and tells the
+  // wall through the ordinary `codes` frame, exactly as the DO answers a save.
+  let screenMeta = CITY_SCREEN;
   let current = { version: 1, revision: 0, target: null, expiresAt: null, status: 'idle' };
   let owner = null;
   const clients = new Map();
@@ -49,7 +57,7 @@ try {
         const m = JSON.parse(String(raw));
         if (m.t === 'join' || m.t === 'resume') socket.send(JSON.stringify({
           t: 'joined', role: 'scanner', expiresAt: now + 600000, serverNow: now, resumeToken: `fixture-${name}`, dataToken: 'fixture-data-token',
-          participants: 1, screen: { kind: 'venue', expiresAt: null, stop: fixtures.FIXTURE_STOP }, presentation: publicState(name),
+          participants: 1, screen: screenMeta, presentation: publicState(name),
         }));
         if (m.t === 'presentation-get') socket.send(JSON.stringify({ t: 'presentation', state: publicState(name) }));
         if (m.t === 'present') {
@@ -85,21 +93,36 @@ try {
     console.log(name, JSON.stringify(geometry));
   }
   const kiosk = await pageFor({ width: 1920, height: 1080 }, 'kiosk');
-  await kiosk.addInitScript(stop => localStorage.setItem('vidikovac-beacon', JSON.stringify({ beaconId: 'ABCDEFGH', secret: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', screen: { kind: 'venue', expiresAt: null, stop } })), fixtures.FIXTURE_STOP);
-  await kiosk.route('**/api/teaser*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ generatedAt: new Date(now).toISOString(), modules: Object.values(snapshots).map(s => teaserSubset(s, fixtures.FIXTURE_STOP)) }) }));
+  await kiosk.addInitScript(screen => localStorage.setItem('vidikovac-beacon', JSON.stringify({ beaconId: 'ABCDEFGH', secret: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', screen })), CITY_SCREEN);
+  // The teaser is the screen's own: stopless for the city window, stop-scoped once a stop is set.
+  await kiosk.route('**/api/teaser*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ generatedAt: new Date(now).toISOString(), modules: Object.values(snapshots).map(s => teaserSubset(s, screenMeta.stop)) }) }));
   await kiosk.routeWebSocket('**/ws/beacon/**', socket => {
     beacon = socket;
     socket.onMessage(raw => {
       const m = JSON.parse(String(raw));
       if (m.t === 'auth' || m.t === 'more') {
-        socket.send(JSON.stringify({ t: 'codes', serverNow: now, screen: { kind: 'venue', expiresAt: null, stop: fixtures.FIXTURE_STOP }, batch: [{ code: 'ABCDEFGH', slotStart: now, slotEnd: now + 30000 }] }));
+        sendCodes();
         if (m.t === 'auth') socket.send(JSON.stringify({ t: 'presentation', presentation: screenState() }));
+      }
+      // The settings panel's save, as the DO answers it: store the screen and
+      // reply with the ordinary codes frame, which re-frames the wall.
+      if (m.t === 'screen-set') {
+        screenMeta = { ...screenMeta, stop: m.stopId ? fixtures.FIXTURE_STOP : null, area: m.area };
+        sendCodes();
       }
       if (m.t === 'presented' && m.revision === current.revision) { current.status = m.status; notify(); }
       if (m.t === 'presentation-stop') { owner = null; current = { version: 1, revision: current.revision + 1, target: null, status: 'idle', expiresAt: null }; socket.send(JSON.stringify({ t: 'presentation', presentation: screenState() })); notify(); }
     });
     socket.send(JSON.stringify({ t: 'challenge', nonce: 'review-only' }));
   });
+  /** One code batch carrying the screen the wall should be framing now. */
+  const sendCodes = () => beacon?.send(JSON.stringify({ t: 'codes', serverNow: now, screen: screenMeta, batch: [{ code: 'ABCDEFGH', slotStart: now, slotEnd: now + 30000 }] }));
+  /** Move the screen the way Postavke does, and wait for the wall to take it. */
+  const setScreen = async (screen) => {
+    screenMeta = screen;
+    sendCodes();
+    await kiosk.waitForTimeout(1500);
+  };
   await kiosk.goto(`${base}/kiosk/`);
   await kiosk.getByTestId('kiosk-invitation').waitFor();
   await kiosk.waitForFunction(() => ['ready', 'tiles-failed', 'unavailable'].includes(document.querySelector('[data-testid=kiosk-map]')?.getAttribute('data-map-status')), null, { timeout: 30_000 });
@@ -108,6 +131,11 @@ try {
     await capture(kiosk, `kiosk-${viewport.width}-light`);
   }
   await kiosk.setViewportSize({ width: 1920, height: 1080 });
+  // The other half of the round: the same screen after somebody set a stop in
+  // Postavke -- the camera on the stop, the Promet card its board.
+  await setScreen(STOP_SCREEN);
+  await capture(kiosk, 'kiosk-1920-light-stop');
+  await setScreen(CITY_SCREEN);
   await kiosk.evaluate(() => localStorage.setItem('vidikovac-theme', 'dark'));
   await kiosk.reload();
   await kiosk.getByTestId('kiosk-invitation').waitFor();
