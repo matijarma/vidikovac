@@ -69,15 +69,31 @@ Skupovi koje Worker nikad ne dohvaća: lokalna skripta ih čita jednom i pretvar
 | Skup | Izvor | Osnova i ograničenje | Izvedeni artefakt | Atribucija |
 |---|---|---|---|---|
 | Nacrt mreže tramvajskih linija | ZET, izvorni `zet-zagreb-tram-lines-map.svg` u repozitoriju | Izvorno ZET-ovo kartografsko djelo. Datoteka ne navodi posebnu dozvolu; Otvorena dozvola za GTFS ne proglašava se automatski dozvolom za nacrt. Potvrda osnove ponovne uporabe / obavijest ZET-u ostaje vlasnički zadatak uz M2. | `scripts/zet-schema.mjs` → `app/public/data/zet-schema.json`; ponovno iscrtane polilinije, stajališta i nazivi, bez logotipa, zaglavlja i legende; izvorni SVG nije javna imovina aplikacije | Shema linija prema nacrtu ZET-a; prikaz geometrije i naziva prilagođen aplikaciji Kaj ima?. |
+| Tablica boja linija | isti nacrt: boje poteza i brojčanih oznaka u `zet-zagreb-tram-lines-map.svg` | Ista osnova i ista ograničenja kao redak iznad. Boja nije identifikator linije: linije 5 i 9 dijele istu, a četiri noćne istu tamnoplavu, pa tablica služi samo za crtanje (linija u fokusu, čipovi okretišta), nikad za prepoznavanje linije. | ista gradnja, `scripts/zet-schema.mjs` → `app/src/data/zet-line-colours.json` (19 linija, uz `feedVersion` koji se mora slagati s mrežom i shemom); izvedeno iz nacrta, ne prepisano ručno | Boje linija prema nacrtu ZET-a. |
 
 Nacrt je povijesna shema, a ne tvrdnja o današnjim privremenim trasama.
 Spajanje sa stajalištima i identitetom linija provjerava se prema ugrađenom
 GTFS-u; imenovane razlike stoje u `scripts/zet-schema-overrides.json`, bez
 izmišljenih lokacija za stanice kojih u nacrtu nema. Koraci osvježavanja su
-`npm run build:network`, `npm run build:trips`, zatim `npm run build:schema`.
+`npm run build:network` (mrežni artefakt **verzije 3**: graf pruge s čvorovima na
+križanjima, sintetička staza za svaki tramvajski uzorak, posluženi popis
+stajališta i `graphHash`), `npm run build:trips`, zatim `npm run build:schema`
+(shema i, uz nju, tablica boja `app/src/data/zet-line-colours.json`).
 Verzije mreže, indeksa i sheme moraju se slagati; provjera artefakta i njegovih
-145 staza dio je testova. Shema se poslužuje statički pod `/data/`, ne kroz
+152 staze dio je testova (146 ih se smješta na nacrt). Shema se poslužuje statički pod `/data/`, ne kroz
 Worker i ne kao novi skup pod `/open`.
+
+### Ručne i građevne dopune uz ZET-ove artefakte
+
+Tri datoteke nisu izvor podataka nego imenovane odluke uz gradnju i uz motor.
+Nijedna ne nosi tuđe podatke, pa nemaju licencu ni atribuciju osim one koja već
+stoji uz ZET-ov GTFS i nacrt.
+
+| Datoteka | Tko je održava | Što nosi |
+|---|---|---|
+| `scripts/zet-schema-overrides.json` | razvoj, uz gradnju sheme | imenovane razlike između povijesnog nacrta i ugrađenog GTFS-a: krajnje stanice, aliasi naziva, staze bez smještaja na nacrt. |
+| `scripts/gtfs-shapes-overrides.json` | razvoj, uz `npm run build:network` | `unreachableStops` (peron uzorka bez oblika dalje od 60 m od svake nacrtane tračnice; na feedu 000395 prazno) i `longLegs` (hop sintetičke staze koji i nakon čvorenja križanja ide preko dvostruke zračne linije i još 500 m dulje). Bez unosa gradnja **pada**: takav obilazak je u pravilu nedostajući čvor, a ne ruta. Svaki unos nosi razlog s mjerom -- danas dva, Botanički vrt → Zrinjevac za linije 6 i 9, gdje dva kolosijeka završavaju 6,79 m jedan od drugoga i nikad se ne sijeku. |
+| `app/public/data/stop-dwell-overrides.json` | **vlasnik**, izravno u repozitoriju | ručna tablica zadržavanja po peronu (`stop`, neobavezni `route`, `defaultSec`, neobavezni `pin`, obavezni `reason`). Deployabilna imovina: blizanac je dohvaća s `/data/stop-dwell-overrides.json`, pa između izmjene i onoga što planer čita nema koraka gradnje. Zasijana je s dvadeset tramvajskih okretišta na 60 s i razlogom „terminus layover placeholder — owner to adjust” (pogađa 61 tramvajski peron i nijedno autobusno ugibalište). Neispravan redak ruši učitavanje cijele datoteke i vidi se na `/stats`; upute su u `docs/kaj-verification.md`. |
 
 ### Prostorni slojevi modula `ckan-geo`
 

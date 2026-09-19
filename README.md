@@ -30,9 +30,15 @@ na produkciju; postavljanje traži zasebno odobrenje.
 npm install
 cp .dev.vars.example .dev.vars        # izričite lokalne tajne; APP_ENV=test samo lokalno
 npm run gtfs:routes                   # jednom: imena ZET linija u app/src/data/zet-routes.json
+npm run build:network                 # mrežni artefakt v3: graf pruge s čvorovima na križanjima, sintetička staza za svaki tramvajski uzorak, posluženi popis stajališta, graphHash
 node scripts/gtfs-stops.mjs            # katalog iz već postojećeg mrežnog artefakta
 npm run dev                           # wrangler dev na http://localhost:8787
 ```
+
+Ručna tablica zadržavanja na stajalištima je `app/public/data/stop-dwell-overrides.json`:
+uređuje se izravno, bez koraka gradnje (blizanac je dohvaća s
+`/data/stop-dwell-overrides.json`). Oblik retka i pravila su u `docs/kaj-verification.md`,
+a imenovane iznimke gradnje mreže u `scripts/gtfs-shapes-overrides.json`.
 
 ## Testovi
 
