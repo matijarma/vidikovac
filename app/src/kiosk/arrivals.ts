@@ -82,26 +82,33 @@ function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string
   return `${word} ${routeName}`.trim();
 }
 
-/** The three cells of one arrival on a kiosk board row (paired.ts's `row`):
- *  the plate and the destination on the first line, the time floated at its
- *  right, and "po redu vožnje" underneath when nothing tracks this trip. */
-export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; sub: string; aside: string } {
+/** The two cells of one arrival on a kiosk board row (paired.ts's `row`): the
+ *  plate and the destination, with the time floated at their right. One line,
+ *  like every other board row on this screen.
+ *
+ *  What is NOT here is the per-row "po redu vožnje": a second line under every
+ *  untracked row doubled the height of a card read from four metres away. The
+ *  distinction survives whole -- a tracked estimate carries the live dot, a
+ *  timetable time carries nothing -- and the note under the list says in one
+ *  sentence what that means. */
+export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; aside: string } {
   return {
     main: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))} ${escapeHtml(row.headsign || row.routeName)}`,
-    sub: row.live ? '' : s.arrivals.scheduled,
     aside: etaMarkup(row, s, 'k-eta'),
   };
 }
 
 /** The same rows as the front page's Promet card reads them (front.ts
- *  FrontRow): the lead cell carries the plate over the time -- the two things
- *  a rider reads first -- and the destination fills the row. */
+ *  FrontRow): the plate at the lead, the destination across the middle, the
+ *  time hard right. One line, the same shape as the exceptions the card shows
+ *  when it has no board -- so a stop's arrivals cost the aside the room three
+ *  or four exception lines cost it, and the events and QR cards keep theirs. */
 export function arrivalFrontRows(arrivals: StopArrivals, s: KioskStrings, limit: number): FrontRow[] {
   return arrivals.rows.slice(0, Math.max(0, limit)).map((row) => ({
     key: `arrival:${row.tripId}|${row.atMs}`,
-    leadMarkup: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))}${etaMarkup(row, s, 'k-fr-eta')}`,
+    leadMarkup: kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s)),
     title: row.headsign || row.routeName,
-    ...(row.live ? {} : { sub: s.arrivals.scheduled }),
+    trail: etaMarkup(row, s, 'k-eta'),
   }));
 }
 

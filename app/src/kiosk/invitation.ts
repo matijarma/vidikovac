@@ -44,6 +44,20 @@ export const FRONT_PANEL_IDS: readonly PanelId[] = ['weather', 'promet', 'tonigh
 const MIN_EVENT_ROWS = 2;
 /** The budget before the aside has been laid out once (happy-dom, a cold first paint). */
 const SEED_EVENT_ROWS: Readonly<Record<Composition, number>> = { wide: 6, compact: 3, portrait: 5, handheld: 4 };
+/** The most rows the promet card keeps when a configured stop's arrivals are
+ *  its rows (WP5b): four across a wide screen, three in a narrow column. It is
+ *  a cap, not a promise -- the measured budget below cuts under it whenever
+ *  the aside's room is short, exactly as it does for the exception lines, so a
+ *  board can never push the events card under its floor or the QR card out of
+ *  the column. */
+const BOARD_LINES: Readonly<Record<Composition, number>> = { wide: 4, compact: 3, portrait: 3, handheld: 3 };
+
+/** How many rows the promet card may keep in whichever reading it is showing:
+ *  a stop's board, or the city's exceptions. One budget, because it is one
+ *  card competing for one column. */
+function prometCap(model: InvitationModel | null): number {
+  return (model?.prometRows?.length ? BOARD_LINES : EXCEPTION_LINES)[model?.composition ?? 'wide'];
+}
 
 /** What the aside's measured room holds: the events card's rows and the promet card's lines. */
 interface Budgets { rows: number; lines: number }
@@ -66,10 +80,11 @@ export interface InvitationModel {
   lastRun: LastRunSnapshot | null;
   /** Which of the four drawings this is (kiosk/layout.ts); the sheet lays the panels out by it. */
   composition: Composition;
-  /** The configured stop's next departures, already cut to the room this
-   *  drawing has (WP5b). With a stop set the Promet card is that stop's
-   *  board; with none -- or while the board has nothing to say -- the card
-   *  keeps the city-wide exceptions it has always shown. */
+  /** The configured stop's next departures (WP5b), at most the cap for this
+   *  drawing; the measured budget cuts further when the aside is short. With a
+   *  stop set the Promet card is that stop's board; with none -- or while the
+   *  board has nothing to say -- the card keeps the city-wide exceptions it
+   *  has always shown. */
   prometRows?: FrontRow[];
 }
 
@@ -157,9 +172,14 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   function measureBudgets(): Budgets | null {
     const room = roomFor(panels.tonight);
     const row = panels.tonight.querySelector<HTMLElement>('.k-fr')?.clientHeight ?? 0;
-    if (room <= 0 || !row) return null;
+    // Room at or below zero is the case that matters most: the promet card has
+    // taken the whole column and the events card has nothing left. Returning
+    // null there (as this did) left the budget frozen at the number that
+    // caused it, and the QR card was pushed out of the aside. A measurable row
+    // is the only thing this needs to start giving lines back.
+    if (!row) return null;
     const line = panels.promet.querySelector<HTMLElement>('.k-fr')?.clientHeight ?? 0;
-    const cap = EXCEPTION_LINES[lastModel?.composition ?? 'wide'];
+    const cap = prometCap(lastModel);
     // The floor is what the promet card yields lines for, not something the
     // events card overflows to honour: where even one exception line cannot buy
     // the second row, the card shows the one row its box holds whole.
@@ -202,7 +222,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     const built = frontPanels({
       modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
       lightweight, composition: model.composition, prometMode: 'exceptions', eventRows: rowBudget + ownEvents, prometLines: lineBudget,
-      ...(model.prometRows?.length ? { prometRows: model.prometRows } : {}),
+      // A board feeds the same budget the exception lines feed: the column is
+      // shared with the events card's two-row floor and the QR card's 240 px.
+      ...(model.prometRows?.length ? { prometRows: model.prometRows.slice(0, Math.max(1, lineBudget)) } : {}),
     });
     if (venues.length) {
       built.tonight.rows = eventCardRows(venues, built.tonight.rows, rowBudget);
@@ -250,7 +272,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     get mapHost() { return field.mapHost; },
     update(model) {
       lastModel = model;
-      if (measured === null) { rowBudget = SEED_EVENT_ROWS[model.composition]; lineBudget = EXCEPTION_LINES[model.composition]; }
+      if (measured === null) { rowBudget = SEED_EVENT_ROWS[model.composition]; lineBudget = prometCap(model); }
       field.update({ modules: model.modules, stop: model.stop, strings: s, i18n, locale });
       paint(model);
       fit();

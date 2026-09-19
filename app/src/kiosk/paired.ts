@@ -410,7 +410,7 @@ function arrivalsBody(ctx: PairedContext, stop: { id: string; name?: string }): 
   }
   const list = rows.map((arrival) => {
     const cells = arrivalCells(arrival, ctx.strings);
-    return `<li class="k-row">${row(cells.main, cells.sub, cells.aside)}</li>`;
+    return `<li class="k-row">${row(cells.main, '', cells.aside)}</li>`;
   }).join('');
   return `<ul class="k-rows" data-testid="k-arrivals">${list}</ul><p class="k-board-note">${escapeHtml(ctx.strings.arrivals.note)}</p>`;
 }

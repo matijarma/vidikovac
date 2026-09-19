@@ -1949,11 +1949,14 @@ describe('arrivals on the public screen', () => {
     await flush();
     const card = q(k.root, '[data-testid=k-selection]')!;
     const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
-    expect(rows.map((row) => text(row))).toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Goricapo redu vožnje', '14:4513 Žitnjakpo redu vožnje']);
-    // The tracked row, and only it, carries the live dot; the two off the
-    // timetable say so in words instead.
+    // One line per row: the time, the plate, where it is going -- and no
+    // per-row "po redu vožnje", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // The tracked row, and only it, carries the live dot and is marked live;
+    // the note under the list says what the unmarked times are.
     expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
     expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
+    expect(text(card)).not.toContain('po redu vožnje');
     // One note for the list, not one per row, and the stop's lines keep their place under it.
     expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
     expect(text(card)).toContain('linija 6, 11, 12');
@@ -1974,7 +1977,11 @@ describe('arrivals on the public screen', () => {
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     // The stop list has not been loaded, so the screen asks about the platform it knows.
     expect(b.asked).toEqual(['106_1']);
-    expect([...promet.querySelectorAll<HTMLElement>('.k-fr')].map((row) => text(row))).toEqual(['6za 3 minČrnomerec', '11za 6 minVelika Goricapo redu vožnje']);
+    // A board row is the exceptions row's shape: plate, destination, time at
+    // the end, one line -- so the card costs the aside what it always cost it.
+    const rows = [...promet.querySelectorAll<HTMLElement>('.k-fr')];
+    expect(rows.map((row) => text(row))).toEqual(['6Črnomerecza 3 min', '11Velika Goricaza 6 min']);
+    expect(rows.every((row) => row.dataset.trail === '1' && row.querySelector('.k-fr-sub') === null)).toBe(true);
     expect(text(promet)).toContain('Promet');
     // No figure on a public screen stands unattributed: the board says under itself where it came from.
     expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
@@ -2000,6 +2007,24 @@ describe('arrivals on the public screen', () => {
     expect(text(card)).toContain('Trg bana J. Jelačića');
     expect(text(card)).toContain('linija 6, 11, 12');
     k.handle.destroy();
+  });
+
+  it("gives the narrow drawing three rows, not four: the board feeds the aside's one budget", async () => {
+    const b = fakeBoards({
+      '106_1': board('106_1', [
+        dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z'),
+        dep('trip-12', '12', 'Ljubljanica', '2026-09-11T12:40:00Z'), dep('trip-14', '14', 'Mihaljevac', '2026-09-11T12:42:00Z'),
+      ]),
+    });
+    const wide = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    expect(q(wide.root, '[data-testid=kiosk-panel-promet]')!.querySelectorAll('.k-fr')).toHaveLength(4);
+    wide.handle.destroy();
+    const compact = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create, viewport: { width: 1366, height: 768 } });
+    await flush();
+    expect(q(compact.root, '.kiosk')!.dataset.size).toBe('compact');
+    expect(q(compact.root, '[data-testid=kiosk-panel-promet]')!.querySelectorAll('.k-fr')).toHaveLength(3);
+    compact.handle.destroy();
   });
 
   it('keeps the city-wide exceptions when the stop board is down', async () => {

@@ -101,7 +101,10 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     // The rows are the caller's, not the city's exceptions, and the kicker and
     // credit the card always had are untouched.
     expect(panel.rows).toEqual(supplied);
-    expect(panel.note).toBe('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.');
+    // The attribution goes under the rows at the card's credit size, not as a
+    // note at row size: a note wrapped to five lines of the aside's column.
+    expect(panel.note).toBeUndefined();
+    expect(panel.footMarkup).toBe('<p class="k-panel-attrib">Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.</p>');
     expect(panel.kicker).toBe(s.say.transit);
     expect(panel.credit).toContain('ZET');
     // With no rows supplied the card is the city's exceptions, exactly as before.

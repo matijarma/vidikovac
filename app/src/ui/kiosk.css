@@ -324,14 +324,18 @@
 .k-fr-lead { display: grid; min-width: 3.8em; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--k-ink); font-variant-numeric: tabular-nums; }
 .k-fr-day { font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
 .k-fr-lead--badge { min-width: 0; padding-top: 0.05em; }
-/* A stop's next departures (WP5b). The lead cell carries the plate over the
-   time -- the two things a rider reads first -- and a tracked estimate keeps
-   the live dot in both time branches, the countdown and the clock, so no
-   figure on the screen stands unlabelled. A row nothing tracks says "po redu
-   vožnje" on its second line instead. */
-.k-fr-eta { display: block; margin-top: calc(var(--k-gap) * 0.25); white-space: nowrap; }
+/* A board row (WP5b): plate, destination, time hard right, on ONE line at
+   every size -- a card read from four metres away is a column of times, not a
+   column of paragraphs, and the aside's room is shared with the events and QR
+   cards. The destination ellipsises rather than wrapping under the time. A
+   tracked estimate keeps the live dot in both time branches, the countdown and
+   the clock; an untracked time carries none, and the note under the list says
+   what that difference is. */
+.k-fr[data-trail] { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.k-fr-trail { justify-self: end; white-space: nowrap; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; color: var(--k-ink); font-variant-numeric: tabular-nums; }
+.k-fr[data-trail] .k-fr-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .k-eta { white-space: nowrap; }
-.k-eta[data-live='true'], .k-fr-eta[data-live='true'] { color: var(--k-ink); }
+.k-eta[data-live='true'] { color: var(--k-ink); }
 .k-live { display: inline-block; inline-size: 0.42em; block-size: 0.42em; margin-inline-end: 0.36em; border-radius: 50%; background: var(--k-green); vertical-align: 0.12em; }
 .k-fr-main { display: grid; gap: calc(var(--k-gap) * 0.15); min-width: 0; }
 .k-fr-title { display: -webkit-box; overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--k-ink); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
@@ -348,6 +352,11 @@
 .k-panel-foot { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5) var(--k-gap); margin-top: calc(var(--k-gap) * 0.5); padding-top: calc(var(--k-gap) * 0.45); border-top: 1px solid var(--k-line); font-size: var(--k-sup-size); font-weight: 700; color: var(--k-ink); font-variant-numeric: tabular-nums; }
 .k-panel-foot-label { flex-basis: 100%; font-size: var(--k-label-size); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-action); }
 .k-panel-foot-note { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-2); }
+/* The board's attribution (WP5b): the same sentence the phone sheet and the
+   tapped card carry, at the card's credit size. A note's size wrapped it to
+   five lines of a 320 px column -- a hundred pixels that came out of the
+   events card and pushed the QR card out of the aside. */
+.k-panel-attrib { margin-top: calc(var(--k-gap) * 0.35); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-2); }
 .k-pair { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.35); white-space: nowrap; }
 /* The credit at the foot of every panel, pushed down by the rows above it. */
 .k-panel-credit { margin-top: auto; padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

@@ -82,6 +82,11 @@ export interface FrontRow {
   leadMarkup?: string;
   title: string;
   sub?: string;
+  /** Trusted markup at the row's end, hard right: a departure's time. A row
+   *  that carries one is ONE line at every size -- the title ellipsises rather
+   *  than wrapping under the trail -- because a board read from across a room
+   *  is a column of times, not a column of paragraphs. */
+  trail?: string;
   tone?: 'late' | 'early' | 'ontime' | 'unknown';
 }
 
@@ -338,7 +343,7 @@ export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: numb
  * lines, the closures counted, ZET's notices counted -- and "Linije voze po
  * redu" when the network has nothing to report. A caller that has a stop's
  * arrivals passes them as `prometRows` and the card becomes that board, with
- * the arrivals note under it.
+ * the arrivals attribution under it.
  */
 export function prometPanel(input: FrontInput): FrontPanel {
   const { strings: s, i18n, now, locale, stop } = input;
@@ -357,9 +362,15 @@ export function prometPanel(input: FrontInput): FrontPanel {
   }
   // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
   const departures = exceptions ? [] : lastDeparturesAhead(input.lastRun, stop, now);
-  const foot = departures.length > 0
-    ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
-    : undefined;
+  // A supplied board is arrivals, and no estimate on a public screen stands
+  // unattributed: the sentence the phone sheet and the tapped card carry goes
+  // under the rows here too. At the card's credit size, not a note's: five
+  // wrapped lines of a 320 px column pushed the QR card out of the aside.
+  const foot = supplied && supplied.length > 0
+    ? `<p class="k-panel-attrib">${escapeHtml(s.arrivals.note)}</p>`
+    : departures.length > 0
+      ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
+      : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
   const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
   const closed = closuresByDistance(byModule(input.modules).prometnice, null, now).length;
@@ -370,12 +381,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
       ? [late.more > 0 ? plural(locale, s.front.moreLate, late.more) : '', closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
       : [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ');
   const empty = exceptions ? s.front.linesRegular : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
-  // A supplied board is arrivals, and no estimate on a public screen stands
-  // unattributed: the list carries the one note that says where its figures
-  // come from, exactly as it does on the phone sheet and the tapped card.
-  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable
-    : supplied && supplied.length > 0 ? s.arrivals.note
-      : rows.length === 0 ? empty : undefined;
+  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
   return {
     id: 'promet',
     kicker: s.say.transit,
@@ -482,7 +488,8 @@ function rowMarkup(row: FrontRow): string {
     ? `<span class="k-fr-lead k-fr-lead--badge">${row.leadMarkup}</span>`
     : `<span class="k-fr-lead">${row.day ? `<span class="k-fr-day">${escapeHtml(row.day)}</span>` : ''}${escapeHtml(row.lead ?? '')}</span>`;
   const tone = row.tone ? ` data-tone="${escapeAttribute(row.tone)}"` : '';
-  return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span></li>`;
+  const trail = row.trail ? `<span class="k-fr-trail">${row.trail}</span>` : '';
+  return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${row.trail ? ' data-trail="1"' : ''}${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span>${trail}</li>`;
 }
 
 /** One panel's inner markup: the head (kicker and meta), the figure, the rows or the note, the foot, the credit. */
