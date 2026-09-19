@@ -34,7 +34,7 @@ import { vehicleFixes } from '../app/src/motion/fixes';
 import { createIntegrator } from '../app/src/motion/integrator';
 import { dist, toPlane } from '../shared/motion/geo';
 import { BUCKETS, emptyCounts, emptySignCounts, HORIZONS_S, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
-import { HEADWAY_M } from '../shared/motion/laws';
+import { HEADWAY_M } from '../shared/motion/order';
 import { decodeNetwork, type GraphNetwork, type Path } from '../shared/motion/network';
 import { evalFreePlan, evalPathPlan } from '../shared/motion/plan';
 import { lastFix, type PathKnot, type Plan } from '../shared/motion/track';
@@ -84,7 +84,7 @@ export const REGRESSION_M = 25;
 export const ORDER_FIX_WINDOW_S = 5;
 
 /** Fixes (or drawn marks) closer than one tram length along the rails have
- *  no order to violate (shared/motion/laws.ts: a pair within a headway is
+ *  no order to violate (shared/motion/order.ts: a pair within a headway is
  *  unordered), so a disagreement counts only beyond it. */
 export const ORDER_MIN_GAP_M = HEADWAY_M;
 
@@ -249,7 +249,7 @@ export interface ReplayReport {
   phantoms: PhantomReport;
   client: ClientReport;
   /** Order-law violations the harness could not attribute to a concession
-   *  that same tick (shared/motion/laws.ts: a concession is the only
+   *  that same tick (shared/motion/order.ts: a concession or a decisive swap is the only
    *  sanctioned way two trams swap places). Must be 0. */
   overtakes: number;
   /** A published plan whose arc ran backwards in time. Must be 0. */
@@ -290,11 +290,10 @@ function joinsFor(index: TripIndex, tripIds: Iterable<string>, patternPathIds: r
 
 // ---- Arcs between paths -----------------------------------------------------
 //
-// The same two helpers shared/motion/laws.ts keeps private (edgeAt, mapArc),
-// copied here rather than exported so the laws file stays untouched, and
-// with a binary search over the offsets and an edge index per path: the
-// client simulation maps arcs a thousand times per frame, where the laws
-// map them a few times per tick.
+// The same two helpers shared/motion/order.ts exports (edgeAt, mapArc),
+// re-stated here with a binary search over the offsets and an edge index per
+// path: the client simulation maps arcs a thousand times per frame, where
+// the register maps them a few times per tick.
 
 interface PathFrames {
   /** The edge under arc `s` of a path, and the arc within that edge. */
@@ -751,7 +750,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
   const firstSeenSec = new Map<string, number>();
   const firstMovingSec = new Map<string, number>();
   const tickMs: number[] = [];
-  let previousBehind: Map<string, ReadonlySet<string>> | null = null;
+  let previousBehind: Map<string, string | null> | null = null;
 
   for (const feed of frames) {
     const headerSec = feed.headerTs ?? state.headerTs ?? 0;
@@ -814,20 +813,21 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
       for (let i = 1; i < knots.length; i++) if (knots[i][1] < knots[i - 1][1] - 1e-6) reversals++;
     }
 
-    // Overtakes: enforceOrder's own bookkeeping (track.order.behind) records
-    // who leads whom, and changes that relationship only through a
-    // concession (shared/motion/laws.ts swaps leader and follower there and
-    // nowhere else). So a "behind" flip this tick that is not covered by
-    // this tick's concession count is a law violation the engine itself
-    // failed to prevent -- the thing R-TE30's gate calls an overtake.
-    const behindNow = new Map<string, ReadonlySet<string>>();
-    for (const track of Object.values(state.tracks)) behindNow.set(track.id, new Set(track.order.behind));
+    // Overtakes: the register's own bookkeeping (track.order.leader, E3)
+    // records who leads whom, and it reverses a standing relation only
+    // through a concession or a decisive swap (shared/motion/order.ts
+    // exchanges leader and follower there and nowhere else). So a reversal
+    // this tick that is not covered by this tick's concessions and swaps is
+    // a law violation the engine itself failed to prevent -- the thing
+    // R-TE30's gate calls an overtake.
+    const behindNow = new Map<string, string | null>();
+    for (const track of Object.values(state.tracks)) behindNow.set(track.id, track.order.leader);
     if (previousBehind) {
       let flips = 0;
-      for (const [id, behindSet] of behindNow) {
-        for (const leaderId of behindSet) if (previousBehind.get(leaderId)?.has(id)) flips++;
+      for (const [id, leaderId] of behindNow) {
+        if (leaderId !== null && previousBehind.get(leaderId) === id) flips++;
       }
-      overtakes += Math.max(0, flips - (result.order?.concessions ?? 0));
+      overtakes += Math.max(0, flips - (result.order?.concessions ?? 0) - (result.order?.swaps ?? 0));
     }
     previousBehind = behindNow;
 

@@ -21,7 +21,7 @@
 // publishes free-plane plans rather than nothing.
 
 import { DurableObject } from 'cloudflare:workers';
-import type { OrderReport } from '../../shared/motion/laws';
+import type { OrderReport } from '../../shared/motion/order';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';

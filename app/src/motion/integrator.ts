@@ -29,10 +29,9 @@
 // towards in the free plane and hold at -- still never a jump.
 
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';
-import { HEADWAY_M } from '../../../shared/motion/laws';
 import { ARC_PRIOR_WEIGHT, BACK_WINDOW_M, OFF_GRAPH_M, REACH_SLACK_M } from '../../../shared/motion/match';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
-import { edgeIndexAt, mapArc, onSharedRails } from '../../../shared/motion/order';
+import { edgeIndexAt, HEADWAY_M, mapArc, mapArcNear, onSharedRails, SWAP_LIMIT_M } from '../../../shared/motion/order';
 import { CONFIDENCE_FREE_CAP, EVICT_S, silenceDecay } from '../../../shared/motion/plan';
 import { at, projectionsWithin, tangent } from '../../../shared/motion/polyline';
 import { REDUCED_MOTION_INTERVAL_MS } from './loop';

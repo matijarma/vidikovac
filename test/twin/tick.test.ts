@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toLonLat, toPlane } from '../../shared/motion/geo';
-import { HEADWAY_M } from '../../shared/motion/laws';
+import { HEADWAY_M } from '../../shared/motion/order';
 import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { isFreeMotion, isPathMotion } from '../../shared/motion/wire';

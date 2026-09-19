@@ -1,7 +1,7 @@
 // One tick of the twin, pure: the decoded frame (or none, for a 304 or a
 // repeated header) folds into the tracks, every vehicle is matched, its
-// speed estimated, its plan built, the ordering law applied over the trams,
-// every fresh fix graded against the plans published before it, and the
+// speed estimated, its plan built, the ordering register applied over the
+// trams, every fresh fix graded against the plans published before it, and the
 // module payload assembled. The Durable Object (twin-do.ts) only fetches,
 // persists and publishes what comes out of here.
 //
@@ -14,7 +14,7 @@
 
 import { toPlane } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts } from '../../shared/motion/hindsight';
-import { enforceOrder, type OrderReport } from '../../shared/motion/laws';
+import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
 import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
@@ -176,7 +176,10 @@ export function runTick(input: TickInput): TickResult {
       const next: NextStopUpdate | null = update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec } : null;
       buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands);
     }
-    order = enforceOrder(all, engine.net, nowSec, headerSec);
+    // The register reads ZET's TripUpdates too: two trips whose next stops
+    // sit in strict order on the path they share are ordered by ZET itself,
+    // which needs no 60 m gap and no second witness (E3).
+    order = enforceOrder(all, engine.net, nowSec, headerSec, tripUpdates);
     // What this tick's fresh fixes teach (C1): cruise per edge, standing per
     // stop, each traversal or dwell once, counted into the pending aggregates
     // the Durable Object flushes once a minute.

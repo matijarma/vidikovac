@@ -6,7 +6,7 @@
 
 import { toPlane } from '../../shared/motion/geo';
 import { emptyAggregates, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
-import type { PlaneFix, Track } from '../../shared/motion/track';
+import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
 
@@ -160,6 +160,11 @@ export function deserializeState(body: string): TwinState {
         const plane = toPlane(fix.lon, fix.lat);
         return { ...fix, x: plane.x, y: plane.y };
       }),
+      // A row written before F10 carries the pairwise law's `behind` array
+      // instead of the register's single leader (shared/motion/track.ts): a
+      // cold restore over one must not throw, it starts the register clean
+      // and the next tick's fixes write it again within two fixes.
+      order: track.order && typeof track.order.leader !== 'undefined' && track.order.witnesses ? track.order : newOrderState(),
     };
   }
   return { ...stored, tracks, published: stored.published ?? {}, learnedUpTo: stored.learnedUpTo ?? {}, pendingLearned: stored.pendingLearned ?? emptyAggregates() };

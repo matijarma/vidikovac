@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toPlane } from '../../shared/motion/geo';
-import { enforceOrder, HEADWAY_M } from '../../shared/motion/laws';
+import { enforceOrder, HEADWAY_M } from '../../shared/motion/order';
 import { createMatcher } from '../../shared/motion/match';
 import { buildPlan, evalPathPlan } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
