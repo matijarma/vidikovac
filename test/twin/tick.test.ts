@@ -109,6 +109,59 @@ describe('runTick on the corridor', () => {
     expect(before.newFixes).toBe(0);
   });
 
+  it('keeps the track and its register through a trip change that continues on the same rails, and starts over when it does not', () => {
+    // D14: ZET's vehicle ids are stable through the day; its trip ids change
+    // at every terminus. Throwing the Track away at a trip change threw away
+    // the fixes, the speed estimate and the order with them -- for a tram
+    // that had simply started its next run on the same rails.
+    const trunkAt = (x: number) => lonLatOf({ x, y: 0 });
+    const twoTrams = (headerTs: number, xA: number, tripA: string, xB: number) => ({
+      headerTs,
+      vehicles: [
+        { vehicleId: 'A', tripId: tripA, routeId: '1', lon: trunkAt(xA).lon, lat: trunkAt(xA).lat, atSec: headerTs },
+        { vehicleId: 'B', tripId: 'tb', routeId: '1', lon: trunkAt(xB).lon, lat: trunkAt(xB).lat, atSec: headerTs },
+      ],
+      tripUpdates: [],
+    });
+    const on = (pathId: string, direction: 0 | 1): TripJoin => ({ direction, headsign: `Kraj ${pathId}`, shapeId: pathId, pathId });
+    const identityJoins = new Map<string, TripJoin>([
+      ['ta', on('1_0', 0)],
+      ['ta2', on('1_0', 0)],
+      ['tnorth', on('2_0', 0)],
+      ['tb', on('1_0', 0)],
+    ]);
+    const T = start;
+    let state = emptyState();
+    let result = runTick({ state, feed: twoTrams(T, 1000, 'ta', 600), nowMs: (T + 2) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    result = runTick({ state, feed: twoTrams(T + 10, 1100, 'ta', 700), nowMs: (T + 12) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['B'].order.leader).toBe('A');
+    const fixesBefore = state.tracks['A'].fixes.length;
+
+    // A's next trip runs the same path: the vehicle is followed straight
+    // through, fixes, speed and the relation behind it intact.
+    result = runTick({ state, feed: twoTrams(T + 20, 1200, 'ta2', 800), nowMs: (T + 22) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['A'].tripId).toBe('ta2');
+    expect(state.tracks['A'].fixes.length).toBe(fixesBefore + 1);
+    expect(state.tracks['A'].speed).toBeGreaterThan(0);
+    expect(state.tracks['B'].order.leader).toBe('A');
+
+    // Past the junction, A is on edge 1, which route 2's path never runs and
+    // whose start is a kilometre and a half back: that is a different
+    // vehicle's worth of evidence, and the track starts over.
+    for (const [k, x] of [[30, 1700], [40, 2000]] as const) {
+      result = runTick({ state, feed: twoTrams(T + k, x, 'ta2', 900), nowMs: (T + k + 2) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+      state = result.state;
+    }
+    expect(state.tracks['A'].match.edge).toBe(1);
+    result = runTick({ state, feed: twoTrams(T + 50, 2100, 'tnorth', 1000), nowMs: (T + 52) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['A'].tripId).toBe('tnorth');
+    expect(state.tracks['A'].fixes.length).toBe(1);
+  });
+
   it('gives a bus a shape plan, an unknown route a free plan, evicts five minutes of silence, and still publishes free plans without any geometry', () => {
     const T = start;
     const busAt = (x: number) => lonLatOf({ x, y: -30 });

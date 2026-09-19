@@ -12,12 +12,13 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
-import { toPlane } from '../../shared/motion/geo';
+import { dist, toPlane } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
+import type { GraphNetwork } from '../../shared/motion/network';
 import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
-import { estimateSpeed } from '../../shared/motion/speed';
+import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
 import { zagrebBands } from '../../shared/motion/times';
 import { lastFix, newTrack, pushFix, type FreeKnot, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -75,6 +76,26 @@ function tripStartOf(join: TripJoin | undefined, startDate: string | undefined):
   return day === null ? null : day + join.startSec;
 }
 
+/**
+ * Does the vehicle's next trip continue the run this Track is a record of
+ * (D14)? ZET's VEHICLE ids are stable through the day and its TRIP ids
+ * change at every terminus, so a trip change is usually the same tram
+ * starting its next run: the new trip's path runs the rail it is standing
+ * on, or it begins at the platform the tram is standing at. Then the fixes,
+ * the speed estimate and the ordering register are evidence about this
+ * vehicle and are kept; only the path-derived match state resets, which the
+ * matcher does itself on the new prior, and the register's own divergence
+ * rule prunes any relation the new path leaves behind. Anything else -- a
+ * vehicle id changing hands, a tram towed to the other end of the city -- is
+ * a new track, as it was before.
+ */
+function continuesRun(net: GraphNetwork, track: Track, priorPathIdx: number | null): boolean {
+  if (priorPathIdx === null || priorPathIdx >= net.paths.length) return false;
+  if (track.match.edge !== null && net.paths[priorPathIdx].edges.includes(track.match.edge)) return true;
+  const last = lastFix(track);
+  return last !== null && dist(net.toPathPoint(priorPathIdx, 0), last) <= STOP_ZONE_M;
+}
+
 /** The plan a vehicle gets with no geometry loaded at all: a straight line
  *  from its previous fix to its latest over their own interval, then a hold
  *  (the planner's own free-plane branch, without a network to consult). */
@@ -115,10 +136,15 @@ export function runTick(input: TickInput): TickResult {
       const routeId = raw.routeId ?? tracks[raw.vehicleId]?.routeId ?? '';
       const tripId = raw.tripId ?? null;
       let track = tracks[raw.vehicleId];
-      // A new trip is a terminus turnaround: the old fixes lie on the other
-      // track and are not comparable evidence, so the vehicle starts over.
+      const join = tripId !== null ? joins.get(tripId) : undefined;
+      const prior = engine ? engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null, join?.pathId ?? null) : null;
+      // A trip change is a terminus turnaround, and a terminus turnaround is
+      // the SAME tram (D14): it keeps its Track whenever the new trip
+      // continues where this one stands. Otherwise the old fixes lie
+      // somewhere else entirely and the vehicle starts over.
       const tripChanged = track !== undefined && track.tripId !== null && tripId !== null && track.tripId !== tripId;
-      if (!track || tripChanged) {
+      const continues = tripChanged && engine !== null && continuesRun(engine.net, track!, prior?.pathIdx ?? null);
+      if (!track || (tripChanged && !continues)) {
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
         tracks[raw.vehicleId] = track;
         if (tripChanged) {
@@ -132,10 +158,8 @@ export function runTick(input: TickInput): TickResult {
       const plane = toPlane(raw.lon, raw.lat);
       const fix: PlaneFix = { x: plane.x, y: plane.y, lon: raw.lon, lat: raw.lat, atSec: raw.atSec };
       const before = lastFix(track)?.atSec ?? null;
-      const join = tripId !== null ? joins.get(tripId) : undefined;
       track.tripStartSec = tripStartOf(join, raw.startDate);
-      if (engine) {
-        const prior = engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null, join?.pathId ?? null);
+      if (engine && prior) {
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null);
       } else {
         pushFix(track, fix);

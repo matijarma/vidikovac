@@ -344,12 +344,15 @@ export function createMatcher(net: GraphNetwork): Matcher {
     const dtSec = motion.dtSec;
 
     // A new prior (a new trip, or the twin re-deriving from the index) starts
-    // the vehicle over on that path; the ordering memory goes with the old one.
+    // the vehicle over ON THAT PATH: only the path-derived state goes. The
+    // ordering register stays (E3, D14) -- the tram is the same tram, and a
+    // relation the new path leaves behind is dropped by the register's own
+    // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
       track.priorPath = prior.pathIdx;
       track.match = noMatch();
       track.offPathCount = 0;
-      resetOrder(track);
+      track.againstCount = 0;
     }
 
     // Off the graph entirely?
