@@ -14,6 +14,17 @@
 // the share of those vehicles whose tripId is on the board of the very stop
 // they are approaching -- overall and per GTFS route type.
 //
+// Optional argument:
+//   --past-minutes=<N>  ESTIMATE, not a measurement. /api/city/departures
+//       serves the board it is deployed with and exposes no raw runs, so a
+//       past window that is not deployed yet cannot be re-applied here from
+//       anything the endpoint returns. What this does instead is count a
+//       'rolled off' miss as recovered when the vehicle is running no more
+//       than N minutes late: its scheduled slot at that stop is then within N
+//       minutes of now, so a board carrying N minutes of scheduled past would
+//       still list the row. The output labels the figure as an estimate. The
+//       real post-fix rate can only be measured after a deploy.
+//
 // Optional environment:
 //   PROBE_ORIGIN    the deployment to probe; default https://zagreb.aningfilm.hr
 //   PROBE_PLATFORMS how many platforms to sample; default 20
@@ -24,6 +35,7 @@
 const ORIGIN = process.env.PROBE_ORIGIN ?? 'https://zagreb.aningfilm.hr';
 const PLATFORMS = Number(process.env.PROBE_PLATFORMS ?? 20);
 const TYPE_NAMES = { 0: 'tram', 3: 'bus' };
+const PAST_MINUTES = Number((process.argv.find((a) => a.startsWith('--past-minutes=')) ?? '=0').split('=')[1]) || 0;
 
 async function getJson(url) {
   const response = await fetch(url, { headers: { accept: 'application/json' } });
@@ -99,10 +111,14 @@ for (const v of vehicles) {
   const reason = hit ? null : reasonFor(board, v);
   if (reason !== null) {
     reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
-    misses.push({ route: v.routeShortName ?? v.routeId, stop: v.nextStopId, tripId: v.tripId, reason });
+    misses.push({ route: v.routeShortName ?? v.routeId, stop: v.nextStopId, tripId: v.tripId, reason, delaySeconds: v.delaySeconds });
   }
   // A terminal arrival is not a failed join: there is no departure to find.
   if (reason !== 'terminal') add('joinable', hit);
+  if (PAST_MINUTES > 0 && reason !== 'terminal') {
+    const recovered = reason === 'rolled off' && Number.isFinite(v.delaySeconds) && v.delaySeconds > 0 && v.delaySeconds <= PAST_MINUTES * 60;
+    add('estimated', hit || recovered);
+  }
 }
 
 const all = tally.get('all') ?? { hit: 0, n: 0 };
@@ -113,10 +129,18 @@ console.log(`platforms probed ${busiest.length}: ${[...boards].filter(([, b]) =>
 console.log(`board rows       ${[...boards.values()].reduce((n, b) => n + (b.departures?.length ?? 0), 0)}`);
 console.log('');
 console.log(`JOIN RATE        ${pct(all.hit, all.n)}  (${all.hit}/${all.n} vehicles matched a departure on the board of the stop they are approaching)`);
-for (const [key, bucket] of [...tally].filter(([k]) => k !== 'all' && k !== 'joinable').sort()) console.log(`  ${key.padEnd(14)} ${pct(bucket.hit, bucket.n)}  (${bucket.hit}/${bucket.n})`);
+for (const [key, bucket] of [...tally].filter(([k]) => k !== 'all' && k !== 'joinable' && k !== 'estimated').sort()) console.log(`  ${key.padEnd(14)} ${pct(bucket.hit, bucket.n)}  (${bucket.hit}/${bucket.n})`);
 const joinable = tally.get('joinable') ?? { hit: 0, n: 0 };
 console.log(`  ${'joinable'.padEnd(14)} ${pct(joinable.hit, joinable.n)}  (${joinable.hit}/${joinable.n}, leaving out arrivals at a terminus, which no board lists)`);
 if (reasons.size > 0) console.log(`  misses by reason: ${[...reasons].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r} ${n}`).join(', ')}`);
+if (PAST_MINUTES > 0) {
+  const estimated = tally.get('estimated') ?? { hit: 0, n: 0 };
+  console.log('');
+  console.log(`  ESTIMATE with a ${PAST_MINUTES}-minute past window on the board: ${pct(estimated.hit, estimated.n)} (${estimated.hit}/${estimated.n} joinable).`);
+  console.log('  Not a measurement: the endpoint serves the board it is deployed with and exposes no raw');
+  console.log('  runs, so this counts a rolled-off miss as recovered when the vehicle is no more than');
+  console.log(`  ${PAST_MINUTES} minutes late. The real rate can only be measured after the fix is deployed.`);
+}
 console.log('');
 console.log(all.n === 0 ? 'NO EVIDENCE: no vehicle met a board that answered.'
   : all.hit / all.n >= 0.7 ? 'AT OR ABOVE the 70 % gate: the tripId join stands on its own.'
@@ -124,6 +148,6 @@ console.log(all.n === 0 ? 'NO EVIDENCE: no vehicle met a board that answered.'
 if (misses.length > 0) {
   console.log('');
   console.log(`misses (${misses.length}):`);
-  for (const m of misses.slice(0, 15)) console.log(`  route ${String(m.route).padEnd(4)} stop ${String(m.stop).padEnd(8)} ${m.reason.padEnd(10)} trip ${m.tripId}`);
+  for (const m of misses.slice(0, 15)) console.log(`  route ${String(m.route).padEnd(4)} stop ${String(m.stop).padEnd(8)} ${m.reason.padEnd(10)} delay ${String(m.delaySeconds ?? '-').padStart(5)}s  trip ${m.tripId}`);
   if (misses.length > 15) console.log(`  ... and ${misses.length - 15} more`);
 }
