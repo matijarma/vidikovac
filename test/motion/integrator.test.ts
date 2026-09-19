@@ -184,9 +184,13 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     expect(headingUnknownOnGeometry).toBe(0);
     // The catch-up cap at 60 Hz: at most max(8, 2 x speed) m/s, never a teleport.
     expect(worstJump).toBeLessThan(0.8);
-    // A backward correction reads as a correction, never as a tram reversing.
-    expect(worstBackwardPerFrame).toBeLessThan(1 / 60 + 1e-6);
-    expect(worstBackwardPerPlan).toBeLessThanOrEqual(30 + 1e-6);
+    // Not a backward frame at all (F9): a mark whose plan has moved behind it
+    // holds where it is until the plan catches up, and a tram on rails never
+    // reverses on screen, whatever a re-plan says.
+    // (The arc here is the drawn point re-projected onto the path, so the
+    // tolerance is the projection's own floating-point noise, not a metre.)
+    expect(worstBackwardPerFrame).toBeLessThan(1e-6);
+    expect(worstBackwardPerPlan).toBeLessThan(1e-6);
     expect(orderViolations).toBe(0);
 
     // Silence: five minutes after the last report a vehicle is gone, not faded forever.
@@ -232,4 +236,150 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     expect(toLonLat(end.p)[1]).toBeGreaterThan(toLonLat(mid.p)[1]);
     expect(end.confidence).toBeLessThanOrEqual(0.5);
   });
+});
+
+// F9's rules, each on the smallest geometry that can show it. The plans here
+// are written by hand rather than grown by the twin: what is under test is
+// what the *client* does with a plan, including the plans the twin should
+// never publish and sometimes does (a re-anchor behind the mark, an order the
+// wire contradicts).
+describe('the integrator never draws a tram backwards, nor two trams across each other', () => {
+  const T0 = 1_800_000_000_000;
+  const FRAME_MS = 1000 / 60;
+
+  /** One vehicle's poll: a path plan, the twin's speed, and whatever else. */
+  function pathFix(id: string, path: string, knots: readonly (readonly [number, number])[], speed: number, extra: Partial<Fix> = {}): Fix {
+    return { id, lon: 15.97, lat: 45.81, at: knots[0][0], type: 0, path, plan: { on: 'path', knots }, speed, confidence: 0.9, ...extra };
+  }
+  /** A plan that stands still: the vehicle is where it is and stays there. */
+  const still = (at: number, s: number): readonly (readonly [number, number])[] => [[at, s], [at + 90_000, s]];
+
+  it('holds instead of reversing when every third plan re-anchors forty metres behind the mark (20 min at 60 Hz)', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    // Two metres a second: twenty minutes of corridor without running off its
+    // end, and a forty-metre re-anchor is then twenty seconds of lost ground
+    // -- the case the old one-metre-a-second allowance crawled back through
+    // for a whole poll interval.
+    const CRUISE = 2;
+    const REGRESS_M = 40;
+    const trams = [
+      { id: 'a', path: '1_0', start: 900 },
+      { id: 'b', path: '1_0', start: 600 },
+      { id: 'c', path: '2_0', start: 300 },
+      { id: 'd', path: '2_0', start: 0 },
+    ];
+    const prev = new Map<string, number>();
+    let backward = 0;
+    let advanced = 0;
+    let holdFrames = 0;
+    for (let poll = 0; poll * 10 <= 1200; poll++) {
+      const now = T0 + poll * 10_000;
+      const fixes = trams.map((t) => {
+        const anchor = t.start + poll * 10 * CRUISE - Math.floor(poll / 3) * REGRESS_M;
+        return pathFix(t.id, t.path, [[now, anchor], [now + 90_000, anchor + 90 * CRUISE]], CRUISE);
+      });
+      integrator.update(fixes, now);
+      for (let k = 0; k < 600; k++) {
+        for (const d of integrator.step(now + k * FRAME_MS)) {
+          if (d.s === undefined) continue;
+          const before = prev.get(d.id);
+          if (before !== undefined) {
+            if (d.s < before - 1e-9) backward++;
+            else if (d.s > before + 1e-9) advanced++;
+          }
+          if (d.holding) holdFrames++;
+          prev.set(d.id, d.s);
+        }
+      }
+    }
+    expect(backward).toBe(0);
+    // The regression was absorbed as a hold, and the marks did move: neither
+    // a reversal nor twenty minutes of standing still.
+    expect(holdFrames).toBeGreaterThan(0);
+    expect(advanced).toBeGreaterThan(100_000);
+  }, 60_000);
+
+  it('clamps a route 1 tram behind a route 2 tram on the shared trunk, though the two run different paths', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    // Both marks on the trunk, forty metres apart and each sitting on its own plan.
+    integrator.update([pathFix('L', '2_0', still(T0, 700), 2), pathFix('F', '1_0', still(T0, 660), 12)], T0);
+    integrator.step(T0);
+    // The leader crawls (the twin has it at 2 m/s) while its plan sits two
+    // hundred metres ahead of its mark; the follower is quick and its own
+    // plan, fifty metres behind the leader's, lies well ahead of the leader's
+    // mark. Nothing but the clamp stops the follower driving through it.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('L', '2_0', still(t1, 900), 2), pathFix('F', '1_0', still(t1, 850), 12)], t1);
+    let worstOvertake = -Infinity;
+    let last = new Map<string, number>();
+    for (let k = 0; k <= 60 * 120; k++) {
+      const drawn = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+      const l = drawn.get('L')!;
+      const f = drawn.get('F')!;
+      worstOvertake = Math.max(worstOvertake, f.s! - (l.s! - HEADWAY_M));
+      last = new Map([['L', l.s!], ['F', f.s!]]);
+    }
+    expect(worstOvertake).toBeLessThanOrEqual(1e-6);
+    // And neither is stranded: both reach their own plans in the end, bar the
+    // dead zone's last metre (a mark does not chase floating point).
+    expect(last.get('L')!).toBeGreaterThan(899);
+    expect(last.get('L')!).toBeLessThanOrEqual(900);
+    expect(last.get('F')!).toBeGreaterThan(849);
+    expect(last.get('F')!).toBeLessThanOrEqual(850);
+  }, 30_000);
+
+  it('obeys the same clamp for a vehicle whose route type the wire never named, because its plan runs the rails', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    const untyped = (id: string, path: string, knots: readonly (readonly [number, number])[], speed: number): Fix => ({
+      id, lon: 15.97, lat: 45.81, at: knots[0][0], path, plan: { on: 'path', knots }, speed, confidence: 0.9,
+    });
+    integrator.update([untyped('L', '2_0', still(T0, 700), 2), untyped('F', '1_0', still(T0, 660), 12)], T0);
+    expect(integrator.step(T0)[0].type).toBe(-1);
+    const t1 = T0 + 10_000;
+    integrator.update([untyped('L', '2_0', still(t1, 900), 2), untyped('F', '1_0', still(t1, 850), 12)], t1);
+    let worstOvertake = -Infinity;
+    for (let k = 0; k <= 60 * 120; k++) {
+      const drawn = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+      worstOvertake = Math.max(worstOvertake, drawn.get('F')!.s! - (drawn.get('L')!.s! - HEADWAY_M));
+    }
+    expect(worstOvertake).toBeLessThanOrEqual(1e-6);
+  }, 30_000);
+
+  it('keeps the order the wire named through a plan that flips it, and follows the plans only without one', () => {
+    const run = (behind: string | undefined): { a: number; b: number; held: boolean } => {
+      const net = syntheticNetwork(corridorSpec());
+      const integrator = createIntegrator(net);
+      const wire = behind === undefined ? {} : { behind };
+      integrator.update([pathFix('B', '1_0', still(T0, 800), 8), pathFix('A', '1_0', still(T0, 700), 8, wire)], T0);
+      integrator.step(T0);
+      // The next tick's plans put A a hundred metres ahead of B. The wire
+      // still says A is the one behind, and the wire is the register.
+      const t1 = T0 + 10_000;
+      integrator.update([pathFix('B', '1_0', still(t1, 800), 8), pathFix('A', '1_0', still(t1, 900), 8, wire)], t1);
+      let held = false;
+      let out = new Map<string, Drawn>();
+      for (let k = 0; k <= 60 * 120; k++) {
+        out = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+        if (out.get('A')!.holding) held = true;
+        if (behind !== undefined) expect(out.get('A')!.s!).toBeLessThanOrEqual(out.get('B')!.s! - HEADWAY_M + 1e-6);
+      }
+      return { a: out.get('A')!.s!, b: out.get('B')!.s!, held };
+    };
+    // With the wire: A holds a tram length behind B and never takes the lead.
+    const wired = run('B');
+    expect(wired.a).toBeCloseTo(800 - HEADWAY_M, 1);
+    expect(wired.b).toBeCloseTo(800, 1);
+    expect(wired.held).toBe(true);
+    // Without it there is nothing but the plans to go on, and the plans have
+    // swapped the two: A leads. That difference is why the wire exists.
+    const bare = run(undefined);
+    expect(bare.a).toBeGreaterThan(bare.b);
+    expect(bare.a).toBeGreaterThan(899);
+    expect(bare.b).toBeCloseTo(800, 6);
+  }, 30_000);
+
+
 });

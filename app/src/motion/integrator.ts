@@ -8,13 +8,21 @@
 //
 // Three rules survive from the old client model because they are about the
 // screen, not the estimate (R-P2, R-F1): a mark converges onto a new plan,
-// it never jumps; a tram's mark never runs backwards beyond a small
-// correction, whatever a re-plan says; and being behind along the path is
-// lag to be caught up, never an error to snap out of. A fourth is the
-// screen's own copy of the ordering law (R-TE7): two marks converging at
-// different rates onto plans that respect the order must not draw the
-// wrong way round in between, so followers are clamped one tram length
-// behind their leader on a shared path every frame.
+// it never jumps; a mark never runs backwards at all, whatever a re-plan
+// says, and a target behind it is a hold until the plan catches up; and
+// being behind along the path is lag to be caught up, never an error to
+// snap out of. That is the owner's rule for this round -- bias behind,
+// never ahead; catch up forwards; hold when contradicted -- because a mark
+// behind the real tram reads as GPS lagging, while a mark ahead that has to
+// come back reads as a broken app.
+//
+// A fourth is the screen's own copy of the ordering law (R-TE7): two marks
+// converging at different rates onto plans that respect the order must not
+// draw the wrong way round in between, so a follower's convergence is
+// capped one tram length behind its leader every frame -- on any two paths
+// that share the rails, not only on one geometry, and in the order the twin
+// published (the wire's own leader) rather than whatever this frame's plans
+// happen to say.
 //
 // Before any plan exists (the artefact not yet loaded, a test feeding bare
 // fixes, a twin that only knows the position), a fix is a point to converge
@@ -23,6 +31,7 @@
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 import { HEADWAY_M } from '../../../shared/motion/laws';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
+import { edgeIndexAt, mapArc, onSharedRails } from '../../../shared/motion/order';
 import { CONFIDENCE_FREE_CAP, EVICT_S, silenceDecay } from '../../../shared/motion/plan';
 import { at, project, tangent } from '../../../shared/motion/polyline';
 
@@ -55,6 +64,11 @@ export interface Fix {
   /** The geometry the plan runs on: a graph path id or a bus shape id. */
   path?: string;
   plan?: FixPlan;
+  /** The vehicle id of the tram this one is behind, from the twin's own
+   *  ordering register (E3). The client never derives the relation itself
+   *  while the wire names one: roles change when the register says so, not
+   *  because two plans crossed between polls. */
+  behind?: string;
   /** The twin's own estimates (R-TE1). */
   speed?: number;
   confidence?: number;
@@ -85,6 +99,10 @@ export interface Drawn {
   track?: XY;
   /** True while the twin holds the vehicle at a stop. */
   held?: boolean;
+  /** True while the mark may not move: its own plan puts it behind where it
+   *  is drawn, or the tram ahead leaves it no room. Drawn nowhere this
+   *  round; it is what a hold is called instead of a step backwards. */
+  holding?: true;
   /** Epoch ms of the last time the mark was re-seeded onto a new geometry. */
   lastSnapAt?: number;
   /** The trip's headsign from the twin's join, when known. */
@@ -104,11 +122,10 @@ export interface Model {
 // --- Every constant has a reason; the reason is the comment. ---
 
 /** A plan target ahead converges quickly: that is the vehicle continuing as
- *  planned. A target behind converges slowly, because a re-plan that put the
- *  vehicle further back has usually learned it stood longer than assumed,
- *  and easing back reads as a correction, not a stutter. (R-F1, ported.) */
+ *  planned. There is no backward counterpart any more: a target behind the
+ *  mark is a hold (F9), because easing back at any rate is still a vehicle
+ *  drawn going the wrong way. (R-F1, ported.) */
 const TAU_FORWARD_S = 1.5;
-const TAU_BACKWARD_S = 4;
 /** Under this gap the mark settles onto a target that is itself moving at
  *  the vehicle's speed, so the settle rate must exceed that speed or the
  *  mark could never gain on it (R-F9); above it the gap is a poll's worth
@@ -121,19 +138,18 @@ const CATCHUP_BEHIND_MIN_MS = 8;
  *  jitter, not real movement; the old 15 m zone made a mark following a
  *  moving target advance in steps. */
 const DEAD_ZONE_M = 1;
-/** A backward correction on a tram is drawn at walking pace and never past
- *  one tram length per plan: a viewer reads that as the mark settling, and a
- *  genuine reversal cannot happen on rails (R-TE7). */
-const BACKWARD_MAX_MS = 1;
-const BACKWARD_BUDGET_M = 30;
 /** A frame longer than this is a paused loop (a parked stage, a hidden
  *  tab), not time to catch up in one go: the mark converges from where it
  *  was over the following frames, so a resume never reads as a jump. */
 const MAX_FRAME_S = 0.25;
 /** Decision 5: under this the facing is undecidable and drawn as unknown. */
 const HEADING_CONFIDENCE_THRESHOLD = 0.3;
-/** GTFS route_type 0 is a tram; the laws apply to trams only (R-TE7). */
+/** GTFS route_type 0 is a tram; the ordering law applies to trams only
+ *  (R-TE7). A vehicle the wire gave no route type at all reads as -1, and is
+ *  a tram too wherever its plan runs a graph path: only a tram is planned
+ *  along the rails. */
 const ROUTE_TYPE_TRAM = 0;
+const ROUTE_TYPE_UNKNOWN = -1;
 
 /** The most the drawn arc may move in one second toward a target `gap`
  *  metres away (R-F1a, R-F9), exported for the tests that bound every frame. */
@@ -172,13 +188,18 @@ interface VehicleState {
   speed: number;
   confidence: number;
   held: boolean;
+  /** True while this frame's convergence had to leave the mark where it is. */
+  holding: boolean;
+  /** The vehicle this one is behind, as the wire last said (null: the wire
+   *  names none). Sticky between polls, and never written from the plans. */
+  leader: string | null;
   lastFixAt: number;
   lastStepAt: number;
-  /** Backward metres spent within the current plan (trams). */
-  backwardUsed: number;
   lastSnapAt?: number;
-  /** This frame's plan target arc, for the order clamp. */
+  /** This frame's plan target arc and integration step: scratch the order
+   *  clamp reads, written once a frame before anything converges. */
   targetS: number;
+  stepDt: number;
 }
 
 function evalPath(knots: readonly (readonly [number, number])[], tMs: number): number {
@@ -291,10 +312,12 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         speed: fix.speed ?? 0,
         confidence: fix.confidence ?? (fix.plan || onPath ? CONFIDENCE_FREE_CAP : 0),
         held: fix.held === true,
+        holding: false,
+        leader: fix.behind ?? null,
         lastFixAt: fix.at,
         lastStepAt: now,
-        backwardUsed: 0,
         targetS: target.s,
+        stepDt: 0,
       };
     }
     v.routeId = fix.routeId;
@@ -306,10 +329,13 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     v.speed = fix.speed ?? 0;
     v.confidence = fix.confidence ?? CONFIDENCE_FREE_CAP;
     v.held = fix.held === true;
+    // The order comes from the twin's register alone (E3): a poll that names
+    // no leader is the register saying there is none, and between polls the
+    // relation stands whatever the plans do.
+    v.leader = fix.behind ?? null;
     v.lastFixAt = Math.max(v.lastFixAt, fix.at);
     v.planAt = now;
     v.plan = fix.plan ?? null;
-    v.backwardUsed = 0;
     if (onPath) {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
@@ -326,36 +352,145 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     return v;
   }
 
-  /** Exponential convergence of the drawn arc onto the target, dead-zoned,
-   *  capped, and for a tram never backwards faster than walking pace nor
-   *  further than one tram length within a plan. */
-  function convergeArc(v: VehicleState, target: number, dt: number): number {
+  /** Exponential convergence of the drawn arc onto the target: forwards
+   *  only, dead-zoned, capped by catchUpCap, and never past `ceiling` -- the
+   *  arc the order leaves this mark this frame. A mark whose target lies
+   *  behind it, or whose ceiling does, holds where it is until the plan (or
+   *  the tram ahead) catches up. A vehicle on a geometry cannot reverse, and
+   *  a mark that comes back does not read as a correction; it reads as an
+   *  app that got it wrong. */
+  function convergeArc(v: VehicleState, target: number, dt: number, ceiling: number): number {
     const diff = target - v.s;
-    const absDiff = Math.abs(diff);
-    if (absDiff < DEAD_ZONE_M || dt <= 0) return v.s;
-    const tau = diff > 0 ? TAU_FORWARD_S : TAU_BACKWARD_S;
-    let step = diff * (1 - Math.exp(-dt / tau));
-    const maxStep = catchUpCap(absDiff, v.speed) * dt;
-    if (Math.abs(step) > maxStep) step = Math.sign(step) * maxStep;
-    if (step < 0 && v.type === ROUTE_TYPE_TRAM) {
-      const allowed = Math.min(BACKWARD_MAX_MS * dt, Math.max(0, BACKWARD_BUDGET_M - v.backwardUsed));
-      if (-step > allowed) step = -allowed;
-      v.backwardUsed += -step;
-    }
+    const room = ceiling - v.s;
+    v.holding = diff < -DEAD_ZONE_M || (diff > DEAD_ZONE_M && room <= 0);
+    if (diff < DEAD_ZONE_M || dt <= 0) return v.s;
+    let step = diff * (1 - Math.exp(-dt / TAU_FORWARD_S));
+    const maxStep = catchUpCap(diff, v.speed) * dt;
+    if (step > maxStep) step = maxStep;
+    if (step > room) step = Math.max(0, room);
     return v.s + step;
   }
 
-  /** The same convergence in the plane, for a free plan or a bare fix. */
+  /** The same convergence in the plane, for a free plan or a bare fix. The
+   *  mark may only close on a target lying ahead of it along the direction
+   *  the target itself is travelling -- the free plan's own forward
+   *  direction, or the last direction the mark moved when the twin sends
+   *  nothing but a position -- and a target behind it is a hold. A bus
+   *  reversing at eight metres a second reads as wrong as a tram doing it. */
   function convergePoint(v: VehicleState, target: XY, dt: number): void {
     const gap = dist(v.p, target);
-    if (gap < DEAD_ZONE_M || dt <= 0) return;
+    const dir = unit(target.x - v.p.x, target.y - v.p.y);
+    if (!dir || gap < DEAD_ZONE_M || dt <= 0) return;
+    if (v.moveDir && dir.x * v.moveDir.x + dir.y * v.moveDir.y < 0) {
+      v.holding = true;
+      return;
+    }
     let step = gap * (1 - Math.exp(-dt / TAU_FORWARD_S));
     const maxStep = catchUpCap(gap, v.speed) * dt;
     if (step > maxStep) step = maxStep;
-    const dir = unit(target.x - v.p.x, target.y - v.p.y);
-    if (!dir) return;
     v.p = { x: v.p.x + dir.x * step, y: v.p.y + dir.y * step };
     v.moveDir = dir;
+  }
+
+  /** Is this one a vehicle the ordering law speaks of? A tram, and a vehicle
+   *  whose route type the wire never named but whose plan runs a graph path,
+   *  which on this network is the same thing. */
+  function onRails(v: VehicleState): boolean {
+    return v.geom !== null && v.geom.path !== null && (v.type === ROUTE_TYPE_TRAM || v.type === ROUTE_TYPE_UNKNOWN);
+  }
+
+  /**
+   * Every leader each mark must stay behind this frame, from two sources in
+   * strict order. First the twin's own register, published per vehicle and
+   * held between polls: while it names a leader, nothing else may name one
+   * for that vehicle, so an order cannot flip because two plans crossed
+   * between two polls. Then, only for a pair the register has placed neither
+   * side of, this frame's plans -- all the client has to go on until the twin
+   * publishes the order, and the same rule the law itself uses: a pair within
+   * one tram length is unordered.
+   *
+   * The index is by the edge each mark is drawn on. A ceiling one tram length
+   * back can only bind between marks on the same edge or on adjacent ones, so
+   * a partner is looked for there and nowhere else: two hundred marks on
+   * screen would otherwise be twenty thousand pair tests every frame.
+   */
+  function leadersOf(list: readonly VehicleState[]): Map<string, VehicleState[]> {
+    const out = new Map<string, VehicleState[]>();
+    if (!graph) return out;
+    const trams = list.filter(onRails);
+    if (trams.length < 2) return out;
+    const add = (follower: VehicleState, leader: VehicleState): void => {
+      const known = out.get(follower.id);
+      if (!known) out.set(follower.id, [leader]);
+      else if (!known.includes(leader)) known.push(leader);
+    };
+    const byId = new Map(trams.map((v) => [v.id, v] as const));
+    for (const v of trams) {
+      if (v.leader === null) continue;
+      if (!vehicles.has(v.leader)) {
+        v.leader = null; // the leader fell silent and was evicted: the relation ends with it
+        continue;
+      }
+      const leader = byId.get(v.leader);
+      if (leader) add(v, leader);
+    }
+
+    const byEdge = new Map<number, VehicleState[]>();
+    const edgeIdx = new Map<string, number>();
+    for (const v of trams) {
+      const path = graph.paths[v.geom!.path!];
+      const k = edgeIndexAt(path, v.s);
+      edgeIdx.set(v.id, k);
+      const here = byEdge.get(path.edges[k]);
+      if (here) here.push(v);
+      else byEdge.set(path.edges[k], [v]);
+    }
+    const seen = new Set<string>();
+    for (const a of trams) {
+      if (a.leader !== null) continue;
+      const pathA = graph.paths[a.geom!.path!];
+      const k = edgeIdx.get(a.id)!;
+      for (let n = k - 1; n <= k + 1; n++) {
+        if (n < 0 || n >= pathA.edges.length) continue;
+        for (const b of byEdge.get(pathA.edges[n]) ?? []) {
+          if (b === a || b.leader !== null) continue;
+          const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const pathB = graph.paths[b.geom!.path!];
+          if (!onSharedRails({ path: pathA, s: a.s }, { path: pathB, s: b.s })) continue;
+          // The two plans read in one frame; a pair whose paths have diverged
+          // at both arcs has no common frame and no order to keep.
+          let planA = a.targetS;
+          let planB = pathA === pathB ? b.targetS : mapArc(pathB, b.targetS, pathA);
+          if (planB === null) {
+            const mapped = mapArc(pathA, a.targetS, pathB);
+            if (mapped === null) continue;
+            planA = mapped;
+            planB = b.targetS;
+          }
+          if (Math.abs(planA - planB) < HEADWAY_M) continue;
+          if (planA > planB) add(b, a);
+          else add(a, b);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** The arc a mark may not pass this frame: one tram length behind the
+   *  nearer of its leader's own mark and its leader's plan, read on the
+   *  follower's path. A leader whose arc does not map onto that path
+   *  constrains nothing -- the two have diverged there, and a constraint
+   *  that cannot be stated in the follower's frame is not one. */
+  function ceilingFor(v: VehicleState, leaders: readonly VehicleState[]): number {
+    let ceiling = Number.POSITIVE_INFINITY;
+    for (const leader of leaders) {
+      const ahead = Math.min(leader.s, leader.targetS) - HEADWAY_M;
+      const here = leader.geom!.path === v.geom!.path ? ahead : mapArc(graph!.paths[leader.geom!.path!], ahead, graph!.paths[v.geom!.path!]);
+      if (here !== null && here < ceiling) ceiling = here;
+    }
+    return ceiling;
   }
 
   function evict(now: number): void {
@@ -378,12 +513,17 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       evict(now);
       const out: Drawn[] = [];
       const onGeometry: VehicleState[] = [];
+      // Nothing on a geometry moves in this pass: the order clamp is an upper
+      // bound on a follower's step, so it has to be known before that
+      // follower converges, and it is read off the leader's arc for this
+      // frame. Free-plane marks have no order to keep and converge at once.
       for (const v of vehicles.values()) {
         const dt = Math.min(MAX_FRAME_S, Math.max(0, (now - v.lastStepAt) / 1000));
         v.lastStepAt = now;
+        v.stepDt = dt;
+        v.holding = false;
         if (v.geom && v.plan && v.plan.on === 'path') {
           v.targetS = evalPath(v.plan.knots, now);
-          v.s = convergeArc(v, v.targetS, dt);
           onGeometry.push(v);
         } else if (v.plan && v.plan.on === 'free') {
           const [lon, lat] = evalFree(v.plan.knots, now);
@@ -397,27 +537,27 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         }
       }
 
-      // The screen's copy of the ordering law (R-TE7): on one geometry, whoever
-      // the plans put behind draws at least one tram length behind, whatever
-      // the two marks' convergence did this frame. Plans within a tram length
-      // of each other are unordered and left alone.
-      const byKey = new Map<string, VehicleState[]>();
-      for (const v of onGeometry) {
-        if (v.type !== ROUTE_TYPE_TRAM) continue;
-        const list = byKey.get(v.geom!.key) ?? [];
-        list.push(v);
-        byKey.set(v.geom!.key, list);
-      }
-      for (const list of byKey.values()) {
-        list.sort((a, b) => b.targetS - a.targetS);
-        for (let i = 1; i < list.length; i++) {
-          const leader = list[i - 1];
-          const follower = list[i];
-          if (leader.targetS - follower.targetS < HEADWAY_M) continue;
-          const ceiling = leader.s - HEADWAY_M;
-          if (follower.s > ceiling) follower.s = Math.max(ceiling, follower.targetS - HEADWAY_M * 2);
-        }
-      }
+      // The screen's copy of the ordering law (R-TE7), applied THROUGH the
+      // convergence and never as a write: leaders converge first, and every
+      // follower then converges with its leader's arc for this frame as its
+      // ceiling, so a mark that would have to come back to respect the order
+      // holds instead. The sweep enters in id order, which is also how a
+      // cycle in the published order is broken: at the relation that closes
+      // it, the same one every frame.
+      const ordered = [...onGeometry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const leaders = leadersOf(ordered);
+      const converged = new Set<string>();
+      const converging = new Set<string>();
+      const converge = (v: VehicleState): void => {
+        if (converged.has(v.id) || converging.has(v.id)) return;
+        converging.add(v.id);
+        const ahead = leaders.get(v.id) ?? [];
+        for (const leader of ahead) converge(leader);
+        converging.delete(v.id);
+        converged.add(v.id);
+        v.s = convergeArc(v, v.targetS, v.stepDt, ahead.length > 0 ? ceilingFor(v, ahead) : Number.POSITIVE_INFINITY);
+      };
+      for (const v of ordered) converge(v);
 
       for (const v of vehicles.values()) {
         const decay = silenceDecay((now - v.planAt) / 1000);
@@ -450,6 +590,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           drawn.s = v.s;
         }
         if (v.held) drawn.held = true;
+        if (v.holding) drawn.holding = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
         if (v.headsign !== undefined) drawn.headsign = v.headsign;
         if (v.nextStopId !== undefined) drawn.nextStopId = v.nextStopId;

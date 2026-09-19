@@ -52,6 +52,10 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
       speed: dataNumber(item, 'speed') ?? undefined,
       confidence: dataNumber(item, 'confidence') ?? undefined,
       held: typeof item.data?.held === 'boolean' ? item.data.held : undefined,
+      // The twin's ordering register, one leader per vehicle (E3). Absent
+      // until the twin publishes it; the integrator falls back to plan order
+      // for a pair it names neither side of.
+      behind: dataText(item, 'behind') || undefined,
     };
     for (const key of Object.keys(fix) as (keyof Fix)[]) if (fix[key] === undefined) delete fix[key];
     const motion = item.motion;
