@@ -1,6 +1,6 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
-import { BeaconDO, CAP_PER_HOUR, CLOSE_AUTH_EXHAUSTED, CLOSE_REVOKED, SLOW_DOWN_FAILS, beaconStub } from '../../worker/do/beacon-do';
+import { BeaconDO, CAP_PER_HOUR, CLOSE_AUTH_EXHAUSTED, CLOSE_REVOKED, SCREEN_SET_MIN_MS, SLOW_DOWN_FAILS, beaconStub } from '../../worker/do/beacon-do';
 import { indexStub } from '../../worker/do/index-do';
 import type { Env } from '../../worker/env';
 import { metricsStub } from '../../worker/metrics';
@@ -248,5 +248,72 @@ describe('BeaconDO redeem', () => {
     expect(kiosk.inbox.closeCode).toBe(CLOSE_REVOKED);
     expect(await beaconStub(testEnv, beaconId).redeem(batch[0]!.code, OTHER_NET)).toEqual({ ok: false, error: 'revoked' });
     expect(await indexStub(testEnv).resolve(batch[0]!.code)).toBeNull();
+  });
+});
+
+// WP4: the screen's own settings panel. The kiosk sends one frame; the DO
+// validates it, stores it and answers through the ordinary codes+screen path,
+// which is what re-frames the wall (app/src/kiosk.ts applyScreen).
+describe('BeaconDO screen-set', () => {
+  it('stores a validated stop and area and answers with the codes frame carrying the new screen', async () => {
+    const { kiosk } = await onlineKiosk('podsljeme');
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'zagreb' }));
+    const answer = await kiosk.inbox.nextOfType('codes');
+    expect(answer.screen).toMatchObject({ kind: 'venue', area: 'zagreb' });
+    expect((answer.screen as { stop: { id: string; name: string; district?: string } }).stop).toMatchObject({ id: '106_1', district: 'gornji-grad-medvescak' });
+    expect((answer.batch as CodeSlot[]).length).toBeGreaterThan(0);
+    kiosk.ws.close(1000, 'done');
+  });
+
+  it('clears the stop when none is chosen, keeping the area', async () => {
+    const { kiosk } = await onlineKiosk('sesvete');
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' }));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje' });
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'trnje' }));
+    // The window is per socket: the second frame lands only once it has passed.
+    await kiosk.inbox.expectSilence(100);
+    kiosk.ws.close(1000, 'done');
+  });
+
+  it('refuses an area or a stop it does not know, and changes nothing', async () => {
+    const { beaconId, kiosk } = await onlineKiosk('brezovica');
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'pariz' }));
+    expect((await kiosk.inbox.nextOfType('error')).error).toBe('bad-area');
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: 'invented', area: 'trnje' }));
+    expect((await kiosk.inbox.nextOfType('error')).error).toBe('bad-stop');
+    await runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => {
+      expect(instance.screenMetadata()).toMatchObject({ area: 'brezovica', stop: null });
+    });
+    kiosk.ws.close(1000, 'done');
+  });
+
+  it('drops a second frame inside the five-second window and takes the next one after it', async () => {
+    const { beaconId, kiosk } = await onlineKiosk('gornja-dubrava');
+    const stub = beaconStub(testEnv, beaconId);
+    const at = Date.now();
+    await runInDurableObject(stub, (instance: BeaconDO) => { vi.spyOn(instance, 'now').mockReturnValue(at); });
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'trnje' }));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'trnje' });
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'maksimir' }));
+    await kiosk.inbox.expectSilence(200);
+    await runInDurableObject(stub, (instance: BeaconDO) => {
+      expect(instance.screenMetadata()).toMatchObject({ area: 'trnje' });
+      vi.spyOn(instance, 'now').mockReturnValue(at + SCREEN_SET_MIN_MS);
+    });
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: null, area: 'maksimir' }));
+    expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ area: 'maksimir' });
+    kiosk.ws.close(1000, 'done');
+  });
+
+  it('is not a way past the challenge: an unauthenticated socket that sends it is refused', async () => {
+    const { beaconId } = await provision();
+    const kiosk = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
+    await kiosk.inbox.nextOfType('challenge');
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'zagreb' }));
+    expect((await kiosk.inbox.nextOfType('error')).error).toBe('auth-required');
+    await runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => {
+      expect(instance.screenMetadata().stop).toBeNull();
+    });
+    kiosk.ws.close(1000, 'done');
   });
 });

@@ -10,7 +10,7 @@ import { logError } from '../log';
 import { recordMetric, zagrebDayHour } from '../metrics';
 import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
-import { withDistrict } from '../pairing/stops';
+import { screenStop, withDistrict } from '../pairing/stops';
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId, signDataToken } from '../pairing/tokens';
 import { parsePresentationCommand, type PresentationCommand, type PresentationResult, type PresentationState, type PresentationTarget } from '../presentation';
 import {
@@ -51,6 +51,8 @@ const STOP_ID_SHAPE = /^[0-9A-Za-z_-]{1,32}$/;
 // generously since the exact byte count is the admin route's concern, not
 // BeaconDO's — only the character set and a sane length are enforced here.
 const SECRET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16,64}$/;
+/** One 'screen-set' per socket per this window; the rest are dropped unanswered (a settings panel must not be a way to mint batches). */
+export const SCREEN_SET_MIN_MS = 5_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -77,7 +79,7 @@ export interface BeaconCreateInput {
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
 type ChallengeAttachment = { phase: 'challenge'; nonce: string; issuedAt: number; attempts: number };
-type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1; capabilities?: string[] };
+type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1; capabilities?: string[]; screenSetAt?: number };
 type SocketAttachment = ChallengeAttachment | AuthedAttachment;
 
 type MetaRow = { key: string; value: string };
@@ -102,9 +104,13 @@ function frame(message: BeaconServerMessage): string {
 function parseClient(message: string | ArrayBuffer): BeaconClientMessage | null {
   if (typeof message !== 'string' || message.length > 512) return null;
   try {
-    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown };
+    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown; stopId?: unknown; area?: unknown };
     if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}),
       ...(Array.isArray(parsed.capabilities)&&parsed.capabilities.includes('city-v1')?{capabilities:['city-v1']}: {}) };
+    if (parsed.t === 'screen-set' && parsed.version === 1 && typeof parsed.area === 'string'
+      && (parsed.stopId === null || typeof parsed.stopId === 'string')) {
+      return { t: 'screen-set', version: 1, stopId: parsed.stopId as string | null, area: parsed.area };
+    }
     if (parsed.version === 1 && Number.isSafeInteger(parsed.revision) && (parsed.revision as number) >= 0) {
       if (parsed.t === 'presented' && (parsed.status === 'displayed' || parsed.status === 'unavailable')) return { t: 'presented', version: 1, revision: parsed.revision as number, status: parsed.status };
       if (parsed.t === 'presentation-stop') return { t: 'presentation-stop', version: 1, revision: parsed.revision as number };
@@ -169,10 +175,12 @@ export class BeaconDO extends DurableObject<Env> {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
     const raw = this.meta('stop');
     const stop = raw ? JSON.parse(raw) as ScreenStop : null;
+    const area = this.meta('area');
     return {
       kind: this.meta('kind') === 'temporary' ? 'temporary' : 'venue',
       expiresAt: expiry || null,
       stop: stop ? withDistrict(stop) : null,
+      ...(area ? { area } : {}),
     };
   }
 
@@ -432,6 +440,10 @@ export class BeaconDO extends DurableObject<Env> {
       if (parsed.revision === this.presentationRecord().revision) this.clearPresentation();
       return;
     }
+    if (parsed.t === 'screen-set') {
+      await this.setScreen(ws, attachment, parsed.stopId, parsed.area);
+      return;
+    }
     if (parsed.t === 'more') {
       if (this.isRevoked()) {
         ws.send(frame({ t: 'revoked' }));
@@ -587,6 +599,36 @@ export class BeaconDO extends DurableObject<Env> {
     }
 
     ws.send(frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now(), screen: this.screenMetadata() }));
+  }
+
+  /**
+   * The screen's own settings panel changed what this screen frames: a stop
+   * (null for none) and one area. Both are validated here -- the browser is
+   * not trusted with either -- and the answer is an ordinary 'codes' frame
+   * carrying the new metadata, the same path a DO-side stop change takes, so
+   * the kiosk re-frames itself through applyScreen() and nothing else.
+   *
+   * Only an authenticated kiosk socket reaches this, at most once every
+   * SCREEN_SET_MIN_MS: a repeat inside the window is dropped in silence,
+   * never answered, so a stuck panel can neither rewrite the meta in a loop
+   * nor pull code batches.
+   */
+  private async setScreen(ws: WebSocket, attachment: AuthedAttachment, stopId: string | null, area: string): Promise<void> {
+    if (this.isRevoked()) return;
+    if (!isAreaSlug(area)) { ws.send(frame({ t: 'error', error: 'bad-area' })); return; }
+    const stop = stopId === null ? null : screenStop(stopId);
+    if (stopId !== null && !stop) { ws.send(frame({ t: 'error', error: 'bad-stop' })); return; }
+    const now = this.now();
+    if (attachment.screenSetAt !== undefined && now - attachment.screenSetAt < SCREEN_SET_MIN_MS) return;
+    ws.serializeAttachment({ ...attachment, screenSetAt: now } satisfies AuthedAttachment);
+    this.ctx.storage.transactionSync(() => {
+      this.setMeta('area', area);
+      this.setMeta('stopId', stop?.id ?? '');
+      // An empty blob is no stop: screenMetadata() reads the absence, and the
+      // row stays so the key is written in one shape either way.
+      this.setMeta('stop', stop ? JSON.stringify(stop) : '');
+    });
+    await this.sendBatch(ws);
   }
 
   // --- RPC: redeem -----------------------------------------------------------
