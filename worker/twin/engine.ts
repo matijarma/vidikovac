@@ -5,6 +5,7 @@
 // loaded and rebuilds it when either changes; a tick without an engine
 // (no geometry loaded) still publishes free-plane plans (tick.ts).
 
+import { createDwellTable, type DwellOverride, type DwellRecent, type DwellTable } from '../../shared/motion/dwell';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import { createMatcher, type Matcher } from '../../shared/motion/match';
 import type { GraphNetwork } from '../../shared/motion/network';
@@ -24,6 +25,15 @@ export interface Engine {
   learnedOnly: TimesProvider;
   /** The live aggregates `times` reads; the twin adds every tick's evidence here. */
   learned: LearnedAggregates;
+  /** The one answer to "how long does this platform hold a tram" (F11): the
+   *  owner's overrides, the rolling recent window, the learned histogram and
+   *  the timetable, in that order. The planner books its dwells from it, the
+   *  speed estimator charges it per stop, and the learner prices the other
+   *  stops inside a dwell sample with it, so the three cannot disagree. */
+  dwell: DwellTable;
+  /** The live recent window the table reads; the twin appends every measured
+   *  dwell here, and it is persisted beside the histograms. */
+  dwellRecent: DwellRecent;
   matcher: Matcher;
   /** The path id each pattern of the index runs, resolved once here so a
    *  trip's join carries it and the matcher's prior and the timetable pick
@@ -36,8 +46,17 @@ export interface Engine {
  *  travel off a schedule that may be as wrong as what it is trying to learn. */
 const NO_TIMES: TimesProvider = { segmentSeconds: () => null, dwellSeconds: () => null };
 
-export function createEngine(net: GraphNetwork, index: TripIndex, learned: LearnedAggregates = emptyAggregates()): Engine {
+export interface EngineOptions {
+  /** The owner's hand-edited dwell table (F11), already parsed. */
+  overrides?: readonly DwellOverride[];
+  /** The rolling window of measured dwells, by reference: the twin keeps
+   *  appending to the object it hands in, and the table reads it live. */
+  dwellRecent?: DwellRecent;
+}
+
+export function createEngine(net: GraphNetwork, index: TripIndex, learned: LearnedAggregates = emptyAggregates(), options: EngineOptions = {}): Engine {
   const schedule = scheduleTimes(net, index);
+  const dwellRecent = options.dwellRecent ?? {};
   return {
     net,
     index,
@@ -45,6 +64,8 @@ export function createEngine(net: GraphNetwork, index: TripIndex, learned: Learn
     times: learnedTimes(schedule, learned, net),
     learnedOnly: learnedTimes(NO_TIMES, learned, net),
     learned,
+    dwell: createDwellTable({ net, schedule, aggregates: learned, overrides: options.overrides ?? [], recent: dwellRecent }),
+    dwellRecent,
     matcher: createMatcher(net),
     patternPathIds: mapPatternsToPaths(net, index).pathIdOf,
   };

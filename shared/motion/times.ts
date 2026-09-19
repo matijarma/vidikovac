@@ -6,19 +6,28 @@
 // once per path here.
 
 import { type DayType, zagrebBands } from './bands';
-import { edgeKey, histogramCount, histogramMedian, stopKey, type Histogram, type LearnedAggregates } from './learn';
+import { edgeKey, histogramCount, histogramQuantile, stopKey, type Histogram, type LearnedAggregates } from './learn';
 import type { GraphNetwork } from './network';
 import { DWELL_DEFAULT_S } from './plan';
 import type { TripIndex } from './trips';
 
 export { zagrebBands, type DayType };
 
+/** The middle of a learned distribution: what a provider answers when the
+ *  caller does not ask for a side of it. Every caller before F11 wanted this,
+ *  and the schedule, which knows one number per stretch, always does. */
+export const TIMES_MEDIAN_QUANTILE = 0.5;
+
 export interface TimesProvider {
   /** Expected seconds to travel from arc `fromS` to arc `toS` on the path,
-   *  or null where nothing is known about that stretch. */
-  segmentSeconds(pathIdx: number, fromS: number, toS: number, hourBand: number, dayType: DayType): number | null;
-  /** Expected standing time at the stop, or null when unknown. */
-  dwellSeconds(stopId: string, hourBand: number, dayType: DayType): number | null;
+   *  or null where nothing is known about that stretch. `quantile` reads the
+   *  learned histogram at a side of its distribution (F11: the planner books
+   *  stretches late on purpose); the schedule has no distribution and ignores
+   *  it. Omitted, it is the median, which is what every caller asked for
+   *  before the planner started tilting its plans. */
+  segmentSeconds(pathIdx: number, fromS: number, toS: number, hourBand: number, dayType: DayType, quantile?: number): number | null;
+  /** Expected standing time at the stop, or null when unknown; `quantile` as above. */
+  dwellSeconds(stopId: string, hourBand: number, dayType: DayType, quantile?: number): number | null;
 }
 
 interface Segment {
@@ -278,7 +287,7 @@ export const LEARN_MIN_SAMPLES = 10;
  *  one band either side, then two. */
 const BAND_REACH = 2;
 
-function borrowOrder(hourBand: number, dayType: DayType): [number, DayType][] {
+export function borrowOrder(hourBand: number, dayType: DayType): [number, DayType][] {
   const other: DayType = dayType === 0 ? 1 : 0;
   const order: [number, DayType][] = [[hourBand, dayType], [hourBand, other]];
   for (let reach = 1; reach <= BAND_REACH; reach++) {
@@ -292,12 +301,39 @@ function borrowOrder(hourBand: number, dayType: DayType): [number, DayType][] {
   return order;
 }
 
-function lookup(table: Record<string, Histogram>, keyFor: (band: number, day: DayType) => string, hourBand: number, dayType: DayType, minSamples: number): number | null {
+/** The first cell of the borrow order that holds `minSamples` or more, read
+ *  at `quantile`; null when none does. The borrowing is the cell's, not the
+ *  quantile's: a cell thin enough to borrow from is thin enough that any
+ *  quantile of it is noise. */
+export function borrowQuantile(
+  table: Record<string, Histogram>,
+  keyFor: (band: number, day: DayType) => string,
+  hourBand: number,
+  dayType: DayType,
+  minSamples: number,
+  quantile: number = TIMES_MEDIAN_QUANTILE,
+): number | null {
   for (const [band, day] of borrowOrder(hourBand, dayType)) {
     const h = table[keyFor(band, day)];
-    if (h && histogramCount(h) >= minSamples) return histogramMedian(h);
+    if (h && histogramCount(h) >= minSamples) return histogramQuantile(h, quantile);
   }
   return null;
+}
+
+/** The samples the borrow order would read, for a report: the count of the
+ *  first cell thick enough to speak, 0 when none is. */
+export function borrowCount(
+  table: Record<string, Histogram>,
+  keyFor: (band: number, day: DayType) => string,
+  hourBand: number,
+  dayType: DayType,
+  minSamples: number,
+): number {
+  for (const [band, day] of borrowOrder(hourBand, dayType)) {
+    const h = table[keyFor(band, day)];
+    if (h && histogramCount(h) >= minSamples) return histogramCount(h);
+  }
+  return 0;
 }
 
 /**
@@ -310,10 +346,10 @@ function lookup(table: Record<string, Histogram>, keyFor: (band: number, day: Da
  */
 export function learnedTimes(schedule: TimesProvider, aggregates: LearnedAggregates, net: GraphNetwork, minSamples = LEARN_MIN_SAMPLES): TimesProvider {
   return {
-    segmentSeconds(pathIdx, fromS, toS, hourBand, dayType) {
+    segmentSeconds(pathIdx, fromS, toS, hourBand, dayType, quantile) {
       if (toS <= fromS) return 0;
       const path = net.paths[pathIdx];
-      if (!path) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+      if (!path) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType, quantile);
       let total = 0;
       for (let k = 0; k < path.edges.length; k++) {
         const start = path.offsets[k];
@@ -321,21 +357,24 @@ export function learnedTimes(schedule: TimesProvider, aggregates: LearnedAggrega
         const lo = Math.max(fromS, start);
         const hi = Math.min(toS, end);
         if (hi <= lo) continue;
-        const learned = lookup(aggregates.edges, (band, day) => edgeKey(path.edges[k], band, day), hourBand, dayType, minSamples);
+        const learned = borrowQuantile(aggregates.edges, (band, day) => edgeKey(path.edges[k], band, day), hourBand, dayType, minSamples, quantile);
         if (learned !== null && end > start) {
           total += (learned * (hi - lo)) / (end - start);
           continue;
         }
-        const scheduled = schedule.segmentSeconds(pathIdx, lo, hi, hourBand, dayType);
-        if (scheduled === null) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+        const scheduled = schedule.segmentSeconds(pathIdx, lo, hi, hourBand, dayType, quantile);
+        if (scheduled === null) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType, quantile);
         total += scheduled;
       }
       // Anything beyond the path's edges is the schedule's to answer.
-      if (toS > path.len + 1e-6 || fromS < -1e-6) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType);
+      if (toS > path.len + 1e-6 || fromS < -1e-6) return schedule.segmentSeconds(pathIdx, fromS, toS, hourBand, dayType, quantile);
       return total;
     },
-    dwellSeconds(stopId, hourBand, dayType) {
-      return lookup(aggregates.stops, (band, day) => stopKey(stopId, band, day), hourBand, dayType, minSamples) ?? schedule.dwellSeconds(stopId, hourBand, dayType);
+    dwellSeconds(stopId, hourBand, dayType, quantile) {
+      return (
+        borrowQuantile(aggregates.stops, (band, day) => stopKey(stopId, band, day), hourBand, dayType, minSamples, quantile) ??
+        schedule.dwellSeconds(stopId, hourBand, dayType, quantile)
+      );
     },
   };
 }
