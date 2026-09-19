@@ -29,7 +29,8 @@ uparivanje, ne posebna demonstracija. Sama postava zaslona ne otključava sesiju
 - **Sada:** informacije iz više područja odmah su vidljive, a vrijeme sesije
   ne zauzima središte sučelja.
 - **Promet:** pronaći liniju i stajalište, odabrati vozilo, promijeniti mjerilo,
-  pratiti vozilo, razumjeti zatvaranje. Kašnjenje linije nije vrijeme dolaska.
+  pratiti vozilo, razumjeti zatvaranje. Kašnjenje linije nije vrijeme dolaska;
+  dolasci na odabranom stajalištu jesu procjena i moraju biti tako označeni.
 - **Vrijeme:** usporediti opažanje i dnevnu prognozu, vjetar i sunce. Grafika
   ne prikazuje satne vrijednosti koje izvor nije objavio.
 - **Događanja:** odabrati datum/kategoriju, pročitati detalj, otvoriti izvornik
@@ -42,9 +43,13 @@ uparivanje, ne posebna demonstracija. Sama postava zaslona ne otključava sesiju
 
 ## Granice prototipa
 
-Koriste se postojeći moduli podataka. Kvaliteta zraka, arhivska građa, HŽ,
-putni planer i dolasci po stajalištu pripadaju predloženom financiranom
-razdoblju, ne glume dovršene mogućnosti. Službeni glasnik prikazuje dostupne
+Koriste se postojeći moduli podataka. Kvaliteta zraka, arhivska građa, HŽ i
+putni planer pripadaju predloženom financiranom razdoblju, ne glume dovršene
+mogućnosti. Dolasci po stajalištu od 19. rujna 2026. postoje, ali kao procjena
+i tako označena: polazak kojemu je pronađeno praćeno vozilo prikazuje se kao
+„za N min”, računato iz voznog reda i kašnjenja koje ZET objavljuje za to
+vozilo, a svi ostali polasci zadržavaju vrijeme po voznom redu. Bez praćenog
+vozila nema odbrojavanja, a HŽ-ove ploče ostaju samo vozni red. Službeni glasnik prikazuje dostupne
 podatke i izvornike akata, ne izmišljeni puni tekst ili pravni sažetak.
 
 Testirani preglednici, snimke zaslona, rezultati automatiziranih testova i

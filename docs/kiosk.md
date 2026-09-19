@@ -52,26 +52,67 @@ pokreće izričitom radnjom, ne automatskom petljom.
 ## Što zaslon prikazuje
 
 Normalan zaslon prikazuje koristan pregled grada i prije i nakon
-skeniranja. U vodoravnom rasporedu lokalna karta i odvojena ploča linija
-zauzimaju lijevi dio; vrijeme i dnevna prognoza, sljedeća događanja,
-obližnja zatvaranja, gradske informacije i pozivnica desni.
-Karta nema ploču linija preko sebe. Brojevi vozila prorjeđuju se pri
+skeniranja. Karta zauzima cijeli lijevi stupac i otvara se na prozoru
+cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja, a ne na
+jednom stajalištu. Na njoj su tramvajska mreža u neutralnom sivom, ispod
+svega ostaloga, pločice tramvaja u brendiranoj plavoj, sve BAJS stanice
+kao tirkizni diskovi s brojem raspoloživih bicikala, zatvorene prometnice,
+prsten dežurne ljekarne i aktivna kulturna mjesta. Imena se ne ispisuju:
+ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
+mjesta. Stanica bez bicikala ili sa zastarjelim očitanjem stoji blijeđa.
+Autobusi -- kapsule i njihove linije -- pridružuju se tramvajima tek kad je
+kamera na zumu 14 ili bliže; tristo kapsula nad cijelim gradom zakrilo bi
+tramvaje o kojima slika govori. Brojevi vozila prorjeđuju se pri
 preklapanju, a položaji ostaju označeni točkama.
 
-Zaglavlje nosi mjesto, datum i vrijeme. Sigurnosna traka uvijek ostaje
-vidljiva i imenuje stanje izvora, upozorenje kada postoji i dežurnu
-ljekarnu. Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
-„Zadnji polazak” navodi raspored ZET-a, ne procjenu dolaska.
+Postavljeno stajalište nadjačava prozor i drži svoj ulični kadar;
+postavljena gradska četvrt sjeda na svoj obris. Stajališta ostaju
+dodirljivi prstenovi i na gradskom kadru, uz toleranciju dodira od 28 CSS
+piksela, jer prst na zidu nije miš na stolu. Dodir na stajalište otvara
+istraživanje grada, s imenima, i prvo kaže koji tramvaji i autobusi dolaze
+i za koliko minuta; 90 sekundi bez dodira vraća prozor.
+
+Desni stupac nosi tri ploče i pozivnicu. **Vrijeme**: opažanje (ikona,
+temperatura, riječ stanja) te današnji i sutrašnji raspon; pripovjedni
+tekst DHMZ-a preselio se u traku zaglavlja. **Promet**: samo iznimke,
+linije čiji je medijan izvan pojasa točnosti za najmanje tri minute, jer
+je manje od toga vozni red koji diše, a ne vijest, uz broj zatvaranja i
+broj ZET-ovih obavijesti. Linije koje kasne idu prije onih koje voze
+ranije, a tramvaji prije autobusa; ploča nosi do tri linije na širokom i
+okomitom zaslonu, do dvije na zbijenom, a ostatak sažima u „+N linija
+kasni”. Kad nema iznimke, kaže „Linije voze po redu”. Kad je stajalište
+postavljeno, ta ploča postaje ploča dolazaka tog stajališta.
+**Događanja** popunjavaju preostalu visinu: prvo aktivna mjesta s brojem
+događaja, zatim datirani događaji, a kad ni toga nema, jedna mirna
+rečenica. Ploča nikad ne ostaje prazna: nosi barem jedan cijeli redak, a
+ploča Promet ustupa svoje retke dok Događanja ne dođu do dva.
+**Pozivnica** je visoka koliko i QR kod: QR uz tekst, kod ispod teksta u
+istom stupcu i na stalnoj veličini, s trakom napretka ispod njega.
+
+Zaglavlje nosi mjesto, datum i vrijeme, a između njih traku gradskih
+vijesti: po jedna stavka odjednom, obojena natuknica (VRIJEME, PROMET,
+RADOVI, VEČERAS, GRAD) i jedna rečenica, izmjena svakih 8 sekundi uz
+prijelaz od 220 milisekundi, a bez prijelaza kad je uključen smanjeni
+pokret. Nema pomične trake ni teksta koji klizi. Pločica sesije i
+obavijest o uparivanju imaju prednost nad trakom. Rečenice dolaze iz istih
+modula iz kojih i ploče; duge izvorne tekstove poslužitelj jednom strojno
+sažme u jednu rečenicu, a kad sažetka nema, stoji izvorni naslov.
+
+Sigurnosna traka uvijek ostaje vidljiva i imenuje stanje izvora,
+upozorenje kada postoji i dežurnu ljekarnu. Izvori, datum događanja i
+vrijeme opažanja nisu zamjenjivi.
 
 Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena
 ploča ne smije postati prazna samo da bi se uklonilo prelijevanje teksta.
 Rasporedi za 1920 × 1080, 1366 × 768 i okomiti totem namjerno su
 različiti; QR na tim zaslonima ostaje najmanje 240 CSS piksela.
-Dežurna ljekarna na karti nosi prsten i adresu. Blizu stajališta zaslona
-prsten ostaje, a sigurnosna traka nosi puni naziv.
+Dežurna ljekarna na karti nosi prsten; adresa se uz njega ispisuje tek kad
+je kamera u kvartu, a na prozoru cijeloga grada puni naziv nosi sigurnosna
+traka.
 
 Radovi u tijeku broje se za cijeli grad i ploča to kaže izričito
-(„Radovi u gradu”); nema odabira gradske četvrti.
+(„Radovi u gradu”); ni postavljena gradska četvrt ne sužava taj broj, ona
+kadrira samo kartu.
 Adresa `/kiosk/` više ne prima dodatak `?prizor=`: nema više odabira
 prizora jer postoji samo jedan. Aplikacija i dalje poštuje sustavnu
 postavku smanjenog pokreta preglednika, ali sada zaustavlja samo glatki
@@ -115,7 +156,16 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 ### Granice podataka
 
 - Položaj vozila je modelirana procjena iz ZET-ovih očitanja, ne dolazak na
-  stajalište. Kašnjenje je medijan po liniji, ne kašnjenje izabranog vozila.
+  stajalište. Medijan na ploči Promet je očitanje linije, ne kašnjenje
+  izabranog vozila.
+- Vrijeme dolaska je procjena, i tako je označeno. Polazak kojemu je pronađeno
+  praćeno vozilo računa se iz voznog reda i kašnjenja koje ZET sam objavljuje
+  za to vozilo, a kad se blizanac i ZET slože oko sljedećeg stajališta,
+  prevladava blizančeva procjena dolaska na to stajalište; takav redak kaže
+  „za N min”. Ostali polasci zadržavaju svoje vrijeme po voznom redu i
+  prikazuju se kao sat. Popis to kaže u jednoj rečenici ispod redaka:
+  „Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.” Ništa se
+  ne izmišlja: bez praćenog vozila nema odbrojavanja.
 - Nedostajući ili neupotrebljivo velik medijan ne prikazuje se kao „na vrijeme”
   niti se skraćuje na izmišljenu vrijednost. Sirovi izvor ostaje neizmijenjen.
 - Prekid izvora zaustavlja procijenjeno kretanje. Posljednji podaci mogu ostati
@@ -125,9 +175,17 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   otvorenje svakog dana.
 - Podaci o ljekarni ne znače jamstvo da je ona trenutačno najbliža korisniku.
   Aplikacija ne traži korisnikovu geolokaciju.
-- Kvaliteta zraka, arhivska građa, HŽ i dolasci po stajalištu nisu
-  implementirane integracije ovog prototipa.
-- Zadnji polazak je polazak po rasporedu ZET-a, nikad dolazak.
+- Kvaliteta zraka i arhivska građa nisu implementirane integracije ovog
+  prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
+  nema praćenih vozila, pa nema ni procjene dolaska.
+- „Zadnji polazak” je posljednji polazak po voznom redu ZET-a, ne procjena
+  dolaska.
+- Rečenice u traci zaglavlja strojno su sažete. Dugačak izvorni tekst (naziv
+  akta iz glasnika, pripovjedna prognoza DHMZ-a, obavijest ZET-a, opis radova,
+  kvartovska vijest) poslužitelj jednom sažme modelom Workers AI u jednu
+  rečenicu i zapamti je; to je prilagodba, a ne izvorni tekst. Sažimaju se samo
+  izvori s otvorenom licencom, sažetak se nikad ne objavljuje na `/open`, a kad
+  ga nema, traka prikazuje izvorni naslov. Na telefonu ostaje izvorni naslov.
 
 ## Lagani prikaz
 
@@ -181,8 +239,9 @@ polje i ploče naslovnice: `prikaz` bira samo renderer, a umirovljeni `prizor`
 ne vraća rotaciju poglavlja.
 
 Zaslon sa stajalištem koje postoji na shemi pokazuje čitljiv kadar oko njega,
-s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta pokazuje cijelu
-mrežu bez sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
+s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta -- a to je zadano
+stanje otkad se zaslon pokreće jednim gumbom -- pokazuje cijelu mrežu bez
+sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
 geografsku kameru. Ploče ne prekrivaju polje pa nema donje tračnice ni
 dodatnog odmaka kadra.
 Prikazuje samo tramvaje čija se postojeća staza može smjestiti na nacrt.
@@ -226,8 +285,10 @@ bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
 
 | Simptom | Provjera i postupak |
 |---|---|
-| Pojavljuje se postavljanje | Nema valjane lokalne postave; odabrati četvrt i stajalište. |
+| Pojavljuje se početni zaslon | Nema valjane lokalne postave; pritisnuti **Pokreni zaslon**. Područje i stajalište nisu potrebni. |
 | Stvaranje je odbijeno | Kod 429 znači dosegnuto ograničenje po mreži ili ukupno; slijediti navedeno vrijeme ponovnog pokušaja. Kod 403 znači zahtjev s druge domene. |
+| Treba promijeniti područje ili stajalište | Zupčanik u zaglavlju otvara **Postavke**. Postavke se ne otvaraju dok traje otključana sesija; pričekati njezin istek ili je zaustaviti. |
+| Spremanje u Postavkama ne uspijeva | Ploča ostaje otvorena i kaže razlog. Odbijenica znači da Durable Object nije prihvatio stajalište ili područje; poruka o prebrzom spremanju znači više od jedne promjene u pet sekundi, pa pričekati i pokušati ponovno. Ako odgovor ne stigne u osam sekundi, gumb se vraća; odgovor koji ipak stigne poslije svejedno ponovno kadrira zaslon. |
 | Postava je istekla ili opozvana | Pokrenuti novu postavu izričito. Ne ponavljati automatski stvaranje. |
 | Kod je istekao ili iskorišten | Upisati novi aktualni kod; provjeriti automatsko podešavanje sata uređaja. |
 | Telefon ne završava povezivanje | Nakon kratkih ponovnih pokušaja sučelje nudi novi ulazak; upotrijebiti svježi kod. |
