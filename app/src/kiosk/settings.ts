@@ -19,8 +19,8 @@ import { fill, plural, type KioskStrings } from './strings';
 /** Untouched for this long, the panel closes itself and the screen returns to the invitation. */
 export const SETTINGS_IDLE_MS = 90_000;
 /** Stops offered before a search narrows them, and after one. */
-export const SETTINGS_STOP_LIMIT = 8;
-export const SETTINGS_SEARCH_LIMIT = 12;
+const SETTINGS_STOP_LIMIT = 8;
+const SETTINGS_SEARCH_LIMIT = 12;
 /** Trg bana Jelačića: where "nearest first" starts from when the area is the whole city. */
 const CITY_CENTRE = { lon: 15.97726, lat: 45.81286 };
 
@@ -46,7 +46,6 @@ export interface SettingsDeps {
   forget: () => void;
   onOpen?: () => void;
   onClose?: (restoreFocus: boolean) => void;
-  now: () => number;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (handle: unknown) => void;
 }
@@ -57,7 +56,9 @@ export interface SettingsHandle {
   /** `restoreFocus` false is for a phase change, where the thing that opened the panel is going away. */
   close(restoreFocus?: boolean): void;
   isOpen(): boolean;
-  /** Re-reads the screen and the theme; called when either changed elsewhere. */
+  /** Re-reads the theme word and the expiry line while the panel is open;
+   *  the area and the stop are the person's own unsaved edit and are read
+   *  only when the panel opens. */
   paint(): void;
   destroy(): void;
 }
@@ -275,7 +276,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   q('[data-testid=kiosk-settings-close]').addEventListener('click', () => close());
   element.addEventListener('pointerdown', armIdle);
   element.addEventListener('keydown', (event) => {
-    if ((event as KeyboardEvent).key === 'Escape') { close(); return; }
+    if (event.key === 'Escape') { close(); return; }
     armIdle();
   });
 

@@ -27,7 +27,7 @@ export interface StartHandle {
   destroy(): void;
 }
 
-export type SetupErrorKind = 'access' | 'quota' | 'network' | 'invalid' | 'failed' | 'stops';
+export type SetupErrorKind = 'access' | 'quota' | 'network' | 'invalid' | 'failed';
 
 /** ScreenError status -> the sentence the person reads. Anything that is
  *  not a ScreenError never reached the Worker: a network failure. */
@@ -43,15 +43,14 @@ export function classifySetupError(error: unknown): { kind: SetupErrorKind; retr
 
 /** The sentence one refusal reads as; the field name is shown only when the
  *  Worker actually named one ('bad-request' is a reason, not a field). */
-export function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: string }): string {
+function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: string }): string {
   const invalid = c.field && c.field !== 'bad-request'
     ? fill(s.setup.errorInvalid, { field: c.field })
     : s.setup.errorInvalid.replace(/\s*\(\{field\}\)/, '');
   return c.kind === 'access' ? s.setup.errorAccess
     : c.kind === 'quota' ? s.setup.errorQuota
       : c.kind === 'invalid' ? invalid
-        : c.kind === 'stops' ? s.setup.errorStops
-          : c.kind === 'failed' ? s.setup.errorFailed : s.setup.errorNetwork;
+        : c.kind === 'failed' ? s.setup.errorFailed : s.setup.errorNetwork;
 }
 
 function startMarkup(s: KioskStrings): string {

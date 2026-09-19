@@ -5,6 +5,7 @@
 // code rotation and feed polling; tests drive these same paths with fakes.
 // Screen credentials never enter public presentation markup or logs.
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import { CITY_AREA } from '../../worker/pairing/areas';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
@@ -45,7 +46,6 @@ import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './ki
 import { createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { districtLabel } from './kiosk/districts';
-import { CITY_AREA } from '../../worker/pairing/areas';
 import { mountSettings, type SettingsHandle } from './kiosk/settings';
 import { mountStart, type StartHandle } from './kiosk/start';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
@@ -403,8 +403,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintContext(): void {
     const district = area && area !== CITY_AREA.slug ? districtLabel(area) : '';
     contextEl.textContent = !credentials ? '' : stop ? stop.name : district;
-    // Settings belong to a screen that exists, and never over a granted session.
-    settingsBtn.hidden = !credentials || phase === 'paired';
+    // Settings belong to a live screen showing the invitation: never before one
+    // exists, never over a granted session, and never over a screen that has
+    // expired or been revoked, whose notice carries the one way on.
+    settingsBtn.hidden = phase !== 'invitation';
   }
   function showSessionLabel(expiresAt: number | null): void {
     if (expiresAt === null) return;
@@ -468,7 +470,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     disarmEssentialsIdle();
     essentialsIdle = setTimer(() => closeEssentials(), ESSENTIALS_IDLE_MS);
   }
-  /** Never over a grant (the driver's layer shows more) and never over the wizard. */
+  /** Never over a grant (the driver's layer shows more) and never over the start screen. */
   function openEssentials(): void {
     if (phase === 'paired' || phase === 'setup') return;
     closeSettings(false);
@@ -844,7 +846,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  life. Saving is one `screen-set` frame; the DO's answer re-frames the
    *  wall through applyScreen, exactly as a stop change from the DO does. */
   function openSettings(): void {
-    if (!credentials || phase === 'paired' || phase === 'setup') return;
+    if (!credentials || phase !== 'invitation') return;
     closeEssentials(false);
     settings ??= mountSettings(element, {
       strings: s,
@@ -865,7 +867,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         if (mapContainer && mapContainer.parentElement !== park) resumeMap();
         if (restoreFocus) settingsBtn.focus();
       },
-      now,
       setTimeout: oneShot,
       clearTimeout: clearTimer,
     });

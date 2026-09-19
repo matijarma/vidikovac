@@ -16,6 +16,7 @@ import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
+import { SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
@@ -544,7 +545,7 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(true);
     open(k);
     expect(panel(k)!.hidden).toBe(false);
-    k.tick(ESSENTIALS_IDLE_MS);
+    k.tick(SETTINGS_IDLE_MS);
     expect(panel(k)!.hidden).toBe(true);
   });
 
