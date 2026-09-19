@@ -36,6 +36,22 @@ describe('public-screen design invariants', () => {
     for (const dead of ['k-local', 'k-local-facts', 'k-neighborhood', 'k-context-stack', 'k-column', 'k-bottom', 'k-provision', 'k-front'])
       for (const sheet of [css, cityCss]) expect(sheet, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
   });
+  // Postavke's stop list on a wall: it may scroll, but it may not show half a
+  // row. The rows are a fixed height and the box is an exact number of them
+  // plus the gaps, so the cut always lands between two rows.
+  it('bounds the settings stop list to whole rows', () => {
+    const list = rule('.k-settings .k-stop-list');
+    expect(list).toContain('--k-stop-row');
+    expect(list).toContain('grid-auto-rows: var(--k-stop-row)');
+    // The height is rows and gaps only -- no bare rem cap that could land mid-row.
+    expect(list).toMatch(/max-height: calc\(var\(--k-stop-row\) \* 5 \+ var\(--k-gap\) \* 0\.6 \* 4\)/);
+    expect(list).not.toMatch(/max-height:\s*\d/);
+    // A row that fills its fixed box clips inside it rather than growing past it.
+    expect(rule('.k-settings .k-stop-list .k-choice-text')).toContain('height: 100%');
+    expect(rule('.k-settings .k-stop-list .k-stop-meta')).toContain('-webkit-line-clamp: 2');
+    // The list is still a scroller, so nothing below the fifth row is unreachable.
+    expect(rule('.k-stop-list')).toContain('overflow-y: auto');
+  });
   it('carries the header ticker on one line, crossfaded and stopped where motion is unwanted', () => {
     expect(rule('.k-ticker')).toContain('font-size: var(--k-ticker-size)');
     expect(rule('.k-ticker-text')).toContain('text-overflow: ellipsis');

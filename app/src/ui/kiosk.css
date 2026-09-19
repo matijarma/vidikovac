@@ -812,7 +812,16 @@ button.k-strip-verdict { cursor: pointer; }
 .k-settings-label { font-size: var(--k-sup-size); font-weight: 700; }
 .k-settings .k-district-pick, .k-settings .k-search { width: 100%; }
 .k-settings .k-search { margin-top: calc(var(--k-gap) * 0.5); }
-.k-settings .k-stop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 22rem; }
+/* Whole rows, never half of one. The list scrolls (a screen with a touch
+   panel can reach the rest, and the count under it says how many there are),
+   but on a screen nobody touches a row cut through the middle reads as a
+   rendering fault, so the rows are a fixed height and the box is an exact
+   number of them plus the gaps between: a cut can only ever fall between two
+   rows. Five rows hold the ten the panel offers with no query; a search's
+   thirteen scroll, by whole rows. */
+.k-settings .k-stop-list { --k-stop-row: 4.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: var(--k-stop-row); max-height: calc(var(--k-stop-row) * 5 + var(--k-gap) * 0.6 * 4); scrollbar-gutter: stable; }
+.k-settings .k-stop-list .k-choice-text { height: 100%; overflow: hidden; }
+.k-settings .k-stop-list .k-stop-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .k-settings .k-btn { margin-top: calc(var(--k-gap) * 0.5); }
 .k-settings-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5); margin-top: calc(var(--k-gap) * 0.5); }
 .k-settings-confirm[hidden] { display: none; }
@@ -820,5 +829,5 @@ button.k-strip-verdict { cursor: pointer; }
 @media (max-width: 60rem) {
   .k-settings-rows { grid-template-columns: minmax(0, 1fr); }
   .k-settings-row[data-row='stop'] { grid-row: auto; }
-  .k-settings .k-stop-list { grid-template-columns: minmax(0, 1fr); max-height: 16rem; }
+  .k-settings .k-stop-list { grid-template-columns: minmax(0, 1fr); max-height: calc(var(--k-stop-row) * 3 + var(--k-gap) * 0.6 * 2); }
 }
