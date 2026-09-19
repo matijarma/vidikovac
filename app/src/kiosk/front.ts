@@ -24,14 +24,15 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayMonth, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
 import {
   byModule, cleanCondition, closuresByDistance, isLive, lastDeparturesAhead, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
-  routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
+  plausibleDelay, routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
 } from './local';
-import { summariseRoutes } from '../layers/route-summary';
+import { delayWord } from '../layers/shared';
 import { routeType } from './stops';
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
 import { districtLabel } from './districts';
 import type { Composition } from './layout';
+import type { ActiveVenue } from '../../../shared/city/events';
 import { venueOutsideZagreb, cultureEvents as clientCultureEvents, upcomingEvents, ongoingEvents } from '../layers/kultura';
 import { weatherMarkup } from './markup';
 import { weatherNow } from './local';
@@ -58,6 +59,13 @@ export interface FrontInput {
   /** Rows in place of the mode's own: a stop's arrivals, once settings can
    *  choose one (WP5b). The panel keeps its kicker, meta and credit. */
   prometRows?: FrontRow[];
+  /** How many rows the events card's measured room holds (kiosk/invitation.ts
+   *  measures it); the composition's own cap otherwise. A card that fills the
+   *  aside's height must be given enough rows to fill it with. */
+  eventRows?: number;
+  /** How many exception lines the aside can spare for the promet card, measured
+   *  the same way; never more than the composition's cap (EXCEPTION_LINES). */
+  prometLines?: number;
 }
 
 /** The two readings of transit a panel can carry (prometPanel). */
@@ -207,6 +215,8 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   // A source that is loading or down says so; only a live observation without a
   // number says "bez očitanja temperature". Never a dash (PRODUCT.md, principle 4).
   const reading = observed.temperature ?? (observed.state === 'loading' ? s.weather.loading : observed.state === 'down' ? s.weather.unavailable : s.weather.noReading);
+  // The glyph and the reading, the condition word under them: inline it widens
+  // the observation until the ranges beside it are clipped mid-degree.
   const figure = `<div class="k-weather-current"><div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(reading)}</span></div>${observed.condition ? `<p class="k-condition">${escapeHtml(observed.condition)}</p>` : ''}</div>`;
   const rows: FrontRow[] = [];
   for (const [key, day, item] of [['today', s.say.today, today], ['tomorrow', s.say.tomorrow, tomorrow]] as const) {
@@ -281,10 +291,16 @@ const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
 
 /** A route median inside this band is on time, not an exception a card names. */
 const ON_TIME_S = 15;
-/** How many late lines the exceptions card names before the rest are the
- *  ticker's. A card, not a board: the aside's height belongs to the events
- *  card, which fills what these leave (kiosk/invitation.ts). */
-const EXCEPTION_LINES: Readonly<Record<Composition, number>> = { wide: 1, compact: 1, portrait: 2, handheld: 3 };
+/** Past half an hour a median is an outlier the feed has not caught up with --
+ *  a broken trip update, a vehicle parked mid-route -- and not an exception a
+ *  rider can plan around. routeDelays has already dropped the impossible ones
+ *  (plausibleDelay); this is where news stops and noise starts. */
+const EXCEPTION_MAX_S = 30 * 60;
+/** The most exceptions a card will name before the rest are the ticker's and
+ *  the meta's. A card, not a board: the aside's height belongs to the events
+ *  card, whose two-row floor comes first, so kiosk/invitation.ts measures the
+ *  room and asks for fewer (`prometLines`) when a card cannot hold all three. */
+export const EXCEPTION_LINES: Readonly<Record<Composition, number>> = { wide: 3, compact: 2, portrait: 3, handheld: 3 };
 
 /** The stop's line board: one row per route with its state word and the
  *  vehicles near, plus ZET's newest notice and the last departures. */
@@ -305,27 +321,31 @@ function linesRows(input: FrontInput, board: LinesBoard): FrontRow[] {
   });
 }
 
-/** The city's late lines: the routes whose median a rider would notice, the
- *  worst first and then in rider order, trams before buses. */
-function exceptionRows(input: FrontInput): FrontRow[] {
+/** The city's exceptions in the order a rider reads them: what is running late
+ *  before what is running early, trams before buses, then the largest first --
+ *  and how many the card had no room for, which the meta counts. Medians the
+ *  feed cannot mean (routeDelays' own plausibility, then half an hour) are not
+ *  exceptions at all: a card that says "281 rani 74 min" is saying nothing. */
+export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: number } {
   const { strings: s, i18n } = input;
   const delays = routeDelays(byModule(input.modules)['zet-rt']);
-  const worst = [...delays]
-    .filter(([, seconds]) => Math.abs(seconds) > ON_TIME_S)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    .slice(0, EXCEPTION_LINES[input.composition ?? 'wide']);
-  return summariseRoutes(worst.map(([routeId]) => ({ routeId, label: routeId, type: routeType(routeId) ?? -1 })), delays, i18n)
-    .map((row) => {
-      const kind = row.type === 0 ? 'tram' : row.type === 3 ? 'bus' : 'other';
-      const kindWord = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
-      const toneRaw = delayTone(i18n, delays.get(row.routeId));
-      return {
-        key: `line:${row.routeId}`,
-        leadMarkup: kBadge(row.label, kind, `${kindWord} ${row.label}`.trim()),
-        title: row.word,
-        tone: toneRaw === 'none' ? 'unknown' : toneRaw,
-      };
-    });
+  const all = [...delays]
+    .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) > ON_TIME_S && Math.abs(seconds) <= EXCEPTION_MAX_S)
+    .map(([routeId, seconds]) => ({ routeId, seconds, type: routeType(routeId) ?? -1 }))
+    .sort((a, b) => Number(a.seconds < 0) - Number(b.seconds < 0) || a.type - b.type || Math.abs(b.seconds) - Math.abs(a.seconds));
+  const cap = EXCEPTION_LINES[input.composition ?? 'wide'];
+  const rows = all.slice(0, Math.max(1, Math.min(input.prometLines ?? cap, cap))).map(({ routeId, seconds, type }) => {
+    const kind = type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
+    const kindWord = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
+    const toneRaw = delayTone(i18n, seconds);
+    return {
+      key: `line:${routeId}`,
+      leadMarkup: kBadge(routeId, kind, `${kindWord} ${routeId}`.trim()),
+      title: delayWord(i18n, seconds),
+      tone: toneRaw === 'none' ? 'unknown' : toneRaw,
+    } satisfies FrontRow;
+  });
+  return { rows, more: all.length - rows.length };
 }
 
 /** ZET's own fresh notices about the network. */
@@ -352,7 +372,8 @@ export function prometPanel(input: FrontInput): FrontPanel {
   const exceptions = input.prometMode === 'exceptions';
   const board = linesAtStop(input.modules, stop, i18n, PROMET_LINES);
   const supplied = input.prometRows;
-  const rows: FrontRow[] = supplied ?? (input.lightweight ? [] : exceptions ? exceptionRows(input) : linesRows(input, board));
+  const late = exceptions && !supplied && !input.lightweight ? exceptionRows(input) : { rows: [], more: 0 };
+  const rows: FrontRow[] = supplied ?? (input.lightweight ? [] : exceptions ? late.rows : linesRows(input, board));
   const notices = zetNotices(input);
   if (!exceptions && !supplied && notices[0]) {
     // The newest ZET notice as the board's last row: what the network says about itself.
@@ -371,7 +392,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
   const meta = state === 'loading' || state === 'down'
     ? ''
     : exceptions
-      ? [closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
+      ? [late.more > 0 ? plural(locale, s.front.moreLate, late.more) : '', closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
       : [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ');
   const empty = exceptions ? s.front.linesRegular : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
   const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
@@ -430,6 +451,27 @@ export function aroundPanel(input: FrontInput): FrontPanel {
 
 // --- All five, and their markup ---------------------------------------------------
 
+/** The events card's rows in the order its room is filled: the active venues
+ *  nearest the screen, each with its own count, then the dated events those
+ *  venues do not already stand for, nearest in time first (tonightPanel's own
+ *  order: tonight, tomorrow, then the week). The budget is the measured room
+ *  (kiosk/invitation.ts), never a constant, and nothing is half-shown: a row
+ *  either fits whole or is not there. */
+export function eventCardRows(venues: readonly ActiveVenue[], events: readonly FrontRow[], budget: number): FrontRow[] {
+  const shown = venues.slice(0, budget);
+  const rows: FrontRow[] = shown.map((venue) => ({
+    key: venue.place.id, lead: String(venue.count), title: venue.place.name, sub: venue.events[0]!.item.title,
+  }));
+  // A venue row already says what is on there; the fill is what it does not cover.
+  const said = new Set(shown.flatMap((venue) => venue.events.map((event) => `event:${event.item.id}`)));
+  for (const row of events) {
+    if (rows.length >= budget) break;
+    if (said.has(row.key)) continue;
+    rows.push(row);
+  }
+  return rows;
+}
+
 export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
   const all = { tonight: tonightPanel(input), weather: weatherPanel(input), city: cityPanel(input), promet: prometPanel(input), around: aroundPanel(input) };
   const compact = input.composition === 'compact';
@@ -438,8 +480,8 @@ export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
   // exceptions card counts against nothing, having no board to be a part of.
   const lineBoard = input.prometMode !== 'exceptions';
   const caps: Record<PanelId, number> = handheld
-    ? { tonight: 5, weather: 2, city: 3, promet: 6, around: 3 }
-    : { tonight: compact ? 1 : 2, weather: 2, city: 1, promet: compact ? 3 : 6, around: 1 };
+    ? { tonight: input.eventRows ?? 5, weather: 2, city: 3, promet: 6, around: 3 }
+    : { tonight: input.eventRows ?? (compact ? 1 : 2), weather: 2, city: 1, promet: compact ? 3 : 6, around: 1 };
   for (const id of PANEL_IDS) {
     const p = all[id];
     const total = id === 'promet' && input.stop && lineBoard ? input.stop.routes.length : p.rows.length;

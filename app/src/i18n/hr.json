@@ -968,7 +968,10 @@
       "closures_other": "{count} zatvaranja",
       "notices_one": "{count} obavijest ZET-a",
       "notices_few": "{count} obavijesti ZET-a",
-      "notices_other": "{count} obavijesti ZET-a"
+      "notices_other": "{count} obavijesti ZET-a",
+      "moreLate_one": "+{count} linija kasni",
+      "moreLate_few": "+{count} linije kasne",
+      "moreLate_other": "+{count} linija kasni"
     },
     "ticker": {
       "weather": "Vrijeme",

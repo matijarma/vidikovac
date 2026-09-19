@@ -20,12 +20,33 @@
 /* The window has the room to lay the card on its side: the QR beside the words. */
 .kiosk .k-city-window .k-invite { grid-template-columns: var(--k-qr) minmax(0, 1fr); grid-template-areas: 'qr side'; justify-items: stretch; }
 
-/* The events card: the venue's own count in the lead, its name, the first thing on there. */
+/* The events card: the venue's own count in the lead, its name, the first
+   thing on there -- then the dated events those venues do not cover. Its rows
+   are set close: the room is the card's whole point and its floor is two. */
+.kiosk .k-city-window [data-panel='tonight'] .k-fr { padding-block: calc(var(--k-gap) * 0.2); }
 .kiosk .k-city-window [data-panel='tonight'] .k-fr-lead { min-width: 1.6em; color: var(--k-violet); }
 .kiosk .k-city-window [data-panel='tonight'] .k-fr-title { -webkit-line-clamp: 1; line-clamp: 1; }
 
-/* The promet card is exceptions only: a badge and the delay word, one per row. */
+/* Where the weather card is half the aside wide, or a phone's column, the
+   reading cannot stand beside the ranges: they take the whole width under it. */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'],
+.kiosk[data-size='handheld'] .k-city-window [data-panel='weather'] { grid-template-columns: minmax(0, 1fr); }
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'] > .k-panel-rows,
+.kiosk[data-size='handheld'] .k-city-window [data-panel='weather'] > .k-panel-rows { padding-left: 0; border-left: 0; }
+/* Nothing stands beside the reading there, so the condition word joins it. */
+.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-weather-current .k-condition,
+.kiosk[data-size='handheld'] .k-city-window .k-weather-current .k-condition { flex-basis: auto; }
+
+/* The promet card is exceptions only: a badge and the delay word, one per row.
+   Up to three of them, so the rows are set close and the head carries no rule
+   of its own -- the height the card saves is the events card's floor. */
+.kiosk .k-city-window [data-panel='promet'] { padding-block: calc(var(--k-gap) * 0.6); }
+.kiosk .k-city-window [data-panel='promet'] .k-panel-head { padding-bottom: 0; border-bottom: 0; margin-bottom: calc(var(--k-gap) * 0.3); }
+/* The counts are a summary, not attribution (the credit names ZET): one line,
+   ellipsised, never three wrapped lines eating the card's head. */
+.kiosk .k-city-window [data-panel='promet'] .k-panel-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .kiosk .k-city-window [data-panel='promet'] .k-panel-rows { grid-template-columns: minmax(0, 1fr); }
+.kiosk .k-city-window [data-panel='promet'] .k-fr { padding-block: calc(var(--k-gap) * 0.25); }
 .kiosk .k-city-window [data-panel='promet'] .k-fr-title { font-size: var(--k-sup-size); }
 
 /* --- Istraži grad: the button over the map, the results in the aside ------ */
@@ -54,9 +75,6 @@
 .kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='tonight'] { grid-column: 1 / -1; grid-row: 2; }
 .kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-discovery-slot { grid-column: 1 / -1; grid-row: 2; }
 .kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window .k-panel--card { grid-column: 1 / -1; grid-row: 3; }
-/* Half the aside is too narrow for the reading beside the ranges: they go under it. */
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'] { grid-template-columns: minmax(0, 1fr); }
-.kiosk[data-size='compact']:not([data-portrait='1']) .k-city-window [data-panel='weather'] > .k-panel-rows { padding-left: 0; border-left: 0; }
 
 /* --- The totem (1080 x 1920): the map on top, the two small cards abreast,
        the events across, the card at the foot. ---------------------------- */
@@ -69,7 +87,11 @@
 .kiosk[data-portrait='1'] .k-city-window [data-panel='promet'] { grid-column: 2; grid-row: 2; }
 .kiosk[data-portrait='1'] .k-city-window [data-panel='tonight'] { grid-column: 1 / -1; grid-row: 3; }
 .kiosk[data-portrait='1'] .k-city-window .k-discovery-slot { grid-column: 1 / -1; grid-row: 3; }
-.kiosk[data-portrait='1'] .k-city-window .k-panel--card { grid-column: 1 / -1; grid-row: 4; }
+.kiosk[data-portrait='1'] .k-city-window .k-panel--card { grid-column: 1 / -1; grid-row: 4; align-self: start; }
+/* The totem's card is as tall as its QR and no taller: the code follows the
+   hint and the bar follows the code, rather than being pushed to a foot the
+   words never reach. The room this frees is the events card's. */
+.kiosk[data-portrait='1'] .k-city-window .k-invite-code { margin-top: 0; }
 
 /* --- A phone: the same page in one column, scrolling ---------------------- */
 .kiosk[data-size='handheld'] .k-city-window { display: flex; flex-direction: column; gap: var(--k-gap); height: auto; }
@@ -78,8 +100,6 @@
 .kiosk[data-size='handheld'] .k-city-window [data-panel='tonight'] { flex: none; }
 /* A phone's column is 358 px: the card stands up again, as it does in the paired rails. */
 .kiosk[data-size='handheld'] .k-city-window .k-invite { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'side'; justify-items: center; }
-/* A phone's card is 358 px wide: two ranges abreast would clip, so they stack. */
-.kiosk[data-size='handheld'] .k-city-window [data-panel='weather'] > .k-panel-rows { grid-template-columns: minmax(0, 1fr); }
 .kiosk[data-size='handheld'] .k-explore { position: static; }
 
 /* Under lagano the field is the lines board (R-L2), not a map: it takes the column's height. */

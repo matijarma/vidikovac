@@ -933,7 +933,9 @@
       "closures_one": "{count} closure",
       "closures_other": "{count} closures",
       "notices_one": "{count} ZET notice",
-      "notices_other": "{count} ZET notices"
+      "notices_other": "{count} ZET notices",
+      "moreLate_one": "+{count} line late",
+      "moreLate_other": "+{count} lines late"
     },
     "ticker": {
       "weather": "Weather",

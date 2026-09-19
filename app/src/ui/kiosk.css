@@ -347,18 +347,22 @@
 .k-panel[data-panel='promet'] { background: var(--k-surface); }
 .k-panel[data-panel='promet'] .k-panel-head { padding-bottom: calc(var(--k-gap) * 0.5); border-bottom: 1px solid var(--k-line); }
 /* The weather card (kiosk/front.ts weatherPanel): the head across, the
-   observation on the left, today's and tomorrow's ranges as rows beside it.
-   The narrative is the ticker's, so nothing here wraps to a paragraph. */
-.k-panel[data-panel='weather'] { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: var(--k-pad); align-items: start; padding-block: calc(var(--k-gap) * 0.6); background: var(--k-action-soft); border-color: transparent; }
+   observation on the left, today's and tomorrow's ranges abreast beside it.
+   A range is a figure -- never broken over two lines and never clipped -- so
+   the observation keeps its condition word on its own line rather than taking
+   the width the ranges need. The narrative is the ticker's; nothing here
+   wraps to a paragraph. */
+.k-panel[data-panel='weather'] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--k-pad); align-items: start; padding-block: calc(var(--k-gap) * 0.6); background: var(--k-action-soft); border-color: transparent; }
 .k-panel[data-panel='weather'] > .k-panel-head { grid-column: 1 / -1; margin-bottom: calc(var(--k-gap) * 0.3); }
-/* Today and tomorrow stand side by side: two ranges are one line of the card, never two. */
-.k-panel[data-panel='weather'] > .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 1px solid var(--k-line); padding-left: var(--k-pad); }
+.k-panel[data-panel='weather'] > .k-panel-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: calc(var(--k-gap) * 0.4); border-left: 1px solid var(--k-line); padding-left: calc(var(--k-gap) * 0.5); }
 .k-panel[data-panel='weather'] .k-panel-rows > .k-fr:nth-child(2) { border-top: 0; }
 .k-panel[data-panel='weather'] .k-fr { display: block; }
 .k-panel[data-panel='weather'] .k-fr-lead { min-width: 0; font-size: var(--k-label-size); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--k-ink-3); }
-/* A range is a figure, read at a glance and never broken over two lines. */
-.k-panel[data-panel='weather'] .k-fr-title { font-size: calc(var(--k-sup-size) * 0.85); white-space: nowrap; }
-.k-weather-current { min-width: 0; }
+/* A range is a figure, read at a glance: never broken over two lines and never
+   wider than the half of the card it shares with the reading. */
+.k-panel[data-panel='weather'] .k-fr-title { font-size: var(--k-hint-size); white-space: nowrap; }
+/* The reading and its condition word: one line where the card is a column of its own, two where the ranges stand beside them. */
+.k-weather-current { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: calc(var(--k-gap) * 0.5); min-width: 0; }
 .k-weather-current .k-temp { font-size: calc(var(--k-main-size) * 1.1); white-space: nowrap; }
 .k-weather-current .k-weather-main { flex-wrap: wrap; gap: calc(var(--k-gap) * 0.4); }
 .k-weather-current .k-condition { flex-basis: 100%; margin-left: 0; font-size: var(--k-hint-size); line-height: 1.25; }

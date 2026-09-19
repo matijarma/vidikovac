@@ -108,6 +108,8 @@ export interface KioskStrings {
     closures: PluralForms;
     /** "1 obavijest ZET-a": ZET's own fresh notices, counted. */
     notices: PluralForms;
+    /** "+2 linije kasne": the exceptions the card had no room for. */
+    moreLate: PluralForms;
   };
   /** The header ticker's five kicker words (kiosk/ticker.ts), printed uppercase
    *  by the sheet: the weather, the network, the works, tonight, the city. */
@@ -328,6 +330,7 @@ function build(code: SupportedLocale): KioskStrings {
       acts: forms('front', 'acts'),
       closures: forms('front', 'closures'),
       notices: forms('front', 'notices'),
+      moreLate: forms('front', 'moreLate'),
     },
     ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
     say: {

@@ -26,12 +26,12 @@ import type { I18n } from '../i18n/i18n';
 import { reconcile } from '../ui/dom/reconcile';
 import { escapeHtml } from '../ui/dom/escape';
 import { mountField, type FieldHandle } from './field';
-import { frontPanels, panelMarkup, type PanelId } from './front';
+import { EXCEPTION_LINES, eventCardRows, frontPanels, panelMarkup, type FrontPanel, type PanelId } from './front';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
 import type { CityState } from '../../../shared/city/types';
-import { locatedEvents,activeVenues } from '../../../shared/city/events';
+import { activeVenues, locatedEvents, type ActiveVenue } from '../../../shared/city/events';
 import { distanceM,located } from '../../../shared/city/geo';
 import { ct } from '../city/strings';
 
@@ -44,6 +44,9 @@ export const FRONT_PANEL_IDS: readonly PanelId[] = ['weather', 'promet', 'tonigh
 const MIN_EVENT_ROWS = 2;
 /** The budget before the aside has been laid out once (happy-dom, a cold first paint). */
 const SEED_EVENT_ROWS: Readonly<Record<Composition, number>> = { wide: 6, compact: 3, portrait: 5, handheld: 4 };
+
+/** What the aside's measured room holds: the events card's rows and the promet card's lines. */
+interface Budgets { rows: number; lines: number }
 
 export interface InvitationDeps {
   strings: KioskStrings;
@@ -113,8 +116,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   const lastHtml: Partial<Record<PanelId, string>> = {};
   let lastModel: InvitationModel | null = null;
   let rowBudget = SEED_EVENT_ROWS.wide;
-  /** Null until the browser has laid a row out: the seed stands in until then. */
-  let measured: number | null = null;
+  let lineBudget = EXCEPTION_LINES.wide;
+  /** Null until the browser has laid a row out: the seeds stand in until then. */
+  let measured: Budgets | null = null;
   let disposed = false;
 
   /** Content budgets belong to the model. Never make a panel silently empty
@@ -126,38 +130,80 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     }
   }
 
-  /** How many venue rows the events card's own box holds: its height less the
-   *  head, the credit and any note, over one row's measured height. Two at
-   *  least; null while nothing has been laid out (happy-dom, a cold first paint). */
-  function measureRowBudget(): number | null {
-    const panel = panels.tonight;
-    const row = panel.querySelector<HTMLElement>('.k-fr');
+  /** A card's room for rows: its box less its own padding, its head, its note
+   *  and its credit. clientHeight is the padding box, and a card's padding is
+   *  not room for a row. */
+  function roomFor(panel: HTMLElement): number {
     const box = panel.clientHeight;
-    if (!box || !row?.clientHeight) return null;
+    if (!box) return 0;
+    const style = getComputedStyle(panel);
+    const pad = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
     const spent = (['.k-panel-head', '.k-panel-note', '.k-panel-credit'] as const)
       .reduce((sum, sel) => sum + (panel.querySelector<HTMLElement>(sel)?.offsetHeight ?? 0), 0);
-    return Math.max(MIN_EVENT_ROWS, Math.floor((box - spent) / row.clientHeight));
+    return box - pad - spent;
+  }
+
+  /** What the aside's measured room holds: how many venue and event rows the
+   *  events card can show (two at least, its floor) and how many exception
+   *  lines the promet card may keep. The floor comes first -- where the events
+   *  card is short, the promet card gives up lines until it is not, and where
+   *  a whole line of slack appears it takes one back, up to its cap. Null while
+   *  nothing has been laid out (happy-dom, a cold first paint). */
+  function measureBudgets(): Budgets | null {
+    const room = roomFor(panels.tonight);
+    const row = panels.tonight.querySelector<HTMLElement>('.k-fr')?.clientHeight ?? 0;
+    if (room <= 0 || !row) return null;
+    const line = panels.promet.querySelector<HTMLElement>('.k-fr')?.clientHeight ?? 0;
+    const cap = EXCEPTION_LINES[lastModel?.composition ?? 'wide'];
+    // The floor is what the promet card yields lines for, not something the
+    // events card overflows to honour: where even one exception line cannot buy
+    // the second row, the card shows the one row its box holds whole.
+    const spare = room - MIN_EVENT_ROWS * row;
+    return {
+      rows: Math.max(1, Math.floor(room / row)),
+      lines: line > 0 ? Math.min(cap, Math.max(1, lineBudget + Math.floor(spare / line))) : lineBudget,
+    };
+  }
+
+  /** The venues with something on, nearest the screen first; none without a city catalogue. */
+  function activeNearby(model: InvitationModel): ActiveVenue[] {
+    if (!model.city) return [];
+    const events = locatedEvents(model.modules.find(m => m.module === 'dogadanja')?.items ?? [], model.city.places, model.now);
+    return activeVenues(events, model.city.places)
+      .sort((a, b) => model.stop ? distanceM(model.stop, a.place as { lon: number; lat: number }) - distanceM(model.stop, b.place as { lon: number; lat: number }) : 0);
+  }
+
+  /** The one place worth naming on a day with nothing on: the nearest culture
+   *  or heritage place, credited to the source that published it. */
+  function quietDay(model: InvitationModel, panel: FrontPanel): void {
+    if (!model.city) return;
+    const ref = model.stop ?? { lon: 15.97726, lat: 45.81286 };
+    const place = model.city.places.filter(p => ['culture', 'heritage'].includes(p.category) && located(p))
+      .sort((a, b) => distanceM(ref, { lon: a.lon!, lat: a.lat! }) - distanceM(ref, { lon: b.lon!, lat: b.lat! }))[0];
+    if (!place) return;
+    panel.kicker = ct(i18n, 'quiet');
+    panel.meta = undefined;
+    panel.note = undefined;
+    panel.rows = [{ key: place.id, title: place.name, sub: place.description?.slice(0, 160) ?? place.address }];
+    panel.credit = model.city.manifest?.sources.find(s => s.id === place.sourceId)?.name ?? place.sourceId;
   }
 
   function paint(model: InvitationModel): void {
-    const built = frontPanels({ modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale, lightweight, composition: model.composition, prometMode: 'exceptions' });
-    if(model.city){
-      const events=locatedEvents(model.modules.find(m=>m.module==='dogadanja')?.items??[],model.city.places,model.now);
-      const venues=activeVenues(events,model.city.places).sort((a,b)=>model.stop?distanceM(model.stop,a.place as {lon:number;lat:number})-distanceM(model.stop,b.place as {lon:number;lat:number}):0);
-      if(venues.length){
-        built.tonight.rows=venues.slice(0,rowBudget).map(v=>({
-          key:v.place.id,lead:String(v.count),title:v.place.name,sub:v.events[0].item.title,
-        }));
-        built.tonight.meta=ct(i18n,'week');
-        built.tonight.note=undefined;
-      }
-      if(!built.tonight.rows.length){
-        const ref=model.stop??{lon:15.97726,lat:45.81286};
-        const p=model.city.places.filter(p=>['culture','heritage'].includes(p.category)&&located(p))
-          .sort((a,b)=>distanceM(ref,{lon:a.lon!,lat:a.lat!})-distanceM(ref,{lon:b.lon!,lat:b.lat!}))[0];
-        if(p){built.tonight.kicker=ct(i18n,'quiet');built.tonight.meta=undefined;built.tonight.rows=[{key:p.id,title:p.name,sub:p.description?.slice(0,160)??p.address}];built.tonight.note=undefined;built.tonight.credit=model.city.manifest?.sources.find(s=>s.id===p.sourceId)?.name??p.sourceId;}
-      }
+    // The venues are read first: the events card asks the panel builder for
+    // enough dated rows to fill the measured room even after the venues' own
+    // events are struck from it (front.ts eventCardRows).
+    const venues = activeNearby(model);
+    const ownEvents = venues.slice(0, rowBudget).reduce((sum, venue) => sum + venue.count, 0);
+    const built = frontPanels({
+      modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
+      lightweight, composition: model.composition, prometMode: 'exceptions', eventRows: rowBudget + ownEvents, prometLines: lineBudget,
+    });
+    if (venues.length) {
+      built.tonight.rows = eventCardRows(venues, built.tonight.rows, rowBudget);
+      built.tonight.meta = ct(i18n, 'week');
+      built.tonight.note = undefined;
     }
+    if (!built.tonight.rows.length) quietDay(model, built.tonight);
     for (const id of FRONT_PANEL_IDS) {
       const html = panelMarkup(built[id]);
       if (html === lastHtml[id]) continue;
@@ -175,11 +221,18 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   function fit(): void {
     markOverflow();
     if (!lastModel) return;
-    measured = measureRowBudget();
-    if (measured === null || measured === rowBudget) return;
-    rowBudget = measured;
-    paint(lastModel);
-    markOverflow();
+    // The two budgets feed each other -- a line the promet card gives up is a
+    // row the events card gains -- so the measurement is settled rather than
+    // read once. Three passes are more than enough; it usually takes one.
+    for (let pass = 0; pass < 3; pass += 1) {
+      const next = measureBudgets();
+      measured = next;
+      if (!next || (next.rows === rowBudget && next.lines === lineBudget)) break;
+      rowBudget = next.rows;
+      lineBudget = next.lines;
+      paint(lastModel);
+      markOverflow();
+    }
   }
 
   // A cold screen paints in the fallback face; the web font arriving changes every wrap, so the panels are fitted once more when the fonts are ready (never on a timer).
@@ -191,7 +244,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     get mapHost() { return field.mapHost; },
     update(model) {
       lastModel = model;
-      if (measured === null) rowBudget = SEED_EVENT_ROWS[model.composition];
+      if (measured === null) { rowBudget = SEED_EVENT_ROWS[model.composition]; lineBudget = EXCEPTION_LINES[model.composition]; }
       field.update({ modules: model.modules, stop: model.stop, strings: s, i18n, locale });
       paint(model);
       fit();
