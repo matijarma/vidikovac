@@ -26,7 +26,7 @@ import type { I18n } from '../i18n/i18n';
 import { reconcile } from '../ui/dom/reconcile';
 import { escapeHtml } from '../ui/dom/escape';
 import { mountField, type FieldHandle } from './field';
-import { EXCEPTION_LINES, eventCardRows, frontPanels, panelMarkup, type FrontPanel, type PanelId } from './front';
+import { EXCEPTION_LINES, eventCardRows, frontPanels, panelMarkup, type FrontPanel, type FrontRow, type PanelId } from './front';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
@@ -66,6 +66,11 @@ export interface InvitationModel {
   lastRun: LastRunSnapshot | null;
   /** Which of the four drawings this is (kiosk/layout.ts); the sheet lays the panels out by it. */
   composition: Composition;
+  /** The configured stop's next departures, already cut to the room this
+   *  drawing has (WP5b). With a stop set the Promet card is that stop's
+   *  board; with none -- or while the board has nothing to say -- the card
+   *  keeps the city-wide exceptions it has always shown. */
+  prometRows?: FrontRow[];
 }
 
 export interface InvitationHandle {
@@ -197,6 +202,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     const built = frontPanels({
       modules: model.modules, stop: model.stop, now: model.now, lastRun: model.lastRun, strings: s, i18n, locale,
       lightweight, composition: model.composition, prometMode: 'exceptions', eventRows: rowBudget + ownEvents, prometLines: lineBudget,
+      ...(model.prometRows?.length ? { prometRows: model.prometRows } : {}),
     });
     if (venues.length) {
       built.tonight.rows = eventCardRows(venues, built.tonight.rows, rowBudget);

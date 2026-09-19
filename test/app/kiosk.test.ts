@@ -23,6 +23,9 @@ import { cityWindowView, DISTRICT_SPAN_M, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN
 import { districtBySlug } from '../../app/src/kiosk/districts';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
+import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
+import type { MapSelection } from '../../app/src/map/city-map';
+import type { DepartureBoard, ScheduledDeparture } from '../../shared/city/types';
 import { fakeCityStore } from '../city/fake-store';
 import { emptyCity } from '../../shared/city/types';
 
@@ -62,7 +65,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -81,6 +84,11 @@ function fakeThemeController(initial: ThemePreference): { theme: ThemeController
   };
   return { theme, calls, listenerCount: () => listeners.size };
 }
+
+/** No test reaches the network for a departure board: a kiosk given no board
+ *  seam of its own gets a cache whose every request answers "down", so a
+ *  configured stop's card says so instead of the suite talking to port 3000. */
+const offlineBoards = (): BoardCache => createBoardCache({ fetchImpl: (async () => ({ ok: false, status: 503, json: async () => ({}) })) as unknown as typeof globalThis.fetch });
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
@@ -112,7 +120,7 @@ function mount(opts: MountOptions = {}) {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
-    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun,
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -1865,5 +1873,144 @@ describe('T5.3: the theme button', () => {
     expect(k.themeListenerCount()).toBe(1);
     k.handle.destroy();
     expect(k.themeListenerCount()).toBe(0);
+  });
+});
+
+
+// --- WP5b: what comes next at a stop, on the public screen ------------------
+// The shared merge (shared/city/arrivals.ts) and the board cache
+// (app/src/city/boards.ts) are proven where they live; what is proven here is
+// the kiosk's own half: the card a tap opens leads with the arrivals, a
+// configured stop turns the Promet card into its board, the cache is made once
+// and let go with the screen, and nothing is asked for that nobody is looking
+// at.
+
+/** A tracked trip and an untracked one at the screen's own platform, and a
+ *  third at its sibling: 14:32 in Zagreb is the test's `NOW`. */
+const TRIP_LIVE = 'trip-6-live';
+function dep(tripId: string, routeId: string, headsign: string, at: string): ScheduledDeparture {
+  return { operator: 'zet', tripId, routeId, routeName: routeId, headsign, at };
+}
+function board(stopId: string, departures: ScheduledDeparture[]): DepartureBoard {
+  return { operator: 'zet', stopId, stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(NOW).toISOString(), departures };
+}
+const JELACIC_BOARDS: Record<string, DepartureBoard> = {
+  // 12:33:00Z + ZET's own 120 s delay = 12:35 = "za 3 min"; the 11 is the
+  // timetable alone, six minutes out; the 13 at the sibling platform is past
+  // the countdown horizon and shows a clock.
+  '106_1': board('106_1', [dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z')]),
+  '106_2': board('106_2', [dep('trip-13', '13', 'Žitnjak', '2026-09-11T12:45:00Z')]),
+};
+/** The teaser with one tracked vehicle on the 6, carrying the trip the board names. */
+const ARRIVAL_MODULES: ModuleSnapshot[] = MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [
+  item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
+  item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: 120 } }),
+  item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 240, vehicles: 12 } }),
+])));
+
+/** The real cache (its memo and its listener set are the thing under test)
+ *  over a fetch this test answers: every platform asked for is recorded, and a
+ *  platform with no board answers like the Worker being down. */
+function fakeBoards(available: Record<string, DepartureBoard> = {}) {
+  const asked: string[] = [];
+  const fetchImpl = vi.fn(async (input: unknown) => {
+    const id = decodeURIComponent(String(input).split('stop=')[1] ?? '');
+    asked.push(id);
+    const found = available[id];
+    if (!found) return { ok: false, status: 503, json: async () => ({}) } as unknown as Response;
+    return { ok: true, status: 200, json: async () => found } as unknown as Response;
+  });
+  const made: { destroy: ReturnType<typeof vi.fn> }[] = [];
+  const create = vi.fn((): BoardCache => {
+    const real = createBoardCache({ fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, now: () => NOW });
+    const wrapped = { get: real.get, ensure: real.ensure, destroy: vi.fn(() => { real.destroy(); }) };
+    made.push(wrapped);
+    return wrapped;
+  });
+  return { create, asked, made };
+}
+
+describe('arrivals on the public screen', () => {
+  /** A map whose only seam this test needs is the tap: the kiosk hands
+   *  `onSelect` to the factory (kiosk/mapview.ts), and a tap on a stop is that
+   *  callback with the stop's id. */
+  function tappableMap() {
+    const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn(), setFeedState: vi.fn(), setView: vi.fn() };
+    return { factory: vi.fn(() => handle), handle };
+  }
+
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const options = map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void };
+    options.onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
+    expect(rows.map((row) => text(row))).toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Goricapo redu vožnje', '14:4513 Žitnjakpo redu vožnje']);
+    // The tracked row, and only it, carries the live dot; the two off the
+    // timetable say so in words instead.
+    expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
+    expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
+    // One note for the list, not one per row, and the stop's lines keep their place under it.
+    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    expect(text(card)).toContain('linija 6, 11, 12');
+    const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    k.handle.destroy();
+  });
+
+  it('a configured stop is the Promet card, asked for once a minute however often the screen paints', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // The stop list has not been loaded, so the screen asks about the platform it knows.
+    expect(b.asked).toEqual(['106_1']);
+    expect([...promet.querySelectorAll<HTMLElement>('.k-fr')].map((row) => text(row))).toEqual(['6za 3 minČrnomerec', '11za 6 minVelika Goricapo redu vožnje']);
+    expect(text(promet)).toContain('Promet');
+    // No figure on a public screen stands unattributed: the board says under itself where it came from.
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
+    // Ten seconds later the poll comes round again; the minute's memo answers it.
+    k.poll();
+    await flush();
+    expect(b.asked).toEqual(['106_1']);
+    k.handle.destroy();
+  });
+
+  it('keeps the city-wide exceptions when the stop board is down', async () => {
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(b.asked).toEqual(['106_1']);
+    expect(text(promet)).not.toContain('za 3 min');
+    expect(text(promet)).toContain('kasni 4 min');
+    k.handle.destroy();
+  });
+
+  it('makes one cache for the screen, asks for nothing without a stop, and lets it go on destroy', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED_CITY, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.poll();
+    await flush();
+    expect(b.create).toHaveBeenCalledTimes(1);
+    expect(b.asked).toEqual([]);
+    k.handle.destroy();
+    expect(b.made[0]!.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for nothing while a phone owns the screen', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    k.poll();
+    await flush();
+    expect(b.asked).toEqual([]);
+    k.handle.destroy();
   });
 });

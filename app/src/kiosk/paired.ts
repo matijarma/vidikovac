@@ -18,6 +18,7 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kBadge, kicker, linesMarkup, weatherMarkup } from './markup';
 import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
+import { arrivalCells, arrivalsEmptyText, ARRIVAL_ROWS, platformIds, type StopArrivals } from './arrivals';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
@@ -56,6 +57,11 @@ export interface PairedContext {
   size: 'wide' | 'compact';
   /** The stop list once the controller has loaded it, so a stop selection can be named. */
   stops?: readonly ScreenStop[] | null;
+  /** What comes next at these platforms, read from the controller's one board
+   *  cache (app/src/kiosk.ts). A closure, not rows: the card knows which stop
+   *  it is drawing and how many rows its size holds, and the controller owns
+   *  the asking -- a card that fetched would fetch on every paint. */
+  arrivals?: (stopIds: readonly string[]) => StopArrivals;
   target?: PresentationTarget;
 }
 
@@ -386,6 +392,28 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
   return findItem(ctx, pick.module, pick.id) ? 'displayed' : 'unavailable';
 }
 
+/** What comes next at the tapped stop, as the card's first block: the rows
+ *  the controller's board cache and the live fleet already agreed on
+ *  (kiosk/arrivals.ts), then the one note that says where an estimate comes
+ *  from. Four rows on a wide screen, three in a narrow column -- the row
+ *  fitter hides what the box still cannot hold.
+ *
+ *  Nothing is fetched from here. A context with no `arrivals` (an older
+ *  caller, a test of another card) shows the stop exactly as it always did. */
+function arrivalsBody(ctx: PairedContext, stop: { id: string; name?: string }): string {
+  if (!ctx.arrivals) return '';
+  const answer = ctx.arrivals(platformIds(stop, ctx.stops));
+  const rows = answer.rows.slice(0, ARRIVAL_ROWS[ctx.size]);
+  if (rows.length === 0) {
+    return `<p class="k-board-note"${answer.status === 'down' ? ' data-state="down"' : ''}>${escapeHtml(arrivalsEmptyText(answer.status, ctx.strings))}</p>`;
+  }
+  const list = rows.map((arrival) => {
+    const cells = arrivalCells(arrival, ctx.strings);
+    return `<li class="k-row">${row(cells.main, cells.sub, cells.aside)}</li>`;
+  }).join('');
+  return `<ul class="k-rows" data-testid="k-arrivals">${list}</ul><p class="k-board-note">${escapeHtml(ctx.strings.arrivals.note)}</p>`;
+}
+
 /** One card naming what the driver's phone selected: a line with its delay
  *  and vehicle count, a stop with its lines, or one item by its public key.
  *  Nothing else the phone knows (filters, coordinates) ever reaches here. */
@@ -412,7 +440,12 @@ export function selectionCard(ctx: PairedContext): string {
   if (selection.kind === 'stop') {
     const named = selection.id === ctx.stop?.id ? ctx.stop : ctx.stops?.find((stop) => stop.id === selection.id) ?? null;
     const routes = named ? sortRouteIds(named.routes).join(', ') : '';
-    const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>${routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : ''}`;
+    // The rider's own question first: which tram comes next, and in how long.
+    // The lines this stop serves are the answer to a different question and
+    // keep their place under it.
+    const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>`
+      + arrivalsBody(ctx, named ?? { id: selection.id })
+      + (routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : '');
     return block(s.session.selected, body, o);
   }
   if(selection.kind==='place'){
