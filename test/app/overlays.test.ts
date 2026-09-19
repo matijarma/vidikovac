@@ -234,11 +234,13 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(stops.paint!['circle-radius']).toBe(6);
       expect(stops.paint!['circle-color']).toBe(p.figure);
       expect(stops.paint!['circle-stroke-width']).toBe(0);
-      // With stopRadius the same dots grow with the camera instead: 1.5 at the whole-city
+      // With stopRadius the same dots grow with the camera instead: 1.5 px at the whole-city
       // window's own floor, 5 at street level, on a one-pixel stroke of the same ink, so a
-      // three-pixel bead on a city full of stops is still a mark and still tappable.
+      // three-pixel bead on a city full of stops is still a mark and still tappable. Drawn
+      // pixels, never the surface's symbol scale: a stop says where it is, not what it says,
+      // and at the screen's scale 2 the street end outweighed the plates standing on it.
       const ramped = overlayLayers(p, { scale: 2, prozor: { ...PROZOR, stopRadius: true } }).find((l) => l.id === LAYERS.stops)!;
-      expect(ramped.paint!['circle-radius']).toEqual(['interpolate', ['linear'], ['zoom'], CITY_STOP_ZOOM, 3, 15.5, 10]);
+      expect(ramped.paint!['circle-radius']).toEqual(['interpolate', ['linear'], ['zoom'], CITY_STOP_ZOOM, 1.5, 15.5, 5]);
       expect(CITY_STOP_ZOOM).toBe(12.7);
       expect(ramped.paint!['circle-stroke-width']).toBe(1);
       expect(ramped.paint!['circle-stroke-color']).toBe(p.figure);

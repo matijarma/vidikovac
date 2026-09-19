@@ -665,16 +665,20 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // On the public screen the stops of the screen's own routes are filled
     // dots in the figure colour: beads on the rails, not rings competing with
     // the screen's stop. With stopRadius they grow with the camera instead of
-    // holding one size -- 1.5 at the whole-city window's own floor, 5 at
-    // street level -- and carry a one-pixel stroke of the same ink, which is
-    // what keeps a three-pixel bead legible over the street grid. Elsewhere
-    // the hollow ring as always.
+    // holding one size: 1.5 px at the whole-city window's own floor, 5 at
+    // street level, with a one-pixel stroke of the same ink under them, which
+    // is what keeps a three-pixel bead legible over the street grid. These
+    // are drawn pixels, NOT multiplied by the surface's symbol scale as the
+    // marks are: a stop is the one thing on this map a person reads by where
+    // it is and not by what it says, and at the screen's scale 2 the street
+    // end came out heavier than the plates standing on it. Elsewhere the
+    // hollow ring as always.
     circle(
       LAYERS.stops,
       SOURCES.stops,
       prozor
         ? {
-            'circle-radius': prozor.stopRadius ? zoomInterpolate(CITY_STOP_ZOOM, 1.5 * s, 15.5, 5 * s) : 3 * s,
+            'circle-radius': prozor.stopRadius ? zoomInterpolate(CITY_STOP_ZOOM, 1.5, 15.5, 5) : 3 * s,
             'circle-color': p.figure,
             'circle-stroke-color': p.figure,
             'circle-stroke-width': prozor.stopRadius ? 1 : 0,
