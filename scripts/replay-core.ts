@@ -34,9 +34,11 @@ import { vehicleFixes } from '../app/src/motion/fixes';
 import { createIntegrator } from '../app/src/motion/integrator';
 import { dist, toPlane } from '../shared/motion/geo';
 import { BUCKETS, emptyCounts, emptySignCounts, HORIZONS_S, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
+import { parseDwellOverrides, pushDwellRecent, trimDwellRecent } from '../shared/motion/dwell';
+import { recordEvidence } from '../shared/motion/learn';
 import { HEADWAY_M } from '../shared/motion/order';
 import { decodeNetwork, type GraphNetwork, type Path } from '../shared/motion/network';
-import { evalFreePlan, evalPathPlan } from '../shared/motion/plan';
+import { emptyPlanCounts, evalFreePlan, evalPathPlan, PLAN_EVENTS, type PlanCounts } from '../shared/motion/plan';
 import { lastFix, type PathKnot, type Plan } from '../shared/motion/track';
 import { decodeTripIndex, type TripIndex } from '../shared/motion/trips';
 import type { FeedPayload } from '../worker/feed/payload';
@@ -267,6 +269,11 @@ export interface ReplayReport {
   /** Vehicles that appeared but never had a moving plan in the window. */
   neverMoved: number;
   tickMs: { p50: number | null; p95: number | null };
+  /** What the planner had to intervene about over the whole run (F11). */
+  plan: PlanCounts;
+  /** What the run taught the engine, so a table can say whether the learned
+   *  layers had anything to answer with by the end (F11). */
+  learned: { edgeCells: number; stopCells: number; nodeCells: number; recentStops: number; dwellSamples: number; waitSamples: number; nodePasses: number };
 }
 
 /** The static join per trip id, from the trip index alone (no SQLite
@@ -754,6 +761,8 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
   const firstSeenSec = new Map<string, number>();
   const firstMovingSec = new Map<string, number>();
   const tickMs: number[] = [];
+  const planTotals = emptyPlanCounts();
+  const learnedTotals = { dwellSamples: 0, waitSamples: 0, nodePasses: 0 };
   let previousBehind: Map<string, string | null> | null = null;
 
   for (const feed of frames) {
@@ -776,6 +785,18 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     const result = runTick({ state, feed, nowMs, joins, routes, engine, validUntilMs });
     tickMs.push(performance.now() - t0);
     state = result.state;
+    // What the Durable Object does with every tick's evidence
+    // (worker/do/twin-do.ts advance): the engine reads its aggregates and its
+    // rolling dwell window LIVE, so a replay that never fed them back would
+    // measure a planner that learns nothing all day. Same objects, same
+    // order, same trimming.
+    recordEvidence(engine.learned, result.learned);
+    for (const dwell of result.learned.dwells) pushDwellRecent(engine.dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
+    trimDwellRecent(engine.dwellRecent, headerSec);
+    learnedTotals.dwellSamples += result.learned.dwells.length;
+    learnedTotals.waitSamples += result.learned.waits.length;
+    learnedTotals.nodePasses += result.learned.passes.length;
+    for (const event of PLAN_EVENTS) planTotals[event] += result.plan[event];
 
     for (const horizon of HORIZONS_S) for (const bucket of BUCKETS) hindsightTotals[horizon][bucket] += result.hindsight[horizon][bucket];
     for (const horizon of HORIZONS_S) for (const bucket of SIGN_BUCKETS) hindsightSignTotals[horizon][bucket] += result.hindsightSign[horizon][bucket];
@@ -889,6 +910,14 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     firstMovingS: { p50: numericPercentile(firstMovingDelays, 0.5), p95: numericPercentile(firstMovingDelays, 0.95) },
     neverMoved: firstSeenSec.size - firstMovingDelays.length,
     tickMs: { p50: numericPercentile(tickMs, 0.5), p95: numericPercentile(tickMs, 0.95) },
+    plan: planTotals,
+    learned: {
+      edgeCells: Object.keys(engine.learned.edges).length,
+      stopCells: Object.keys(engine.learned.stops).length,
+      nodeCells: Object.keys(engine.learned.nodes).length,
+      recentStops: Object.keys(engine.dwellRecent).length,
+      ...learnedTotals,
+    },
   };
 }
 
@@ -912,14 +941,25 @@ export async function replayDirectory(dir: string, engine: Engine, options: Repl
  *  decodes them (shared/motion/{network,trips}.ts) -- read from disk rather
  *  than fetched, since node has no ASSETS binding. For the CLI only; a test
  *  builds its own synthetic engine directly. */
-export async function loadRealEngine(networkPath: string, tripsPath: string): Promise<Engine> {
+export async function loadRealEngine(networkPath: string, tripsPath: string, overridesPath?: string): Promise<Engine> {
   const [networkRaw, tripsRaw] = await Promise.all([
     readFile(networkPath, 'utf8').then((text) => JSON.parse(text) as unknown),
     readFile(tripsPath, 'utf8').then((text) => JSON.parse(text) as unknown),
   ]);
   const net: GraphNetwork = decodeNetwork(networkRaw);
   const index: TripIndex = decodeTripIndex(tripsRaw);
-  return createEngine(net, index);
+  // The owner's dwell table, exactly as the twin reads it through ASSETS
+  // (worker/twin/index-load.ts): a replay that skipped it would measure a
+  // planner the deploy does not run. A missing file is no overrides.
+  let overrides: ReturnType<typeof parseDwellOverrides> = [];
+  if (overridesPath !== undefined) {
+    try {
+      overrides = parseDwellOverrides(JSON.parse(await readFile(overridesPath, 'utf8')) as unknown);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
+    }
+  }
+  return createEngine(net, index, undefined, { overrides });
 }
 
 function fmtBucket(b: BucketPercentile | null): string {
@@ -993,5 +1033,12 @@ export function formatTable(report: ReplayReport): string {
   lines.push(`unknown-trip share:      ${fmtShare(report.unknownTripShare)}`);
   lines.push(`first moving plan (s):   p50 ${fmtS(report.firstMovingS.p50)}  p95 ${fmtS(report.firstMovingS.p95)}  (never moved: ${report.neverMoved})`);
   lines.push(`per-tick wall time (ms): p50 ${fmtMs(report.tickMs.p50)}  p95 ${fmtMs(report.tickMs.p95)}`);
+  lines.push('');
+  lines.push(`planner interventions:   ${PLAN_EVENTS.map((event) => `${event} ${report.plan[event]}`).join('  ')}`);
+  lines.push(
+    `learned by the end:      ${report.learned.edgeCells} edge cells / ${report.learned.stopCells} stop cells / ${report.learned.nodeCells} node cells; ` +
+      `${report.learned.dwellSamples} dwell samples, ${report.learned.waitSamples} junction waits of ${report.learned.nodePasses} passes, ` +
+      `${report.learned.recentStops} platforms in the recent window`,
+  );
   return lines.join('\n');
 }

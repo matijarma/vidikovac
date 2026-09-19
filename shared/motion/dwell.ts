@@ -18,10 +18,10 @@
 //   4. the DEFAULT -- the owner's override where there is one, else the
 //      timetable's median where it is above zero, else DWELL_DEFAULT_S.
 //
-// The quantile is 0.7, not the median, for the round's own rule: a plan that
-// leaves a platform before the tram does puts the mark ahead of the tram and
-// has to come back, which reads as a broken app; a plan that waits a little
-// too long reads as GPS lag. Seven trams in ten are gone by the 0.7 quantile.
+// The quantile is DWELL_PLAN_QUANTILE, never the median, for the round's own
+// rule: a plan that leaves a platform before the tram does puts the mark
+// ahead of the tram and has to come back, which reads as a broken app; a plan
+// that waits a little too long reads as GPS lag.
 //
 // DOM-free, no import from worker/ or app/ (R-TE15): the twin builds one per
 // engine, the replay harness builds the same one from the same files.
@@ -32,12 +32,19 @@ import { DWELL_DEFAULT_S } from './plan';
 import type { DayType } from './bands';
 import { borrowCount, borrowQuantile, LEARN_MIN_SAMPLES, type TimesProvider } from './times';
 
-/** The side of the dwell distribution the planner books. 0.7, not 0.5: the
- *  F7 measurement of ZET's own platforms put the tram dwell at p50 15 s,
- *  p75 23 s, p90 37 s, so the median leaves three trams in ten still at the
- *  platform while the plan has driven off, and 0.7 costs 6 s against the
- *  median where it is wrong and saves 20 s where it is right. */
-export const DWELL_PLAN_QUANTILE = 0.7;
+/** The side of the dwell distribution the planner books, never the median:
+ *  F7 measured ZET's own platforms at p50 15 s, p75 23 s, p90 37 s, so a
+ *  median dwell leaves three trams in ten still at the platform while the
+ *  plan has driven off -- a mark ahead of a standing tram, which is the one
+ *  error the round forbids.
+ *
+ *  0.9, tuned on the replay of 17 Sept over the like-for-like window: paired
+ *  with PLAN_QUANTILE it took the 30 s ahead share 17.6 % (0.7) -> 16.5 %
+ *  (0.85) -> 15.6 % (0.9) for 0.8 percentage points of "within 50 m" at the
+ *  10 s horizon, while the client's holds fell by a third. 0.9 of the F7
+ *  distribution is about 37 s, which is a real ZET platform stand and not an
+ *  invented one; beyond it the number stops being a dwell. */
+export const DWELL_PLAN_QUANTILE = 0.9;
 
 /** Recent samples kept per platform. Thirty covers a whole rush hour on any
  *  line that runs every two minutes and still fits in the state row. */
@@ -49,8 +56,9 @@ export const DWELL_RECENT_N = 30;
 export const DWELL_RECENT_WINDOW_S = 5400;
 
 /** Samples the window needs before it outranks the banded histogram. Five is
- *  where a 0.7 quantile stops being one tram's opinion: the nearest-rank
- *  0.7 of five samples is the fourth, so a single long stand cannot move it. */
+ *  where the planning quantile stops being one tram's opinion: its
+ *  nearest-rank value over five samples is the fourth or the fifth, so a
+ *  single short stand cannot pull the whole platform forward. */
 export const DWELL_RECENT_MIN = 5;
 
 /** A dwell above this is a layover, a fault or a blockage and never a
@@ -130,18 +138,24 @@ export function pushDwellRecent(recent: DwellRecent, stopId: string, atSec: numb
   if (list.length > DWELL_RECENT_N) list.splice(0, list.length - DWELL_RECENT_N);
 }
 
-/** The newest DWELL_RECENT_N samples per platform inside the window, oldest
- *  first: what a cold restore keeps of what SQLite held. */
+/**
+ * Drops everything outside the window and everything past DWELL_RECENT_N,
+ * oldest first, IN PLACE, and returns the same object. In place on purpose:
+ * the twin hands this object to createDwellTable, which closes over it and
+ * reads it live, so a caller that replaced it with a fresh one would leave
+ * the engine holding a window that never grows again. Every caller keeps
+ * the identity it was given.
+ */
 export function trimDwellRecent(recent: DwellRecent, nowSec: number, windowSec = DWELL_RECENT_WINDOW_S): DwellRecent {
-  const out: DwellRecent = {};
   for (const [stopId, list] of Object.entries(recent)) {
     const kept = list
       .filter(([at]) => at > nowSec - windowSec)
       .sort((a, b) => a[0] - b[0])
       .slice(-DWELL_RECENT_N);
-    if (kept.length > 0) out[stopId] = kept;
+    if (kept.length > 0) recent[stopId] = kept;
+    else delete recent[stopId];
   }
-  return out;
+  return recent;
 }
 
 /** Nearest-rank quantile of a small sample: the value at ceil(q*n), so the

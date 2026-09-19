@@ -82,7 +82,7 @@ describe('TwinDO keeps the F11 tables across an eviction', () => {
     expect(recent['T600'].every(([, seconds]) => seconds < 30)).toBe(true);
     expect(await runInDurableObject(stub, (instance: TwinDO) => instance.junctionCellsForTest())).toEqual({ nodes: 1, passes: 1 });
     // The owner's file reached the engine: one entry, and the table shows it.
-    expect((await runInDurableObject(stub, (instance: TwinDO) => instance.tablesForTest(nowSec))).overrides).toBe(1);
+    expect((await stub.tables(nowSec)).overrides).toBe(1);
 
     // A rebuilt rail graph renumbers the nodes as it renumbers the edges, so
     // a wait learned for "node 1" is about a different crossing: it goes.

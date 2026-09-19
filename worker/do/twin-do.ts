@@ -368,7 +368,8 @@ export class TwinDO extends DurableObject<Env> {
     // The rolling window the dwell table reads lives here, beside the
     // aggregates, for the same reason: the engine holds it by reference.
     for (const dwell of result.learned.dwells) pushDwellRecent(this.dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
-    this.dwellRecent = trimDwellRecent(this.dwellRecent, Math.floor(nowMs / 1000));
+    // In place: the engine's dwell table closes over THIS object (F11).
+    trimDwellRecent(this.dwellRecent, Math.floor(nowMs / 1000));
     const learnedFlushed = this.flushLearnedIfDue(result.state, nowMs);
     this.state = result.state;
     this.payload = result.payload;
@@ -483,10 +484,12 @@ export class TwinDO extends DurableObject<Env> {
       const seen = new Set((restored[stopId] ?? []).map(([at]) => at));
       for (const [at, seconds] of samples) if (!seen.has(at)) pushDwellRecent(restored, stopId, at, seconds);
     }
-    const trimmed = trimDwellRecent(restored, nowSec);
+    // Into the object the engine already holds, never over it.
     for (const key of Object.keys(this.dwellRecent)) delete this.dwellRecent[key];
-    Object.assign(this.dwellRecent, trimmed);
-    this.advance({ ...saved, dwellRecent: { ...trimmed } }, null, now, await loadZetRoutes());
+    Object.assign(this.dwellRecent, trimDwellRecent(restored, nowSec));
+    const forState: DwellRecent = {};
+    for (const [stopId, samples] of Object.entries(this.dwellRecent)) forState[stopId] = [...samples];
+    this.advance({ ...saved, dwellRecent: forState }, null, now, await loadZetRoutes());
   }
 
   /** Loads the trip index and the network once, re-checks them hourly, and
@@ -559,17 +562,27 @@ export class TwinDO extends DurableObject<Env> {
     this.learnedLoaded = true;
   }
 
-  /** What the engine's two F11 tables hold right now, for /stats and for a
-   *  test: the dwell rows and the junction rows at the given instant. */
-  tablesForTest(nowSec: number): { dwell: number; recentStops: number; junctions: number; overrides: number } {
-    const bands = zagrebBands(nowSec);
+  /**
+   * The two F11 tables as /stats renders them: what every platform the twin
+   * knows anything about is planned to hold a tram for, and where the rails
+   * branch and how long a tram waits there. Read from the live engine, so an
+   * operator sees what the planner is using right now and not an hourly
+   * counter of it. Empty before the assets load.
+   */
+  async tables(nowSec?: number): Promise<TwinTables> {
+    const at = nowSec ?? Math.floor(this.now() / 1000);
+    const bands = zagrebBands(at);
+    if (!this.engine) return { at, dwell: [], junctions: [], overrides: 0, unmatched: [] };
     return {
-      dwell: this.engine ? this.engine.dwell.rows(nowSec, bands.hourBand, bands.dayType).length : 0,
-      recentStops: Object.keys(this.dwellRecent).length,
-      junctions: this.engine ? this.engine.junctions.rows(bands.hourBand, bands.dayType).length : 0,
+      at,
+      dwell: this.engine.dwell.rows(at, bands.hourBand, bands.dayType),
+      junctions: this.engine.junctions.rows(bands.hourBand, bands.dayType),
       overrides: this.dwellOverrides.length,
+      unmatched: this.engine.dwell.unmatchedOverrides.map((entry) => ({ stop: entry.stop, route: entry.route ?? null })),
     };
   }
+
+  // ---- test seams ------------------------------------------------------------
 
   /** The rolling dwell window as the twin holds it, for a restore test. */
   dwellRecentForTest(): DwellRecent {
@@ -581,7 +594,6 @@ export class TwinDO extends DurableObject<Env> {
     return { nodes: Object.keys(this.learned.nodes).length, passes: Object.keys(this.learned.nodePasses).length };
   }
 
-  // ---- test seams ------------------------------------------------------------
 
   /** The static join per trip id, as the tick sees it: which source answered
    *  is the point (the decoded index, or the SQLite copy after an eviction). */
@@ -608,26 +620,6 @@ export class TwinDO extends DurableObject<Env> {
     this.dwellRecent = {};
     this.dwellOverrides = [];
     this.graphChanged = false;
-  }
-
-  /**
-   * The two F11 tables as /stats renders them: what every platform the twin
-   * knows anything about is planned to hold a tram for, and where the rails
-   * branch and how long a tram waits there. Read from the live engine, so an
-   * operator sees what the planner is using right now and not an hourly
-   * counter of it. Empty before the assets load.
-   */
-  async tables(nowSec?: number): Promise<TwinTables> {
-    const at = nowSec ?? Math.floor(this.now() / 1000);
-    const bands = zagrebBands(at);
-    if (!this.engine) return { at, dwell: [], junctions: [], overrides: 0, unmatched: [] };
-    return {
-      at,
-      dwell: this.engine.dwell.rows(at, bands.hourBand, bands.dayType),
-      junctions: this.engine.junctions.rows(bands.hourBand, bands.dayType),
-      overrides: this.dwellOverrides.length,
-      unmatched: this.engine.dwell.unmatchedOverrides.map((entry) => ({ stop: entry.stop, route: entry.route ?? null })),
-    };
   }
 
   /** What the twin has learned, for a test: cells per table and the median

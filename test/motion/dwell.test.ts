@@ -6,6 +6,8 @@ import {
   DWELL_RECENT_WINDOW_S,
   parseDwellOverrides,
   pushDwellRecent,
+  sampleQuantile,
+  trimDwellRecent,
   type DwellRecent,
 } from '../../shared/motion/dwell';
 import { addSample, emptyAggregates, emptyHistogram, stopKey } from '../../shared/motion/learn';
@@ -82,18 +84,21 @@ describe('the dwell table', () => {
     expect(table.dynamicSec('S0', NOW, BAND, DAY)).toBeNull();
 
     // DWELL_RECENT_MIN samples inside the window beat the histogram: the
-    // 0.7 quantile of [12, 14, 16, 18, 60] is 18 (nearest rank, 4th of 5).
-    for (const [at, secs] of [[NOW - 100, 12], [NOW - 200, 14], [NOW - 300, 16], [NOW - 400, 18], [NOW - 500, 60]] as const) {
+    // planning quantile of five samples is read by nearest rank, so at 0.9
+    // it is the slowest of the five -- the platform's recent worst, which is
+    // exactly the tram the plan must not drive off without.
+    for (const [at, secs] of [[NOW - 100, 12], [NOW - 200, 14], [NOW - 300, 16], [NOW - 400, 18], [NOW - 500, 26]] as const) {
       pushDwellRecent(recent, 'S1800', at, secs);
     }
     expect(recent['S1800']).toHaveLength(DWELL_RECENT_MIN);
-    expect(table.dynamicSec('S1800', NOW, BAND, DAY)).toBe(18);
+    expect(table.dynamicSec('S1800', NOW, BAND, DAY)).toBe(sampleQuantile([12, 14, 16, 18, 26], DWELL_PLAN_QUANTILE));
+    expect(table.dynamicSec('S1800', NOW, BAND, DAY)).toBe(26);
 
     // Samples older than the window do not count: shift the clock past it and
     // the histogram answers again.
     const later = NOW + DWELL_RECENT_WINDOW_S + 1;
     expect(table.dynamicSec('S1800', later, BAND, DAY)).toBe(banded);
-    expect(DWELL_PLAN_QUANTILE).toBe(0.7);
+    expect(DWELL_PLAN_QUANTILE).toBe(0.9); // tuned on the replay of 17 Sept; the constant carries the sweep
   });
 
   it('reads an owner override by name, by platform id and by route, and pin beats the measured estimate', () => {
@@ -206,5 +211,22 @@ describe('the committed override file', () => {
     };
     const known = new Set<string>([...artefact.stops.id, ...artefact.stops.name]);
     for (const entry of entries) expect(known.has(entry.stop), `override names ${entry.stop}, which the network does not know`).toBe(true);
+  });
+});
+
+// The engine holds the rolling window BY REFERENCE (worker/twin/engine.ts
+// hands the same object to createDwellTable and keeps appending to it), so
+// trimming it must never hand back a different object: a twin that replaced
+// its window once a tick would leave the table reading one that never grows.
+describe('trimDwellRecent', () => {
+  it('drops what left the window and keeps the object it was given', () => {
+    const recent: DwellRecent = {};
+    pushDwellRecent(recent, 'S600', NOW - 100, 18);
+    pushDwellRecent(recent, 'S600', NOW - DWELL_RECENT_WINDOW_S - 10, 90);
+    pushDwellRecent(recent, 'S605', NOW - DWELL_RECENT_WINDOW_S - 10, 90);
+    const back = trimDwellRecent(recent, NOW);
+    expect(back).toBe(recent);
+    expect(recent['S600']).toEqual([[NOW - 100, 18]]);
+    expect(recent['S605']).toBeUndefined();
   });
 });

@@ -13,6 +13,7 @@
 // Usage:
 //   node scripts/replay-twin.mjs <frames-dir> [--limit N]
 //   node scripts/replay-twin.mjs <frames-dir> --network <path> --trips <path>
+//   node scripts/replay-twin.mjs <frames-dir> --overrides <path>   (F11's dwell table)
 //
 // The repo's TypeScript uses extensionless imports, which plain `node`
 // cannot resolve; esbuild (already a dependency, pulled in by vite) bundles
@@ -82,20 +83,24 @@ function parseArgs(argv) {
     limit: limitRaw !== undefined ? Number(limitRaw) : undefined,
     networkPath: flag('network'),
     tripsPath: flag('trips'),
+    overridesPath: flag('overrides'),
   };
 }
 
 async function main() {
-  const { dir, limit, networkPath, tripsPath } = parseArgs(process.argv);
+  const { dir, limit, networkPath, tripsPath, overridesPath } = parseArgs(process.argv);
   if (!dir) {
-    console.error('usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path]');
+    console.error('usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path] [--overrides path]');
     process.exitCode = 1;
     return;
   }
   const core = await loadCore();
   const net = resolve(repoRoot, networkPath ?? 'app/public/data/zet-network.json');
   const trips = resolve(repoRoot, tripsPath ?? 'app/public/data/zet-trips.json');
-  const engine = await core.loadRealEngine(net, trips);
+  // The owner's dwell table (F11) reaches the replay from the same file the
+  // deployed Worker serves, so the run measures the engine as it ships.
+  const overrides = resolve(repoRoot, overridesPath ?? 'app/public/data/stop-dwell-overrides.json');
+  const engine = await core.loadRealEngine(net, trips, overrides);
   const report = await core.replayDirectory(resolve(dir), engine, { limit });
   console.log(core.formatTable(report));
 }

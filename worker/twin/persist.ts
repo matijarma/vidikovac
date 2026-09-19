@@ -4,7 +4,7 @@
 // one indexed lookup when the decoded index is not in memory. Plain SQL over
 // the storage the Durable Object hands in; no Cloudflare import.
 
-import { DWELL_RECENT_N, DWELL_RECENT_WINDOW_S, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
+import { DWELL_RECENT_N, DWELL_RECENT_WINDOW_S, type DwellRecent } from '../../shared/motion/dwell';
 import { toPlane } from '../../shared/motion/geo';
 import { emptyAggregates, emptyHistogram, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
 import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -38,6 +38,13 @@ const LOOKUP_CHUNK = 50;
  *  arcs a decimetre. The plane coordinates are recomputed on load. */
 const COORD_PRECISION = 1e5;
 const ARC_PRECISION = 10;
+
+/** A measured dwell is stored as whole seconds (F11). It is derived from
+ *  report times a second apart at best, the histogram bins it lands in are
+ *  26 % wide, and the window can hold thirty of them for every platform the
+ *  fleet called at -- a decimal per sample would be a tenth of a megabyte of
+ *  state row per tick for a precision the measurement never had. */
+const DWELL_PRECISION = 1;
 
 export interface IndexPattern {
   route: string;
@@ -174,7 +181,11 @@ export function serializeState(state: TwinState): string {
       }),
     };
   }
-  const stored: StoredState = { ...state, tracks };
+  const dwellRecent: DwellRecent = {};
+  for (const [stopId, samples] of Object.entries(state.dwellRecent ?? {})) {
+    dwellRecent[stopId] = samples.map(([at, seconds]) => [at, Math.round(seconds * DWELL_PRECISION) / DWELL_PRECISION]);
+  }
+  const stored: StoredState = { ...state, tracks, dwellRecent };
   return JSON.stringify(stored);
 }
 
@@ -419,10 +430,14 @@ export function loadDwellRecent(sql: SqlStorage, nowSec: number): DwellRecent {
 export function flushDwellRecent(storage: DurableObjectStorage, recent: DwellRecent, sinceSec: number, nowSec: number): number {
   const sql = storage.sql;
   let rows = 0;
+  // A sample is stamped with the VEHICLE's report time, which can lag the
+  // twin's wall clock by up to a tick's silence, so "newer than the last
+  // flush" is widened by that much and the primary key absorbs the repeats.
+  const from = sinceSec - RECENT_FLUSH_SLACK_S;
   storage.transactionSync(() => {
     for (const [stopId, samples] of Object.entries(recent)) {
       for (const [at, seconds] of samples) {
-        if (at <= sinceSec) continue;
+        if (at <= from) continue;
         sql.exec('INSERT OR REPLACE INTO stop_dwell_recent (stop, at, seconds) VALUES (?, ?, ?)', stopId, at, seconds);
         rows++;
       }
@@ -432,10 +447,10 @@ export function flushDwellRecent(storage: DurableObjectStorage, recent: DwellRec
   return rows;
 }
 
-/** The window as the twin keeps it: newest first per platform, inside the
- *  window. Re-exported here so the Durable Object has one import for both
- *  halves of the round trip. */
-export { trimDwellRecent };
+/** How far back of its own clock a flush re-offers samples, so a vehicle
+ *  report older than the flush that preceded it is not lost for good; the
+ *  table's primary key turns the repeat into a no-op. */
+const RECENT_FLUSH_SLACK_S = 120;
 
 /** Merges the pending aggregates into the tables in one transaction; returns the rows written. */
 export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggregates): number {

@@ -16,7 +16,7 @@ import { dist, toPlane } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
-import { dwellPlannerAt, pushDwellRecent, trimDwellRecent } from '../../shared/motion/dwell';
+import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
 import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCounts, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCounts } from '../../shared/motion/plan';
 import { junctionWaitsAt } from '../../shared/motion/junction';
@@ -133,7 +133,10 @@ export function runTick(input: TickInput): TickResult {
     nodes: { ...(input.state.pendingLearned.nodes ?? {}) },
     nodePasses: { ...(input.state.pendingLearned.nodePasses ?? {}) },
   };
-  const dwellRecent = { ...(input.state.dwellRecent ?? {}) };
+  // Copied per platform, not just per key: the tick appends to these arrays
+  // and must not grow the state it was handed.
+  const dwellRecent: DwellRecent = {};
+  for (const [stopId, samples] of Object.entries(input.state.dwellRecent ?? {})) dwellRecent[stopId] = [...samples];
   const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [] };
   const planCounts = emptyPlanCounts();
   const headerTs = feed?.headerTs ?? input.state.headerTs;

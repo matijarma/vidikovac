@@ -30,7 +30,15 @@ export const JUNCTION_ZONE_M = 60;
 
 /** How often trams must actually stop at a crossing before the planner books
  *  a wait there: below this the wait is the exception, and booking it would
- *  hold six plans in ten behind trams that sailed through. */
+ *  hold six plans in ten behind trams that sailed through.
+ *
+ *  Left at 0.4 after the tuning sweep of 17 Sept, which asked whether
+ *  lowering it earns anything: at 0.25 the planner booked 21 % more waits
+ *  (24.423 against 20.178 over the window) and bought 0.5 % of the
+ *  between-plan regressions and 0.7 % of the visible crossings, with the
+ *  signed hindsight identical to a tenth of a point at every horizon. That
+ *  is a wait applied to the majority for the minority's sake, so the
+ *  principled threshold stands. */
 export const JUNCTION_STOP_SHARE = 0.4;
 
 /** The side of the wait distribution the planner books. The MEDIAN, not the

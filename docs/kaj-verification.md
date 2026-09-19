@@ -1245,6 +1245,166 @@ Isti okviri, prije (`fd8afae`, ponovno izmjereno) i poslije (F10):
   metara dalje — unutar bliskog pojasa, pa brojač skretanja nikad nije opalio (D4). Dva uzastopna
   očitanja protiv tangente putanje sada izvode putanju na suprotan smjer iste linije.
 
+### Nakon F11 (tablica zadržavanja, popravci stanja planera, kvantili, čekanja na križanjima, objavljeni pod), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba i isti prozor: `node scripts/replay-twin.mjs
+recordings/2026/09/17 --limit 2216`. Stupac „prije” **ponovno je izmjeren** na `ee94037` (stanje
+poslije F10) neposredno prije prve izmjene i vratio je F10-ovu tablicu do znamenke — sva tri
+horizonta ocjene unatrag, 41.243 regresije, 1.883 prekršaja redoslijeda, 17 preticanja, 6.471
+križanje, 0 slika unatrag — osim vremena otkucaja, koje je mjera opterećenja stroja, a ne koda.
+
+Jedna promjena u samom harnessu vrijedi imenovati prije brojeva: `scripts/replay-core.ts` sada
+**vraća dokaze svakog otkucaja u motor** (`recordEvidence` i kotrljajući prozor zadržavanja), točno
+kao što to radi `worker/do/twin-do.ts`. Dotad je ponavljanje vozilo motor koji kroz cijeli dan ništa
+ne nauči, pa naučeni kvantili i čekanja na križanjima uopće ne bi bili izmjereni. Motor u
+ponavljanju učita i vlasnikovu datoteku zadržavanja s istog mjesta s kojeg je čita i objavljeni
+Worker.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=374127)
+  30s:  p50 <100m   p95 ge200m  (n=371250)
+  60s:  p50 <200m   p95 ge200m  (n=363023)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 12.8%  within 56.1%  behind 31.1%  (n=374127)
+  30s:  ahead 15.6%  within 40.4%  behind 44.0%  (n=371250)
+  60s:  ahead 15.7%  within 30.7%  behind 53.6%  (n=363023)
+
+between-plan regressions (>25 m):     19827  (of 190661 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  1882  (of 1089771 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      5868
+  hold-time share:                    1.4%  mean hold length: 2.1 s  (14156 holds)
+
+overtakes (must be 0):   17
+reversals (must be 0):   0
+concessions / swaps:     77 / 32
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 882  p95 1781  (never moved: 5)
+per-tick wall time (ms): p50 32.55  p95 49.42
+
+planner interventions:   floor 134975  junction_wait 20178  stand_fix 30317  eta_bound_skipped 60364
+learned by the end:      1142 edge cells / 1162 stop cells / 333 node cells; 11168 dwell samples, 1720 junction waits of 5695 passes, 228 platforms in the recent window
+```
+
+Isti okviri, prije (`ee94037`, ponovno izmjereno) i poslije (F11):
+
+| Mjera | prije | poslije | promjena |
+|---|---|---|---|
+| **10 s: ispred / unutar / iza** | 17,3 / 56,1 / 26,6 % | **12,8** / 56,1 / 31,1 % | −4,5 p. b. ispred |
+| **30 s: ispred / unutar / iza** | 21,5 / 41,6 / 36,9 % | **15,6** / 40,4 / 44,0 % | −5,9 p. b. ispred |
+| **60 s: ispred / unutar / iza** | 23,3 / 33,0 / 43,8 % | **15,7** / 30,7 / 53,6 % | −7,6 p. b. ispred |
+| **regresije među planovima** | 41.243 od 190.649 | **19.827** od 190.661 | −51,9 % |
+| **vidljiva križanja (klijent)** | 6.471 | **5.868** | −9,3 % |
+| **udio držanja / broj držanja** | 3,9 % / 23.847 | **1,4 % / 14.156** | −2,5 p. b. / −40,6 % |
+| prosječna duljina držanja | 3,4 s | 2,1 s | −1,3 s |
+| slike unatrag (klijent) | 0 od 25.531.087 | **0** | cilj kruga drži |
+| vožnje unatrag u planu | 0 | 0 | drži |
+| preticanja (blizanac) | 17 | 17 | drži |
+| prekršaji redoslijeda prema očitanjima | 1.883 od 1.088.537 | 1.882 od 1.089.771 | −0,1 % |
+| ustupci / zamjene | 77 / 34 | 77 / 32 | −2 zamjene |
+| razred p50 / p95 (10/30/60 s) | <50 / <100 / <200 m; p95 ≥200 m | isto | drži |
+| poznati smjer | 100,0 % | 100,0 % | drži |
+| otkucaj p50 / p95 | 13,86 / 49,62 ms | 32,55 / 49,42 ms | p50 raste (motor sada uči) |
+
+#### Kako su odabrane konstante
+
+Cilj E4 traži da udio planova **50 m ili više ispred** tramvaja na 30 s padne na 10 % ili niže, a da
+udio **iza** ne prijeđe polazni ukupni udio pogrešaka iznad 50 m (na 30 s: 21,5 + 36,9 = 58,4 %) i da
+razred p95 ne bude lošiji. Četiri prolaza kroz isti prozor, sva tri broja mijenjana zajedno:
+
+| Prolaz | `PLAN_QUANTILE` | `DWELL_PLAN_QUANTILE` | `JUNCTION_STOP_SHARE` | 30 s ispred | 30 s unutar | 30 s iza | regresije | križanja | držanja |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 (polazne) | 0,65 | 0,70 | 0,40 | 17,6 % | 42,3 % | 40,1 % | 24.608 | 6.108 | 20.281 |
+| 2 | 0,80 | 0,85 | 0,30 | 16,5 % | 41,4 % | 42,0 % | 23.121 | 5.941 | 16.880 |
+| 3 | 0,90 | 0,90 | 0,25 | 15,6 % | 40,4 % | 44,1 % | 19.737 | 5.826 | 14.146 |
+| **4 (odabrano)** | **0,90** | **0,90** | **0,40** | **15,6 %** | **40,4 %** | **44,0 %** | **19.827** | **5.868** | **14.156** |
+
+Iz čega se odluka čita:
+
+- **Kvantili se isplate, ali skromno.** Cijeli raspon od 0,65/0,70 do 0,90/0,90 nosi 2,0 postotna
+  boda udjela „ispred” na 30 s, a plaća 0,8 postotnih bodova udjela „unutar 50 m” na **10 s** — a to
+  je horizont na kojem gledatelj zapravo živi, jer klijent anketira svakih nekoliko sekundi. Uz to
+  padaju regresije (−19 %), križanja (−3,9 %) i držanja (−30 %): pošteno kasan plan je plan koji
+  sljedeće očitanje ne mora vući unatrag. Dalje se nije išlo — kvantil iznad najsporije desetine
+  prestaje opisivati dionicu, a počinje opisivati njezino najgore jutro.
+- **Spuštanje praga na križanjima ne zarađuje ništa.** Prolaz 3 i prolaz 4 razlikuju se samo po
+  `JUNCTION_STOP_SHARE` (0,25 prema 0,40). Na 0,25 planer knjiži 21 % više čekanja (24.423 prema
+  20.178), a dobiva 0,5 % regresija i 0,7 % križanja, dok je ocjena unatrag po predznaku ista do
+  desetine boda na svakom horizontu. To je čekanje nametnuto većini zbog manjine, pa načelni prag
+  od 0,4 ostaje.
+- **Cilj E4 nije dosegnut i neće ga doseći ova tri broja.** 15,6 % prema traženih 10 %. Ograničenja
+  o „iza” i o p95 jesu ispunjena s puno zraka (44,0 % prema dopuštenih 58,4 %; razredi p95
+  nepromijenjeni), pa prostor za nagib postoji — ali ga kvantili ne koriste: cijeli raspon od 0,65 do
+  0,90 vrijedi samo 2 postotna boda. Ostatak „ispred” ne živi u očekivanim vremenima dionica nego
+  drugdje: tramvaj koji stane zbog nečega o čemu blizanac nema **nikakav** dokaz (semafor koji nije
+  na čvoru stupnja većeg od dva, zatvorena ulica, izmjena vozača), i plan koji se 30 sekundi
+  ekstrapolira sa sidra staroga do 30 s. Ni jedno ni drugo ne popravlja kvantil; oba traže novi
+  dokaz, ne novu konstantu.
+- **Najveći pojedinačni dobitak je objavljeni pod.** Od 190.661 uzastopnog para planova njih 134.975
+  kreće od objavljenoga luka umjesto od sidra koje je unutar raspršenja GPS-a iza njega. Regresije
+  su prepolovljene (41.243 → 19.827), a s njima i držanja (−41 %) — jer je držanje upravo cijena
+  regresije: klijent od F9 oznaku ne crta unatrag nego je zaustavi dok je plan ne sustigne.
+- **Popravci stanja rade često.** `stand_fix` 30.317 puta zadrži tramvaj na peronu kojeg bi staro
+  pravilo otpustilo (prvo očitanje na peronu, D8), a `eta_bound_skipped` 60.364 puta odbije ZET-ovu
+  najavu „već si otišao” za prvo sljedeće stajalište, koju je stari planer primjenjivao bez uvjeta i
+  time zakašnjeli tramvaj tjerao s perona.
+- **Naučeni sloj se puni sporo.** Do kraja prozora (2.216 okvira, oko šest sati) motor ima 1.142
+  ćelije bridova, 1.162 ćelije perona i 333 ćelije čvorova, 11.168 uzoraka zadržavanja i 1.720
+  čekanja od 5.695 prolaza kroz križanja. To je dovoljno da kvantili uopće imaju o čemu govoriti, ali
+  ne na svakoj liniji i u svakom satu — pa velik dio dana planer i dalje računa po voznom redu, gdje
+  kvantil ne mijenja ništa. Blizanac u proizvodnji uči neprekidno i taj sloj mu je gušći nego ovdje.
+- **Otkucaj je sporiji jer motor sada uči.** p50 13,86 → 32,55 ms: svaki otkucaj vadi dokaze i za
+  križanja, a ponavljanje ih sada i vraća u motor (prije nije). p95 je nepromijenjen (49,62 → 49,42
+  ms), a proračun otkucaja je 10 s, pa je i p95 dva reda veličine ispod granice.
+
+#### Ručna tablica zadržavanja (za vlasnika)
+
+Datoteka je **`app/public/data/stop-dwell-overrides.json`**. Uredi je izravno, napravi commit i push
+— između tvoje izmjene i onoga što blizanac pročita nema nijednog koraka gradnje: poslužitelj je
+dohvaća s `/data/stop-dwell-overrides.json` istim putem kojim dohvaća `zet-trips.json` i
+`zet-network.json`. (Druge dvije datoteke s „overrides” u imenu leže u `scripts/` jer su **ulaz** u
+gradnju koja prepisuje artefakt; ova se ne prepisuje ničim, pa bi korak kopiranja iz `scripts/` samo
+dodao način da tvoja izmjena tiho ne stigne u proizvodnju.)
+
+Jedan redak izgleda ovako:
+
+```json
+{ "stop": "Črnomerec", "route": "6", "defaultSec": 90, "pin": true, "reason": "okretište, vozač mijenja smjer" }
+```
+
+- `stop` je **id perona iz GTFS-a** (`98_1`) ili **ime stajališta** (`Črnomerec`). Ime pogađa **sve**
+  perone tog imena.
+- `route` je neobavezan i sužava redak na perone koje ta linija stvarno vozi.
+- `defaultSec` su sekunde. Redak s id-om perona jači je od retka s imenom, a redak s linijom od retka
+  bez nje; među jednakima vrijedi tvoj zadnji redak.
+- Bez `"pin": true` broj je samo **polazna** vrijednost: izmjereno zadržavanje (zadnjih 30 uzoraka u
+  90 minuta, pa naučena razdioba po satu i vrsti dana) i dalje ima prednost. S `"pin": true` broj je
+  ono što planer knjiži, a mjerenja se vide samo na `/stats`.
+- `reason` je obavezan — da za pola godine piše zašto je broj tu.
+- Neispravan redak **ruši učitavanje datoteke i ispisuje se cijeli** u zapisnik; blizanac tada vozi
+  bez ijednog ručnog unosa, a ne s polovicom njih. Unos koji ne pogađa nijedan peron učitane mreže
+  (preimenovano stajalište, tipfeler) ne ruši ništa nego se **imenuje na `/stats`**.
+
+Sjeme u datoteci su dvadeset okretišta tramvajskih uzoraka iz `zet-trips.json`, sva na 60 s s
+razlogom „terminus layover placeholder — owner to adjust”: popis za uređivanje, ne prazna datoteka.
+Sve što tablica zna — polazna vrijednost, ručni unos, naučeni p50 i p70, broj uzoraka, koliko ih je u
+zadnjih 90 minuta i kada je zadnji, te sekunde koje planer stvarno knjiži — vidi se na `/stats` pod
+naslovom **Zadržavanje po stajalištu**, a čekanja na križanjima pod **Čekanje na križanjima**.
+
 ## Javni zaslon Prozor (16. 9. 2026.)
 
 Plan `C:/Users/MatijaRadeljak/.claude/plans/observe-the-layout-and-valiant-fiddle.md`, grana i

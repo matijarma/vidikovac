@@ -76,11 +76,21 @@ export const CONFIDENCE_SINGLE_FIX = 0.6;
 export const CONFIDENCE_FREE_CAP = 0.5;
 
 /** The side of a learned stretch's distribution the planner books (F11).
- *  0.65: the round's rule is "bias behind, never ahead", and a median
- *  stretch time puts half of every plan ahead of its tram by construction.
- *  Not 0.7 like the dwell: a stretch's spread is traffic, which a plan can
- *  catch up on within a tick, while a dwell it books short it cannot. */
-export const PLAN_QUANTILE = 0.65;
+ *  A median stretch time puts half of every plan ahead of its tram by
+ *  construction, and the round's rule is "bias behind, never ahead".
+ *
+ *  0.9 rather than something gentler because the replay of 17 Sept says so.
+ *  Swept over the like-for-like window (2216 frames) against 0.7 dwells:
+ *  0.65 gave 17.6 % of 30 s fixes ahead, 0.8 gave 16.5 %, 0.9 gave 15.6 %,
+ *  and the cost of the whole sweep was 0.8 percentage points of "within
+ *  50 m" at the 10 s horizon -- the horizon a viewer actually lives at,
+ *  since the client polls every few seconds. Over the same sweep the
+ *  between-plan regressions fell 24.608 -> 19.827 (-19 %), the visible
+ *  crossings 6.108 -> 5.868 and the client's holds 20.281 -> 14.156 (-30 %),
+ *  because a plan that is honestly late is one the next fix does not have to
+ *  drag backwards. Higher was not tried: a quantile beyond the slowest tenth
+ *  stops describing a stretch and starts describing its worst morning. */
+export const PLAN_QUANTILE = 0.9;
 
 /** How far two fixes may lie apart ALONG THE ARC and still be the same
  *  standing tram (F11). ZET's GPS scatters up to 30 m at a platform, so the
@@ -279,7 +289,7 @@ function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwell
     // past the stop point has left, whatever it did before that.
     const movingNow = run.length >= 2 && separation(fixes[fixes.length - 2], last) >= STAND_SCATTER_M;
     if (movingNow) return null;
-    counts && counts.stand_fix++;
+    if (counts) counts.stand_fix++;
   }
   let arrivalSec = run[0].atSec;
   const before = i > 0 ? fixes[i - 1] : null;
@@ -352,7 +362,7 @@ export function buildPlan(
   const floorS = context.publishedArcS ?? null;
   if (floorS !== null && Number.isFinite(floorS) && s < floorS && floorS - s < ANCHOR_NOISE_M) {
     s = floorS;
-    counts && counts.floor++;
+    if (counts) counts.floor++;
   }
   knots.push([rel(t), round1(s)]);
   let nextStop: NextStop | null = null;
@@ -365,11 +375,6 @@ export function buildPlan(
   for (let i = track.fixes.length - 2; i >= 0 && separation(track.fixes[i], last) < STAND_SCATTER_M; i--) stoodSec = last.atSec - track.fixes[i].atSec;
   const standing = stoodSec > 0;
 
-  // At a platform: when the tram moves on decides everything after. The
-  // history says how long it has stood (dwellRemaining); ZET's ETA for the
-  // stop beyond says when it must leave to make it; and a TripUpdate that
-  // already names the stop beyond says it has left by the header at the
-  // latest (the update is current, the fix may be 30 s old).
   // The dwell every stop of this plan is booked at: the table's answer where
   // the caller handed one in (the twin always does), the TimesProvider's
   // otherwise, and the flat default failing both (F11).
@@ -393,6 +398,11 @@ export function buildPlan(
     return halts;
   };
 
+  // At a platform: when the tram moves on decides everything after. The
+  // history says how long it has stood (dwellRemaining); ZET's ETA for the
+  // stop beyond says when it must leave to make it; and a TripUpdate that
+  // already names the stop beyond says it has left by the header at the
+  // latest (the update is current, the fix may be 30 s old).
   const here = geometry.stopAt(s);
   if (here) {
     const aheadOfHere = geometry.stopsAhead(here.s);
@@ -434,13 +444,14 @@ export function buildPlan(
         // post-dates a fix that showed the tram MOVING.
         const between = aheadOfHere.filter((stop) => stop.s < beyond.s - 0.5);
         const movingSec = movingAnchorSec(track);
-        const postDatesMotion = next?.atSec !== null && next?.atSec !== undefined && movingSec !== null && next.atSec > movingSec;
+        const updateAtSec = next?.atSec ?? null;
+        const postDatesMotion = updateAtSec !== null && movingSec !== null && updateAtSec > movingSec;
         if (between.length >= 1 || postDatesMotion) {
           const lastBetween = between[between.length - 1];
           const latest = lastBetween ? headerSec - travelTo(lastBetween.s) - dwellOf(lastBetween.stopId) : headerSec;
           departure = Math.min(departure, Math.max(t, latest));
         } else {
-          counts && counts.eta_bound_skipped++;
+          if (counts) counts.eta_bound_skipped++;
         }
       }
       // A trip that has not started does not leave its first platform (R-TE49).
@@ -513,7 +524,7 @@ export function buildPlan(
       if (!nextStop) nextStop = { stopId: stop.stopId, s: round1(stop.s), etaSec: Math.round(arrive) };
       firstPlatformAhead = false;
     } else if (stop.holdSec > 0) {
-      counts && counts.junction_wait++;
+      if (counts) counts.junction_wait++;
     }
     const dwell = stop.holdSec;
     if (dwell > 0) knots.push([rel(arrive + dwell), round1(target)]);

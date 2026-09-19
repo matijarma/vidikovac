@@ -137,12 +137,6 @@ export function emptyAggregates(): LearnedAggregates {
   return { edges: {}, stops: {}, nodes: {}, nodePasses: {} };
 }
 
-/** Fills in the tables a row written before F11 has no field for, so a cold
- *  restore over an older state row or SQLite copy does not read `undefined`. */
-export function withAllTables(agg: Partial<LearnedAggregates> | undefined): LearnedAggregates {
-  return { edges: agg?.edges ?? {}, stops: agg?.stops ?? {}, nodes: agg?.nodes ?? {}, nodePasses: agg?.nodePasses ?? {} };
-}
-
 export function edgeKey(edge: number, hourBand: number, dayType: number): string {
   return `${edge}|${hourBand}|${dayType}`;
 }

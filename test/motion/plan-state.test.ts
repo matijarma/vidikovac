@@ -154,7 +154,7 @@ describe('the planner reads the vehicle state honestly (F11, D8)', () => {
     const tram = tramOn1('q', [[350, 1000], [450, 1010]]);
     buildPlan(tram, net, times, null, 1012, 1012, BANDS, { dwell: { plannedSec: () => 45 } });
     expect(asked.every((q) => q === PLAN_QUANTILE)).toBe(true);
-    expect(PLAN_QUANTILE).toBe(0.65);
+    expect(PLAN_QUANTILE).toBe(0.9); // tuned on the replay of 17 Sept; the constant carries the sweep
     // T600 at arc 600, reached at ~8 m/s from 450 m; the 45 s dwell holds it.
     const dwellKnots = knotsOf(tram).filter(([, s]) => Math.abs(s - 600) < 1);
     expect(dwellKnots.length).toBeGreaterThanOrEqual(2);
