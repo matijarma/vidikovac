@@ -13,12 +13,13 @@
 // tick join the ring.
 
 import { dist, toPlane } from '../../shared/motion/geo';
-import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts } from '../../shared/motion/hindsight';
+import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
 import { dwellPlannerAt, pushDwellRecent, trimDwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { buildPlan, CONFIDENCE_FREE_CAP, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
+import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCounts, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCounts } from '../../shared/motion/plan';
+import { junctionWaitsAt } from '../../shared/motion/junction';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
 import { zagrebBands } from '../../shared/motion/times';
@@ -56,6 +57,8 @@ export interface TickResult {
   hindsightSign: HindsightSignCounts;
   /** The evidence this tick mined from the fresh fixes (C1, F11), already counted into the state's pending aggregates. */
   learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[]; waits: NodeWaitEvidence[]; passes: NodePassEvidence[] };
+  /** What the planner had to intervene about this tick (F11): `twin_plan`. */
+  plan: PlanCounts;
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -132,6 +135,7 @@ export function runTick(input: TickInput): TickResult {
   };
   const dwellRecent = { ...(input.state.dwellRecent ?? {}) };
   const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [] };
+  const planCounts = emptyPlanCounts();
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
@@ -203,11 +207,18 @@ export function runTick(input: TickInput): TickResult {
     // parts of the engine disagree about one platform.
     const dwellPlanner = dwellPlannerAt(engine.dwell, headerSec, bands.hourBand, bands.dayType);
     const dwellOf = (stopId: string): number => dwellPlanner.plannedSec(stopId);
+    const junctions = junctionWaitsAt(engine.junctions, bands.hourBand, bands.dayType);
     for (const track of all) {
       track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween, dwellOf });
       const update = track.tripId !== null ? tripUpdates[track.tripId] : undefined;
-      const next: NextStopUpdate | null = update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec } : null;
-      buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands);
+      const next: NextStopUpdate | null =
+        update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec, atSec: update.atSec ?? null } : null;
+      buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands, {
+        dwell: dwellPlanner,
+        junctions,
+        publishedArcS: publishedArcAt(input.state.published[track.id], track, headerSec),
+        counts: planCounts,
+      });
     }
     // The register reads ZET's TripUpdates too: two trips whose next stops
     // sit in strict order on the path they share are ordered by ZET itself,
@@ -270,5 +281,22 @@ export function runTick(input: TickInput): TickResult {
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts };
+}
+
+/**
+ * Where the plan published last tick puts this vehicle at THIS header, when
+ * that plan ran on the geometry the vehicle is still matched to; null
+ * otherwise (a fresh vehicle, a trip change, a re-match onto another path).
+ * The planner uses it as a floor under an anchor that stepped back inside
+ * the GPS scatter (F11 ANCHOR_NOISE_M).
+ */
+function publishedArcAt(ring: readonly PublishedPlan[] | undefined, track: Track, headerSec: number): number | null {
+  if (!ring || ring.length === 0) return null;
+  const latest = ring[ring.length - 1];
+  const plan = latest.plan;
+  const tRel = headerSec - latest.headerSec;
+  if (plan.on === 'path' && track.match.pathIdx === plan.pathIdx) return evalPathPlan(plan.knots, tRel);
+  if (plan.on === 'shape' && track.match.shapeIdx === plan.shapeIdx) return evalPathPlan(plan.knots, tRel);
+  return null;
 }

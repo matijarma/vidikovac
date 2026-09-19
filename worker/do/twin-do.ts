@@ -22,6 +22,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import type { OrderReport } from '../../shared/motion/order';
+import { emptyPlanCounts, PLAN_EVENTS, type PlanCounts } from '../../shared/motion/plan';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
@@ -97,6 +98,8 @@ export interface TickReport {
   learned: { edges: number; dwells: number; waits: number; passes: number };
   /** True when this tick flushed the pending aggregates into SQLite (once a minute). */
   learnedFlushed: boolean;
+  /** What the planner had to intervene about this tick (F11). */
+  plan: PlanCounts;
 }
 
 /** What the cold start cost: decoding the two static assets, in milliseconds. */
@@ -134,6 +137,16 @@ function hindsightSignEntries(counts: HindsightSignCounts): MetricsEntry[] {
     }
   }
   return entries;
+}
+
+/** The planner's own interventions this tick (F11) as metric cells: the
+ *  published floor under a noisy anchor, a junction wait booked, a stand the
+ *  D8 fix kept at its platform, and an ETA bound the planner refused to
+ *  believe. Counters like the register's -- a tick's events, which MetricsDO
+ *  sums over the hour. */
+function planEntries(counts: PlanCounts | null): MetricsEntry[] {
+  if (!counts) return [];
+  return PLAN_EVENTS.filter((event) => counts[event] > 0).map((event) => ({ event: 'twin_plan' as const, dim1: event, dim2: 'tram', count: counts[event] }));
 }
 
 /** The ordering register's pass as metric cells (E3): one entry per counter
@@ -256,6 +269,7 @@ export class TwinDO extends DurableObject<Env> {
       stateBytes: 0,
       learned: { edges: 0, dwells: 0, waits: 0, passes: 0 },
       learnedFlushed: false,
+      plan: emptyPlanCounts(),
     });
 
     // A retried or early alarm inside the floor: no second fetch (R-TE8).
@@ -278,7 +292,7 @@ export class TwinDO extends DurableObject<Env> {
       // Nothing new from ZET: the plans still move on (D2), validUntil moves.
       const result = this.advance(prev, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed });
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed, plan: result.plan });
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
@@ -288,7 +302,7 @@ export class TwinDO extends DurableObject<Env> {
       // The same frame again (the cushion beat ZET's publish): nothing new.
       const result = this.advance({ ...prev, etag }, null, now, routes);
       recordMetric(this.env, 'twin_tick', 'unchanged', cold ? 'cold' : 'warm');
-      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed });
+      return finish({ ...baseline('unchanged'), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed, plan: result.plan });
     }
 
     const result = this.advance({ ...prev, etag }, decoded, now, routes);
@@ -311,6 +325,7 @@ export class TwinDO extends DurableObject<Env> {
       stateBytes: result.stateBytes,
       learned: result.learned,
       learnedFlushed: result.learnedFlushed,
+      plan: result.plan,
     });
   }
 
@@ -321,7 +336,7 @@ export class TwinDO extends DurableObject<Env> {
     feed: ReturnType<typeof decodeFeed> | null,
     nowMs: number,
     routes: ZetRoutes,
-  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: TickReport['learned']; learnedFlushed: boolean } {
+  ): { state: TwinState; newFixes: number; evicted: number; order: OrderReport | null; unknownTrips: number; tripIds: number; hindsightSamples: number; stateBytes: number; learned: TickReport['learned']; learnedFlushed: boolean; plan: PlanCounts } {
     const headerTs = feed?.headerTs ?? prev.headerTs;
     // The joins for every trip in view: the frame's trips plus the tracks already followed.
     const tripIds = new Set<string>();
@@ -347,7 +362,7 @@ export class TwinDO extends DurableObject<Env> {
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);
     for (const entry of unsigned) hindsightSamples += entry.count ?? 0;
-    const entries = [...unsigned, ...hindsightSignEntries(result.hindsightSign), ...orderEntries(result.order)];
+    const entries = [...unsigned, ...hindsightSignEntries(result.hindsightSign), ...orderEntries(result.order), ...planEntries(result.plan)];
     if (entries.length > 0) {
       // One batched write per tick, never one RPC per vehicle; the signed
       // histogram and the ordering register ride in the same batch, so none
@@ -367,6 +382,7 @@ export class TwinDO extends DurableObject<Env> {
       stateBytes,
       learned: { edges: result.learned.edges.length, dwells: result.learned.dwells.length, waits: result.learned.waits.length, passes: result.learned.passes.length },
       learnedFlushed,
+      plan: result.plan,
     };
   }
 

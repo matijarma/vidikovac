@@ -136,6 +136,13 @@ export interface JunctionTableInput {
   quantile?: number;
 }
 
+/** The table bound to one hour band and day type, in the shape the planner
+ *  takes (plan.ts JunctionWaits) -- the same trick dwellPlannerAt does for
+ *  the dwell table, so the planner never has to know about bands. */
+export function junctionWaitsAt(table: JunctionTable, hourBand: number, dayType: DayType): { aheadOf(pathIdx: number, s: number): { s: number; waitSec: number }[] } {
+  return { aheadOf: (pathIdx, s) => table.waitsAhead(pathIdx, s, hourBand, dayType) };
+}
+
 export function createJunctionTable(input: JunctionTableInput): JunctionTable {
   const { net, aggregates } = input;
   const minShare = input.minShare ?? JUNCTION_STOP_SHARE;

@@ -24,6 +24,10 @@ export interface TripNext {
   delaySec: number | null;
   timeSec: number | null;
   delays: number[];
+  /** When ZET issued the update (its own timestamp, else the frame header).
+   *  The planner's "departed by the header" bound needs it to tell a current
+   *  update from one naming the platform a tram is still standing at (F11). */
+  atSec: number | null;
 }
 
 export interface TwinState {
@@ -72,6 +76,7 @@ export function nextStopOf(feed: DecodedFeed): Record<string, TripNext> {
       delaySec: chosen?.delaySec ?? null,
       timeSec: chosen?.timeSec ?? null,
       delays: stops.map((s) => s.delaySec).filter((d): d is number => d !== null),
+      atSec: update.atSec ?? feed.headerTs ?? null,
     };
   }
   return out;
