@@ -26,7 +26,7 @@ import {
   vehicleKinds,
   type ProzorOptions,
 } from '../../app/src/map/overlays';
-import { PILL_MAX_CHARS_CLUSTER, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_MAX_CHARS_CLUSTER, clusterLabel, pillChars, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -58,6 +58,9 @@ describe('the overlay layer list', () => {
       expect(pills.layout![key], key).toBe(true);
     }
     expect(pills.layout!['text-optional']).toBe(false); // number and pill are one mark
+    // A cluster's label is one line or it is nothing: MapLibre's default 10 em
+    // broke "109·113·119·120 +3" at the space and hung the tail under the capsule.
+    expect(pills.layout!['text-max-width']).toBe(100);
     // What reads as "several here": the ink ring around a merged pill.
     expect(pills.paint!['icon-halo-color']).toEqual(['case', ['get', 'cluster'], OVERLAY_LIGHT.selection, OVERLAY_LIGHT.halo]);
     expect(pills.paint!['icon-halo-width']).toEqual(['case', ['get', 'cluster'], 2, 1]);
@@ -65,9 +68,11 @@ describe('the overlay layer list', () => {
     expect([NOSE_MIN_ZOOM, NOSE_MAX_ZOOM]).toEqual([14.5, 16.5]);
     const noses = layerById(LAYERS.vehicleNoses);
     expect([noses.minzoom, noses.maxzoom]).toEqual([14.5, 16.5]);
+    // The selected vehicle's nose is a nose: the owner's ruling is "only
+    // between 14.5 and 16.5", and a selection is no reason to draw a triangle
+    // over a city-wide view where nothing else carries one.
     const selectedNose = layerById(LAYERS.vehicleSelectedNose);
-    expect(selectedNose.minzoom).toBeUndefined();
-    expect(selectedNose.maxzoom).toBe(16.5);
+    expect([selectedNose.minzoom, selectedNose.maxzoom]).toEqual([14.5, 16.5]);
     const selected = layerById(LAYERS.vehicleSelected);
     expect(selected.minzoom).toBeUndefined();
     expect(selected.layout!['icon-allow-overlap']).toBe(true);
@@ -88,12 +93,26 @@ describe('the overlay layer list', () => {
   it('generates one SDF pill and one plate for every label length a cluster can take, at pills.ts\u2019s own widths, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
     const images = overlayImages();
     const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
-    expect(PILL_MAX_CHARS_CLUSTER).toBe(14); // "6\u00b711\u00b712\u00b714 +2" is the longest label clusterLabel writes
+    // The longest label clusterLabel can write, and the reason the cap is
+    // what it is: four *bus* routes of three digits, their three separators,
+    // the space, the "+" and a two-digit tail -- "109\u00b7113\u00b7119\u00b7120 +12",
+    // nineteen characters. A tram cluster is shorter; a bus hub is not.
+    expect(PILL_MAX_CHARS_CLUSTER).toBe(19);
+    const bus = (n: number): string[] => Array.from({ length: n }, (_, i) => String(109 + i));
+    expect(clusterLabel(bus(16))).toBe('109\u00b7110\u00b7111\u00b7112 +12');
+    expect(clusterLabel(bus(16))).toHaveLength(PILL_MAX_CHARS_CLUSTER);
+    // Five three-digit routes -- the everyday bus cluster -- get a pill wide
+    // enough to write them in, not a clamped one that drops characters.
+    const five = clusterLabel(bus(5));
+    expect(five).toBe('109\u00b7110\u00b7111\u00b7112 +1');
+    expect(pillChars(five)).toBe(five.length);
     expect(images.map((i) => i.id)).toEqual([
       ...lengths.map((n) => `vehicle-pill-${n}`),
       ...lengths.map((n) => `vehicle-plate-${n}`),
       'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
     ]);
+    // Nineteen pills, nineteen plates, the nose, the selection ring and the three place marks.
+    expect(images).toHaveLength(2 * PILL_MAX_CHARS_CLUSTER + 5);
     // Every one is pillWidthPx's box plus the distance field's own spread around it.
     for (const n of lengths) {
       const pill = images[n - 1]!.image;
@@ -160,6 +179,8 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(pills.layout!['text-allow-overlap']).toBe(true);
       expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6); // the kiosk's own threshold stays its own
       expect(by(LAYERS.vehicleNoses).maxzoom).toBe(NOSE_MAX_ZOOM);
+      // The selected vehicle's nose sits in the same band as every other nose, the field's zoom included.
+      expect(by(LAYERS.vehicleSelectedNose).minzoom).toBe(14.6);
       expect(JSON.stringify(by(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
       // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
       const screenStop = by(LAYERS.screenStop);

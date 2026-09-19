@@ -17,12 +17,15 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
   it('gives the four hand-tuned widths verbatim, then +7px per character up to the cluster cap, mapping onto the SDF image ids', () => {
     expect(PILL_BASE_WIDTHS_PX.map((_, i) => pillWidthPx(i + 1))).toEqual(PILL_BASE_WIDTHS_PX);
     expect(pillWidthPx(5)).toBe(45);
-    expect(pillWidthPx(PILL_MAX_CHARS_CLUSTER)).toBe(108);
+    // The widest capsule: nineteen characters, the longest cluster label of
+    // four three-digit bus routes with a two-digit tail.
+    expect(pillWidthPx(PILL_MAX_CHARS_CLUSTER)).toBe(143);
     // '' counts as one character (route unknown takes the smallest pill); anything past the
-    // cluster cap (a run-on "+n" label) clamps to it rather than growing forever.
+    // cluster cap (a label no clusterLabel writes) clamps to it rather than growing forever.
     expect(pillChars('')).toBe(1);
-    expect(pillChars('123456789012345678')).toBe(PILL_MAX_CHARS_CLUSTER);
-    expect(pillWidthPx(pillChars('123456789012345678'))).toBe(108);
+    expect(pillChars('109·113·119·120 +3')).toBe(18); // an everyday bus cluster, written whole
+    expect(pillChars('12345678901234567890123')).toBe(PILL_MAX_CHARS_CLUSTER);
+    expect(pillWidthPx(pillChars('12345678901234567890123'))).toBe(143);
     expect(pillImageId(3)).toBe('vehicle-pill-3');
     expect(pillImageId(3, true)).toBe('vehicle-plate-3');
   });

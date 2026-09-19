@@ -375,6 +375,11 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'text-field': ['get', 'short'],
       'text-font': [MAP_FONTS.medium],
       'text-size': 12 * s,
+      // A pill's number is one line, always: in ems, and a hundred of them is
+      // wider than any label can be. MapLibre's default is 10 em, which broke
+      // a bus cluster ("109·113·119·120 +3") at its space and hung the tail
+      // under the capsule instead of inside it.
+      'text-max-width': 100,
       'text-allow-overlap': true,
       'text-ignore-placement': true,
       'text-rotation-alignment': 'viewport',
@@ -712,7 +717,11 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       layout: { 'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, 'text-anchor': 'top', 'text-offset': [0, 0.9], 'text-max-width': 9, 'text-allow-overlap': true, 'text-ignore-placement': true },
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
-    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], 0, s, alpha),
+    // The selected vehicle's nose keeps the general nose's band (design D):
+    // the triangle says the direction only between 14.5 and 16.5, and a
+    // selection is no reason to draw one over a city-wide view where nothing
+    // else carries one -- or past 16.5, where the rails say it themselves.
+    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], noseZoom, s, alpha),
     pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], 0, s, p, pillInks(p, null), mark),
     {
       id: LAYERS.selectionRing,

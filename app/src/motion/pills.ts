@@ -13,8 +13,13 @@ export const PILL_BASE_WIDTHS_PX: readonly number[] = [18, 24, 31, 38];
  *  beyond the hand-tuned table widens the pill instead of clipping it. */
 export const PILL_EXTRA_CHAR_PX = 7;
 /** A cluster label's hard cap: past this many characters the pill stops
- *  growing and the label itself is what shortens (clusterLabel's "+n"). */
-export const PILL_MAX_CHARS_CLUSTER = 14;
+ *  growing and the label itself is what shortens (clusterLabel's "+n").
+ *  Nineteen is the longest label clusterLabel can write, and it is a *bus*
+ *  cluster that writes it: four three-digit ZET routes (12), their three
+ *  separators (15), the space and the "+" (17) and a two-digit tail (19) --
+ *  "109·113·119·120 +12". A cap below that clamped the capsule to a width
+ *  the number no longer fits in, and the label spilled past its own pill. */
+export const PILL_MAX_CHARS_CLUSTER = 19;
 
 export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
 /** The tram's plate on the public screen (plan D4, the badge rule: a tram is
