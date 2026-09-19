@@ -578,8 +578,16 @@ export interface VehicleInfo {
   onShape: number | null;
   /** The trip's headsign from the twin's join, when known (R-TE2). */
   headsign?: string;
+  /** The realtime trip id from the twin's join, when known: what shared/city/
+   *  arrivals.ts matches a scheduled departure against (WP5). */
+  tripId?: string;
   /** The next stop's id from the twin, when known. */
   nextStopId?: string;
+  /** ZET's reported delay at that stop, seconds; negative is early. */
+  delaySeconds?: number;
+  /** The twin's own planned arrival at that stop, epoch ms. It refines the
+   *  arrivals row for the platform the vehicle is actually approaching. */
+  nextStopEtaMs?: number;
 }
 
 export interface MapCamera {
@@ -1825,7 +1833,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         held: v.held === true,
         onShape: v.onShape,
         ...(v.headsign !== undefined ? { headsign: v.headsign } : {}),
+        ...(v.tripId !== undefined ? { tripId: v.tripId } : {}),
         ...(v.nextStopId !== undefined ? { nextStopId: v.nextStopId } : {}),
+        ...(v.delaySeconds !== undefined ? { delaySeconds: v.delaySeconds } : {}),
+        ...(v.nextStopEtaMs !== undefined ? { nextStopEtaMs: v.nextStopEtaMs } : {}),
       };
     });
   }

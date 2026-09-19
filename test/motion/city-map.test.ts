@@ -309,6 +309,22 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(toB).toBeGreaterThan(0.5);
     expect(toB).toBeLessThan(100);
   });
+
+  it('carries the trip, the reported delay and the twin’s next-stop ETA through to the lists (WP5 arrivals)', async () => {
+    const eta = T0 + 120_000;
+    const joined: MapPoint = { ...B, tripId: 'T-118', delaySeconds: 95, nextStopId: '231_2', nextStopEtaMs: eta };
+    const { handle, frame } = await harness({ points: [{ ...joined, lon: A.lon, at: A.at }] });
+    handle.update([joined], [CLOSURE]);
+    for (let i = 0; i < 10; i++) frame();
+    expect(handle.vehicles!()[0]).toMatchObject({ id: 'vehicle:1', tripId: 'T-118', delaySeconds: 95, nextStopId: '231_2', nextStopEtaMs: eta });
+    // A vehicle the twin joined to nothing carries none of the three keys at all.
+    handle.update([B], [CLOSURE]);
+    for (let i = 0; i < 10; i++) frame();
+    const bare = handle.vehicles!()[0];
+    expect(bare).not.toHaveProperty('tripId');
+    expect(bare).not.toHaveProperty('delaySeconds');
+    expect(bare).not.toHaveProperty('nextStopEtaMs');
+  });
 });
 
 describe('12 Hz source updates, not one per frame', () => {

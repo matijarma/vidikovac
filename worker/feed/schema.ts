@@ -162,7 +162,11 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // to trams before, or without, the network artefact). 'direction',
   // 'headsign', 'shapeId', 'nextStopId' and 'delaySeconds' are the twin's
   // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
-  // A); 'speed' (m/s), 'confidence' (0..1) and 'held' are the twin's OWN
+  // A). 'nextStopEtaSec' is the twin's OWN planned arrival at that stop in
+  // epoch seconds, and rides only where 'nextStopId' is the twin's own stop
+  // rather than ZET's (WP5): an arrival time belongs to the stop it was
+  // computed for, and it is what refines a tapped stop's 'za N min'.
+  // 'speed' (m/s), 'confidence' (0..1) and 'held' are the twin's OWN
   // estimates from history, geometry and timetable (R-TE1), never ZET's
   // position.speed, which the direct parser still drops. 'behind' is the
   // twin's ordering register (E3): the vehicle id of the tram this one is
@@ -170,7 +174,7 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // about rather than re-deriving one from two plans between polls. It is
   // read off the register at every publish, so it is withdrawn the tick the
   // relation ends, and absent for a tram the register places nowhere.
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds', 'speed', 'confidence', 'held', 'behind'],
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'nextStopEtaSec', 'delaySeconds', 'speed', 'confidence', 'held', 'behind'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],

@@ -142,6 +142,12 @@ export function buildPayload(
         headsign: join?.headsign,
         shapeId: join?.shapeId ?? undefined,
         nextStopId: next?.stopId ?? track.next?.stopId ?? undefined,
+        // The twin's planned arrival, epoch seconds, and only where the id
+        // beside it is the twin's OWN next stop (WP5): an arrival time
+        // belongs to the stop it was computed for, so where ZET names a
+        // different stop the plan's ETA is withheld rather than published
+        // against somebody else's platform.
+        nextStopEtaSec: next?.stopId ? undefined : track.next?.etaSec ?? undefined,
         delaySeconds: next?.delaySec ?? undefined,
         speed: round(track.speed, 10),
         confidence: round(track.confidence, 100),
