@@ -180,6 +180,10 @@ export interface VehicleFeatureCollection {
       bearing: number;
       /** True when the model knows which way the vehicle faces (decision 5). */
       hasHeading: boolean;
+      /** True on a merged mark whose members face opposite ways (more than
+       *  TWO_WAY_MIN_DEG of bearing apart): the two-way arrow layers filter on
+       *  it. Written on every feature, false on a single, as `cluster` is. */
+      twoWay: boolean;
       /** Confidence carried as opacity, floored at vehicle-mark.ts's MIN_ICON_ALPHA. */
       alpha: number;
       /** Draw order (overlays.ts SORT_KEY, higher over lower): a cluster over
@@ -261,6 +265,12 @@ export function bearingOf(dir: { x: number; y: number } | null | undefined): num
   return Math.round(((deg % 360) + 360) % 360);
 }
 
+/** The shortest way round the compass between two bearings, 0 to 180 degrees. */
+function bearingGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
 /** The number on the front of the vehicle: the network's own short name,
  *  else the static GTFS table's, else the route id itself; '' for a vehicle
  *  whose route nobody knows. */
@@ -276,6 +286,12 @@ export function vehicleLabel(v: { short?: string; routeId?: string }): string {
 const SORT_BUS = 1;
 const SORT_TRAM = 2;
 const SORT_CLUSTER = 3;
+
+/** How far apart two merged members' bearings must be, the shortest way
+ *  round the compass, before their mark says "both ways": two trams of one
+ *  line passing each other at a stop are 180° apart, two following each
+ *  other round the sharpest bend in the network are well under this. */
+const TWO_WAY_MIN_DEG = 120;
 
 /** The colour ZET prints a line in, from the table the schema build writes
  *  beside the artefact (scripts/zet-schema.mjs, F5). A route the table does
@@ -322,11 +338,18 @@ interface VehiclePillPoint extends PillPoint {
  *  ("6·11"), their ids, their centroid, and the properties a layer still has
  *  to be able to read -- the mode they all share (the group is built inside
  *  one mode, see below), the one route id they share or none at all, the
- *  members' best alpha, and no heading, because a merged mark has no one
- *  facing and draws no direction nose. */
+ *  members' best alpha, and no single heading, because a merged mark has no
+ *  one facing and draws no direction nose. What it does say is whether its
+ *  members face opposite ways: its bearing is the first member's that knows
+ *  its facing, and `twoWay` is set when two such members are more than
+ *  TWO_WAY_MIN_DEG apart -- two trams of one line passing each other read as
+ *  one number with an arrow each way (the owner's ruling), while a merge
+ *  going one way changes nothing. */
 function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: string): VehicleFeature {
   const members = cluster.members.map((m) => m.feature);
   const kind: VehicleKind = members[0]!.properties.kind;
+  const facing = members.filter((f) => f.properties.hasHeading).map((f) => f.properties.bearing);
+  const twoWay = facing.some((a, i) => facing.slice(i + 1).some((b) => bearingGap(a, b) > TWO_WAY_MIN_DEG));
   const routes = new Set(members.map((f) => f.properties.routeId));
   const routeId = routes.size === 1 ? [...routes][0]!
     : focusedRoute !== undefined && routes.has(focusedRoute) ? focusedRoute : '';
@@ -341,8 +364,9 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: str
       kind,
       short: cluster.label,
       routeId,
-      bearing: 0,
+      bearing: facing[0] ?? 0,
       hasHeading: false,
+      twoWay,
       alpha: Math.max(...members.map((f) => f.properties.alpha)),
       sort: SORT_CLUSTER,
       held: false,
@@ -384,6 +408,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
         routeId: v.routeId ?? '',
         bearing: bearingOf(v.heading ?? v.track),
         hasHeading: v.heading !== null,
+        twoWay: false,
         alpha: markAlpha(v.confidence),
         sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
         held: v.held === true,
@@ -1038,8 +1063,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //   data-bodies how many `vehicle-bodies` features MapLibre renders: the
   //               body's zoom floor (overlays.ts BODY_ZOOM) and the push that
   //               stops below it are both claims about what is on the screen.
+  //   data-twoway how many `vehicle-twoway-fore` features MapLibre renders:
+  //               one per opposed merge on the screen. The fore layer alone --
+  //               the aft one draws the same marks turned about, and counting
+  //               both would say two for one pair. data-noses keeps to
+  //               `vehicle-noses`, so the nose band's edges are still read
+  //               off one layer.
   //
-  // All three reads come from ONE queryRenderedFeatures over those four layers --
+  // All of these come from ONE queryRenderedFeatures over those layers --
   // the call placedNames() already makes, scoped to the vehicles source -- on
   // MapLibre's `idle`, the one moment it has finished painting what it was
   // given. It is taken only when the answer can have changed: the camera's
@@ -1072,21 +1103,24 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     renderProbeKey = key;
     // Asking MapLibre about a layer the style does not carry fires an error
     // event, which onMapError logs as a bug; placedNames() guards the same way.
-    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies]
+    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies, l.LAYERS.vehicleTwoWayFore]
       .filter((id) => !m.getLayer || m.getLayer(id));
     // By feature id, so a mark queried twice (a point on a tile seam) is one
     // pill, and in id order, so the attribute is stable frame to frame.
     const pills = new Map<string, string>();
     let noses = 0;
     let bodies = 0;
+    let twoWay = 0;
     for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
       if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
       else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies++;
+      else if (feature.layer.id === l.LAYERS.vehicleTwoWayFore) twoWay++;
       else pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
     }
     container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
     container.dataset.noses = String(noses);
     container.dataset.bodies = String(bodies);
+    container.dataset.twoway = String(twoWay);
   }
 
   /** `data-focus`: what line focus did, read back off the live style once the

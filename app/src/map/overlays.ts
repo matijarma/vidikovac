@@ -16,7 +16,9 @@
 // `cluster`, the joined label and its members' ids before the source is
 // pushed, so MapLibre only ever sees marks that fit. The direction nose draws
 // inside its own band alone (NOSE_MIN_ZOOM to NOSE_MAX_ZOOM, or the public
-// screen's own overlapZoom for its lower edge). The selected or followed
+// screen's own overlapZoom for its lower edge). A merged mark whose members
+// face opposite ways (`twoWay`, city-map.ts) carries the same triangle fore
+// and aft of its pill instead, at every pill zoom. The selected or followed
 // vehicle draws at every zoom. Stop names come in by rank, the busiest corners
 // first, one per named stop. From BODY_ZOOM a body of the mode's one length
 // (shared/motion/vehicle.ts, built by motion/bodies.ts) lies under each pill,
@@ -59,6 +61,8 @@ export const LAYERS = Object.freeze({
   vehicleBodies: 'vehicle-bodies',
   vehicleDots: 'vehicle-dots',
   vehicleNoses: 'vehicle-noses',
+  vehicleTwoWayFore: 'vehicle-twoway-fore',
+  vehicleTwoWayAft: 'vehicle-twoway-aft',
   vehicles: 'vehicles',
   stopLabels: 'stop-labels',
   placeWorks: 'place-works',
@@ -228,6 +232,13 @@ const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS_CLUSTER, ['max', 1, ['length', [
  *  modes differ in shape as well as ink. */
 const MARK_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
 const NOSE_OFFSET: Expr = ['match', PILL_CHARS, ...NOSE_OFFSETS_PX.slice(0, -1).flatMap((px, i) => [i + 1, ['literal', [px, 0]]]), ['literal', [NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1], 0]]];
+/** The nose's turn from the feature's compass bearing. The triangle points
+ *  along its own +x, so degrees clockwise from north less 90 stand a
+ *  north-bound vehicle's nose upright. Plus 90 is the same triangle turned
+ *  about -- and since the offset turns with it, it lands behind the pill,
+ *  pointing back: the aft arrow of an opposed merge. */
+const NOSE_ROTATE: Expr = ['-', ['get', 'bearing'], 90];
+const NOSE_ROTATE_AFT: Expr = ['+', ['get', 'bearing'], 90];
 /** A cluster over a tram over a bus over an unknown: the `sort` the vehicle
  *  source writes (city-map.ts), read straight. With overlap allowed MapLibre
  *  draws the *higher* sort key last, over the rest -- where under the old
@@ -423,21 +434,21 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
   };
 }
 
-function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, s: number, opacity: Expr): StyleLayerLike {
+/** The SDF triangle at a pill's edge -- the direction nose, or one arrow of an
+ *  opposed merge -- turned by `rotate` from the feature's bearing, inside the
+ *  zoom band `minzoom` to `maxzoom` (no maxzoom: open upward). */
+function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, maxzoom: number | undefined, rotate: Expr, s: number, opacity: Expr): StyleLayerLike {
   return {
     id,
     type: 'symbol',
     source: SOURCES.vehicles,
     ...(minzoom > 0 ? { minzoom } : {}),
-    // The band's upper edge is the same on every surface: past it the rails say the direction themselves.
-    maxzoom: NOSE_MAX_ZOOM,
+    ...(maxzoom !== undefined ? { maxzoom } : {}),
     filter,
     layout: {
       'icon-image': NOSE_IMAGE,
       'icon-size': s,
-      // The triangle points along its own +x; compass degrees clockwise from
-      // north less 90 stand a north-bound vehicle's nose upright.
-      'icon-rotate': ['-', ['get', 'bearing'], 90],
+      'icon-rotate': rotate,
       'icon-rotation-alignment': 'map',
       'icon-offset': NOSE_OFFSET,
       'icon-allow-overlap': true,
@@ -532,6 +543,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const dimmed = focus === null && sel?.kind === 'route';
   // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
+  /** The pills' own filter in front, so the mode toggle hides the arrows with their pill. */
+  const twoWayFilter: Expr = ['all', vehicleFilter(modes, selectedVehicle), ['get', 'cluster'], ['get', 'twoWay']];
   const mark: Expr = MARK_IMAGE;
   /** A network is drawn for its mode when nothing is in focus (line focus
    *  leaves only the focused route's own layer), when the modes admit it and,
@@ -694,7 +707,17 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: kindFilter(modes) },
     ),
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, s, alpha),
+    // The nose band's upper edge is the same on every surface: past it the rails say the direction themselves.
+    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha),
+    // An opposed merge (city-map.ts `twoWay`: two members facing more than its
+    // TWO_WAY_MIN_DEG apart, two trams of one line passing at a stop) keeps
+    // its one pill and gets the triangle fore and aft along the first member's
+    // bearing. From the first pill zoom and with no upper edge: the nose band
+    // closes at 16.5 because the rail under a tram says which way it faces,
+    // but no rail can say which way a pair going both ways is heading, so the
+    // arrows stay for as long as the two marks stay merged.
+    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE, s, alpha),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE_AFT, s, alpha),
     pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark),
     // Stop names: on the public screen the hubs alone (rank from the option
     // set), from the field's zoom and never below it -- as the layer's own
@@ -762,7 +785,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing
     // else carries one -- or past 16.5, where the rails say it themselves.
-    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], noseZoom, s, alpha),
+    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha),
     pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], 0, s, p, pillInks(p, null), mark),
     {
       id: LAYERS.selectionRing,

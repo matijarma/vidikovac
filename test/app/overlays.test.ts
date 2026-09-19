@@ -7,6 +7,7 @@ import {
   NETWORK_OPACITY,
   NETWORK_OPACITY_DIMMED,
   NEVER,
+  NOSE_IMAGE,
   NOSE_MAX_ZOOM,
   NOSE_MIN_ZOOM,
   VEHICLE_OPACITY_DIMMED,
@@ -85,6 +86,31 @@ describe('the overlay layer list', () => {
     expect(pills.layout!['icon-rotation-alignment']).toBe('viewport');
     expect(noses.layout!['icon-rotate']).toEqual(['-', ['get', 'bearing'], 90]);
     expect(noses.layout!['icon-rotation-alignment']).toBe('map');
+  });
+
+  it('an opposed merge carries a triangle each way: two nose layers on the twoWay cluster alone, fore and aft of the pill, from PILL_ZOOM with no upper edge', () => {
+    const ids = overlayLayers(OVERLAY_LIGHT).map((l) => l.id);
+    expect([LAYERS.vehicleTwoWayFore, LAYERS.vehicleTwoWayAft]).toEqual(['vehicle-twoway-fore', 'vehicle-twoway-aft']);
+    // Right after the noses and under the pills, so a triangle sits where a nose would.
+    const at = ids.indexOf(LAYERS.vehicleNoses);
+    expect(ids.slice(at, at + 4)).toEqual([LAYERS.vehicleNoses, LAYERS.vehicleTwoWayFore, LAYERS.vehicleTwoWayAft, LAYERS.vehicles]);
+    const noses = layerById(LAYERS.vehicleNoses);
+    const rotations = [[LAYERS.vehicleTwoWayFore, ['-', ['get', 'bearing'], 90]], [LAYERS.vehicleTwoWayAft, ['+', ['get', 'bearing'], 90]]] as const;
+    for (const [id, rotate] of rotations) {
+      const layer = layerById(id);
+      expect(layer, id).toMatchObject({ type: 'symbol', source: SOURCES.vehicles, minzoom: PILL_ZOOM });
+      // The rail cannot say which way a merged pair goes, so the nose band's upper edge does not apply.
+      expect(layer.maxzoom, id).toBeUndefined();
+      expect(layer.filter, id).toEqual(['all', vehicleFilter(null, null), ['get', 'cluster'], ['get', 'twoWay']]);
+      expect(layer.layout!['icon-rotate'], id).toEqual(rotate);
+      expect(layer.layout!['icon-image'], id).toBe(NOSE_IMAGE);
+      expect(layer.layout!['icon-offset'], id).toEqual(noses.layout!['icon-offset']);
+      expect(layer.layout!['icon-rotation-alignment'], id).toBe('map');
+      expect(layer.paint, id).toEqual(noses.paint);
+    }
+    // The mode toggle and the selected vehicle reach them exactly as they reach the pills.
+    const trams = overlayLayers(OVERLAY_LIGHT, { modes: new Set([ROUTE_TYPE_TRAM]), selection: { kind: 'vehicle', id: 'v1' } });
+    expect(trams.find((l) => l.id === LAYERS.vehicleTwoWayFore)!.filter).toEqual(['all', vehicleFilter(new Set([ROUTE_TYPE_TRAM]), 'v1'), ['get', 'cluster'], ['get', 'twoWay']]);
   });
 
   it('lays a vehicle body under the pills from zoom 16: a flat-ended line on its own source, right before the dots, the mode ink metres wide, dimmed with the dots and hidden with the mode', () => {

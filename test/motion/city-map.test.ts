@@ -240,6 +240,32 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('a merged mark faces where its first member with a heading faces, and says twoWay only when two members with headings are more than 120° apart', () => {
+    const tram = (id: string, lon: number, heading: { x: number; y: number } | null): Drawn =>
+      ({ id, type: 0, routeId: '6', short: '6', p: toPlane(lon, 45.81), heading, speed: 5, confidence: 1, onShape: null, track: { x: 0, y: 1 } });
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    const merged = (drawn: Drawn[]) => vehiclesToGeoJson(drawn, { project }).features.find((f) => f.properties.cluster)!.properties;
+    /** A unit heading at a compass bearing. */
+    const facing = (deg: number): { x: number; y: number } => ({ x: Math.sin((deg * Math.PI) / 180), y: Math.cos((deg * Math.PI) / 180) });
+    // Two trams of one line passing each other at a stop, north and south:
+    // one label "6", the first member's bearing, and an arrow each way.
+    expect(merged([tram('a', 15.97, facing(0)), tram('b', 15.971, facing(180))])).toMatchObject({ short: '6', bearing: 0, twoWay: true, hasHeading: false });
+    // Following each other round a bend, 30° apart: one direction, nothing new to say.
+    expect(merged([tram('a', 15.97, facing(0)), tram('b', 15.971, facing(30))])).toMatchObject({ bearing: 0, twoWay: false });
+    // The difference is the shortest one round the compass: 350° and 10° are
+    // 20° apart, 0° and 240° are 120° apart -- on the edge, not over it -- and
+    // 0° and 130° are over it.
+    expect(merged([tram('a', 15.97, facing(350)), tram('b', 15.971, facing(10))]).twoWay).toBe(false);
+    expect(merged([tram('a', 15.97, facing(0)), tram('b', 15.971, facing(240))]).twoWay).toBe(false);
+    expect(merged([tram('a', 15.97, facing(0)), tram('b', 15.971, facing(130))]).twoWay).toBe(true);
+    // Only one member knows its facing: the mark takes that bearing but cannot claim two directions.
+    expect(merged([tram('a', 15.97, null), tram('b', 15.971, facing(90))])).toMatchObject({ bearing: 90, twoWay: false, hasHeading: false });
+    // A cluster where no member knows its facing: nothing to say, as before.
+    expect(merged([tram('a', 15.97, null), tram('b', 15.971, null)])).toMatchObject({ bearing: 0, twoWay: false, hasHeading: false });
+    // Every single carries twoWay, false: the layers filter on it, and a missing property is a runtime error in a case.
+    expect(vehiclesToGeoJson([tram('a', 15.97, facing(0)), tram('c', 15.99, facing(180))]).features.map((f) => f.properties.twoWay)).toEqual([false, false]);
+  });
+
   it('never merges across modes: a bus swallowed by a tram’s cluster would vanish the moment trams are switched off', () => {
     const at = (id: string, type: number, short: string, lon: number): Drawn =>
       ({ id, type, routeId: short, short, p: toPlane(lon, 45.81), heading: null, speed: 0, confidence: 1, onShape: null });
@@ -555,6 +581,23 @@ describe('the vehicle bodies under the pills', () => {
     expect(container.dataset.bodies).toBe('2');
     expect(container.dataset.pills).toBe('6');
     expect(container.dataset.noses).toBe('0');
+  });
+});
+
+describe('the two-way arrows on an opposed merge', () => {
+  it('data-twoway counts the fore arrows MapLibre rendered; data-noses goes on counting vehicle-noses alone', async () => {
+    const { map, container, frame } = await harness();
+    frame();
+    map.rendered = [
+      { layer: { id: 'vehicle-twoway-fore' }, properties: { id: 'cluster:a,b' } },
+      { layer: { id: 'vehicle-twoway-aft' }, properties: { id: 'cluster:a,b' } },
+      { layer: { id: 'vehicle-noses' }, properties: { id: 'vehicle:3' } },
+      { layer: { id: 'vehicles' }, properties: { id: 'cluster:a,b', short: '6' } },
+    ];
+    map.fire('idle');
+    expect(container.dataset.twoway).toBe('1');
+    expect(container.dataset.noses).toBe('1');
+    expect(container.dataset.pills).toBe('6');
   });
 });
 
