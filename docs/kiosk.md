@@ -22,8 +22,12 @@ rute `/api/admin/*` i `/stats`.
    stajališta”), *Tema* i *Zaslon* (do kada vrijedi i „Zaboravi zaslon” s
    potvrdom). **Spremi** šalje jednu poruku `screen-set` preko postojeće veze
    zaslona; Durable Object provjerava stajalište i područje, pamti ih i
-   odgovara redovnim okvirom s kodovima, koji zaslon ponovno kadrira.
-   Postavke se ne otvaraju dok traje otključana sesija.
+   odgovara redovnim okvirom s kodovima, koji zaslon ponovno kadrira. Ploča
+   čeka taj odgovor: zatvara se kad stigne, a odbijenicu ili prebrzo ponovno
+   spremanje kaže rečenicom i ostaje otvorena. Ako odgovor ne stigne u osam
+   sekundi, gumb se vraća uz istu obavijest; odgovor koji ipak stigne poslije
+   svejedno ponovno kadrira zaslon. Postavke se ne otvaraju dok traje
+   otključana sesija.
 4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Uspješna
    provjera izravno otvara desetominutni pogled, bez drugog gumba „Otključaj”.
 5. Zaslon nastavlja prikazivati pregled grada. Telefon pregledava privatno.

@@ -21,6 +21,11 @@ import { fill, plural, type KioskStrings } from './strings';
 
 /** Untouched for this long, the panel closes itself and the screen returns to the invitation. */
 export const SETTINGS_IDLE_MS = 90_000;
+/** How long a save waits for the DO's answer before giving the button back:
+ *  the same eight seconds the phone gives a presentation receipt
+ *  (docs/kiosk.md). Nothing is re-sent and nothing is forgotten -- an answer
+ *  that arrives after it is still the DO's truth. */
+export const SAVE_TIMEOUT_MS = 8_000;
 /** Stops offered before a search narrows them, and after one. */
 const SETTINGS_STOP_LIMIT = 8;
 const SETTINGS_SEARCH_LIMIT = 12;
@@ -67,7 +72,9 @@ export interface SettingsHandle {
    *  only when the panel opens. */
   paint(): void;
   /** A screen arrived from the DO: if it is the pair this panel asked for, the
-   *  save landed and the panel is done. Any other screen is someone else's. */
+   *  save landed and the panel is done -- late as well as in time, since the
+   *  DO's answer is the truth whatever the panel already said. Any other
+   *  screen is someone else's. */
   applied(): void;
   /** The DO answered the frame this panel sent with a refusal or a drop. */
   refused(error: string): void;
@@ -161,8 +168,11 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   let selectedStopId: string | null = null;
   let destroyed = false;
   let idle: unknown = null;
-  /** The pair sent to the DO and not yet answered; one save is in flight at a time. */
+  /** The pair last sent to the DO; kept past a timeout so a late answer is still recognised as this panel's. */
   let requested: { stopId: string | null; area: string } | null = null;
+  /** Whether that pair is still being waited for; one save is in flight at a time. */
+  let pending = false;
+  let saveTimer: unknown = null;
 
   function showError(text: string): void { errorEl.textContent = text; errorEl.hidden = false; }
   function clearError(): void { errorEl.hidden = true; errorEl.textContent = ''; }
@@ -265,19 +275,36 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     deps.onClose?.(restoreFocus);
   }
 
-  function endSave(): void {
-    requested = null;
+  /** Stop waiting: the button comes back, the pair does not go away. */
+  function stopWaiting(): void {
+    pending = false;
+    if (saveTimer !== null) { deps.clearTimeout(saveTimer); saveTimer = null; }
     saveBtn.disabled = false;
     saveBtn.textContent = s.settings.save;
   }
+  function endSave(): void {
+    requested = null;
+    stopWaiting();
+  }
   function save(): void {
-    if (requested) return;
+    if (pending) return;
     clearError();
     const next = { stopId: selectedStopId, area: area() };
     if (!deps.save(next.stopId, next.area)) { showError(s.settings.saveOffline); return; }
     requested = next;
+    pending = true;
     saveBtn.disabled = true;
     saveBtn.textContent = s.settings.saving;
+    // A screen whose socket died between the frame and the answer must not sit
+    // on a disabled button until the idle close: past SAVE_TIMEOUT_MS the panel
+    // says the change did not reach the server and lets it be pressed again.
+    // The frame is never re-sent from here -- one press is one `screen-set`.
+    saveTimer = deps.setTimeout(() => {
+      saveTimer = null;
+      if (!pending) return;
+      stopWaiting();
+      showError(s.settings.saveOffline);
+    }, SAVE_TIMEOUT_MS);
   }
   function applied(): void {
     if (!requested) return;
@@ -287,7 +314,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     close();
   }
   function refused(error: string): void {
-    if (!requested || !(SCREEN_SET_ERRORS as readonly string[]).includes(error)) return;
+    if (!pending || !(SCREEN_SET_ERRORS as readonly string[]).includes(error)) return;
     endSave();
     showError(error === 'screen-set-rate' ? s.settings.saveBusy : s.settings.saveRefused);
     armIdle();
@@ -327,6 +354,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     destroy() {
       destroyed = true;
       disarmIdle();
+      if (saveTimer !== null) { deps.clearTimeout(saveTimer); saveTimer = null; }
       element.remove();
     },
   };

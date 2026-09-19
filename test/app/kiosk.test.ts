@@ -16,7 +16,7 @@ import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
-import { SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
+import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
@@ -559,6 +559,28 @@ describe('settings: the panel on the screen itself', () => {
     expect(box.hidden).toBe(false);
     expect(text(q(box, '[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa spremi ponovno.');
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it('a save with no answer in eight seconds gives the button back, and the late answer still closes the panel', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    const box = panel(k)!;
+    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
+    saveBtn.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    expect(saveBtn.disabled).toBe(true);
+    k.tick(SAVE_TIMEOUT_MS);
+    expect(box.hidden).toBe(false);
+    expect(saveBtn.disabled).toBe(false);
+    expect(text(saveBtn)).toBe('Spremi');
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
+    // Nothing is re-sent by the clock: one press is one screen-set.
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    // The DO's answer is the truth whenever it lands: late, it re-frames the
+    // screen and closes the panel that is still open on it.
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'gornji-grad-medvescak' });
+    expect(box.hidden).toBe(true);
   });
 
   it('an expiring screen takes the stage back from an open panel, so the notice is what shows', async () => {
