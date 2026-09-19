@@ -17,7 +17,8 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { emptyCity, type CityState } from '../../shared/city/types';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/setup';
@@ -600,7 +601,8 @@ describe('the one map, through the additive adapter', () => {
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
     // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2), the street names' padding R-KP17's own on the wall's field.
-    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24 });
+    // The camera is at street level (a configured stop), so the buses are on the picture with the trams.
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24 });
     // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
     expect(setProzor).toHaveBeenCalledTimes(1);
     expect(setProzor).toHaveBeenLastCalledWith(options.prozor);
@@ -678,6 +680,114 @@ describe('the one map, through the additive adapter', () => {
     // The rule lives once (R-KP9, R-KP23): what the map lights is exactly what local.ts's kioskQuakes selects, in its order.
     expect(kioskQuakePoints(emsc, NOW, 'hr').map((p) => p.id)).toEqual(kioskQuakes(emsc, NOW).map((quake) => `quake:${quake.id}`));
     expect(metresPerPixel(15, 45.81)).toBeCloseTo(1.665, 2);
+  });
+});
+
+// A screen the one-button setup made has no stop and no district: it opens
+// on the whole city, with the trams, the BAJS stations and the closures on
+// it and no names over them.
+describe('the kiosk\u2019s whole-city window', () => {
+  const ISO = new Date(NOW - 60_000).toISOString();
+  const CITY: CityState = {
+    ...emptyCity(),
+    places: [
+      { id: 'culture-1', category: 'culture', name: 'Kino Europa', lon: 15.9738, lat: 45.8105, sourceId: 'culture', sourceRecord: '1' },
+      { id: 'culture-2', category: 'culture', name: 'Mocvara', lon: 15.9611, lat: 45.8009, sourceId: 'culture', sourceRecord: '2' },
+    ],
+    live: {
+      schema: 1 as never,
+      generatedAt: ISO,
+      sources: [{ id: 'bajs', name: 'BAJS', url: 'https://example.test/', licence: 'x', status: 'live', count: 2 }],
+      bikes: [
+        { id: 'b1', name: 'Trg bana Jelacica', lon: 15.9772, lat: 45.8128, bikes: 7, docks: 5, capacity: 12, installed: true, renting: true, returning: true, observedAt: ISO },
+        { id: 'b2', name: 'Jarun', lon: 15.9312, lat: 45.7833, bikes: 0, docks: 12, capacity: 12, installed: true, renting: true, returning: true, observedAt: ISO },
+      ],
+      air: [],
+      consultations: [],
+    },
+  };
+  const EVENTS = [item('dogadanja', 'kvartovske:e1', 'event', 'Koncert', { at: new Date(NOW + 3_600_000).toISOString(), dateBasis: 'event', data: { source: 'kvartovske', venue: 'Kino Europa', precision: 'time' } })];
+  const stub = () => {
+    const calls = { setModes: vi.fn(), setCityLabels: vi.fn(), setProzor: vi.fn(), setOutline: vi.fn(), update: vi.fn() };
+    const factory = vi.fn(() => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
+    const adapter = createKioskMapAdapter(factory);
+    return { calls, factory, adapter, maps: createMapSlots(adapter.factory) };
+  };
+  const base = { stop: null, city: CITY, snapshots: { dogadanja: snap('dogadanja', EVENTS), prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+
+  it('opens on the city window with the transit picture on it, a tap box for a wall, and no quarter nobody asked for', () => {
+    const { calls, factory, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options.center).toEqual(cityWindowView(1300, 880).center);
+    expect(options.zoom).toBe(FIELD_MIN_ZOOM);
+    expect(options.hitTolerancePx).toBe(KIOSK_HIT_TOLERANCE_PX);
+    expect(options.outline).toBeNull();
+    // The gate that used to empty the map whenever the default 'living' group was
+    // active is gone: the network, the stops and the vehicles are the invitation.
+    expect(options.prozor).toMatchObject({ networkKinds: ['tram'], stopRoutes: null, stopRadius: true });
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    expect((options.lines as unknown[]).length).toBe(1);
+  });
+
+  it('keeps every tram in the city on the window, not only the lines of the screen\u2019s own stop, and still narrows to a relayed route', () => {
+    const zet = MODULES.find((m) => m.module === 'zet-rt')!;
+    const withStop = { ...base, stop: { ...STOP, routes: ['11'] }, snapshots: { ...base.snapshots, 'zet-rt': zet } };
+    const one = stub();
+    requestKioskMap(one.maps, withStop, one.adapter);
+    // The teaser's two vehicles are on route 6 and the screen's stop is not: the
+    // invitation used to drop them, which left the window showing a line or two.
+    expect(((one.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).filter((p) => p.id.startsWith('vehicle:')).map((p) => p.id)).toEqual(['vehicle:1', 'vehicle:2']);
+    // A relayed route is still the one line the picture is about.
+    const two = stub();
+    requestKioskMap(two.maps, { ...withStop, phase: 'paired' as const, selection: { kind: 'route' as const, id: '11' } }, two.adapter);
+    expect(((two.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).some((p) => p.id.startsWith('vehicle:'))).toBe(false);
+  });
+
+  it('carries every BAJS station and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
+    const { calls, factory, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    const city = (options.points as { id: string; title: string; place?: string; props?: Record<string, unknown> }[]).filter((p) => p.place === 'city');
+    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
+    expect(city.every((p) => p.title === '')).toBe(true);
+    expect(city.find((p) => p.id === 'bajs-b1')!.props).toEqual({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
+    expect(city.find((p) => p.id === 'bajs-b2')!.props!.badge).toBe('0');
+    expect(city.find((p) => p.id === 'culture-1')!.props).toEqual({ category: 'culture', badge: '1', eventCount: 1, priority: 0 });
+    expect(options.cityLabels).toBe(false);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(false);
+    // The one on-duty pharmacy keeps its ring and loses its address: a street number is not a fact anyone reads a city window for.
+    expect((options.points as { place?: string; title: string; props?: Record<string, unknown> }[]).find((p) => p.place === 'pharmacy')).toMatchObject({ title: '' });
+    // The same call, exploring: discover() answers the question with the few places it is about, named.
+    requestKioskMap(maps, { ...base, exploring: true }, adapter);
+    const drawn = calls.update.mock.calls.at(-1)![0] as { id: string; title: string; place?: string }[];
+    expect(drawn.filter((p) => p.place === 'city').some((p) => p.title !== '')).toBe(true);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+  });
+
+  it('puts the buses on the picture only once the camera is in a neighbourhood, and follows the camera without a new map', () => {
+    expect(CITY_DETAIL_ZOOM).toBe(14);
+    expect([busesVisible(13.99), busesVisible(14), busesVisible(15.5)]).toEqual([false, true, true]);
+    const { calls, adapter, maps, factory } = stub();
+    requestKioskMap(maps, base, adapter);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram'] }));
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    // A tap took the camera in: the same map hears both, no second one is made.
+    requestKioskMap(maps, { ...base, cameraZoom: 14.2 }, adapter);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'] }));
+    expect(calls.setModes).toHaveBeenLastCalledWith(null);
+    requestKioskMap(maps, { ...base, cameraZoom: 13.4 }, adapter);
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it('cityWindowPoints reads the live BAJS rows and the week\u2019s venues, and nothing a source did not place', () => {
+    expect(cityWindowPoints(CITY, EVENTS, NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
+    // A station whose own source is not live cannot claim a count: bikeAvailability says so.
+    const stale: CityState = { ...CITY, live: { ...CITY.live!, sources: [{ ...CITY.live!.sources[0]!, status: 'stale' }] } };
+    expect(cityWindowPoints(stale, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props!.badge).toBe('?');
+    // No events, no venue marks: a venue is on the window because something is on there.
+    expect(cityWindowPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
   });
 });
 

@@ -42,7 +42,7 @@ import { frameStrip, headerWeather, stripMarkup, weatherGroupMarkup } from './ki
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountSetup, type SetupHandle } from './kiosk/setup';
 import { DEFAULT_STOP_ID } from './kiosk/stops';
@@ -494,6 +494,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     handle.resume();
     mapAdapter.setFeedState(mapAdapter.feedState());
   }
+  /** The live map's own zoom, as its camera last reported it. The buses join
+   *  the trams on the picture from CITY_DETAIL_ZOOM (mapview.ts busesVisible),
+   *  and a tap that takes the camera over that line must show them then, not
+   *  at the next poll -- so crossing it repaints, and nothing else does. */
+  let mapZoom: number | null = null;
+  function onMapCamera(camera: { zoom: number }): void {
+    const before = mapZoom;
+    mapZoom = camera.zoom;
+    if (before === null || busesVisible(before) !== busesVisible(camera.zoom)) paintMap();
+  }
   /** The map into the composition's host, or parked while none shows it. The
    *  invitation's camera is derived from the field's measured width -- the
    *  composition's design width before anything is laid out -- so the picture
@@ -511,6 +521,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
       city:cityStore.snapshot(),localSelection,localGroup,localCategory,localQuery,exploring,
       onSelect:exploreSelection,
+      onCamera:onMapCamera,
+      cameraZoom:mapZoom ?? undefined,
       resolveStreet:(name,point)=>matchStreet(name,point,cityStore.snapshot().streets,cityStore.snapshot().settlements)?.id??null,
       phase: phase === 'paired' ? 'paired' : 'invitation',
       selection: phase === 'paired' ? selection : null,

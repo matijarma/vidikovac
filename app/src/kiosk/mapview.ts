@@ -35,7 +35,9 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
-import { matchStreet } from '../../../shared/city/geo';
+import { bikeAvailability } from '../../../shared/city/bikes';
+import { activeVenues, locatedEvents } from '../../../shared/city/events';
+import { located, matchStreet } from '../../../shared/city/geo';
 import type { MapSelection } from '../map/city-map';
 import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { PresentationTarget } from '../../../worker/presentation';
@@ -47,12 +49,13 @@ import type { MapSlotOptions, MapSlots } from '../map/map-slots';
 import type { ProzorOptions } from '../map/overlays';
 import { EARTH_CIRCUMFERENCE_M, metresPerPixel } from '../map/scale';
 import { vehicleFixes } from '../motion/fixes';
+import { ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { dataNumber, dataText } from '../panels/panel';
 import { districtBySlug } from './districts';
 import { fmtNumber, sameZagrebDay } from './format';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from './layout';
 import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
-import { routeType, stopDistanceM } from './stops';
+import { stopDistanceM } from './stops';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** The paired compositions' street level around one stop: named streets, the stop, the vehicles near it (R-KP8). */
@@ -107,6 +110,25 @@ export function fieldZoom(widthPx: number, lat: number, spanM: number): number {
  *  rasters draw pixel for pixel on a 1x television instead of being
  *  resampled. */
 export const KIOSK_SYMBOL_SCALE = 2;
+
+/** How far from a mark a tap may land on a public screen and still pick it,
+ *  CSS px (CityMapOptions.hitTolerancePx, whose default 8 is a mouse on a
+ *  desk). A finger on a wall is not a mouse, and on the whole-city window the
+ *  stop rings it aims at are three pixels across. */
+export const KIOSK_HIT_TOLERANCE_PX = 28;
+
+/** The zoom at which the kiosk's picture stops being the whole city and
+ *  becomes a neighbourhood. From here the bus network and its capsules join
+ *  the trams -- three hundred capsules over the city window would bury the
+ *  trams the picture is about -- and the on-duty pharmacy's address is worth
+ *  the room it takes beside the ring. */
+export const CITY_DETAIL_ZOOM = 14;
+
+/** Whether the buses are on the picture at this camera (an assumption of the
+ *  round, easy to move: one zoom, stated once). */
+export function busesVisible(zoom: number): boolean {
+  return zoom >= CITY_DETAIL_ZOOM;
+}
 
 /** The screen is the one surface read from three metres, so it is the one
  *  surface on the prozor basemap: two landuse tones, hairline streets, the
@@ -164,7 +186,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'selection' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor' | 'cityLabels' | 'hitTolerancePx'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -196,7 +218,7 @@ export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMap
   let view: KioskMapView = { zoom: PAIRED_ZOOM };
   let pushed = '';
   let feed: FeedState = 'down';
-  let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE };
+  let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, hitTolerancePx: KIOSK_HIT_TOLERANCE_PX };
   let current: KioskMapHandle | null = null;
   const wrapped: MapFactory | undefined = factory && ((options) => {
     const merged: CityMapOptions = { ...options, ...extras, ...view };
@@ -380,14 +402,17 @@ export const PHARMACY_LABEL_MIN_M = 150;
  *  approximate (local.ts's PHARMACY_POINTS) and its ADDRESS is exact, so the
  *  address is the label and the mark is a hollow ring, never a filled pin.
  *  On the screen's own stop the label is blank and the ring alone remains
- *  (PHARMACY_LABEL_MIN_M); `props.address` stays, because the ring's layer
- *  filter draws a pharmacy only with its published address (map/overlays.ts). */
-export function pharmacyPoint(stop: ScreenStop | null): MapPoint[] {
+ *  (PHARMACY_LABEL_MIN_M), and so it is on a picture of the whole city, where
+ *  a street address is a detail nobody can act on from three metres
+ *  (`labelled` false, CITY_DETAIL_ZOOM); `props.address` stays, because the
+ *  ring's layer filter draws a pharmacy only with its published address
+ *  (map/overlays.ts). */
+export function pharmacyPoint(stop: ScreenStop | null, labelled = true): MapPoint[] {
   const pharmacy = nearestPharmacy(stop);
   const at = PHARMACY_POINTS[pharmacy.label];
   if (!at) return [];
   const onTheStop = stop !== null && stopDistanceM(at, stop) < PHARMACY_LABEL_MIN_M;
-  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: onTheStop ? '' : pharmacy.address, place: 'pharmacy', props: { address: pharmacy.address } }];
+  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: labelled && !onTheStop ? pharmacy.address : '', place: 'pharmacy', props: { address: pharmacy.address } }];
 }
 
 /** The seat of the stop's own gradska cetvrt, from the real seat coordinates
@@ -405,14 +430,38 @@ export function seatPoint(stop: ScreenStop | null): MapPoint[] {
 /** Every city point, in one call: what the screen's own corner of Zagreb
  *  publishes about itself. The camera decides which of them are lit
  *  (KIOSK_EMPHASIS), never which of them exist. */
-export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, now: number, locale: string): MapPoint[] {
+export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, now: number, locale: string, pharmacyLabelled = true): MapPoint[] {
   return [
     ...placedEvents(snapshots.dogadanja, now),
     ...kioskQuakePoints(snapshots.emsc, now, locale),
     ...assemblyPoints(snapshots['ckan-geo'], stop, safetyState(snapshots, now).level === 'urgent'),
-    ...pharmacyPoint(stop),
+    ...pharmacyPoint(stop, pharmacyLabelled),
     ...seatPoint(stop),
   ];
+}
+
+/** What the city itself publishes, on the window a screen nobody configured
+ *  opens with: every BAJS station with the count of bikes standing in it, and
+ *  every venue with something on this week with the count of its programme.
+ *  Both as a mark and a badge alone -- the names are off (CityMapOptions
+ *  cityLabels), because a hundred station names over the tram network is a
+ *  list and not a map, and a count is the one thing a passer-by can act on
+ *  from across a room. The names come back the moment somebody explores,
+ *  where discover() picks the few places a query or a group is about.
+ *
+ *  The shapes are discover()'s own (app/src/city/discovery.ts), so one tap
+ *  reaches the same place through the same properties whichever built it. */
+export function cityWindowPoints(city: CityState, dogadanja: readonly FeedItem[], now: number): MapPoint[] {
+  const out: MapPoint[] = [];
+  for (const place of dynamicPlaces(city, now)) {
+    if (place.sourceId !== 'bajs' || !located(place)) continue;
+    out.push({ id: place.id, title: '', lon: place.lon, lat: place.lat, place: 'city', props: { category: 'bikes', badge: bikeAvailability(place, 'rent'), eventCount: 0, priority: 2 } });
+  }
+  for (const venue of activeVenues(locatedEvents(dogadanja, city.places, now, 'week'), city.places)) {
+    if (!located(venue.place)) continue;
+    out.push({ id: venue.place.id, title: '', lon: venue.place.lon, lat: venue.place.lat, place: 'city', props: { category: venue.place.category, badge: String(venue.count), eventCount: venue.count, priority: 0 } });
+  }
+  return out;
 }
 
 // --- The kvart outline ------------------------------------------------------
@@ -647,12 +696,13 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  the FIELD's derived zoom less a tenth in both phases: the paired camera
  *  (z15) is always above it, so the noses and the unconditional pills the
  *  invitation gets, the paired views keep; the street names' padding is the
- *  field's too (labelPadding). The map is created once with the first
- *  request's set and hears every later one through setProzor (R-KP19), so
- *  the stop's routes, the measured field's threshold and its padding reach
- *  the picture without a second map. */
-export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number): ProzorOptions {
-  const buses = stop?.routes.some(id => routeType(id) === 3);
+ *  field's too (labelPadding). Which networks are drawn is the CAMERA's
+ *  question, not the stop's: on the whole-city window the trams alone, from
+ *  CITY_DETAIL_ZOOM the buses with them. The map is created once with the
+ *  first request's set and hears every later one through setProzor (R-KP19),
+ *  so the stop's routes, the measured field's threshold, its padding and the
+ *  camera's own band reach the picture without a second map. */
+export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
   return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx };
 }
 
@@ -682,6 +732,13 @@ export interface KioskMapInput {
   spanM: number;
   ariaLabel: string;
   reducedMotion?: boolean;
+  /** The live map's own zoom, as its camera last reported it (kiosk.ts
+   *  subscribes through CityMapOptions.onCamera); absent before it has
+   *  reported one, when the camera this render asks for is the answer. */
+  cameraZoom?: number;
+  /** Told every settled zoom, so the screen can re-ask for its map when the
+   *  camera crosses CITY_DETAIL_ZOOM. Read once, at creation. */
+  onCamera?: CityMapOptions['onCamera'];
   /** Injected in tests; the page's own fetch otherwise. */
   fetchImpl?: typeof fetch;
   locale?: string;
@@ -704,19 +761,28 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   ))input={...input,renderer:'map'};
   let points = vehiclePoints(input.snapshots['zet-rt'], input.now);
   const route = input.selection?.kind === 'route' ? input.selection.id : null;
-  const relevant = route ? [route] : input.phase === 'invitation' ? input.stop?.routes : null;
-  if (relevant?.length) points = points.filter(point => point.routeId && relevant.includes(point.routeId));
+  // A relayed route is the one line the phone asked about, and the picture
+  // narrows to it. Nothing else narrows: the invitation is the city live, and
+  // a window that carried only the screen's own lines was a window onto four
+  // trams in a city of two hundred.
+  if (route) points = points.filter(point => point.routeId === route);
   if (input.stop) points.push({...stopPlace(input.stop),...(input.city?{title:''}:{})});
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr'));
+  const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', field.zoom >= CITY_DETAIL_ZOOM));
   if(input.city){
-    const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
-      center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
-    points.push(...result.points);
+    // Exploring, a person has asked a question, and discover() answers it with
+    // the few places a group or a query is about, named. Otherwise the window
+    // carries what the city publishes about itself all the time: every BAJS
+    // station and every venue with something on, as badges alone.
+    if(input.exploring){
+      const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
+        center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
+      points.push(...result.points);
+    } else points.push(...cityWindowPoints(input.city,input.snapshots.dogadanja?.items??[],input.now));
     const pick=input.selection?.kind==='place'?input.selection:input.localSelection?.kind==='place'?input.localSelection:null;
     const p=pick?[...input.city.places,...dynamicPlaces(input.city,input.now)].find(p=>p.id===pick.id):null;
     if(p&&p.lon!==undefined&&p.lat!==undefined&&!points.some(x=>x.id===p.id))points.push({id:p.id,title:p.name,lon:p.lon,lat:p.lat,place:'city',props:{category:p.category,badge:'',eventCount:0,priority:0}});
   }
-  const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
   const view = input.phase === 'paired' ? pairedView({ stop: input.stop, selection: input.selection }) : field;
   if(input.selection?.kind==='place'||input.localSelection?.kind==='place'){
     const pick=input.selection?.kind==='place'?input.selection:input.localSelection!;
@@ -741,23 +807,22 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
       view.selection = item.kind === 'vehicle' ? { kind: 'vehicle', id: item.id } : item.kind === 'closure' ? { kind: 'closure', id: item.id } : null;
     }
   }
-  const district = input.target?.district ?? input.stop?.district;
+  // The quarter is what the screen was CONFIGURED for, never where its stop
+  // happens to fall: a screen on a stop draws no outline, and no camera is
+  // ever framed by a district nobody chose.
+  const district = districtBySlug(input.district)?.slug ?? null;
   const selection=input.selection?.kind==='place'?input.selection:input.localSelection;
   const selectedPlace=selection?.kind==='place'?input.city?.places.find(p=>p.id===selection.id):null;
   mapDistrict.set(maps,selectedPlace?.polygons?selectedPlace.id:district??'');
   const outline = selectedPlace?.polygons?{id:selectedPlace.id,polygons:selectedPlace.polygons}:kvartOutline(district);
-  if (input.target?.layer === 'kvart' && district) {
-    const d = districtBySlug(district);
-    if (d) { view.center = [d.seat.lon, d.seat.lat]; view.zoom = fieldZoom(input.widthPx, d.seat.lat, 3500); delete view.selectedStop; }
-    if (outline) {
-      const coordinates = outline.polygons.flat(2);
-      const lons = coordinates.map(p => p[0]), lats = coordinates.map(p => p[1]);
-      const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
-      view.center = [(Math.min(...lons) + Math.max(...lons)) / 2, lat];
-      const span = Math.max((Math.max(...lons) - Math.min(...lons)) * 78000, (Math.max(...lats) - Math.min(...lats)) * 111000 * input.widthPx / Math.max(1, input.heightPx));
-      view.zoom = Math.max(10, Math.min(15.5, Math.log2(EARTH_CIRCUMFERENCE_M * Math.cos(lat * Math.PI / 180) * input.widthPx / (512 * span * 1.15))));
-    }
+  // A configured quarter frames its own rings once they land; until then
+  // fieldView's seat camera holds the frame.
+  if (input.phase !== 'paired' && !input.stop && district && outline?.id === district) {
+    const fit = outlineView(outline, input.widthPx, input.heightPx);
+    view.center = fit.center;
+    view.zoom = fit.zoom;
   }
+  const buses = busesVisible(input.cameraZoom ?? view.zoom);
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
     stop: input.stop,
@@ -766,9 +831,16 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
     outline: input.renderer !== 'schema' ? outline : null,
-    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM)),
+    // The names of the city's own places are a reader's, not a passer-by's:
+    // off on the window, on the moment somebody explores.
+    cityLabels: Boolean(input.exploring),
+    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM), buses),
   };
-  const transit=input.renderer==='schema'||!input.city||(input.phase==='invitation'?input.localGroup==='transport':input.target?.layer==='u-pokretu'&&input.selection?.kind!=='place'&&input.selection?.kind!=='street');
+  // The invitation IS the transit picture: the network, the stops and the
+  // vehicles are always on it. Only a paired presentation of something that
+  // is not transport -- a place or a street a phone put on the screen --
+  // still clears them, so the one subject it is about stands alone.
+  const transit=input.phase==='invitation'||input.renderer==='schema'||!input.city||(input.target?.layer==='u-pokretu'&&input.selection?.kind!=='place'&&input.selection?.kind!=='street');
   if(!transit)extras.prozor={...extras.prozor!,networkKinds:[],stopRoutes:[]};
   const request: KioskMapRequest = {
     id: KIOSK_MAP_SLOT_ID,
@@ -779,6 +851,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     lines: closureLines(input.snapshots.prometnice),
     reducedMotion: input.reducedMotion,
     onSelect:input.onSelect,
+    onCamera:input.onCamera,
     resolveStreet:input.resolveStreet,
     ...extras,
     zoom: view.zoom,
@@ -802,7 +875,10 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   // routes and a re-measured field moves the overlap threshold, where the
   // creation-time options alone would leave stale dots for the screen's life.
   adapter?.handle()?.setProzor?.(extras.prozor ?? null);
-  adapter?.handle()?.setModes?.(transit?null:new Set());
+  // Trams alone on the whole city, both modes once the camera is in a
+  // neighbourhood; nothing at all where the picture is not about transit.
+  adapter?.handle()?.setModes?.(transit?(buses?null:new Set([ROUTE_TYPE_TRAM])):new Set());
+  adapter?.handle()?.setCityLabels?.(extras.cityLabels ?? true);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   if (container && input.renderer !== 'schema' && district && !request.outline) {
