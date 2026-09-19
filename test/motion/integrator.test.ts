@@ -381,7 +381,29 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(bare.b).toBeCloseTo(800, 6);
   }, 30_000);
 
-
+  it('keeps pace with an eight-metre-a-second plan on a once-a-second loop', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    const SPEED = 8;
+    const knots: [number, number][] = [[T0, 100], [T0 + 90_000, 100 + 90 * SPEED]];
+    integrator.update([pathFix('v', '1_0', knots, SPEED)], T0);
+    const gapAt = (t: number): number => {
+      const d = integrator.step(t)[0];
+      return 100 + ((t - T0) / 1000) * SPEED - d.s!;
+    };
+    let gap30 = 0;
+    let gap60 = 0;
+    for (let t = T0; t <= T0 + 60_000; t += 1000) {
+      const gap = gapAt(t);
+      if (t === T0 + 30_000) gap30 = gap;
+      if (t === T0 + 60_000) gap60 = gap;
+    }
+    // The mark keeps pace: the lag settles at the convergence's own steady
+    // state (about sixteen metres at this speed) instead of growing by the
+    // three quarters of every second the loop used to throw away.
+    expect(gap60).toBeLessThan(20);
+    expect(Math.abs(gap60 - gap30)).toBeLessThan(1);
+  });
 
   it('re-seeds onto a loop at the arc nearest the one it was drawn at, not at the nearest point on the ground', () => {
     // A stem from (0,0) to (1000,0) and a loop that runs six metres north of

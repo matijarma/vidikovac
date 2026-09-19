@@ -35,6 +35,7 @@ import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { edgeIndexAt, mapArc, onSharedRails } from '../../../shared/motion/order';
 import { CONFIDENCE_FREE_CAP, EVICT_S, silenceDecay } from '../../../shared/motion/plan';
 import { at, projectionsWithin, tangent } from '../../../shared/motion/polyline';
+import { REDUCED_MOTION_INTERVAL_MS } from './loop';
 
 /** A plan as the wire decoder hands it over: knot times are absolute epoch
  *  milliseconds (fixes.ts resolves the wire's header-relative seconds), the
@@ -141,8 +142,12 @@ const CATCHUP_BEHIND_MIN_MS = 8;
 const DEAD_ZONE_M = 1;
 /** A frame longer than this is a paused loop (a parked stage, a hidden
  *  tab), not time to catch up in one go: the mark converges from where it
- *  was over the following frames, so a resume never reads as a jump. */
-const MAX_FRAME_S = 0.25;
+ *  was over the following frames, so a resume never reads as a jump. The cap
+ *  is the reduced-motion loop's own tick (loop.ts), and must stay so: that
+ *  path draws once a second, and a tick that integrates only a quarter of
+ *  the second it covers leaves every mark further behind its plan after
+ *  every tick, for ever. */
+const MAX_FRAME_S = REDUCED_MOTION_INTERVAL_MS / 1000;
 /** Decision 5: under this the facing is undecidable and drawn as unknown. */
 const HEADING_CONFIDENCE_THRESHOLD = 0.3;
 /** GTFS route_type 0 is a tram; the ordering law applies to trams only
