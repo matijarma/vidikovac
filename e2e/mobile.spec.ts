@@ -424,12 +424,11 @@ const SEGMENT_COUNT = 5;
  * The zoom-compact facts at 200% text. The document keeps the viewport's width
  * (a document wider than the viewport widens the layout viewport under mobile
  * emulation, the fixed tab bar follows it and a tab's tap lands on a tile);
- * no overflow in the header or the tab bar; the kvart picker present but
- * hidden in the compact header; on Sada every time segment shows its whole
- * word (WCAG 1.4.4: a pill that clips or ellipsises one loses content for a
- * sighted reader while its aria-label keeps it from AT only); the current
- * tab's label whole. `segments` says whether Sada's segments are expected on
- * the page: the Kvart panel replaces the workspace, so they are not there.
+ * no overflow in the header or the tab bar; on Sada every time segment shows
+ * its whole word (WCAG 1.4.4: a pill that clips or ellipsises one loses
+ * content for a sighted reader while its aria-label keeps it from AT only);
+ * the current tab's label whole. `segments` says whether Sada's segments are
+ * expected on the page: the directory replaces the workspace, so they are not there.
  */
 async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: { segments: boolean }): Promise<string[]> {
   return page.evaluate(({ header, tabbar, width, tolerance, segments, count }) => {
@@ -440,12 +439,6 @@ async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: {
       const el = document.querySelector<HTMLElement>(sel);
       if (!el || el.getBoundingClientRect().height <= 0) { out.push(`the ${label} ${sel} is missing or hidden`); continue; }
       if (el.scrollWidth > el.clientWidth + 1) out.push(`the ${label} ${sel} overflows horizontally at 200%: scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}`);
-    }
-    const pick = document.querySelector<HTMLElement>(`${header} [data-testid=kvart-pick]`);
-    if (!pick) out.push(`the header ${header} must carry the kvart picker [data-testid=kvart-pick] (the DOM stays honest; the compact header hides it by CSS)`);
-    else {
-      const p = pick.getBoundingClientRect();
-      if (p.width > 0 && p.height > 0) out.push(`the compact header must hide the kvart picker at 200%; [data-testid=kvart-pick] measures ${Math.round(p.width)}×${Math.round(p.height)} px`);
     }
     if (segments) {
       const seg = document.querySelector<HTMLElement>('[data-testid=tb-seg]');
@@ -486,19 +479,18 @@ async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: {
   }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar, width: viewport.width, tolerance: EDGE_TOLERANCE_PX, segments, count: SEGMENT_COUNT });
 }
 
-test('at 200% text the document keeps its width, the header and the tab bar have no horizontal overflow, the compact header hides the kvart picker, every time segment keeps a whole word and the current tab keeps a whole label, on Sada and with the Kvart tab open', async ({ page }) => {
+test('at 200% text the document keeps its width, the header and the tab bar have no horizontal overflow, every time segment keeps a whole word and the current tab keeps a whole label, on Sada and with the directory open', async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await settle(page, fixture);
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await page.waitForTimeout(300);
   expect(await zoomCompactIssues(page, PHONE, { segments: true }), 'zoom-compact state at 200% text on Sada').toEqual([]);
   await page.getByTestId('tab-more').click();
-  await page.getByTestId('tab-kvart').click();
-  await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
+  await expect(page.locator('#layer-directory'), 'Još must open the directory').toBeVisible();
   await expect(page.getByTestId('tab-more')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('tab-more')).toHaveText('Kvart');
+  await expect(page.getByTestId('tab-more')).toHaveText('Još');
   await page.waitForTimeout(300);
-  expect(await zoomCompactIssues(page, PHONE, { segments: false }), 'zoom-compact state at 200% text with the Kvart tab open').toEqual([]);
+  expect(await zoomCompactIssues(page, PHONE, { segments: false }), 'zoom-compact state at 200% text with the directory open').toEqual([]);
 });
 
 // --- 8. landing -----------------------------------------------------------------------------
@@ -572,6 +564,6 @@ test('at 1440 the desk paints before the session joins, keeps the screen control
   await expect(rows, 'the directory lists Promet and the four extra domains').toHaveCount(DESK_DIRECTORY.length);
   expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), 'the directory rows in order').toEqual(DESK_DIRECTORY);
   for (const layer of DESK_DIRECTORY) await expect(page.getByTestId(`dir-${layer}`), `the directory row dir-${layer}`).toBeVisible();
-  await expect(page.getByTestId('kvart-aside')).toBeHidden();
+  await expect(page.getByTestId('kvart-aside'), 'the kvart aside is gone entirely, not merely hidden').toHaveCount(0);
   await expect(page.locator('.ki-domains [data-layer]')).toHaveCount(6);
 });

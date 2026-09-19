@@ -185,17 +185,7 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await expect(kiosk.locator('.k-select-main')).toHaveText(eventTitle);
     await b.locator('[data-action=presentation-close]').click();
-    await b.getByTestId('tab-more').click();
-    await b.getByTestId('tab-kvart').click();
-    await b.getByTestId('kvart-panel').getByTestId('kvart-select').selectOption('trnje');
-    await expect(b.getByTestId('kvart-panel')).toBeVisible();
-    await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await b.getByTestId('screen-control').click();
-    await b.getByTestId('present-view').click();
-    await expect(b.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 25_000 });
-    await expect(kiosk.locator('.k-present-board .k-panel-kicker')).toHaveText('Trnje');
-    await expect(kiosk.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready');
-    await kiosk.screenshot({ path: 'test-results/redesign/presented-district.png' });
     await b.getByTestId('stop-presentation').click();
     await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(b.getByTestId('session-label')).toHaveAttribute('data-state', 'live');
