@@ -31,8 +31,22 @@ import { isTestEnvironment } from '../config';
 
 /** Workers AI text generation, small and fast: the ticker needs one sentence, not prose. */
 export const BRIEF_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+/**
+ * Gazette act titles alone are worth the large model. The small one restated
+ * both act titles it was given in the live probe instead of condensing them
+ * ("... donesena je.", 164 characters from a 151-character title), and the
+ * gazette is the source the owner named unreadable. A gazette issue carries a
+ * handful of acts, so the cost of the larger model here is a rounding error.
+ */
+export const BRIEF_MODEL_AKT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+/** The model a kind is read with. Everything but the gazette uses the small one. */
+export function briefModel(kind: BriefKind): string {
+  return kind === 'akt' ? BRIEF_MODEL_AKT : BRIEF_MODEL;
+}
+
 /** KV key prefix in `env.FEED`; the version moves if the prompt or the stored shape changes. */
-export const BRIEF_KEY_PREFIX = 'brief:v1:';
+export const BRIEF_KEY_PREFIX = 'brief:v2:';
 export const BRIEF_TTL_SECONDS = 30 * 24 * 60 * 60;
 /** A refused or failed generation is remembered this long, so a bad text is not retried every refresh. */
 export const BRIEF_NEGATIVE_TTL_SECONDS = 60 * 60;
@@ -52,11 +66,37 @@ const SIGNIFICANT_TOKEN_LETTERS = 5;
  */
 export const BRIEF_MIN_SOURCE_CHARS = 120;
 
+/**
+ * The floor, per kind. An act title is the one text that is never "already
+ * one line" however short it is: it is written as a legal citation rather
+ * than as a sentence, which is exactly what makes the gazette unreadable on
+ * a wall, so every act is eligible.
+ */
+export function briefMinSourceChars(kind: BriefKind): number {
+  return kind === 'akt' ? 0 : BRIEF_MIN_SOURCE_CHARS;
+}
+
 export const BRIEF_SYSTEM_PROMPT =
   'Ti si urednik gradskog informativnog zaslona u Zagrebu. Iz zadanog teksta napiši jednu rečenicu na hrvatskom jeziku, ' +
   'najviše 110 znakova, koja sadrži samo činjenice iz tog teksta. Rečenica mora biti kraća od zadanog teksta. ' +
   'Ne dodaj ništa čega u tekstu nema, ne nagađaj razloge, mjesta ni datume i ne prepisuj cijeli tekst. ' +
   'Bez uvoda, bez navodnika, bez markdowna, bez novog retka. Odgovori isključivo tom rečenicom.';
+
+/**
+ * The gazette's own prompt. An act title is a legal citation; the reader is a
+ * person standing in front of a public screen, who needs to know what the act
+ * changes and for whom, not its number or the statute it amends.
+ */
+export const BRIEF_SYSTEM_PROMPT_AKT =
+  'Pišeš za građanina koji stoji pred javnim zaslonom u Zagrebu. Iz naziva akta Grada Zagreba napiši jednu jednostavnu ' +
+  'rečenicu na hrvatskom jeziku, najviše 110 znakova: što taj akt mijenja ili uređuje i za koga. Izostavi broj i datum akta, ' +
+  'pozivanje na propise i izraze poput "Odluka o izmjenama i dopunama". Ne nagađaj ništa što u nazivu ne piše. ' +
+  'Bez uvoda, bez navodnika, bez markdowna, bez novog retka. Odgovori isključivo tom rečenicom.';
+
+/** The system prompt a kind is read with. */
+export function briefPrompt(kind: BriefKind): string {
+  return kind === 'akt' ? BRIEF_SYSTEM_PROMPT_AKT : BRIEF_SYSTEM_PROMPT;
+}
 
 /** What the text is, for the model and for the cache key: the same sentence about a tram notice and about an act is not the same brief. */
 const KIND_LABEL: Record<BriefKind, string> = {
@@ -164,9 +204,9 @@ async function remember(env: Env, key: string, brief: string | null): Promise<vo
 
 async function generate(ai: AiRunner, kind: BriefKind, text: string): Promise<string> {
   const result = await withTimeout(
-    ai.run(BRIEF_MODEL, {
+    ai.run(briefModel(kind), {
       messages: [
-        { role: 'system', content: BRIEF_SYSTEM_PROMPT },
+        { role: 'system', content: briefPrompt(kind) },
         { role: 'user', content: `${KIND_LABEL[kind]}:\n${text}` },
       ],
       max_tokens: 96,
@@ -190,7 +230,8 @@ export async function briefAll(env: Env, texts: readonly string[], kind: BriefKi
   if (!ai || isTestEnvironment(env)) return briefs;
 
   try {
-    const unique = [...new Set(texts)].filter((text) => text.trim().length > BRIEF_MIN_SOURCE_CHARS);
+    const floor = briefMinSourceChars(kind);
+    const unique = [...new Set(texts)].filter((text) => text.trim().length > floor);
     const looked = await Promise.all(unique.map(async (text) => {
       const key = await briefKey(kind, text);
       return { text, key, cached: await readCached(env, key) };

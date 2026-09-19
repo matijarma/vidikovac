@@ -11,6 +11,9 @@ import {
   BRIEF_MAX_UNCACHED,
   BRIEF_MIN_SOURCE_CHARS,
   BRIEF_MODEL,
+  BRIEF_MODEL_AKT,
+  BRIEF_SYSTEM_PROMPT,
+  BRIEF_SYSTEM_PROMPT_AKT,
   BRIEF_NEGATIVE_TTL_SECONDS,
   BRIEF_TIMEOUT_MS,
   BRIEF_TTL_SECONDS,
@@ -72,6 +75,12 @@ function makeEnv(run?: (model: string, input: unknown) => Promise<unknown>, appE
 
 const answers = (text: string) => async () => ({ response: text });
 
+/** The system message of a recorded call. */
+function systemOf(call: { input: unknown }): string {
+  const { messages } = call.input as { messages: { role: string; content: string }[] };
+  return messages.find((message) => message.role === 'system')?.content ?? '';
+}
+
 beforeEach(() => {
   kv = new KvStub();
   calls = [];
@@ -115,9 +124,9 @@ describe('briefAll', () => {
 
     expect(briefs.get(ACT)).toBe(GOOD);
     expect(calls).toHaveLength(1);
-    expect(calls[0].model).toBe(BRIEF_MODEL);
+    expect(calls[0].model).toBe(BRIEF_MODEL_AKT);
     const key = await briefKey('akt', ACT);
-    expect(key).toMatch(/^brief:v1:[0-9a-f]{64}$/);
+    expect(key).toMatch(/^brief:v2:[0-9a-f]{64}$/);
     expect(kv.puts).toEqual([{ key, body: JSON.stringify({ brief: GOOD }), expirationTtl: BRIEF_TTL_SECONDS }]);
   });
 
@@ -223,6 +232,37 @@ describe('briefAll', () => {
     const env = makeEnv(answers(GOOD));
     expect(ACT.length).toBeGreaterThan(BRIEF_MIN_SOURCE_CHARS);
     expect((await briefAll(env, [ACT], 'akt')).get(ACT)).toBe(GOOD);
+  });
+
+  // The gazette is the source the owner called unreadable, and the small
+  // model restated both act titles it was given in the live probe instead of
+  // condensing them. Acts alone are read with the large model, with their own
+  // prompt, and are never skipped for being short.
+  it('reads a gazette act with the large model and its own citizen-facing prompt', async () => {
+    const env = makeEnv(answers(GOOD));
+    await briefAll(env, [ACT], 'akt');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].model).toBe(BRIEF_MODEL_AKT);
+    expect(systemOf(calls[0])).toBe(BRIEF_SYSTEM_PROMPT_AKT);
+    expect(systemOf(calls[0])).toContain('javnim zaslonom');
+  });
+
+  it('reads every other kind with the small model and the general prompt', async () => {
+    const env = makeEnv(answers(GOOD));
+    const notice = `${'Obavijest o izmjeni trase autobusne linije u Zagrebu. '.repeat(3)}Kraj.`;
+    expect(notice.length).toBeGreaterThan(BRIEF_MIN_SOURCE_CHARS);
+    await briefAll(env, [notice], 'obavijest');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].model).toBe(BRIEF_MODEL);
+    expect(systemOf(calls[0])).toBe(BRIEF_SYSTEM_PROMPT);
+  });
+
+  it('condenses a short act title, which the one-line floor would otherwise skip', async () => {
+    const env = makeEnv(answers('Zagreb mijenja pravila o zakupu javnih površina.'));
+    const shortAct = 'Odluka o zakupu javnih površina';
+    expect(shortAct.length).toBeLessThan(BRIEF_MIN_SOURCE_CHARS);
+    expect((await briefAll(env, [shortAct], 'akt')).get(shortAct)).toBe('Zagreb mijenja pravila o zakupu javnih površina.');
+    expect(calls).toHaveLength(1);
   });
 
   it('does nothing at all without the AI binding', async () => {
