@@ -38,7 +38,7 @@ describe('public-screen design invariants', () => {
   it('uses tabular numerals and a bounded monospace pairing code', () => {
     expect(rule('.k-code')).toContain('var(--font-mono)');
     expect(rule('.k-code')).toContain('font-variant-numeric: tabular-nums');
-    expect(rule('.k-code')).toContain('min(');
+    expect(rule('.k-code')).toContain('clamp(');
   });
   it('progress animates by transform, not layout width', () => {
     expect(rule('.k-progress-bar')).toContain('transition: transform');

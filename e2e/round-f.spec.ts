@@ -81,6 +81,13 @@ async function openTwoTrams(page: Page, routes: readonly [string, string] = TWO_
   await page.clock.resume();
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
+  // The workspace now opens on the city's own group ("Zivi grad"), where the
+  // transport modes are switched off entirely (workspace.ts modesArg) and no
+  // vehicle is drawn. "Kretanje" is the transport group; picking it is what a
+  // reader looking for a tram does, and it is what the schema spec's own
+  // tests do since the city sources landed.
+  await page.getByTestId('transport-search').focus();
+  await page.locator('[data-action=city-group][data-group=transport]').click();
   // Both marks on the screen before anything is measured. This is also the
   // map's own readiness: `data-pills` is a census of rendered features, so it
   // says nothing until the style is up, the model has stepped and MapLibre
@@ -109,11 +116,13 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   page.on('pageerror', (error) => errors.push(error.message));
   await openTwoTrams(page);
 
-  // The session's map opens on the screen's stop at zoom 15, which is where
-  // the fixture parks the pair, so two keyboard steps land on exactly 17 with
+  // The session's map opens on the screen's stop at zoom 14 (workspace.ts
+  // sets that camera once the city sources landed), which is where the
+  // fixture parks the pair, so three keyboard steps land on exactly 17 with
   // both marks under the camera. MapLibre's keyboard step is +1 from the zoom
-  // it is at, with no rounding, so 15 -> 16 -> 17.
-  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('15.00');
+  // it is at, with no rounding, so 14 -> 15 -> 16 -> 17.
+  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('14.00');
+  await zoomIn(page, '15.00');
   await zoomIn(page, '16.00');
   await zoomIn(page, '17.00');
   // Both numbers on the map, 20 m apart at ~0.83 m per px, counted from the

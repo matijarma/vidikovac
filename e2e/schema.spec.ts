@@ -12,6 +12,12 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
+  await page.getByTestId('transport-search').focus();
+  await page.locator('[data-action=city-group][data-group=transport]').click();
+  if(test.info().project.name==='mobile'){
+    for(let i=0;i<3&&await page.getByTestId('transport-workspace').getAttribute('data-sheet')!=='peek';i++)
+      await page.locator('[data-action=toggle-sheet]').click();
+  }
   await page.locator('.t-map-menu > summary').click();
   const toggle = page.getByTestId('map-mode-toggle');
   await expect(toggle).toBeVisible();
@@ -77,13 +83,13 @@ test('schema preference loads directly without the transport map, and lightweigh
   await page.addInitScript(() => localStorage.setItem('kajima:map-mode:v1', 'schema'));
   const requested: string[] = [];
   page.on('request', req => requested.push(req.url()));
-  await page.goto(FIXTURE_DASHBOARD.replace('#', '#layer=u-pokretu&'));
+  await page.goto(FIXTURE_DASHBOARD.replace('#', '#layer=u-pokretu&kind=route&id=6&'));
   await expect(page.getByTestId('schema-vehicles')).toBeVisible();
   if (test.info().project.name === 'mobile') expect(requested.some(u => /maplibre-(entry|gl-worker)/.test(u))).toBe(false);
   requested.length = 0;
-  await page.goto(FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=1').replace('#', '#layer=u-pokretu&'));
+  await page.goto(FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=1').replace('#', '#layer=u-pokretu&kind=route&id=6&'));
   await page.clock.runFor(3000);
-  await expect(page.getByTestId('map-mode-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('map-mode-toggle')).toBeHidden();
   await expect(page.getByTestId('schema-vehicles')).toHaveCount(0);
   expect(requested.some(u => /zet-schema\.json|schema-map-/.test(u))).toBe(false);
 });
@@ -124,6 +130,11 @@ test('the diagram paints numbered pills, names that give way and come back, and 
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => localStorage.setItem('kajima:map-mode:v1', 'schema'));
   await page.goto(FIXTURE_DASHBOARD.replace('#', '#layer=u-pokretu&'));
+  // The workspace opens on the city's own group since the city sources
+  // landed; the diagram is the transport group's renderer, so pick that group
+  // first -- the same step the two tests above take.
+  await page.getByTestId('transport-search').focus();
+  await page.locator('[data-action=city-group][data-group=transport]').click();
   const canvas = page.getByTestId('schema-vehicles');
   const diagram = page.getByTestId('schema-map');
   await expect(canvas).toBeVisible();

@@ -20,6 +20,12 @@ Tehničko ime repozitorija, Workera, domena i postojeći ključevi pohrane ostaj
 
 ## Pokretanje
 
+Lokalna nadogradnja od 18. rujna 2026. uvodi Sada, Karta, Događanja i Još
+na telefonu. Dodaje gradska mjesta, BAJS, priče ulica, baštinu, zrak,
+hidrološki bilten, savjetovanja i vozni red. Status i ograničenja:
+`docs/upgrade-city-2026-09-18.md`. To ne znači da je nadogradnja postavljena
+na produkciju; postavljanje traži zasebno odobrenje.
+
 ```sh
 npm install
 cp .dev.vars.example .dev.vars        # izričite lokalne tajne; APP_ENV=test samo lokalno
@@ -36,6 +42,7 @@ npm run e2e                           # Playwright: uparivanje u dva konteksta, 
 npm run e2e:a11y                      # axe nad /, /hitno, /kiosk/, /s/, /d/ u svijetloj i tamnoj temi
 npm run a11y:lighthouse               # Lighthouse pristupačnost (treba pokrenut poslužitelj)
 npm run check:izvori                  # sve poveznice iz docs/izvori.md odgovaraju; svi moduli dokumentirani
+npx playwright test e2e/city.spec.ts  # mjesta, događanja, baština, lagani način i privatna prezentacija
 ```
 
 Protiv produkcije: `E2E_NO_WEBSERVER=1 E2E_APP_URL=https://zagreb.aningfilm.hr E2E_KIOSK_URL=<adresa testnog zaslona> npx playwright test` (u PowerShellu `$env:E2E_NO_WEBSERVER='1'; ...`).
@@ -49,6 +56,14 @@ R2 spremnik `vidikovac-maps` nosi verzionirani regionalni PMTiles arhiv. Karta, 
 `workers_dev` i pregledne adrese onemogućene su. Privremeni zasloni stvaraju se javno na `/kiosk/` (`POST /api/screens`), najviše pet postava po mreži i trideset ukupno u kliznom satu; adresa mreže se ne pohranjuje, ključ je HMAC njezina prefiksa. Njihovo korištenje vodi se kao `evaluation` i ne ulazi u izvoz podataka o korištenju na pilot lokacijama.
 
 ## Struktura
+
+`CatalogueDO` (migracija v3) osvježava referentne izvore redom u R2 pod
+`city/v1/`; manifest se objavljuje tek nakon fragmenata. Ugrađeni katalog
+`app/public/data/city` pokriva prvi start. `npm run build:city` obnavlja ga
+iz lokalno spremljenih resursa, `--fresh` traži novi dohvat, a `--prune`
+briše samo ugrađene fragmente koje aktualni manifest više ne koristi.
+`npm run build` ne dohvaća izvore. Javne `/api/city/*` rute služe aplikaciji;
+katalog nije novi otvoreno licencirani skup pod `/open`.
 
 ```
 worker/        Worker: index.ts (usmjerivač), routes/, feed/ (moduli izvora), do/ (BeaconDO, RoomDO, IndexDO, MetricsDO), protocol.ts

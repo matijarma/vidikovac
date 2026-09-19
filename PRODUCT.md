@@ -43,6 +43,23 @@ WCAG AA rendered contrast, visible keyboard focus, 44px minimum targets, 48px pr
 
 ## Approval
 
+On 18 September 2026 the owner approved the city-data upgrade in
+`docs/upgrade-city-2026-09-18.md`, superseding the navigation and
+transport-led map composition below. Phone: Sada, Karta, Događanja, Još.
+Time-led Sada and place-led Karta complement the chronological agenda.
+Existing transport URLs and selections remain compatible. Culture pins show
+known activity during seven calendar days including today, plus ongoing
+exhibitions. Quiet venues remain searchable; practical places belong in
+map/list discovery, not more dashboard widgets.
+
+The public display is a whole-city window. Idle touchscreen discovery returns
+after 90 seconds without input; explicit remote presentation takes priority.
+Search, geolocation and saved choices remain private. Street stories use the
+actual register, disambiguated by settlement. Heritage geometry describes
+protection boundaries, not entrances. New sources retain their attribution,
+timestamps and uncertainty; missing licence metadata is recorded without
+inventing a licence or a new `/open` export.
+
 On 17 September 2026 the owner approved the whole-product redesign in `docs/redesign-2026-09-17.md`: a light-led high-contrast system; public overview plus explicit presentation; confirmed takeover; all six domains directly accessible on desktop; Sada, Promet, Događanja and Još on the phone. Kvart is a workspace reached through location and Još.
 
 This approval supersedes earlier pixel layouts, fixed map spans, header-only weather, compulsory time-band columns and automatic paired layouts. It does not authorize changing the submitted documents in `docs/prijava` or `app/prijava`. Review real rendered interfaces, not only tests. Keep heavy verification work sequential to conserve the owner's quota.

@@ -24,6 +24,10 @@ import { cardMarkup } from './invitation';
 import { frontPanels, panelMarkup } from './front';
 import { columnsFor } from '../experience/timeband';
 import { districtLabel } from './districts';
+import type { CityState } from '../../../shared/city/types';
+import { dynamicPlaces } from '../city/discovery';
+import { placeDetail,streetDetail } from '../city/markup';
+import { locatedEvents } from '../../../shared/city/events';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */
@@ -39,6 +43,7 @@ export const KIOSK_LAYER_MODULES: Record<LayerId, ModuleId[]> = {
 export const PAIRED_MAP_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['u-pokretu']);
 
 export interface PairedContext {
+  city?:CityState;
   layer: LayerId;
   strings: KioskStrings;
   i18n: I18n;
@@ -399,6 +404,9 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
     if (pick.id === ctx.stop?.id || ctx.stops?.some(stop => stop.id === pick.id)) return 'displayed';
     return ctx.stops ? 'unavailable' : 'loading';
   }
+  if(pick.kind==='place')return !ctx.city||ctx.city.loading?'loading':
+    [...ctx.city.places,...dynamicPlaces(ctx.city,ctx.now)].some(p=>p.id===pick.id)?'displayed':'unavailable';
+  if(pick.kind==='street')return !ctx.city||ctx.city.loading?'loading':ctx.city.streets.some(s=>s.id===pick.id)?'displayed':'unavailable';
   if (!ctx.snapshots[pick.module]) return 'loading';
   return findItem(ctx, pick.module, pick.id) ? 'displayed' : 'unavailable';
 }
@@ -406,7 +414,7 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
 /** One card naming what the driver's phone selected: a line with its delay
  *  and vehicle count, a stop with its lines, or one item by its public key.
  *  Nothing else the phone knows (filters, coordinates) ever reaches here. */
-function selectionCard(ctx: PairedContext): string {
+export function selectionCard(ctx: PairedContext): string {
   const { strings: s, selection, i18n } = ctx;
   if (!selection) return '';
   // The selection is the column's subject: it takes the room the column has.
@@ -431,6 +439,14 @@ function selectionCard(ctx: PairedContext): string {
     const routes = named ? sortRouteIds(named.routes).join(', ') : '';
     const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>${routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : ''}`;
     return block(s.session.selected, body, o);
+  }
+  if(selection.kind==='place'){
+    const p=ctx.city&&[...ctx.city.places,...dynamicPlaces(ctx.city,ctx.now)].find(p=>p.id===selection.id);
+    return p&&ctx.city?placeDetail(i18n,p,ctx.city,locatedEvents(ctx.snapshots.dogadanja?.items??[],ctx.city.places,ctx.now),false,true):'';
+  }
+  if(selection.kind==='street'){
+    const p=ctx.city?.streets.find(s=>s.id===selection.id);
+    return p?streetDetail(i18n,p):'';
   }
   const found = findItem(ctx, selection.module, selection.id);
   if (!found) return '';

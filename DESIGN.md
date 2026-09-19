@@ -5,8 +5,9 @@ description: "Useful city information, a public overview and deliberate presenta
 
 # Kaj ima? Design system
 
-Approved direction: 17 September 2026. Product intent is in `PRODUCT.md`;
-implementation and verification are tracked in `docs/redesign-2026-09-17.md`.
+Approved direction: 17 September 2026, extended on 18 September 2026.
+Product intent is in `PRODUCT.md`; current implementation and verification
+are tracked in `docs/upgrade-city-2026-09-18.md`.
 The authoritative values are `app/src/ui/tokens.css`, not a second palette
 invented by a component or this document.
 
@@ -77,8 +78,9 @@ honour reduced motion. Do not animate layout width for countdown bars.
 
 The normal `/kiosk/` surface is an ambient city overview, not a locked
 dashboard. Pairing acknowledges access without replacing it. Landscape
-uses local geography and a separate route board on the left; weather,
-upcoming events, nearby changes, civic information and a QR on the right.
+uses local geography with compact local facts below; weather,
+active cultural venues and a QR share the other column. Transport stays
+available in discovery but does not dominate default city cartography.
 Compact landscape and portrait have their own arrangements.
 
 Keep location/date/time in the header and safety/on-duty pharmacy in the
@@ -95,6 +97,12 @@ Overview content has deliberate budgets. A fitting routine may not hide
 every row of a populated panel to make a screenshot test pass. A genuine
 empty, loading or unavailable source is stated explicitly.
 
+Compact displays carry one complete cultural venue row, wide two, portrait
+three. Quiet-day discovery uses a real cultural or heritage record with its
+own attribution. Touch exploration has search, categories, list/details and
+an explicit return action; 90-second inactivity restores the overview.
+Refreshes preserve focus and scroll. Remote presentation makes the map inert.
+
 ### Presented content
 
 A deliberate presentation gives the public subject a distance-readable
@@ -109,7 +117,7 @@ controller distinguishes a pending request from a kiosk-confirmed render.
 
 ### Phone and desktop
 
-Phone destinations are Sada, Promet, Događanja and Još. Kvart is reached
+Phone destinations are Sada, Karta, Događanja and Još. Kvart is reached
 through location and Još. The current destination retains a readable
 label at text zoom. Desktop exposes all six domains and Kvart directly.
 Do not reintroduce the permanent competing neighborhood-map sidebar.
@@ -118,10 +126,18 @@ Sada has two reading regions: local facts now, and what comes next. Names
 and destinations are readable; weather is useful in the first view.
 Time filters change the agenda without removing the local context.
 
-Promet has one map, one search entry, a peek/detail/open sheet on a phone,
+Karta has one map, one search entry, a peek/detail/open sheet on a phone,
 and a contextual board on desktop. Secondary map actions live in one
 disclosure. The peek state keeps search visible; focus must not wait for
 an animation to clear the navigation bar.
+
+Living city, culture, transport, useful places and heritage are progressive
+map groups. Active venue pins have bounded size and explicit event counts;
+geographic clusters use a distinct plus-count mark. Selected places stay
+outside clustering and filters. Venue programs open the in-app event detail
+before its original source. Street stories have map-label and search paths.
+Heritage selections draw the protection outline, never an assumed entrance.
+Every category has a map-free list path.
 
 The single Zaslon control is consistently placed in the shared header.
 Its panel explains the target, current presentation, pending/confirmed
@@ -142,8 +158,10 @@ redundant second unlock button.
 
 Missing is not zero. A request time is not an observation or event time.
 An unavailable safety source is not an all-clear. Vehicle positions are
-estimates; route delay is not an arrival forecast. No new sources, push
-delivery or funded future features are implied by this redesign.
+estimates; route delay is not an arrival forecast. BAJS counts require a
+recent observation; air is a preliminary station observation; ZET and HŽ
+departures are scheduled times, not ETA. Inventory capacity is never live
+availability. No push delivery or unverified open-now claims are implied.
 
 Verify both themes, Croatian/English, reduced motion, 200% text,
 keyboard navigation, small phones, tablet, landscape/portrait displays

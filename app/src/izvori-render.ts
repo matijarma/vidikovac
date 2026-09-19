@@ -3,6 +3,7 @@
 // with JavaScript switched off and cannot drift from the data the panels use.
 import data from './data/izvori.json';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
+import {REFERENCE_SOURCES,LIVE_SOURCES} from '../../worker/city/sources';
 
 export interface IzvorEntry {
   module: string;
@@ -68,5 +69,14 @@ export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): strin
   ${source.module === 'dogadanja' ? renderDogadanjaSources() : ''}
 </article>`,
     )
-    .join('\n');
+    .join('\n')+renderCitySources();
+}
+function renderCitySources():string{
+  const references=REFERENCE_SOURCES.map(s=>({id:s.id,name:s.name,url:s.catalogue,licence:s.licence}));
+  const rows=[...references,...Object.values(LIVE_SOURCES)].map(s=>`<li id="city-source-${escapeAttribute(s.id)}"><a href="${escapeAttribute(s.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(s.name)}</a>: ${escapeHtml(s.licence)}</li>`).join('\n');
+  return `<section aria-labelledby="city-sources-title"><h2 id="city-sources-title">Mjesta, priče i uvjeti u gradu</h2>
+    <p>Katalog gradskih mjesta osvježava se zasebno od događanja i položaja vozila. Registar nije provjera radnog vremena, pristupačnosti ili trenutačnog stanja. BAJS brojevi imaju vrijeme opažanja; zrak je preliminarni indeks pojedine postaje; polasci ZET-a i HŽPP-a su raspored, ne procjena dolaska.</p>
+    <ul>${rows}</ul>
+    <p>Ulične priče prenose objavljene opise, uz naselje. Baština se povezuje preko registarske oznake; geometrija označava obuhvat zaštite, ne ulaz ni pravo pristupa. Nepotvrđene lokacije ostaju u popisu bez oznake na karti.</p>
+    <p>Ti izvori isporučuju se aplikaciji kroz javni katalog, bez novog skupa na /open. Navođenje izvora ne dodjeljuje dodatna prava ponovne uporabe; gdje uvjeti nisu navedeni, to ostaje izričito označeno.</p></section>`;
 }

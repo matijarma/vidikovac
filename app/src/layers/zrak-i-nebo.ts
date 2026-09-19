@@ -19,6 +19,7 @@ import { radar, rangeBar, sunPath } from '../ui/graphics';
 import { iconMarkup } from '../ui/icons';
 import { sunTimes } from '../ui/solar';
 import type { LayerContext } from './types';
+import { conditionsMarkup } from '../city/conditions';
 
 const QUAKE_RADIUS_KM = 150;
 const QUAKE_WINDOW_MS = 7 * 86_400_000;
@@ -256,7 +257,7 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   const headObs = o ? `<p class="wx-head-obs">${observed(i18n, o, observation, ctx.errors?.['dhmz-now'])}</p>` : '';
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
-<div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${sunSection(i18n, ctx)}${warningsSection(i18n, ctx)}${quakesSection(i18n, ctx)}</div>
+<div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${warningsSection(i18n, ctx)}${quakesSection(i18n, ctx)}</div>
 ${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
 </section>`);
 }

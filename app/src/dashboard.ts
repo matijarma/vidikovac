@@ -47,6 +47,9 @@ import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
 import { PRESENTATION_ACK_MS, PRESENTATION_TIMES, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
 import { presentationPanel, presentationTargetLabel } from './experience/presentation';
+import { createCityStore, type CityStore } from './core/city-store';
+import { dynamicPlaces } from './city/discovery';
+import { ct } from './city/strings';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
@@ -95,6 +98,7 @@ export function parseSessionHash(hash: string): SessionHashParams | null {
 export interface MediaLike { matches: boolean; addEventListener?(type: 'change', listener: () => void): void; removeEventListener?(type: 'change', listener: () => void): void }
 
 export interface DashboardDeps {
+  cityStore?: CityStore;
   i18n: I18n;
   session: SessionClient;
   now?: () => number;
@@ -144,6 +148,8 @@ export interface DashboardHandle {
   destroy(): void;
 }
 export function mountDashboard(root: HTMLElement, deps: DashboardDeps): DashboardHandle {
+  const cityStore = deps.cityStore ?? createCityStore();
+  const workspaceDisposals=new Set<()=>void>();
   const { i18n, session } = deps;
   const now = deps.now ?? (() => Date.now());
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
@@ -315,6 +321,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function paintPresentation(): void {
     const target = currentPresentationTarget();
+    const cityUnsupported=(target.selection?.kind==='place'||target.selection?.kind==='street')&&!presentationState?.capabilities?.includes('city-v1');
     const waiting = presentationRequest !== null || presentationState?.status === 'pending';
     const since = presentationRequest ? presentationRequestAt : presentationPendingSince;
     const pending = waiting && now() - since < PRESENTATION_ACK_MS;
@@ -322,19 +329,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     let message = presentationMessage;
     if (s.phase !== 'live' || frozen) message = i18n.t(frozen ? 'cast.frozen' : 'cast.connecting');
     else if (!presentationState?.online) message = i18n.t('presentation.offline');
-    else if (!presentationState.supported) message = i18n.t('presentation.unsupported');
+    else if (!presentationState.supported||cityUnsupported) message = i18n.t('presentation.unsupported');
     else if (waiting && !pending && !message) message = i18n.t('presentation.notConfirmed');
     else if (pending && !message) message = i18n.t('presentation.pending');
     else if (presentationState.status === 'unavailable') message = i18n.t('presentation.unavailable');
     else if (presentationState.status === 'displayed' && presentationState.owner === 'self' && !message) message = i18n.t('presentation.displayed');
     paintRegion(regions.presentation, presentationPanel(i18n, {
       open: presentationOpen, state: presentationState, target,
-      targetLabel: presentationTargetLabel(i18n, target, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : [])),
+      targetLabel: presentationTargetLabel(i18n, target, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : []),cityStore.snapshot()),
       currentLabel: presentationState?.status === 'pending' ? i18n.t('presentation.pending')
         : presentationState?.status === 'unavailable' ? i18n.t('presentation.unavailable')
-        : presentationTargetLabel(i18n, presentationState?.target ?? null, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : [])),
+        : presentationTargetLabel(i18n, presentationState?.target ?? null, store.snapshot().snapshots, stops ?? (s.screen?.stop ? [s.screen.stop] : []),cityStore.snapshot()),
       screenLabel: deps.label ?? s.screen?.stop?.name ?? i18n.t('session.labelScreen'),
-      can: castState().can, confirming: presentationConfirmRevision !== null, pending, message,
+      can: castState().can&&!cityUnsupported, canStop:castState().can, confirming: presentationConfirmRevision !== null, pending, message,
     }));
   }
 
@@ -413,7 +420,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // The cast state plus the moment of the last cast, which the panel's button shows as data-sent.
     const cast: CastState & { sentAt: number | null } = { ...castState(), sentAt: castSentAt };
     return {
-      i18n, snapshots: feed.snapshots, now: now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
+      city: cityStore.snapshot(),
+      ensureCity: ids => { if (!frozen && !disposed) void cityStore.ensure(ids); },
+      onDispose:fn=>workspaceDisposals.add(fn),
+      i18n, snapshots: feed.snapshots, now: frozenAt??now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
@@ -622,6 +632,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function present(action: 'present' | 'stop', confirm = false, target = currentPresentationTarget()): void {
     if (!castState().can || !presentationState) return;
+    if(action==='present'&&(target.selection?.kind==='place'||target.selection?.kind==='street')&&!presentationState.capabilities?.includes('city-v1'))return;
     if (action === 'present' && presentationState.owner === 'other' && !confirm) {
       presentationConfirmRevision = presentationState.revision;
       paintPresentation();
@@ -891,6 +902,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function freeze(): void {
     if (frozen) return;
     frozen = true;
+    cityStore.pause();
     // The session's clock, not the phone's, and never later than the session's end: a phone that
     // hears of the end late (a socket dropped in the background, a resume after the room is gone)
     // still dates its data by the minute the pill promised. Revoked keeps the moment itself, its
@@ -916,6 +928,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {
+    void cityStore.start();
     presentationState = snapshot.presentation;
     reconnecting = false;
     error = null;
@@ -1007,6 +1020,21 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (!target || !element.contains(target)) return;
     const d = target.dataset;
     switch (d.action) {
+      case 'city-save':
+        if(!frozen&&d.id)saved.toggle({kind:'place',id:d.id});return;
+      case 'city-copy': {
+        const city=cityStore.snapshot(),p=[...city.places,...dynamicPlaces(city,frozenAt??now())].find(p=>p.id===d.id);
+        const say=(word:'copied'|'copyFailed')=>{
+          if(disposed||!element.contains(target))return;
+          let status=target.parentElement?.querySelector<HTMLElement>('[data-copy-status]');
+          if(!status){status=document.createElement('p');status.dataset.copyStatus='';status.setAttribute('role','status');status.className='city-meta';target.parentElement?.append(status);}
+          status.textContent=ct(i18n,word);
+        };
+        const source=city.manifest?.sources.find(s=>s.id===p?.sourceId)??city.live?.sources.find(s=>s.id===p?.sourceId);
+        if(p&&navigator.clipboard)void navigator.clipboard.writeText([p.name,p.address,p.description,source?.name,source?.url,source?.licence,p.updatedAt].filter(Boolean).join('\n')).then(()=>say('copied'),()=>say('copyFailed'));
+        else say('copyFailed');
+        return;
+      }
       case 'nav': {
         event.preventDefault();
         let selection: PublicSelection | null = null;
@@ -1085,6 +1113,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });
+  const stopCity = cityStore.subscribe(() => { if(!disposed&&!frozen){render();paintShell();} });
   // A batch can finish several modules in the same turn. Render the latest
   // combined state once, without delaying independent slow-source responses.
   let feedRenderQueued = false;
@@ -1149,11 +1178,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     activeLayer: () => view.snapshot().layer,
     restore: restoreView,
     destroy() {
+      workspaceDisposals.forEach(fn=>fn());workspaceDisposals.clear();
+      cityStore.destroy();
       disposed = true;
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
       if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
       stopView();
+      stopCity();
       stopStore();
       stopTheme?.();
       stopKvart();

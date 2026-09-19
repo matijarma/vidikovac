@@ -17,6 +17,7 @@ import { iconMarkup, type IconName } from '../ui/icons';
 import { weatherStatusMarkup, type WeatherStatus } from './weather-status';
 import type { PresentationState } from '../../../worker/presentation';
 import { presentationButton } from './presentation';
+import { ct } from '../city/strings';
 
 export type Surface = 'phone' | 'desktop';
 /** A phone tab: a domain, or the Kvart panel, which is a shell surface and never a LayerId (D9). */
@@ -95,6 +96,7 @@ export function snapshotLine(i18n: I18n, frozenAt: number): string {
 }
 
 function layerLabel(i18n: I18n, layer: LayerId): string {
+  if(layer==='u-pokretu')return ct(i18n,'map');
   return i18n.t(`layers.${layer}`);
 }
 
@@ -124,7 +126,7 @@ export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather
   const safety = safetyMarkup(i18n, s);
   const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
   if (s.surface === 'phone') return `${wordmark}${kvart}${display}${session}${safety}`;
-  const domains: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost'];
+  const domains: LayerId[] = ['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost'];
   const navigation = `<nav class="ki-domains" data-key="domains" aria-label="${escapeAttribute(i18n.t('nav.label'))}"><ul>${domains.map(layer => layerTab(i18n, s, layer)).join('')}<li>${kvartTab(i18n, s).replace(/^<li>|<\/li>$/g, '')}</li></ul></nav>`;
   return `${wordmark}${kvart}<div class="ki-status-space" data-key="space"></div>${clockMarkup(i18n, s, now, null)}${display}${session}${moreButtonMarkup(i18n, s)}${navigation}`;
 }

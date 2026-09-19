@@ -25,6 +25,8 @@ export interface PresentationState {
   status: 'idle' | 'pending' | 'displayed' | 'unavailable';
   online: boolean;
   supported: boolean;
+  /** V1 screens cannot render city catalogue subjects. */
+  capabilities?: readonly string[];
 }
 
 export interface PresentationCommand {

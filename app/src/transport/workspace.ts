@@ -29,6 +29,14 @@ import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { statusText } from '../panels/panel';
 import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
+import { discover, dynamicPlaces, clusterPlaces, CATEGORY_SOURCE, GROUP_SOURCES, type CityGroup, type Discovery } from '../city/discovery';
+import { ct, type CityWord } from '../city/strings';
+import { placeDetail, placesMarkup, streetDetail, departuresMarkup } from '../city/markup';
+import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
+import { locatedEvents, type ActivityWindow } from '../../../shared/city/events';
+import { matchStreet } from '../../../shared/city/geo';
+import { reconcile } from '../ui/dom/reconcile';
+import { districtBySlug } from '../kiosk/districts';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehicleNextStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
 import { searchTransport, type StopGroup } from './search';
@@ -85,6 +93,7 @@ type StageMode = 'phone' | 'landscape' | 'desk';
 interface MediaLike {
   matches: boolean;
   addEventListener?(type: 'change', listener: () => void): void;
+  removeEventListener?(type:'change',listener:()=>void):void;
 }
 const media = (query: string): MediaLike | null => (typeof globalThis.matchMedia === 'function' ? globalThis.matchMedia(query) : null);
 const DESK_QUERY = '(min-width: 60rem)';
@@ -99,6 +108,7 @@ function unplaced(p: MapPoint): VehicleInfo {
 
 function toMapSelection(pub: { kind: string; id: string } | null | undefined, groups: readonly StopGroup[] | null): MapSelection | null {
   if (!pub) return null;
+  if (pub.kind === 'place' || pub.kind === 'street') return { kind: pub.kind, id: pub.id };
   if (pub.kind === 'route') return { kind: 'route', id: pub.id };
   if (pub.kind === 'stop') {
     const group = groups ? stopGroupById(groups, pub.id) : undefined;
@@ -110,6 +120,7 @@ function toMapSelection(pub: { kind: string; id: string } | null | undefined, gr
 /** The bounded public form of a selection (worker/public-selection.ts): route and stop by id, a vehicle or a closure by its public item key. */
 export function toPublic(sel: MapSelection | null): PublicSelection | null {
   if (!sel) return null;
+  if (sel.kind === 'place' || sel.kind === 'street') return { kind: sel.kind, id: sel.id };
   if (sel.kind === 'route' || sel.kind === 'stop') return { kind: sel.kind, id: sel.id };
   const module = sel.kind === 'vehicle' ? 'zet-rt' : 'prometnice';
   return { kind: 'item', id: publicItemKey(module, sel.id), module };
@@ -172,6 +183,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           <button type="button" class="btn-quiet icon-btn t-sheet-toggle" id="${id}-sheet" data-action="toggle-sheet" aria-expanded="false" aria-controls="${ids.body}">${iconMarkup('chevron-down')}</button>
         </div>
         <div class="transport-toolbar" data-testid="transport-toolbar">
+          <div class="city-groups" role="group" data-testid="city-groups"></div>
+          <div class="city-filters" data-testid="city-filters"></div>
           <div class="t-search">
             <label class="visually-hidden" for="${ids.search}" data-ref="search-label"></label>
             <input id="${ids.search}" class="t-search-input" type="search" role="combobox" aria-expanded="false" aria-controls="${ids.results}" aria-autocomplete="list" aria-describedby="${id}-hint" autocomplete="off" spellcheck="false" data-testid="transport-search">
@@ -248,6 +261,84 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let sheet: SheetController | null = null;
   let lastFull = false;
   let lastStageHeight = -1;
+  let cityGroup: CityGroup = 'living';
+  let cityCategory = '';
+  let activityWindow: ActivityWindow = 'week';
+  let cityCenter: {lon:number;lat:number}|null = null;
+  let cityDistrict: string|null|undefined;
+  let cityLimit = 20;
+  let cityData: Discovery|null = null;
+  let cityFilterKey = '';
+  let bikeMode:'rent'|'return'='rent';
+  let streetRequested=false;
+  let disposed=false;
+  let disposalRegistered=false;
+  const boardTimes=new Map<string,number>();
+  const pollutants=new Map<string,string>();
+  const pollutantPending=new Set<string>();
+  const boards = new Map<string,DepartureBoard>();
+  const boardPending = new Set<string>();
+  const cityState = () => ctx().city ?? emptyCity();
+  function discovery(): Discovery {
+    const c=ctx(),stop=c.screen?.stop;
+    return discover(cityState(),c.snapshots.dogadanja?.items??[],{
+      group:cityGroup,category:cityCategory,query,window:activityWindow,
+      center:cityCenter??{lon:stop?.lon??15.97726,lat:stop?.lat??45.81286},radius:5000,now:c.frozenAt??c.now,bikeMode});
+  }
+  function askCity():void {
+    const c=ctx(); if(c.session?.frozen)return;
+    c.ensureCity?.(cityCategory?CATEGORY_SOURCE[cityCategory]??[]:GROUP_SOURCES[cityGroup]);
+    if(query)c.ensureCity?.(['culture','water','toilets','sport','dogs','markets','recycling','wifi','cycle-parking','garages','charging','heritage','streets','hz-schedule']);
+  }
+  function paintCityFilters():void {
+    const i18n=ctx().i18n;
+    const groups: [CityGroup,CityWord][]=[['living','all'],['culture','culture'],['transport','movement'],['useful','useful'],['heritage','heritage']];
+    const g=q<HTMLElement>('[data-testid=city-groups]');
+    const groupHtml=groups.map(([key,label])=>`<button type="button" class="city-group" data-action="city-group" data-group="${key}" aria-pressed="${cityGroup===key}">${esc(ct(i18n,label))}</button>`).join('');
+    if(g.innerHTML!==groupHtml){const next=document.createElement('div');next.innerHTML=groupHtml;reconcile(g,next);}
+    const category:CityWord[]=cityGroup==='useful'?['water','toilet','sport','dogs','recycling','market','wifi','cycle-parking','garage','charging']:
+      cityGroup==='transport'?['network','bikes','rail','cycle-paths']:cityGroup==='heritage'?['heritage','streets']:cityGroup==='culture'?['activeVenues','allVenues']:[];
+    const windows=cityGroup==='culture'||cityGroup==='living'?`<div class="city-times" role="group" aria-label="${esc(ct(i18n,'program'))}">${(['today','tomorrow','week'] as ActivityWindow[]).map(w=>`<button type="button" class="city-filter" data-action="city-window" data-window="${w}" aria-pressed="${activityWindow===w}">${ct(i18n,w)}</button>`).join('')}</div>`:'';
+    const html=windows+category.map(k=>{const key=k==='network'||k==='activeVenues'?'':k==='allVenues'?'culture':k;return `<button type="button" class="city-filter" data-action="city-category" data-category="${key}" aria-pressed="${cityCategory===key}">${ct(i18n,k)}</button>`;}).join('')
+      +(cityCategory==='bikes'?`<button class="city-filter" data-action="bike-mode" data-mode="rent" aria-pressed="${bikeMode==='rent'}">${ct(i18n,'rentMode')}</button><button class="city-filter" data-action="bike-mode" data-mode="return" aria-pressed="${bikeMode==='return'}">${ct(i18n,'returnMode')}</button>`:'');
+    const f=q<HTMLElement>('[data-testid=city-filters]');if(f.innerHTML!==html){const next=document.createElement('div');next.innerHTML=html;reconcile(f,next);}
+    g.setAttribute('aria-label',ct(i18n,'layers'));
+  }
+  function saveCityFilters():void {
+    const category=cityCategory,group=cityGroup,window=activityWindow;
+    ctx().setFilter?.('city-group',group);
+    ctx().setFilter?.('city-category',category);
+    ctx().setFilter?.('city-window',window);
+    cityGroup=group;cityCategory=category;activityWindow=window;
+  }
+  function cityMapPoints():MapPoint[] {
+    if(!input||!ctx().city)return [];
+    cityData=discovery();
+    const selected=selection?.kind==='place'?[...cityState().places,...dynamicPlaces(cityState(),ctx().now)].find(p=>p.id===selection!.id):null;
+    // Keep the selected marker outside geographic clusters and outside filters.
+    const extra=selected&&Number.isFinite(selected.lon)&&Number.isFinite(selected.lat)
+      ?[cityData.points.find(p=>p.id===selected.id)??{id:selected.id,title:selected.name,lon:selected.lon!,lat:selected.lat!,place:'city' as const,props:{category:selected.category,eventCount:0,badge:'',priority:0}}]:[];
+    return [...clusterPlaces(cityData.points.filter(p=>p.id!==selected?.id),camera?.zoom??14),...extra];
+  }
+  function updateCityMap():void {
+    if(!input || !ctx().city)return;
+    handle?.update([...input.points,...cityMapPoints()],input.lines);
+    handle?.setModes?.(modesArg());
+    const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
+    handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
+    const paths=cityCategory==='cycle-paths'?cityState().paths.flatMap(p=>p.lines.map((coordinates,i)=>({id:`${p.id}-${i}`,title:p.name,coordinates}))):[];
+    handle?.setCityPaths?.(paths);
+  }
+  function ensureBoard(operator:'zet'|'hz',stopId:string):void {
+    const key=`${operator}:${stopId}`;
+    if(disposed||(boards.has(key)&&Date.now()-(boardTimes.get(key)??0)<60_000)||boardPending.has(key)||ctx().session?.frozen)return;
+    boardPending.add(key);
+    void fetch(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`,{signal:AbortSignal.timeout(12000)})
+      .then(r=>{if(!r.ok)throw new Error('schedule-down');return r.json() as Promise<DepartureBoard>;})
+      .then(board=>{if(disposed||ctx().session?.frozen)return;boards.set(key,board);boardTimes.set(key,Date.now());renderSheet();})
+      .catch(()=>{if(disposed||ctx().session?.frozen)return;boards.set(key,{operator,stopId,stopName:stopId,status:'down',generatedAt:new Date().toISOString(),departures:[]});boardTimes.set(key,Date.now());renderSheet();})
+      .finally(()=>boardPending.delete(key));
+  }
 
   // --- Derived, per render ----------------------------------------------------
   function ctx(): LayerContext {
@@ -262,6 +353,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const lineFocusRow = (): boolean | null => (ctx().lineFocus ? lineFocus : null);
   /** null while every mode is on: the map then also draws vehicles of a type nobody knows. */
   const modesArg = (): ReadonlySet<number> | null => (
+    ctx().city&&(cityGroup!=='transport'||cityCategory!=='') ? new Set() :
     mapMode === 'schema' ? new Set([ROUTE_TYPE_TRAM]) : ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes)
   );
   const delays = (): Map<string, number> => plausibleDelays(routeDelayMap(ctx().snapshots['zet-rt']));
@@ -275,13 +367,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     return usePlaced ? placed : (input?.points ?? []).filter((p) => p.at !== undefined).map(unplaced);
   }
 
-  /** The stop catalogue for search when the network artefact is not in (yet, or at all); never on the lightweight path. */
+  /** Small stop-name catalogue also supplies the lightweight list alternative. */
   function ensureCatalogue(): void {
-    if (groups || catalogueRequested || ctx().lightweight) return;
+    if (disposed || groups || catalogueRequested) return;
     catalogueRequested = true;
     (deps.loadStops ?? (() => loadStops()))().then(
       (stops) => {
-        if (!groups) {
+        if (!disposed&&!groups) {
           groups = stopGroupsFromCatalogue(stops);
           renderSheet();
         }
@@ -305,8 +397,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
 
   /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
+    if(ctx().session?.frozen)return;
+    if(next?.kind==='place'&&next.id.startsWith('cluster-')){
+      const clusterId=next.id;
+      const point=clusterPlaces(discovery().points,camera?.zoom??14).find(p=>p.id===clusterId);
+      if(point){const zoom=Math.min((camera?.zoom??14)+1.5,18);camera={center:[point.lon,point.lat],zoom};handle?.setView?.({center:camera.center,zoom});updateCityMap();}return;
+    }
+    if(next?.kind==='place'||next?.kind==='street'){
+      if(mapMode==='schema')ctx().mapMode?.set('map');
+      askCity();
+    }
+    if(next&&['route','stop','vehicle','closure'].includes(next.kind)){cityGroup='transport';cityCategory='';}
     if (next?.kind === 'stop' && !next.ids) next = { ...next, ids: groupFor(next.id)?.ids };
     selection = next;
+    updateCityMap();
     folds.delete('stops');
     if (next?.kind !== 'vehicle' && following) {
       following = null;
@@ -406,7 +510,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const onStageBox = (): void => {
     if (!sheet) syncFitPadding();
   };
-  if (typeof ResizeObserver === 'function') new ResizeObserver(onStageBox).observe(stage);
+  const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(onStageBox):null;
+  if (resizeObserver) resizeObserver.observe(stage);
   else window.addEventListener('resize', onStageBox);
   sheetEl.addEventListener('transitionend', (event) => {
     if (event.target === sheetEl) onStageBox();
@@ -436,11 +541,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const i18n = c.i18n;
     const k = kiosk();
     const schema = mapMode === 'schema';
+    const cityOnly=Boolean(c.city&&(cityGroup!=='transport'||cityCategory!==''));
     element.dataset.kiosk = k ? 'true' : 'false';
     element.dataset.mapMode = mapMode;
+    element.dataset.cityGroup=cityGroup;
     toolbar.hidden = k;
     searchLabel.textContent = tr(i18n, 'searchLabel');
-    searchInput.placeholder = tr(i18n, 'search');
+    searchInput.placeholder = ct(i18n, 'search');
+    searchLabel.textContent = ct(i18n,'search');
+    paintCityFilters();
     searchHint.textContent = tr(i18n, 'searchHint');
     clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'));
     clearButton.hidden = query === '';
@@ -449,7 +558,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     modeButtons[ROUTE_TYPE_TRAM].textContent = tr(i18n, 'trams');
     modeButtons[ROUTE_TYPE_BUS].textContent = tr(i18n, 'buses');
     for (const mode of ALL_MODES) modeButtons[mode].setAttribute('aria-pressed', (schema ? mode === ROUTE_TYPE_TRAM : modes.has(mode)) ? 'true' : 'false');
-    modeButtons[ROUTE_TYPE_BUS].hidden = schema;
+    modeButtons[ROUTE_TYPE_TRAM].hidden = cityOnly;
+    modeButtons[ROUTE_TYPE_BUS].hidden = schema||cityOnly;
     closuresButton.textContent = tr(i18n, 'showClosures');
     closuresButton.setAttribute('aria-pressed', closuresVisible ? 'true' : 'false');
     closuresButton.hidden = schema;
@@ -460,7 +570,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     q<HTMLElement>('.t-map-menu-trigger').setAttribute('aria-label', tr(i18n, 'toolsLabel'));
     q<HTMLElement>('.t-map-menu').hidden = k;
     tools.hidden = k;
-    mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps;
+    mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps || cityOnly;
     const modeLabel = tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema');
     mapModeButton.innerHTML = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(modeLabel)}</span>`;
     mapModeButton.setAttribute('aria-label', modeLabel);
@@ -492,24 +602,42 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function swapBody(html: string): void {
     const active = document.activeElement;
     const focusId = active instanceof HTMLElement && content.contains(active) ? active.id : '';
-    content.innerHTML = html;
+    const next=document.createElement('div');next.innerHTML=html;
+    if(query&&ctx().city){
+      // Mixed city results are a normal button list, not a partial combobox
+      // whose active descendant excludes places and street stories.
+      next.querySelectorAll('[role=listbox]').forEach(list=>list.setAttribute('role','list'));
+      next.querySelectorAll<HTMLElement>('[role=option]').forEach(option=>{
+        const button=document.createElement('button');
+        button.type='button';button.id=option.id;button.className=option.className;
+        button.dataset.action=option.dataset.action;button.dataset.id=option.dataset.id;
+        button.innerHTML=option.innerHTML;option.removeAttribute('id');option.removeAttribute('role');
+        for(const attribute of ['aria-selected','class','data-action','data-id'])option.removeAttribute(attribute);
+        option.replaceChildren(button);
+      });
+    }
+    reconcile(content,next);
     if (focusId) document.getElementById(focusId)?.focus();
   }
 
   /** The sheet: search results while typing, the selection's detail, else the overview; and the peek line above it. */
   function renderSheet(): void {
-    if (!input) return;
+    if (!input||disposed) return;
     const i18n = ctx().i18n;
     const vehicles = vehiclesNow();
     const shown = vehiclesOfModes(vehicles, modesArg());
     let html: string;
     let peekHtml: string;
     let peekText: string | null = null;
+    cityData=discovery();
     if (query) {
       const results = searchTransport(query, routeCatalogue(), groups ?? []);
-      const total = results.routes.length + results.stops.length;
+      const total = results.routes.length + results.stops.length + cityData.places.length + cityData.streets.length;
       if (activeOption && !results.routes.some((r) => ids.option('route', r.id) === activeOption) && !results.stops.some((s) => ids.option('stop', s.id) === activeOption)) activeOption = null;
-      html = resultsMarkup(i18n, { query, results, counts: countByRoute(vehicles), delays: delays(), routeOf: routeEntry, active: activeOption, ids: { list: ids.results, option: ids.option } });
+      html = ctx().city&&!results.routes.length&&!results.stops.length?'':resultsMarkup(i18n, { query, results, counts: countByRoute(vehicles), delays: delays(), routeOf: routeEntry, active: activeOption, ids: { list: ids.results, option: ids.option } });
+      html = placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode)
+        +cityData.streets.slice(0,20).map(s=>`<button type="button" id="city-street-${esc(s.id)}" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span><span>↗</span></button>`).join('')+html;
+      if(!total)html+=`<p role="status">${ct(i18n,'noResults')}</p>`;
       peekText = trPlural(i18n, 'resultsCount', total);
       peekHtml = esc(peekText);
       searchInput.setAttribute('aria-expanded', total > 0 ? 'true' : 'false');
@@ -527,14 +655,41 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         [html, peekText] = detail;
         peekHtml = esc(peekText);
       } else {
-        html = overview(shown);
-        peekHtml = overviewPeek(shown);
+        const transport=cityGroup==='transport'&&!cityCategory;
+        html = transport ? overview(shown) : `<section class="city-browse"><h3>${esc(ct(i18n,'list'))}</h3>
+          <p class="city-meta">${esc(ct(i18n,'legend'))}</p>${cityState().loading?`<p role="status">${ct(i18n,'loading')}</p>`:''}
+          ${cityCategory==='streets'?`<p class="city-meta">${ct(i18n,'streetBrowse')}</p>${cityData.streets.slice(0,cityLimit).map(s=>`<button type="button" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span></button>`).join('')}${cityData.streets.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
+            cityCategory==='cycle-paths'?`<p>${cityState().paths.length} ${ct(i18n,'cycle-paths')}</p>${cityState().paths.slice(0,cityLimit).map(p=>`<p>${esc(p.name)}${p.surface?` · ${esc(p.surface)}`:''}</p>`).join('')}${cityState().paths.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
+            cityData.places.length?placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode):`<p>${ct(i18n,'noResults')}</p>`}
+          ${cityState().errors.length?`<p class="city-meta" role="status">${ct(i18n,'unavailable')}</p>`:''}
+          <button type="button" class="btn-quiet" data-action="city-area">${ct(i18n,'here')}</button>
+          <button type="button" class="btn-quiet" data-action="city-locate">${ct(i18n,'locate')}</button></section>`;
+        peekHtml = transport ? overviewPeek(shown) : `<strong>${esc(ct(i18n,'city'))}</strong><span class="city-meta">${cityData.count} ${ct(i18n,'venues')}</span>`;
       }
     }
     if (query && activeOption) searchInput.setAttribute('aria-activedescendant', activeOption);
     else searchInput.removeAttribute('aria-activedescendant');
+    if(ctx().city)for(const attribute of ['role','aria-expanded','aria-controls','aria-autocomplete','aria-activedescendant'])searchInput.removeAttribute(attribute);
     peek.innerHTML = following && selection?.kind === 'vehicle' && peekText !== null ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
     swapBody(html);
+    for(const slot of content.querySelectorAll<HTMLElement>('[data-city-air]')){
+      const station=slot.dataset.cityAir!;
+      if(pollutants.has(station))slot.innerHTML=pollutants.get(station)!;
+      else if(!disposed&&!ctx().session?.frozen&&!pollutantPending.has(station)){
+        pollutantPending.add(station);
+        void fetch(`/api/city/air?station=${encodeURIComponent(station)}`,{signal:AbortSignal.timeout(12000)})
+          .then(r=>{if(!r.ok)throw new Error('air-down');return r.json();})
+          .then(result=>{if(disposed||ctx().session?.frozen)return;const rows=Array.isArray(result.pollutants)?result.pollutants:[];
+            pollutants.set(station,`<dl class="city-facts">${rows.map((r:{name:string;value:number|null})=>`<div><dt>${esc(r.name)}</dt><dd>${r.value===null?ct(i18n,'unknown'):esc(String(r.value))+' µg/m³'}</dd></div>`).join('')}</dl>`);renderSheet();})
+          .catch(()=>{pollutants.set(station,`<p class="city-meta">${ct(i18n,'unavailable')}</p>`);})
+          .finally(()=>pollutantPending.delete(station));
+      }
+    }
+    for(const slot of content.querySelectorAll<HTMLElement>('[data-city-departures]')){
+      const operator=slot.dataset.cityDepartures as 'zet'|'hz',stopId=slot.dataset.stop!;
+      ensureBoard(operator,stopId);const board=boards.get(`${operator}:${stopId}`);
+      slot.innerHTML=board?departuresMarkup(i18n,board):`<p>${ct(i18n,'loading')}</p>`;
+    }
     renderChrome();
   }
 
@@ -590,6 +745,16 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const i18n = c.i18n;
     const k = kiosk();
     switch (sel.kind) {
+      case 'place': {
+        const p=[...cityState().places,...dynamicPlaces(cityState(),c.now)].find(p=>p.id===sel.id);
+        if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected')];}
+        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,activityWindow),c.saved?.has('place',p.id)),p.name];
+      }
+      case 'street': {
+        const s=cityState().streets.find(s=>s.id===sel.id);
+        if(!s){c.ensureCity?.(['streets','settlements']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'streets')];}
+        return [streetDetail(i18n,s),s.name];
+      }
       case 'route': {
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
@@ -608,7 +773,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           routes: screen?.id === sel.id ? [...screen.routes] : [],
         };
         const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast });
-        return [html, `${tr(i18n, 'stop')} ${group.name}`];
+        return [html+`<div data-city-departures="zet" data-stop="${esc(sel.id)}"></div>`, `${tr(i18n, 'stop')} ${group.name}`];
       }
       case 'vehicle': {
         const v = vehicles.find((x) => x.id === sel.id);
@@ -651,6 +816,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     else if (kind === 'select-stop') setSelection({ kind: 'stop', id: value }, { fit: true });
     else if (kind === 'select-vehicle') setSelection({ kind: 'vehicle', id: value }, { fit: true });
     else if (kind === 'select-closure') setSelection({ kind: 'closure', id: value }, { fit: true });
+    else if (kind === 'select-place') setSelection({ kind:'place',id:value },{fit:true});
+    else if (kind === 'select-street') setSelection({kind:'street',id:value});
     else return;
     focusDetail();
   }
@@ -673,11 +840,31 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     const action = target.dataset.action;
     const value = target.dataset.id ?? '';
+    if(ctx().session?.frozen)return;
     if (action?.startsWith('select-')) {
       choose(action, value);
       return;
     }
     switch (action) {
+      case 'bike-mode':bikeMode=target.dataset.mode==='return'?'return':'rent';updateCityMap();renderSheet();break;
+      case 'city-group':
+        cityGroup=target.dataset.group as CityGroup;cityCategory='';cityLimit=20;selection=null;
+        if(mapMode==='schema'&&cityGroup!=='transport')ctx().mapMode?.set('map');
+        relay(null);saveCityFilters();askCity();updateCityMap();renderSheet();break;
+      case 'city-category':
+        cityCategory=target.dataset.category??'';cityLimit=20;selection=null;
+        if(cityCategory==='cycle-paths')ctx().ensureCity?.(['cycle-paths']);
+        saveCityFilters();askCity();updateCityMap();renderSheet();break;
+      case 'city-window':
+        activityWindow=target.dataset.window as ActivityWindow;saveCityFilters();updateCityMap();renderSheet();break;
+      case 'city-more': cityLimit+=20;renderSheet();break;
+      case 'city-area':
+        if(camera)cityCenter={lon:camera.center[0],lat:camera.center[1]};
+        updateCityMap();renderSheet();break;
+      case 'city-locate':
+        navigator.geolocation?.getCurrentPosition(p=>{cityCenter={lon:p.coords.longitude,lat:p.coords.latitude};handle?.setView?.({center:[cityCenter.lon,cityCenter.lat],zoom:15});updateCityMap();renderSheet();},
+          ()=>{statusEl.hidden=false;statusEl.textContent=ct(ctx().i18n,'locationDenied');},{timeout:10000,maximumAge:60000});
+        break;
       case 'clear-selection':
         setSelection(null);
         break;
@@ -763,13 +950,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     query = searchInput.value;
     activeOption = null;
     if (query) {
+      askCity();
       ensureCatalogue();
       raise();
     }
     renderSheet();
+    updateCityMap();
   });
 
   searchInput.addEventListener('keydown', (event) => {
+    if(ctx().city&&(event.key==='ArrowDown'||event.key==='Enter')){
+      const first=content.querySelector<HTMLButtonElement>('button[data-action^="select-"]');
+      if(first){event.preventDefault();if(event.key==='Enter')choose(first.dataset.action,first.dataset.id??'');else first.focus();}
+      return;
+    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const options = optionIds();
       if (options.length === 0) return;
@@ -812,7 +1006,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   // --- The map slot -----------------------------------------------------------------
   /** Asks the page's slots for the one map, moves its container in and binds the handle they hand back (a new one after a kiosk's destroy()). */
   function syncMap(c: LayerContext, points: MapPoint[], lines: MapLine[]): void {
-    const renderer = c.lightweight ? 'map' : c.mapMode?.snapshot() ?? 'map';
+    const renderer = c.lightweight || (c.city&&(cityGroup!=='transport'||cityCategory!=='')) ? 'map' : c.mapMode?.snapshot() ?? 'map';
     const slotId = renderer === 'schema' ? SCHEMA_MAP_SLOT_ID : MAP_SLOT_ID;
     if (slotId !== activeSlotId || (c.maps?.handle(slotId) ?? null) !== handle) {
       // Fits and following can move the camera without onUserMove. Read it while the old map still exists.
@@ -838,7 +1032,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         className: 'map-canvas t-map-canvas',
         testid: 'map-canvas',
         ariaLabel: label,
-        points,
+        points:[...points,...cityMapPoints()],
         lines,
         reducedMotion: c.reducedMotion,
         theme: c.screen?.theme,
@@ -858,6 +1052,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         center: renderer === 'map' ? camera?.center : undefined,
         zoom: renderer === 'map' ? camera?.zoom : undefined,
         onSelect: (sel) => { if (epoch === mapEpoch) setSelection(sel); },
+        resolveStreet:(name,point)=>matchStreet(name,point,cityState().streets,cityState().settlements)?.id??null,
         onStatus: (next) => {
           if (epoch !== mapEpoch) return;
           status = next;
@@ -873,6 +1068,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         onUserMove: (cam) => {
           if (epoch !== mapEpoch) return;
           if (cam !== null && renderer === 'map') camera = cam;
+          updateCityMap();
           if (following) {
             following = null;
             handle?.follow?.(null);
@@ -902,8 +1098,31 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   }
 
   function render(next: WorkspaceInput): void {
+    if(disposed)return;
     input = next;
     const c = next.ctx;
+    if(c.onDispose&&!disposalRegistered){
+      disposalRegistered=true;c.onDispose(()=>{disposed=true;sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
+    }
+    if (!c.city) cityGroup = 'transport'; // legacy hosts retain their transport-only view
+    const pickedDistrict=c.kvartChoice&&c.kvartChoice!=='screen'?c.kvart:null;
+    if(pickedDistrict!==cityDistrict){
+      cityDistrict=pickedDistrict;
+      const district=districtBySlug(pickedDistrict);
+      cityCenter=district?{lon:district.seat.lon,lat:district.seat.lat}:null;
+      if(cityCenter){camera={center:[cityCenter.lon,cityCenter.lat],zoom:13};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
+      else if(c.screen?.stop){camera={center:[c.screen.stop.lon,c.screen.stop.lat],zoom:14};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
+    }
+    if(c.city&&!streetRequested&&!c.lightweight){streetRequested=true;c.ensureCity?.(['streets','settlements']);}
+    const filterKey=JSON.stringify(c.view?.filters??{});
+    if(filterKey!==cityFilterKey){
+      cityFilterKey=filterKey;
+      const group=c.view?.filters['city-group'];
+      if(group&&group in GROUP_SOURCES)cityGroup=group as CityGroup;
+      cityCategory=c.view?.filters['city-category']??cityCategory;
+      const window=c.view?.filters['city-window'];if(['week','today','tomorrow'].includes(window??''))activityWindow=window as ActivityWindow;
+    }
+    askCity();
     if (!modesSettled) {
       modesSettled = true;
       if (kiosk()) modes.delete(ROUTE_TYPE_BUS);
@@ -932,6 +1151,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const closures = closureItems(c.snapshots.prometnice).map((item) => item.id);
         const incoming = fromPublic(pub, { vehicles, closures }, groups);
         if (incoming || selection) {
+          if(incoming?.kind==='route'||incoming?.kind==='stop'||incoming?.kind==='vehicle'||incoming?.kind==='closure'){cityGroup='transport';cityCategory='';}
           selection = incoming;
           following = null;
           changed = true;
@@ -942,6 +1162,14 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // A selection the page brought lifts the sheet to half like any other, before the map fits to it.
     if (changed && selection) sheet?.set('half');
     syncMap(c, next.points, next.lines);
+    handle?.setModes?.(modesArg());
+    if(c.city) {
+      const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
+      handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
+      const paths=cityCategory==='cycle-paths'?cityState().paths.flatMap(p=>p.lines.map((coordinates,i)=>({id:`${p.id}-${i}`,title:p.name,coordinates}))):[];
+      handle?.setCityPaths?.(paths);
+    }
+    // Reference chunks are loaded on explicit discovery, never all on map boot.
     // An outage is no evidence of motion: the map holds every vehicle where it is until the feed is live again.
     handle?.setFeedState?.(c.snapshots['zet-rt']?.status ?? 'down');
     if (changed) handle?.select?.(selection, { fit: selection !== null });
