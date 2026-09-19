@@ -125,8 +125,6 @@ export interface KioskStrings {
   say: {
     /** "Večeras u gradu": the events kicker. */
     tonight: string;
-    /** "Sutra": tomorrow's forecast kicker. */
-    forecast: string;
     allDay: string;
     tonightMore: PluralForms;
     transit: string;
@@ -333,7 +331,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
     say: {
-      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'allDay']),
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
       tonightMore: forms('say', 'tonightMore'),

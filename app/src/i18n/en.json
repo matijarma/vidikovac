@@ -911,7 +911,6 @@
       "today": "today",
       "tomorrow": "tomorrow",
       "tonight": "Tonight in the city",
-      "forecast": "Tomorrow",
       "allDay": "all day",
       "tonightMore_one": "{count} more event",
       "tonightMore_other": "{count} more events"
