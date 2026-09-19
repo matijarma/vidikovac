@@ -185,6 +185,11 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       selectedRoute: selection?.kind === 'route' ? selection.id : null,
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
       screenStop: screenStop()?.name, labelMinPx: publicDisplay ? KIOSK_LABEL_MIN_PX : undefined,
+      // The same stop the highlight ring marks, handed in a second time for
+      // a second job: the name the collision pass may never drop. A surface
+      // with no stop of its own hands in nothing and ranks by terminal as
+      // before.
+      priorityStop: screenStop()?.name,
       // The artwork names its lines by GTFS route id; a terminal's chips
       // show what ZET calls them, which only the network knows.
       routeShort: (routeId: string) => net?.routes.get(routeId)?.short ?? routeId };

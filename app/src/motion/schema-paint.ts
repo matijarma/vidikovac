@@ -156,10 +156,18 @@ export interface SchemaLayout extends VehicleLayout {
   selectedRoute?: string | null;
   selectedStop?: string | null;
   screenStop?: string | null;
-  /** Kiosk floor, independent of an unusually small host's viewport. Its
-   *  presence is also what says this is a public screen: the crop there is
-   *  chosen so every name in it fits, so no name is ever dropped. */
+  /** Kiosk floor, independent of an unusually small host's viewport: a name on
+   *  a screen read across a room is never smaller than this, whatever the
+   *  crop's own scale says. Its presence is also what says this is a public
+   *  screen -- it lifts the cap as well as the floor. It does not lift the
+   *  collision pass: a screen that shows every name shows them over each
+   *  other (F6b, schema-kiosk capture). */
   labelMinPx?: number;
+  /** The one name the collision pass may never drop: the stop the surface is
+   *  about -- on a public screen its own stop, whose 24 px name is the anchor
+   *  the whole crop is chosen around. It sorts above the terminals, so the
+   *  names that collide with it are the ones that give way. */
+  priorityStop?: string | null;
   /** A route's display number for a terminal's chips. The artwork carries
    *  GTFS route ids; only the network knows what ZET calls them. */
   routeShort: (routeId: string) => string;
@@ -399,12 +407,15 @@ function overlaps(a: LabelBox, b: LabelBox, gap: number): boolean {
 /**
  * Measures every name and decides which of them this scale has room for.
  *
- * The order is the rank: terminals first (they are what a stranger reads a
+ * The order is the rank: the surface's own stop first where it has one
+ * (`priorityStop`), then the terminals (they are what a stranger reads a
  * network by), then the stops the most lines call at, then the name itself
  * so one scale always drops the same name rather than flickering between
  * two. A candidate is placed when its box -- the widest row by the rows'
  * height, plus the halo, plus a terminal's chips -- clears everything
- * already placed; otherwise it waits for the next zoom step.
+ * already placed; otherwise it waits for the next zoom step. Every surface
+ * runs this, the public screen included: its crop is chosen for its own
+ * stop, not for every name that falls inside it.
  */
 function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => XY, scale: number): NamePlan[] {
   const { schema, density } = layout;
@@ -416,8 +427,10 @@ function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => X
   for (const line of schema.lines) for (const name of new Set(line.stops.map(s => s.name))) {
     calling.set(name, (calling.get(name) ?? 0) + 1);
   }
+  const priority = layout.priorityStop ?? null;
   const ranked = schema.stops.filter((s): s is SchemaStop & { label: NonNullable<SchemaStop['label']> } => s.label !== null)
-    .sort((a, b) => Number(b.terminal) - Number(a.terminal)
+    .sort((a, b) => Number(b.name === priority) - Number(a.name === priority)
+      || Number(b.terminal) - Number(a.terminal)
       || (calling.get(b.name) ?? 0) - (calling.get(a.name) ?? 0)
       || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const placed: LabelBox[] = [];
@@ -461,8 +474,9 @@ function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => X
       // A terminal's box covers its disc, its name and its chips.
       y0: Math.min(top, at.y - disc), y1: chips.length > 0 ? chipY + chipHeight / 2 : nameBottom,
     };
-    // A public screen shows the lot; an interactive map chooses (F4).
-    if (kioskMinPx === undefined && placed.some(other => overlaps(other, box, gap))) continue;
+    // Every surface chooses (F4, and F6b for the public screen): a name laid
+    // over another name is not more information, it is two unreadable names.
+    if (placed.some(other => overlaps(other, box, gap))) continue;
     placed.push(box);
     plans.push({ rows, terminal, px, x: at.x, y: firstRow, advance, chips, chipPx, chipHeight, chipsWidth, chipY });
   }

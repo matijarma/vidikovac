@@ -607,8 +607,21 @@ describe('paintSchema (F4: flat names, a collision pass and terminal chips)', ()
     expect(inked(paint(6))).toEqual(expect.arrayContaining(['Alfa', 'Beta']));
   });
 
-  it('keeps every name on a public screen, whose crop is already chosen so they fit', () => {
-    expect(inked(paint(LABEL_MIN_PX_PER_UNIT, { labelMinPx: 24 }))).toEqual(expect.arrayContaining(['Alfa', 'Beta']));
+  it('chooses on a public screen too, but never drops the screen’s own stop: it outranks the terminals and the names that collide with it give way', () => {
+    // At the kiosk floor the two names are far wider than the ten units
+    // between them, so one of them goes -- the public screen runs the same
+    // rank-greedy pass as every other surface (F6b; F4 exempted it and the
+    // capture came back with names overprinting each other).
+    const shown = inked(paint(LABEL_MIN_PX_PER_UNIT, { labelMinPx: 24 }));
+    expect(shown).toContain('Alfa'); // two lines call at Alfa, one at Beta
+    expect(shown).not.toContain('Beta');
+    // Name Beta as the screen's own stop and the ranking inverts around it:
+    // the stop the whole crop is about is never the name that is dropped.
+    const own = inked(paint(LABEL_MIN_PX_PER_UNIT, { labelMinPx: 24, priorityStop: 'Beta' }));
+    expect(own).toContain('Beta');
+    expect(own).not.toContain('Alfa');
+    // Above the terminals too, which otherwise rank first.
+    expect(own).toContain('ČRNOMEREC');
   });
 
   it('picks a chip number tone against the theme tones as a browser resolves them, which is oklch and not hex', () => {
