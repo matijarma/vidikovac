@@ -244,6 +244,14 @@ export const SERVER_EVENTS = [
   // concession and a swap are the only two ways a standing order may
   // reverse, which is what makes an overtake countable at all.
   'twin_order',
+  // F11: what the planner had to intervene about this tick (dim1
+  // floor|junction_wait|stand_fix|eta_bound_skipped, dim2 the kind). `floor`
+  // is an anchor inside the GPS scatter behind the plan already published,
+  // `junction_wait` a wait booked at a crossing trams actually stop at,
+  // `stand_fix` a tram kept at its platform that the old rule would have
+  // driven off, `eta_bound_skipped` a TripUpdate's "you have departed" the
+  // planner refused to believe about the very next stop.
+  'twin_plan',
   // R-TE18: the hourly HEAD of ZET's static GTFS against the artefacts' build
   // time (dim1 current|newer|unknown|error); "newer" is the call to rebuild.
   'static_watch',

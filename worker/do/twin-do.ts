@@ -37,7 +37,8 @@ import { patternPathResolver, zagrebBands, type PatternPathResolver } from '../.
 import { decodeFeed } from '../twin/feed-decode';
 import { BUCKETS, horizonKey, type HindsightCounts, type HindsightSignCounts, HORIZONS_S, SIGN_BUCKETS } from '../../shared/motion/hindsight';
 import { emptyAggregates, emptyHistogram, histogramMedian, isEmptyAggregates, mergeAggregates, mergeHistograms, parseKey, recordEvidence, type LearnedAggregates } from '../../shared/motion/learn';
-import { pushDwellRecent, trimDwellRecent, type DwellOverride, type DwellRecent } from '../../shared/motion/dwell';
+import { pushDwellRecent, trimDwellRecent, type DwellOverride, type DwellRecent, type DwellRow } from '../../shared/motion/dwell';
+import type { JunctionRow } from '../../shared/motion/junction';
 import { indexRowsFromIndex } from '../twin/index-load';
 import {
   INDEX_RECHECK_MS,
@@ -75,6 +76,20 @@ export { TWIN_DO_NAME };
 export const STALE_INDEX_SHARE = 0.5;
 
 export type TickOutcome = 'ok' | 'unchanged' | 'error' | 'stale_index';
+
+/** The live F11 tables, as /stats asks for them over RPC. */
+export interface TwinTables {
+  /** The instant the rows were read at, epoch seconds. */
+  at: number;
+  dwell: DwellRow[];
+  junctions: JunctionRow[];
+  /** Entries the owner's file carries. */
+  overrides: number;
+  /** Entries that matched no platform of the loaded network: a renamed stop,
+   *  a typo. Shown rather than thrown, so a rebuilt artefact cannot take the
+   *  twin down over one stale line of a hand-edited file. */
+  unmatched: { stop: string; route: string | null }[];
+}
 
 export interface TickReport {
   outcome: TickOutcome;
@@ -593,6 +608,26 @@ export class TwinDO extends DurableObject<Env> {
     this.dwellRecent = {};
     this.dwellOverrides = [];
     this.graphChanged = false;
+  }
+
+  /**
+   * The two F11 tables as /stats renders them: what every platform the twin
+   * knows anything about is planned to hold a tram for, and where the rails
+   * branch and how long a tram waits there. Read from the live engine, so an
+   * operator sees what the planner is using right now and not an hourly
+   * counter of it. Empty before the assets load.
+   */
+  async tables(nowSec?: number): Promise<TwinTables> {
+    const at = nowSec ?? Math.floor(this.now() / 1000);
+    const bands = zagrebBands(at);
+    if (!this.engine) return { at, dwell: [], junctions: [], overrides: 0, unmatched: [] };
+    return {
+      at,
+      dwell: this.engine.dwell.rows(at, bands.hourBand, bands.dayType),
+      junctions: this.engine.junctions.rows(bands.hourBand, bands.dayType),
+      overrides: this.dwellOverrides.length,
+      unmatched: this.engine.dwell.unmatchedOverrides.map((entry) => ({ stop: entry.stop, route: entry.route ?? null })),
+    };
   }
 
   /** What the twin has learned, for a test: cells per table and the median

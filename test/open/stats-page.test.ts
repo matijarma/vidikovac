@@ -136,3 +136,63 @@ describe('renderStatsPage: the twin', () => {
     expect(html).toContain('30 s: 12,0 % ispred');
   });
 });
+
+// F11: the twin's two live tables on /stats. These are not counters -- they
+// are what the planner is using right now -- so the page takes them beside
+// the metric rows and renders nothing where the twin did not answer.
+describe('the twin tables on /stats', () => {
+  const view = {
+    days: DEFAULT_DAYS,
+    since: '2026-09-10',
+    today: '2026-09-12',
+    rows: ROWS,
+  };
+
+  it('renders the dwell table, the junction table and the planner interventions', () => {
+    const html = renderStatsPage({
+      ...view,
+      rows: [...ROWS, row('2026-09-11', 11, 'twin_plan', 'floor', 'tram', 42), row('2026-09-11', 11, 'twin_plan', 'stand_fix', 'tram', 7)],
+      twin: {
+        at: 1_800_000_000,
+        overrides: 2,
+        unmatched: [{ stop: 'Nepostojeće', route: null }],
+        dwell: [
+          {
+            stopId: '275_1',
+            name: 'Selska',
+            defaultSec: 60,
+            override: { defaultSec: 60, pin: true, route: null, reason: 'terminus' },
+            p50: 41,
+            p70: 58,
+            samples: 24,
+            recent: 9,
+            lastSampleSec: 1_799_999_400,
+            plannedSec: 60,
+          },
+          { stopId: '299_1', name: 'Trg', defaultSec: 20, override: null, p50: null, p70: null, samples: 0, recent: 0, lastSampleSec: null, plannedSec: 20 },
+        ],
+        junctions: [
+          { node: 137, passes: 84, waits: 51, share: 51 / 84, p50: 23, booked: true },
+          { node: 12, passes: 40, waits: 4, share: 0.1, p50: 18, booked: false },
+        ],
+      },
+    });
+    expect(html).toContain('Zadržavanje po stajalištu');
+    expect(html).toContain('Selska');
+    expect(html).toContain('275_1');
+    expect(html).toContain('(fiksno)');
+    expect(html).toContain('Čekanje na križanjima');
+    expect(html).toContain('137');
+    expect(html).toContain('Zahvati planera');
+    expect(html).toContain('floor');
+    expect(html).toContain('Nepostojeće'); // an override the network no longer knows is shown, never silently dropped
+    expect(html).toContain('stop-dwell-overrides.json');
+  });
+
+  it('says so plainly when the twin answered nothing', () => {
+    const html = renderStatsPage(view);
+    expect(html).toContain('blizanac još nije ništa izmjerio');
+    expect(html).toContain('još nema dovoljno prolaza ni na jednom čvoru');
+    expect(html).toContain('planer još nije morao zahvatiti');
+  });
+});
