@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { districtBySlug } from '../../app/src/kiosk/districts';
+import { CITY_WINDOW, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
 import * as basemap from '../../app/src/map/basemap';
 import {
   createCityMap,
@@ -284,20 +286,55 @@ describe('the field camera and the paired camera', () => {
     expect(FIELD_SPAN_M).toBe(1500);
     expect(HANDHELD_SPAN_M).toBe(1400);
     // The clamp: a tiny box never leaves the archive's readable floor, a huge one never overzooms past its ceiling; no width yet is the floor, never NaN.
-    expect(fieldZoom(200, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
+    expect(fieldZoom(100, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
     expect(fieldZoom(6000, LAT, FIELD_SPAN_M)).toBe(FIELD_MAX_ZOOM);
     expect(fieldZoom(0, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
-    expect([FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]).toEqual([13.5, 15.5]);
+    expect([FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]).toEqual([12.7, 15.5]);
   });
 
   it('the field view is the stop at its derived zoom with the kiosk emphasis and the outline, and no selection, no follow, no padding', () => {
-    const view = fieldView({ stop: STOP, widthPx: 1400, spanM: FIELD_SPAN_M });
+    const view = fieldView({ stop: STOP, district: null, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M });
     expect(view).toEqual({ zoom: fieldZoom(1400, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
     expect(KIOSK_EMPHASIS).toEqual(['event', 'quake', 'assembly', 'pharmacy']);
-    // A screen with no stop still frames the city, at the city's own latitude.
-    const none = fieldView({ stop: null, widthPx: 1400, spanM: FIELD_SPAN_M });
-    expect(none.center).toBeUndefined();
-    expect(none.zoom).toBeCloseTo(fieldZoom(1400, LAT, FIELD_SPAN_M), 6);
+  });
+
+  // The screen a person sets up with one button has no stop and no district:
+  // it opens on the whole city (CITY_WINDOW, Crnomerec to Maksimir, the Sava
+  // to Mirogoj), fitted to whatever box the composition gives it.
+  it('frames the whole city when neither a stop nor a district is configured: the window fitted with 24 px of clearance, the tighter axis governing, never below the zoom that still carries plates and stop rings', () => {
+    expect(CITY_WINDOW).toEqual({ west: 15.925, south: 45.775, east: 16.035, north: 45.838 });
+    // The floor is map/overlays.ts's PILL_ZOOM (and STOP_ZOOM) plus a fifth: under it the
+    // plates and the stop rings stop drawing and the window would be a basemap with nothing on it.
+    expect(FIELD_MIN_ZOOM).toBe(overlays.PILL_ZOOM + 0.2);
+    expect(FIELD_MIN_ZOOM).toBe(12.7);
+    // Every field the kiosk lays out is smaller than the window's 8.5 x 7.0 km asks for, so each sits on the floor.
+    for (const [w, h] of [[1300, 880], [880, 620], [1032, 900], [358, 420]] as const) {
+      expect(cityWindowView(w, h).zoom, `${w}x${h}`).toBe(FIELD_MIN_ZOOM);
+    }
+    expect(cityWindowView(0, 0).zoom).toBe(FIELD_MIN_ZOOM); // a box not yet laid out is the floor, never NaN
+    expect(cityWindowView(1300, 880).center).toEqual([(15.925 + 16.035) / 2, (45.775 + 45.838) / 2]);
+    // A field with room for the window takes the tighter of the two axes: 2600 x 1760 could
+    // carry the window's width at z13.99 and only its height at z13.70.
+    const big = cityWindowView(2600, 1760);
+    expect(big.zoom).toBeCloseTo(13.70, 2);
+    const mid = (45.775 + 45.838) / 2;
+    const ppm = 1 / metresPerPixel(big.zoom, mid);
+    expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M * ppm).toBeCloseTo(1760 - 48, 0);
+    expect(((16.035 - 15.925) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((mid * Math.PI) / 180) * ppm).toBeLessThan(2600 - 48);
+    // The same window is what the field view hands back for a screen with neither.
+    const none = fieldView({ stop: null, district: null, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M });
+    expect(none).toEqual({ ...cityWindowView(1300, 880), emphasis: KIOSK_EMPHASIS, outline: true });
+  });
+
+  it('frames a configured district on its seat until its outline lands, and a configured stop keeps its own centred camera', () => {
+    const kvart = fieldView({ stop: null, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M });
+    const seat = districtBySlug('maksimir')!.seat;
+    expect(kvart.center).toEqual([seat.lon, seat.lat]);
+    expect(kvart.zoom).toBeCloseTo(fieldZoom(1300, seat.lat, DISTRICT_SPAN_M), 6);
+    // An area that is not one of the seventeen gradske cetvrti ('zagreb' is the whole city) is the window.
+    expect(fieldView({ stop: null, district: 'zagreb', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual(cityWindowView(1300, 880).center);
+    // A stop outranks both.
+    expect(fieldView({ stop: STOP, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual([STOP.lon, STOP.lat]);
   });
 
   it('the worker\u2019s teaser box reaches past the field by one stop spacing (TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400, D2): a vehicle has given the motion model one fix of its own before it enters the picture', () => {

@@ -69,10 +69,17 @@ export const FIELD_SPAN_M = 1500;
 /** A phone's 280 px map band spans about the panel's ground: the band is a
  *  glance at the stop, not a stage. */
 export const HANDHELD_SPAN_M = 1400;
-/** The derived zoom never goes below the basemap's readable floor for a
- *  screen read from three metres (the prozor profile's names and the tram
- *  figure are sized from here up)... */
-export const FIELD_MIN_ZOOM = 13.5;
+/** The ground a configured gradska cetvrt's own camera spans before its
+ *  outline lands: a district is a few kilometres across, so the seat at this
+ *  span is the honest frame until loadKvartOutline answers with the real one. */
+export const DISTRICT_SPAN_M = 3500;
+/** The derived zoom never goes below the zoom at which the marks themselves
+ *  stop drawing: map/overlays.ts's PILL_ZOOM and STOP_ZOOM (12.5) plus a
+ *  fifth, so even the whole-city window still carries numbered plates and
+ *  stop rings rather than an empty basemap. A hand-copy of that literal, like
+ *  LABEL_PADDING_TILE_PX below (this module stays off the map layer's own
+ *  graph); test/app/map.test.ts pins the two equal. */
+export const FIELD_MIN_ZOOM = 12.7;
 /** ...nor past the overzoom ceiling KIOSK_MAX_ZOOM explains. */
 export const FIELD_MAX_ZOOM = KIOSK_MAX_ZOOM;
 /** The ground a pixel covers is map/scale.ts's, shared with the overlay
@@ -498,21 +505,87 @@ export interface KioskView extends KioskMapView {
 
 export interface FieldInput {
   stop: ScreenStop | null;
+  /** The configured gradska cetvrt's slug, or null for the whole city. An
+   *  area that names no gradska cetvrt ('zagreb') is the whole city too. */
+  district: string | null;
   /** The map host's laid-out width in CSS px (kiosk/field.ts measureWidth), or the composition's design width before layout (kiosk/layout.ts FIELD_DESIGN_WIDTH). */
   widthPx: number;
+  /** The host's laid-out height, the other axis of the window's own fit. */
+  heightPx: number;
   /** FIELD_SPAN_M on a wall, HANDHELD_SPAN_M on a phone's band. */
   spanM: number;
 }
 
-/** Zagreb's own latitude, for a screen that has no stop yet: the zoom is a function of latitude and a screen with none still frames the city. */
-const ZAGREB_LAT = 45.815;
+/** The whole-city window a screen opens on when nobody has configured it:
+ *  Crnomerec to Maksimir across, the Sava to Mirogoj up, which is the city a
+ *  passer-by means by "Zagreb". One constant, so moving the frame is one
+ *  edit. */
+export const CITY_WINDOW = Object.freeze({ west: 15.925, south: 45.775, east: 16.035, north: 45.838 });
 
-/** The invitation's fixed window (R-KP1, R-KP2, R-KP11): the stop at the
- *  derived zoom, the kiosk's points lit, the quarter drawn; no selection, no
- *  follow, no padding. */
+/** Clearance between the window's own edge and the field's, on every side:
+ *  the marks that sit on the window's rim (a terminus plate, a BAJS count)
+ *  need room to draw beside their point. */
+export const CITY_WINDOW_PADDING_PX = 24;
+
+/** The camera that fits a lon/lat box in a widthPx x heightPx field with
+ *  `paddingPx` of clearance on every side: the box's centre, and the zoom at
+ *  which its ground fits -- one axis at a time, the tighter of the two
+ *  winning, because a fit that honoured only the width would crop the top and
+ *  the bottom off. Each axis is the inverse of metresPerPixel (map/scale.ts),
+ *  the same arithmetic fieldZoom states for a span; in Web Mercator a ground
+ *  metre costs the same pixels north to south as east to west at a given
+ *  latitude, so one metres-per-pixel serves both. Never past the overzoom
+ *  ceiling and never below `minZoom`; a field not yet laid out (0 px) is
+ *  minZoom, never NaN. */
+function boundsView(bounds: { west: number; south: number; east: number; north: number }, widthPx: number, heightPx: number, paddingPx: number, minZoom: number): { center: [number, number]; zoom: number } {
+  const lat = (bounds.south + bounds.north) / 2;
+  const across = EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180);
+  const groundW = (across * (bounds.east - bounds.west)) / 360;
+  const groundH = (EARTH_CIRCUMFERENCE_M * (bounds.north - bounds.south)) / 360;
+  const axis = (px: number, groundM: number): number => Math.log2((across * Math.max(1, px - 2 * paddingPx)) / (512 * groundM));
+  const fit = Math.min(axis(widthPx, groundW), axis(heightPx, groundH));
+  return { center: [(bounds.west + bounds.east) / 2, lat], zoom: Math.min(FIELD_MAX_ZOOM, Math.max(minZoom, Number.isFinite(fit) ? fit : minZoom)) };
+}
+
+/** CITY_WINDOW fitted to this field. Every box the kiosk lays out today is
+ *  smaller than the window's 8.5 x 7.0 km asks for, so every one of them
+ *  sits on FIELD_MIN_ZOOM and shows a little less than the whole frame north
+ *  to south: the floor is the marks' own, and a window with no plates and no
+ *  stop rings on it would not be the city, live. */
+export function cityWindowView(widthPx: number, heightPx: number): { center: [number, number]; zoom: number } {
+  return boundsView(CITY_WINDOW, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM);
+}
+
+/** A district's outline fitted to this field, for the screen whose area is
+ *  one gradska cetvrt: the same fit as the window's, so the two frames are
+ *  one arithmetic. */
+export function outlineView(outline: MapOutline, widthPx: number, heightPx: number): { center: [number, number]; zoom: number } {
+  const coordinates = outline.polygons.flat(2);
+  const lons = coordinates.map((p) => p[0]), lats = coordinates.map((p) => p[1]);
+  return boundsView({ west: Math.min(...lons), south: Math.min(...lats), east: Math.max(...lons), north: Math.max(...lats) }, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM);
+}
+
+/** The invitation's window (R-KP1, R-KP2, R-KP11): the kiosk's points lit,
+ *  the quarter drawn, no selection, no follow, no padding -- on the frame the
+ *  screen's own configuration asks for. A configured stop keeps its centred
+ *  camera at the derived zoom; a configured gradska cetvrt sits on its seat
+ *  until its outline lands (requestKioskMap re-frames on the real rings); a
+ *  screen with neither -- which is every screen the one-button setup makes --
+ *  opens on the whole city. */
 export function fieldView(input: FieldInput): KioskView {
-  const view: KioskView = { zoom: fieldZoom(input.widthPx, input.stop?.lat ?? ZAGREB_LAT, input.spanM), emphasis: KIOSK_EMPHASIS, outline: true };
-  if (input.stop) view.center = [input.stop.lon, input.stop.lat];
+  const view: KioskView = { zoom: FIELD_MIN_ZOOM, emphasis: KIOSK_EMPHASIS, outline: true };
+  const district = districtBySlug(input.district);
+  if (input.stop) {
+    view.zoom = fieldZoom(input.widthPx, input.stop.lat, input.spanM);
+    view.center = [input.stop.lon, input.stop.lat];
+  } else if (district) {
+    view.zoom = fieldZoom(input.widthPx, district.seat.lat, DISTRICT_SPAN_M);
+    view.center = [district.seat.lon, district.seat.lat];
+  } else {
+    const window = cityWindowView(input.widthPx, input.heightPx);
+    view.zoom = window.zoom;
+    view.center = window.center;
+  }
   return view;
 }
 
@@ -593,6 +666,8 @@ export interface KioskMapInput {
   exploring?:boolean;
   resolveStreet?:(name:string,point:{lon:number;lat:number})=>string|null;
   stop: ScreenStop | null;
+  /** The configured area: a gradska cetvrt's slug, or null for the whole city. */
+  district?: string | null;
   /** The whole teaser, not only the two transport modules: the map draws the
    *  city's own points too (cityPoints). */
   snapshots: FeedSnapshots;
@@ -641,7 +716,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     const p=pick?[...input.city.places,...dynamicPlaces(input.city,input.now)].find(p=>p.id===pick.id):null;
     if(p&&p.lon!==undefined&&p.lat!==undefined&&!points.some(x=>x.id===p.id))points.push({id:p.id,title:p.name,lon:p.lon,lat:p.lat,place:'city',props:{category:p.category,badge:'',eventCount:0,priority:0}});
   }
-  const field = fieldView({ stop: input.stop, widthPx: input.widthPx, spanM: input.spanM });
+  const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
   const view = input.phase === 'paired' ? pairedView({ stop: input.stop, selection: input.selection }) : field;
   if(input.selection?.kind==='place'||input.localSelection?.kind==='place'){
     const pick=input.selection?.kind==='place'?input.selection:input.localSelection!;
