@@ -53,6 +53,8 @@ export interface SimTram {
   routeId: string;
   tripId: string;
   pathIdx: number;
+  /** The path's id, whether it is a shape or a synthetic `path:` id. */
+  pathId: string;
   shapeId: string;
   direction: 0 | 1;
   departSec: number;
@@ -140,6 +142,7 @@ export function simulate(net: GraphNetwork, pathIds: string[], options: SimOptio
       routeId: path.route,
       tripId: `trip-${i + 1}`,
       pathIdx,
+      pathId: path.id,
       shapeId: path.id,
       direction: path.direction === 1 ? 1 : 0,
       departSec,

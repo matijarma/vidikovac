@@ -3,12 +3,20 @@
 // `default-src 'none'`). Rounding and folding happen only in the City export
 // (worker/stats/export.ts); this page is where the operator sees the truth.
 import type { MetricsDailyRow } from '../metrics-do';
+import { DWELL_PLAN_QUANTILE_LABEL } from '../../shared/motion/dwell';
+import type { TwinTables } from '../do/twin-do';
 import { escapeHtml } from '../open/html';
 
 export const MAX_DAYS = 365;
 export const DEFAULT_DAYS = 30;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_OPTIONS: readonly number[] = [7, 30, 90, 365];
+
+/** Rows of the two live twin tables /stats shows: enough to read the shape
+ *  of the fleet's platforms without turning the page into a thousand-row
+ *  listing of "20 s, nothing measured". The tables arrive already sorted by
+ *  how much is known about each entry. */
+export const TWIN_TABLE_ROWS = 120;
 
 export interface StatsView {
   days: number;
@@ -17,6 +25,9 @@ export interface StatsView {
   /** Today's Zagreb day, YYYY-MM-DD. */
   today: string;
   rows: MetricsDailyRow[];
+  /** The twin's live dwell and junction tables (F11), or null when the twin
+   *  did not answer. Not counters: what the planner is using right now. */
+  twin?: TwinTables | null;
 }
 
 type Pivot = Map<string, Map<string, number>>;
@@ -96,6 +107,77 @@ function matrixTable(heading: string, rowLabel: string, p: Pivot, empty: string)
   );
 }
 
+function secs(value: number | null): string {
+  return value === null ? '&mdash;' : `${value.toLocaleString('hr-HR', { maximumFractionDigits: 0 })} s`;
+}
+
+/** Zagreb wall clock of an epoch second, HH:MM, for the "last sample" column. */
+function clock(atSec: number | null): string {
+  if (atSec === null) return '&mdash;';
+  return new Intl.DateTimeFormat('hr-HR', { timeZone: 'Europe/Zagreb', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(atSec * 1000));
+}
+
+/** The per-stop dwell table as the planner reads it right now (F11). */
+function dwellTable(twin: TwinTables | null | undefined): string {
+  const heading = 'Zadržavanje po stajalištu';
+  if (!twin || twin.dwell.length === 0) {
+    return `<h3>${heading}</h3><p class="empty">blizanac još nije ništa izmjerio ni dobio ručnu vrijednost</p>`;
+  }
+  const rows = twin.dwell.slice(0, TWIN_TABLE_ROWS);
+  const body = rows
+    .map(
+      (r) =>
+        `<tr><th scope="row">${escapeHtml(r.name)}</th>` +
+        `<td>${escapeHtml(r.stopId)}</td>` +
+        `<td class="num">${secs(r.defaultSec)}</td>` +
+        `<td class="num${r.override === null ? ' dim' : ''}">${r.override === null ? '&mdash;' : `${secs(r.override.defaultSec)}${r.override.pin ? ' (fiksno)' : ''}${r.override.route === null ? '' : ` · linija ${escapeHtml(r.override.route)}`}`}</td>` +
+        `<td class="num${r.p50 === null ? ' dim' : ''}">${secs(r.p50)}</td>` +
+        `<td class="num${r.pPlan === null ? ' dim' : ''}">${secs(r.pPlan)}</td>` +
+        `<td class="num${r.samples === 0 ? ' dim' : ''}">${fmt(r.samples)}</td>` +
+        `<td class="num${r.recent === 0 ? ' dim' : ''}">${fmt(r.recent)}</td>` +
+        `<td class="num">${clock(r.lastSampleSec)}</td>` +
+        `<td class="num">${secs(r.plannedSec)}</td></tr>`,
+    )
+    .join('');
+  const more = twin.dwell.length > rows.length ? `<p class="lede">Prikazano ${fmt(rows.length)} od ${fmt(twin.dwell.length)} perona o kojima se nešto zna.</p>` : '';
+  return (
+    `<h3>${heading}</h3>` +
+    `<div class="scroll" tabindex="0" role="region" aria-label="${heading}"><table class="tbl"><thead><tr>` +
+    `<th scope="col">Stajalište</th><th scope="col">Peron</th><th scope="col" class="num">Polazno</th><th scope="col" class="num">Ručno</th>` +
+    `<th scope="col" class="num">p50</th><th scope="col" class="num">${DWELL_PLAN_QUANTILE_LABEL}</th><th scope="col" class="num">Uzoraka</th>` +
+    `<th scope="col" class="num">Nedavnih</th><th scope="col" class="num">Zadnji</th><th scope="col" class="num">Planira se</th>` +
+    `</tr></thead><tbody>${body}</tbody></table></div>` +
+    more
+  );
+}
+
+/** Where the rails branch, how often a tram stops there and for how long (F11). */
+function junctionTable(twin: TwinTables | null | undefined): string {
+  const heading = 'Čekanje na križanjima';
+  if (!twin || twin.junctions.length === 0) {
+    return `<h3>${heading}</h3><p class="empty">još nema dovoljno prolaza ni na jednom čvoru</p>`;
+  }
+  const rows = twin.junctions.slice(0, TWIN_TABLE_ROWS);
+  const body = rows
+    .map(
+      (r) =>
+        `<tr><th scope="row">${fmt(r.node)}</th>` +
+        `<td class="num">${fmt(r.passes)}</td>` +
+        `<td class="num">${fmt(r.waits)}</td>` +
+        `<td class="num">${pct(r.waits, r.passes)}</td>` +
+        `<td class="num${r.p50 === null ? ' dim' : ''}">${secs(r.p50)}</td>` +
+        `<td>${r.booked ? 'da' : 'ne'}</td></tr>`,
+    )
+    .join('');
+  return (
+    `<h3>${heading}</h3>` +
+    `<div class="scroll" tabindex="0" role="region" aria-label="${heading}"><table class="tbl"><thead><tr>` +
+    `<th scope="col">Čvor</th><th scope="col" class="num">Prolaza</th><th scope="col" class="num">Stajanja</th>` +
+    `<th scope="col" class="num">p(stane)</th><th scope="col" class="num">Čekanje p50</th><th scope="col">Knjiži se</th>` +
+    `</tr></thead><tbody>${body}</tbody></table></div>`
+  );
+}
+
 /** Every Zagreb day in the window, oldest first, so a gap renders as a zero. */
 /** The hindsight buckets in order with the bound a percentile can be stated
  *  against: an error in `lt50` is under 50 m, so "p95 ispod 50 m" is exactly
@@ -124,6 +206,20 @@ function hindsightPercentile(rows: readonly MetricsDailyRow[], horizon: string, 
     if (cumulative / total >= share) return bucket.label;
   }
   return HINDSIGHT_BUCKETS[HINDSIGHT_BUCKETS.length - 1].label;
+}
+
+/** The share of a horizon's graded fixes whose plan ran ahead of the tram
+ *  by 50 m or more (F7): the round's target at 30 s is 10 % or under. */
+function aheadShareLine(rows: readonly MetricsDailyRow[]): string {
+  const parts = ['10s', '30s', '60s']
+    .map((horizon) => {
+      const total = sum(rows, (r) => r.event === 'twin_hindsight_sign' && r.dim1 === horizon);
+      if (total === 0) return null;
+      const ahead = sum(rows, (r) => r.event === 'twin_hindsight_sign' && r.dim1 === horizon && r.dim2 === 'ahead_ge50');
+      return `${escapeHtml(horizon.replace('s', ' s'))}: ${pct(ahead, total)} ispred`;
+    })
+    .filter((part): part is string => part !== null);
+  return parts.length ? `<p>Plan 50 m ili više ispred vozila, po horizontu: ${parts.join('; ')}. Cilj kruga F na 30 s: 10 % ili manje.</p>` : '';
 }
 
 function hindsightLine(rows: readonly MetricsDailyRow[]): string {
@@ -350,6 +446,16 @@ export function renderStatsPage(view: StatsView): string {
     `<h3>Ocjena unatrag</h3><p class="lede">Svako novo očitanje ocjenjuje planove objavljene 10, 30 i 60 s prije njega: koliko je metara plan bio od mjesta gdje se vozilo zaista našlo.</p>` +
     matrixTable('Greška plana po horizontu i razredu', 'Horizont', pivot(rows, 'twin_hindsight', 'dim1', 'dim2'), 'još nema ocijenjenih planova') +
     hindsightLine(rows) +
+    `<p class="lede">Ista očitanja po predznaku: <em>ahead_ge50</em> je plan 50 m ili više ispred vozila (oznaka koja se mora vraćati), <em>behind_ge50</em> plan toliko iza njega (čita se kao kašnjenje GPS-a), <em>within50</em> unutar toga.</p>` +
+    matrixTable('Predznak greške plana po horizontu', 'Horizont', pivot(rows, 'twin_hindsight_sign', 'dim1', 'dim2'), 'još nema ocijenjenih planova s predznakom') +
+    aheadShareLine(rows) +
+    `<h3>Registar redoslijeda</h3><p class="lede">Tko je iza koga na istim tračnicama, zapisano iz očitanja i onda postojano. Svaki redak je <em>događaj</em> otkucaja, jer se tablica zbraja kroz sat: <em>established</em> koliko je odnosa upisano, <em>dropped</em> koliko ih je palo (razišli su se ili je odnos zastario), <em>hold</em> i <em>push</em> koliko je puta odnos stvarno pomaknuo plan, a <em>concession</em> i <em>swap</em> su jedina dva načina na koja se upisani redoslijed smije obrnuti. Koliko odnosa u nekom trenutku stoji nije događaj nego stanje i namjerno nije ovdje.</p>` +
+    matrixTable('Registar redoslijeda po događaju', 'Događaj', pivot(rows, 'twin_order', 'dim1', 'dim2'), 'registar još nije ništa zapisao') +
+    `<h3>Zahvati planera</h3><p class="lede">Što je planer morao ispraviti, po otkucaju: <em>floor</em> je sidro koje je unutar raspršenja GPS-a iza već objavljenog plana, pa plan kreće od objavljenog luka umjesto da se vrati unatrag; <em>junction_wait</em> je čekanje upisano na križanju na kojem tramvaji doista staju; <em>stand_fix</em> je tramvaj zadržan na peronu kojeg bi staro pravilo otpustilo; <em>eta_bound_skipped</em> je ZET-ova najava „već si otišao” za prvo sljedeće stajalište koju planer nije povjerovao.</p>` +
+    matrixTable('Zahvati planera po vrsti', 'Zahvat', pivot(rows, 'twin_plan', 'dim1', 'dim2'), 'planer još nije morao zahvatiti') +
+    `<h3>Tablica zadržavanja i križanja</h3><p class="lede">Ovo nisu brojači nego ono čime planer računa <em>sada</em>: za svaki peron o kojem se nešto zna polazna vrijednost (ručna, pa vozni red, pa 20 s), ručni unos iz <code>app/public/data/stop-dwell-overrides.json</code>, naučena razdioba po satu i vrsti dana (p50 i ${DWELL_PLAN_QUANTILE_LABEL}), koliko je uzoraka u zadnjih 90 minuta i kada je zadnji, te na kraju sekunde koje planer stvarno knjiži. Ručni unos uredi u toj datoteci i objavi — između nje i blizanca nema koraka gradnje.${view.twin && view.twin.unmatched.length > 0 ? ` <b>Unosa bez perona: ${fmt(view.twin.unmatched.length)}</b> (${escapeHtml(view.twin.unmatched.map((u) => u.stop).join(', '))}) — stajalište je preimenovano ili je u imenu tipfeler.` : ''}</p>` +
+    dwellTable(view.twin) +
+    junctionTable(view.twin) +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
     `</section>` +
     `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +

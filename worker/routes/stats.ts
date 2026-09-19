@@ -5,6 +5,8 @@
 // same `404 {"error":"not-found"}`, so an unauthenticated caller cannot learn
 // that the route exists.
 import type { Env } from '../env';
+import type { TwinTables } from '../do/twin-do';
+import { twinStub } from '../do/twin-do';
 import { METRICS_DO_NAME, type MetricsDO, type MetricsDailyRow } from '../metrics-do';
 import { zagrebDay } from '../open/time';
 import { verifyAccess } from '../pairing/access';
@@ -20,6 +22,11 @@ export interface StatsDeps {
   verify?: (env: Env, request: Request) => Promise<boolean>;
   /** Test seam; production queries the MetricsDO singleton. */
   loadRows?: (env: Env, sinceDay: string) => Promise<MetricsDailyRow[]>;
+  /** Test seam; production asks the twin for its live dwell and junction
+   *  tables (F11). A twin that cannot answer leaves the tables empty rather
+   *  than failing the page: /stats is where an operator goes when something
+   *  is wrong with the twin. */
+  loadTwin?: (env: Env) => Promise<TwinTables | null>;
   now?: () => Date;
 }
 
@@ -36,6 +43,15 @@ function clampDays(raw: string | null): number {
   const parsed = Number.parseInt(raw ?? '', 10);
   if (!Number.isFinite(parsed)) return DEFAULT_DAYS;
   return Math.min(MAX_DAYS, Math.max(1, parsed));
+}
+
+async function defaultLoadTwin(env: Env): Promise<TwinTables | null> {
+  try {
+    return await twinStub(env).tables();
+  } catch (error) {
+    console.error(`[vidikovac] stats-twin-tables-failed ${error instanceof Error ? `${error.name}: ${error.message}` : 'unknown-error'}`);
+    return null;
+  }
 }
 
 async function defaultLoadRows(env: Env, sinceDay: string): Promise<MetricsDailyRow[]> {
@@ -80,9 +96,12 @@ async function handleStatsInner(
 
   try {
     const rows = await (deps.loadRows ?? defaultLoadRows)(env, since);
+    // Only the HTML page renders the twin's live tables; the CSV and JSON
+    // exports stay exactly what they were, a dump of the counter rows.
+    const twin = url.pathname === '/stats' ? await (deps.loadTwin ?? defaultLoadTwin)(env) : null;
     switch (url.pathname) {
       case '/stats':
-        return new Response(renderStatsPage({ days, since, today, rows }), {
+        return new Response(renderStatsPage({ days, since, today, rows, twin }), {
           status: 200,
           headers: { 'content-type': 'text/html; charset=utf-8', 'content-language': 'hr', ...NO_STORE },
         });

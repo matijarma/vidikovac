@@ -22,8 +22,17 @@ export interface GraphMethods {
   pathOfShape(shapeIdx: number): number | null;
   /** The path's edges as one polyline with its cumulative arc, built once. */
   pathGeometry(pathIdx: number): { pts: XY[]; cum: number[] };
-  /** The stops on the path in arc order, each at its arc along the path. */
+  /** The stops the path's own trips call at, in arc order, each at its arc
+   *  along the path: the artefact's served list (F8) where it carries one,
+   *  and the geometric derivation only for a path without one. This is what
+   *  the engine reads -- the planner's dwells, the laws' concession gate, the
+   *  learner's evidence, the speed estimator's charge, the published `held`. */
   stopsOnPath(pathIdx: number): { stop: Stop; s: number }[];
+  /** Every platform that lies on the path's edges, served or not, in arc
+   *  order: what stopsOnPath derived before the served list existed. The
+   *  replay grader's phantom row and the build reports measure against it;
+   *  no engine site may read it. */
+  stopsOnPathGeometric(pathIdx: number): { stop: Stop; s: number }[];
   /** The first stop strictly ahead of arc `s` on the path, or null. */
   nextStopOnPath(pathIdx: number, s: number): { stop: Stop; s: number } | null;
   /** Every edge within `radiusM` of `p`, nearest first. */
@@ -47,6 +56,7 @@ const GRID_CELL_M = 250;
 export function graphMethods(edges: readonly Edge[], paths: readonly Path[], stops: readonly Stop[], pathOfShapeIdx: ReadonlyMap<number, number>): GraphMethods {
   const geometry = new Map<number, { pts: XY[]; cum: number[] }>();
   const pathStops = new Map<number, { stop: Stop; s: number }[]>();
+  const pathStopsGeometric = new Map<number, { stop: Stop; s: number }[]>();
   let grid: Map<string, number[]> | null = null;
 
   const stopsByEdge = new Map<number, { stop: Stop; s: number }[]>();
@@ -79,8 +89,8 @@ export function graphMethods(edges: readonly Edge[], paths: readonly Path[], sto
     return geo;
   }
 
-  function stopsOnPath(pathIdx: number): { stop: Stop; s: number }[] {
-    let list = pathStops.get(pathIdx);
+  function stopsOnPathGeometric(pathIdx: number): { stop: Stop; s: number }[] {
+    let list = pathStopsGeometric.get(pathIdx);
     if (list) return list;
     const path = paths[pathIdx];
     list = [];
@@ -88,6 +98,19 @@ export function graphMethods(edges: readonly Edge[], paths: readonly Path[], sto
       for (const entry of stopsByEdge.get(e) ?? []) list!.push({ stop: entry.stop, s: path.offsets[k] + entry.s });
     });
     list.sort((a, b) => a.s - b.s);
+    pathStopsGeometric.set(pathIdx, list);
+    return list;
+  }
+
+  function stopsOnPath(pathIdx: number): { stop: Stop; s: number }[] {
+    let list = pathStops.get(pathIdx);
+    if (list) return list;
+    const served = paths[pathIdx]?.served;
+    if (!served || served.length === 0) return stopsOnPathGeometric(pathIdx);
+    list = served
+      .map((entry) => ({ stop: stops[entry.stop], s: entry.s }))
+      .filter((entry) => entry.stop !== undefined)
+      .sort((a, b) => a.s - b.s);
     pathStops.set(pathIdx, list);
     return list;
   }
@@ -155,6 +178,7 @@ export function graphMethods(edges: readonly Edge[], paths: readonly Path[], sto
     pathOfShape: (shapeIdx) => pathOfShapeIdx.get(shapeIdx) ?? null,
     pathGeometry,
     stopsOnPath,
+    stopsOnPathGeometric,
     nextStopOnPath,
     edgesNear,
     toPathPoint(pathIdx, s) {

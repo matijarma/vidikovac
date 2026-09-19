@@ -1,7 +1,7 @@
 // One tick of the twin, pure: the decoded frame (or none, for a 304 or a
 // repeated header) folds into the tracks, every vehicle is matched, its
-// speed estimated, its plan built, the ordering law applied over the trams,
-// every fresh fix graded against the plans published before it, and the
+// speed estimated, its plan built, the ordering register applied over the
+// trams, every fresh fix graded against the plans published before it, and the
 // module payload assembled. The Durable Object (twin-do.ts) only fetches,
 // persists and publishes what comes out of here.
 //
@@ -12,12 +12,15 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
-import { toPlane } from '../../shared/motion/geo';
-import { countGrades, emptyCounts, gradeFix, rememberPlan, type HindsightCounts } from '../../shared/motion/hindsight';
-import { enforceOrder, type OrderReport } from '../../shared/motion/laws';
-import { extractEvidence, recordEvidence, type DwellEvidence, type EdgeEvidence } from '../../shared/motion/learn';
-import { buildPlan, CONFIDENCE_FREE_CAP, DWELL_DEFAULT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate } from '../../shared/motion/plan';
-import { estimateSpeed } from '../../shared/motion/speed';
+import { dist, toPlane } from '../../shared/motion/geo';
+import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
+import { enforceOrder, type OrderReport } from '../../shared/motion/order';
+import { extractEvidence, recordEvidence, type DwellDropped, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
+import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
+import type { GraphNetwork } from '../../shared/motion/network';
+import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
+import { junctionWaitsAt } from '../../shared/motion/junction';
+import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
 import { zagrebBands } from '../../shared/motion/times';
 import { lastFix, newTrack, pushFix, type FreeKnot, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -50,8 +53,15 @@ export interface TickResult {
   evicted: number;
   order: OrderReport | null;
   hindsight: HindsightCounts;
-  /** The evidence this tick mined from the fresh fixes (C1), already counted into the state's pending aggregates. */
-  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[] };
+  /** The same graded fixes by sign: plan ahead of the fix, within 50 m, behind (F7). */
+  hindsightSign: HindsightSignCounts;
+  /** The evidence this tick mined from the fresh fixes (C1, F11), already
+   *  counted into the state's pending aggregates, plus the dwell candidates
+   *  the stationarity gate refused (measurement only, never stored). */
+  learned: { edges: EdgeEvidence[]; dwells: DwellEvidence[]; waits: NodeWaitEvidence[]; passes: NodePassEvidence[]; dwellDropped: DwellDropped };
+  /** What the planner had to intervene about this tick, by vehicle kind
+   *  (F11): `twin_plan`, dim1 the event, dim2 the kind. */
+  plan: PlanCountsByKind;
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -71,6 +81,26 @@ function tripStartOf(join: TripJoin | undefined, startDate: string | undefined):
   if (!join || join.startSec === undefined || !startDate) return null;
   const day = serviceDayStartSec(startDate);
   return day === null ? null : day + join.startSec;
+}
+
+/**
+ * Does the vehicle's next trip continue the run this Track is a record of
+ * (D14)? ZET's VEHICLE ids are stable through the day and its TRIP ids
+ * change at every terminus, so a trip change is usually the same tram
+ * starting its next run: the new trip's path runs the rail it is standing
+ * on, or it begins at the platform the tram is standing at. Then the fixes,
+ * the speed estimate and the ordering register are evidence about this
+ * vehicle and are kept; only the path-derived match state resets, which the
+ * matcher does itself on the new prior, and the register's own divergence
+ * rule prunes any relation the new path leaves behind. Anything else -- a
+ * vehicle id changing hands, a tram towed to the other end of the city -- is
+ * a new track, as it was before.
+ */
+function continuesRun(net: GraphNetwork, track: Track, priorPathIdx: number | null): boolean {
+  if (priorPathIdx === null || priorPathIdx >= net.paths.length) return false;
+  if (track.match.edge !== null && net.paths[priorPathIdx].edges.includes(track.match.edge)) return true;
+  const last = lastFix(track);
+  return last !== null && dist(net.toPathPoint(priorPathIdx, 0), last) <= STOP_ZONE_M;
 }
 
 /** The plan a vehicle gets with no geometry loaded at all: a straight line
@@ -100,8 +130,18 @@ export function runTick(input: TickInput): TickResult {
   const tracks: Record<string, Track> = { ...input.state.tracks };
   const published = { ...input.state.published };
   const learnedUpTo = { ...input.state.learnedUpTo };
-  const pendingLearned = { edges: { ...input.state.pendingLearned.edges }, stops: { ...input.state.pendingLearned.stops } };
-  const learned: TickResult['learned'] = { edges: [], dwells: [] };
+  const pendingLearned = {
+    edges: { ...input.state.pendingLearned.edges },
+    stops: { ...input.state.pendingLearned.stops },
+    nodes: { ...(input.state.pendingLearned.nodes ?? {}) },
+    nodePasses: { ...(input.state.pendingLearned.nodePasses ?? {}) },
+  };
+  // Copied per platform, not just per key: the tick appends to these arrays
+  // and must not grow the state it was handed.
+  const dwellRecent: DwellRecent = {};
+  for (const [stopId, samples] of Object.entries(input.state.dwellRecent ?? {})) dwellRecent[stopId] = [...samples];
+  const learned: TickResult['learned'] = { edges: [], dwells: [], waits: [], passes: [], dwellDropped: { oneFix: 0, movedThrough: 0 } };
+  const planCounts = emptyPlanCountsByKind();
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
@@ -113,10 +153,15 @@ export function runTick(input: TickInput): TickResult {
       const routeId = raw.routeId ?? tracks[raw.vehicleId]?.routeId ?? '';
       const tripId = raw.tripId ?? null;
       let track = tracks[raw.vehicleId];
-      // A new trip is a terminus turnaround: the old fixes lie on the other
-      // track and are not comparable evidence, so the vehicle starts over.
+      const join = tripId !== null ? joins.get(tripId) : undefined;
+      const prior = engine ? engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null, join?.pathId ?? null) : null;
+      // A trip change is a terminus turnaround, and a terminus turnaround is
+      // the SAME tram (D14): it keeps its Track whenever the new trip
+      // continues where this one stands. Otherwise the old fixes lie
+      // somewhere else entirely and the vehicle starts over.
       const tripChanged = track !== undefined && track.tripId !== null && tripId !== null && track.tripId !== tripId;
-      if (!track || tripChanged) {
+      const continues = tripChanged && engine !== null && continuesRun(engine.net, track!, prior?.pathIdx ?? null);
+      if (!track || (tripChanged && !continues)) {
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
         tracks[raw.vehicleId] = track;
         if (tripChanged) {
@@ -130,10 +175,8 @@ export function runTick(input: TickInput): TickResult {
       const plane = toPlane(raw.lon, raw.lat);
       const fix: PlaneFix = { x: plane.x, y: plane.y, lon: raw.lon, lat: raw.lat, atSec: raw.atSec };
       const before = lastFix(track)?.atSec ?? null;
-      const join = tripId !== null ? joins.get(tripId) : undefined;
       track.tripStartSec = tripStartOf(join, raw.startDate);
-      if (engine) {
-        const prior = engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null);
+      if (engine && prior) {
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null);
       } else {
         pushFix(track, fix);
@@ -159,19 +202,37 @@ export function runTick(input: TickInput): TickResult {
   const all = Object.values(tracks);
   let order: OrderReport | null = null;
   const hindsight = emptyCounts();
+  const hindsightSign = emptySignCounts();
   if (engine) {
     const bands = zagrebBands(headerSec);
+    // What a stop is expected to hold a vehicle for: the owner's override,
+    // the rolling recent window, the learned band, the timetable, the default
+    // -- the dwell table's one answer (F11). The speed estimator charges it
+    // per stop (F8) rather than a flat 20 s, the planner books it, and the
+    // learner prices the other stops inside a dwell sample with it, so no two
+    // parts of the engine disagree about one platform.
+    const dwellPlanner = dwellPlannerAt(engine.dwell, headerSec, bands.hourBand, bands.dayType);
+    const dwellOf = (stopId: string): number => dwellPlanner.plannedSec(stopId);
+    const junctions = junctionWaitsAt(engine.junctions, bands.hourBand, bands.dayType);
     for (const track of all) {
-      track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween });
+      track.speed = estimateSpeed(track.fixes, { stopsBetween: engine.matcher.stopsBetween, dwellOf });
       const update = track.tripId !== null ? tripUpdates[track.tripId] : undefined;
-      const next: NextStopUpdate | null = update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec } : null;
-      buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands);
+      const next: NextStopUpdate | null =
+        update && update.stopId !== null ? { stopId: update.stopId, timeSec: update.timeSec, delaySec: update.delaySec, atSec: update.atSec ?? null } : null;
+      buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands, {
+        dwell: dwellPlanner,
+        junctions,
+        publishedArcS: publishedArcAt(input.state.published[track.id], track, headerSec),
+        counts: planCounts[track.kind],
+      });
     }
-    order = enforceOrder(all, engine.net, nowSec, headerSec);
+    // The register reads ZET's TripUpdates too: two trips whose next stops
+    // sit in strict order on the path they share are ordered by ZET itself,
+    // which needs no 60 m gap and no second witness (E3).
+    order = enforceOrder(all, engine.net, nowSec, headerSec, tripUpdates);
     // What this tick's fresh fixes teach (C1): cruise per edge, standing per
     // stop, each traversal or dwell once, counted into the pending aggregates
     // the Durable Object flushes once a minute.
-    const dwellOf = (stopId: string): number => engine.times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
     const travelOf = (pathIdx: number, fromS: number, toS: number, atSec: number): number | null => {
       const at = zagrebBands(atSec);
       return engine.learnedOnly.segmentSeconds(pathIdx, fromS, toS, at.hourBand, at.dayType);
@@ -182,9 +243,17 @@ export function runTick(input: TickInput): TickResult {
       const evidence = extractEvidence(engine.net, track, learnedUpTo[id] ?? 0, dwellOf, travelOf);
       learned.edges.push(...evidence.edges);
       learned.dwells.push(...evidence.dwells);
+      learned.waits.push(...evidence.waits);
+      learned.passes.push(...evidence.passes);
+      learned.dwellDropped.oneFix += evidence.dwellDropped.oneFix;
+      learned.dwellDropped.movedThrough += evidence.dwellDropped.movedThrough;
       learnedUpTo[id] = evidence.upTo;
     }
     recordEvidence(pendingLearned, learned);
+    // The same dwell samples also join the rolling window the table reads
+    // first (F11): the histograms are about the hour band, the window is
+    // about the last ninety minutes.
+    for (const dwell of learned.dwells) pushDwellRecent(dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
     // Grade this tick's fresh fixes against what was published before, then
     // remember this tick's plans for the fixes still to come.
     for (const id of fresh) {
@@ -192,7 +261,9 @@ export function runTick(input: TickInput): TickResult {
       const fix = track ? lastFix(track) : null;
       const ring = published[id];
       if (!fix || !ring || ring.length === 0) continue;
-      countGrades(hindsight, gradeFix(engine.net, fix, ring));
+      const grades = gradeFix(engine.net, fix, ring);
+      countGrades(hindsight, grades);
+      countSignGrades(hindsightSign, grades);
     }
   } else {
     for (const track of all) freePlanOnly(track, nowSec, headerSec);
@@ -204,7 +275,36 @@ export function runTick(input: TickInput): TickResult {
     published[track.id] = ring;
   }
 
-  const state: TwinState = { headerTs, etag: input.state.etag, tickAtMs: nowMs, tracks, tripUpdates, published, learnedUpTo, pendingLearned };
+  const state: TwinState = {
+    headerTs,
+    etag: input.state.etag,
+    tickAtMs: nowMs,
+    tracks,
+    tripUpdates,
+    published,
+    learnedUpTo,
+    pendingLearned,
+    // Samples that fell out of the window go here, not in an alarm: the tick
+    // is the only place the state is rewritten.
+    dwellRecent: trimDwellRecent(dwellRecent, nowSec),
+  };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, learned };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts };
+}
+
+/**
+ * Where the plan published last tick puts this vehicle at THIS header, when
+ * that plan ran on the geometry the vehicle is still matched to; null
+ * otherwise (a fresh vehicle, a trip change, a re-match onto another path).
+ * The planner uses it as a floor under an anchor that stepped back inside
+ * the GPS scatter (F11 ANCHOR_NOISE_M).
+ */
+function publishedArcAt(ring: readonly PublishedPlan[] | undefined, track: Track, headerSec: number): number | null {
+  if (!ring || ring.length === 0) return null;
+  const latest = ring[ring.length - 1];
+  const plan = latest.plan;
+  const tRel = headerSec - latest.headerSec;
+  if (plan.on === 'path' && track.match.pathIdx === plan.pathIdx) return evalPathPlan(plan.knots, tRel);
+  if (plan.on === 'shape' && track.match.shapeIdx === plan.shapeIdx) return evalPathPlan(plan.knots, tRel);
+  return null;
 }

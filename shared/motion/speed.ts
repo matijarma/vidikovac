@@ -47,9 +47,16 @@ const MOVING_SHARE_FLOOR = 1 / 3;
 export const CHARGEABLE_INTERVAL_S = 25;
 
 export interface SpeedContext {
-  /** How many stops lie strictly between two arcs on the geometry `key`. */
-  stopsBetween(key: string, fromS: number, toS: number): number;
-  /** The dwell to charge per such stop; the timetable's or a learned one. */
+  /** The stops that lie strictly between two arcs on the geometry `key`, by
+   *  id: the platforms the line CALLS AT there (graph.ts stopsOnPath), never
+   *  every platform the rails pass. Before F8 this counted the opposite
+   *  direction's platform and other lines' too, and charged a dwell for each. */
+  stopsBetween(key: string, fromS: number, toS: number): string[];
+  /** The dwell to charge at a given stop: the timetable's or a learned one
+   *  (F8). Where it answers nothing, `dwellSec` stands in, and failing that
+   *  the flat DWELL_CHARGE_S. */
+  dwellOf?: (stopId: string) => number;
+  /** One dwell for every stop, where nothing knows them apart. */
   dwellSec?: number;
 }
 
@@ -59,11 +66,16 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/** m/s, or 0 when the history holds no interval to trust. Distance is the
+/** m/s, or 0 when the history holds no interval to trust, and 0 for a
+ *  vehicle whose recent intervals say it is standing (F11). Distance is the
  *  arc along the matched geometry when both fixes were placed on the same
  *  one (a chord across a curve underestimates), the straight line otherwise. */
 export function estimateSpeed(fixes: readonly PlaneFix[], ctx?: SpeedContext): number {
-  const dwell = ctx?.dwellSec ?? DWELL_CHARGE_S;
+  const flatDwell = ctx?.dwellSec ?? DWELL_CHARGE_S;
+  const dwellAt = (stopId: string): number => {
+    const own = ctx?.dwellOf?.(stopId);
+    return own !== undefined && Number.isFinite(own) && own >= 0 ? own : flatDwell;
+  };
   const ratios: number[] = [];
   // Where the platforms are so dense that no interval is clear of a stop
   // zone (the inner city at ZET's 10 s tick), the vehicle's own recent pace
@@ -79,14 +91,26 @@ export function estimateSpeed(fixes: readonly PlaneFix[], ctx?: SpeedContext): n
     const sameGeometry = a.arc !== undefined && b.arc !== undefined && a.arc.key === b.arc.key;
     const ds = sameGeometry ? Math.abs(b.arc!.s - a.arc!.s) : dist(a, b);
     const dt = b.atSec - a.atSec;
-    if (ds < DEAD_ZONE_M || dt <= 0) continue;
+    if (dt <= 0) continue;
+    if (ds < DEAD_ZONE_M) {
+      // F11: an interval that covered less than the dead zone is not an
+      // interval we know nothing about -- it is evidence of a speed near
+      // zero, and skipping it left a tram that cruised and then stopped
+      // holding its old cruise for as long as it stood. The planner's first
+      // stretch then ran at a speed measured BEFORE the last stop (D8). Two
+      // such intervals are enough to pull the median of three to zero, and
+      // the planner falls back to what the stretch usually takes.
+      ratios.push(0);
+      pace.push(0);
+      continue;
+    }
     pace.push(ds / dt);
     if (a.arc?.atStop || b.arc?.atStop) continue;
     let charged = 0;
     if (sameGeometry && ctx && dt >= CHARGEABLE_INTERVAL_S) {
       const lo = Math.min(a.arc!.s, b.arc!.s) + DEAD_ZONE_M;
       const hi = Math.max(a.arc!.s, b.arc!.s) - DEAD_ZONE_M;
-      if (hi > lo) charged += ctx.stopsBetween(a.arc!.key, lo, hi) * dwell;
+      if (hi > lo) for (const stopId of ctx.stopsBetween(a.arc!.key, lo, hi)) charged += dwellAt(stopId);
     }
     const moving = Math.max(dt - charged, dt * MOVING_SHARE_FLOOR);
     ratios.push(ds / moving);

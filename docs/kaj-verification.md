@@ -549,14 +549,329 @@ obrade po otkucaju. Okviri se čitaju iz direktorija i slažu po vlastitom vreme
 po imenu datoteke, tako da propušteno objavljivanje jednostavno znači da je sljedeći okvir na
 redu.
 
-Pokretanje: `node scripts/replay-twin.mjs <direktorij-okvira> [--limit N]`. Nijedan dan još nije
-snimljen (blizanac još nije objavljen, D3), pa direktorij dolazi iz R2-a alatom wrangler,
-objekt po objekt (naredba je zapisana u zaglavlju skripte, `npx wrangler r2 object get
-vidikovac-feed/zet-rt/GGGG/MM/DD/...`). Pragovi za tablicu bit će zabilježeni ovdje tek nakon
-prvog cijelog snimljenog dana; do tada scenarijski test `test/scripts/replay-twin.test.ts` nad
-kratkim sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`) dokazuje
-da jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
+Pokretanje: `node scripts/replay-twin.mjs <direktorij-okvira> [--limit N]`. Direktorij dolazi iz
+R2-a alatom wrangler, objekt po objekt (naredba je zapisana u zaglavlju skripte, `npx wrangler r2
+object get vidikovac-feed/zet-rt/GGGG/MM/DD/...`), i drži se izvan gita (`recordings/`). Uz
+snimljeni dan stoji i scenarijski test `test/scripts/replay-twin.test.ts` nad kratkim
+sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`), koji dokazuje da
+jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
 vraća plan unatrag i pogađa 30 s unaprijed unutar 60 m pri p95.
+
+### Redci ocjenjivača i simulacija klijenta (F7)
+
+Krug F dodaje istoj tablici pet mjera. Sve se mjere nad istim snimljenim danom prije ijedne
+promjene pogona i mjere ponovno nakon svake, pa je napredak broj, a ne dojam. Definicije:
+
+**Ocjena unatrag s predznakom.** Uz postojeće razrede apsolutne greške, svako ocijenjeno
+očitanje nosi i predznak: položaj plana minus položaj očitanja duž iste putanje, pozitivno kad
+je plan bio *ispred* tramvaja. Razredi su `ahead_ge50` (plan 50 m ili više ispred), `within50`
+i `behind_ge50`. Pravilo kruga je „radije iza nego ispred”: oznaka iza pravog tramvaja čita se
+kao kašnjenje GPS-a, a oznaka ispred, koja se poslije mora vraćati, čita se kao pokvarena
+aplikacija. Isti brojevi idu i na `/stats` (`twin_hindsight_sign`, dim1 horizont, dim2 razred),
+upisani u istom skupnom upisu kao i razredi bez predznaka.
+
+**Regresija između planova (> 25 m).** Za tramvaj koji ima plan u dva uzastopna otkucaja, oba
+se plana čitaju u trenutku zaglavlja kasnijeg otkucaja. Broji se kad je noviji plan stavio
+tramvaj više od 25 m *iza* mjesta gdje ga je imao stariji. 25 m je gornja granica prvog razreda
+ocjene unatrag -- najmanji korak koji gledatelj čita kao ispravak, a ne kao podrhtavanje.
+Promjena vožnje (okretanje na okretištu) nije regresija i preskače se.
+
+**Prekršaj redoslijeda prema očitanjima (≤ 5 s, > 35 m).** Dva tramvaja na dijeljenom kolosijeku
+(brid pod jednim leži na putanji drugoga) čija su svježa očitanja unutar 5 s jedno od drugoga --
+pola otkucaja, pa razlika u trenutku javljanja dvaju vozila iz istog okvira ne može lažirati
+prekršaj. Oba se očitanja i oba objavljena plana preslikaju na jednu putanju; broji se kad
+objavljeni redoslijed proturječi redoslijedu očitanja, a očitanja su razmaknuta više od jedne
+duljine tramvaja (35 m, `HEADWAY_M` iz `shared/motion/order.ts`; bliži par nema redoslijed koji
+bi se mogao prekršiti).
+
+**Fantomska stajališta.** Po putanji: koliko stajališta geometrijski leži na njezinim bridovima
+(`stopsOnPath`) naspram onih na kojima neki njezin uzorak zaista staje -- za putanju s oblikom
+unija svih uzoraka indeksa putovanja koji voze taj oblik (pa su i skraćene varijante pokrivene),
+za sintetsku putanju `path:` njezin vlastiti niz stajališta. Geometrijski zapis koji nije ni u
+jednom od njih je fantom: peron druge linije na istim tračnicama, na kojem planer danas svejedno
+stoji. To je broj koji odjeljak E0 uklanja. Tablica ispisuje ukupne iznose i medijan po putanji,
+odvojeno za putanje s oblikom i za sintetske; iznosi po pojedinoj putanji stoje u
+`report.phantoms.paths`.
+
+**Simulacija klijenta.** Pravi integrator (`app/src/motion/integrator.ts`) vođen upravo onim
+teretima koje je ponovljeni blizanac objavio, dekodiranima točno kako ih dekodira stranica
+(`app/src/motion/fixes.ts` razrješava vremena čvorova prema `sourceUpdatedAt`). Anketa stiže
+3,5 s nakon zaglavlja (vlastiti jastuk otkucaja, rubna predmemorija i mreža), a slike se crtaju
+12 puta u sekundi između anketa. Broji se ono što bi gledatelj vidio:
+
+- *slike unatrag*: nacrtani `s` tramvaja smanjio se za više od jednog centimetra između dviju
+  slika na istoj geometriji (mora biti 0);
+- *vidljiva križanja*: dva tramvaja na dijeljenom kolosijeku čiji nacrtani redoslijed, preslikan
+  na jednu putanju, proturječi redoslijedu njihovih planova razmaknutih više od 35 m (mora biti
+  0); broji se jednom po paru koji uđe u to stanje, ne po svakoj slici;
+- *udio držanja*: udio tramvajskih slika u kojima nacrtani `s` nije napredovao dok je meta plana
+  napredovala više od 0,5 m, i prosječna duljina takvog držanja u sekundama.
+
+### Polazna tablica, snimljeni dan 17. 9. 2026.
+
+Mjereno 18. 9. 2026. nad `recordings/2026/09/17/`, prije ijedne promjene pogona u krugu F:
+`node scripts/replay-twin.mjs recordings/2026/09/17`. Prisutno je bilo **2216 okvira**, prozor
+**2026-09-17T00:00:04Z do 2026-09-17T06:41:16Z** (UTC), s jutarnjim vrhom od 05 do 06 h;
+ostatak dana još se povlačio iz R2-a, pa se sljedeća mjerenja rade nad istim direktorijem i
+uspoređuju samo nad istim prozorom.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           435
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=374587)
+  30s:  p50 <100m   p95 ge200m  (n=371570)
+  60s:  p50 <200m   p95 ge200m  (n=363142)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 22.2%  within 53.7%  behind 24.2%  (n=374587)
+  30s:  ahead 25.7%  within 39.0%  behind 35.2%  (n=371570)
+  60s:  ahead 26.3%  within 30.1%  behind 43.6%  (n=363142)
+
+between-plan regressions (>25 m):     48983  (of 190842 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2228  (of 1203162 fresh pairs on shared rails)
+phantom stops:           6410 of 10599 geometric entries on 145 paths (4189 served)
+  shape paths:           100 paths, 7657 geometric / 3032 served / 4625 phantom, median per path 76.5 / 29.0 / 43.5
+  synthetic paths:       45 paths, 2942 geometric / 1157 served / 1785 phantom, median per path 58.0 / 25.0 / 34.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 288926 frames, 26316757 tram-frames):
+  backward frames (must be 0):        9606292
+  visible crossings (must be 0):      9550
+  hold-time share:                    7.9%  mean hold length: 5.1 s  (34426 holds)
+
+overtakes (must be 0):   2864
+reversals (must be 0):   0
+concessions:             1535
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 836  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 48.36  p95 355.21
+```
+
+Što se iz nje čita, prije ijedne promjene u krugu F:
+
+- **Cilj kruga na 30 s nije ni blizu.** Plan je 50 m ili više *ispred* tramvaja u 25,7 % od
+  371.570 ocijenjenih očitanja; cilj je 10 % ili manje. Udio unutar 50 m pada s horizontom
+  (53,7 % na 10 s, 39,0 % na 30 s, 30,1 % na 60 s), a p95 je na svim horizontima preko 200 m.
+- **Planovi se međusobno proturječe.** Svaki četvrti uzastopni par planova (48.983 od 190.842)
+  vraća tramvaj više od 25 m unatrag u odnosu na ono što je prethodni plan tvrdio za isti
+  trenutak. To je izvor i oznaka koje se na zaslonu vraćaju i ocjene ispred.
+- **Klijent danas crta unatrag.** 9.606.292 od 26.316.757 tramvajskih slika (36,5 %) nacrtane
+  su iza prethodne slike, i 9.550 puta par tramvaja na dijeljenom kolosijeku nacrtan je u
+  krivom redoslijedu. Integrator to danas dopušta namjerno (`BACKWARD_MAX_MS` 1 m/s do 30 m po
+  planu), pa je "mora biti 0" cilj kruga, a ne današnje svojstvo. Držanje je 7,9 % slika,
+  prosječno 5,1 s.
+- **Fantomska stajališta su većina.** 6.410 od 10.599 geometrijskih zapisa nije ni na jednom
+  uzorku svoje putanje; na putanjama s oblikom medijan je 76,5 geometrijskih naspram 29,0
+  posluženih po putanji. To je mjera koju odjeljak E0 uklanja.
+- Prekršaja redoslijeda prema očitanjima ima 2.228 od 1.203.162 provjerenih parova (0,19 %), a
+  vožnji unatrag u samom planu nijedna; preticanja koja zakon nije sankcionirao ustupkom ima
+  2.864 uz 1.535 ustupaka. Prvo planirano kretanje po vozilu čeka p50 836 s -- vozilo se pojavi
+  u feedu davno prije nego što ga plan pokrene.
+
+Cijeli prolaz traje oko osam i pol minuta na osam jezgri (21:51 do 21:59), gotovo sve u
+simulaciji klijenta, koja integrator korača 12 puta u sekundi kroz cijeli snimljeni raspon.
+
+### Nakon F8 (posluženi popis stajališta), isti snimljeni dan
+
+Mjereno 18. 9. 2026. nad istim direktorijem, `node scripts/replay-twin.mjs recordings/2026/09/17
+--limit 2216`. **Prozor se pomaknuo**: direktorij je u međuvremenu narastao na 2904 okvira, a
+688 novih ne leže samo iza polazne tablice -- 37 ih pada unutar njezinog prozora, pa prva 2216
+okvira po zaglavlju sada završavaju u 06:34:27Z umjesto u 06:41:16Z. Da usporedba ne bi mjerila
+prozor umjesto promjene, polazni je kod (`cd7495c`) ponovno pokrenut nad **istim** okvirima; on
+je stupac „prije" u tablici ispod, a brojke iz polazne tablice stoje uz njega samo kao
+orijentir.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 23.9%  within 51.6%  behind 24.5%  (n=373886)
+  30s:  ahead 28.4%  within 37.6%  behind 34.1%  (n=370862)
+  60s:  ahead 29.8%  within 29.5%  behind 40.6%  (n=362424)
+
+between-plan regressions (>25 m):     58919  (of 190806 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2793  (of 1132483 fresh pairs on shared rails)
+phantom stops:           0 of 10599 geometric entries on 145 paths (3091 served)
+  shape paths:           100 paths, 7657 geometric / 2219 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       45 paths, 2942 geometric / 872 served / 0 phantom, median per path 58.0 / 19.0 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        10543874
+  visible crossings (must be 0):      10324
+  hold-time share:                    8.2%  mean hold length: 5.4 s  (32237 holds)
+
+overtakes (must be 0):   3324
+reversals (must be 0):   0
+concessions:             650
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 29.45  p95 180.72
+```
+
+Isti okviri, prije (`cd7495c`) i poslije (F8):
+
+| Mjera | prije | poslije | promjena |
+|---|---|---|---|
+| fantomska stajališta | 6410 od 10599 | **0** od 10599 | uklonjena po konstrukciji |
+| posluženih zapisa po putanji (medijan, s oblikom) | 29,0 | 22,0 | popis je sada ono na čemu linija staje |
+| 30 s: plan ≥ 50 m ispred | 25,7 % | 28,4 % | +2,7 p. b. |
+| 30 s: unutar 50 m | 39,1 % | 37,6 % | −1,5 p. b. |
+| 30 s: plan ≥ 50 m iza | 35,2 % | 34,1 % | −1,1 p. b. |
+| regresije među planovima (> 25 m) | 48.749 | 58.919 | +20,9 % |
+| prekršaji redoslijeda prema očitanjima | 2.221 | 2.793 | +25,8 % |
+| slike unatrag (klijent) | 9.432.429 | 10.543.874 | +11,8 % |
+| vidljiva križanja | 9.327 | 10.324 | +10,7 % |
+| preticanja | 2.693 | 3.324 | +23,4 % |
+| ustupci | 1.553 | 650 | −58,2 % |
+| otkucaj p50 / p95 | 47,33 / 303,52 ms | 29,45 / 180,72 ms | −38 % / −40 % |
+
+Tablica je zapis prolaza od 18. 9. 2026., **prije kontrolorovih odluka A i B** (poslužni radijus
+`SERVED_STOP_MAX_METRES` 60 m i razrješenje putanje u SQLite spoju): artefakt od tada nosi
+**3100** posluženih zapisa umjesto 3091, jer je Olipska 251_2 ušla u poslužne popise devet
+putanja. Brojke iznad nisu ponovno mjerene i stoje kao zapis onoga što je taj prolaz dao;
+fantomskih stajališta i dalje je 0 po konstrukciji.
+
+Što se iz nje čita:
+
+- **Fantomi su otišli, i to je cijela svrha ovog koraka.** Nijedan zapis na putanji nije više
+  peron koji ta linija ne poslužuje: 6410 od 10599 geometrijskih zapisa izašlo je iz svega što
+  pogon čita (planer, zakon, učilo, procjena brzine, objavljeni `held`). Medijan po putanji s
+  oblikom pao je sa 76,5 geometrijskih na 22 poslužena.
+- **Plan je zato postao brži, a ne točniji na 30 s.** Fantomska stajališta bila su kočnica:
+  planer je na svakom od njih knjižio zadržavanje od 20 s, pa je plan sustavno kasnio za
+  tramvajem. Bez njih plan trči, i udio "≥ 50 m ispred" raste s 25,7 % na 28,4 %. To je oblik
+  koji je krug i predvidio: prvo se plan čini **ispravnim** (E0), pa se tek onda namjerno
+  nagne prema kašnjenju (vlasnikovo pravilo "radije iza nego ispred"). Bez sljedećeg koraka ova
+  je brojka lošija nego prije, i tako je i treba čitati.
+- **Regresije i križanja rastu iz istog razloga.** Brži plan svaki put kad stigne novo očitanje
+  mora natrag, pa parova koji se razlikuju više od 25 m ima petinu više, a klijent ih crta.
+- **Preticanja rastu samo na papiru.** Ustupaka je 650 umjesto 1553, jer vrata ustupka
+  (`nearStopOrEnd`) sada gledaju samo stajališta na kojima linija staje. Preticanje se broji kao
+  *zamjene redoslijeda minus ustupci*, pa je stvarni broj zamjena pao (2693 + 1553 = 4246 prije,
+  3324 + 650 = 3974 poslije) iako je brojka u tablici narasla.
+- **Otkucaj je gotovo dvostruko jeftiniji.** p50 pada s 47,3 na 29,5 ms, p95 s 303,5 na 180,7:
+  planer, zakon i učilo prolaze kroz tri puta kraće popise stajališta.
+- Uz to: sve 145 tramvajskih putanja sada ima segmente voznog reda (prije 107), jer se svaki
+  uzorak preslikava na vlastitu putanju; 42 točnim nizom stajališta, 3 skraćenim, 1 starom
+  pretpostavkom, 6 uzoraka nema nijednu putanju do koje bi došlo. Crtač sheme i dalje dosiže
+  139 od 145 putanja -- on čita geometrijski popis, jer postavlja oznake na tiskani crtež, a ne
+  planira.
+
+Prolaz traje 5 minuta i 32 sekunde (22:46:35 do 22:52:07), uglavnom u simulaciji klijenta.
+
+### Nakon F8b (putanja za svaki uzorak bez oblika), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba: `node scripts/replay-twin.mjs recordings/2026/09/17 --limit
+2216`. **Prozor se ovaj put nije pomaknuo.** Direktorij je narastao s 2904 na 4733 okvira sa
+zaglavljem, ali svi novi leže *iza* prozora: prva 2216 okvira po zaglavlju i dalje idu od
+00:00:04Z do **06:34:27Z**, točno kao u tablici F8. To potvrđuju i same brojke -- `frames
+processed` 2216, `vehicles seen` 433, sva tri broja ocijenjenih očitanja (373886 / 370862 /
+362424) i simulacija klijenta (284077 slika, 25531087 tramvajskih slika) identični su F8. Zato
+je tablica F8 valjan stupac „prije" nad **istim** okvirima i polazni kod nije ponovno pokretan.
+
+Feed je provjeren prije i poslije: `feed_version` **000395**, `Last-Modified` Tue, 01 Sep 2026
+08:50:29 GMT, 14.720.190 B -- isti kao u F8.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 24.4%  within 51.3%  behind 24.3%  (n=373886)
+  30s:  ahead 28.9%  within 37.3%  behind 33.8%  (n=370862)
+  60s:  ahead 30.4%  within 29.4%  behind 40.3%  (n=362424)
+
+between-plan regressions (>25 m):     60119  (of 190788 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2804  (of 1118044 fresh pairs on shared rails)
+phantom stops:           0 of 11161 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3504 geometric / 1074 served / 0 phantom, median per path 61.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        10707174
+  visible crossings (must be 0):      10974
+  hold-time share:                    8.4%  mean hold length: 5.5 s  (32733 holds)
+
+overtakes (must be 0):   3336
+reversals (must be 0):   0
+concessions:             661
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 30.17  p95 194.71
+```
+
+Isti okviri, prije (F8) i poslije (F8b):
+
+| Mjera | prije (F8) | poslije (F8b) | promjena |
+|---|---|---|---|
+| sintetičke putanje | 45 | **52** | sedam uzoraka koje 40-metarski usmjerivač nije mogao spojiti |
+| tramvajske putanje sa segmentima voznog reda | 145 od 145 | **152 od 152** | svaka i dalje ima vozni red |
+| uzorci bez oblika bez vlastite putanje | 6 nepreslikanih + 1 pogođen | **0 + 0** | 49 točnim nizom, 3 skraćena (linija 1) |
+| posluženih zapisa | 3.100 | 3.302 | +202 (sedam novih putanja) |
+| fantomska stajališta | 0 od 10.599 | 0 od 11.161 | i dalje 0 po konstrukciji |
+| 30 s: plan ≥ 50 m ispred | 28,4 % | 28,9 % | +0,5 p. b. |
+| 30 s: unutar 50 m | 37,6 % | 37,3 % | −0,3 p. b. |
+| 30 s: plan ≥ 50 m iza | 34,1 % | 33,8 % | −0,3 p. b. |
+| regresije među planovima (> 25 m) | 58.919 | 60.119 | +2,0 % |
+| prekršaji redoslijeda prema očitanjima | 2.793 od 1.132.483 | 2.804 od 1.118.044 | +0,4 % broja, 0,247 ‰ → 0,251 ‰ |
+| slike unatrag (klijent) | 10.543.874 | 10.707.174 | +1,5 % |
+| vidljiva križanja | 10.324 | 10.974 | +6,3 % |
+| preticanja | 3.324 | 3.336 | +0,4 % |
+| ustupci | 650 | 661 | +1,7 % |
+| **udio poznatog smjera** | 100,0 % | **100,0 %** | nepromijenjen, kako je i traženo |
+| **udio nepoznate vožnje** | 0,0 % | **0,0 %** | nepromijenjen, kako je i traženo |
+| otkucaj p50 / p95 | 29,45 / 180,72 ms | 30,17 / 194,71 ms | +2,4 % / +7,7 % |
+
+Što se iz nje čita:
+
+- **Nijedan uzorak bez oblika više nema tuđu putanju.** Prije F8b sedam uzoraka linija 2, 5 i 13
+  (13/1 s 384 vožnje dnevno, 13/0 s 356, 5/1 sa 162, 2/1 sa 150) nije imalo nikakvu sintetičku
+  putanju, pa su ih `candidatesFor` slagali na bilo koju putanju iste linije, a vozni red im je
+  dolazio od drugog uzorka. Sada svaki od njih ima svoju putanju, svoj posluženi popis i svoj
+  vozni red; `mapPatternsToPaths` javlja 0 nepreslikanih i 0 pogođenih.
+- **Uzrok je bio radijus, ne usmjerivač.** Olipska 251_2 je 39,4 m od tračnice *suprotnog*
+  smjera i 42,8 m od one kojom njezina linija vozi; na 40 m usmjerivač je vidio samo pogrešnu
+  tračnicu i od nje do Držićeve nije bilo lanca. Poslužni radijus (`SERVED_STOP_MAX_METRES`,
+  60 m, odluka A iz F8) odgovara na pitanje „na kojoj tračnici stoji stajalište *ove* linije",
+  što je upravo pitanje koje usmjerivač postavlja. Geometrijskih 40 m ostaje netaknuto: ono
+  odgovara na „pokraj kojih perona prolazi ova tračnica" i mora ostati usko.
+- **Cijena je mala i posvuda jednaka.** Sedam novih putanja znači sedam uzoraka koje motor sada
+  planira po vlastitoj geometriji umjesto po tuđoj, pa se svi redci pomiču za pola postotka do
+  nekoliko postotaka; vidljiva križanja +6,3 % najveći su pomak. Ono što je moralo ostati --
+  poznati smjer 100 % i nepoznata vožnja 0 % -- ostalo je.
+- **Ostao je jedan pravi nedostatak grafa, i sada je izmjeren.** Devet skokova između dva
+  susjedna stajališta vozi se znatno dalje nego što ide zrak: šest na putanjama linija 6, 9 i 17
+  (Botanički vrt ↔ Zrinjevac, 3241–3261 m luka za 511–522 m zraka) koji su u artefaktu već od
+  F8, i tri na linijama 13 (Šubićeva ↔ Trg žrtava fašizma, 1779–2122 m za 304–511 m). Uzrok je
+  isti: graf nema čvor ondje gdje linija skreće, jer nijedan oblik u feedu ne crta to skretanje.
+  Kod Šubićeve to se vidi golim okom -- Šubićeva ulica (brid 85) i Ulica kralja Zvonimira
+  (bridovi 247/248, koje crtaju samo dva oblika noćne linije 32) križaju se *usred* oba brida,
+  pa tramvaj koji tuda skreće nema kuda. Gradnja sada svaki takav skok ispisuje imenom
+  (`HOP_DETOUR_FACTOR`), ali ga ne odbija: bez putanje bi uzorak bio ondje gdje je i bio.
 
 Dopuna 16. 9. 2026., drugi prolaz, nakon što je područje Vijesti izašlo iz proizvoda
 (`b8a6a19`) i karta postala cijelo polje javnog zaslona (`e60bbfc` do `c0c9867`): prijedlog,
@@ -588,6 +903,664 @@ izvora i rečenica da se HINA nikada ne preuzima (bespredmetna kad se vijesti ne
 uopće), te dva zastarjela komentara u kodu koja su imenovala uklonjeno područje Vijesti
 (`producers/index.ts`, `kiosk.css`). Ovo nije aplikacija za vijesti; hitna sigurnosna
 informacija dolazi iz DHMZ-a, EMSC-a i Grada, nikada iz novinskog izvora.
+
+### Nakon F8c (čvorovi na križanjima koja linije stvarno skreću), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba: `node scripts/replay-twin.mjs recordings/2026/09/17 --limit
+2216`. **Prozor se opet nije pomaknuo.** Direktorij je u međuvremenu narastao na 5232 okvira,
+ali prva 2216 po zaglavlju i dalje idu od 00:00:04Z do 06:34:27Z: `frames processed` 2216,
+`vehicles seen` 433 i sva tri broja ocijenjenih očitanja (373886 / 370862 / 362424) identična
+su F8 i F8b, pa je tablica F8b valjan stupac „prije" nad **istim** okvirima.
+
+Feed je provjeren prije prve izmjene i nakon zadnje: `feed_version` **000395**, `Last-Modified`
+Tue, 01 Sep 2026 08:50:29 GMT, 14.720.190 B -- isti bajt do bajta kao u F8 i F8b.
+
+Gradnja mreže sada zatvara nedostatak koji je F8b samo izmjerio. Od devet predugih skokova
+usmjerivač je ponudio **pet kandidatskih križanja**, a gradnja je zadržala **tri** -- ona na
+kojima neka putanja doista skreće:
+
+```
+Junctions noded: 3 of 5 crossings considered for 9 long hops; 2 hops still route past 2x the straight line (2 allowlisted in scripts/gtfs-shapes-overrides.json)
+Junction at 15.978,45.8056 (48.8 deg, 0.37 m off the exact crossing): edges 109 x 228 -> 111,112,231,232 at node 105
+Junction at 15.9933,45.8104 (48.5 deg, 0.35 m off the exact crossing): edges 85 x 248 -> 85,86,253,254 at node 80
+Junction at 15.9933,45.8103 (50.1 deg, 0.24 m off the exact crossing): edges 98 x 247 -> 99,100,251,252 at node 95
+```
+
+Prvi je kod Glavnog kolodvora (kolosijek prema jugu križa Mihanovićevu prema zapadu), druga dva
+su dva kolosijeka Šubićeve ulice preko dva kolosijeka Ulice kralja Zvonimira. Preostala dva
+kandidata (Šubićeva ↔ suprotni kolosijek Zvonimirove) nijedna putanja ne koristi, pa ih graf
+nije dobio: čvor stvara skretanja na sve strane, a mreža puna skretanja koja nijedan tramvaj ne
+vozi lošiji je model od jednog obilaska. Graf ima **293 brida nad 212 čvorova** (bilo 287 nad
+209): šest bridova rasječeno je na dvanaest, sve ostalo je nedirnuto.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 23.9%  within 51.6%  behind 24.5%  (n=373886)
+  30s:  ahead 28.4%  within 37.6%  behind 34.0%  (n=370862)
+  60s:  ahead 29.9%  within 29.6%  behind 40.6%  (n=362424)
+
+between-plan regressions (>25 m):     58944  (of 190816 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2784  (of 1124149 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        10490391
+  visible crossings (must be 0):      10384
+  hold-time share:                    8.1%  mean hold length: 5.4 s  (32063 holds)
+
+overtakes (must be 0):   3304
+reversals (must be 0):   0
+concessions:             659
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 31.60  p95 200.89
+```
+
+Isti okviri, prije (F8b) i poslije (F8c), uz stupac F8 za mjeru cijelog kruga:
+
+| Mjera | F8 | prije (F8b) | poslije (F8c) | promjena F8b → F8c |
+|---|---|---|---|---|
+| bridovi grafa / čvorovi | 287 / 209 | 287 / 209 | **293 / 212** | tri križanja postala su čvorovi |
+| predugi skokovi (> 2× zraka i > 500 m) | 9 | 9 | **2, oba s obrazloženjem** | sedam popravljeno |
+| sintetičke putanje | 45 | 52 | 52 | nijedna nije izgubljena |
+| posluženih zapisa | 3.100 | 3.302 | 3.302 | nepromijenjeno |
+| fantomska stajališta | 0 od 10.599 | 0 od 11.161 | **0 od 11.004** | 157 geometrijskih zapisa manje (obilasci više ne prolaze pokraj tuđih perona) |
+| 30 s: plan ≥ 50 m ispred | 28,4 % | 28,9 % | 28,4 % | −0,5 p. b. |
+| 30 s: unutar 50 m | 37,6 % | 37,3 % | **37,6 %** | +0,3 p. b. |
+| 30 s: plan ≥ 50 m iza | 34,1 % | 33,8 % | 34,0 % | +0,2 p. b. |
+| regresije među planovima (> 25 m) | 58.919 | 60.119 | **58.944** | −2,0 % |
+| prekršaji redoslijeda prema očitanjima | 2.793 od 1.132.483 | 2.804 od 1.118.044 | **2.784 od 1.124.149** | −0,7 % broja, 0,251 ‰ → 0,248 ‰ |
+| slike unatrag (klijent) | 10.543.874 | 10.707.174 | **10.490.391** | −2,0 % (ispod F8) |
+| vidljiva križanja | 10.324 | 10.974 | **10.384** | −5,4 % |
+| udio zadržavanja | — | 8,4 % / 5,5 s | 8,1 % / 5,4 s | −0,3 p. b. |
+| preticanja | 3.324 | 3.336 | **3.304** | −1,0 % (ispod F8) |
+| ustupci | 650 | 661 | 659 | −0,3 % |
+| **udio poznatog smjera** | 100,0 % | 100,0 % | **100,0 %** | nepromijenjen, kako je i traženo |
+| **udio nepoznate vožnje** | 0,0 % | 0,0 % | **0,0 %** | nepromijenjen, kako je i traženo |
+| otkucaj p50 / p95 | 29,45 / 180,72 ms | 30,17 / 194,71 ms | 31,60 / 200,89 ms | +4,7 % / +3,2 % |
+
+Što se iz nje čita:
+
+- **Svaki redak kvalitete se popravio, i F8c poništava cijenu koju je F8b platio.** Regresije
+  među planovima vratile su se na razinu F8 (58.944 prema 58.919), slike unatrag i preticanja
+  pale su *ispod* F8, vidljiva križanja vratila su se na +0,6 % od F8 umjesto +6,3 %. Razlog je
+  isti u svim redcima: sedam planova koji su vozili 1,5 do 2,7 km oko ugla koji tramvaj ne vozi
+  više to ne rade, pa ne ostavljaju fantomske tramvaje na bridovima koje dijele druge linije,
+  gdje zakon redoslijeda onda steže prave.
+- **Sedam od devet skokova je popravljeno, dva nisu i to je zapisano.** Linija 13 sada skreće iz
+  Šubićeve u Zvonimirovu u 304 m luka umjesto 1779 (`path:13:1:129fd87e`), odnosno 564 umjesto
+  2122 m u suprotnom smjeru; linije 6 i 17 voze Zrinjevac → Botanički vrt u 747 m umjesto 3261.
+  Preostaju **Botanički vrt → Zrinjevac na linijama 6 i 9** (3242 m luka za 511 m zraka). To
+  skretanje se ne da učvoriti: kolosijek Mihanovićeve prema istoku *završava* u čvoru kod
+  Glavnog kolodvora, a kolosijek prema sjeveru *počinje* 6,79 m dalje, pa se dvije crte nikada
+  ne sijeku i nema točke koja leži na obje. 6,79 m je daleko izvan `SNAP_METRES` (2,5 m), a
+  spajanje dvaju čvorova umjesto toga stvorilo bi tri okreta u mjestu koje nijedan tramvaj ne
+  vozi. Oba skoka su zato imenovana u `scripts/gtfs-shapes-overrides.json` s razlogom; bez
+  zapisa gradnja **pada**.
+- **Graf sada nosi svoje ime.** Artefakt ima `graphHash` (SHA-256 nad poredanim bridovima kako
+  ih žica nosi, 16 znamenki), blizanac pamti pod kojim je imenom učio i pri promjeni briše sve
+  što je ključano indeksom brida (`edge_time`), a zadržava `stop_dwell`, koji je ključan
+  identifikatorom stajališta i koji nijedna pregradnja ne prenumerira. Bez toga bi histogram za
+  „brid 137" nakon ove pregradnje govorio o drugom komadu pruge.
+- **Tri putanje linije 4 vratile su se na vlastiti ulazni brid.** F8b ih je nehotice pomaknuo na
+  61-metarski privoz koji nijedan oblik linije 4 ne crta; prvo i zadnje stajalište uzorka sada
+  opet čitaju geometrijskih 40 m (200-metarska iznimka za okretišta i dalje vrijedi), pa putanje
+  kreću s brida koji crtaju oblici `4_3` i `4_9`.
+- **Cijena je jedan otkucaj.** p50 je 31,60 ms prema 30,17 (+4,7 %); graf je za šest bridova
+  veći, a putanje kraće, pa je to unutar šuma mjerenja na jednom prolazu.
+
+### Nakon F9 (klijent nikad ne crta unatrag; redoslijed kroz konvergenciju), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba: `node scripts/replay-twin.mjs recordings/2026/09/17 --limit
+2216`. **Prozor se opet nije pomaknuo**, a ovaj put stupac „prije" nije prepisan iz tablice F8c
+nego **ponovno izmjeren** na istom stablu (`9e91716`) neposredno prije prve izmjene, pa su oba
+stupca iz istoga sata i s istoga diska. Polazni prolaz vratio je F8c-ove brojke do znamenke
+(slike unatrag 10.490.391, križanja 10.384, držanje 8,1 % / 5,4 s), osim vremena otkucaja, koje
+je mjera opterećenja stroja, a ne koda.
+
+Blizanac u ovoj cjelini nije mijenjan: `laws.ts` samo uvozi `edgeAt` i `mapArc` iz nove
+datoteke `shared/motion/order.ts`. Svi redci koji mjere blizanca zato moraju biti — i jesu —
+identični do znamenke: ocjena unatrag sva tri horizonta, regresije među planovima (58.944),
+prekršaji redoslijeda prema očitanjima (2.784), fantomska stajališta (0 od 11.004), preticanja
+(3.304), vožnje unatrag u planu (0), ustupci (659), poznati smjer i nepoznata vožnja. Promijenio
+se samo klijent.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=373886)
+  30s:  p50 <100m   p95 ge200m  (n=370862)
+  60s:  p50 <200m   p95 ge200m  (n=362424)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 23.9%  within 51.6%  behind 24.5%  (n=373886)
+  30s:  ahead 28.4%  within 37.6%  behind 34.0%  (n=370862)
+  60s:  ahead 29.9%  within 29.6%  behind 40.6%  (n=362424)
+
+between-plan regressions (>25 m):     58944  (of 190816 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  2784  (of 1124149 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      13240
+  hold-time share:                    8.9%  mean hold length: 5.0 s  (37677 holds)
+
+overtakes (must be 0):   3304
+reversals (must be 0):   0
+concessions:             659
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 833  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 35.34  p95 214.21
+```
+
+Isti okviri, prije (`9e91716`, ponovno izmjereno) i poslije (F9):
+
+| Mjera | prije | poslije | promjena |
+|---|---|---|---|
+| **slike unatrag (klijent)** | 10.490.391 od 25.531.087 | **0** | −100 %, cilj kruga |
+| vidljiva križanja | 10.384 | **13.240** | +27,5 % |
+| udio držanja | 8,1 % | 8,9 % | +0,8 p. b. |
+| prosječna duljina držanja | 5,4 s | 5,0 s | −0,4 s |
+| broj držanja | 32.063 | 37.677 | +17,5 % |
+| tramvajske slike | 25.531.087 | 25.531.087 | isti okviri |
+| 30 s: ispred / unutar / iza | 28,4 / 37,6 / 34,0 % | 28,4 / 37,6 / 34,0 % | nepromijenjeno (blizanac nije diran) |
+| regresije među planovima | 58.944 | 58.944 | nepromijenjeno |
+| prekršaji redoslijeda prema očitanjima | 2.784 | 2.784 | nepromijenjeno |
+| preticanja / ustupci | 3.304 / 659 | 3.304 / 659 | nepromijenjeno |
+| otkucaj p50 / p95 | 30,14 / 187,01 ms | 35,34 / 214,21 ms | +17 % / +15 % |
+
+Što se iz nje čita:
+
+- **Nijedna oznaka se više ne crta unatrag, nijedne slike od 25,5 milijuna.** Bilo ih je
+  10.490.391 (41,1 % tramvajskih slika u ovom prolazu). Dopuštenje od metra u sekundi do 30 m po
+  planu nije više ograničeno nego ukinuto, za svaku vrstu vozila: kad plan stavi vozilo iza
+  nacrtane oznake, oznaka **stoji** dok je plan ne sustigne (`Drawn.holding`). To je vlasnikovo
+  pravilo kruga — radije iza nego ispred, sustizanje unaprijed, držanje kad je proturječno —
+  doslovno provedeno na zaslonu.
+- **Cijena je da se proturječje više ne može sakriti.** Vidljivih križanja ima 27,5 % više, i to
+  nije nova greška nego ista stara, sada vidljiva. Dosadašnja stezaljka *upisivala* je zaostalu
+  oznaku unatrag na svakoj slici, pa je par na istoj putanji bio „ispravljen" u jednoj slici — po
+  cijenu tramvaja koji se na ekranu vraća. Sada se par može razriješiti samo unaprijed, pa ostaje
+  vidljiv dok ga vođa ne prestigne. Proturječja pritom nisu klijentova: blizanac u istom prolazu
+  objavi 58.944 regresije među uzastopnim planovima i 2.784 prekršaja redoslijeda prema
+  očitanjima, i svaki put kad se redoslijed dvaju planova okrene između dviju anketa klijent
+  danas nema ništa drugo za čitati — `data.behind` još nije na žici. Registar redoslijeda (E3)
+  je korak koji to gasi na izvoru; tek s njim ovaj redak može pasti na nulu.
+- **Stezaljka sada uopće vidi parove koje prije nije.** Grupirala je samo oznake na **istoj**
+  geometriji (`p<idx>`), pa tramvaj linije 1 i tramvaj linije 2 na zajedničkom kolosijeku jedno
+  drugome nisu postojali. Sada je par svaki par na dijeljenim tračnicama (`onSharedRails` iz
+  `shared/motion/order.ts`), a strop (`min(vođa.s, vođa.plan) − 35 m`) preslikava se na putanju
+  sljedbenika preko `mapArc`. Vođa čiji strop ne pada ni na jedan brid sljedbenikove putanje ne
+  ograničava ništa — tada su se putanje razišle i tramvaj ispred više nije na istim tračnicama.
+- **Držanja je nešto više i kraća su.** 8,9 % naspram 8,1 % slika, prosječno 5,0 s umjesto 5,4 s:
+  oznaka koja bi prije krenula unatrag sada pričeka, a kako pričeka odmah, čeka kraće.
+- **Otkucaj blizanca nije se usporio zbog blizanca.** Njegov kod nije mijenjan, a svi njegovi
+  redci su identični do znamenke; p50 raste jer u istom procesu, između otkucaja, sada radi skuplja
+  simulacija klijenta (cijeli prolaz 8 min 26 s naspram 5 min 42 s), pa čišćenje smeća pada i
+  unutar mjerenog otkucaja. Prva inačica stezaljke radila je po jednu mapu, dva skupa i niz
+  ključeva po slici i dala je 10 min 26 s uz p50 44,66 ms; radni skup je nakon toga premješten na
+  same oznake i čisti se umjesto da se gradi, uz istovjetan ishod (0 slika unatrag, 13.240
+  križanja, 8,9 % držanja; dva držanja razlike od 37.677 dolaze od drukčijeg, jednako valjanog,
+  prekidanja ciklusa u pometanju). U pregledniku je to ionako 40 μs po slici na 150 oznaka.
+- **Što još nosi ova cjelina, a replay ne mjeri:** ponovno sjedanje na novu geometriju više ne
+  uzima globalno najbližu točku nego najbližu *unutar prozora* oko luka koji novi plan imenuje
+  (petlja i okretište prolaze sama pokraj sebe na nekoliko metara, a cijeli krug dalje po luku),
+  i gornja granica koraka po slici podignuta je s 0,25 s na 1 s, koliko traje otkucaj smanjenog
+  kretanja (`loop.ts`): dotad je takav otkucaj integrirao četvrtinu sekunde koju pokriva, pa je
+  oznaka na javnom zaslonu zaostajala za planom zauvijek.
+
+### Nakon F10 (registar redoslijeda iz očitanja, `behind` na žici, matcher zna smjer, identitet kroz vožnje), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba i isti prozor: `node scripts/replay-twin.mjs
+recordings/2026/09/17 --limit 2216`. Stupac „prije" **ponovno je izmjeren** na `fd8afae` (stanje
+poslije F9) neposredno prije prve izmjene i vratio je F9-ovu tablicu do znamenke — sva tri
+horizonta ocjene unatrag, 58.944 regresije, 2.784 prekršaja redoslijeda, 3.304 preticanja, 659
+ustupaka, 0 slika unatrag, 13.240 križanja — osim vremena otkucaja, koje je mjera opterećenja
+stroja, a ne koda.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=374127)
+  30s:  p50 <100m   p95 ge200m  (n=371250)
+  60s:  p50 <200m   p95 ge200m  (n=363023)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 17.3%  within 56.1%  behind 26.6%  (n=374127)
+  30s:  ahead 21.5%  within 41.6%  behind 36.9%  (n=371250)
+  60s:  ahead 23.3%  within 33.0%  behind 43.8%  (n=363023)
+
+between-plan regressions (>25 m):     41243  (of 190649 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  1883  (of 1088537 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      6471
+  hold-time share:                    3.9%  mean hold length: 3.4 s  (23847 holds)
+
+overtakes (must be 0):   17
+reversals (must be 0):   0
+concessions / swaps:     77 / 34
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 836  p95 1794  (never moved: 5)
+per-tick wall time (ms): p50 18.81  p95 44.48
+```
+
+Isti okviri, prije (`fd8afae`, ponovno izmjereno) i poslije (F10):
+
+| Mjera | prije | poslije | promjena |
+|---|---|---|---|
+| **preticanja (blizanac)** | 3.304 | **17** | −99,5 % |
+| **prekršaji redoslijeda prema očitanjima** | 2.784 od 1.124.149 | **1.883** od 1.088.537 | −32,4 % |
+| **vidljiva križanja (klijent)** | 13.240 | **6.471** | −51,1 % |
+| slike unatrag (klijent) | 0 od 25.531.087 | **0** | cilj kruga i dalje drži |
+| vožnje unatrag u planu | 0 | 0 | drži |
+| regresije među planovima | 58.944 od 190.816 | 41.243 od 190.649 | −30,0 % |
+| 10 s: ispred / unutar / iza | 23,9 / 51,6 / 24,5 % | 17,3 / 56,1 / 26,6 % | −6,6 p. b. ispred |
+| 30 s: ispred / unutar / iza | 28,4 / 37,6 / 34,0 % | 21,5 / 41,6 / 36,9 % | −6,9 p. b. ispred |
+| 60 s: ispred / unutar / iza | 29,9 / 29,6 / 40,6 % | 23,3 / 33,0 / 43,8 % | −6,6 p. b. ispred |
+| ustupci / zamjene | 659 / — | 77 / 34 | −83,2 % ustupaka |
+| udio držanja | 8,9 % | 3,9 % | −5,0 p. b. |
+| prosječna duljina držanja | 5,0 s | 3,4 s | −1,6 s |
+| broj držanja | 37.677 | 23.847 | −36,7 % |
+| poznati smjer | 100,0 % | 100,0 % | drži |
+| otkucaj p50 / p95 | 47,26 / 247,22 ms | 18,81 / 44,48 ms | −60 % / −82 % |
+
+Što se iz nje čita:
+
+- **Preticanja su praktički nestala: 3.304 → 17.** Ta mjera broji svaki put kad se upisani
+  redoslijed dvaju tramvaja okrene, a da to nije bio ustupak. Stari zakon
+  (`shared/motion/laws.ts`) izvodio je redoslijed iz **dvaju planova** u svakom otkucaju, pa je
+  svako križanje dviju ekstrapolacija bilo okretanje; registar (`shared/motion/order.ts`) piše ga
+  jednom, iz **očitanja**, i mijenja ga samo ustupkom (77) ili odlučnom zamjenom (34) — 111
+  okretanja kroz jutro umjesto 3.963. Preostalih 17 su parovi kojima je odnos pao (razišli su se
+  ili je zastario) pa se odmah upisao obrnuto; harness to ne razlikuje od preticanja, i ispravno
+  je da ne razlikuje.
+- **Prekršaji redoslijeda prema očitanjima padaju za trećinu, ispod polazne vrijednosti kruga.**
+  Vrata plana su „ne iznad polazne" (2.784 nakon F7 i F9); F10 daje 1.883. Razlog je izravan: gdje
+  odnos stoji, planovi se slažu s očitanjima po konstrukciji, jer je redoslijed iz očitanja i
+  proizašao. Preostatak je **namjeran** i vrijedi ga imenovati: harness broji svaki par čija se
+  očitanja razlikuju za više od duljine tramvaja (35 m), a registar upisuje odnos tek iznad 60 m
+  — dva raspršenja ZET-ova GPS-a. Pojas između 35 i 60 m ostaje neuređen jer u njemu očitanje ne
+  može reći tko je ispred; spustiti prag znači upisivati redoslijed iz šuma, što je točno ono što
+  je stari zakon radio.
+- **Vidljiva križanja su prepolovljena (13.240 → 6.471), ali nisu nula.** Krug traži nulu. Klijent
+  od F9 par može razriješiti samo unaprijed (oznaka nikad ne ide unatrag), pa proturječje ostaje
+  vidljivo dok ga vođa ne prestigne; registar gasi **izvor** većine tih proturječja, ali par koji
+  blizanac uopće ne uređuje — skupljen unutar 60 m, ili na tračnicama koje se ne daju pročitati u
+  jednom okviru — i dalje nema ništa osim planova. Ostatak visi o 41.243 regresije među uzastopnim
+  planovima, a to su pravila planera (F11), ne registra.
+- **Plan je rjeđe ispred tramvaja, na svim horizontima (−6,6 do −6,9 p. b.).** Vlasnikovo pravilo
+  kruga je „radije iza nego ispred"; oznaka ispred koja se mora vraćati čita se kao pokvarena
+  aplikacija. Najveći pojedinačni doprinos je vremenski ograničen **push**: zastarjelom vođi se
+  sada podižu samo čvorovi **od trenutka sljedbenikova očitanja nadalje**, a nikad sidro, pa jedno
+  očitanje iza više ne teleportira cijeli tuđi plan naprijed (D6).
+- **Držanja ima upola manje i kraća su (8,9 % → 3,9 %, 5,0 s → 3,4 s).** Držanje je cijena
+  proturječja: kad ga je manje, oznake stoje rjeđe i kraće, a nijedna i dalje ne ide unatrag.
+- **Otkucaj je dvostruko brži (p50 47,26 → 18,81 ms, p95 247,22 → 44,48 ms).** Stari zakon je za
+  svaki par u svakom otkucaju iznova uspostavljao odnos i ubacivao prijelomne točke po cijelom
+  planu; registar radi samo za parove koji odnos imaju. Dio razlike je i opterećenje stroja, ali
+  p95 pada osam puta, što opterećenje ne objašnjava.
+- **Identitet vozila je provjeren na istom prozoru.** Od 433 identifikatora vozila njih 418 mijenja
+  vožnju, a 415 pritom ima **neprekinut** niz očitanja (razmak manji od 300 s, koliko je i prag
+  ispadanja iz blizanca); od 2.495 promjena vožnje 2.410 je neprekinuto, a jedan identifikator
+  nosi i do 23 vožnje. Zato blizanac od F10 zadržava `Track` kad nova vožnja vozi brid na kojem
+  vozilo stoji ili kreće s perona na kojem stoji: dotad je na svakom okretištu bacao očitanja,
+  procjenu brzine i registar zajedno s njima.
+- **Smjer i dalje zna za svako vozilo (100 %), a sada ga i koristi.** `adoptPath` je slaganje s
+  kretanjem računao pa bacao (`void agrees`); okret na okretištu pod starim identifikatorom vožnje
+  čitao se kao tramvaj koji hoda unatrag niz vlastitu liniju, jer je povratni kolosijek nekoliko
+  metara dalje — unutar bliskog pojasa, pa brojač skretanja nikad nije opalio (D4). Dva uzastopna
+  očitanja protiv tangente putanje sada izvode putanju na suprotan smjer iste linije.
+
+### Nakon F11 (tablica zadržavanja, popravci stanja planera, kvantili, čekanja na križanjima, objavljeni pod), isti snimljeni dan
+
+Mjereno 19. 9. 2026., ista naredba i isti prozor: `node scripts/replay-twin.mjs
+recordings/2026/09/17 --limit 2216`.
+
+**Oba stupca voze isti harness.** F11 je u `scripts/replay-core.ts` dodao ono što
+`worker/do/twin-do.ts` radi u svakom otkucaju — dokazi otkucaja vraćaju se u motor, pa motor kroz
+dan uči. Prvo mjerenje „prije” vozilo je harness **bez** te povratne veze, pa je uspoređivalo planer
+koji ništa ne uči s planerom koji uči cijeli dan: usporedbu dvaju harnessa, a ne dvaju planera.
+Stupac „prije” zato je **ponovno izmjeren na `ee94037` s istim jednim retkom dodanim u njegov
+`replay-core.ts`** (`recordEvidence(engine.learned, result.learned)` i ništa drugo).
+
+Razlika nije mala i ide na štetu starog planera: s učenjem `ee94037` je **gori** nego bez njega
+(23,8 % umjesto 21,5 % planova ispred tramvaja na 30 s, 47.052 regresije umjesto 41.243, 36.971
+držanje umjesto 23.847). Razlog je sam po sebi nalaz: stari je učitelj upisivao zadržavanje i za
+tramvaje koji nisu stajali (nema provjere mirovanja), a stari je planer to onda knjižio po medijanu.
+Pošten pomak F11 je zato **veći** od prvotno prijavljenog: −7,9 postotnih bodova na 30 s umjesto
+−5,9.
+
+```
+twin replay report
+-------------------
+frames processed:        2216 (dropped, no header: 0)
+vehicles seen:           433
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 ge200m  (n=374127)
+  30s:  p50 <100m   p95 ge200m  (n=371250)
+  60s:  p50 <200m   p95 ge200m  (n=363023)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 13.0%  within 56.2%  behind 30.8%  (n=374127)
+  30s:  ahead 15.9%  within 40.5%  behind 43.6%  (n=371250)
+  60s:  ahead 16.2%  within 30.7%  behind 53.1%  (n=363023)
+
+between-plan regressions (>25 m):     19996  (of 190661 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  1884  (of 1089735 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 284077 frames, 25531087 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      5895
+  hold-time share:                    1.4%  mean hold length: 2.1 s  (14282 holds)
+
+overtakes (must be 0):   17
+reversals (must be 0):   0
+concessions / swaps:     77 / 32
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 848  p95 1781  (never moved: 5)
+per-tick wall time (ms): p50 32.92  p95 49.07
+
+planner interventions:   floor 134709  junction_wait 20187  stand_fix 20294  eta_bound_skipped 57624
+learned by the end:      1142 edge cells / 1162 stop cells / 333 node cells; 11168 dwell samples, 1720 junction waits of 5695 passes, 228 platforms in the recent window
+dwell candidates:        11168 kept, 3209 refused by the stationarity gate (1466 with ONE fix in the zone = ambiguous, 1743 with two or more that all moved = pass-through); ambiguous share of all candidates 10.2%
+
+why the plan was ahead at 30 s (share of the fixes graded in each situation that had the plan >=50 m ahead):
+  anchor age <10 s:           16.6%  (44248 of 266125)
+  anchor age 10-20 s:         18.4%  (7714 of 42022)
+  anchor age 20-30 s:         25.2%  (2450 of 9703)
+  anchor age >=30 s:          23.0%  (4656 of 20261)
+  anchor standing:            15.7%  (20097 of 127962)
+  anchor moving:              18.5%  (38971 of 210149)
+  junction within 30 s:       21.1%  (2657 of 12579)
+  no junction within 30 s:    17.3%  (56411 of 325532)
+```
+
+Isti okviri, prije (`ee94037` **s povratnom vezom**) i poslije (F11):
+
+| Mjera | prije (pošteno) | poslije | promjena | *(prije, bez povratne veze)* |
+|---|---|---|---|---|
+| **10 s: ispred / unutar / iza** | 19,1 / 56,4 / 24,5 % | **13,0** / 56,2 / 30,8 % | −6,1 p. b. ispred | *17,3 / 56,1 / 26,6 %* |
+| **30 s: ispred / unutar / iza** | 23,8 / 42,6 / 33,6 % | **15,9** / 40,5 / 43,6 % | −7,9 p. b. ispred | *21,5 / 41,6 / 36,9 %* |
+| **60 s: ispred / unutar / iza** | 26,5 / 34,0 / 39,5 % | **16,2** / 30,7 / 53,1 % | −10,3 p. b. ispred | *23,3 / 33,0 / 43,8 %* |
+| **regresije među planovima** | 47.052 od 190.651 | **19.996** od 190.661 | −57,5 % | *41.243* |
+| **vidljiva križanja (klijent)** | 6.638 | **5.895** | −11,2 % | *6.471* |
+| **udio držanja / broj držanja** | 8,4 % / 36.971 | **1,4 % / 14.282** | −7,0 p. b. / −61,4 % | *3,9 % / 23.847* |
+| prosječna duljina držanja | 4,9 s | 2,1 s | −2,8 s | *3,4 s* |
+| slike unatrag (klijent) | 0 od 25.531.087 | **0** | cilj kruga drži | *0* |
+| vožnje unatrag u planu | 0 | 0 | drži | *0* |
+| preticanja (blizanac) | 17 | 17 | drži | *17* |
+| prekršaji redoslijeda prema očitanjima | 1.898 od 1.087.933 | 1.884 od 1.089.735 | −0,7 % | *1.883* |
+| ustupci / zamjene | 77 / 34 | 77 / 32 | −2 zamjene | *77 / 34* |
+| razred p50 / p95 (10/30/60 s) | <50 / <100 / <200 m; p95 ≥200 m | isto | drži | *isto* |
+| poznati smjer | 100,0 % | 100,0 % | drži | *100,0 %* |
+| otkucaj p50 / p95 | 14,44 / 24,87 ms | 32,92 / 49,07 ms | p50 raste | *13,86 / 49,62 ms* |
+
+#### Gdje plan još uvijek bježi ispred tramvaja
+
+Cilj E4 traži udio „50 m ili više ispred” na 30 s od 10 % ili niže. F11 daje **15,9 %**. Ograničenja
+su ispunjena s puno zraka — „iza” 43,6 % prema dopuštenih 57,4 % (polazni ukupni udio pogrešaka
+iznad 50 m na 30 s), razredi p95 nepromijenjeni — pa prostor za nagib postoji, ali ga kvantili ne
+koriste. Zato ocjenjivač od ove izmjene **dijeli te ocjene po situaciji** (tri retka gore), i tek se
+iz njih vidi gdje ostatak živi. Udjeli su unutar svake situacije, a nazivnici su vlastiti, pa se
+čita „od očitanja ocijenjenih u ovoj situaciji, toliko ih je imalo plan ispred”:
+
+| Situacija u kojoj je plan objavljen | udio „ispred” | koliko ocijenjenih | koliko od svih „ispred” |
+|---|---|---|---|
+| sidro mlađe od 10 s | 16,6 % | 266.125 | **74,9 %** |
+| sidro 10–20 s | 18,4 % | 42.022 | 13,1 % |
+| sidro 20–30 s | 25,2 % | 9.703 | 4,1 % |
+| sidro starije od 30 s | 23,0 % | 20.261 | 7,9 % |
+| sidro **stoji** | 15,7 % | 127.962 | 34,0 % |
+| sidro **vozi** | 18,5 % | 210.149 | **66,0 %** |
+| križanje unutar 30 s plana | 21,1 % | 12.579 | 4,5 % |
+| nema križanja unutar 30 s | 17,3 % | 325.532 | 95,5 % |
+
+Što se iz toga čita, i to mijenja ono što je prije stajalo ovdje:
+
+- **Ostatak nije zastarjeli dokaz.** Tri četvrtine svih planova koji su završili ispred tramvaja
+  objavljeno je sa sidrom **mlađim od deset sekundi**. Stara očitanja jesu gora *po stopi* (25,2 %
+  na 20–30 s prema 16,6 % ispod 10 s), ali ih je premalo da bi nosila zbroj. Čekanje na svježije
+  očitanje ne bi popravilo skoro ništa.
+- **Ostatak nije ni tramvaj koji stoji, nego tramvaj koji vozi pa stane.** Sidro koje vozi daje
+  **dvije trećine** svih „ispred” i ima višu stopu (18,5 % prema 15,7 %). Popravci stanja (D8) i
+  objavljeni pod riješili su slučaj „tramvaj stoji na peronu, a plan je otišao”; ono što je ostalo
+  je „tramvaj je vozio, plan ga je produžio po kvantilu, a on je u sljedećih pola minute stao zbog
+  nečega što feed ne javlja”.
+- **Križanja nose malo, a njihov predznak nije stabilan.** U ovom prozoru stopa je ondje gdje čvor
+  stupnja većeg od dva leži unutar 30 s plana viša (21,1 % prema 17,3 %), ali na **cijelom danu je
+  niža** (17,4 % prema 18,3 %) — vidi odjeljak o punom danu. Predznak se okreće, pa se na taj redak
+  ne smije nasloniti zaključak. Takvih je ocjena ionako samo 3,7 % svih, pa ta situacija nosi 4,5 %
+  ostatka. Sljedeći korak — **više mjesta na kojima se stajanje može predvidjeti** (semafor koji nije
+  na čvoru stupnja većeg od dva, naučeno sporo mjesto po bridu i satu, zatvorena ulica iz ZET-ovih
+  obavijesti) — stoji na prva dva retka podjele, koji su na oba mjerenja isti, a ne na ovom.
+- Nazivnici ovdje (338.111 ocjena) nešto su manji od zaglavnih (371.250): ocjenjivač pamti stanje
+  osam zadnjih objavljenih planova po vozilu, pa ocjena protiv plana starijeg od toga ostaje bez
+  situacije i ispada iz podjele. Udjeli su zato usporedivi međusobno, a zaglavni broj (15,9 %) ostaje
+  mjera koja vrijedi.
+
+#### Kako su odabrane konstante
+
+Četiri prolaza kroz isti prozor, sva tri broja mijenjana zajedno. **Ti su prolazi izmjereni prije
+popravka `movingNow` iz pregleda F11** (planer je tada zadržavao i tramvaj koji je kroz zonu prošao
+s jednim očitanjem u njoj); zaključci vrijede jer su svi mjereni pod istim pravilima, a odabrani
+prolaz 4 ponovno je izmjeren poslije popravka i pomaknuo se za 0,3 postotna boda (15,6 → 15,9 %
+ispred, 19.827 → 19.996 regresija).
+
+| Prolaz | `PLAN_QUANTILE` | `DWELL_PLAN_QUANTILE` | `JUNCTION_STOP_SHARE` | 30 s ispred | 30 s unutar | 30 s iza | regresije | križanja | držanja |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 (polazne) | 0,65 | 0,70 | 0,40 | 17,6 % | 42,3 % | 40,1 % | 24.608 | 6.108 | 20.281 |
+| 2 | 0,80 | 0,85 | 0,30 | 16,5 % | 41,4 % | 42,0 % | 23.121 | 5.941 | 16.880 |
+| 3 | 0,90 | 0,90 | 0,25 | 15,6 % | 40,4 % | 44,1 % | 19.737 | 5.826 | 14.146 |
+| **4 (odabrano)** | **0,90** | **0,90** | **0,40** | **15,6 %** | **40,4 %** | **44,0 %** | **19.827** | **5.868** | **14.156** |
+
+- **Kvantili se isplate, ali skromno.** Cijeli raspon od 0,65/0,70 do 0,90/0,90 nosi 2,0 postotna
+  boda udjela „ispred” na 30 s, a plaća 0,8 postotnih bodova udjela „unutar 50 m” na **10 s** — a to
+  je horizont na kojem gledatelj zapravo živi. Uz to padaju regresije (−19 %), križanja (−3,9 %) i
+  držanja (−30 %). Dalje se nije išlo: kvantil iznad najsporije desetine prestaje opisivati dionicu,
+  a počinje opisivati njezino najgore jutro.
+- **Spuštanje praga na križanjima ne zarađuje ništa.** Prolaz 3 i prolaz 4 razlikuju se samo po
+  `JUNCTION_STOP_SHARE` (0,25 prema 0,40). Na 0,25 planer knjiži 21 % više čekanja (24.423 prema
+  20.178), a dobiva 0,5 % regresija i 0,7 % križanja, dok je ocjena po predznaku ista do desetine
+  boda na svakom horizontu. Načelni prag od 0,4 ostaje.
+
+#### Cijena provjere mirovanja: pristranost preživjelih
+
+Uzorak zadržavanja od F11 traži **par mirovanja** u zoni perona. Ono što odbija nije jedna vrsta
+stvari nego dvije, i samo je jedna od njih bila pogrešna:
+
+```
+dwell candidates:  11.168 zadržano, 3.209 odbijeno
+                   1.466 s JEDNIM očitanjem u zoni  (dvosmisleno: ne dokazuje ni stajanje ni prolaz)
+                   1.743 s dva ili više, sva u pokretu (dokazan prolaz: nikad nije ni bilo zadržavanje)
+                   dvosmislenih 10,2 % svih kandidata
+```
+
+Prolaz kroz peron doista nije zadržavanje i njegovo je odbijanje ispravak. Kandidat s **jednim**
+očitanjem u zoni je nešto drugo: pri ZET-ovu osvježavanju dva od tri, **kratko** zadržavanje je baš
+ono koje najčešće ostavi jedno očitanje u zoni (tramvaj koji je stajao 8 s javi se ondje jednom, onaj
+koji je stajao 40 s tri puta). Zato uzorci koji prežive **naginju na dugu stranu**, a tablica ih onda
+čita na `DWELL_PLAN_QUANTILE` — dvije pristranosti u istom smjeru. Mjera je gore: 1.466 od 14.377
+kandidata, 10,2 %. Ispravak nije blaža provjera (to je D1 natrag) nego procjenitelj koji zna da su
+podaci cenzurirani; dotad je ovo poznata i izmjerena pristranost, a ne skrivena.
+
+#### Cijeli snimljeni dan (7.972 okvira)
+
+`node scripts/replay-twin.mjs recordings/2026/09/17`, s odabranim konstantama i poslije popravaka iz
+pregleda, protiv polazne tablice cijelog dana iz `replay-fullday-baseline-cd7495c.txt`.
+
+**Ovo nije kontrolirana razlika i ne smije se čitati kao takva.** Ta polazna tablica je `cd7495c`,
+stanje **prije F8**, i vožena je harnessom **bez povratne veze učenja** — dakle razlikuju se i
+planer (cijeli krug F: F8 posluženi popis stajališta, F9 klijent koji ne crta unatrag, F10 registar
+redoslijeda, F11 planer i zadržavanje) i harness. Kontrolirana razlika koja mjeri samo F11 je
+tablica prozora gore. Ovdje se čita veličina i smjer, ne pripisivanje.
+
+```
+twin replay report
+-------------------
+frames processed:        7972 (dropped, no header: 0)
+vehicles seen:           473
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 <200m   (n=1560618)
+  30s:  p50 <100m   p95 ge200m  (n=1549449)
+  60s:  p50 <200m   p95 ge200m  (n=1530176)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 13.8%  within 56.8%  behind 29.4%  (n=1560618)
+  30s:  ahead 17.3%  within 40.1%  behind 42.6%  (n=1549449)
+  60s:  ahead 17.9%  within 29.8%  behind 52.3%  (n=1530176)
+
+between-plan regressions (>25 m):     85387  (of 841568 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  6974  (of 4495247 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 1036562 frames, 112221628 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      23149
+  hold-time share:                    1.1%  mean hold length: 1.8 s  (58863 holds)
+
+overtakes (must be 0):   86
+reversals (must be 0):   0
+concessions / swaps:     309 / 170
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 811  p95 1781  (never moved: 8)
+per-tick wall time (ms): p50 39.73  p95 51.25
+
+planner interventions:   floor 595235  junction_wait 101585  stand_fix 97639  eta_bound_skipped 274155
+learned by the end:      4252 edge cells / 4755 stop cells / 1317 node cells; 53164 dwell samples, 7491 junction waits of 24559 passes, 78 platforms in the recent window
+dwell candidates:        53164 kept, 9444 refused by the stationarity gate (4150 with ONE fix in the zone = ambiguous, 5294 with two or more that all moved = pass-through); ambiguous share of all candidates 6.6%
+
+why the plan was ahead at 30 s (share of the fixes graded in each situation that had the plan >=50 m ahead):
+  anchor age <10 s:           17.2%  (202990 of 1177630)
+  anchor age 10-20 s:         20.2%  (34760 of 172404)
+  anchor age 20-30 s:         26.6%  (10578 of 39798)
+  anchor age >=30 s:          25.0%  (20183 of 80737)
+  anchor standing:            16.7%  (96086 of 574127)
+  anchor moving:              19.2%  (172425 of 896442)
+  junction within 30 s:       17.4%  (9442 of 54295)
+  no junction within 30 s:    18.3%  (259069 of 1416274)
+```
+
+| Mjera (cijeli dan) | prije kruga F (`cd7495c`, bez povratne veze) | poslije F11 | promjena |
+|---|---|---|---|
+| **slike unatrag (klijent)** | 41.223.762 od 112.221.628 | **0** | nestale |
+| **preticanja (blizanac)** | 11.204 | **86** | −99,2 % |
+| **fantomska stajališta** | 6.410 od 10.599 | **0** od 11.004 | nestala |
+| **regresije među planovima** | 218.265 od 842.298 | **85.387** od 841.568 | −60,9 % |
+| **vidljiva križanja (klijent)** | 38.228 | **23.149** | −39,4 % |
+| **10 s: ispred / unutar / iza** | 23,7 / 54,2 / 22,1 % | **13,8** / 56,8 / 29,4 % | −9,9 p. b. ispred |
+| **30 s: ispred / unutar / iza** | 28,2 / 38,8 / 33,0 % | **17,3** / 40,1 / 42,6 % | −10,9 p. b. ispred |
+| **60 s: ispred / unutar / iza** | 29,1 / 29,5 / 41,4 % | **17,9** / 29,8 / 52,3 % | −11,2 p. b. ispred |
+| **razred p95 na 10 s** | ≥200 m | **<200 m** | prvi pomak razreda p95 u krugu |
+| razred p50 (10/30/60 s) | <50 / <100 / <200 m | isto | drži |
+| prekršaji redoslijeda prema očitanjima | 9.356 od 5.022.158 | 6.974 od 4.495.247 | −25,5 % |
+| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | **1,1 % / 1,8 s / 58.863** | −6,7 p. b. / −60,4 % |
+| vožnje unatrag u planu | 0 | 0 | drži |
+| ustupci / zamjene | 6.960 / — | 309 / 170 | −95,6 % ustupaka |
+| poznati smjer / nepoznate vožnje | 100,0 % / 0,0 % | 100,0 % / 0,0 % | drži |
+| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 811 / 1.781 s | +35 s p50 |
+| otkucaj p50 / p95 | 123,03 / 304,87 ms | **39,73 / 51,25 ms** | −68 % / −83 % |
+
+Četiri stvari treba pročitati pažljivo:
+
+- **Razred p95 na 10 s prvi put pada ispod 200 m.** Kroz cijeli krug F razredi p95 stajali su na
+  „≥200 m” na sva tri horizonta; na punom danu horizont jednog otkucaja sada završava ispod 200 m.
+- **Podjela „zašto ispred” drži na punom danu za dva retka, a za treći se OKREĆE.** Sidro mlađe od
+  10 s i dalje nosi tri četvrtine svih „ispred” (75,6 % na punom danu prema 74,9 % u prozoru), a
+  sidro koje vozi dvije trećine (64,2 % prema 66,0 %) — ta dva zaključka su stabilna. Ali **križanje
+  unutar 30 s** u prozoru je imalo višu stopu (21,1 % prema 17,3 %), a na punom danu ima **nižu**
+  (17,4 % prema 18,3 %). Predznak se mijenja, dakle taj signal nije robustan: na punom danu planer
+  knjiži 101.585 čekanja na križanjima i ondje gdje ih knjiži plan nije češće ispred — što je upravo
+  ono što se želi ako čekanja rade. Zaključak „više mjesta na kojima se stajanje može predvidjeti”
+  stoji na prva dva retka, koja su stabilna, a ne na trećem.
+- **Pristranost preživjelih je na punom danu manja nego u prozoru** (6,6 % dvosmislenih kandidata
+  prema 10,2 %): kroz cijeli dan ima više dugih zadržavanja na okretištima i u slaboj vožnji, koja
+  ostavljaju više od jednog očitanja u zoni.
+- **Prvi plan u pokretu je 35 s sporiji (776 → 811 s p50).** Vozilo koje blizanac prvi put vidi na
+  peronu sada stoji dok ne dokaže da je krenulo. Pola minute čekanja na tramvaj koji doista stoji
+  jeftinije je od oznake koja otiđe bez njega i onda se mora vratiti.
+
+#### Ručna tablica zadržavanja (za vlasnika)
+
+Datoteka je **`app/public/data/stop-dwell-overrides.json`**. Uredi je izravno, napravi commit i push
+— između tvoje izmjene i onoga što blizanac pročita nema nijednog koraka gradnje: poslužitelj je
+dohvaća s `/data/stop-dwell-overrides.json` istim putem kojim dohvaća `zet-trips.json` i
+`zet-network.json`. (Druge dvije datoteke s „overrides” u imenu leže u `scripts/` jer su **ulaz** u
+gradnju koja prepisuje artefakt; ova se ne prepisuje ničim, pa bi korak kopiranja iz `scripts/` samo
+dodao način da tvoja izmjena tiho ne stigne u proizvodnju.)
+
+Jedan redak izgleda ovako:
+
+```json
+{ "stop": "Črnomerec", "route": "6", "defaultSec": 90, "pin": true, "reason": "okretište, vozač mijenja smjer" }
+```
+
+- `stop` je **id perona iz GTFS-a** (`98_1`) ili **ime stajališta** (`Črnomerec`). Ime pogađa sve
+  perone tog imena **koje vozi neki tramvaj** — nikad autobusno ugibalište istog imena. To nije
+  sitnica: „Črnomerec” je tri tramvajska perona i jedanaest autobusnih, a ovu tablicu čita i procjena
+  brzine, pa bi okretnički broj naplaćen autobusnom ugibalištu gurnuo **autobusov** plan ispred
+  njega. Id perona pogađa točno taj peron, kakav god bio: id nije pogađanje. Sjeme od dvadeset imena
+  tako pogađa 61 tramvajski peron i nijedno autobusno ugibalište.
+- `route` je neobavezan i sužava redak na perone koje ta linija stvarno vozi.
+- `defaultSec` su sekunde. Redak s id-om perona jači je od retka s imenom, a redak s linijom od retka
+  bez nje; među jednakima vrijedi tvoj zadnji redak.
+- Bez `"pin": true` broj je samo **polazna** vrijednost: izmjereno zadržavanje (zadnjih 30 uzoraka u
+  90 minuta, pa naučena razdioba po satu i vrsti dana) i dalje ima prednost. S `"pin": true` broj je
+  ono što planer knjiži, a mjerenja se vide samo na `/stats`.
+- `reason` je obavezan — da za pola godine piše zašto je broj tu.
+- Neispravan redak **ruši učitavanje datoteke i ispisuje se cijeli** u zapisnik; blizanac tada vozi
+  bez ijednog ručnog unosa, a ne s polovicom njih. Unos koji ne pogađa nijedan peron učitane mreže
+  (preimenovano stajalište, tipfeler) ne ruši ništa nego se **imenuje na `/stats`**.
+
+Sjeme u datoteci su dvadeset okretišta tramvajskih uzoraka iz `zet-trips.json`, sva na 60 s s
+razlogom „terminus layover placeholder — owner to adjust”: popis za uređivanje, ne prazna datoteka.
+Sve što tablica zna — polazna vrijednost, ručni unos, naučeni p50 i p90 (stupac nosi ime iz same konstante DWELL_PLAN_QUANTILE, pa ne može lagati kad se ona pomakne), broj uzoraka, koliko ih je u
+zadnjih 90 minuta i kada je zadnji, te sekunde koje planer stvarno knjiži — vidi se na `/stats` pod
+naslovom **Zadržavanje po stajalištu**, a čekanja na križanjima pod **Čekanje na križanjima**.
 
 ## Javni zaslon Prozor (16. 9. 2026.)
 

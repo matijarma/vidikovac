@@ -54,11 +54,25 @@ export interface NextStop {
   etaSec: number | null;
 }
 
-/** The ordering law's memory (laws.ts): the vehicles this one is established
- *  behind, and how many consecutive fixes have contradicted each of those. */
+/** The ordering register's memory (order.ts, E3): the ONE vehicle this one
+ *  is established behind, when that was written, how many consecutive fresh
+ *  fixes have contradicted it since, and the per-partner witnesses a pair
+ *  collects before any relation is written at all. */
 export interface OrderState {
-  behind: string[];
-  contradictions: Record<string, number>;
+  /** The vehicle id this one is established behind, or null. */
+  leader: string | null;
+  /** The follower fix time (epoch seconds) the relation was written at. */
+  since: number;
+  /** Consecutive fresh follower fixes that read ahead of the leader. */
+  contradictions: number;
+  /** The follower fix time the last contradiction was counted at, so three
+   *  passes over one fix count as the one observation they are. */
+  countedAt: number;
+  /** Per partner vehicle id: consecutive fresh fixes of the pair that read
+   *  the same way round (`lead` is the id they put ahead), and the pair
+   *  evidence time they were counted at. Kept on the track whose id sorts
+   *  first, so one pair is counted once. */
+  witnesses: Record<string, { n: number; at: number; lead: string }>;
 }
 
 export interface Track {
@@ -77,6 +91,10 @@ export interface Track {
   offGraphCount: number;
   /** Consecutive fixes whose on-path residual exceeded the near band. */
   offPathCount: number;
+  /** Consecutive fixes that moved against the rail the vehicle is read on
+   *  (match.ts FOLD_FIXES): a terminus turnaround still reported under the
+   *  old trip id. Undefined on a state row written before F10. */
+  againstCount: number;
   /** m/s, the speed estimate from the moving intervals (speed.ts). */
   speed: number;
   /** 0..1, the planner's confidence after silence decay (plan.ts). */
@@ -110,11 +128,12 @@ export function newTrack(id: string, routeId: string, tripId: string | null, kin
     offGraph: false,
     offGraphCount: 0,
     offPathCount: 0,
+    againstCount: 0,
     speed: 0,
     confidence: 0,
     plan: null,
     next: null,
-    order: { behind: [], contradictions: {} },
+    order: newOrderState(),
     tripStartSec: null,
   };
 }
@@ -133,6 +152,10 @@ export function lastFix(track: Track): PlaneFix | null {
   return track.fixes.length > 0 ? track.fixes[track.fixes.length - 1] : null;
 }
 
+export function newOrderState(): OrderState {
+  return { leader: null, since: 0, contradictions: 0, countedAt: 0, witnesses: {} };
+}
+
 export function resetOrder(track: Track): void {
-  track.order = { behind: [], contradictions: {} };
+  track.order = newOrderState();
 }

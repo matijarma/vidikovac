@@ -19,6 +19,7 @@
 
 import type { Bands } from './bands';
 import { zagrebBands } from './bands';
+import { junctionsOnPath, JUNCTION_ZONE_M, MAX_JUNCTION_WAIT_S, nodeKey } from './junction';
 import type { GraphNetwork } from './network';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, type PlaneFix, type Track } from './track';
@@ -124,10 +125,16 @@ export function parseHistogram(text: string): Histogram {
 export interface LearnedAggregates {
   edges: Record<string, Histogram>;
   stops: Record<string, Histogram>;
+  /** F11: standing time before a junction node, per (node, band, day) -- the
+   *  waits, not the passes, so a share can be taken against `nodePasses`. */
+  nodes: Record<string, Histogram>;
+  /** F11: traversals of that same cell, so p(stop) = count(nodes) / passes.
+   *  A plain count, not a histogram: nothing is distributed about a pass. */
+  nodePasses: Record<string, number>;
 }
 
 export function emptyAggregates(): LearnedAggregates {
-  return { edges: {}, stops: {} };
+  return { edges: {}, stops: {}, nodes: {}, nodePasses: {} };
 }
 
 export function edgeKey(edge: number, hourBand: number, dayType: number): string {
@@ -154,20 +161,27 @@ function addTo(table: Record<string, Histogram>, key: string, seconds: number): 
 }
 
 /** Adds every histogram of `from` into `into`, in place. */
-export function mergeAggregates(into: LearnedAggregates, from: LearnedAggregates): void {
-  for (const [key, h] of Object.entries(from.edges)) into.edges[key] = into.edges[key] ? mergeHistograms(into.edges[key], h) : [...h];
-  for (const [key, h] of Object.entries(from.stops)) into.stops[key] = into.stops[key] ? mergeHistograms(into.stops[key], h) : [...h];
+export function mergeAggregates(into: LearnedAggregates, from: Partial<LearnedAggregates>): void {
+  for (const [key, h] of Object.entries(from.edges ?? {})) into.edges[key] = into.edges[key] ? mergeHistograms(into.edges[key], h) : [...h];
+  for (const [key, h] of Object.entries(from.stops ?? {})) into.stops[key] = into.stops[key] ? mergeHistograms(into.stops[key], h) : [...h];
+  for (const [key, h] of Object.entries(from.nodes ?? {})) into.nodes[key] = into.nodes[key] ? mergeHistograms(into.nodes[key], h) : [...h];
+  for (const [key, n] of Object.entries(from.nodePasses ?? {})) into.nodePasses[key] = (into.nodePasses[key] ?? 0) + n;
 }
 
 export function isEmptyAggregates(agg: LearnedAggregates): boolean {
-  return Object.keys(agg.edges).length === 0 && Object.keys(agg.stops).length === 0;
+  return (
+    Object.keys(agg.edges).length === 0 &&
+    Object.keys(agg.stops).length === 0 &&
+    Object.keys(agg.nodes ?? {}).length === 0 &&
+    Object.keys(agg.nodePasses ?? {}).length === 0
+  );
 }
 
 /** Rows and bytes the aggregates would take in SQLite, for reports. */
 export function aggregateSize(agg: LearnedAggregates): { rows: number; bytes: number } {
   let bytes = 0;
   let rows = 0;
-  for (const table of [agg.edges, agg.stops]) {
+  for (const table of [agg.edges, agg.stops, agg.nodes ?? {}]) {
     for (const [key, h] of Object.entries(table)) {
       rows++;
       bytes += key.length + serializeHistogram(h).length + 16;
@@ -193,15 +207,44 @@ export interface DwellEvidence {
   atSec: number;
 }
 
+/** One stand short of a junction node, mined off every platform (F11). */
+export interface NodeWaitEvidence {
+  node: number;
+  seconds: number;
+  /** Report time of the fix that confirmed the node was crossed, for banding. */
+  atSec: number;
+}
+
+/** One traversal of a junction node, wait or no wait: the denominator of p(stop). */
+export interface NodePassEvidence {
+  node: number;
+  atSec: number;
+}
+
+/** Dwell candidates the stationarity gate refused, split by WHY (F11
+ *  review, item 4). `movedThrough` is a proven pass-through: two or more
+ *  fixes inside the zone, every consecutive pair further apart than the dead
+ *  zone. `oneFix` is the ambiguous half: a single fix inside the zone, which
+ *  proves neither a stand nor a pass. Those two are not the same kind of
+ *  loss, and the second is where the gate's SURVIVORSHIP BIAS lives. */
+export interface DwellDropped {
+  oneFix: number;
+  movedThrough: number;
+}
+
 export interface Evidence {
   edges: EdgeEvidence[];
   dwells: DwellEvidence[];
+  waits: NodeWaitEvidence[];
+  passes: NodePassEvidence[];
+  /** Dwell candidates the gate refused, for the measurement only. */
+  dwellDropped: DwellDropped;
   /** Report time of the newest fix mined; the next extraction starts after it. */
   upTo: number;
 }
 
 export function emptyEvidence(upTo = 0): Evidence {
-  return { edges: [], dwells: [], upTo };
+  return { edges: [], dwells: [], waits: [], passes: [], dwellDropped: { oneFix: 0, movedThrough: 0 }, upTo };
 }
 
 interface ArcFix {
@@ -264,8 +307,30 @@ export function extractEvidence(net: GraphNetwork, track: Track, sinceSec: numbe
     }
   }
 
-  // Dwell samples: a run inside a stop's zone, bounded by clean fixes.
+  // Dwell samples: a run inside a stop's zone, bounded by clean fixes, with
+  // at least one STATIONARY pair inside the zone (F11). Without that check a
+  // tram that merely passed the platform between two clean fixes wrote a
+  // dwell sample of whatever the interval happened to exceed the travel by,
+  // and the table learned a standing time from trams that never stood --
+  // the learner poisoning of D1.
+  //
+  // The gate is NOT free, and the bias runs one way (F11 review, item 4). It
+  // refuses two different things: a proven pass-through, which was never a
+  // dwell, and a candidate with a SINGLE fix inside the zone, which proves
+  // nothing either way. At ZET's two-in-three refresh a SHORT dwell is
+  // exactly the one most likely to leave a single fix in the zone -- a tram
+  // that stood 8 s is reported once there, a tram that stood 40 s three
+  // times. So the samples that survive skew LONG, and the dwell table then
+  // reads DWELL_PLAN_QUANTILE of an already-long-skewed set: the two
+  // compound. `evidence.dwellDropped` counts both refusals so the size of
+  // the effect is measurable rather than asserted (the replay prints it).
+  // Correcting it needs a censored-data estimator, not a looser gate: a
+  // looser gate is the D1 poisoning back.
   const pooledCruise = pooledDs >= MIN_CRUISE_BASELINE_M && pooledDt > 0 ? pooledDs / pooledDt : null;
+  const travelBetween = (fromS: number, toS: number, atSec: number): number | null => {
+    const learnedTravel = travelOf?.(pathIdx, fromS, toS, atSec) ?? null;
+    return learnedTravel ?? (pooledCruise !== null && pooledCruise >= MIN_CRUISE_MS ? (toS - fromS) / pooledCruise : null);
+  };
   {
     for (const entry of stops) {
       const S = entry.s;
@@ -283,9 +348,13 @@ export function extractEvidence(net: GraphNetwork, track: Track, sinceSec: numbe
       if (!before || !after) continue;
       if (before.atStop || after.atStop || before.s >= S - STOP_ZONE_M || after.s <= S + STOP_ZONE_M) continue;
       if (after.fix.atSec <= sinceSec) continue;
+      if (!stationaryRun(onPath, first, lastIdx)) {
+        if (lastIdx > first) evidence.dwellDropped.movedThrough++;
+        else evidence.dwellDropped.oneFix++;
+        continue;
+      }
       const interval = after.fix.atSec - before.fix.atSec;
-      const learnedTravel = travelOf?.(pathIdx, before.s, after.s, after.fix.atSec) ?? null;
-      const travel = learnedTravel ?? (pooledCruise !== null && pooledCruise >= MIN_CRUISE_MS ? (after.s - before.s) / pooledCruise : null);
+      const travel = travelBetween(before.s, after.s, after.fix.atSec);
       if (travel === null) continue;
       let others = 0;
       for (const other of stopsBetween(before.s, after.s)) if (other.stopId !== entry.stop.id) others += dwellOf(other.stopId);
@@ -294,11 +363,60 @@ export function extractEvidence(net: GraphNetwork, track: Track, sinceSec: numbe
     }
   }
 
+  // Junction waits (F11): the same shape of evidence one zone earlier, at
+  // the rail nodes where three ways meet. Every crossing of the node is a
+  // PASS, so p(stop) is a share and not a count; a stationary pair inside
+  // the zone, off every platform the line serves, is a WAIT.
+  for (const junction of junctionsOnPath(net, pathIdx)) {
+    const S = junction.s;
+    const zoneFrom = S - JUNCTION_ZONE_M;
+    const j = onPath.findIndex((entry) => entry.s > S);
+    if (j <= 0) continue;
+    const after = onPath[j];
+    if (after.atStop || after.fix.atSec <= sinceSec) continue;
+    // Back over every fix still inside the zone to the clean fix before it.
+    let k = j - 1;
+    while (k > 0 && onPath[k].s >= zoneFrom) k--;
+    const before = onPath[k];
+    if (before.s >= zoneFrom || before.atStop) continue;
+    evidence.passes.push({ node: junction.node, atSec: after.fix.atSec });
+    // A stationary pair inside the zone and off every served platform: the
+    // stand that is the junction's and not a dwell the table already books.
+    let stood = false;
+    for (let i = k + 1; i < j - 1; i++) {
+      if (onPath[i].atStop || onPath[i + 1].atStop) continue;
+      if (Math.abs(onPath[i + 1].s - onPath[i].s) < DEAD_ZONE_M) {
+        stood = true;
+        break;
+      }
+    }
+    if (!stood) continue;
+    const travel = travelBetween(before.s, after.s, after.fix.atSec);
+    if (travel === null) continue;
+    let others = 0;
+    for (const other of stopsBetween(before.s, after.s)) others += dwellOf(other.stopId);
+    const wait = Math.max(0, Math.min(MAX_JUNCTION_WAIT_S, after.fix.atSec - before.fix.atSec - travel - others));
+    if (wait <= 0) continue;
+    evidence.waits.push({ node: junction.node, seconds: wait, atSec: after.fix.atSec });
+  }
+
   return evidence;
 }
 
+/** At least two fixes of the run within the dead zone of each other ALONG
+ *  THE ARC: the proof that the vehicle actually stood, rather than crossing
+ *  the zone between two reports. One fix alone proves nothing either way. */
+function stationaryRun(onPath: readonly ArcFix[], first: number, last: number): boolean {
+  for (let i = first; i < last; i++) if (Math.abs(onPath[i + 1].s - onPath[i].s) < DEAD_ZONE_M) return true;
+  return false;
+}
+
 /** Counts the evidence into the aggregates, banded by when it was seen. */
-export function recordEvidence(agg: LearnedAggregates, evidence: Pick<Evidence, 'edges' | 'dwells'>, bandsOf: (atSec: number) => Bands = zagrebBands): void {
+export function recordEvidence(
+  agg: LearnedAggregates,
+  evidence: Pick<Evidence, 'edges' | 'dwells'> & Partial<Pick<Evidence, 'waits' | 'passes'>>,
+  bandsOf: (atSec: number) => Bands = zagrebBands,
+): void {
   for (const e of evidence.edges) {
     const { hourBand, dayType } = bandsOf(e.atSec);
     addTo(agg.edges, edgeKey(e.edge, hourBand, dayType), e.seconds);
@@ -306,5 +424,14 @@ export function recordEvidence(agg: LearnedAggregates, evidence: Pick<Evidence, 
   for (const d of evidence.dwells) {
     const { hourBand, dayType } = bandsOf(d.atSec);
     addTo(agg.stops, stopKey(d.stopId, hourBand, dayType), d.seconds);
+  }
+  for (const w of evidence.waits ?? []) {
+    const { hourBand, dayType } = bandsOf(w.atSec);
+    addTo(agg.nodes, nodeKey(w.node, hourBand, dayType), w.seconds);
+  }
+  for (const p of evidence.passes ?? []) {
+    const { hourBand, dayType } = bandsOf(p.atSec);
+    const key = nodeKey(p.node, hourBand, dayType);
+    agg.nodePasses[key] = (agg.nodePasses[key] ?? 0) + 1;
   }
 }

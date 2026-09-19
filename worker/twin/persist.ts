@@ -4,9 +4,10 @@
 // one indexed lookup when the decoded index is not in memory. Plain SQL over
 // the storage the Durable Object hands in; no Cloudflare import.
 
+import { DWELL_RECENT_N, DWELL_RECENT_WINDOW_S, type DwellRecent } from '../../shared/motion/dwell';
 import { toPlane } from '../../shared/motion/geo';
-import { emptyAggregates, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
-import type { PlaneFix, Track } from '../../shared/motion/track';
+import { emptyAggregates, emptyHistogram, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
+import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
 
@@ -38,6 +39,13 @@ const LOOKUP_CHUNK = 50;
 const COORD_PRECISION = 1e5;
 const ARC_PRECISION = 10;
 
+/** A measured dwell is stored as whole seconds (F11). It is derived from
+ *  report times a second apart at best, the histogram bins it lands in are
+ *  26 % wide, and the window can hold thirty of them for every platform the
+ *  fleet called at -- a decimal per sample would be a tenth of a megabyte of
+ *  state row per tick for a precision the measurement never had. */
+const DWELL_PRECISION = 1;
+
 export interface IndexPattern {
   route: string;
   direction: 0 | 1;
@@ -66,6 +74,11 @@ export interface TripLookup extends TripJoin {
   pattern: number;
   block: string;
 }
+
+/** Resolves the path id of a pattern of the SQLite copy, the way the decoded
+ *  index does (times.ts patternPathResolver). Passed in rather than imported
+ *  so this file keeps knowing nothing about the network geometry. */
+export type PathIdOfPattern = (pattern: { idx: number; route: string; direction: 0 | 1; shape: string | null; stops: string[] }) => string | null;
 
 export function ensureSchema(sql: SqlStorage): void {
   sql.exec(
@@ -119,6 +132,33 @@ export function ensureSchema(sql: SqlStorage): void {
        PRIMARY KEY (stop, band, daytype)
      )`,
   );
+  // F11: the waits short of a junction node, and the passes of that node in
+  // the same cell, so p(stop) is a share. Keyed by NODE INDEX, which only
+  // means something inside one rail graph -- adoptGraph drops these with the
+  // edge rows, for exactly the reason it drops those.
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS node_wait (
+       node INTEGER NOT NULL,
+       band INTEGER NOT NULL,
+       daytype INTEGER NOT NULL,
+       hist TEXT NOT NULL,
+       n INTEGER NOT NULL,
+       passes INTEGER NOT NULL,
+       PRIMARY KEY (node, band, daytype)
+     )`,
+  );
+  // F11: the rolling window of individual dwell samples, beside the banded
+  // histograms. Rows, not a histogram: the window answers "what is this
+  // platform doing in the last ninety minutes", which a cell summed over a
+  // whole hour band and a whole day type cannot.
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS stop_dwell_recent (
+       stop TEXT NOT NULL,
+       at INTEGER NOT NULL,
+       seconds REAL NOT NULL,
+       PRIMARY KEY (stop, at)
+     )`,
+  );
 }
 
 // ---- tick state -------------------------------------------------------------
@@ -141,7 +181,11 @@ export function serializeState(state: TwinState): string {
       }),
     };
   }
-  const stored: StoredState = { ...state, tracks };
+  const dwellRecent: DwellRecent = {};
+  for (const [stopId, samples] of Object.entries(state.dwellRecent ?? {})) {
+    dwellRecent[stopId] = samples.map(([at, seconds]) => [at, Math.round(seconds * DWELL_PRECISION) / DWELL_PRECISION]);
+  }
+  const stored: StoredState = { ...state, tracks, dwellRecent };
   return JSON.stringify(stored);
 }
 
@@ -155,9 +199,27 @@ export function deserializeState(body: string): TwinState {
         const plane = toPlane(fix.lon, fix.lat);
         return { ...fix, x: plane.x, y: plane.y };
       }),
+      // A row written before F10 carries the pairwise law's `behind` array
+      // instead of the register's single leader (shared/motion/track.ts): a
+      // cold restore over one must not throw, it starts the register clean
+      // and the next tick's fixes write it again within two fixes.
+      order: track.order && typeof track.order.leader !== 'undefined' && track.order.witnesses ? track.order : newOrderState(),
+      // Added with the register (shared/motion/match.ts FOLD_FIXES); a row
+      // written before it has no such field, and undefined + 1 is NaN.
+      againstCount: track.againstCount ?? 0,
     };
   }
-  return { ...stored, tracks, published: stored.published ?? {}, learnedUpTo: stored.learnedUpTo ?? {}, pendingLearned: stored.pendingLearned ?? emptyAggregates() };
+  const pendingLearned = stored.pendingLearned ?? emptyAggregates();
+  return {
+    ...stored,
+    tracks,
+    published: stored.published ?? {},
+    learnedUpTo: stored.learnedUpTo ?? {},
+    // A row written before F11 carries neither the junction tables nor the
+    // rolling dwell window; both start empty and fill within a minute.
+    pendingLearned: { edges: pendingLearned.edges ?? {}, stops: pendingLearned.stops ?? {}, nodes: pendingLearned.nodes ?? {}, nodePasses: pendingLearned.nodePasses ?? {} },
+    dwellRecent: stored.dwellRecent ?? {},
+  };
 }
 
 /** Writes the tick's state and keeps only the newest STATE_ROWS_KEPT rows. */
@@ -232,21 +294,47 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
 }
 
 /** The join for each known trip id; unknown ids are simply absent. */
-export function lookupTrips(sql: SqlStorage, tripIds: readonly string[]): Map<string, TripLookup> {
+export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdOf?: PathIdOfPattern): Map<string, TripLookup> {
   const out = new Map<string, TripLookup>();
   const unique = [...new Set(tripIds)];
+  // One resolution per pattern, not per trip: a rush-hour tick looks up
+  // hundreds of trips over a few dozen patterns, and the shapeless ones cost
+  // a JSON parse of the stop sequence each.
+  const pathIdByPattern = new Map<number, string | null>();
   for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
     const chunk = unique.slice(i, i + LOOKUP_CHUNK);
     const rows = sql
-      .exec<{ trip_id: string; pattern: number; block: string; start: number; direction: number; shape: string | null; headsign: string }>(
-        `SELECT t.trip_id, t.pattern, t.block, t.start, p.direction, p.shape, p.headsign
+      .exec<{ trip_id: string; pattern: number; block: string; start: number; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
+        `SELECT t.trip_id, t.pattern, t.block, t.start, p.route, p.direction, p.shape, p.headsign, p.stops
            FROM trips t JOIN patterns p ON p.idx = t.pattern
           WHERE t.trip_id IN (${chunk.map(() => '?').join(', ')})`,
         ...chunk,
       )
       .toArray();
     for (const row of rows) {
-      out.set(row.trip_id, { direction: row.direction === 1 ? 1 : 0, headsign: row.headsign, shapeId: row.shape, startSec: row.start, pattern: row.pattern, block: row.block });
+      const direction = row.direction === 1 ? 1 : 0;
+      let pathId = pathIdByPattern.get(row.pattern) ?? null;
+      if (pathIdOf && !pathIdByPattern.has(row.pattern)) {
+        let stops: string[] = [];
+        try {
+          const parsed: unknown = JSON.parse(row.stops);
+          if (Array.isArray(parsed)) stops = parsed as string[];
+        } catch {
+          // A pattern row written by an older build, or a truncated one: the
+          // join goes out without a path id, as it did before F8.
+        }
+        pathId = pathIdOf({ idx: row.pattern, route: row.route, direction, shape: row.shape, stops });
+        pathIdByPattern.set(row.pattern, pathId);
+      }
+      out.set(row.trip_id, {
+        direction,
+        headsign: row.headsign,
+        shapeId: row.shape,
+        startSec: row.start,
+        pattern: row.pattern,
+        block: row.block,
+        ...(pathId === null ? {} : { pathId }),
+      });
     }
   }
   return out;
@@ -264,6 +352,38 @@ export function markLearnFlushed(sql: SqlStorage, atMs: number): void {
   metaSet(sql, 'learn_flushed_at', String(atMs));
 }
 
+/**
+ * The graph the learned edge rows belong to. `edge_time` is keyed by edge
+ * INDEX, and an index only means something within one rail graph: the F8c
+ * builder nodes a crossing where a line turns and renumbers everything after
+ * it, so a histogram for "edge 137" would then be about a different piece of
+ * track. On a change every edge-keyed row goes and the new name is recorded;
+ * `stop_dwell` and `stop_dwell_recent` are keyed by stop id, which no rebuild
+ * renumbers, so they stay; `node_wait` is keyed by node index and goes too.
+ * Returns the rows dropped, or null when the graph is the one already
+ * recorded (nothing to do, nothing to say).
+ */
+export function adoptGraph(storage: DurableObjectStorage, graphHash: string): number | null {
+  const sql = storage.sql;
+  const stored = metaGet(sql, 'graph_hash');
+  if (stored === graphHash) return null;
+  let dropped = 0;
+  storage.transactionSync(() => {
+    dropped = sql.exec<{ c: number }>('SELECT count(*) AS c FROM edge_time').one().c;
+    dropped += sql.exec<{ c: number }>('SELECT count(*) AS c FROM node_wait').one().c;
+    sql.exec('DELETE FROM edge_time');
+    // F11: node_wait is keyed by node index, which the same rebuild renumbers.
+    sql.exec('DELETE FROM node_wait');
+    metaSet(sql, 'graph_hash', graphHash);
+  });
+  return dropped;
+}
+
+/** The graph the learned edge rows were gathered under, or null before any. */
+export function learnedGraphHash(sql: SqlStorage): string | null {
+  return metaGet(sql, 'graph_hash');
+}
+
 /** Every learned histogram the tables hold. */
 export function loadLearned(sql: SqlStorage): LearnedAggregates {
   const agg = emptyAggregates();
@@ -273,8 +393,64 @@ export function loadLearned(sql: SqlStorage): LearnedAggregates {
   for (const row of sql.exec<{ stop: string; band: number; daytype: number; hist: string }>('SELECT stop, band, daytype, hist FROM stop_dwell').toArray()) {
     agg.stops[`${row.stop}|${row.band}|${row.daytype}`] = parseHistogram(row.hist);
   }
+  for (const row of sql.exec<{ node: number; band: number; daytype: number; hist: string; passes: number }>(
+    'SELECT node, band, daytype, hist, passes FROM node_wait',
+  ).toArray()) {
+    const key = `${row.node}|${row.band}|${row.daytype}`;
+    agg.nodes[key] = parseHistogram(row.hist);
+    agg.nodePasses[key] = Number.isFinite(row.passes) && row.passes > 0 ? Math.floor(row.passes) : 0;
+  }
   return agg;
 }
+
+/** The rolling dwell window from SQLite: the newest DWELL_RECENT_N samples
+ *  per platform inside the window, so a cold start plans from what the last
+ *  ninety minutes measured rather than from the timetable. */
+export function loadDwellRecent(sql: SqlStorage, nowSec: number): DwellRecent {
+  const recent: DwellRecent = {};
+  for (const row of sql.exec<{ stop: string; at: number; seconds: number }>(
+    'SELECT stop, at, seconds FROM stop_dwell_recent WHERE at > ? ORDER BY at ASC',
+    nowSec - DWELL_RECENT_WINDOW_S,
+  ).toArray()) {
+    const list = recent[row.stop] ?? (recent[row.stop] = []);
+    list.push([row.at, row.seconds]);
+    if (list.length > DWELL_RECENT_N) list.splice(0, list.length - DWELL_RECENT_N);
+  }
+  return recent;
+}
+
+/**
+ * The samples taken since the last flush into `stop_dwell_recent`, and the
+ * ones that fell out of the window out of it, in one transaction beside the
+ * histograms. Only rows newer than `sinceSec` are written: the window itself
+ * stays whole in memory and in the state row, and re-writing all thirty
+ * samples of every platform once a minute would be a row write per sample
+ * per minute for nothing.
+ */
+export function flushDwellRecent(storage: DurableObjectStorage, recent: DwellRecent, sinceSec: number, nowSec: number): number {
+  const sql = storage.sql;
+  let rows = 0;
+  // A sample is stamped with the VEHICLE's report time, which can lag the
+  // twin's wall clock by up to a tick's silence, so "newer than the last
+  // flush" is widened by that much and the primary key absorbs the repeats.
+  const from = sinceSec - RECENT_FLUSH_SLACK_S;
+  storage.transactionSync(() => {
+    for (const [stopId, samples] of Object.entries(recent)) {
+      for (const [at, seconds] of samples) {
+        if (at <= from) continue;
+        sql.exec('INSERT OR REPLACE INTO stop_dwell_recent (stop, at, seconds) VALUES (?, ?, ?)', stopId, at, seconds);
+        rows++;
+      }
+    }
+    sql.exec('DELETE FROM stop_dwell_recent WHERE at <= ?', nowSec - DWELL_RECENT_WINDOW_S);
+  });
+  return rows;
+}
+
+/** How far back of its own clock a flush re-offers samples, so a vehicle
+ *  report older than the flush that preceded it is not lost for good; the
+ *  table's primary key turns the repeat into a no-op. */
+const RECENT_FLUSH_SLACK_S = 120;
 
 /** Merges the pending aggregates into the tables in one transaction; returns the rows written. */
 export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggregates): number {
@@ -297,6 +473,32 @@ export function flushLearned(storage: DurableObjectStorage, pending: LearnedAggr
       const existing = sql.exec<{ hist: string }>('SELECT hist FROM stop_dwell WHERE stop = ? AND band = ? AND daytype = ?', parsed.id, parsed.hourBand, parsed.dayType).toArray()[0];
       const merged = existing ? mergeHistograms(parseHistogram(existing.hist), h) : h;
       sql.exec('INSERT OR REPLACE INTO stop_dwell (stop, band, daytype, hist, n) VALUES (?, ?, ?, ?, ?)', parsed.id, parsed.hourBand, parsed.dayType, serializeHistogram(merged), histogramCount(merged));
+      rows++;
+    }
+    // F11: the junction cells. A cell can gain passes without gaining waits
+    // (trams sailed through this minute), so the two are merged separately
+    // and the row is written whenever either moved.
+    const nodeKeys = new Set([...Object.keys(pending.nodes ?? {}), ...Object.keys(pending.nodePasses ?? {})]);
+    for (const key of nodeKeys) {
+      const parsed = parseKey(key);
+      if (!parsed) continue;
+      const node = Number(parsed.id);
+      if (!Number.isInteger(node)) continue;
+      const existing = sql
+        .exec<{ hist: string; passes: number }>('SELECT hist, passes FROM node_wait WHERE node = ? AND band = ? AND daytype = ?', node, parsed.hourBand, parsed.dayType)
+        .toArray()[0];
+      const fresh = pending.nodes?.[key] ?? emptyHistogram();
+      const hist = existing ? mergeHistograms(parseHistogram(existing.hist), fresh) : fresh;
+      const passes = (existing?.passes ?? 0) + (pending.nodePasses?.[key] ?? 0);
+      sql.exec(
+        'INSERT OR REPLACE INTO node_wait (node, band, daytype, hist, n, passes) VALUES (?, ?, ?, ?, ?, ?)',
+        node,
+        parsed.hourBand,
+        parsed.dayType,
+        serializeHistogram(hist),
+        histogramCount(hist),
+        passes,
+      );
       rows++;
     }
   });

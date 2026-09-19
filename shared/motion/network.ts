@@ -1,9 +1,23 @@
-// Decodes app/public/data/zet-network.json version 2 -- the artefact
+// Decodes app/public/data/zet-network.json version 3 -- the artefact
 // scripts/gtfs-shapes.mjs builds -- into an in-memory network shared by the
 // app (the motion model, the schematic, the map) and the Worker (the twin's
 // matcher and planner, R-TE15). The wire is struct-of-arrays with every point
 // chain-delta-encoded as integer units against `origin`/`scale`; this file
 // undoes exactly that, once, at load time.
+//
+// Version 3 also carries `graphHash` (F8c), the name of the rail graph the
+// edge indices belong to: the builder nodes a crossing where a line turns and
+// no shape draws the turn, which renumbers every edge, and the twin drops
+// what it learned per edge when the name changes.
+//
+// Version 3 (F8) adds the SERVED-STOP TABLE: every path carries `served`,
+// the platforms its own trips call at, in arc order, and every stop carries
+// `terminal`. The geometric `onEdge` links stay exactly as they were -- they
+// are what the matcher and the city map's stop circles read -- but the
+// engine (planner, laws, learner, speed estimator, publisher) now reads the
+// served list through graph.ts's `stopsOnPath`, so it no longer books a
+// dwell at the opposite-direction platform 3 m away or at another line's
+// platform on the same rails.
 //
 // Version 2 (B1/B2) carries the tram RAIL GRAPH: directed `edges` shared by
 // every line that runs them, every tram shape as an edge sequence, synthetic
@@ -59,6 +73,11 @@ export interface Path {
   len: number;
   /** The stop sequence a synthetic path was routed through. */
   stops?: string[];
+  /** The platforms this path's own trips call at, in arc order: the stop's
+   *  index into `stops` and its arc along the path, metres (F8). Absent for a
+   *  path the artefact carries no served list for, and then the geometric
+   *  derivation stands in (graph.ts stopsOnPath). */
+  served?: { stop: number; s: number }[];
 }
 
 export interface Stop {
@@ -70,6 +89,8 @@ export interface Stop {
   on: { shape: number; s: number }[];
   /** Every rail edge this stop lies on, with its arc on that edge. */
   onEdge?: { edge: number; s: number }[];
+  /** First or last stop of some trip in the feed: a terminus platform. */
+  terminal: boolean;
 }
 
 export interface Network {
@@ -87,11 +108,18 @@ export interface Network {
 export interface GraphNetwork extends Network, GraphMethods {
   edges: Edge[];
   paths: Path[];
+  /** The name of THIS rail graph (F8c): a hash over the ordered edges'
+   *  endpoints and polylines as the wire carries them, computed by
+   *  scripts/gtfs-shapes.mjs. An edge index only means something within one
+   *  graph, so anything keyed by one -- the twin's learned edge times -- must
+   *  be dropped when this changes. An empty string is an artefact from before
+   *  F8c, which names no graph and so counts as a different one. */
+  graphHash: string;
 }
 
 /** The only version this decoder understands. A cached artefact from a
  *  different build must never be decoded as if it were this one. */
-export const SUPPORTED_VERSION = 2;
+export const SUPPORTED_VERSION = 3;
 
 /** Thrown by decodeNetwork when `raw.version` is missing or does not match
  *  SUPPORTED_VERSION: a stale cached artefact fails loudly here rather than
@@ -114,13 +142,14 @@ const DECIMETRES_PER_METRE = 10;
 interface RawNetworkArtefact {
   version: number;
   feedVersion: string;
+  graphHash?: string;
   origin: [number, number];
   scale: number;
   routes: { id: string[]; short: string[]; type: number[]; rank: number[]; shapes: number[][] };
   edges: { from: number[]; to: number[]; d: number[][] };
-  shapes: { id: string[]; route: string[]; dir: number[]; d: number[][]; e: number[][]; len: number[] };
-  paths: { id: string[]; route: string[]; dir: number[]; e: number[][]; stops: string[][] };
-  stops: { id: string[]; name: string[]; p: [number, number][]; on: [number, number][][]; onEdge: [number, number][][] };
+  shapes: { id: string[]; route: string[]; dir: number[]; d: number[][]; e: number[][]; len: number[]; served: [number, number][][] };
+  paths: { id: string[]; route: string[]; dir: number[]; e: number[][]; stops: string[][]; served: [number, number][][] };
+  stops: { id: string[]; name: string[]; p: [number, number][]; on: [number, number][][]; onEdge: [number, number][][]; terminal: number[] };
   diagram: { lines: { route: string[]; pts: [number, number][][] }; box: [number, number] };
 }
 
@@ -224,17 +253,26 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
     }
     return { offsets, len };
   };
+  // A path's served list on the wire is [stopIdx, decimetres] pairs, already
+  // in arc order; an empty list means the artefact knows of none, and the
+  // geometric derivation stands in (graph.ts).
+  const decodeServed = (wire: readonly (readonly [number, number])[] | undefined): { stop: number; s: number }[] | undefined => {
+    if (!wire || wire.length === 0) return undefined;
+    return wire.map(([stop, dm]) => ({ stop, s: dm / DECIMETRES_PER_METRE }));
+  };
   const paths: Path[] = [];
   const pathOfShapeIdx = new Map<number, number>();
   shapes.forEach((shape, shapeIdx) => {
     if (!shape.edges) return;
     const { offsets, len } = offsetsOf(shape.edges);
     pathOfShapeIdx.set(shapeIdx, paths.length);
-    paths.push({ id: shape.id, route: shape.route, direction: shape.direction ?? 0, shape: shapeIdx, edges: shape.edges, offsets, len });
+    const served = decodeServed(r.shapes.served?.[shapeIdx]);
+    paths.push({ id: shape.id, route: shape.route, direction: shape.direction ?? 0, shape: shapeIdx, edges: shape.edges, offsets, len, ...(served ? { served } : {}) });
   });
   for (let i = 0; i < r.paths.id.length; i++) {
     const { offsets, len } = offsetsOf(r.paths.e[i]);
-    paths.push({ id: r.paths.id[i], route: r.paths.route[i], direction: r.paths.dir[i], shape: null, edges: r.paths.e[i], offsets, len, stops: r.paths.stops[i] });
+    const served = decodeServed(r.paths.served?.[i]);
+    paths.push({ id: r.paths.id[i], route: r.paths.route[i], direction: r.paths.dir[i], shape: null, edges: r.paths.e[i], offsets, len, stops: r.paths.stops[i], ...(served ? { served } : {}) });
   }
 
   // A stop on an edge is on every shape that runs the edge, at the shape's
@@ -265,7 +303,7 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
       for (const { shape, offset } of edgeInShapes.get(link.edge) ?? []) on.push({ shape, s: offset + link.s });
     }
     on.sort((a, b) => a.shape - b.shape || a.s - b.s);
-    return { id, name: r.stops.name[i], p: toPoint(ux, uy), on, onEdge };
+    return { id, name: r.stops.name[i], p: toPoint(ux, uy), on, onEdge, terminal: r.stops.terminal?.[i] === 1 };
   });
 
   const diagram = {
@@ -301,6 +339,7 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
   return {
     version: r.version,
     feedVersion: r.feedVersion,
+    graphHash: typeof r.graphHash === 'string' ? r.graphHash : '',
     routes,
     shapes,
     stops,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toLonLat, toPlane } from '../../shared/motion/geo';
-import { HEADWAY_M } from '../../shared/motion/laws';
+import { HEADWAY_M } from '../../shared/motion/order';
 import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { isFreeMotion, isPathMotion } from '../../shared/motion/wire';
@@ -10,6 +10,7 @@ import { emptyState, type TwinState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
 import { simulate } from '../motion/simulator';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
+import type { TripJoin } from '../../worker/twin/publish';
 import { corridorIndex, corridorJoins, frameAsFeed } from './engine-fixture';
 
 // The twin's tick over the corridor: the simulator's frames go in, the
@@ -83,12 +84,16 @@ describe('runTick on the corridor', () => {
           expect(Math.sign(pa - pb), `frame ${k}: ${pins[i].id} vs ${pins[j].id}`).toBe(Math.sign(a.s - b.s));
         }
       }
+      let signSamples = 0;
       for (const horizon of Object.values(result.hindsight)) {
         for (const [bucket, n] of Object.entries(horizon)) {
           hindsightSamples += n;
           tally[bucket as keyof typeof tally] += n;
         }
       }
+      // F7: every graded fix is counted once more by its sign, in the same tick result.
+      for (const horizon of Object.values(result.hindsightSign)) for (const n of Object.values(horizon)) signSamples += n;
+      expect(signSamples).toBe(Object.values(result.hindsight).reduce((sum, h) => sum + Object.values(h).reduce((a, b) => a + b, 0), 0));
       if (k === 1) expect(hindsightSamples).toBe(0); // nothing to grade before a plan has aged
     }
     expect(orderChecks).toBeGreaterThan(10);
@@ -102,6 +107,59 @@ describe('runTick on the corridor', () => {
     expect(before.payload.items.filter((item) => item.id.startsWith('vehicle:')).length).toBeGreaterThan(0);
     expect(before.payload.validUntil).toBe(new Date((sim.frames[29].headerSec + 22) * 1000).toISOString());
     expect(before.newFixes).toBe(0);
+  });
+
+  it('keeps the track and its register through a trip change that continues on the same rails, and starts over when it does not', () => {
+    // D14: ZET's vehicle ids are stable through the day; its trip ids change
+    // at every terminus. Throwing the Track away at a trip change threw away
+    // the fixes, the speed estimate and the order with them -- for a tram
+    // that had simply started its next run on the same rails.
+    const trunkAt = (x: number) => lonLatOf({ x, y: 0 });
+    const twoTrams = (headerTs: number, xA: number, tripA: string, xB: number) => ({
+      headerTs,
+      vehicles: [
+        { vehicleId: 'A', tripId: tripA, routeId: '1', lon: trunkAt(xA).lon, lat: trunkAt(xA).lat, atSec: headerTs },
+        { vehicleId: 'B', tripId: 'tb', routeId: '1', lon: trunkAt(xB).lon, lat: trunkAt(xB).lat, atSec: headerTs },
+      ],
+      tripUpdates: [],
+    });
+    const on = (pathId: string, direction: 0 | 1): TripJoin => ({ direction, headsign: `Kraj ${pathId}`, shapeId: pathId, pathId });
+    const identityJoins = new Map<string, TripJoin>([
+      ['ta', on('1_0', 0)],
+      ['ta2', on('1_0', 0)],
+      ['tnorth', on('2_0', 0)],
+      ['tb', on('1_0', 0)],
+    ]);
+    const T = start;
+    let state = emptyState();
+    let result = runTick({ state, feed: twoTrams(T, 1000, 'ta', 600), nowMs: (T + 2) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    result = runTick({ state, feed: twoTrams(T + 10, 1100, 'ta', 700), nowMs: (T + 12) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['B'].order.leader).toBe('A');
+    const fixesBefore = state.tracks['A'].fixes.length;
+
+    // A's next trip runs the same path: the vehicle is followed straight
+    // through, fixes, speed and the relation behind it intact.
+    result = runTick({ state, feed: twoTrams(T + 20, 1200, 'ta2', 800), nowMs: (T + 22) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['A'].tripId).toBe('ta2');
+    expect(state.tracks['A'].fixes.length).toBe(fixesBefore + 1);
+    expect(state.tracks['A'].speed).toBeGreaterThan(0);
+    expect(state.tracks['B'].order.leader).toBe('A');
+
+    // Past the junction, A is on edge 1, which route 2's path never runs and
+    // whose start is a kilometre and a half back: that is a different
+    // vehicle's worth of evidence, and the track starts over.
+    for (const [k, x] of [[30, 1700], [40, 2000]] as const) {
+      result = runTick({ state, feed: twoTrams(T + k, x, 'ta2', 900), nowMs: (T + k + 2) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+      state = result.state;
+    }
+    expect(state.tracks['A'].match.edge).toBe(1);
+    result = runTick({ state, feed: twoTrams(T + 50, 2100, 'tnorth', 1000), nowMs: (T + 52) * 1000, joins: identityJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['A'].tripId).toBe('tnorth');
+    expect(state.tracks['A'].fixes.length).toBe(1);
   });
 
   it('gives a bus a shape plan, an unknown route a free plan, evicts five minutes of silence, and still publishes free plans without any geometry', () => {
@@ -148,5 +206,46 @@ describe('runTick on the corridor', () => {
     expect(blindBus.motion && isFreeMotion(blindBus.motion)).toBe(true);
     expect(blindBus.geo?.coordinates[0]).toBeCloseTo(busAt(180).lon, 5);
     expect(toPlane(blindBus.geo!.coordinates[0] as number, blindBus.geo!.coordinates[1] as number).x).toBeCloseTo(180, 0);
+  });
+
+  // E3: the register's leader reaches the client on the wire, and it is
+  // withdrawn the moment the register drops the relation -- `behind` is
+  // derived from track.order.leader at every publish, never latched.
+  it('publishes the register leader as data.behind and withdraws it when the relation goes', () => {
+    const trunkAt = (x: number) => lonLatOf({ x, y: 0 });
+    const twoTrams = (headerTs: number, xA: number, xB: number) => ({
+      headerTs,
+      vehicles: [
+        { vehicleId: 'A', tripId: 'ta', routeId: '1', lon: trunkAt(xA).lon, lat: trunkAt(xA).lat, atSec: headerTs },
+        { vehicleId: 'B', tripId: 'tb', routeId: '1', lon: trunkAt(xB).lon, lat: trunkAt(xB).lat, atSec: headerTs },
+      ],
+      tripUpdates: [],
+    });
+    const pairJoins = new Map<string, TripJoin>([
+      ['ta', { direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0', pathId: '1_0' }],
+      ['tb', { direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0', pathId: '1_0' }],
+    ]);
+    const behindOf = (result: { payload: { items: { id: string; data?: Record<string, unknown> }[] } }, id: string): unknown =>
+      result.payload.items.find((item) => item.id === `vehicle:${id}`)?.data?.behind;
+
+    const T = start;
+    let state = emptyState();
+    let result = runTick({ state, feed: twoTrams(T, 1000, 600), nowMs: (T + 2) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    // One reading is not yet a relation, so nothing is on the wire.
+    expect(behindOf(result, 'B')).toBeUndefined();
+    result = runTick({ state, feed: twoTrams(T + 10, 1100, 700), nowMs: (T + 12) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['B'].order.leader).toBe('A');
+    expect(behindOf(result, 'B')).toBe('A');
+    expect(behindOf(result, 'A')).toBeUndefined();
+    for (const key of Object.keys(result.payload.items.find((item) => item.id === 'vehicle:B')!.data ?? {})) {
+      expect(DATA_KEYS.vehicle, `vehicle:B emitted ${key}`).toContain(key);
+    }
+    // B's next fix lands 400 m past A: more than any swap on single track,
+    // so the relation is dropped -- and `behind` goes with it, that tick.
+    result = runTick({ state, feed: twoTrams(T + 20, 1150, 1600), nowMs: (T + 22) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    expect(result.state.tracks['B'].order.leader).toBeNull();
+    expect(behindOf(result, 'B')).toBeUndefined();
   });
 });

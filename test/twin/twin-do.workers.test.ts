@@ -16,12 +16,14 @@ const testEnv = env as unknown as Env;
 
 // The corridor (test/motion/synthetic-network.ts) as the twin's world: route
 // '1' east along the trunk (path 1_0), route '2' north (path 2_0), bus '109'
-// on a polyline south of the trunk. Trips t1a/t1b run 1_0, t2 runs 2_0.
+// on a polyline south of the trunk. Trips t1a/t1b run 1_0, t2 runs 2_0, and
+// t9 runs the shapeless pattern's synthetic path.
 const NET = syntheticNetwork(corridorSpec());
 const INDEX = corridorIndex(NET, [
   { tripId: 't1a', pathId: '1_0' },
   { tripId: 't1b', pathId: '1_0' },
   { tripId: 't2', pathId: '2_0' },
+  { tripId: 't9', pathId: 'path:9:0:abc' },
 ]);
 
 /** A tram on the trunk at metre `x`, reported `at`. */
@@ -145,6 +147,36 @@ describe('TwinDO', () => {
     expect(calls()).toBe(4);
   });
 
+  it('writes what the ordering register did into one twin_order batch per tick', async () => {
+    // Two trams on the trunk, the leader 400 m ahead and both moving: by the
+    // second frame the register has written the relation, and every tick
+    // reports what it DID (E3) -- dim1 the register's own event vocabulary,
+    // dim2 the kind.
+    const script = [0, 1, 2].map((k) =>
+      frame(T0 + 10 * k, [tram('a', 't1a', '1', 1000 + 80 * k, T0 + 10 * k - 2), tram('b', 't1b', '1', 600 + 80 * k, T0 + 10 * k - 2)]),
+    );
+    const { upstream } = scriptedUpstream(script);
+    setTwinUpstreamForTest(upstream);
+    const stub = freshTwin();
+    const day = zagrebDayHour(new Date()).day;
+    const orderRows = async () => (await metricsStub(testEnv).query(day)).filter((r) => r.event === 'twin_order');
+    const before = (await orderRows()).reduce((sum, r) => sum + r.count, 0);
+    await pinClock(stub, T0 * 1000 + 2_000);
+    await stub.publish();
+    for (let k = 1; k <= 2; k++) {
+      await pinClock(stub, (T0 + 10 * k) * 1000 + 2_000);
+      expect(await stub.tick()).toMatchObject({ outcome: 'ok' });
+    }
+    const after = await orderRows();
+    expect(after.reduce((sum, r) => sum + r.count, 0)).toBeGreaterThan(before);
+    expect(after.every((r) => ['established', 'dropped', 'hold', 'push', 'concession', 'swap'].includes(r.dim1))).toBe(true);
+    expect(after.every((r) => r.dim2 === 'tram')).toBe(true);
+    expect(after.some((r) => r.dim1 === 'established')).toBe(true);
+    // The standing count of relations is a gauge and this table sums over the
+    // hour, so it is never written as a counter cell.
+    expect(after.some((r) => r.dim1 === 'relation')).toBe(false);
+  });
+
   it('treats a 304 and a repeated header as no new evidence but still re-plans: validUntil moves, the plan stands, nothing new is recorded; an upstream error keeps the last payload', async () => {
     const first = frame(T0, [tram('a', 't1a', '1', 400, T0 - 5)]);
     const { upstream } = scriptedUpstream([first, 304, first, new Error('upstream 503 Service Unavailable')]);
@@ -207,6 +239,37 @@ describe('TwinDO', () => {
     expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(450);
     await pinClock(stub, (T0 + 20) * 1000 + 2_000);
     expect(await stub.tick()).toMatchObject({ cold: true });
+  });
+
+  // F8: a shapeless pattern runs the synthetic path built from its own stop
+  // sequence. The decoded index resolves that once at load; the SQLite copy an
+  // earlier life wrote has to resolve it the same way, or an evicted twin whose
+  // index asset is slow (or unreadable) would put such a trip on the route and
+  // direction's FIRST synthetic path until the index came back.
+  it('carries the resolved path id in the SQLite join too, not only in the decoded index', async () => {
+    const { upstream } = scriptedUpstream([
+      frame(T0, [tram('a', 't9', '9', 400, T0 - 5)]),
+      frame(T0 + 10, [tram('a', 't9', '9', 500, T0 + 4)]),
+    ]);
+    setTwinUpstreamForTest(upstream);
+    const stub = freshTwin();
+    await pinClock(stub, T0 * 1000 + 2_000);
+    await stub.publish(); // the index is in memory, and its rows reach SQLite
+
+    const warm = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
+    expect(warm.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+
+    // Memory gone and the index asset unreadable: only the SQLite copy answers.
+    await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
+    setTwinIndexSourceForTest(async () => null);
+    await pinClock(stub, (T0 + 10) * 1000 + 2_000);
+    const report = await stub.tick();
+    expect(report).toMatchObject({ indexLoaded: false, networkLoaded: true });
+    const cold = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
+    expect(cold.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+    // (The plans themselves are free-plane while the index is missing -- the
+    // engine needs both assets -- so it is the join that is worth asserting:
+    // the moment the index returns, that join already names the right path.)
   });
 
   it('evicts a vehicle silent for five minutes', async () => {

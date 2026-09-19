@@ -15,11 +15,12 @@
 //   - off every geometry, the free plane: a straight line from the previous
 //     fix to the latest over their own interval, then a hold.
 
+import type { DwellPlanner } from './dwell';
 import { dist } from './geo';
 import type { GraphNetwork } from './network';
 import { DEAD_ZONE_M, STOP_ZONE_M } from './speed';
 import type { DayType, TimesProvider } from './times';
-import { lastFix, type FreeKnot, type NextStop, type PathKnot, type Track } from './track';
+import { lastFix, type FreeKnot, type NextStop, type PathKnot, type PlaneFix, type Track, type VehicleKind } from './track';
 
 /** How far back a plan reaches: a client whose clock runs behind the twin's
  *  by a poll still finds a knot to stand on. */
@@ -74,10 +75,89 @@ export const CONFIDENCE_ON_GEOMETRY = 0.9;
 export const CONFIDENCE_SINGLE_FIX = 0.6;
 export const CONFIDENCE_FREE_CAP = 0.5;
 
+/** The side of a learned stretch's distribution the planner books (F11).
+ *  A median stretch time puts half of every plan ahead of its tram by
+ *  construction, and the round's rule is "bias behind, never ahead".
+ *
+ *  0.9 rather than something gentler because the replay of 17 Sept says so.
+ *  Swept over the like-for-like window (2216 frames) against 0.7 dwells:
+ *  0.65 gave 17.6 % of 30 s fixes ahead, 0.8 gave 16.5 %, 0.9 gave 15.6 %,
+ *  and the cost of the whole sweep was 0.8 percentage points of "within
+ *  50 m" at the 10 s horizon -- the horizon a viewer actually lives at,
+ *  since the client polls every few seconds. Over the same sweep the
+ *  between-plan regressions fell 24.608 -> 19.827 (-19 %), the visible
+ *  crossings 6.108 -> 5.868 and the client's holds 20.281 -> 14.156 (-30 %),
+ *  because a plan that is honestly late is one the next fix does not have to
+ *  drag backwards. Higher was not tried: a quantile beyond the slowest tenth
+ *  stops describing a stretch and starts describing its worst morning. */
+export const PLAN_QUANTILE = 0.9;
+
+/** How far two fixes may lie apart ALONG THE ARC and still be the same
+ *  standing tram (F11). ZET's GPS scatters up to 30 m at a platform, so the
+ *  15 m dead zone read a standing tram as moving and the planner then drove
+ *  its plan off at the cruise measured before the stop (D8). At the feed's
+ *  10 s tick 30 m is 3 m/s, which is a tram at rest in traffic either way. */
+export const STAND_SCATTER_M = 30;
+
+/** How far behind the plan published a tick ago an anchor may lie and still
+ *  be read as noise rather than a reversal (F11). The client holds a mark
+ *  rather than drawing it backwards, so a plan starting a few metres behind
+ *  the published one buys nothing: the viewer sees a stopped tram either
+ *  way, and the twin has thrown away an arc it already stood behind. Beyond
+ *  this the disagreement is real and the honest plan goes out. */
+export const ANCHOR_NOISE_M = 25;
+
+/** What the planner had to intervene about this tick, counted for
+ *  `twin_plan` on /stats: the published floor under a noisy anchor, a
+ *  junction wait booked, a stand the D8 fix kept at its platform, and an
+ *  ETA bound the planner refused to believe. */
+export const PLAN_EVENTS = ['floor', 'junction_wait', 'stand_fix', 'eta_bound_skipped'] as const;
+export type PlanEvent = (typeof PLAN_EVENTS)[number];
+export type PlanCounts = Record<PlanEvent, number>;
+
+export function emptyPlanCounts(): PlanCounts {
+  return { floor: 0, junction_wait: 0, stand_fix: 0, eta_bound_skipped: 0 };
+}
+
+/** The same counters kept apart by vehicle kind. A tram and a bus meet
+ *  different rules -- a bus may overtake and reverse, and its plan runs a
+ *  shape rather than a path, so it books no junction wait at all -- and a
+ *  single total would hide which of the two an intervention was about. */
+export type PlanCountsByKind = Record<VehicleKind, PlanCounts>;
+
+export function emptyPlanCountsByKind(): PlanCountsByKind {
+  return { tram: emptyPlanCounts(), bus: emptyPlanCounts() };
+}
+
 export interface NextStopUpdate {
   stopId: string;
   timeSec: number | null;
   delaySec: number | null;
+  /** When ZET issued the update (the frame header it came in), or null for
+   *  a caller that does not know. The "departed by the header" bound needs
+   *  it to tell a current update from one about a platform the tram is
+   *  still standing at (F11). */
+  atSec?: number | null;
+}
+
+/** The junction waits to book ahead on a path, already bound to an hour band
+ *  and day type (shared/motion/junction.ts). */
+export interface JunctionWaits {
+  aheadOf(pathIdx: number, s: number): { s: number; waitSec: number }[];
+}
+
+/** Everything F11 added to the planner's inputs. Every field is optional and
+ *  every default is the behaviour before F11, so a caller that only wants a
+ *  plan (a test, the schematic's preview) still gets one. */
+export interface PlanContext {
+  /** The per-stop dwell table, bound to this instant and band. Without it
+   *  the planner falls back to the TimesProvider and DWELL_DEFAULT_S. */
+  dwell?: DwellPlanner;
+  junctions?: JunctionWaits;
+  /** The arc the previously published plan puts this vehicle at, at THIS
+   *  header, or null when there is none on the same geometry. */
+  publishedArcS?: number | null;
+  counts?: PlanCounts;
 }
 
 export interface Bands {
@@ -120,6 +200,16 @@ export function evalFreePlan(knots: readonly FreeKnot[], tRel: number): [lon: nu
   }
   const last = knots[knots.length - 1];
   return [last[1], last[2]];
+}
+
+/** Where a plan stands still on its way: a platform (with its dwell) or a
+ *  junction node (with its wait). The loop treats both the same way -- run
+ *  to the arc, hold, run on -- and only a platform becomes `track.next`. */
+interface Halt {
+  /** The platform's id, or null for a junction wait. */
+  stopId: string | null;
+  s: number;
+  holdSec: number;
 }
 
 interface ArcGeometry {
@@ -169,15 +259,32 @@ function shapeGeometryOf(net: GraphNetwork, shapeIdx: number): ArcGeometry {
   };
 }
 
+/** How far two fixes lie apart along the geometry they were both placed on,
+ *  or across the plane when they were not. */
+function separation(a: PlaneFix, b: PlaneFix): number {
+  if (a.arc && b.arc && a.arc.key === b.arc.key) return Math.abs(b.arc.s - a.arc.s);
+  return dist(a, b);
+}
+
 /**
  * How much of a dwell remains at the platform the anchor fix lies at. The
  * fix alone says nothing about how long the tram has stood; the history
  * does: the stationary run of fixes in the stop's zone says when it began,
  * and the fix before that run says when the tram must have arrived at its
- * speed. A fix past the stop by more than the dead zone with no stationary
- * run behind it is a tram already leaving: no dwell at all.
+ * speed.
+ *
+ * D8, fixed in F11: an anchor INSIDE a stop zone is a stand. Departure is
+ * proven only by a LATER FIX: either one beyond the zone by more than the
+ * dead zone -- which the anchor, being inside the zone, never is -- or the
+ * anchor itself, past the stop point and reached by real movement over the
+ * last interval. Before this, ANY fix past the stop point by more than the
+ * dead zone with no stationary run behind it got no dwell at all, so the
+ * FIRST time the twin saw a tram at a platform it drove the plan off at the
+ * cruise measured before that platform: a mark ahead of a standing tram,
+ * the one error the round forbids. One fix proves nothing either way, and
+ * the round's rule is to be late rather than early.
  */
-function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwellSec: number, speed: number): number | null {
+function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwellSec: number, speed: number, counts?: PlanCounts): number | null {
   const fixes = track.fixes;
   const last = fixes[fixes.length - 1];
   const key = last.arc?.key;
@@ -185,8 +292,19 @@ function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwell
   let i = fixes.length - 1;
   while (i > 0 && fixes[i - 1].arc?.key === key && Math.abs(fixes[i - 1].arc!.s - stop.s) <= STOP_ZONE_M) i--;
   const run = fixes.slice(i);
-  const stationary = run.length >= 2 && dist(run[0], run[run.length - 1]) < DEAD_ZONE_M;
-  if (track.match.s > stop.s + DEAD_ZONE_M && !stationary) return null;
+  const pastThePoint = track.match.s > stop.s + DEAD_ZONE_M;
+  if (pastThePoint) {
+    // Moving NOW, judged at the same scatter `standing` is judged at: a tram
+    // that covered more than a GPS scatter over its LAST interval and lies
+    // past the stop point has left, whatever it did before that. The guard
+    // is on `fixes`, which is what the interval is read from -- `run` counts
+    // only the fixes inside this stop's zone, so guarding on it read a tram
+    // cruising through the zone from 80 m before it as a stand, purely
+    // because only one of its reports landed in the zone (F11 review).
+    const movingNow = fixes.length >= 2 && separation(fixes[fixes.length - 2], last) >= STAND_SCATTER_M;
+    if (movingNow) return null;
+    if (counts) counts.stand_fix++;
+  }
   let arrivalSec = run[0].atSec;
   const before = i > 0 ? fixes[i - 1] : null;
   if (before?.arc && before.arc.key === key && before.arc.s < stop.s - STOP_ZONE_M) {
@@ -196,8 +314,28 @@ function dwellRemaining(track: Track, stop: { stopId: string; s: number }, dwell
   return Math.max(0, dwellSec - (last.atSec - arrivalSec));
 }
 
+/** The report time of the newest fix a vehicle reached by MOVING: the
+ *  anchor when the last interval covered more than the dead zone, else null.
+ *  A TripUpdate that post-dates one is evidence about a tram in motion; one
+ *  that merely post-dates a standing tram's last report is not (F11). */
+function movingAnchorSec(track: Track): number | null {
+  const n = track.fixes.length;
+  if (n < 2) return null;
+  const last = track.fixes[n - 1];
+  return separation(track.fixes[n - 2], last) >= DEAD_ZONE_M ? last.atSec : null;
+}
+
 /** Sets track.plan, track.next and track.confidence for the frame at headerSec, seen at nowSec. */
-export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider, next: NextStopUpdate | null, nowSec: number, headerSec: number, bands: Bands): void {
+export function buildPlan(
+  track: Track,
+  net: GraphNetwork,
+  times: TimesProvider,
+  next: NextStopUpdate | null,
+  nowSec: number,
+  headerSec: number,
+  bands: Bands,
+  context: PlanContext = {},
+): void {
   const last = lastFix(track);
   if (!last) {
     track.plan = null;
@@ -225,19 +363,54 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
     return;
   }
 
+  const counts = context.counts;
   const ownSpeed = track.speed >= MIN_OWN_SPEED_MS ? track.speed : null;
   const knots: PathKnot[] = [];
   let t = last.atSec;
   let s = track.match.s;
+  // The published floor (F11): an anchor a few metres behind the arc the
+  // last published plan puts this vehicle at right now is GPS scatter, not a
+  // tram that reversed, and the client would hold the mark rather than draw
+  // it backwards. Starting from the published arc keeps the mark moving;
+  // beyond ANCHOR_NOISE_M the disagreement is real and the honest plan goes.
+  const floorS = context.publishedArcS ?? null;
+  if (floorS !== null && Number.isFinite(floorS) && s < floorS && floorS - s < ANCHOR_NOISE_M) {
+    s = floorS;
+    if (counts) counts.floor++;
+  }
   knots.push([rel(t), round1(s)]);
   let nextStop: NextStop | null = null;
   const first = true;
-  // The stand the history shows: how long the fixes have sat within the dead
-  // zone of the latest one. A standing vehicle's speed estimate is its last
+  // The stand the history shows: how long the fixes have sat within the GPS
+  // SCATTER of the latest one, along the arc where both were placed on the
+  // same geometry (F11). A standing vehicle's speed estimate is its last
   // cruise, stale evidence about now.
   let stoodSec = 0;
-  for (let i = track.fixes.length - 2; i >= 0 && dist(track.fixes[i], last) < DEAD_ZONE_M; i--) stoodSec = last.atSec - track.fixes[i].atSec;
+  for (let i = track.fixes.length - 2; i >= 0 && separation(track.fixes[i], last) < STAND_SCATTER_M; i--) stoodSec = last.atSec - track.fixes[i].atSec;
   const standing = stoodSec > 0;
+
+  // The dwell every stop of this plan is booked at: the table's answer where
+  // the caller handed one in (the twin always does), the TimesProvider's
+  // otherwise, and the flat default failing both (F11).
+  const dwellOf = (stopId: string): number => context.dwell?.plannedSec(stopId) ?? times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
+  // Stretches are booked at PLAN_QUANTILE of what they are measured to take,
+  // not at the median (F11): the round's rule is to be late rather than early.
+  const segmentTime = (fromS: number, toS: number): number => {
+    const scheduled = geometry.timesPath !== null ? times.segmentSeconds(geometry.timesPath, fromS, toS, bands.hourBand, bands.dayType, PLAN_QUANTILE) : null;
+    return scheduled !== null && scheduled > 0 ? scheduled : (toS - fromS) / (ownSpeed ?? DEFAULT_CRUISE_MS);
+  };
+  /** Every place the plan stands still after arc `from`, in arc order: the
+   *  platforms the line calls at, and the junctions its trams wait at. */
+  const haltsAfter = (from: number): Halt[] => {
+    const halts: Halt[] = geometry.stopsAhead(from).map((stop) => ({ stopId: stop.stopId, s: stop.s, holdSec: dwellOf(stop.stopId) }));
+    if (context.junctions && geometry.timesPath !== null) {
+      for (const wait of context.junctions.aheadOf(geometry.timesPath, from)) {
+        if (wait.waitSec > 0) halts.push({ stopId: null, s: wait.s, holdSec: wait.waitSec });
+      }
+    }
+    halts.sort((a, b) => a.s - b.s);
+    return halts;
+  };
 
   // At a platform: when the tram moves on decides everything after. The
   // history says how long it has stood (dwellRemaining); ZET's ETA for the
@@ -246,27 +419,23 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
   // latest (the update is current, the fix may be 30 s old).
   const here = geometry.stopAt(s);
   if (here) {
-    const dwellOf = (stopId: string): number => times.dwellSeconds(stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
-    const segmentTime = (fromS: number, toS: number): number => {
-      const scheduled = geometry.timesPath !== null ? times.segmentSeconds(geometry.timesPath, fromS, toS, bands.hourBand, bands.dayType) : null;
-      return scheduled !== null && scheduled > 0 ? scheduled : (toS - fromS) / (ownSpeed ?? DEFAULT_CRUISE_MS);
-    };
     const aheadOfHere = geometry.stopsAhead(here.s);
-    /** Seconds from leaving this platform to arriving at arc toS, every dwell on the way included. */
+    const haltsBeyond = haltsAfter(here.s);
+    /** Seconds from leaving this platform to arriving at arc toS, every dwell and junction wait on the way included. */
     const travelTo = (toS: number): number => {
       let total = 0;
       let from = here.s;
-      for (const stop of aheadOfHere) {
-        if (stop.s >= toS - 0.5) break;
-        total += segmentTime(from, stop.s) + dwellOf(stop.stopId);
-        from = stop.s;
+      for (const halt of haltsBeyond) {
+        if (halt.s >= toS - 0.5) break;
+        total += segmentTime(from, halt.s) + halt.holdSec;
+        from = halt.s;
       }
       return total + segmentTime(from, toS);
     };
     const dwellHere = dwellOf(here.stopId);
     const beyond = next && next.stopId !== here.stopId ? aheadOfHere.find((ahead) => ahead.stopId === next.stopId) ?? null : null;
     const approachSpeed = ownSpeed ?? (Math.min(here.s, 300) > 0 ? Math.min(here.s, 300) / segmentTime(Math.max(0, here.s - 300), here.s) : DEFAULT_CRUISE_MS);
-    const remaining = dwellRemaining(track, here, dwellHere, approachSpeed);
+    const remaining = dwellRemaining(track, here, dwellHere, approachSpeed, counts);
     if (remaining !== null) {
       // The dwell that is left; a stand already past it ends a tick from now (R-TE48).
       let departure = t + (remaining > 0 ? remaining : STAND_EXTEND_S);
@@ -280,10 +449,24 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
         // The update is current while the fix may be old: the tram has at least
         // left the last platform before the one ZET names, so by the header it
         // had departed here that long ago.
+        //
+        // F11 gates it. Applied to any update this bound drove a LATE tram
+        // off its platform on ZET's word alone (D8): ZET names the next stop
+        // for a tram that has not left yet all day long. It is evidence only
+        // when the named stop is at least two ahead -- something was passed
+        // in between, so the tram cannot still be here -- or when the update
+        // post-dates a fix that showed the tram MOVING.
         const between = aheadOfHere.filter((stop) => stop.s < beyond.s - 0.5);
-        const last = between[between.length - 1];
-        const latest = last ? headerSec - travelTo(last.s) - dwellOf(last.stopId) : headerSec;
-        departure = Math.min(departure, Math.max(t, latest));
+        const movingSec = movingAnchorSec(track);
+        const updateAtSec = next?.atSec ?? null;
+        const postDatesMotion = updateAtSec !== null && movingSec !== null && updateAtSec > movingSec;
+        if (between.length >= 1 || postDatesMotion) {
+          const lastBetween = between[between.length - 1];
+          const latest = lastBetween ? headerSec - travelTo(lastBetween.s) - dwellOf(lastBetween.stopId) : headerSec;
+          departure = Math.min(departure, Math.max(t, latest));
+        } else {
+          if (counts) counts.eta_bound_skipped++;
+        }
       }
       // A trip that has not started does not leave its first platform (R-TE49).
       const scheduledStart = tripStartAfter(track, next, t);
@@ -310,18 +493,21 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
     t += hold;
   }
 
-  const stops = geometry.stopsAhead(s);
+  const halts = haltsAfter(s);
   let stopIdx = 0;
+  /** Nothing ahead has been reached yet: ZET's ETA is about the first
+   *  PLATFORM ahead, which a junction wait in front of it must not displace. */
+  let firstPlatformAhead = true;
 
   while (t < horizonEnd) {
-    const stop = stopIdx < stops.length ? stops[stopIdx] : null;
+    const stop = stopIdx < halts.length ? halts[stopIdx] : null;
     const target = stop ? Math.min(stop.s, geometry.len) : geometry.len;
     if (target <= s + 0.5) {
       if (!stop) break; // at the path end already
       stopIdx++;
       continue;
     }
-    const scheduled = geometry.timesPath !== null ? times.segmentSeconds(geometry.timesPath, s, target, bands.hourBand, bands.dayType) : null;
+    const scheduled = geometry.timesPath !== null ? times.segmentSeconds(geometry.timesPath, s, target, bands.hourBand, bands.dayType, PLAN_QUANTILE) : null;
     const scheduledSpeed = scheduled !== null && scheduled > 0 ? (target - s) / scheduled : null;
     // Own speed is evidence about now: a moving vehicle's first stretch runs
     // at it for OWN_SPEED_HOLD_S, then at what the stretch usually takes
@@ -333,7 +519,7 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
     const kinematic = (own !== null ? ownLeg / own : 0) + (target - s - ownLeg) / cruise;
     let arrive = t + kinematic;
     let viaEta = false;
-    if (stopIdx === 0 && stop && next && next.stopId === stop.stopId && next.timeSec !== null) {
+    if (firstPlatformAhead && stop && stop.stopId !== null && next && next.stopId === stop.stopId && next.timeSec !== null) {
       const eta = next.timeSec - t;
       if (eta >= ETA_BAND[0] * kinematic && eta <= ETA_BAND[1] * kinematic) {
         arrive = next.timeSec;
@@ -348,13 +534,18 @@ export function buildPlan(track: Track, net: GraphNetwork, times: TimesProvider,
       t = horizonEnd;
       break;
     }
-    if (!nextStop) nextStop = { stopId: stop.stopId, s: round1(stop.s), etaSec: Math.round(arrive) };
-    const dwell = times.dwellSeconds(stop.stopId, bands.hourBand, bands.dayType) ?? DWELL_DEFAULT_S;
+    if (stop.stopId !== null) {
+      if (!nextStop) nextStop = { stopId: stop.stopId, s: round1(stop.s), etaSec: Math.round(arrive) };
+      firstPlatformAhead = false;
+    } else if (stop.holdSec > 0) {
+      if (counts) counts.junction_wait++;
+    }
+    const dwell = stop.holdSec;
     if (dwell > 0) knots.push([rel(arrive + dwell), round1(target)]);
     t = arrive + dwell;
     s = target;
     stopIdx++;
-    if (stopIdx >= stops.length && target >= geometry.len - 0.5) {
+    if (stopIdx >= halts.length && target >= geometry.len - 0.5) {
       knots.push([rel(Math.max(horizonEnd, t)), round1(target)]);
       t = horizonEnd;
       break;

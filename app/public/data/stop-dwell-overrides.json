@@ -1,0 +1,105 @@
+{
+  "_comment": "Ručna tablica zadržavanja na stajalištima (F11). Blizanac je čita pri stvaranju motora i gleda je prije svake izmjerene procjene. Ovo JE datoteka koju poslužitelj dohvaća s /data/stop-dwell-overrides.json: uredi je ovdje, napravi commit i push — između tvoje izmjene i onoga što blizanac pročita nema nijednog koraka gradnje. Jedan redak: { \"stop\": \"<id perona iz GTFS-a> ili <ime stajališta>\", \"route\": \"<id linije, neobavezno>\", \"defaultSec\": <sekunde>, \"pin\": <true ili false, neobavezno>, \"reason\": \"<zašto je broj tu>\" }. IME stajališta pogađa sve perone tog imena KOJE VOZI NEKI TRAMVAJ — nikad autobusno ugibalište istog imena („Črnomerec” je tri tramvajska perona i jedanaest autobusnih), jer ovu tablicu čita i procjena brzine, pa bi okretnički broj naplaćen autobusu gurnuo autobusov plan ispred njega. ID PERONA pogađa točno taj peron, kakav god bio: id nije pogađanje. \"route\" sužava redak na perone koje ta linija stvarno vozi; redak s id-om perona jači je od retka s imenom, a redak s linijom od retka bez nje. Bez \"pin\" broj je samo polazna vrijednost: izmjereno zadržavanje (zadnjih 30 uzoraka u 90 minuta, pa naučena razdioba po satu i vrsti dana) i dalje ima prednost. S \"pin\": true broj je ono što planer knjiži, a mjerenja se onda vide samo na /stats. Neispravan redak ruši učitavanje i ispisuje se cijeli, da tiha pogreška ne prođe; redak koji ne pogodi nijedan peron ne ruši ništa nego se imenuje na /stats. Sjeme ispod su okretišta tramvajskih uzoraka iz zet-trips.json, sa 60 s kao mjestom za vlasnikov broj; tih 20 imena pogađa 61 tramvajski peron i nijedno autobusno ugibalište.",
+  "entries": [
+    {
+      "stop": "Borongaj",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 1, 9, 17, 32; platforms 193_1, 193_2)"
+    },
+    {
+      "stop": "Črnomerec",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 2, 6, 11, 14, 31; platforms 98_1, 98_11, 98_2)"
+    },
+    {
+      "stop": "Dubec",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 11, 34; platforms 206_11, 206_14, 206_4)"
+    },
+    {
+      "stop": "Dubrava",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 7, 11, 12; platforms 209_1, 209_12, 209_13, 209_14, 209_2, 209_7)"
+    },
+    {
+      "stop": "Gračansko dolje",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 15; platforms 134_1, 134_2)"
+    },
+    {
+      "stop": "Kvaternikov trg",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 13; platforms 236_10, 236_13, 236_14, 236_2)"
+    },
+    {
+      "stop": "Ljubljanica",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 1, 2, 3, 5, 6, 9, 11, 12, 14, 17, 32, 34; platforms 245_1, 245_12, 245_2)"
+    },
+    {
+      "stop": "Mandlova",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 6, 7, 8, 11, 13, 14, 15, 31, 33; platforms 1787_4)"
+    },
+    {
+      "stop": "Mihaljevac",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 8, 14, 15, 33; platforms 177_1, 177_2, 177_3, 177_4, 177_5)"
+    },
+    {
+      "stop": "Park Maksimir",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 5, 12; platforms 1783_11, 197_2)"
+    },
+    {
+      "stop": "Prečko",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 5, 17, 32; platforms 259_1, 259_2)"
+    },
+    {
+      "stop": "Ravnice",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 6, 7, 8, 11, 13, 14, 15, 31, 33; platforms 264_1, 264_2)"
+    },
+    {
+      "stop": "Savišće",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 2, 3, 33; platforms 266_3, 266_4)"
+    },
+    {
+      "stop": "Savski most",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 4, 7, 12, 31; platforms 272_3, 272_4)"
+    },
+    {
+      "stop": "Selska",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 1, 2, 5, 6, 11, 14, 17, 32; platforms 275_1)"
+    },
+    {
+      "stop": "Sopot",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 6; platforms 1794_12, 179_1)"
+    },
+    {
+      "stop": "Trg žrt. fašizma",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 9, 17; platforms 299_1, 299_17)"
+    },
+    {
+      "stop": "Zapadni kolodvor",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 1; platforms 317_1, 317_2)"
+    },
+    {
+      "stop": "Zapruđe",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 6, 8, 14; platforms 1780_11, 1780_18, 185_1, 185_14, 185_8)"
+    },
+    {
+      "stop": "Žitnjak",
+      "defaultSec": 60,
+      "reason": "terminus layover placeholder — owner to adjust (lines 2, 5, 13; platforms 1781_11, 187_1, 187_2)"
+    }
+  ]
+}

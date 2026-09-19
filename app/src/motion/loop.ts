@@ -68,7 +68,7 @@ const PARK_AFTER_UNCHANGED = 8;
  *  asks the compositor for a frame at all (R-F6), so a lightweight kiosk
  *  is not woken sixty times a second to decide, fifty-nine times, to do
  *  nothing. */
-const REDUCED_MOTION_INTERVAL_MS = 1000;
+export const REDUCED_MOTION_INTERVAL_MS = 1000;
 
 export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}): Loop {
   const rafFn = deps.raf ?? ((cb: (t: number) => void) => requestAnimationFrame(cb));

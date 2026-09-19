@@ -2,7 +2,7 @@
 // route's polylines (a bus) a reported fix puts the vehicle. The trip's own
 // path is the prior; geometry only decides where the prior is silent or has
 // been proven wrong twice. Nothing here draws anything: the match is the
-// planner's anchor (plan.ts) and the ordering law's frame (laws.ts).
+// planner's anchor (plan.ts) and the ordering register's frame (order.ts).
 //
 // Rules (plan "Engine core", R-TE22, the reviewer's A10):
 //   - candidates come from the edges within NEAR_M of the fix, on-path first;
@@ -24,6 +24,7 @@
 
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
+import { arcOnPath } from './order';
 import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
@@ -67,6 +68,11 @@ export const NEXT_STOP_DISTANCE_WEIGHT = 0.01;
 /** Ground movement in one interval that is motion, not scatter: a vehicle
  *  that moved this far against its rail's direction is on the wrong fold. */
 export const FOLD_MOVE_M = 50;
+/** Consecutive fixes moving against the rail the vehicle is read on before
+ *  the path is re-derived to the other direction (D4). One is a stray or a
+ *  platform shuffle; two in a row, both further than FOLD_MOVE_M, is a tram
+ *  that has turned at its terminus while ZET still names the old trip. */
+export const FOLD_FIXES = 2;
 
 export interface Prior {
   /** The rail path the trip runs, or null for a shapeless pattern without a synthetic path (and for buses). */
@@ -78,11 +84,12 @@ export interface Prior {
 }
 
 export interface Matcher {
-  priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior;
+  priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior;
   /** Pushes the fix into the track and matches it; returns the new match. */
   matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null): Match;
-  /** Stops strictly between two arcs of a geometry key (`p<path>` or `b<shape>`), for the speed estimate. */
-  stopsBetween(key: string, fromS: number, toS: number): number;
+  /** Stops strictly between two arcs of a geometry key (`p<path>` or
+   *  `b<shape>`), by id, for the speed estimate's per-stop dwell charge. */
+  stopsBetween(key: string, fromS: number, toS: number): string[];
 }
 
 interface Candidate {
@@ -95,6 +102,7 @@ interface Candidate {
 
 export function createMatcher(net: GraphNetwork): Matcher {
   const shapeIndexById = new Map<string, number>(net.shapes.map((shape, idx) => [shape.id, idx] as const));
+  const pathIndexById = new Map<string, number>(net.paths.map((path, idx) => [path.id, idx] as const));
   const pathsByEdge = new Map<number, number[]>();
   net.paths.forEach((path, pathIdx) => {
     for (const e of path.edges) {
@@ -136,7 +144,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return tan.x * dir.x + tan.y * dir.y >= 0;
   }
 
-  function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null): Prior {
+  function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior {
     if (shapeId !== null) {
       const shapeIdx = shapeIndexById.get(shapeId);
       if (shapeIdx !== undefined) {
@@ -144,6 +152,13 @@ export function createMatcher(net: GraphNetwork): Matcher {
         const shapeDir = net.shapes[shapeIdx].direction;
         return { pathIdx, shapeIdx, routeId, direction: shapeDir === 0 || shapeDir === 1 ? shapeDir : direction };
       }
+    }
+    // The path the trip index resolved for this trip's pattern (F8): a
+    // shapeless variant gets the synthetic path built from its own stop
+    // sequence, which is the one the timetable has segments for.
+    if (pathId) {
+      const own = pathIndexById.get(pathId);
+      if (own !== undefined) return { pathIdx: own, shapeIdx: null, routeId, direction };
     }
     if (direction !== null) {
       const synthetic = net.paths.findIndex((p) => p.shape === null && p.route === routeId && p.direction === direction);
@@ -156,33 +171,38 @@ export function createMatcher(net: GraphNetwork): Matcher {
    *  running the edge the way the vehicle moves, else any path of the route
    *  on the edge, else any path at all (a diversion over another line's
    *  rails), preferring the direction of movement throughout. */
-  function adoptPath(edge: number, sOnEdge: number, routeId: string, dir: XY | null): number | null {
+  function adoptPath(edge: number, sOnEdge: number, routeId: string, dir: XY | null, direction: 0 | 1 | null): number | null {
     const candidates = pathsByEdge.get(edge) ?? [];
     if (candidates.length === 0) return null;
-    const agrees = edgeTangentAgrees(edge, sOnEdge, dir);
     const own = candidates.filter((p) => net.paths[p].route === routeId);
     const pool = own.length > 0 ? own : candidates;
+    if (direction === null) return pool[0];
     // Every path runs the edge in the edge's own direction (edges are
-    // directed), so direction agreement is a property of the edge, not the
-    // path; among the pool prefer a path whose GTFS direction matches the
-    // movement sign when the edge itself disagrees with the movement, there is
-    // no better path on this edge anyway.
-    void agrees;
-    return pool[0];
+    // directed), so agreement is a property of the EDGE, not of the paths
+    // over it: what it chooses among them is the service direction the
+    // vehicle is evidently running. Moving along the edge, it is still
+    // running the direction its prior named; moving against it, it is
+    // running the other one -- which is what a terminus turnaround is.
+    const agrees = edgeTangentAgrees(edge, sOnEdge, dir);
+    const wanted = agrees ? direction : direction === 0 ? 1 : 0;
+    return pool.find((p) => net.paths[p].direction === wanted) ?? pool[0];
   }
 
-  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, routeId: string, restrictToRoute: boolean, nextStopId: string | null): Candidate[] {
+  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, routeId: string, direction: 0 | 1 | null, restrictToRoute: boolean, nextStopId: string | null): Candidate[] {
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
     if (restrictToRoute) for (const pathIdx of pathsByRoute.get(routeId) ?? []) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
     const out: Candidate[] = [];
     for (const hit of hits) {
       if (restrictToRoute && routeEdges.size > 0 && !routeEdges.has(hit.edge)) continue;
-      const pathIdx = adoptPath(hit.edge, hit.s, routeId, dir);
+      const pathIdx = adoptPath(hit.edge, hit.s, routeId, dir, direction);
       if (pathIdx === null) continue;
       const path = net.paths[pathIdx];
-      const k = path.edges.indexOf(hit.edge);
-      const s = path.offsets[k] + hit.s;
+      // A path that runs this edge twice (a circuit, a balloon) offers two
+      // arcs a lap apart: the one nearest where the vehicle already was is
+      // the one it is on, and the first occurrence is a lap out (R-TE45).
+      const s = arcOnPath(path, hit.edge, hit.s, track.match.pathIdx === pathIdx ? track.match.s : null);
+      if (s === null) continue;
       let score = hit.d;
       if (!edgeTangentAgrees(hit.edge, hit.s, dir)) score += DIRECTION_PENALTY_M;
       if (track.match.pathIdx === pathIdx && dtSec > 0 && Math.abs(s - track.match.s) > MAX_SPEED_MS * dtSec + REACH_SLACK_M) score += REACH_PENALTY_M;
@@ -269,6 +289,38 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return { s: best.s, d: best.d };
   }
 
+  /** The path a vehicle found running against its own rails belongs on (D4):
+   *  the nearest edge within NEAR_M whose direction agrees with the movement,
+   *  on a path of the same route running the OPPOSITE direction. At a
+   *  terminus ZET names the old trip for a fix or two after the tram has
+   *  turned, and the other track is three to six metres away -- well inside
+   *  the near band, so nothing here ever looked like a detour. Null when no
+   *  such rail is within reach, and then the vehicle keeps its projection. */
+  function turnaroundMatch(fromPathIdx: number, p: XY, dir: XY, routeId: string): Match | null {
+    const current = net.paths[fromPathIdx];
+    let best: { pathIdx: number; edge: number; s: number; d: number } | null = null;
+    for (const hit of net.edgesNear(p, NEAR_M)) {
+      if (!edgeTangentAgrees(hit.edge, hit.s, dir)) continue;
+      for (const pathIdx of pathsByEdge.get(hit.edge) ?? []) {
+        const path = net.paths[pathIdx];
+        if (path.route !== routeId || pathIdx === fromPathIdx) continue;
+        if (path.direction === current.direction) continue;
+        const s = arcOnPath(path, hit.edge, hit.s, null);
+        if (s === null) continue;
+        if (best === null || hit.d < best.d) best = { pathIdx, edge: hit.edge, s, d: hit.d };
+      }
+    }
+    if (best === null) return null;
+    return { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d };
+  }
+
+  /** Does the path's own tangent at arc `s` agree with the ground movement? */
+  function pathTangentAgrees(pathIdx: number, s: number, dir: XY | null): boolean {
+    if (!dir) return true;
+    const geo = net.pathGeometry(pathIdx);
+    return dot(tangent(geo.pts, geo.cum, s), dir) >= 0;
+  }
+
   function onPathMatch(track: Track, pathIdx: number, p: XY, motion: Motion, nextStopId: string | null): Match {
     const path = net.paths[pathIdx];
     const geo = net.pathGeometry(pathIdx);
@@ -292,12 +344,15 @@ export function createMatcher(net: GraphNetwork): Matcher {
     const dtSec = motion.dtSec;
 
     // A new prior (a new trip, or the twin re-deriving from the index) starts
-    // the vehicle over on that path; the ordering memory goes with the old one.
+    // the vehicle over ON THAT PATH: only the path-derived state goes. The
+    // ordering register stays (E3, D14) -- the tram is the same tram, and a
+    // relation the new path leaves behind is dropped by the register's own
+    // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
       track.priorPath = prior.pathIdx;
       track.match = noMatch();
       track.offPathCount = 0;
-      resetOrder(track);
+      track.againstCount = 0;
     }
 
     // Off the graph entirely?
@@ -321,6 +376,22 @@ export function createMatcher(net: GraphNetwork): Matcher {
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
       if (onPath.residual <= NEAR_M) {
         track.offPathCount = 0;
+        // (D4) Two consecutive fixes moving AGAINST the rail the vehicle is
+        // read on, each further than scatter, with a rail within reach that
+        // agrees: the tram turned at its terminus and is running back on the
+        // other track while ZET still names the outbound trip. Re-derive
+        // rather than read its own line backwards.
+        const against = dir !== null && motion.groundM >= FOLD_MOVE_M && !pathTangentAgrees(working, onPath.s, dir);
+        track.againstCount = against ? (track.againstCount ?? 0) + 1 : 0;
+        if (dir !== null && track.againstCount >= FOLD_FIXES) {
+          track.againstCount = 0;
+          const turned = turnaroundMatch(working, p, dir, prior.routeId);
+          if (turned) {
+            resetOrder(track);
+            track.match = turned;
+            return track.match;
+          }
+        }
         track.match = onPath;
         return track.match;
       }
@@ -331,7 +402,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
         return track.match;
       }
       // A detour: the path is re-derived from the edge the vehicle is on.
-      const best = candidatesFor(track, p, dir, dtSec, prior.routeId, false, nextStopId)[0];
+      const best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, false, nextStopId)[0];
       track.offPathCount = 0;
       if (!best) {
         track.match = { ...onPath }; // nothing within reach: keep the projection, the residual says how far off
@@ -343,8 +414,8 @@ export function createMatcher(net: GraphNetwork): Matcher {
     }
 
     // No path known (R-TE22): the route's own edges decide, then any edge.
-    let best = candidatesFor(track, p, dir, dtSec, prior.routeId, true, nextStopId)[0];
-    if (!best) best = candidatesFor(track, p, dir, dtSec, prior.routeId, false, nextStopId)[0];
+    let best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, true, nextStopId)[0];
+    if (!best) best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, false, nextStopId)[0];
     if (!best) {
       // Between NEAR_M and OFF_GRAPH_M of every edge with no path to stand on: the free plane, not yet off-graph.
       track.match = { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
@@ -404,19 +475,19 @@ export function createMatcher(net: GraphNetwork): Matcher {
     }
   }
 
-  function stopsBetween(key: string, fromS: number, toS: number): number {
+  function stopsBetween(key: string, fromS: number, toS: number): string[] {
     const idx = Number(key.slice(1));
-    if (!Number.isFinite(idx)) return 0;
-    if (key.startsWith('p')) return net.stopsOnPath(idx).filter((entry) => entry.s > fromS && entry.s < toS).length;
-    let count = 0;
+    if (!Number.isFinite(idx)) return [];
+    if (key.startsWith('p')) return net.stopsOnPath(idx).filter((entry) => entry.s > fromS && entry.s < toS).map((entry) => entry.stop.id);
+    const out: string[] = [];
     let cursor = fromS;
     for (;;) {
       const next = net.nextStop(idx, cursor);
       if (!next || next.s >= toS) break;
-      count++;
+      out.push(next.stop.id);
       cursor = next.s;
     }
-    return count;
+    return out;
   }
 
   return {

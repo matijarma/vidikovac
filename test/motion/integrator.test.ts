@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toLonLat, toPlane } from '../../shared/motion/geo';
-import { HEADWAY_M, enforceOrder } from '../../shared/motion/laws';
+import { HEADWAY_M, enforceOrder } from '../../shared/motion/order';
 import { createMatcher } from '../../shared/motion/match';
 import { buildPlan, evalPathPlan } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
@@ -8,7 +8,7 @@ import type { TimesProvider } from '../../shared/motion/times';
 import { lastFix, newTrack, type Track } from '../../shared/motion/track';
 import { createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
 import { simulate } from './simulator';
-import { corridorSpec, syntheticNetwork } from './synthetic-network';
+import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
 
 // The client side of the engine (B6, R-TE10): the twin's plans arrive as
 // wire fixes every tick, and the integrator turns them into what is drawn
@@ -184,9 +184,13 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     expect(headingUnknownOnGeometry).toBe(0);
     // The catch-up cap at 60 Hz: at most max(8, 2 x speed) m/s, never a teleport.
     expect(worstJump).toBeLessThan(0.8);
-    // A backward correction reads as a correction, never as a tram reversing.
-    expect(worstBackwardPerFrame).toBeLessThan(1 / 60 + 1e-6);
-    expect(worstBackwardPerPlan).toBeLessThanOrEqual(30 + 1e-6);
+    // Not a backward frame at all (F9): a mark whose plan has moved behind it
+    // holds where it is until the plan catches up, and a tram on rails never
+    // reverses on screen, whatever a re-plan says.
+    // (The arc here is the drawn point re-projected onto the path, so the
+    // tolerance is the projection's own floating-point noise, not a metre.)
+    expect(worstBackwardPerFrame).toBeLessThan(1e-6);
+    expect(worstBackwardPerPlan).toBeLessThan(1e-6);
     expect(orderViolations).toBe(0);
 
     // Silence: five minutes after the last report a vehicle is gone, not faded forever.
@@ -231,5 +235,268 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     expect(toLonLat(mid.p)[1]).toBeLessThan(45.8106);
     expect(toLonLat(end.p)[1]).toBeGreaterThan(toLonLat(mid.p)[1]);
     expect(end.confidence).toBeLessThanOrEqual(0.5);
+  });
+});
+
+// F9's rules, each on the smallest geometry that can show it. The plans here
+// are written by hand rather than grown by the twin: what is under test is
+// what the *client* does with a plan, including the plans the twin should
+// never publish and sometimes does (a re-anchor behind the mark, an order the
+// wire contradicts).
+describe('the integrator never draws a tram backwards, nor two trams across each other', () => {
+  const T0 = 1_800_000_000_000;
+  const FRAME_MS = 1000 / 60;
+
+  /** One vehicle's poll: a path plan, the twin's speed, and whatever else. */
+  function pathFix(id: string, path: string, knots: readonly (readonly [number, number])[], speed: number, extra: Partial<Fix> = {}): Fix {
+    return { id, lon: 15.97, lat: 45.81, at: knots[0][0], type: 0, path, plan: { on: 'path', knots }, speed, confidence: 0.9, ...extra };
+  }
+  /** A plan that stands still: the vehicle is where it is and stays there. */
+  const still = (at: number, s: number): readonly (readonly [number, number])[] => [[at, s], [at + 90_000, s]];
+
+  it('holds instead of reversing when every third plan re-anchors forty metres behind the mark (20 min at 60 Hz)', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    // Two metres a second: twenty minutes of corridor without running off its
+    // end, and a forty-metre re-anchor is then twenty seconds of lost ground
+    // -- the case the old one-metre-a-second allowance crawled back through
+    // for a whole poll interval.
+    const CRUISE = 2;
+    const REGRESS_M = 40;
+    const trams = [
+      { id: 'a', path: '1_0', start: 900 },
+      { id: 'b', path: '1_0', start: 600 },
+      { id: 'c', path: '2_0', start: 300 },
+      { id: 'd', path: '2_0', start: 0 },
+    ];
+    const prev = new Map<string, number>();
+    let backward = 0;
+    let advanced = 0;
+    let holdFrames = 0;
+    for (let poll = 0; poll * 10 <= 1200; poll++) {
+      const now = T0 + poll * 10_000;
+      const fixes = trams.map((t) => {
+        const anchor = t.start + poll * 10 * CRUISE - Math.floor(poll / 3) * REGRESS_M;
+        return pathFix(t.id, t.path, [[now, anchor], [now + 90_000, anchor + 90 * CRUISE]], CRUISE);
+      });
+      integrator.update(fixes, now);
+      for (let k = 0; k < 600; k++) {
+        for (const d of integrator.step(now + k * FRAME_MS)) {
+          if (d.s === undefined) continue;
+          const before = prev.get(d.id);
+          if (before !== undefined) {
+            if (d.s < before - 1e-9) backward++;
+            else if (d.s > before + 1e-9) advanced++;
+          }
+          if (d.holding) holdFrames++;
+          prev.set(d.id, d.s);
+        }
+      }
+    }
+    expect(backward).toBe(0);
+    // The regression was absorbed as a hold, and the marks did move: neither
+    // a reversal nor twenty minutes of standing still.
+    expect(holdFrames).toBeGreaterThan(0);
+    expect(advanced).toBeGreaterThan(100_000);
+  }, 60_000);
+
+  it('clamps a route 1 tram behind a route 2 tram on the shared trunk, though the two run different paths', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    // Both marks on the trunk, forty metres apart and each sitting on its own plan.
+    integrator.update([pathFix('L', '2_0', still(T0, 700), 2), pathFix('F', '1_0', still(T0, 660), 12)], T0);
+    integrator.step(T0);
+    // The leader crawls (the twin has it at 2 m/s) while its plan sits two
+    // hundred metres ahead of its mark; the follower is quick and its own
+    // plan, fifty metres behind the leader's, lies well ahead of the leader's
+    // mark. Nothing but the clamp stops the follower driving through it.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('L', '2_0', still(t1, 900), 2), pathFix('F', '1_0', still(t1, 850), 12)], t1);
+    let worstOvertake = -Infinity;
+    let last = new Map<string, number>();
+    for (let k = 0; k <= 60 * 120; k++) {
+      const drawn = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+      const l = drawn.get('L')!;
+      const f = drawn.get('F')!;
+      worstOvertake = Math.max(worstOvertake, f.s! - (l.s! - HEADWAY_M));
+      last = new Map([['L', l.s!], ['F', f.s!]]);
+    }
+    expect(worstOvertake).toBeLessThanOrEqual(1e-6);
+    // And neither is stranded: both reach their own plans in the end, bar the
+    // dead zone's last metre (a mark does not chase floating point).
+    expect(last.get('L')!).toBeGreaterThan(899);
+    expect(last.get('L')!).toBeLessThanOrEqual(900);
+    expect(last.get('F')!).toBeGreaterThan(849);
+    expect(last.get('F')!).toBeLessThanOrEqual(850);
+  }, 30_000);
+
+  it('obeys the same clamp for a vehicle whose route type the wire never named, because its plan runs the rails', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    const untyped = (id: string, path: string, knots: readonly (readonly [number, number])[], speed: number): Fix => ({
+      id, lon: 15.97, lat: 45.81, at: knots[0][0], path, plan: { on: 'path', knots }, speed, confidence: 0.9,
+    });
+    integrator.update([untyped('L', '2_0', still(T0, 700), 2), untyped('F', '1_0', still(T0, 660), 12)], T0);
+    expect(integrator.step(T0)[0].type).toBe(-1);
+    const t1 = T0 + 10_000;
+    integrator.update([untyped('L', '2_0', still(t1, 900), 2), untyped('F', '1_0', still(t1, 850), 12)], t1);
+    let worstOvertake = -Infinity;
+    for (let k = 0; k <= 60 * 120; k++) {
+      const drawn = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+      worstOvertake = Math.max(worstOvertake, drawn.get('F')!.s! - (drawn.get('L')!.s! - HEADWAY_M));
+    }
+    expect(worstOvertake).toBeLessThanOrEqual(1e-6);
+  }, 30_000);
+
+  it('keeps the order the wire named through a plan that flips it, and follows the plans only without one', () => {
+    const run = (behind: string | undefined): { a: number; b: number; held: boolean } => {
+      const net = syntheticNetwork(corridorSpec());
+      const integrator = createIntegrator(net);
+      const wire = behind === undefined ? {} : { behind };
+      integrator.update([pathFix('B', '1_0', still(T0, 800), 8), pathFix('A', '1_0', still(T0, 700), 8, wire)], T0);
+      integrator.step(T0);
+      // The next tick's plans put A a hundred metres ahead of B. The wire
+      // still says A is the one behind, and the wire is the register.
+      const t1 = T0 + 10_000;
+      integrator.update([pathFix('B', '1_0', still(t1, 800), 8), pathFix('A', '1_0', still(t1, 900), 8, wire)], t1);
+      let held = false;
+      let out = new Map<string, Drawn>();
+      for (let k = 0; k <= 60 * 120; k++) {
+        out = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+        if (out.get('A')!.holding) held = true;
+        if (behind !== undefined) expect(out.get('A')!.s!).toBeLessThanOrEqual(out.get('B')!.s! - HEADWAY_M + 1e-6);
+      }
+      return { a: out.get('A')!.s!, b: out.get('B')!.s!, held };
+    };
+    // With the wire: A holds a tram length behind B and never takes the lead.
+    const wired = run('B');
+    expect(wired.a).toBeCloseTo(800 - HEADWAY_M, 1);
+    expect(wired.b).toBeCloseTo(800, 1);
+    expect(wired.held).toBe(true);
+    // Without it there is nothing but the plans to go on, and the plans have
+    // swapped the two: A leads. That difference is why the wire exists.
+    const bare = run(undefined);
+    expect(bare.a).toBeGreaterThan(bare.b);
+    expect(bare.a).toBeGreaterThan(899);
+    expect(bare.b).toBeCloseTo(800, 6);
+  }, 30_000);
+
+  it('reads its ceiling on the lap it is actually running, not the one it ran ten minutes ago', () => {
+    // A circuit: line 6's path runs the same two edges twice in one trip, a
+    // lap apart along the arc. The follower is on its SECOND lap; its leader
+    // runs a one-lap path over the same rails. Mapping the leader's arc by
+    // the FIRST occurrence of its edge puts the ceiling a whole lap behind
+    // the mark, which is a ceiling the follower can never pass: it would
+    // stand still until the twin next spoke (E3, the F9 review's finding).
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 0, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 500 }, { x: 0, y: 500 }, { x: 0, y: 0 }] },
+      ],
+      routes: [
+        { id: '6', type: 0, paths: [{ id: 'C6', direction: 0, edges: [0, 1, 0, 1], served: ['S0'] }] },
+        { id: '7', type: 0, paths: [{ id: 'S7', direction: 0, edges: [0, 1], served: ['S0'] }] },
+      ],
+      stops: [{ id: 'S0', edge: 0, s: 0, terminal: true }],
+    });
+    const lap = net.paths[net.paths.findIndex((p) => p.id === 'C6')].offsets[2];
+    expect(lap).toBeCloseTo(3000, 6);
+    const integrator = createIntegrator(net);
+    // The leader stands at 400 m on its own path; the follower is at 3200 m
+    // on its second lap -- the same rails, 200 m behind it on the ground --
+    // and its plan asks it forward 400 m over the next minute and a half.
+    integrator.update(
+      [
+        pathFix('L', 'S7', still(T0, 400), 0),
+        pathFix('F', 'C6', [[T0, lap + 200], [T0 + 90_000, lap + 600]], 6, { behind: 'L' }),
+      ],
+      T0,
+    );
+    let out = new Map<string, Drawn>();
+    for (let k = 0; k <= 60 * 120; k++) out = new Map(integrator.step(T0 + k * FRAME_MS).map((d) => [d.id, d]));
+    // It runs up to one tram length behind the leader ON ITS OWN LAP, and
+    // nowhere near the arc the first occurrence would have given it.
+    expect(out.get('F')!.s!).toBeGreaterThan(lap + 300);
+    expect(out.get('F')!.s!).toBeLessThanOrEqual(lap + 400 - HEADWAY_M + 1e-6);
+    expect(out.get('L')!.s!).toBeCloseTo(400, 1);
+  }, 30_000);
+
+  it('releases a wire leader whose own plan has fallen a swap limit behind it', () => {
+    // The register withdraws `behind` the tick a relation ends, but a wire
+    // that is a poll stale (or a twin that has not caught up) can still name
+    // a leader the follower has long since left 400 m behind. The client
+    // holds the wire's order through a crossing of the plans -- that is what
+    // it is for -- but not through THIS: a ceiling that far back would freeze
+    // the mark until the twin next spoke. It is dropped until the wire
+    // re-asserts it, which the next poll does if the register still means it.
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('B', '1_0', still(T0, 400), 8), pathFix('A', '1_0', still(T0, 300), 8, { behind: 'B' })], T0);
+    integrator.step(T0);
+    // A's plan is now 500 m past B's, well beyond SWAP_LIMIT_M, and the wire
+    // still names B. A must reach its own plan rather than stall at B - 35.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('B', '1_0', still(t1, 400), 8), pathFix('A', '1_0', still(t1, 900), 8, { behind: 'B' })], t1);
+    let out = new Map<string, Drawn>();
+    for (let k = 0; k <= 60 * 120; k++) out = new Map(integrator.step(t1 + k * FRAME_MS).map((d) => [d.id, d]));
+    expect(out.get('A')!.s!).toBeGreaterThan(899);
+    expect(out.get('B')!.s!).toBeCloseTo(400, 1);
+  }, 30_000);
+
+  it('keeps pace with an eight-metre-a-second plan on a once-a-second loop', () => {
+    const net = syntheticNetwork(corridorSpec());
+    const integrator = createIntegrator(net);
+    const SPEED = 8;
+    const knots: [number, number][] = [[T0, 100], [T0 + 90_000, 100 + 90 * SPEED]];
+    integrator.update([pathFix('v', '1_0', knots, SPEED)], T0);
+    const gapAt = (t: number): number => {
+      const d = integrator.step(t)[0];
+      return 100 + ((t - T0) / 1000) * SPEED - d.s!;
+    };
+    let gap30 = 0;
+    let gap60 = 0;
+    for (let t = T0; t <= T0 + 60_000; t += 1000) {
+      const gap = gapAt(t);
+      if (t === T0 + 30_000) gap30 = gap;
+      if (t === T0 + 60_000) gap60 = gap;
+    }
+    // The mark keeps pace: the lag settles at the convergence's own steady
+    // state (about sixteen metres at this speed) instead of growing by the
+    // three quarters of every second the loop used to throw away.
+    expect(gap60).toBeLessThan(20);
+    expect(Math.abs(gap60 - gap30)).toBeLessThan(1);
+  });
+
+  it('re-seeds onto a loop at the arc nearest the one it was drawn at, not at the nearest point on the ground', () => {
+    // A stem from (0,0) to (1000,0) and a loop that runs six metres north of
+    // it, away to (0,300) and back four metres south of it: a mark at (990,0)
+    // is nearer the loop's return leg (arc 3588) than its outbound one (arc
+    // 990), and the two are a whole circuit apart.
+    const spec: SynthSpec = {
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(0, 1000, 6) },
+        { from: 3, to: 4, pts: [{ x: 1000, y: 6 }, { x: 1000, y: 300 }, { x: 0, y: 300 }, { x: 0, y: -4 }] },
+        { from: 4, to: 5, pts: straight(0, 1000, -4) },
+      ],
+      routes: [
+        { id: 'S', type: 0, paths: [{ id: 'stem', direction: 0, edges: [0] }] },
+        { id: 'L', type: 0, paths: [{ id: 'loop', direction: 0, edges: [1, 2, 3] }] },
+      ],
+      stops: [],
+    };
+    const net = syntheticNetwork(spec);
+    const loopIdx = net.paths.findIndex((p) => p.id === 'loop');
+    expect(net.projectOntoPath(loopIdx, { x: 990, y: 0 }).s).toBeGreaterThan(3000); // the global nearest point is the return leg
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 990), 8)], T0);
+    expect(integrator.step(T0)[0].s).toBeCloseTo(990, 6);
+    // The trip changes and the vehicle is now planned along the loop.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'loop', still(t1, 1000), 8)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.path).toBe(loopIdx);
+    expect(after.s).toBeGreaterThan(900);
+    expect(after.s).toBeLessThan(1100);
   });
 });

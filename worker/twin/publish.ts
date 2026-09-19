@@ -28,6 +28,12 @@ export interface TripJoin {
   headsign: string;
   /** The GTFS shape id, or null for a pattern whose trips carry none (line 1). */
   shapeId: string | null;
+  /** The id of the path the pattern runs, resolved once when the index loaded
+   *  (times.ts mapPatternsToPaths). It is what makes a shapeless trip adopt
+   *  the synthetic path built from ITS OWN stop sequence rather than the
+   *  route and direction's first; absent where the join came from a source
+   *  that never resolved it, and then the matcher falls back to that first. */
+  pathId?: string;
   /** The trip's first scheduled departure, seconds past service midnight
    *  (R-TE49); absent where the join comes from a source without it. */
   startSec?: number;
@@ -140,6 +146,9 @@ export function buildPayload(
         speed: round(track.speed, 10),
         confidence: round(track.confidence, 100),
         held: placed.held,
+        // The ordering register's leader (E3), read fresh at every publish:
+        // a relation that ended is off the wire the same tick it ended.
+        behind: track.order.leader ?? undefined,
       }),
       ...(placed.motion ? { motion: placed.motion } : {}),
     });

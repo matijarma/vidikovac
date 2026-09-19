@@ -46,8 +46,11 @@ function buildQr() {
 /** The artefact's `diagram` as {route, kind, pts:[x,y][]}[] plus its box; only what this figure reads (see app/src/motion/network.ts RawNetworkArtefact). */
 function readDiagram() {
   const raw = JSON.parse(readFileSync(NETWORK, 'utf8'));
-  // Versions 1 and 2 (the twin engine's rail graph) carry the same `routes` and `diagram` members this figure reads.
-  if (raw.version !== 1 && raw.version !== 2) throw new Error(`zet-network.json: unexpected artefact version ${raw.version}`);
+  // Versions 1 to 3 (version 2 added the twin engine's rail graph, version 3
+  // the served-stop table) carry the same `routes` and `diagram` members this
+  // figure reads, untouched by either; a version past them must still stop the
+  // build rather than have its bytes guessed at.
+  if (![1, 2, 3].includes(raw.version)) throw new Error(`zet-network.json: unexpected artefact version ${raw.version}`);
   const typeOf = new Map(raw.routes.id.map((id, i) => [id, raw.routes.type[i]]));
   const lines = raw.diagram.lines.route.map((route, i) => ({ route, type: typeOf.get(route), pts: raw.diagram.lines.pts[i] }));
   return { lines, box: raw.diagram.box, feedVersion: raw.feedVersion };

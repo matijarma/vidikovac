@@ -5,6 +5,7 @@
 // one row per tick in SQLite (persist.ts) brings an evicted object back
 // knowing the fleet.
 
+import type { DwellRecent } from '../../shared/motion/dwell';
 import type { PublishedPlan } from '../../shared/motion/hindsight';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
 import type { Track } from '../../shared/motion/track';
@@ -23,6 +24,10 @@ export interface TripNext {
   delaySec: number | null;
   timeSec: number | null;
   delays: number[];
+  /** When ZET issued the update (its own timestamp, else the frame header).
+   *  The planner's "departed by the header" bound needs it to tell a current
+   *  update from one naming the platform a tram is still standing at (F11). */
+  atSec: number | null;
 }
 
 export interface TwinState {
@@ -42,10 +47,16 @@ export interface TwinState {
   /** Evidence counted since the last flush to SQLite (C1): rides in the
    *  state row so an eviction between two flushes loses nothing. */
   pendingLearned: LearnedAggregates;
+  /** F11: the rolling window of measured dwells per platform, whole (not
+   *  just the unflushed minute). It is small -- thirty numbers per platform
+   *  the fleet actually called at -- and carrying it whole means an eviction
+   *  wakes up planning from the last ninety minutes rather than from the
+   *  timetable while SQLite is read. */
+  dwellRecent: DwellRecent;
 }
 
 export function emptyState(): TwinState {
-  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates() };
+  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {} };
 }
 
 /** The update to keep for a trip: the earliest stop still ahead of the header
@@ -65,6 +76,7 @@ export function nextStopOf(feed: DecodedFeed): Record<string, TripNext> {
       delaySec: chosen?.delaySec ?? null,
       timeSec: chosen?.timeSec ?? null,
       delays: stops.map((s) => s.delaySec).filter((d): d is number => d !== null),
+      atSec: update.atSec ?? feed.headerTs ?? null,
     };
   }
   return out;

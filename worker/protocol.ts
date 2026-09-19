@@ -233,6 +233,25 @@ export const SERVER_EVENTS = [
   // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
   'twin_tick',
   'twin_hindsight',
+  // Round F: the same graded fixes by sign (dim1 horizon, dim2
+  // ahead_ge50|within50|behind_ge50): the plan ahead of the tram is the
+  // failure the round forbids, so its share is the number /stats leads with.
+  'twin_hindsight_sign',
+  // E3: what the ordering register did this tick (dim1
+  // established|dropped|hold|push|concession|swap, dim2 the kind). Every one
+  // is an EVENT of the tick, because this table sums over the hour: the
+  // standing count of relations is a gauge and stays off the wire. A
+  // concession and a swap are the only two ways a standing order may
+  // reverse, which is what makes an overtake countable at all.
+  'twin_order',
+  // F11: what the planner had to intervene about this tick (dim1
+  // floor|junction_wait|stand_fix|eta_bound_skipped, dim2 the kind). `floor`
+  // is an anchor inside the GPS scatter behind the plan already published,
+  // `junction_wait` a wait booked at a crossing trams actually stop at,
+  // `stand_fix` a tram kept at its platform that the old rule would have
+  // driven off, `eta_bound_skipped` a TripUpdate's "you have departed" the
+  // planner refused to believe about the very next stop.
+  'twin_plan',
   // R-TE18: the hourly HEAD of ZET's static GTFS against the artefacts' build
   // time (dim1 current|newer|unknown|error); "newer" is the call to rebuild.
   'static_watch',

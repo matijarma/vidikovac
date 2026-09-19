@@ -38,6 +38,14 @@ describe('the vehicle data vocabulary never re-admits a ZET bearing or speed', (
     }
   });
 
+  // E3: the ordering register's leader is a key the TWIN publishes and the
+  // direct parser of ZET's bytes never can -- ZET's feed has no such notion.
+  it("admits the twin's ordering leader, which the real fixture never produces", () => {
+    expect(DATA_KEYS.vehicle).toContain('behind');
+    const payload = parseZetRt(zetRtFixture, {});
+    for (const item of payload.items) expect(item.data).not.toHaveProperty('behind');
+  });
+
   it('rejects any data key outside DATA_KEYS for its kind, decoding the real fixture', () => {
     const payload = parseZetRt(zetRtFixture, {});
     expect(payload.items.length).toBeGreaterThan(0);
