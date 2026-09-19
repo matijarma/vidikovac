@@ -75,6 +75,11 @@ function makeEnv(run?: (model: string, input: unknown) => Promise<unknown>, appE
 
 const answers = (text: string) => async () => ({ response: text });
 
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /** The system message of a recorded call. */
 function systemOf(call: { input: unknown }): string {
   const { messages } = call.input as { messages: { role: string; content: string }[] };
@@ -126,7 +131,7 @@ describe('briefAll', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].model).toBe(BRIEF_MODEL_AKT);
     const key = await briefKey('akt', ACT);
-    expect(key).toMatch(/^brief:v2:[0-9a-f]{64}$/);
+    expect(key).toMatch(/^brief:v3:[0-9a-f]{64}$/);
     expect(kv.puts).toEqual([{ key, body: JSON.stringify({ brief: GOOD }), expirationTtl: BRIEF_TTL_SECONDS }]);
   });
 
@@ -138,6 +143,17 @@ describe('briefAll', () => {
     const briefs = await briefAll(makeEnv(answers('nikad')), [ACT], 'akt');
     expect(briefs.get(ACT)).toBe(GOOD);
     expect(calls).toHaveLength(0);
+  });
+
+  it("keys a brief on the model that wrote it, so one model never serves another's", async () => {
+    // The digest is over kind, model and text, newline-separated. Recomputed
+    // here rather than snapshotted, so the composition itself is the assertion.
+    expect(await briefKey('akt', ACT)).toBe(`brief:v3:${await sha256Hex(`akt
+${BRIEF_MODEL_AKT}
+${ACT}`)}`);
+    expect(await briefKey('obavijest', ACT)).toBe(`brief:v3:${await sha256Hex(`obavijest
+${BRIEF_MODEL}
+${ACT}`)}`);
   });
 
   it('keys the cache on the kind as well as the text', async () => {
@@ -168,8 +184,7 @@ describe('briefAll', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const env = makeEnv(() => new Promise(() => {}));
     const pending = briefAll(env, [ACT], 'akt');
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    for (let turn = 0; turn < 8; turn += 1) await new Promise((resolve) => setImmediate(resolve));
     await vi.advanceTimersByTimeAsync(BRIEF_TIMEOUT_MS + 10);
 
     expect((await pending).size).toBe(0);

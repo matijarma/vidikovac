@@ -29,8 +29,13 @@ import { isTestEnvironment } from '../config';
 // the briefer off the FetchContext and touches nothing in this file, so the
 // five briefed modules stay free of the Worker's environment types.
 
-/** Workers AI text generation, small and fast: the ticker needs one sentence, not prose. */
-export const BRIEF_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+/**
+ * Workers AI text generation, small and fast: the ticker needs one sentence,
+ * not prose. Pinned to a name the catalogue actually lists (`npx wrangler ai
+ * models`): an unlisted name may answer today and stop resolving without
+ * notice, and briefs failing quietly is not a reason to depend on one.
+ */
+export const BRIEF_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 /**
  * Gazette act titles alone are worth the large model. The small one restated
  * both act titles it was given in the live probe instead of condensing them
@@ -46,7 +51,7 @@ export function briefModel(kind: BriefKind): string {
 }
 
 /** KV key prefix in `env.FEED`; the version moves if the prompt or the stored shape changes. */
-export const BRIEF_KEY_PREFIX = 'brief:v2:';
+export const BRIEF_KEY_PREFIX = 'brief:v3:';
 export const BRIEF_TTL_SECONDS = 30 * 24 * 60 * 60;
 /** A refused or failed generation is remembered this long, so a bad text is not retried every refresh. */
 export const BRIEF_NEGATIVE_TTL_SECONDS = 60 * 60;
@@ -122,9 +127,15 @@ interface BriefRecord {
   brief: string | null;
 }
 
-/** `brief:v1:<sha256 hex>` over the kind and the text; a newline separates them so no kind can spell another kind's text. */
+/**
+ * `brief:v3:<sha256 hex>` over the kind, the model that wrote the brief and
+ * the text, newline-separated so no field can spell another's. The model is
+ * in the digest because a sentence written by the small model must never be
+ * served as the large model's reading of the same act, and because swapping
+ * a model then needs no version bump: its briefs simply have different keys.
+ */
 export async function briefKey(kind: BriefKind, text: string): Promise<string> {
-  const bytes = new TextEncoder().encode(`${kind}\n${text}`);
+  const bytes = new TextEncoder().encode(`${kind}\n${briefModel(kind)}\n${text}`);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `${BRIEF_KEY_PREFIX}${hex}`;
