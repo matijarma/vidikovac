@@ -1,7 +1,7 @@
 // Round F in a real browser: the rendering stream F1-F5 landed, proved on the
 // city map rather than in a jsdom stand-in.
 //
-// Four claims, in two scenarios:
+// Six claims, in three scenarios:
 //   1. two trams 20 m apart keep BOTH numbers -- two pills or one cluster
 //      whose label lists both (F2, design A);
 //   2. the direction nose keeps to its band -- drawn at 15.5, gone at 17
