@@ -110,6 +110,22 @@ async function openLayer(page, layer) {
   await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor();
 }
 
+/** Promet, then its transport group. Since the city sources landed the
+ *  workspace opens on the city's own group ("Zivi grad"), where the transport
+ *  modes are off and neither a pill nor the diagram is drawn (workspace.ts
+ *  modesArg and the renderer choice); "Kretanje" is what a reader looking for
+ *  a tram picks, and what e2e/round-f.spec.ts picks. A host that has no city
+ *  groups at all (a legacy transport-only view) is already there. */
+async function openTransport(page) {
+  await openLayer(page, 'u-pokretu');
+  const group = page.locator('[data-action=city-group][data-group=transport]');
+  if (!(await group.count())) return;
+  // Focusing the search first is what raises the sheet on a phone, so the
+  // group buttons under it are on screen to be clicked (e2e/schema.spec.ts).
+  await page.getByTestId('transport-search').focus();
+  await group.first().click();
+}
+
 try {
   const { experienceSnapshots, installExperienceFixture, FIXTURE_DASHBOARD } =
     await loader.ssrLoadModule('/e2e/experience-fixtures.ts');
@@ -192,7 +208,7 @@ try {
     snapshots['zet-rt'] = schemaSnapshot(FIXTURE_NOW.getTime());
     await installExperienceFixture(page, snapshots);
     await page.goto(`${base}${FIXTURE_DASHBOARD}`);
-    await openLayer(page, 'u-pokretu');
+    await openTransport(page);
     await page.getByTestId('schema-vehicles').waitFor();
     await page.waitForFunction(() => document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-map-status') === 'ready');
     await page.clock.runFor(1000);
@@ -211,6 +227,10 @@ try {
   // one line only and then the whole network again (F5), and the diagram's
   // flat names with a terminal's chips (F4). Same fixture the browser gate
   // runs on, so a scene and a spec can never drift apart.
+
+  /** The zoom the round's clustering rule is about: close enough that two
+   *  trams 20 m apart are two pills the reader can tell apart (F2). */
+  const CLUSTER_SCENE_ZOOM = 17;
 
   // Is this machine serving the basemap at all? One tile decides it; see
   // openTwoTrams just below for what hangs on the answer.
@@ -242,7 +262,7 @@ try {
     await page.clock.resume();
     await page.goto(`${base}${FIXTURE_DASHBOARD}`);
     await page.locator('[data-testid=tb]').waitFor();
-    await openLayer(page, 'u-pokretu');
+    await openTransport(page);
   }
 
   /** A read-only probe attribute the renderer writes (city-map.ts, schema-map.ts). */
@@ -273,14 +293,17 @@ try {
       await page.waitForFunction(
         () => (document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-pills') ?? '').length > 0,
         null, { timeout: 25_000 });
-      // The session's map opens on the screen's stop at zoom 15, where the
-      // fixture parks the pair; MapLibre's keyboard step is +1 from the zoom
-      // it is at *now*, so the two steps are taken one at a time and land on
-      // exactly 17 -- the zoom the cluster rule is about.
+      // The camera opens where the session and the workspace put it -- the
+      // screen's stop at 15 for a paired reader, the city's own zoom since the
+      // city sources landed -- and MapLibre's keyboard step is +1 from the
+      // rounded zoom it is at *now*. So the steps are taken one at a time from
+      // wherever it opened and land on exactly 17, the zoom the cluster rule
+      // is about.
       await page.locator('[data-testid=map-canvas] canvas').focus();
-      for (const stop of ['16.00', '17.00']) {
+      const from = Math.round(Number(await page.getAttribute('[data-testid=map-canvas]', 'data-zoom')));
+      for (let stop = from + 1; stop <= CLUSTER_SCENE_ZOOM; stop++) {
         await page.keyboard.press('=');
-        await waitForProbe(page, '[data-testid=map-canvas]', 'zoom', stop);
+        await waitForProbe(page, '[data-testid=map-canvas]', 'zoom', stop.toFixed(2));
       }
       await captureLayer(page, scene.name, 'u-pokretu');
 
