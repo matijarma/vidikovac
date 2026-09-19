@@ -415,7 +415,11 @@ export const PHARMACY_LABEL_MIN_M = 150;
 /** The one on-duty pharmacy the safety strip also names, so the map and the
  *  strip can never name two different ones. Its coordinate is hand-entered and
  *  approximate (local.ts's PHARMACY_POINTS) and its ADDRESS is exact, so the
- *  address is the label and the mark is a hollow ring, never a filled pin.
+ *  mark is a hollow ring, never a filled pin. The label is the pharmacy's NAME:
+ *  a postal address printed at the wall's 24 px was the loudest thing on a
+ *  quarter's picture and it was not even a name -- "Trg bana Josipa Jelačića 3,
+ *  Zagreb" over two lines. The address stays in `props`, which is what the
+ *  detail prints and what the ring's own layer filter reads.
  *  On the screen's own stop the label is blank and the ring alone remains
  *  (PHARMACY_LABEL_MIN_M), and so it is on a picture of the whole city, where
  *  a street address is a detail nobody can act on from three metres
@@ -427,7 +431,7 @@ export function pharmacyPoint(stop: ScreenStop | null, labelled = true): MapPoin
   const at = PHARMACY_POINTS[pharmacy.label];
   if (!at) return [];
   const onTheStop = stop !== null && stopDistanceM(at, stop) < PHARMACY_LABEL_MIN_M;
-  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: labelled && !onTheStop ? pharmacy.address : '', place: 'pharmacy', props: { address: pharmacy.address } }];
+  return [{ id: `pharmacy:${pharmacy.label}`, lon: at.lon, lat: at.lat, title: labelled && !onTheStop ? pharmacy.name : '', place: 'pharmacy', props: { address: pharmacy.address } }];
 }
 
 /** The seat of the stop's own gradska cetvrt, from the real seat coordinates

@@ -15,7 +15,7 @@ import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
-import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
+import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, STOP_LABEL_MIN_RANK, STOP_LABEL_MIN_RANK_FAR, STOP_LABEL_THIN_ZOOM, stopLabelMinRank } from '../../app/src/kiosk/mapview';
 import { emptyCity, type CityState } from '../../shared/city/types';
@@ -843,17 +843,21 @@ describe('the kiosk\u2019s whole-city window', () => {
 });
 
 describe('the on-duty pharmacy on the map (R-KP18)', () => {
-  it('keeps its hollow ring but drops the address label when it sits on the screen\u2019s own stop, and labels it in full from 150 m out', () => {
+  it('keeps its hollow ring but drops its label when it sits on the screen\u2019s own stop, and names the pharmacy from 150 m out', () => {
     // The hand-entered point for "Trg bana J. Jelačića 3" (local.ts PHARMACY_POINTS); a stop is put due south of it by a latitude offset.
     const ring = { lon: 15.9776, lat: 45.8131 };
     const stopAt = (metresSouth: number) => ({ ...STOP, lon: ring.lon, lat: ring.lat - metresSouth / 111_320 });
-    // The label is the short form the strip prints; the address (worker/hitno/ljekarne.ts) is the exact, full one the map labels with.
+    // The label is the short form the strip prints; the address (worker/hitno/ljekarne.ts) is the exact one, and it is a detail, not a name.
     const address = 'Trg bana Josipa Jelačića 3, Zagreb';
     const [onTheStop] = pharmacyPoint(stopAt(80));
     expect(onTheStop).toEqual({ id: 'pharmacy:Trg bana J. Jelačića 3', lon: ring.lon, lat: ring.lat, title: '', place: 'pharmacy', props: { address } });
     const [downTheStreet] = pharmacyPoint(stopAt(400));
-    expect(downTheStreet).toMatchObject({ id: 'pharmacy:Trg bana J. Jelačića 3', title: address, props: { address } });
-    // The strip names the pharmacy in full either way: the map and the strip can never name two different ones.
+    // What the mark says is what the place is called; the address stays in the detail the props carry.
+    expect(downTheStreet).toMatchObject({ id: 'pharmacy:Trg bana J. Jelačića 3', title: 'Gradska ljekarna Zagreb', props: { address } });
+    expect(downTheStreet!.title).not.toContain('3');
+    // A unit whose own handle IS a name keeps it: the operator is the name either way.
+    expect(pharmaciesByDistance(null).find((p) => p.label === 'Ljekarna ZEUS')!.name).toBe('Ljekarna ZEUS');
+    // The strip names the pharmacy by its address either way: the map and the strip can never name two different ones.
     expect(safetyStrip(MODULES, stopAt(80), i18n, hr, NOW).pharmacy.label).toBe('Trg bana J. Jelačića 3');
   });
 });
