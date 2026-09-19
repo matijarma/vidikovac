@@ -33,6 +33,10 @@ export type ItemKind =
 
 export type Severity = 'info' | 'minor' | 'moderate' | 'severe' | 'extreme';
 
+/** What a briefed text is (worker/feed/brief.ts, WP6): the model is told which
+ *  of the five briefed sources it is reading, and the cache key carries it. */
+export type BriefKind = 'akt' | 'prognoza' | 'obavijest' | 'radovi' | 'novost';
+
 export interface Geo {
   type: 'Point' | 'LineString';
   /** [lon, lat] for Point; [[lon, lat], ...] for LineString (GeoJSON order). */
@@ -64,6 +68,8 @@ export interface FeedItem {
    *  because neither is a scalar; times relative to `sourceUpdatedAt`. See
    *  shared/motion/wire.ts. */
   motion?: VehicleMotion;
+  /** One-line machine-condensed reading of the item (worker/feed/brief.ts, WP6). */
+  brief?: string;
 }
 
 export type SnapshotStatus = 'live' | 'stale' | 'down';
@@ -114,6 +120,10 @@ export interface FetchContext {
    *  the twin feeds (`ModuleSpec.twin`, R-TE2/R-TE8); absent in a fixture
    *  context, where the module fetches its source directly. */
   twin?: () => Promise<FeedPayload>;
+  /** Condense long source texts into one readable line each (WP6), injected
+   *  by the cache layer from worker/feed/brief.ts. Absent in a fixture
+   *  context, where every item simply keeps its original text. Never rejects. */
+  brief?: (texts: readonly string[], kind: BriefKind) => Promise<Map<string, string>>;
 }
 
 export interface ModuleSpec {
