@@ -42,7 +42,7 @@ export const JUNCTION_ZONE_M = 60;
 export const JUNCTION_STOP_SHARE = 0.4;
 
 /** The side of the wait distribution the planner books. The MEDIAN, not the
- *  dwell table's 0.7: a junction wait is already conditional on stopping at
+ *  dwell table's 0.9: a junction wait is already conditional on stopping at
  *  all, so the share and the quantile would otherwise tilt the same plan
  *  late twice over. */
 export const JUNCTION_WAIT_QUANTILE = 0.5;

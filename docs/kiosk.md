@@ -175,7 +175,7 @@ Krug F ne mijenja ponašanje zaslona osim na dva mjesta. Prvo: oznake vozila i
 njihove skupine (pločica za tramvaj, kapsula za autobus) **nikad se ne ispuštaju** --
 sudarni prolaz karte ne odbacuje nijednu oznaku, a gužvu drži čitljivom spajanje
 preklopljenih oznaka u jednu skupinu s natpisom tipa „6·11·12·14”, računato na
-zaslonovoj skali oznaka, pa se marke ne spajaju na pola stvarne udaljenosti.
+zaslonovoj skali oznaka, pa se oznake ne spajaju na pola stvarne udaljenosti.
 Drugo: shema na zaslonu vozi **isti sudarni prolaz naziva kao svaka druga
 površina**, samo sa svojim stajalištem prvim u rangu -- zaslon koji pokaže baš
 svaki naziv pokaže ih jedne preko drugih. Donja granica naziva od 24 CSS px i

@@ -117,8 +117,9 @@ export const TERMINUS_TRIM_STOPS = 2;
 // zrtava fasizma on three of route 13, where Subiceva street crosses Kralja
 // Zvonimira mid-edge and only the night line's two shapes draw the corridor).
 // The build REPORTS those hops by name -- the honest measure of what the
-// feed's shapes fail to draw -- and does not fail on them: the alternative is
-// the pathless pattern this task exists to end.
+// feed's shapes fail to draw -- and, since F8c, FAILS on any leg that is not
+// named with its reason in gtfs-shapes-overrides.json longLegs (route-scoped):
+// a silent detour would route every plan on that path the long way round.
 export const HOP_DETOUR_FACTOR = 2; // past twice the straight line...
 export const HOP_DETOUR_EXCESS_METRES = 500; // ...and past half a kilometre longer
 // F8c NODES those crossings, one reported leg at a time. The search is

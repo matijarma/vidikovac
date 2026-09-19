@@ -1582,12 +1582,12 @@ Ništa nije gurnuto ni spojeno u `main`: objava je `git push` u `main` i traži 
 |---|---|---|---|
 | TypeScript | `npm run typecheck` | `e59f85c` | čisto, oba projekta (`worker`, `app`) |
 | Jedinični i radni testovi | `npm test` | `e59f85c` | **204 datoteke / 2.693 testa, sve zeleno.** Poznata krhkost pod opterećenjem: `test/twin/learn.workers.test.ts` zna isteći na 5 s dok isti stroj vrti preglednik -- sam prolazi. |
-| Gradnja | `npm run build` | `b606d96` (R) i `8ecef34` (integracija, kroz `wrangler dev`, koji pri startu vrti gradnju) | čisto; upozorenje o veličini komada je zatečeno. Na `e59f85c` nije ponovno vožena u ovom radnom stablu jer je kapija držala stablo; taj spoj dira samo `shared/motion`, `worker/` i testove (15 datoteka). |
+| Gradnja | `npm run build` | `152e612` (integracija; isti kod kao `e59f85c`, povrh su samo dokumenti) | čisto; upozorenje o veličini komada je zatečeno (`gate-integration-visual-152e612.txt`). |
 | Shema | `node scripts/zet-schema.mjs --check` | `e59f85c` | prolazi: 57.639 B sirovo, 10.582 B gzip, feed 000395; **146 od 152 staze** se smješta na nacrt sa strogo monotonim dionicama, šest izuzetih imenovano. |
 | Izvori | `npm run check:izvori` | `e59f85c` | svih 36 poveznica odgovara; svi moduli dokumentirani |
-| Preglednik | `npx playwright test` (chromium + mobile) | `8ecef34` | **101 prolaz / 14 padova**, svih 14 okolišnih ili zajedničkih s `main` -- razvrstano niže |
-| Pristupačnost | `npm run e2e:a11y` | `8ecef34` | **18 od 20**; padaju ista dva slučaja iz `a11y.spec.ts` |
-| Vizualna matrica | `npm run review:visual` | `2410303` / `b606d96` (grana R) | **93 površine, 0 nalaza**. U integracijskom stablu nije ponovno vožena: kapija drži poslužitelj i port, a spoj grane M ne dira nijednu iscrtanu površinu. |
+| Preglednik | `npx playwright test` (chromium + mobile) | `8ecef34`; podskup `motion`/`round-f`/`schema` ponovljen na `e59f85c` | **101 prolaz / 14 padova**, svih 14 okolišnih ili zajedničkih s `main` -- razvrstano niže. Podskup na `e59f85c`: 12 prolaza / 2 pada (`motion.spec.ts:174` i `:250`, oba iz razreda pločica). |
+| Pristupačnost | `npm run e2e:a11y` | `8ecef34`; tekstualna staza (`a11y.spec.ts:225`, `:246`) ponovljena na `e59f85c` i `152e612` | **18 od 20**; padaju ista dva slučaja iz `a11y.spec.ts`. U ponavljanjima `:246` pada u sva tri pokretanja, a `:225` prolazi 2 od 3 -- krhkost iz razvrstavanja niže. |
+| Vizualna matrica | `npm run review:visual` | `b606d96` (grana R) i `152e612` (integracija) | **93 površine, 0 nalaza** na objema. Skripta ne diže vlastiti poslužitelj: prvi pokušaj u integracijskom stablu pao je s `ERR_CONNECTION_REFUSED` bez ijedne snimke i ponovljen je uz ručno podignut `wrangler dev` na 8787. |
 | Ponavljanje snimljenog dana | `node scripts/replay-twin.mjs recordings/2026/09/17` | `e59f85c` (svih 7.972 okvira 17. rujna) | slike unatrag **0**, fantomska stajališta **0**, vidljiva križanja 12.244, prekršaji redoslijeda 1.218; cijela tablica u sljedećem odjeljku |
 
 **Razvrstavanje padova u pregledniku.** Ovaj stroj nema lokalnu R2 kopiju arhive pločica, pa svaka
@@ -1656,9 +1656,9 @@ prozor i puni dan slažu se u predznaku i veličini.
 
 **Dva praga plana nisu postignuta i to se ne zaokružuje:**
 
-- **„Ispred” na 30 s: 15,8 % prema traženih ≤ 10 %.** Broj je s kontroliranog prozora (stari motor
-  *s* povratnom vezom učenja protiv novoga, dakle pošteno usporedivo; 15,9 % prije vala popravaka);
-  na cijelom danu iznosi **17,2 %**. Zadatak F11 je prošao cijeli raspon triju konstanti (0,65 → 0,90)
+- **„Ispred” na 30 s: 17,2 % na cijelom danu prema traženih ≤ 10 %.** Na kontroliranom prozoru
+  (stari motor *s* povratnom vezom učenja protiv novoga, dakle pošteno usporedivo) iznosi 15,8 %
+  (15,9 % prije vala popravaka). Zadatak F11 je prošao cijeli raspon triju konstanti (0,65 → 0,90)
   i cijeli taj raspon vrijedi 2,0 postotna boda: prag se ovim konstantama ne može doseći. Ostatak je
   pripisan mjerenjem: **76 % svih „ispred” ima sidro mlađe od 10 s, a 64 % sidro u pokretu**
   (66 % u kontroliranom prozoru) -- tramvaj koji vozi na svježem očitanju i zatim **stane**. To je meta
@@ -1711,6 +1711,9 @@ Popis je spojen iz oba završna pregleda. Ništa od ovoga stroj ne može potvrdi
 10. **Dijagram.** Nazivi vodoravno preko linija s oznakama preko njih; okretišta verzalom ispod
     koluta, s čipovima linija; dodir na skupinu otvara njezine članove.
 11. **Tamna tema** na svemu gore: tinte oznaka, čipovi okretišta i prigušene linije pod fokusom.
+12. **Nos smjera i kolosijeci po zumu.** Nos postoji samo između zuma 14,5 i 16,5: na 15,5 ga svaki
+    tramvaj ima, na 17 ga nema i svaki tramvaj sjedi na svom kolosijeku (dva su tada razmaknuta
+    bar 4 px). Nos koji ostaje na 17 ili nedostaje na 15,5 znači da je pojas krivo postavljen.
 
 #### Otvorene točke
 
@@ -1726,28 +1729,35 @@ Odluke i nalazi koje krug ostavlja vlasniku; nijedna nije prepreka objavi, sve s
 3. **Javni zaslon vozi sudarni prolaz naziva**, sa svojim stajalištem prvim u rangu -- plan je tražio
    „svi nazivi”. Snimka kioska bez prolaza pokazala je nazive jedne preko drugih.
 
+4. **Tramvaji iste linije slažu se jedan preko drugoga na dijagramu kad je jedan odabran.** Odabrano
+   vozilo se po planu nikad ne upija u skupinu, pa tramvaj iste linije na istom mjestu sjedi pod
+   njim umjesto u skupini s njim. Nalaz završnog pregleda grane R, ostavljen kao manji.
+
 *Zatečeno uzvodno, ne od ovog kruga:*
 
-4. **Radni prostor prijevoza otvara se na gradskoj skupini „Živi grad”**, pa su karta prometa i fokus
+5. **Radni prostor prijevoza otvara se na gradskoj skupini „Živi grad”**, pa su karta prometa i fokus
    linije jedan klik dublje (iza „Kretanje”). Odluka o zadanoj skupini je vlasnička.
-5. **Nazivi na shemi se režu na rubu kadra javnog zaslona** („PADNI / ODVOR”): čitljivost javnog
+6. **Nazivi na shemi se režu na rubu kadra javnog zaslona** („PADNI / ODVOR”): čitljivost javnog
    zaslona za idući krug.
-6. **Karta bez pločica ostaje neiscrtana umjesto da se degradira.** Kad je usluga pločica trajno
+7. **Karta bez pločica ostaje neiscrtana umjesto da se degradira.** Kad je usluga pločica trajno
    nedostupna, MapLibre-ov stil može propustiti `load`, pa slojevi nikad ne stignu na kartu i spremnik
    ostane `unavailable` -- na grani i na `main` jednako. Latentno u proizvodnji.
-7. **`e2e/experience.spec.ts:191` je crven na samom `main`** (pretraga prijevoza bez WebGL-a, 3 od 3).
-   Posljedica zadane skupine iz točke 4.
+8. **`e2e/experience.spec.ts:191` je crven na samom `main`** (pretraga prijevoza bez WebGL-a, 3 od 3).
+   Posljedica zadane skupine iz točke 5.
+9. **Ponovno prilagođavanje lista na telefonu spušta dijagram pod prag naziva**: kad se donji list
+   ponovno prilagodi, shema izgubi zum i nazivi se sakriju dok korisnik sam ne zumira. Zatečeno
+   prije kruga F (zabilježeno pri F6), ostavljeno vlasniku.
 
 *Motor, prvi zadaci idućeg kruga:*
 
-8. **Semantika guranja (I4).** Guranje vuče vođu po **sljedbenikovu planu**, ne po njegovu očitanju.
+10. **Semantika guranja (I4).** Guranje vuče vođu po **sljedbenikovu planu**, ne po njegovu očitanju.
    Promjena semantike traži vlastito ponavljanje snimljenog dana, pa je odvojena.
-9. **Redak stanja 1,42 MB u vršcu prema ogradi Durable Objecta od 2 MB.** Dodan je zapis
+11. **Redak stanja 1,42 MB u vršcu prema ogradi Durable Objecta od 2 MB.** Dodan je zapis
    `stateBytes`/`vehicles` na minutnom ispiranju da se to promatra; smanjivanje prstena objavljenih
    planova je zaseban zadatak.
-10. **Pojas od 35 do 60 m ostaje neuređen.** Očitanje ne može reći tko je prvi unutar dvaju rasipanja
+12. **Pojas od 35 do 60 m ostaje neuređen.** Očitanje ne može reći tko je prvi unutar dvaju rasipanja
     GPS-a; to je izvor najvećeg dijela preostalih vidljivih križanja.
-11. **Na obnovljenom otkucaju `advance()` se vrti dvaput** (ponovno planiranje pri obnovi i sam okvir),
+13. **Na obnovljenom otkucaju `advance()` se vrti dvaput** (ponovno planiranje pri obnovi i sam okvir),
     a izvještaj otkucaja nosi samo drugi prolaz -- pa izvještaj podbroji zadržavanje koje je mjerilo
     ispravno izbrojilo. Nalaz opažanja, ne kvarenja podataka.
 
