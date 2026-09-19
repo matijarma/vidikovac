@@ -1,12 +1,11 @@
-// Waste's pickup tiles (plan T3.2, D7): the kvart's next collection days, off
+// Waste's pickup tiles (plan T3.2, D7): the city's next collection days, off
 // behind FEED_WASTE until Čistoća's pickup calendar can be converted to
-// public/data/waste/<kvart>.json (docs/izvori.md "Crveni izvori"). Sutra and
+// public/data/waste/<district>.json (docs/izvori.md "Crveni izvori"). Sutra and
 // tjedan only: a pickup today is not "next" the way the band frames it, so it
 // is left off exactly as bucketOf would place it (the sada/danas/veceras
 // lanes), never forced into a lane that misreports it as upcoming.
 import { FLAGS } from '../../core/flags';
 import { mobilityStaleBadge } from '../../core/mobility';
-import { districtLabel } from '../../kiosk/districts';
 import type { ProduceOptions, TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
 
@@ -21,14 +20,13 @@ export const wasteProducer: TileProducer = {
     const snapshot = ctx.waste;
     if (!snapshot || snapshot.status === 'down') return [];
     const { i18n } = ctx;
-    const scoped = o.kvart ? snapshot.pickups.filter((pickup) => pickup.district === o.kvart) : snapshot.pickups;
     const label = i18n.t('tiles.waste.label');
-    const contextText = o.kvart ? districtLabel(o.kvart) : i18n.t('kvart.wholeCity');
+    const contextText = i18n.t('kvart.wholeCity');
     // A degraded fetch still shows the last known pickup days, but badged rather than
     // read as live (global constraints §1/§8: every tile inherits the stale state too).
     const stale = snapshot.status === 'stale' ? mobilityStaleBadge(i18n, snapshot.fetchedAt) : undefined;
     const tiles: Tile[] = [];
-    for (const pickup of scoped) {
+    for (const pickup of snapshot.pickups) {
       const bucket = o.bucket(pickup.date, undefined, true);
       if (bucket !== 'sutra' && bucket !== 'tjedan') continue;
       tiles.push({

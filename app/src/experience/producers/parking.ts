@@ -18,7 +18,7 @@ export const parkingProducer: TileProducer = {
     if (!FLAGS.FEED_PARKING) return [];
     const snapshot = ctx.parking;
     if (!snapshot || snapshot.status === 'down') return [];
-    const station = nearestStation(snapshot.stations, ctx.screen?.stop, o.kvart);
+    const station = nearestStation(snapshot.stations, ctx.screen?.stop);
     if (!station) return [];
     const tile = stationTile(ctx, `parking:${station.id}`, ctx.i18n.t('tiles.parkingFree'), station, 'tile-parking');
     // Same stale handling as bikes.ts: a degraded fetch keeps the last free count, badged.

@@ -541,16 +541,10 @@ export function eventsTonight(modules: readonly ModuleSnapshot[], now: number): 
 }
 
 export interface Nearest { title: string; distanceM: number | null }
-export interface WorksInKvart { state: SourceState; scope: 'kvart' | 'city'; count: number; nearest: Nearest | null }
+export interface WorksInKvart { state: SourceState; count: number; nearest: Nearest | null }
 
 /** The register's phase for works one can see on the street (komunalne.ts's closed vocabulary). */
 const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
-
-/** The stop's district slug once area D stamps it (ScreenStop.district, D6); a stop stored before the field existed has none. */
-function stopDistrict(stop: ScreenStop | null): string {
-  const district = (stop as (ScreenStop & { district?: unknown }) | null)?.district;
-  return typeof district === 'string' ? district : '';
-}
 
 function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
   if (!stop || item.geo?.type !== 'Point') return null;
@@ -558,21 +552,16 @@ function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
   return typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat) ? stopDistanceM({ lon, lat }, stop) : null;
 }
 
-/** Komunalne works in progress in the stop's district, nearest first by geometry (D18); the whole city before the worker stamps districts or when the stop has none. */
+/** Komunalne works in progress city-wide, nearest the stop first by geometry (D18, always city scope since the reader's own district choice was removed). */
 export function worksInKvart(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): WorksInKvart {
   const dogadanja = byModule(modules).dogadanja;
   const ongoing = (isLive(dogadanja) ? dogadanja.items : []).filter((item) =>
     dataText(item, 'source') === 'komunalne' && dataText(item, 'phase') === WORKS_ONGOING_PHASE && windowOf(item, now) !== 'expired');
-  // Kvart scope needs both halves of D6: a stop that knows its district and rows the worker has stamped. Live rows without a district
-  // prove the worker has not shipped them yet (a kvart count would be a false zero); with no row to judge by, the stop's district decides,
-  // so a district stop's band never flips its label while the source is down or loading.
-  const district = stopDistrict(stop);
-  const scope = district && (ongoing.length === 0 || ongoing.some((item) => dataText(item, 'district') !== '')) ? 'kvart' : 'city';
-  const counted = (scope === 'kvart' ? ongoing.filter((item) => dataText(item, 'district') === district) : ongoing)
+  const counted = ongoing
     .map((item) => ({ item, distanceM: pointDistance(item, stop) }))
     .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity) || 0);
   const first = counted[0];
-  return { state: sourceState(dogadanja), scope, count: counted.length, nearest: first ? { title: first.item.title, distanceM: first.distanceM } : null };
+  return { state: sourceState(dogadanja), count: counted.length, nearest: first ? { title: first.item.title, distanceM: first.distanceM } : null };
 }
 
 export interface ClosuresNearby { state: SourceState; count: number; nearest: Nearest | null }

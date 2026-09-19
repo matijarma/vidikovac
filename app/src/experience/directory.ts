@@ -98,7 +98,7 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   ];
   return createElementFromHTML(`<section class="layer ws ws-directory" id="layer-directory" data-layer="directory" data-reconcile aria-labelledby="layer-title-directory">
 <header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
-<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}"><li class="row row-dir" data-key="kvart"><button type="button" class="dir-item" data-action="kvart" data-testid="tab-kvart">${iconMarkup('map-pin', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('nav.kvart'))}</span><span class="row-sub">${escapeHtml(ctx.kvartLabel ?? i18n.t('kvart.wholeCity'))}</span></span>${chevron}</button></li>${items}${sessionRow}</ul>
+<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}${sessionRow}</ul>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }

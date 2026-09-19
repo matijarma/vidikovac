@@ -176,8 +176,6 @@ export function bucketOf(now: number, columns: readonly ColumnSpec[], at: string
 export interface ProduceOptions {
   columns: readonly ColumnSpec[];
   surface: 'phone' | 'desktop';
-  /** The kvart slug the shell selected; null is the whole city. */
-  kvart: string | null;
   /** `bucketOf` bound to this moment and these columns. */
   bucket: (at?: string, until?: string, allDay?: boolean) => Bucket | null;
 }
@@ -228,7 +226,7 @@ export interface TimebandModel {
 }
 
 /**
- * The kvart alert switches (plan T3.3, ctx.notify) surface a matching tile
+ * The reader's alert switches (plan T3.3, ctx.notify) surface a matching tile
  * with a stroke, never a push (PUSH stays off, D7): a delay past the
  * threshold on a saved line, the works band once its count clears zero, the
  * safety band gone urgent, or a waste tile (T3.2, `tile-waste`). Local
@@ -316,9 +314,7 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
   const frame = frameFor(now);
   const columns = columnsFor(i18n, now);
   const surface: 'phone' | 'desktop' = ctx.screen?.surface === 'phone' ? 'phone' : 'desktop';
-  // The shell's kvart selection (plan D6) reaches the context from area S; read structurally until its field lands, the whole city meanwhile.
-  const kvart = (ctx as LayerContext & { kvart?: string | null }).kvart ?? null;
-  const options: ProduceOptions = { columns, surface, kvart, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) };
+  const options: ProduceOptions = { columns, surface, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) };
 
   const lanes = new Map<Bucket, Lane>(columns.map((c) => [c.id, { col: c.id, tiles: [], foot: [], busy: false, skeletons: [] }]));
   const nextLane = lanes.get(columns[1]!.id)!;

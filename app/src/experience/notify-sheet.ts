@@ -1,4 +1,4 @@
-// The bell sheet (plan B.5, D7): the kvart alert switches as "istakni"
+// The bell sheet (plan B.5, D7): the reader's alert switches as "istakni"
 // highlights, never a push -- toggling one only lifts a matching tile's
 // state in this browser, said once in the note under the rows.
 import type { NotifyFlags, NotifyKey } from '../core/notify-store';

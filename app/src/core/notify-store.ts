@@ -1,4 +1,4 @@
-/** The kvart alert switches (spec §4.9's bell): purely local tile highlighting, never a
+/** The reader's alert switches (spec §4.9's bell): purely local tile highlighting, never a
  *  push — `PUSH` stays off (D7) and `notify.note` says so beside the switches. */
 export const NOTIFY_KEYS = ['delays', 'works', 'waste', 'dhmz'] as const;
 export type NotifyKey = (typeof NOTIFY_KEYS)[number];

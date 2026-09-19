@@ -123,8 +123,6 @@ export interface KioskStrings {
     quake: string;
     closure: string;
     zet: string;
-    kvart: string;
-    worksKvart: string;
     worksCity: string;
     works: PluralForms;
     today: string;
@@ -316,7 +314,7 @@ function build(code: SupportedLocale): KioskStrings {
       acts: forms('front', 'acts'),
     },
     say: {
-      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
       tonightMore: forms('say', 'tonightMore'),

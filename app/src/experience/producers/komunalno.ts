@@ -1,8 +1,7 @@
 // Komunalno's one works band (plan A.6): how many neighbourhood works the
-// City's own register lists as "u tijeku" right now, in the reader's kvart
-// when one is chosen, the whole city otherwise. The register has no end
-// dates (komunalne.ts:81), so this producer never emits a works-end time tile.
-import { districtLabel } from '../../kiosk/districts';
+// City's own register lists as "u tijeku" right now, city-wide. The register
+// has no end dates (komunalne.ts:81), so this producer never emits a
+// works-end time tile.
 import { filterBySource } from '../../layers/kultura';
 import { dataText } from '../../panels/panel';
 import { numberText } from '../text';
@@ -19,16 +18,10 @@ export const worksProducer: TileProducer = {
   produce(ctx, o: ProduceOptions): Tile[] {
     const { i18n } = ctx;
     const works = filterBySource(ctx.snapshots.dogadanja, ['komunalne']).filter((item) => dataText(item, 'phase') === WORKS_PHASE);
-    // The kvart scopes the count only once the register actually carries
-    // districts (T2.1); before that (or when the item has none), the city
-    // count stays honest rather than being labelled with a kvart it cannot
-    // verify — the same city-wide fallback D18 names for the kiosk.
-    const withDistrict = works.some((item) => dataText(item, 'district') !== '');
-    const scoped = o.kvart && withDistrict ? works.filter((item) => dataText(item, 'district') === o.kvart) : works;
-    const count = scoped.length;
+    const count = works.length;
     if (count === 0) return [];
     const label = i18n.t('tiles.works');
-    const title = o.kvart && withDistrict ? districtLabel(o.kvart) : i18n.t('tiles.worksCity');
+    const title = i18n.t('tiles.worksCity');
     return [{
       key: 'komunalno:works',
       domain: 'komunalno',
