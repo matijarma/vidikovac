@@ -83,6 +83,17 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(more).toBe(0);
   });
 
+  it('counts a line as an exception only from three minutes: two is the timetable breathing', () => {
+    const modules = [snap('zet-rt', [route('6', 120), route('11', -120), route('12', 180), route('13', -180)])];
+    const { rows, more } = exceptionRows(input(modules));
+    expect(rows.map((row) => row.key)).toEqual(['line:12', 'line:13']);
+    expect(rows.map((row) => row.title)).toEqual(['kasni 3 min', 'rani 3 min']);
+    // The ones under the threshold are not counted for the meta either.
+    expect(more).toBe(0);
+    expect(prometPanel(input(modules, { prometMode: 'exceptions', composition: 'compact' })).meta).toBe('');
+    expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po redu');
+  });
+
   it('orders late before early, trams before buses, then the largest first', () => {
     const modules = [snap('zet-rt', [
       route('109', 300), // a bus, late

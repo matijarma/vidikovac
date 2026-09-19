@@ -289,8 +289,10 @@ const PROMET_LINES = 8;
 /** A ZET notice is worth the panel while it is fresh. */
 const ZET_NOTICE_WINDOW_MS = 48 * 3_600_000;
 
-/** A route median inside this band is on time, not an exception a card names. */
-const ON_TIME_S = 15;
+/** Under three minutes a median is a timetable breathing, not an exception: a
+ *  card that names it says nothing a rider would change a plan over, and the
+ *  count beside it ("+N linija kasni") would be the whole network. */
+const EXCEPTION_MIN_S = 180;
 /** Past half an hour a median is an outlier the feed has not caught up with --
  *  a broken trip update, a vehicle parked mid-route -- and not an exception a
  *  rider can plan around. routeDelays has already dropped the impossible ones
@@ -330,7 +332,7 @@ export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: numb
   const { strings: s, i18n } = input;
   const delays = routeDelays(byModule(input.modules)['zet-rt']);
   const all = [...delays]
-    .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) > ON_TIME_S && Math.abs(seconds) <= EXCEPTION_MAX_S)
+    .filter(([, seconds]) => plausibleDelay(seconds) && Math.abs(seconds) >= EXCEPTION_MIN_S && Math.abs(seconds) <= EXCEPTION_MAX_S)
     .map(([routeId, seconds]) => ({ routeId, seconds, type: routeType(routeId) ?? -1 }))
     .sort((a, b) => Number(a.seconds < 0) - Number(b.seconds < 0) || a.type - b.type || Math.abs(b.seconds) - Math.abs(a.seconds));
   const cap = EXCEPTION_LINES[input.composition ?? 'wide'];

@@ -45,7 +45,7 @@ const MODULES: ModuleSnapshot[] = [
   snap('zet-rt', [
     item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
     item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0 } }),
-    item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 130, vehicles: 12 } }),
+    item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 240, vehicles: 12 } }),
   ]),
   snap('emsc', [item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } })]),
   snap('dogadanja', [item('dogadanja', 'skupstina:13', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T07:00:00Z', dateBasis: 'event', data: { source: 'skupstina', precision: 'time' } })]),
@@ -507,7 +507,7 @@ describe('invitation: the screen a passer-by sees', () => {
     const rows = [...promet.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-fr')];
     expect(rows.map((el) => el.dataset.key)).toEqual(['line:6']);
     expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
-    expect(text(q(rows[0]!, '.k-fr-title'))).toBe('kasni 2 min');
+    expect(text(q(rows[0]!, '.k-fr-title'))).toBe('kasni 4 min');
     expect(rows[0]!.dataset.tone).toBe('late');
     expect(text(q(promet, '.k-panel-meta'))).toBe('1 zatvaranje');
     expect(text(q(promet, '.k-panel-credit'))).toContain('ZET 14:31');
@@ -615,7 +615,7 @@ describe('invitation: the screen a passer-by sees', () => {
     const board = q(field, '[data-testid=kiosk-lines]')!;
     expect(board.classList.contains('k-lines--board')).toBe(true);
     expect(board.querySelectorAll('li.k-line')).toHaveLength(9);
-    expect(text(board)).toContain('kasni 2 min');
+    expect(text(board)).toContain('kasni 4 min');
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
     // The promet card does not repeat the board's rows (R-L2); the other cards stand.
     expect(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr')).toBeNull();
@@ -708,7 +708,7 @@ describe('paired: selection and ending', () => {
     await flush();
     const route = text(q(k.root, '[data-testid=k-selection]'));
     expect(route).toContain('Odabrano na telefonu');
-    expect(route).toContain('kasni 2 min');
+    expect(route).toContain('kasni 4 min');
     expect(route).toContain('12 vozila');
     k.view('u-pokretu', { kind: 'stop', id: '200_1' });
     await flush();
@@ -1271,7 +1271,7 @@ describe('the field, the column and the one map', () => {
     await flush();
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     const row = q(promet, 'li[data-key="line:6"]')!;
-    expect(text(q(row, '.k-fr-title'))).toBe('kasni 2 min');
+    expect(text(q(row, '.k-fr-title'))).toBe('kasni 4 min');
     // The same answer on the next poll: the same nodes stand (a reader mid-glance is never interrupted).
     k.poll();
     await flush();
