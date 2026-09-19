@@ -149,6 +149,17 @@ export async function buildSchedule(bytes: Uint8Array, operator: 'zet' | 'hz', n
   for(const part of parts)part.validUntil=new Date(validUntilMs).toISOString();
   return { parts, places };
 }
+/** How much scheduled past a board carries (WP5). A board of nothing but
+ *  future departures drops a trip the moment its scheduled minute passes,
+ *  which is exactly when a late tram is closest and the rider most wants it:
+ *  the join-rate probe found that "rolled off the board" was the largest
+ *  reason a tracked vehicle had no row to be matched to. Fifteen minutes is
+ *  longer than any delay ZET reports routinely, and short enough that the
+ *  twelve rows are still mostly future at every headway the network runs.
+ *  Which of these rows has actually gone is decided against live positions in
+ *  shared/city/arrivals.ts, not here: the schedule does not know. */
+export const DEPARTURES_PAST_WINDOW_MS = 15 * 60_000;
+
 export function departuresFrom(part: SchedulePart | null, operator: 'zet' | 'hz', stopId: string, now: number): DepartureBoard {
   const stop = part?.stops[stopId];
   const valid = part && now < Date.parse(part.validUntil) && now >= scheduleInstant(part.days[0], 0);
@@ -158,7 +169,7 @@ export function departuresFrom(part: SchedulePart | null, operator: 'zet' | 'hz'
     for (const [mask, seconds, tripId, routeId, routeName, headsign] of stop.runs) {
       for (let i = 0; i < part.days.length; i++) if (mask & (1 << i)) {
         const at = starts[i]+seconds*1000;
-        if (at >= now && at <= now + DAY_MS) departures.push({ operator, tripId, routeId, routeName, headsign, at: new Date(at).toISOString() });
+        if (at >= now - DEPARTURES_PAST_WINDOW_MS && at <= now + DAY_MS) departures.push({ operator, tripId, routeId, routeName, headsign, at: new Date(at).toISOString() });
       }
     }
   }

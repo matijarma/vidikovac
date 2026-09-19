@@ -51,6 +51,29 @@ describe('arrivalsAt', () => {
     expect(out.rows[0].minutes).toBe(0);
   });
 
+  // The board now carries a quarter of an hour of scheduled past
+  // (DEPARTURES_PAST_WINDOW_MS, worker/city/schedules.ts). Those rows are
+  // exactly the ones a rider still cares about, and exactly the ones only the
+  // live fleet can sort out: the schedule cannot tell a tram that is seven
+  // minutes late from one that left on time five minutes ago.
+  it('sorts the board’s scheduled past by what the fleet is doing: the late tram stays, the one that left goes', () => {
+    const boards = [board('100_1', [
+      // Scheduled five minutes ago, running seven minutes late: still two minutes away.
+      dep({ tripId: 'LATE', at: at(-5) }),
+      // Scheduled five minutes ago and on time: long gone.
+      dep({ tripId: 'LEFT', at: at(-5), routeId: '11', routeName: '11', headsign: 'Dubec' }),
+      // Scheduled five minutes ago with no vehicle on the wire at all: the
+      // schedule alone says it has gone, and nothing here says otherwise.
+      dep({ tripId: 'UNTRACKED', at: at(-5), routeId: '12', routeName: '12', headsign: 'Ljubljanica' }),
+    ])];
+    const vehicles = [
+      vehicle({ id: 'vehicle:1', tripId: 'LATE', delaySeconds: 420 }),
+      vehicle({ id: 'vehicle:2', tripId: 'LEFT', delaySeconds: 0 }),
+    ];
+    const out = arrivalsAt(boards, vehicles, NOW, { stopIds: ['100_1'] });
+    expect(out.rows.map((r) => [r.tripId, r.minutes, r.live])).toEqual([['LATE', 2, true]]);
+  });
+
   it('shows the clock time beyond the horizon: minutes is null, atMs still carries the moment', () => {
     const boards = [board('100_1', [dep({ tripId: 'T1', at: at(4) }), dep({ tripId: 'T2', at: at(10) }), dep({ tripId: 'T3', at: at(22) })])];
     const out = arrivalsAt(boards, [], NOW, { stopIds: ['100_1'] });
