@@ -434,9 +434,9 @@ export interface OverlayPalette {
  * dark); a bus and its route line the transit role (--tone-transit, #34465c
  * light, #b8c9dc dark); a closure the urgency role (#b72d39, #ff9aa5). The
  * tram network's own line is the new rail role, one neutral grey in both
- * faces (#8d99a8 light, #4a5768 dark), well under the plate it carries; BAJS
+ * faces (#8d99a8 light, #5b6a7c dark), well under the plate it carries; BAJS
  * bike-share is the new bike role, one teal in both faces (#178f7f), its
- * count badge read in bikeText (#0b1a2a). The stop fill and every halo take
+ * count badge read in bikeText (#08131f). The stop fill and every halo take
  * the canvas or its brighter paper-white sibling; the selection and the
  * screen stop pin take the ink and accent roles. One Zagreb blue and one ink
  * across the map, the badges (ui/signage.css) and the mode chips
@@ -448,7 +448,7 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   routeBus: '#34465c',
   rail: '#8d99a8',
   bike: '#178f7f',
-  bikeText: '#0b1a2a',
+  bikeText: '#08131f',
   figure: '#142334', // --palette-light-text-primary, the ink
   figureOpacity: 0.9,
   stopFill: '#f1f4f7',
@@ -468,9 +468,9 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   ...PILL_INKS.dark, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#84b5ff',
   routeBus: '#b8c9dc',
-  rail: '#4a5768',
+  rail: '#5b6a7c',
   bike: '#178f7f',
-  bikeText: '#0b1a2a',
+  bikeText: '#08131f',
   figure: '#b8c5d5', // --palette-dark-text-muted: the screen's own stop dots, a step under the paper the plates are cut from
   figureOpacity: 0.7,
   stopFill: '#111922',

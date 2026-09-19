@@ -67,21 +67,16 @@ describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.
 
 // BAJS bike-share: one teal in both faces (owner ruling, round F "kiosk
 // window"). The dot is a non-text graphic (WCAG 1.4.11's 3:1 floor); the
-// count badge painted over it is text and wants the full 4.5:1, but the
-// mandated pair (#178f7f / #0b1a2a) measures 4.41:1 -- just short. Flagged
-// for owner review rather than adjusted, since the hexes are pinned by the
-// plan, not chosen here.
+// count badge painted over it is text and clears the full AA text minimum.
 describe.each(['dark', 'light'] as const)('BAJS bike-share teal (WP1)', (theme) => {
   it(`bike reads as a graphic at >= 3:1 on the ${theme} canvas`, () => {
     const ratio = contrastRatio(palette(theme, 'bike'), palette(theme, 'canvas'));
     expect(Number(ratio.toFixed(2)), `${theme} bike on canvas = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
   });
 });
-it('the count badge ink on the bike teal falls just short of 4.5:1 in both faces, still well clear of the 3:1 graphic floor', () => {
+it('the count badge ink reads at 4.5:1 on the bike teal, in both faces', () => {
   for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
-    const ratio = contrastRatio(p.bikeText, p.bike);
-    expect(Number(ratio.toFixed(2))).toBe(4.41);
-    expect(ratio).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(p.bikeText, p.bike)).toBeGreaterThanOrEqual(AA_TEXT);
   }
 });
 

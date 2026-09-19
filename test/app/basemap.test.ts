@@ -150,7 +150,7 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_LIGHT.routeBus).toBe('#34465c');
     expect(OVERLAY_LIGHT.rail).toBe('#8d99a8');
     expect(OVERLAY_LIGHT.bike).toBe('#178f7f');
-    expect(OVERLAY_LIGHT.bikeText).toBe('#0b1a2a');
+    expect(OVERLAY_LIGHT.bikeText).toBe('#08131f');
     expect(OVERLAY_LIGHT.closure).toBe('#b72d39');
     expect(OVERLAY_LIGHT.stopFill).toBe('#f1f4f7');
     expect(OVERLAY_LIGHT.label).toBe('#142334');
@@ -163,9 +163,9 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_DARK.busText).toBe('#102236');
     expect(OVERLAY_DARK.routeTram).toBe('#84b5ff');
     expect(OVERLAY_DARK.routeBus).toBe('#b8c9dc');
-    expect(OVERLAY_DARK.rail).toBe('#4a5768');
+    expect(OVERLAY_DARK.rail).toBe('#5b6a7c');
     expect(OVERLAY_DARK.bike).toBe('#178f7f');
-    expect(OVERLAY_DARK.bikeText).toBe('#0b1a2a');
+    expect(OVERLAY_DARK.bikeText).toBe('#08131f');
     expect(OVERLAY_DARK.closure).toBe('#ff9aa5');
     expect(OVERLAY_DARK.label).toBe('#f1f4f7');
     expect(OVERLAY_DARK.halo).toBe('#111922');
@@ -367,15 +367,12 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       expect(seenMinor, `${theme} minor`).toBeGreaterThan(1.15);
       expect(seenMajor, `${theme} major`).toBeGreaterThan(seenMinor);
       expect(seenMajor, `${theme} major`).toBeGreaterThan(theme === 'dark' ? 2 : 1.5);
-      // Texture, never lost in it: the tram network still reads over the
-      // ordinary hairline streets. The new rail grey is deliberately quieter
-      // than the old bright figure (owner ruling, round F "kiosk window"),
-      // so by night it no longer out-contrasts the boldest arterial ink at
-      // the plan's own opacity (seenMajor 2.17:1 vs rail 1.99:1) -- flagged
-      // for owner review; it still clears the minor-street baseline in both faces.
+      // Texture, never the figure: the tram network's own rail grey (owner
+      // ruling, round F "kiosk window") still sits above the boldest street
+      // ink, in both faces, at the plan's own opacity.
       const overlay = theme === 'dark' ? OVERLAY_DARK : OVERLAY_LIGHT;
       const seenRail = contrast(over(overlay.rail, ground, 0.8), ground);
-      expect(seenRail, `${theme} rail`).toBeGreaterThan(seenMinor);
+      expect(seenRail, `${theme} rail`).toBeGreaterThanOrEqual(seenMajor);
     }
   });
 
