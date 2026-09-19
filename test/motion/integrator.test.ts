@@ -8,7 +8,7 @@ import type { TimesProvider } from '../../shared/motion/times';
 import { lastFix, newTrack, type Track } from '../../shared/motion/track';
 import { createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
 import { simulate } from './simulator';
-import { corridorSpec, syntheticNetwork } from './synthetic-network';
+import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
 
 // The client side of the engine (B6, R-TE10): the twin's plans arrive as
 // wire fixes every tick, and the integrator turns them into what is drawn
@@ -382,4 +382,37 @@ describe('the integrator never draws a tram backwards, nor two trams across each
   }, 30_000);
 
 
+
+  it('re-seeds onto a loop at the arc nearest the one it was drawn at, not at the nearest point on the ground', () => {
+    // A stem from (0,0) to (1000,0) and a loop that runs six metres north of
+    // it, away to (0,300) and back four metres south of it: a mark at (990,0)
+    // is nearer the loop's return leg (arc 3588) than its outbound one (arc
+    // 990), and the two are a whole circuit apart.
+    const spec: SynthSpec = {
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(0, 1000, 6) },
+        { from: 3, to: 4, pts: [{ x: 1000, y: 6 }, { x: 1000, y: 300 }, { x: 0, y: 300 }, { x: 0, y: -4 }] },
+        { from: 4, to: 5, pts: straight(0, 1000, -4) },
+      ],
+      routes: [
+        { id: 'S', type: 0, paths: [{ id: 'stem', direction: 0, edges: [0] }] },
+        { id: 'L', type: 0, paths: [{ id: 'loop', direction: 0, edges: [1, 2, 3] }] },
+      ],
+      stops: [],
+    };
+    const net = syntheticNetwork(spec);
+    const loopIdx = net.paths.findIndex((p) => p.id === 'loop');
+    expect(net.projectOntoPath(loopIdx, { x: 990, y: 0 }).s).toBeGreaterThan(3000); // the global nearest point is the return leg
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 990), 8)], T0);
+    expect(integrator.step(T0)[0].s).toBeCloseTo(990, 6);
+    // The trip changes and the vehicle is now planned along the loop.
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'loop', still(t1, 1000), 8)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.path).toBe(loopIdx);
+    expect(after.s).toBeGreaterThan(900);
+    expect(after.s).toBeLessThan(1100);
+  });
 });

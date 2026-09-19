@@ -30,10 +30,11 @@
 
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 import { HEADWAY_M } from '../../../shared/motion/laws';
+import { ARC_PRIOR_WEIGHT, BACK_WINDOW_M, OFF_GRAPH_M, REACH_SLACK_M } from '../../../shared/motion/match';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { edgeIndexAt, mapArc, onSharedRails } from '../../../shared/motion/order';
 import { CONFIDENCE_FREE_CAP, EVICT_S, silenceDecay } from '../../../shared/motion/plan';
-import { at, project, tangent } from '../../../shared/motion/polyline';
+import { at, projectionsWithin, tangent } from '../../../shared/motion/polyline';
 
 /** A plan as the wire decoder hands it over: knot times are absolute epoch
  *  milliseconds (fixes.ts resolves the wire's header-relative seconds), the
@@ -150,6 +151,13 @@ const HEADING_CONFIDENCE_THRESHOLD = 0.3;
  *  along the rails. */
 const ROUTE_TYPE_TRAM = 0;
 const ROUTE_TYPE_UNKNOWN = -1;
+/** The window a re-seed onto a new geometry searches, around the arc the new
+ *  plan puts the vehicle at: the mark may be a poll's worth of catch-up
+ *  behind that plan (CATCHUP_GAP_M) plus the platform scatter the matcher
+ *  allows itself (BACK_WINDOW_M), and never far ahead of it, since it only
+ *  ever converges forwards onto it (REACH_SLACK_M). */
+const RESEED_BACK_M = BACK_WINDOW_M + CATCHUP_GAP_M;
+const RESEED_AHEAD_M = REACH_SLACK_M;
 
 /** The most the drawn arc may move in one second toward a target `gap`
  *  metres away (R-F1a, R-F9), exported for the tests that bound every frame. */
@@ -340,7 +348,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
         // drawn, so the change of mind is recorded, never shown as a jump.
-        v.s = project(geom!.pts, geom!.cum, v.p).s;
+        v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s);
         v.lastSnapAt = now;
       }
       v.geom = geom;
@@ -350,6 +358,45 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       v.targetP = target.p;
     }
     return v;
+  }
+
+  /**
+   * Where a mark's arc lands when its geometry changes under it (E1): the
+   * same arc mapped exactly when the new path runs the edge the mark is on,
+   * and otherwise the nearest point on the new geometry within a WINDOW
+   * around where the new plan puts the vehicle now. What this replaces is a
+   * global nearest point, and the reason is the reason the matcher refuses
+   * one too (R-TE45): on a loop or a balloon the two rails pass within a few
+   * metres of each other and a whole circuit apart along the path, so the
+   * nearest point on the ground is regularly the wrong one, and a mark that
+   * lands on it is a tram drawn a kilometre from where it is.
+   */
+  function reseedArc(from: Geometry | null, to: Geometry, s: number, p: XY, expected: number): number {
+    if (graph && from && from.path !== null && to.path !== null) {
+      const mapped = mapArc(graph.paths[from.path], s, graph.paths[to.path]);
+      if (mapped !== null) return mapped;
+    }
+    const sFrom = expected - RESEED_BACK_M;
+    const sTo = expected + RESEED_AHEAD_M;
+    const window =
+      graph && to.path !== null
+        ? graph.projectionsOntoPath(to.path, p, sFrom, sTo, OFF_GRAPH_M)
+        : projectionsWithin(to.pts, to.cum, p, sFrom, sTo, OFF_GRAPH_M).map((proj) => ({ s: proj.s, d: proj.d }));
+    // Nothing on the new geometry within the window leaves the plan's own
+    // arc, which is the twin's matched position: still evidence, and still
+    // not a point picked by centimetres of scatter half a circuit away.
+    let best = expected;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const candidate of window) {
+      // The matcher's own score (match.ts): the residual, plus what an arc
+      // costs for lying away from where the vehicle is expected to be.
+      const score = candidate.d + ARC_PRIOR_WEIGHT * Math.abs(candidate.s - expected);
+      if (score < bestScore) {
+        best = candidate.s;
+        bestScore = score;
+      }
+    }
+    return best;
   }
 
   /** Exponential convergence of the drawn arc onto the target: forwards
