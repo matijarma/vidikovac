@@ -116,9 +116,14 @@ describe('TwinDO keeps the F11 tables across an eviction', () => {
     const tables = await stub.tables();
     expect(tables.overrides).toBe(0);
     expect(tables.overridesError).toContain('defaultSec');
-    // And the twin is still a twin: the tram in the frame is planned.
+    // And the twin is still a twin: the tram in the frame is planned on the
+    // rails, off a tick that loaded both artefacts and reported a good frame.
     expect(payload.items.some((item) => item.id.startsWith('vehicle:') && item.motion !== null)).toBe(true);
-    expect((await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest()))?.networkLoaded ?? true).toBe(true);
+    expect(await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({
+      outcome: 'ok',
+      networkLoaded: true,
+      indexLoaded: true,
+    });
   });
 
   it('reports no error for a file that simply is not there', async () => {
