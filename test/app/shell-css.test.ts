@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 // The /d/ shell's grid and status line, read as text: the phone shell is a
 // sticky 52 px status line, banners in flow, one workspace and a fixed tab bar;
-// the desktop spans the same line over the workspace and the kvart aside (no
+// the desktop spans the same line over one full workspace column (no
 // rail, D10). Literals pinned here are the ones the geometry gates and the
-// sibling tasks (tab bar, Promet stage, Kvart panel) build on.
+// sibling tasks (tab bar, Promet stage) build on.
 const ui = (name: string): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', name), 'utf8');
 const CSS = ui('dashboard.css');
 const BASE_CSS = ui('base.css');
@@ -92,7 +92,7 @@ describe('dashboard.css phone shell', () => {
     expect(head).toContain('min-block-size: var(--ki-top)');
     expect(head).toContain('padding-block-start: env(safe-area-inset-top, 0px)');
     expect(head).toContain('background: var(--tone-surface-1)');
-    // Four keyed controls on the phone: wordmark, the kvart control taking the room, session, safety.
+    // Three keyed controls on the phone: wordmark, session, safety, with a flexible gap pushing them right.
     expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     expect(rule(".ki[data-loading='true'] .ki-head::after")).toContain('opacity: 1');
@@ -126,9 +126,8 @@ describe('dashboard.css phone shell', () => {
     for (const [, property, twin] of fallbacks) expect(twin).toBe(property);
     expect(CSS).not.toContain('!important');
   });
-  it('the phone FAB reserves its room: with data-fab main pads by the tab bar plus 5rem, and the kvart aside has no box on the phone', () => {
+  it('the phone FAB reserves its room: with data-fab main pads by the tab bar plus 5rem', () => {
     expect(rule(".ki[data-fab='1'] .ki-main")).toContain('padding-block-end: calc(var(--ki-tabs) + 5rem)');
-    expect(rule('.ki-kvart')).toContain('display: none');
   });
 });
 
@@ -151,24 +150,6 @@ describe('dashboard.css header controls', () => {
     expect(safety).toContain('justify-content: center');
     expect(rule('.ki-safety .ki-nav-label')).toBe('');
     expect(CSS).not.toContain('@media (max-width: 22.4375rem)');
-  });
-  it('the kvart control is a native select at opacity 0 over a 44 px ink face, so the picker measured is the real control (B.5)', () => {
-    const pick = rule('.ki-kvart-pick');
-    expect(pick).toContain('position: relative');
-    expect(pick).toContain('min-block-size: var(--target)');
-    expect(pick).toContain('min-inline-size: var(--target)');
-    const face = rule('.ki-kvart-face');
-    expect(face).toContain('min-block-size: var(--target)');
-    expect(face).toContain('background: transparent');
-    expect(face).toContain('color: var(--tone-text-muted)');
-    expect(face).toContain('font-size: var(--type-control)');
-    expect(rule('.ki-kvart-name')).toContain('text-overflow: ellipsis');
-    const select = rule('.ki-kvart-select');
-    expect(select).toContain('position: absolute; inset: 0');
-    expect(select).toContain('opacity: 0');
-    expect(select).toContain('touch-action: manipulation');
-    // Focus on the invisible select paints the 2 px accent ring on the face it covers.
-    expect(rule('.ki-kvart-pick:has(.ki-kvart-select:focus-visible) .ki-kvart-face')).toContain('outline: 2px solid var(--tone-action-brand)');
   });
   it('the wordmark keeps its size and paints only the question mark in the brand tone', () => {
     expect(rule('.ki-wordmark-text')).toContain('font-size: var(--type-body)');
@@ -201,10 +182,7 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(ki).toContain('grid-template-columns: minmax(0, 1fr)');
     expect(ki).toContain('grid-template-rows: auto auto auto 1fr');
     expect(ki).toContain("grid-template-areas: 'status' 'presentation' 'banners' 'main'");
-    const aside = rule('.ki-kvart', DESKTOP);
-    expect(aside).toContain('display: none');
     expect(rule('.ki-domains', DESKTOP)).toContain('grid-column: 1 / -1');
-    expect(rule('.ki-kvart[hidden]', DESKTOP)).toContain('display: none');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
     expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
   });
@@ -213,9 +191,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
     expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('keeps the status line a real box with eight columns, the search taking the room; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+  it('keeps the status line a real box with six columns, the search taking the room; the tab bar and the FAB leave; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto');
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto');
     expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
     expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--type-title)');
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
@@ -250,9 +228,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
     expect(rule(".ki-bell[data-active]:not([data-active='0'])::after", DESKTOP)).toContain('background: var(--tone-action-brand)');
   });
-  it('pins the aside width at 18.75rem, a rem track so text zoom widens it with its rows; the workspace column shrinks to zero', () => {
-    expect(rule('.ki')).toContain('--ki-kvart: 18.75rem;');
+  it('never reintroduces a side rail: no aside width variable stands', () => {
     expect(CSS).not.toContain('--ki-side');
+    expect(CSS).not.toContain('--ki-kvart');
   });
 });
 
@@ -288,12 +266,11 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     expect(rule('.ki-head')).toContain('container-type: inline-size; container-name: header;');
     expect(rule('.ki-tabbar')).toContain('container-type: inline-size; container-name: tabs;');
   });
-  it('under 18rem the header drops the ring and the kvart control (the Kvart tab carries the same selector), and the tab bar hides every label but the current one', () => {
+  it('under 18rem the header drops the ring, and the tab bar hides every label but the current one', () => {
     expect(CSS).toContain('@container header (max-width: 18rem)');
     expect(CSS).toContain('@container tabs (max-width: 18rem)');
     const header = /@container header \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-session .g-ring', header)).toContain('display: none');
-    expect(rule('.ki-kvart-pick', header)).toContain('display: none');
     expect(rule('.ki-wordmark-text', header)).toContain('font-size: 0');
     expect(rule('.ki-wordmark-mark', header)).toContain('font-size: var(--type-title)');
     const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
@@ -352,7 +329,7 @@ describe('touch: the main scrolls vertically only; controls get the browser out 
     expect(rule('.ki-main')).toContain('touch-action: pan-y');
   });
   it('every S-owned control is touch-action: manipulation (no 300 ms tap delay)', () => {
-    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab', '.ki-kvart-select', '.ki-fab']) expect(rule(selector)).toContain('touch-action: manipulation');
+    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab', '.ki-fab']) expect(rule(selector)).toContain('touch-action: manipulation');
     for (const selector of ['.ki-more', '.ki-search']) expect(rule(selector, DESKTOP)).toContain('touch-action: manipulation');
     for (const selector of ['.btn, .btn-ghost, .btn-quiet', '.chip']) expect(rule(selector, BASE_CSS)).toContain('touch-action: manipulation');
     for (const selector of ['.row-button', '.route-link', '.dir-item', '.link-arrow, .link-ext', '.source-link']) {
@@ -459,7 +436,7 @@ describe('layers.css time band', () => {
     expect(hover).toContain(".tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }");
     expect(hover).toContain('.tb-more:hover, .tb-weather:hover');
   });
-  it('in a workspace of 60rem or less (a 1280 laptop beside the kvart aside, or a desk at 125 % text) keeps three lanes: sutra and tjedan wait in Događanja', () => {
+  it('in a workspace of 60rem or less (a narrower window, or a desk at 125 % text) keeps three lanes: sutra and tjedan wait in Događanja', () => {
     const middling = /@container ws \(max-width: 60rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(rule('.tb-heads, .tb-lanes, .tb-axis', middling)).toContain('grid-template-columns: 2fr 1fr 1fr');
     expect(middling).toContain(".tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],");

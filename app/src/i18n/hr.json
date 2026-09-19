@@ -72,7 +72,6 @@
     "kultura": "Događanja"
   },
   "nav": {
-    "kvart": "Kvart",
     "label": "Domene",
     "more": "Još",
     "moreTitle": "Još",
@@ -159,9 +158,6 @@
   "tiles": {
     "line": "Linija {line}",
     "closures": "Zatvaranja",
-    "inKvart_one": "{count} u kvartu",
-    "inKvart_few": "{count} u kvartu",
-    "inKvart_other": "{count} u kvartu",
     "works": "Radovi",
     "worksCity": "Radovi u gradu",
     "worksNow_one": "{count} rad u tijeku",
@@ -474,33 +470,15 @@
     "lightNoResults": "Nijedna linija u pokretu ne odgovara „{query}”."
   },
   "kvart": {
-    "select": "Gradska četvrt",
-    "screenOption": "Stanica zaslona · {stop}",
     "wholeCity": "Cijeli grad",
-    "map": "Karta",
-    "mapLabel": "Karta kvarta {kvart}",
-    "works_one": "{count} rad u tijeku",
-    "works_few": "{count} rada u tijeku",
-    "works_other": "{count} radova u tijeku",
-    "nothingNow": "Trenutačno nema radova ni zatvaranja u kvartu.",
-    "nearestClosure": "najbliže {street}",
-    "saved": "Spremljeno",
-    "savedEmpty": "Spremi liniju ili stanicu iz Prometa; ovdje su zatim uvijek pri ruci.",
-    "addStop": "+ stanica",
-    "removeRoute": "Ukloni liniju {id}",
-    "removeStop": "Ukloni stanicu {name}",
     "saveRoute": "Spremi liniju {id}",
     "saveStop": "Spremi stanicu {name}",
     "unsave": "Ukloni iz spremljenog",
-    "walkTitle": "Pješice od stanice zaslona",
-    "walkLabel": "Pješice od stanice zaslona, procjena ravnom linijom",
     "walkMinutes": "{minutes} min",
-    "notify": "Obavijesti za kvart",
     "notifyOn_one": "{count} uključena",
     "notifyOn_few": "{count} uključene",
     "notifyOn_other": "{count} uključenih",
-    "notifyOff": "isključene",
-    "localNote": "Spremljeno i obavijesti ostaju samo u ovom pregledniku, bez računa."
+    "notifyOff": "isključene"
   },
   "cast": {
     "toScreen": "Prebaci na zaslon",
@@ -517,7 +495,7 @@
   "notify": {
     "title": "Obavijesti",
     "delays": "Kašnjenja dulja od 5 min na spremljenim linijama",
-    "works": "Radovi u kvartu",
+    "works": "Radovi u gradu",
     "waste": "Odvoz sutra",
     "dhmz": "Upozorenja DHMZ-a",
     "note": "Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.",
@@ -932,8 +910,6 @@
       "quake": "Potres",
       "closure": "Zatvoreno",
       "zet": "ZET javlja",
-      "kvart": "Kvart",
-      "worksKvart": "Radovi u kvartu",
       "worksCity": "Radovi u gradu",
       "works_one": "{count} rad u tijeku",
       "works_few": "{count} rada u tijeku",

@@ -12,7 +12,7 @@
 //            kvart news (Skupština, Grad Zagreb)
 //   promet   the stop's lines with their state words and vehicles near, the
 //            last departures from 20:00, ZET's newest notice
-//   around   closures within 1.5 km by distance, works under way in the kvart
+//   around   closures within 1.5 km by distance, works under way in the city
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { LastRunSnapshot } from '../core/lastrun';
@@ -339,7 +339,7 @@ export function aroundPanel(input: FrontInput): FrontPanel {
   }
   const works = worksInKvart(input.modules, stop, now);
   if (works.count > 0 && (works.state === 'live' || works.state === 'stale')) {
-    const label = works.scope === 'kvart' ? s.say.worksKvart : s.say.worksCity;
+    const label = s.say.worksCity;
     rows.push({
       key: 'works',
       lead: s.front.worksLead,

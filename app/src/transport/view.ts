@@ -20,7 +20,7 @@ import type { CastState } from '../core/contracts';
 import type { SavedRef } from '../core/saved-store';
 import { lineBadge, signRow } from '../experience/blocks';
 import { delayTone, type DelayTone } from '../experience/delay';
-import { castReasonText } from '../experience/kvart';
+import { castReasonText } from '../experience/presentation';
 import { zagrebDateTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import type { RouteSummaryRow } from '../layers/route-summary';
@@ -332,8 +332,7 @@ function lineFocusSwitch(i18n: I18n, on: boolean): string {
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });
 
 /** The save toggle (route and stop details only): a filled star once saved, "Ukloni iz spremljenog" generic
- *  once it is (the id already named it on the way in); the panel's own saved chips (kvart.ts) still say
- *  which one by name when removing from there. */
+ *  once it is (the id already named it on the way in). */
 function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
   const label = save.on
     ? i18n.t('kvart.unsave')
@@ -341,8 +340,8 @@ function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
   return `<button type="button" class="btn-quiet icon-btn t-save" data-action="${save.on ? 'unsave' : 'save'}" data-kind="${attr(save.kind)}" data-id="${attr(save.id)}" aria-pressed="${save.on ? 'true' : 'false'}" aria-label="${attr(label)}">${iconMarkup('star')}</button>`;
 }
 
-/** The ghost cast button every detail carries (D5): disabled with its reason (kvart.ts's own castReasonText,
- *  the same sentence the Kvart panel's primary and the FAB read) when "Na zaslon" cannot fire. */
+/** The ghost cast button every detail carries (D5): disabled with its reason (presentation.ts's own
+ *  castReasonText, the same sentence the FAB reads) when "Na zaslon" cannot fire. */
 function castButton(i18n: I18n, cast: CastState | undefined): string {
   const can = cast?.can ?? false;
   const disabled = can ? '' : ` aria-disabled="true" title="${attr(castReasonText(i18n, cast))}"`;

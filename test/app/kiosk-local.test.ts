@@ -457,15 +457,13 @@ describe('readers moved from scenes.ts (P3 deletes it): eventsTonight, worksInKv
     expect(eventsTonight(withModule(TONIGHT_MODULES, 'dogadanja', { status: 'down' }), NOW)).toEqual([]);
   });
 
-  it('worksInKvart (D18) counts the district’s ongoing works nearest first, falls back to the whole city without a district match, and never flips scope on an outage', () => {
+  it('worksInKvart (D18) counts every ongoing work city-wide, nearest the stop first (D6 is removed: no district scoping)', () => {
     const works = worksInKvart(READER_MODULES, KVART_STOP, NOW);
-    expect(works).toMatchObject({ state: 'live', scope: 'kvart', count: 1 });
+    expect(works).toMatchObject({ state: 'live', count: 2 });
     expect(works.nearest).toMatchObject({ title: 'Ilica 120' });
     const city = worksInKvart(READER_MODULES, STOP, NOW);
-    expect(city).toMatchObject({ scope: 'city', count: 2 });
+    expect(city).toMatchObject({ count: 2 });
     expect(city.nearest).toMatchObject({ title: 'Ilica 120' });
-    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), KVART_STOP, NOW).scope).toBe('kvart');
-    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), STOP, NOW).scope).toBe('city');
   });
 
   it('closuresNearby counts only what lies within the nearby radius and gives no nearest beyond it', () => {

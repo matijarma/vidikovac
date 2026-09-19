@@ -60,6 +60,6 @@ protection boundaries, not entrances. New sources retain their attribution,
 timestamps and uncertainty; missing licence metadata is recorded without
 inventing a licence or a new `/open` export.
 
-On 17 September 2026 the owner approved the whole-product redesign in `docs/redesign-2026-09-17.md`: a light-led high-contrast system; public overview plus explicit presentation; confirmed takeover; all six domains directly accessible on desktop; Sada, Promet, Događanja and Još on the phone. Kvart is a workspace reached through location and Još.
+On 17 September 2026 the owner approved the whole-product redesign in `docs/redesign-2026-09-17.md`: a light-led high-contrast system; public overview plus explicit presentation; confirmed takeover; all six domains directly accessible on desktop; Sada, Promet, Događanja and Još on the phone. Kvart, once a workspace reached through location and Još, is removed everywhere; the wire literal `'kvart'` is still accepted from an older phone and renders as the plain Sada overview.
 
 This approval supersedes earlier pixel layouts, fixed map spans, header-only weather, compulsory time-band columns and automatic paired layouts. It does not authorize changing the submitted documents in `docs/prijava` or `app/prijava`. Review real rendered interfaces, not only tests. Keep heavy verification work sequential to conserve the owner's quota.

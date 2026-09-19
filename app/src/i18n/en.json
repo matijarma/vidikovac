@@ -71,7 +71,6 @@
     "kultura": "Events"
   },
   "nav": {
-    "kvart": "District",
     "label": "Domains",
     "more": "More",
     "moreTitle": "More",
@@ -151,8 +150,6 @@
   "tiles": {
     "line": "Line {line}",
     "closures": "Closures",
-    "inKvart_one": "{count} in the district",
-    "inKvart_other": "{count} in the district",
     "works": "Works",
     "worksCity": "Works across the city",
     "worksNow_one": "{count} work under way",
@@ -457,31 +454,14 @@
     "lightNoResults": "No route running now matches “{query}”."
   },
   "kvart": {
-    "select": "City district",
-    "screenOption": "Screen's stop · {stop}",
     "wholeCity": "Whole city",
-    "map": "Map",
-    "mapLabel": "Map of {kvart}",
-    "works_one": "{count} work underway",
-    "works_other": "{count} works underway",
-    "nothingNow": "No works or closures in the district right now.",
-    "nearestClosure": "nearest {street}",
-    "saved": "Saved",
-    "savedEmpty": "Save a line or a stop from Transit; they are then always at hand here.",
-    "addStop": "+ stop",
-    "removeRoute": "Remove line {id}",
-    "removeStop": "Remove stop {name}",
     "saveRoute": "Save line {id}",
     "saveStop": "Save stop {name}",
     "unsave": "Remove from saved",
-    "walkTitle": "On foot from the screen's stop",
-    "walkLabel": "On foot from the screen's stop, straight-line estimate",
     "walkMinutes": "{minutes} min",
-    "notify": "Alerts for the district",
     "notifyOn_one": "{count} on",
     "notifyOn_other": "{count} on",
-    "notifyOff": "off",
-    "localNote": "Saved items and alerts stay in this browser only, no account."
+    "notifyOff": "off"
   },
   "cast": {
     "toScreen": "Send to the screen",
@@ -498,7 +478,7 @@
   "notify": {
     "title": "Alerts",
     "delays": "Delays over 5 min on saved lines",
-    "works": "Works in the district",
+    "works": "Works in the city",
     "waste": "Waste pickup tomorrow",
     "dhmz": "DHMZ warnings",
     "note": "Nothing is sent: a switched-on alert only highlights tiles in this browser.",
@@ -904,8 +884,6 @@
       "quake": "Earthquake",
       "closure": "Closed",
       "zet": "ZET notice",
-      "kvart": "Neighbourhood",
-      "worksKvart": "Works in the district",
       "worksCity": "Works in the city",
       "works_one": "{count} project under way",
       "works_other": "{count} projects under way",

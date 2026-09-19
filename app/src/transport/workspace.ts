@@ -36,7 +36,6 @@ import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
 import { locatedEvents, type ActivityWindow } from '../../../shared/city/events';
 import { matchStreet } from '../../../shared/city/geo';
 import { reconcile } from '../ui/dom/reconcile';
-import { districtBySlug } from '../kiosk/districts';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehicleNextStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
 import { searchTransport, type StopGroup } from './search';
@@ -265,7 +264,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let cityCategory = '';
   let activityWindow: ActivityWindow = 'week';
   let cityCenter: {lon:number;lat:number}|null = null;
-  let cityDistrict: string|null|undefined;
+  /** The screen's stop centres the camera once, the first render only. */
+  let stopCentered = false;
   let cityLimit = 20;
   let cityData: Discovery|null = null;
   let cityFilterKey = '';
@@ -1105,13 +1105,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       disposalRegistered=true;c.onDispose(()=>{disposed=true;sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
     }
     if (!c.city) cityGroup = 'transport'; // legacy hosts retain their transport-only view
-    const pickedDistrict=c.kvartChoice&&c.kvartChoice!=='screen'?c.kvart:null;
-    if(pickedDistrict!==cityDistrict){
-      cityDistrict=pickedDistrict;
-      const district=districtBySlug(pickedDistrict);
-      cityCenter=district?{lon:district.seat.lon,lat:district.seat.lat}:null;
-      if(cityCenter){camera={center:[cityCenter.lon,cityCenter.lat],zoom:13};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
-      else if(c.screen?.stop){camera={center:[c.screen.stop.lon,c.screen.stop.lat],zoom:14};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
+    if(!stopCentered){
+      stopCentered=true;
+      if(c.screen?.stop){camera={center:[c.screen.stop.lon,c.screen.stop.lat],zoom:14};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
     }
     if(c.city&&!streetRequested&&!c.lightweight){streetRequested=true;c.ensureCity?.(['streets','settlements']);}
     const filterKey=JSON.stringify(c.view?.filters??{});

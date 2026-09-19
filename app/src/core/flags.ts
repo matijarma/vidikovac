@@ -9,7 +9,7 @@ export const FLAGS = Object.freeze({
   FEED_BIKES: false,
   /** The nearest garage's free places: as above. */
   FEED_PARKING: false,
-  /** The kvart's next waste pickup: as above. */
+  /** The city's next waste pickup: as above. */
   FEED_WASTE: false,
   /** The last departure from the screen's stop, from GTFS static on disk (scripts/gtfs-lastrun.mjs, core/lastrun.ts): on since T3.1. */
   FEED_LASTRUN: true,

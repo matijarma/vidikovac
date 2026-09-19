@@ -109,8 +109,8 @@ Refreshes preserve focus and scroll. Remote presentation makes the map inert.
 A deliberate presentation gives the public subject a distance-readable
 layout, not a cropped phone screen. Route/stop selections have geography
 and a separate subject board. Events and civic selections lead with their
-title and source-supported details. Kvart means the selected public
-district, not the private layer hidden underneath it.
+title and source-supported details. A legacy phone that still sends the
+retired `kvart` layer renders as the plain Sada overview, never a district.
 
 Safety, the invitation and return-to-overview action remain available.
 Private browsing never automatically changes the presentation. The
@@ -118,10 +118,10 @@ controller distinguishes a pending request from a kiosk-confirmed render.
 
 ### Phone and desktop
 
-Phone destinations are Sada, Karta, Događanja and Još. Kvart is reached
-through location and Još. The current destination retains a readable
-label at text zoom. Desktop exposes all six domains and Kvart directly.
-Do not reintroduce the permanent competing neighborhood-map sidebar.
+Phone destinations are Sada, Karta, Događanja and Još. The current
+destination retains a readable label at text zoom. Desktop exposes all
+six domains directly. Do not reintroduce the permanent competing
+neighborhood-map sidebar or a Kvart workspace.
 
 Sada has two reading regions: local facts now, and what comes next. Names
 and destinations are readable; weather is useful in the first view.

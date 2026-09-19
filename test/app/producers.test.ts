@@ -38,7 +38,7 @@ function ctx(over: Partial<LayerContext> = {}): LayerContext {
 
 function options(over: Partial<ProduceOptions> = {}, now = NOW): ProduceOptions {
   const columns = columnsFor(hr, now);
-  return { columns, surface: 'desktop', kvart: null, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay), ...over };
+  return { columns, surface: 'desktop', bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay), ...over };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,18 +130,14 @@ describe('closuresProducer', () => {
     expect(tiles[0]!.value).toBe(`do ${zagrebTime('2026-09-11T20:00:00Z')}`);
   });
 
-  it('with a kvart and stamped closures, names the nearest closed street in the kvart with its end, and counts the kvart in the label', () => {
+  it('city-wide with several stamped closures, counts them rather than naming one', () => {
     const prometnice = base('prometnice', [
       { id: 'far', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Ilica 200', at: '2026-09-01T07:00:00Z', geo: { type: 'LineString', coordinates: [[15.93, 45.81], [15.94, 45.81]] }, data: { district: 'donji-grad' } },
       { id: 'near', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Amruševa', at: '2026-09-11T07:00:00Z', until: '2026-09-11T16:00:00Z', geo: { type: 'LineString', coordinates: [[15.979, 45.812], [15.981, 45.812]] }, data: { district: 'donji-grad' } },
       { id: 'other', module: 'prometnice', kind: 'closure', tier: 'open', title: 'Vukovarska', at: '2026-09-01T07:00:00Z', geo: { type: 'LineString', coordinates: [[15.99, 45.80], [15.995, 45.80]] }, data: { district: 'trnje' } },
     ]);
     const stop = { surface: 'phone' as const, locale: 'hr' as const, theme: 'light' as const, themePreference: 'light' as const, lightweight: false, reducedMotion: false, stop: { id: 'st1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.812, routes: ['6'] } };
-    const tile = closuresProducer.produce(ctx({ snapshots: { prometnice }, screen: stop }), options({ kvart: 'donji-grad' }))[0]!;
-    expect(tile).toMatchObject({ tone: 'komunalno', icon: 'hard-hat', label: 'Zatvaranja · 2 u kvartu', title: 'Amruševa' });
-    expect(tile.value).toBe(`do ${zagrebTime('2026-09-11T16:00:00Z')}`);
-    // A kvart with no stamped closure falls back to the city: three closures, a count, no street.
-    const city = closuresProducer.produce(ctx({ snapshots: { prometnice }, screen: stop }), options({ kvart: 'sesvete' }))[0]!;
+    const city = closuresProducer.produce(ctx({ snapshots: { prometnice }, screen: stop }), options())[0]!;
     expect(city).toMatchObject({ label: 'Zatvaranja', title: '3 zatvaranja', value: '' });
   });
 
@@ -212,9 +208,9 @@ describe('worksProducer', () => {
     data: { source: 'komunalne', phase, status: 'U tijeku', amount: 100, precision: 'day', ...(district ? { district } : {}) },
   });
 
-  it('counts the city’s works in progress when no kvart is chosen', () => {
+  it('counts the city’s works in progress, always city-wide', () => {
     const dogadanja = base('dogadanja', [work('w1', 'Radovi u tijeku'), work('w2', 'Radovi u tijeku'), work('w3', 'U pripremi')]);
-    const tile = worksProducer.produce(ctx({ snapshots: { dogadanja } }), options({ kvart: null }))[0]!;
+    const tile = worksProducer.produce(ctx({ snapshots: { dogadanja } }), options())[0]!;
     expect(tile.value).toBe('2');
     expect(tile.title).toBe('Radovi u gradu');
     expect(tile.aria).toBe('Radovi, 2 rada u tijeku, Radovi u gradu');
@@ -222,23 +218,11 @@ describe('worksProducer', () => {
     expect(tile.bucket).toBe('sada');
   });
 
-  it('scopes the count and names the kvart once the register carries districts', () => {
+  it('counts every district’s works together, never scoped to one', () => {
     const dogadanja = base('dogadanja', [work('w1', 'Radovi u tijeku', 'trnje'), work('w2', 'Radovi u tijeku', 'maksimir'), work('w3', 'Radovi u tijeku', 'trnje')]);
-    const tile = worksProducer.produce(ctx({ snapshots: { dogadanja } }), options({ kvart: 'trnje' }))[0]!;
-    expect(tile.value).toBe('2');
-    expect(tile.title).toBe('Trnje');
-  });
-
-  it('shows no tile for a kvart with no matching works once districts are known', () => {
-    const dogadanja = base('dogadanja', [work('w1', 'Radovi u tijeku', 'maksimir')]);
-    expect(worksProducer.produce(ctx({ snapshots: { dogadanja } }), options({ kvart: 'trnje' }))).toEqual([]);
-  });
-
-  it('falls back to the city-wide title when the kvart is chosen but the register has not shipped districts yet', () => {
-    const dogadanja = base('dogadanja', [work('w1', 'Radovi u tijeku')]);
-    const tile = worksProducer.produce(ctx({ snapshots: { dogadanja } }), options({ kvart: 'trnje' }))[0]!;
+    const tile = worksProducer.produce(ctx({ snapshots: { dogadanja } }), options())[0]!;
+    expect(tile.value).toBe('3');
     expect(tile.title).toBe('Radovi u gradu');
-    expect(tile.value).toBe('1');
   });
 
   it('shows no tile with nothing "u tijeku"', () => {

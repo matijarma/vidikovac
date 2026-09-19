@@ -1,12 +1,32 @@
-import { areaName, isAreaSlug } from '../../../worker/pairing/areas';
 import type { PresentationState, PresentationTarget } from '../../../worker/presentation';
-import { publicItemKey, type FeedSnapshots, type ScreenStop } from '../core/contracts';
+import { publicItemKey, type CastState, type FeedSnapshots, type ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { routeLongName } from '../kiosk/stops';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import type { CityState } from '../../../shared/city/types';
 import { ct } from '../city/strings';
+
+/** The cast state as the dashboard hands it over: `sentAt` marks the moment after a cast, while the button carries data-sent. */
+type CastView = CastState & { sentAt?: number | null };
+
+/** Why "Prebaci na zaslon" cannot fire, in words (D5); shared by the transport detail head's ghost cast button and the FAB. */
+export function castReasonText(i18n: I18n, cast: CastView | undefined): string {
+  if (!cast?.can) {
+    switch (cast?.reason ?? 'connecting') {
+      case 'no-screen': return i18n.t('cast.noScreen');
+      case 'peer': return i18n.t('cast.peer');
+      case 'frozen': return i18n.t('cast.frozen');
+      case 'screen-offline': return i18n.t('presentation.offline');
+      case 'unsupported': return i18n.t('presentation.unsupported');
+      default: return i18n.t('cast.connecting');
+    }
+  }
+  // The screen is named by its operator label, then its stop; a reloaded view without either says nothing extra.
+  if (cast.screenLabel && cast.stopName) return i18n.t('cast.targetStop', { label: cast.screenLabel, stop: cast.stopName });
+  const name = cast.screenLabel ?? cast.stopName;
+  return name ? i18n.t('cast.target', { label: name }) : '';
+}
 
 /** A title resolved from public data, never from text submitted by a client. */
 export function presentationTargetLabel(
@@ -15,9 +35,9 @@ export function presentationTargetLabel(
   city?:CityState,
 ): string {
   if (!target) return i18n.t('presentation.overview');
-  let title = target.layer === 'kvart'
-    ? isAreaSlug(target.district) ? areaName(target.district) : i18n.t('nav.kvart')
-    : i18n.t(`layers.${target.layer}`);
+  // A legacy phone may still send the retired 'kvart' layer (worker/presentation.ts keeps
+  // accepting the wire literal); it renders as the plain Sada label, never a district name.
+  let title = target.layer === 'kvart' ? i18n.t('layers.grad-sada') : i18n.t(`layers.${target.layer}`);
   const selection = target.selection;
   if(selection?.kind==='place')title=city?.places.find(p=>p.id===selection.id)?.name??city?.live?.bikes.find(p=>`bajs-${p.id}`===selection.id)?.name??city?.live?.air.find(p=>`air-${p.id}`===selection.id)?.name??ct(i18n,'selected');
   else if(selection?.kind==='street')title=city?.streets.find(s=>s.id===selection.id)?.name??ct(i18n,'streets');

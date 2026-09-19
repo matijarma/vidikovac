@@ -513,7 +513,7 @@
   .tl[data-tone]:active, .tl[data-variant='ink']:active { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
 }
 
-/* Middling room (a 1280 laptop beside the kvart aside, or a desk at 125 % text): three lanes; sutra and tjedan wait in Događanja. */
+/* Middling room (a narrower window, or a desk at 125 % text): three lanes; sutra and tjedan wait in Događanja. */
 @container ws (max-width: 60rem) {
   .tb-heads, .tb-lanes, .tb-axis { grid-template-columns: 2fr 1fr 1fr; }
   .tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],

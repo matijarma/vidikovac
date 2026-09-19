@@ -78,8 +78,7 @@ The schema ignores geographic cameras, emphasis and outlines. It keeps the
 legible crop around the screen's stop; without a stop it fits the network
 without labels. Prozor's statements do not overlay the field, so no rail
 padding is needed and `setView` is a no-op. No district outline is fetched
-for a schema field. The schema renderer itself does not load MapLibre. This
-does not change the dashboard's separate geographic Kvart thumbnail.
+for a schema field. The schema renderer itself does not load MapLibre.
 
 ## UI workstream (tokens, i18n)
 

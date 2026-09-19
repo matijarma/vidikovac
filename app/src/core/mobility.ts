@@ -21,7 +21,7 @@ import { haversineKm } from './geo';
  * One bike-share or parking station (plan T3.2). `free`/`capacity` are the
  * source's own counts, never derived: `null` is "the source has no figure
  * for this station right now", which honest-data keeps distinct from zero
- * free spots. `district` is the same kvart slug `worker/pairing/areas.ts`
+ * free spots. `district` is the same slug `worker/pairing/areas.ts`
  * defines, present once the worker module can resolve it geometrically.
  */
 export interface MobilityStation {
@@ -71,27 +71,17 @@ const NEAREST_RADIUS_KM = 0.6;
 
 /**
  * The one station a bikes or parking tile shows (plan T3.2): the nearest to
- * the screen's stop when one is within 600 m of it; otherwise the nearest
- * (by the same stop, when there is one) among the stations in the reader's
- * kvart; otherwise, without a stop, the first station the kvart lists. None
- * of the three found is `null` -- a producer with nothing honestly nearby
+ * the screen's stop when one is within 600 m of it; `null` without a screen
+ * stop or without one that close -- a producer with nothing honestly nearby
  * renders no tile rather than a distant, misleading one.
  */
 export function nearestStation(
   stations: readonly MobilityStation[],
   stop: { lon: number; lat: number } | undefined,
-  kvart: string | null,
 ): MobilityStation | null {
-  const byDistance = stop
-    ? stations.map((station) => ({ station, km: haversineKm(stop.lon, stop.lat, station.lon, station.lat) })).sort((a, b) => a.km - b.km)
-    : null;
-  if (byDistance && byDistance.length > 0 && byDistance[0]!.km <= NEAREST_RADIUS_KM) return byDistance[0]!.station;
-  const inKvart = kvart ? stations.filter((station) => station.district === kvart) : [];
-  if (byDistance) {
-    const nearestInKvart = byDistance.find((d) => inKvart.includes(d.station));
-    if (nearestInKvart) return nearestInKvart.station;
-  }
-  return inKvart[0] ?? null;
+  if (!stop) return null;
+  const byDistance = stations.map((station) => ({ station, km: haversineKm(stop.lon, stop.lat, station.lon, station.lat) })).sort((a, b) => a.km - b.km);
+  return byDistance.length > 0 && byDistance[0]!.km <= NEAREST_RADIUS_KM ? byDistance[0]!.station : null;
 }
 
 /**

@@ -205,7 +205,6 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
   await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
   await page.getByTestId('transport-search').fill('Jela');
-  // The results' options, not the kvart select's: a closed <select> keeps its options hidden.
   await expect(page.getByTestId('transport-results').getByRole('option').first()).toBeVisible();
   await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');

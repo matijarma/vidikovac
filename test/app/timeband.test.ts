@@ -383,18 +383,14 @@ describe('buildTimeband: the model', () => {
     expect(lane(model, 'sada').skeletons).toEqual([]);
     expect(lane(buildTimeband(ctx(), [bikes]), 'sada').tiles).toEqual([]);
   });
-  it('hands every producer the columns, the surface, the kvart (the whole city until the shell sets one) and the bucket function', () => {
+  it('hands every producer the columns, the surface and the bucket function', () => {
     const produce = vi.fn<TileProducer['produce']>(() => []);
     const probe: TileProducer = { domain: 'civic', modules: ['glasnik'], layer: 'uprava-i-pravo', skeleton: null, produce };
     buildTimeband(phone(), [probe]);
     const o = produce.mock.calls[0]![1];
     expect(o.surface).toBe('phone');
-    expect(o.kvart).toBeNull();
     expect(o.columns.map((c) => c.id)).toEqual(['sada', 'danas', 'veceras', 'sutra', 'tjedan']);
     expect(o.bucket('2026-09-11T18:00:00Z')).toBe('veceras');
-    // The shell's kvart (area S) reaches the context as `kvart`; the band reads it structurally until the field lands.
-    buildTimeband({ ...ctx(), kvart: 'tresnjevka-sjever' } as LayerContext, [probe]);
-    expect(produce.mock.calls[1]![1].kvart).toBe('tresnjevka-sjever');
   });
   it('drops a tile whose bucket is null even when the producer kept it', () => {
     const careless: TileProducer = { ...events([]), produce: () => [eventTile({ id: 'past', at: '2026-09-11T10:00:00Z' })] };

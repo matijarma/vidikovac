@@ -136,8 +136,7 @@ async function auditSurface(page: Page, surface: string, within: string): Promis
 
 for (const viewport of SIZES) {
   for (const scheme of SCHEMES) {
-    const kvartToo = viewport === PHONE ? ' and the Kvart tab' : '';
-    test(`axe /d/ in a session @${viewport.width} (${scheme}): Sada, Promet and Sigurnost${kvartToo} have no serious or critical violations, and every Tab stop lies clear of the header and the tab bar`, async ({ page }) => {
+    test(`axe /d/ in a session @${viewport.width} (${scheme}): Sada, Promet and Sigurnost have no serious or critical violations, and every Tab stop lies clear of the header and the tab bar`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await page.emulateMedia({ colorScheme: scheme });
       await installExperienceFixture(page, await experienceSnapshots());
@@ -148,15 +147,6 @@ for (const viewport of SIZES) {
       for (const layer of LAYERS) {
         await openLayer(page, layer);
         await auditSurface(page, `/d/ ${layer} @${viewport.width} (${scheme})`, `layer-${layer}`);
-      }
-      if (viewport === PHONE) {
-        await page.getByTestId('tab-more').click();
-        await page.getByTestId('tab-kvart').click();
-        await expect(page.locator('#layer-kvart'), 'the Kvart tab must open its panel').toBeVisible();
-        const map = page.getByTestId('kvart-map-canvas');
-        if (await map.count()) await expect(map, 'the kvart map must reach a settled status').toHaveAttribute('data-map-status', /^(ready|tiles-failed|unavailable)$/, { timeout: 30_000 });
-        await page.waitForTimeout(400);
-        await auditSurface(page, `/d/ kvart @${viewport.width} (${scheme})`, 'layer-kvart');
       }
     });
   }

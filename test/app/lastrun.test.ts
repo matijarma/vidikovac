@@ -162,7 +162,7 @@ describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelači
   it('gives the Sada band two Zadnji polazak tiles in večeras with xs badges, and never the word dolazak', () => {
     const hr = createDefaultI18n('hr');
     const columns = columnsFor(hr, now);
-    const tiles = lastRunProducer.produce({ i18n: hr, snapshots: {}, now, lastRun: snapshot }, { columns, surface: 'desktop', kvart: null, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) });
+    const tiles = lastRunProducer.produce({ i18n: hr, snapshots: {}, now, lastRun: snapshot }, { columns, surface: 'desktop', bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) });
     expect(tiles).toHaveLength(2);
     for (const tile of tiles) {
       expect(tile.label).toBe('Zadnji polazak');
