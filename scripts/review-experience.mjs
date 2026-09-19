@@ -212,6 +212,11 @@ try {
   // flat names with a terminal's chips (F4). Same fixture the browser gate
   // runs on, so a scene and a spec can never drift apart.
 
+  // Is this machine serving the basemap at all? One tile decides it; see
+  // openTwoTrams just below for what hangs on the answer.
+  const tilesMissing = await fetch(`${base}/maps/zagreb-v1/14/8918/5840.mvt`)
+    .then(response => response.status !== 200).catch(() => true);
+
   /** The dashboard with the pair of trams, on a clock that runs: the camera's
    *  eases and the 12 Hz push both live on rAF, and the plan is rebuilt at
    *  fulfil time so the pair never runs out of it however long a capture
@@ -244,11 +249,6 @@ try {
   const waitForProbe = (page, selector, name, value) => page.waitForFunction(
     ([sel, key, want]) => document.querySelector(sel)?.getAttribute(`data-${key}`) === want,
     [selector, name, value], { timeout: 30_000 });
-
-  // Is this machine serving the basemap at all? One tile decides it; see
-  // openTwoTrams below for what hangs on the answer.
-  const tilesMissing = await fetch(`${base}/maps/zagreb-v1/14/8918/5840.mvt`)
-    .then(response => response.status !== 200).catch(() => true);
 
   // A browser of its own for the round: by this point the run has built and
   // torn down a dozen WebGL contexts, and Chrome keeps about sixteen before it

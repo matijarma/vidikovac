@@ -17,10 +17,12 @@
 //
 // The assertions read the read-only `data-*` attributes the city map writes
 // for exactly this (`data-frames` has stood there since T11): `data-zoom`,
-// `data-pills`, `data-noses` and `data-focus`. See the comment block above
-// the probe block in app/src/map/city-map.ts (`writeMarkProbe`,
-// `writeNoseProbe`, `writeFocusProbe`) for what each costs and why it is
-// written where it is.
+// `data-pills`, `data-noses` and `data-focus`. `data-pills` and `data-noses`
+// are read off the SCREEN -- one queryRenderedFeatures over the two pill
+// layers and the nose layer, taken when MapLibre goes idle -- so "both
+// numbers are there" is a statement about what was drawn, not about the
+// collection that was handed to it. See the probe block in
+// app/src/map/city-map.ts for what each costs and when it is taken.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -79,9 +81,10 @@ async function openTwoTrams(page: Page, routes: readonly [string, string] = TWO_
   await page.clock.resume();
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
-  // Both marks in the source before anything is measured. This is also the
-  // map's own readiness: `data-pills` is written by the frame loop, which
-  // does not run until the style is up and the model has stepped.
+  // Both marks on the screen before anything is measured. This is also the
+  // map's own readiness: `data-pills` is a census of rendered features, so it
+  // says nothing until the style is up, the model has stepped and MapLibre
+  // has painted.
   await expect.poll(() => probe(page, 'pills').then(numbersIn), { timeout: 30_000 })
     .toEqual([routes[0], routes[1]].sort());
 }
@@ -113,9 +116,11 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('15.00');
   await zoomIn(page, '16.00');
   await zoomIn(page, '17.00');
-  // Both numbers on the map, 20 m apart at ~0.83 m per px: whether that is
-  // two pills or one merged mark labelled "6·11" is F2's own arithmetic and
-  // either reads correctly. What may never happen is a number going missing.
+  // Both numbers on the map, 20 m apart at ~0.83 m per px, counted from the
+  // pills MapLibre placed: whether that is two pills or one merged mark
+  // labelled "6·11" is F2's own arithmetic and either reads correctly. What
+  // may never happen is a number going missing at placement time -- which is
+  // exactly what allow-overlap and ignore-placement fixed.
   await expect.poll(() => probe(page, 'pills').then(numbersIn), { timeout: 20_000 })
     .toEqual([ROUTE_A, ROUTE_B].sort());
   // Past the band's upper edge (overlays.ts NOSE_MAX_ZOOM 16.5) the rails say
@@ -132,8 +137,11 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   // layers (overlays.ts vehicle-selected-nose), so what `vehicle-noses`
   // renders here is the other one: one nose, not none.
   await expect.poll(() => probe(page, 'noses'), { timeout: 20_000 }).toBe('1');
-  // A selected mark is never absorbed, so both numbers are two pills here.
-  expect(numbersIn(await probe(page, 'pills'))).toEqual([ROUTE_A, ROUTE_B].sort());
+  // A selected mark is never absorbed, so both numbers are two pills here --
+  // one drawn by `vehicles`, the selected one by `vehicle-selected`, and the
+  // census covers both layers.
+  await expect.poll(() => probe(page, 'pills').then(numbersIn), { timeout: 20_000 })
+    .toEqual([ROUTE_A, ROUTE_B].sort());
   expect(errors).toEqual([]);
 });
 

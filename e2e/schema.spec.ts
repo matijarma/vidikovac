@@ -161,7 +161,9 @@ test('the diagram paints numbered pills, names that give way and come back, and 
   await canvas.focus();
   for (let i = 0; i < 5; i++) await page.keyboard.press('+');
   await page.clock.runFor(200);
-  expect(await count(page, 'names')).toBeGreaterThan(near);
+  // Polled: the zoom steps repaint the static layer on their own schedule,
+  // and the count is only settled once the last of them has been painted.
+  await expect.poll(() => count(page, 'names'), { timeout: 15_000 }).toBeGreaterThan(near);
   expect(((await diagram.getAttribute('data-pills')) ?? '').split('|').filter(Boolean).length,
     'the pair is still on the canvas at the deeper zoom').toBeGreaterThan(0);
   expect(errors).toEqual([]);

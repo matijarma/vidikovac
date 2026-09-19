@@ -996,51 +996,71 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // `data-frames` has been written on this container since T11 for one
   // reason: a browser-level proof has to read what the renderer did without
   // diffing pixels. Round F adds three more of the same kind here, and a
-  // fourth (`data-focus`) beside applyOverlays(). None of them
-  // changes what is drawn, each is a string, and each is written where the
-  // renderer already holds the answer:
+  // fourth (`data-focus`) beside applyOverlays(). None of them changes what
+  // is drawn, and each says what MapLibre did rather than what it was asked:
   //
   //   data-zoom   the camera's zoom at this frame, so an e2e states the zoom
   //               its assertion is about instead of trusting a fit to land
   //               there. Free: the value is read for the clustering anyway.
-  //   data-pills  the labels of the pill and cluster marks in the vehicles
-  //               source, '|'-joined, written when a push actually replaces
-  //               that source's data. F2 gave the pill layer allow-overlap
-  //               and ignore-placement, so from PILL_ZOOM up a label here is
-  //               a pill on the screen; below it the layer draws dots and the
-  //               attribute is empty rather than misleading.
-  //   data-noses  how many `vehicle-noses` features MapLibre actually
-  //               renders. The nose band (overlays.ts NOSE_MIN_ZOOM and
-  //               NOSE_MAX_ZOOM) is a claim about rendering, so this one asks
-  //               MapLibre, through the same queryRenderedFeatures()
-  //               placedNames() already uses. It is the only one that costs
-  //               anything, so it is taken on `idle` -- the one moment
-  //               MapLibre has finished painting the state it was given --
-  //               and only when the zoom or the number of marks has changed
-  //               since the last answer. On a still map that is zero queries.
-  /** zoom and mark count the nose census was last taken for. */
-  let noseProbeKey = '';
-  /** Marks in the last pushed collection, half of that key. */
-  let probeMarks = 0;
+  //   data-pills  the label of every pill MapLibre actually renders, from the
+  //               two pill layers (`vehicles` and, for the selected mark,
+  //               `vehicle-selected`), '|'-joined in id order. Read from the
+  //               screen, not from the collection that was pushed: what F2
+  //               fixed is that a pill is never dropped at placement time,
+  //               and the source carried both numbers before F2 as well, so
+  //               a source-side list would pass against the old behaviour.
+  //   data-noses  how many `vehicle-noses` features MapLibre renders. The
+  //               nose band (overlays.ts NOSE_MIN_ZOOM/NOSE_MAX_ZOOM) is a
+  //               claim about rendering, so this asks MapLibre too. The
+  //               selected mark's own `vehicle-selected-nose` is deliberately
+  //               not counted: it is a second layer with its own zoom range,
+  //               and mixing the two would hide which of them the band moved.
+  //
+  // Both reads come from ONE queryRenderedFeatures over those three layers --
+  // the call placedNames() already makes, scoped to the vehicles source -- on
+  // MapLibre's `idle`, the one moment it has finished painting what it was
+  // given. It is taken only when the answer can have changed: the camera's
+  // zoom (which layer draws, and which pills merge), the selection (which
+  // layer the selected mark is in), and whether the source has any marks at
+  // all (the first snapshot landing on a cold map). Precise cost: one query
+  // per settled zoom, one per selection change, one when the fleet first
+  // appears -- and zero while a reader watches a still map, however many
+  // times a second the marks move under it.
+  //
+  // What it deliberately does not follow is the fleet changing beneath a
+  // fixed camera: a vehicle arriving or going quiet does not re-take the
+  // census, because that would be a query per 12 Hz push for a test hook.
+  /** zoom, selection and "has any marks" the census was last taken for. */
+  let renderProbeKey = '';
+  /** Whether the last pushed collection had any mark at all; see the key above. */
+  let probeHasMarks = false;
 
-  function writeMarkProbe(m: MapApi, l: MaplibreModule, pushed: VehicleFeatureCollection | null): void {
-    const zoom = m.getZoom();
-    container.dataset.zoom = zoom.toFixed(2);
-    if (!pushed) return;
-    probeMarks = pushed.features.length;
-    container.dataset.pills = zoom >= l.PILL_ZOOM ? pushed.features.map((f) => f.properties.short).join('|') : '';
+  function writeMarkProbe(m: MapApi, pushed: VehicleFeatureCollection | null): void {
+    container.dataset.zoom = m.getZoom().toFixed(2);
+    if (pushed) probeHasMarks = pushed.features.length > 0;
   }
 
-  function writeNoseProbe(): void {
+  function writeRenderProbe(): void {
     const m = map;
     const l = lib;
     if (!m || !styled || !l) return;
-    const key = `${m.getZoom().toFixed(2)}|${probeMarks}`;
-    if (key === noseProbeKey) return;
-    noseProbeKey = key;
-    const id = l.LAYERS.vehicleNoses;
-    const drawn = m.getLayer && !m.getLayer(id) ? [] : m.queryRenderedFeatures(undefined, { layers: [id] });
-    container.dataset.noses = String(drawn.length);
+    const key = `${m.getZoom().toFixed(2)}|${selection ? `${selection.kind}:${selection.id}` : ''}|${probeHasMarks ? 1 : 0}`;
+    if (key === renderProbeKey) return;
+    renderProbeKey = key;
+    // Asking MapLibre about a layer the style does not carry fires an error
+    // event, which onMapError logs as a bug; placedNames() guards the same way.
+    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses]
+      .filter((id) => !m.getLayer || m.getLayer(id));
+    // By feature id, so a mark queried twice (a point on a tile seam) is one
+    // pill, and in id order, so the attribute is stable frame to frame.
+    const pills = new Map<string, string>();
+    let noses = 0;
+    for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
+      if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
+      else pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
+    }
+    container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
+    container.dataset.noses = String(noses);
   }
 
   /** `data-focus`: what line focus did, read back off the live style once the
@@ -1092,7 +1112,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (following === true) followRoute();
       else if (following) followCamera(fc);
     }
-    writeMarkProbe(m, l, pushing ? fc : null);
+    writeMarkProbe(m, pushing ? fc : null);
     return changed;
   }
 
@@ -1260,7 +1280,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('moveend', onMoveEnd);
     // The one moment MapLibre has finished painting what it was given: the
     // honest place to ask it what it drew (see the probe comment above).
-    created.on('idle', writeNoseProbe);
+    created.on('idle', writeRenderProbe);
     if (interactive) bindPointer(created);
     created.once('load', () => onLoad(l, created));
     watchTheme();
