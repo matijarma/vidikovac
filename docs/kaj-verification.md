@@ -1371,6 +1371,90 @@ Iz čega se odluka čita:
   križanja, a ponavljanje ih sada i vraća u motor (prije nije). p95 je nepromijenjen (49,62 → 49,42
   ms), a proračun otkucaja je 10 s, pa je i p95 dva reda veličine ispod granice.
 
+#### Cijeli snimljeni dan (7.972 okvira)
+
+`node scripts/replay-twin.mjs recordings/2026/09/17`, s odabranim konstantama, protiv polazne
+tablice cijelog dana iz `replay-fullday-baseline-cd7495c.txt` (`cd7495c`, stanje **prije F8**). Ta
+polazna tablica je jedina koja za cijeli dan postoji, pa razlika ispod mjeri **cijeli krug F**
+(F8 posluženi popis stajališta, F9 klijent koji nikad ne crta unatrag, F10 registar redoslijeda,
+F11 planer i zadržavanje) — ne samo F11. Razlika koja mjeri samo F11 je tablica prozora gore.
+
+```
+twin replay report
+-------------------
+frames processed:        7972 (dropped, no header: 0)
+vehicles seen:           473
+
+hindsight, bucket p50 / p95 (n graded fixes):
+  10s:  p50 <50m    p95 <200m   (n=1560618)
+  30s:  p50 <100m   p95 ge200m  (n=1549449)
+  60s:  p50 <200m   p95 ge200m  (n=1530176)
+
+signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
+  10s:  ahead 13.6%  within 56.7%  behind 29.7%  (n=1560618)
+  30s:  ahead 17.0%  within 40.1%  behind 42.9%  (n=1549449)
+  60s:  ahead 17.3%  within 29.8%  behind 52.8%  (n=1530176)
+
+between-plan regressions (>25 m):     84683  (of 841568 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  6971  (of 4495410 fresh pairs on shared rails)
+phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
+  shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
+  synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
+  paths without pattern: 0 (left out)
+
+client simulation (polls land at header + 3.5 s, 12 Hz; 1036562 frames, 112221628 tram-frames):
+  backward frames (must be 0):        0
+  visible crossings (must be 0):      23079
+  hold-time share:                    1.1%  mean hold length: 1.7 s  (58332 holds)
+
+overtakes (must be 0):   86
+reversals (must be 0):   0
+concessions / swaps:     309 / 170
+direction known share:   100.0%
+unknown-trip share:      0.0%
+first moving plan (s):   p50 831  p95 1781  (never moved: 8)
+per-tick wall time (ms): p50 40.44  p95 54.72
+
+planner interventions:   floor 596562  junction_wait 101495  stand_fix 137860  eta_bound_skipped 285656
+learned by the end:      4252 edge cells / 4755 stop cells / 1317 node cells; 53164 dwell samples, 7491 junction waits of 24559 passes, 78 platforms in the recent window
+```
+
+| Mjera (cijeli dan) | prije kruga F (`cd7495c`) | poslije F11 | promjena |
+|---|---|---|---|
+| **slike unatrag (klijent)** | 41.223.762 od 112.221.628 | **0** | nestale |
+| **preticanja (blizanac)** | 11.204 | **86** | −99,2 % |
+| **fantomska stajališta** | 6.410 od 10.599 | **0** od 11.004 | nestala |
+| **regresije među planovima** | 218.265 od 842.298 | **84.683** od 841.568 | −61,2 % |
+| **vidljiva križanja (klijent)** | 38.228 | **23.079** | −39,6 % |
+| **10 s: ispred / unutar / iza** | 23,7 / 54,2 / 22,1 % | **13,6** / 56,7 / 29,7 % | −10,1 p. b. ispred |
+| **30 s: ispred / unutar / iza** | 28,2 / 38,8 / 33,0 % | **17,0** / 40,1 / 42,9 % | −11,2 p. b. ispred |
+| **60 s: ispred / unutar / iza** | 29,1 / 29,5 / 41,4 % | **17,3** / 29,8 / 52,8 % | −11,8 p. b. ispred |
+| **razred p95 na 10 s** | ≥200 m | **<200 m** | prvi pomak razreda p95 u krugu |
+| razred p50 (10/30/60 s) | <50 / <100 / <200 m | isto | drži |
+| prekršaji redoslijeda prema očitanjima | 9.356 od 5.022.158 | 6.971 od 4.495.410 | −25,5 % |
+| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | **1,1 % / 1,7 s / 58.332** | −6,7 p. b. / −60,8 % |
+| vožnje unatrag u planu | 0 | 0 | drži |
+| ustupci / zamjene | 6.960 / — | 309 / 170 | −95,6 % ustupaka |
+| poznati smjer / nepoznate vožnje | 100,0 % / 0,0 % | 100,0 % / 0,0 % | drži |
+| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 831 / 1.781 s | +55 s p50 |
+| otkucaj p50 / p95 | 123,03 / 304,87 ms | **40,44 / 54,72 ms** | −67 % / −82 % |
+
+Tri stvari treba pročitati pažljivo:
+
+- **Razred p95 na 10 s prvi put pada ispod 200 m.** Kroz cijeli krug F razredi p95 stajali su na
+  „≥200 m” na sva tri horizonta; na punom danu, s objavljenim podom i popravcima stanja, horizont
+  jednog otkucaja sada završava u razredu ispod 200 m. Na 30 i 60 s razred i dalje stoji — tamo je
+  rep i dalje dug.
+- **Naučeni sloj je na kraju dana pun, a kotrljajući prozor prazan.** 4.252 ćelije bridova, 4.755
+  ćelija perona i 1.317 ćelija čvorova, 53.164 uzorka zadržavanja i 7.491 čekanje od 24.559 prolaza
+  kroz križanja. „78 perona u kotrljajućem prozoru” nije mali broj zato što je prozor slab nego zato
+  što dan završava poslije ponoći: prozor drži zadnjih 90 minuta, a u to doba vozi šačica tramvaja.
+  U prozoru koji završava usred jutra ista je brojka 228.
+- **Prvi plan u pokretu je 55 s sporiji (776 → 831 s p50).** To je izravna posljedica pravila: vozilo
+  koje blizanac prvi put vidi na peronu sada **stoji** dok ne dokaže da je krenulo, umjesto da odmah
+  odveze plan brzinom izmjerenom prije perona. Pola minute čekanja na tramvaj koji doista stoji je
+  jeftinije od oznake koja otiđe bez njega i onda se mora vratiti.
+
 #### Ručna tablica zadržavanja (za vlasnika)
 
 Datoteka je **`app/public/data/stop-dwell-overrides.json`**. Uredi je izravno, napravi commit i push
