@@ -110,10 +110,20 @@ export function sharedStretch(a: Placed, b: Placed): { edges: number[] } | null 
  */
 export function mapArcNear(from: Path, s: number, to: Path, nearS: number): number | null {
   const { edge, arc } = edgeAt(from, s);
+  return arcOnPath(to, edge, arc, nearS);
+}
+
+/** The arc along `path` of a point `arc` metres into `edge`: the occurrence
+ *  of that edge nearest `nearS`, or the first one when there is no reference
+ *  to read it against. Null when the path does not run the edge. The matcher
+ *  asks this of a raw edge hit (match.ts), mapArcNear of an arc on another
+ *  path; both mean the same thing on a path that laps its own rails. */
+export function arcOnPath(path: Path, edge: number, arc: number, nearS: number | null): number | null {
   let best: number | null = null;
   let bestGap = Number.POSITIVE_INFINITY;
-  for (let k = to.edges.indexOf(edge); k >= 0; k = to.edges.indexOf(edge, k + 1)) {
-    const candidate = to.offsets[k] + arc;
+  for (let k = path.edges.indexOf(edge); k >= 0; k = path.edges.indexOf(edge, k + 1)) {
+    const candidate = path.offsets[k] + arc;
+    if (nearS === null) return candidate;
     const gap = Math.abs(candidate - nearS);
     if (gap < bestGap) {
       best = candidate;

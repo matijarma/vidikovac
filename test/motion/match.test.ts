@@ -118,6 +118,43 @@ function circuitSpec(): SynthSpec {
   };
 }
 
+// D4: at a terminus ZET keeps reporting the old trip id for a fix or two
+// after the tram has turned and is running back on the OTHER track, three to
+// six metres away. The old matcher read that as its own tram walking
+// backwards down its own line (the residual never left the near band, so the
+// off-path counter never fired). Two consecutive fixes moving against the
+// rail the vehicle is read on, with a directed edge within reach that agrees
+// with the movement, are a turnaround: the path is re-derived to the route's
+// opposite direction.
+describe('matchFix at a terminus turnaround under the old trip id', () => {
+  it('re-derives to the route opposite direction within two fixes, and never reads the arc backwards', () => {
+    const turned = newTrack('t', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    matcher.matchFix(turned, fix(1300, 0, 2000), outbound, null);
+    matcher.matchFix(turned, fix(1400, 0, 2010), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_0'));
+    const before = turned.match.s;
+    // The tram has turned: it is on the westbound track (y = 60), 60 m from
+    // the rail it was read on -- inside the near band, so nothing here is a
+    // detour. ZET still names the outbound trip.
+    matcher.matchFix(turned, fix(1350, 60, 2020), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_0')); // one fix is not yet evidence
+    matcher.matchFix(turned, fix(1250, 60, 2030), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    expect(net.paths[turned.match.pathIdx!].direction).toBe(1);
+    expect(turned.match.edge).toBe(5);
+    expect(turned.match.residual).toBeLessThan(5);
+    // Westbound path 1_1 runs from x = 1500 to x = 0, so the arc grows as the
+    // tram runs west: the turnaround is read forwards, not as a reversal.
+    const afterTurn = turned.match.s;
+    expect(afterTurn).toBeCloseTo(250, 0);
+    matcher.matchFix(turned, fix(1150, 60, 2040), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    expect(turned.match.s).toBeGreaterThan(afterTurn);
+    expect(before).toBeCloseTo(1400, 0);
+  });
+});
+
 describe('matchFix on a circuit', () => {
   it('places by the next stop, keeps a placed vehicle on its fold, finds a wrong fold out by the backward arc it implies, and holds a bus on the leg of its loop', () => {
     const loop = syntheticNetwork(circuitSpec());

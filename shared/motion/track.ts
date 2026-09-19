@@ -91,6 +91,10 @@ export interface Track {
   offGraphCount: number;
   /** Consecutive fixes whose on-path residual exceeded the near band. */
   offPathCount: number;
+  /** Consecutive fixes that moved against the rail the vehicle is read on
+   *  (match.ts FOLD_FIXES): a terminus turnaround still reported under the
+   *  old trip id. Undefined on a state row written before F10. */
+  againstCount: number;
   /** m/s, the speed estimate from the moving intervals (speed.ts). */
   speed: number;
   /** 0..1, the planner's confidence after silence decay (plan.ts). */
@@ -124,6 +128,7 @@ export function newTrack(id: string, routeId: string, tripId: string | null, kin
     offGraph: false,
     offGraphCount: 0,
     offPathCount: 0,
+    againstCount: 0,
     speed: 0,
     confidence: 0,
     plan: null,
