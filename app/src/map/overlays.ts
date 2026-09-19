@@ -520,7 +520,17 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const tramNetwork = prozor
     ? network(LAYERS.networkTram, 'tram', p.figure, zoomInterpolate(14, 3, 15, 5, 16, 6), p.figureOpacity)
     : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
-  const stops = routeStopsFilter(modes, prozor ? prozor.stopRoutes : null);
+  /** Which platforms the ordinary ring field is about. Under line focus it is
+   *  the focused line's own stops: with every other line hidden, every other
+   *  line's rings are hundreds of grey circles with nothing under them to read
+   *  them against (F6 review, round-f-city-desktop-focus-on). The selection
+   *  layer (stops-route) still lights the route's platforms over these, and the
+   *  screen's own stop draws from its own source whatever this says. The ranked
+   *  names follow the rings, because a name over a platform with neither ring
+   *  nor line under it is the same clutter by another means. Focus off, every
+   *  stop the modes admit, exactly as before. */
+  const stopRoutes = focus ? [focus.routeId] : prozor ? prozor.stopRoutes : null;
+  const stops = routeStopsFilter(modes, stopRoutes);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.

@@ -20,6 +20,7 @@ import {
   overlayLayers,
   pillInks,
   selectionFilters,
+  routeStopsFilter,
   stopFilter,
   vehicleFilter,
   vehicleKinds,
@@ -276,6 +277,23 @@ describe('filters and the selection', () => {
     const plain = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: false });
     expect(plain.find((l) => l.id === LAYERS.networkSelected)!.filter).toEqual(NEVER);
     expect(plain.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toEqual(NETWORK_OPACITY);
+  });
+
+  it('line focus thins the stop rings to the focused line’s own platforms, keeps the selection ring and the screen’s own stop, and switched off draws every stop again', () => {
+    const focus = { routeId: '6', colour: '#cc706f' };
+    const stopsOf = (options: Parameters<typeof overlayLayers>[1]) => overlayLayers(OVERLAY_LIGHT, options).find((l) => l.id === LAYERS.stops)!;
+    // Hiding every other line and keeping every other line’s rings left the
+    // F6 capture a field of grey circles with no line under them.
+    expect(stopsOf({ selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: true }).filter)
+      .toEqual(routeStopsFilter(null, ['6']));
+    // The switch off is the whole network again, rings and all.
+    expect(stopsOf({ selection: { kind: 'route', id: '6' }, focus, lineFocus: false }).filter).toEqual(stopFilter(null));
+    expect(stopsOf({}).filter).toEqual(stopFilter(null));
+    // The selection layer still lights the route’s platforms, and the
+    // screen’s own stop is its own source and draws under focus too.
+    const on = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'route', id: '6' }, focus, lineFocus: true });
+    expect(on.find((l) => l.id === LAYERS.stopsRoute)!.filter).toEqual(['in', '6', ['get', 'routes']]);
+    expect(on.find((l) => l.id === LAYERS.screenStop)!.filter).toBeUndefined();
   });
 });
 // Four rules the product will not draw without. Two of them live where
