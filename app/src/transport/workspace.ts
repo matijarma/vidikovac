@@ -14,9 +14,12 @@
 // The desk and the landscape phone show the sheet as a column with no
 // detents; the kiosk contract (data-kiosk) keeps an open, still sheet.
 //
-// Nothing here is an arrival time. The lists say which routes have vehicles
-// moving now and which way a vehicle faces when the model knows (R-P2,
-// decision 5), and the sheet says in one sentence that ZET publishes none.
+// A tapped stop first says what comes next. Those times are estimates, not
+// promises: a trip a tracked vehicle carries is timed from the schedule plus
+// ZET's own reported delay, refined by the twin's next-stop ETA, and every
+// other trip keeps its timetable moment. Each row says which of the two it
+// is -- live or by the timetable -- and the arithmetic itself is
+// shared/city/arrivals.ts's, never this file's.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { MapMode } from '../core/map-mode-store';
@@ -32,6 +35,8 @@ import { iconMarkup } from '../ui/icons';
 import { discover, dynamicPlaces, clusterPlaces, CATEGORY_SOURCE, GROUP_SOURCES, type CityGroup, type Discovery } from '../city/discovery';
 import { ct, type CityWord } from '../city/strings';
 import { placeDetail, placesMarkup, streetDetail, departuresMarkup } from '../city/markup';
+import { createBoardCache, type BoardCache, type BoardOperator } from '../city/boards';
+import { arrivalsAt } from '../../../shared/city/arrivals';
 import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
 import { locatedEvents, type ActivityWindow } from '../../../shared/city/events';
 import { matchStreet } from '../../../shared/city/geo';
@@ -63,6 +68,10 @@ export interface WorkspaceInput {
 export interface WorkspaceDeps {
   /** The stop catalogue for search without the network artefact; defaults to core/screens.ts's loadStops. */
   loadStops?: () => Promise<ScreenStop[]>;
+  /** How the scheduled boards are fetched and remembered; defaults to
+   *  city/boards.ts's createBoardCache. The workspace owns what this makes and
+   *  destroys it with itself. */
+  createBoards?: () => BoardCache;
 }
 
 export interface TransportWorkspace {
@@ -273,11 +282,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let streetRequested=false;
   let disposed=false;
   let disposalRegistered=false;
-  const boardTimes=new Map<string,number>();
   const pollutants=new Map<string,string>();
   const pollutantPending=new Set<string>();
-  const boards = new Map<string,DepartureBoard>();
-  const boardPending = new Set<string>();
+  /** One request per platform per minute, answered to every reader that asked
+   *  for it (city/boards.ts). This workspace's own, and destroyed with it. */
+  const boards: BoardCache = (deps.createBoards ?? createBoardCache)();
   const cityState = () => ctx().city ?? emptyCity();
   function discovery(): Discovery {
     const c=ctx(),stop=c.screen?.stop;
@@ -329,15 +338,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const paths=cityCategory==='cycle-paths'?cityState().paths.flatMap(p=>p.lines.map((coordinates,i)=>({id:`${p.id}-${i}`,title:p.name,coordinates}))):[];
     handle?.setCityPaths?.(paths);
   }
-  function ensureBoard(operator:'zet'|'hz',stopId:string):void {
-    const key=`${operator}:${stopId}`;
-    if(disposed||(boards.has(key)&&Date.now()-(boardTimes.get(key)??0)<60_000)||boardPending.has(key)||ctx().session?.frozen)return;
-    boardPending.add(key);
-    void fetch(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`,{signal:AbortSignal.timeout(12000)})
-      .then(r=>{if(!r.ok)throw new Error('schedule-down');return r.json() as Promise<DepartureBoard>;})
-      .then(board=>{if(disposed||ctx().session?.frozen)return;boards.set(key,board);boardTimes.set(key,Date.now());renderSheet();})
-      .catch(()=>{if(disposed||ctx().session?.frozen)return;boards.set(key,{operator,stopId,stopName:stopId,status:'down',generatedAt:new Date().toISOString(),departures:[]});boardTimes.set(key,Date.now());renderSheet();})
-      .finally(()=>boardPending.delete(key));
+  /** One function, not one per render: the cache keeps its waiting callers in a
+   *  Set, and a fresh closure each time would make a stop with eight platforms
+   *  re-render 2^8 times as its boards landed one after another. */
+  const onBoardSettled=():void=>{if(!disposed&&!ctx().session?.frozen)renderSheet();};
+  /** The cache does the asking and the remembering; the gate is this
+   *  workspace's, as it always was: a frozen session neither asks nor repaints. */
+  function ensureBoards(operator:BoardOperator,stopIds:readonly string[]):void {
+    if(disposed||ctx().session?.frozen)return;
+    boards.ensure(operator,stopIds,onBoardSettled);
+  }
+  /** Every board this stop's platforms have answered with so far. An empty
+   *  list is "nothing in hand yet", which arrivalsAt reads as 'none'. */
+  function boardsFor(operator:BoardOperator,stopIds:readonly string[]):DepartureBoard[] {
+    return stopIds.map(id=>boards.get(operator,id)).filter((board):board is DepartureBoard=>board!==undefined);
   }
 
   // --- Derived, per render ----------------------------------------------------
@@ -686,9 +700,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       }
     }
     for(const slot of content.querySelectorAll<HTMLElement>('[data-city-departures]')){
-      const operator=slot.dataset.cityDepartures as 'zet'|'hz',stopId=slot.dataset.stop!;
-      ensureBoard(operator,stopId);const board=boards.get(`${operator}:${stopId}`);
-      slot.innerHTML=board?departuresMarkup(i18n,board):`<p>${ct(i18n,'loading')}</p>`;
+      const operator=slot.dataset.cityDepartures as BoardOperator,stopId=slot.dataset.stop!;
+      ensureBoards(operator,[stopId]);const board=boards.get(operator,stopId);
+      slot.innerHTML=board?departuresMarkup(i18n,board,ctx().now):`<p>${ct(i18n,'loading')}</p>`;
     }
     renderChrome();
   }
@@ -772,8 +786,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           lat: Number.NaN,
           routes: screen?.id === sel.id ? [...screen.routes] : [],
         };
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast });
-        return [html+`<div data-city-departures="zet" data-stop="${esc(sel.id)}"></div>`, `${tr(i18n, 'stop')} ${group.name}`];
+        // Every platform of the named stop, not only the one that was tapped:
+        // the 6 leaves from one side and the 11 from the other, and the rider
+        // waiting here wants both. The merge itself is arrivalsAt's.
+        ensureBoards('zet', group.ids);
+        const next = arrivalsAt(boardsFor('zet', group.ids), vehicles, c.now, { stopIds: group.ids });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, arrivalsStatus: next.status });
+        return [html, `${tr(i18n, 'stop')} ${group.name}`];
       }
       case 'vehicle': {
         const v = vehicles.find((x) => x.id === sel.id);
@@ -1102,7 +1121,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     input = next;
     const c = next.ctx;
     if(c.onDispose&&!disposalRegistered){
-      disposalRegistered=true;c.onDispose(()=>{disposed=true;sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
+      disposalRegistered=true;c.onDispose(()=>{disposed=true;boards.destroy();sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
     }
     if (!c.city) cityGroup = 'transport'; // legacy hosts retain their transport-only view
     const pickedDistrict=c.kvartChoice&&c.kvartChoice!=='screen'?c.kvart:null;

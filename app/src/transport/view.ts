@@ -14,6 +14,7 @@
 // destination, a word for the state -- and a `.line` the number on the
 // front of the vehicle. Where a row opens something, the whole row is one
 // button (`.t-row`, map.css) inside the row, so the target is the row.
+import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import type { FeedItem } from '../../../worker/feed/schema';
 import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
 import type { CastState } from '../core/contracts';
@@ -21,7 +22,7 @@ import type { SavedRef } from '../core/saved-store';
 import { lineBadge, signRow } from '../experience/blocks';
 import { delayTone, type DelayTone } from '../experience/delay';
 import { castReasonText } from '../experience/kvart';
-import { zagrebDateTime } from '../format';
+import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import type { RouteSummaryRow } from '../layers/route-summary';
 import { delayWord } from '../layers/shared';
@@ -472,7 +473,6 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(route.long || tr(i18n, 'routeTitle', { short: route.short }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
-    `<p class="t-note">${esc(tr(i18n, 'noArrivals'))}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
     `<section class="t-block">${sectionHead(tr(i18n, 'routeVehicles'), 4)}${vehicles}</section>` +
@@ -490,9 +490,57 @@ export interface StopDetailData {
   /** Whether this stop is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
   cast?: CastState;
+  /** What comes next here, already merged across the stop's platforms and
+   *  sorted (shared/city/arrivals.ts). Never computed in this file: the view
+   *  only says, row by row, whether a time is an estimate or the timetable. */
+  arrivals: readonly ArrivalRow[];
+  /** How much of the answer is trustworthy: 'none' is "no board in hand yet",
+   *  'down' is "every platform's board failed". */
+  arrivalsStatus: ArrivalsStatus;
 }
 
-/** One stop: its name at title, "3 perona" under it, the arrivals sentence once, its lines as rows with their count and delay word. */
+/** The GTFS type behind an arrival row, read off the stop's own lines: the
+ *  badge is then a tram plate or a bus capsule. A route the catalogue does not
+ *  list here keeps the neutral shape rather than being guessed from its number. */
+function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
+  return routes.find((r) => r.id === routeId)?.type ?? -1;
+}
+
+/** A row's time at the row's end: the countdown with the live dot where a
+ *  tracked vehicle carries the trip, the clock time otherwise. `sada` at zero:
+ *  a tram due in under half a minute is the one pulling in, not "za 0 min". */
+function arrivalTime(i18n: I18n, row: ArrivalRow): string {
+  if (row.live && row.minutes !== null) {
+    const word = row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes });
+    return `<span class="t-eta" data-live="true"><span class="t-live" role="img" aria-label="${attr(i18n.t('arrivals.live'))}"></span>${esc(word)}</span>`;
+  }
+  return `<span class="t-eta"><time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time></span>`;
+}
+
+/** The arrivals list: the board's own row (blocks.ts signRow) with the line
+ *  badge as its lead, the headsign as its destination and the time at its end.
+ *  A row off the timetable alone says so on its second line; a row an estimate
+ *  stands behind says nothing there, because the note under the list already
+ *  says where the estimate comes from. */
+function arrivalsSection(i18n: I18n, d: StopDetailData): string {
+  const rows = d.arrivals
+    .map((row) => signRow({
+      lead: badge(row.routeName, routeTypeAt(d.routes, row.routeId), 'm'),
+      title: row.headsign || row.routeName,
+      sub: row.live ? '' : i18n.t('arrivals.scheduled'),
+      trail: arrivalTime(i18n, row),
+      key: `${row.tripId}|${row.atMs}`,
+    }))
+    .join('');
+  const body = d.arrivals.length > 0
+    ? `<ul class="t-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    : d.arrivalsStatus === 'none'
+      ? `<p class="t-empty">${esc(i18n.t('status.loading'))}</p>`
+      : `<p class="t-empty">${esc(i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none'))}</p>`;
+  return `<section class="t-block" data-testid="stop-arrivals">${sectionHead(i18n.t('arrivals.title'), 4)}${body}</section>`;
+}
+
+/** One stop: its name at title, then what comes next, then "3 perona" and its lines as rows with their count and delay word. */
 export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const meta = [trPlural(i18n, 'platforms', d.stop.ids.length), d.isScreenStop ? tr(i18n, 'screenStop') : ''].filter(Boolean).join(' · ');
   const rows = d.routes.map((r) => rowButton({ kind: 'route', id: r.id, action: 'select-route', inner: routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id)) })).join('');
@@ -500,8 +548,8 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(d.stop.name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
+    arrivalsSection(i18n, d) +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
-    `<p class="t-note">${esc(tr(i18n, 'noArrivals'))}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     `<section class="t-block">${sectionHead(tr(i18n, 'stopRoutes'), 4)}${lead}<ul class="t-list" data-testid="stop-routes">${rows}</ul></section>`
   );

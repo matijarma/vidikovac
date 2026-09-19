@@ -31,6 +31,16 @@ describe('persistent city workspace',()=>{
     expect(workspace.element.querySelector('[data-testid=city-detail]')?.textContent).toContain('Gavella');
     disposal.forEach(fn=>fn());maps.destroy();
   });
+  it('keeps one board cache for every platform it asks about and destroys it with the workspace',()=>{
+    const cache={get:vi.fn(()=>undefined),ensure:vi.fn(),destroy:vi.fn()};
+    const disposal:(()=>void)[]=[];
+    const ctx:LayerContext={i18n:createDefaultI18n('hr'),snapshots:{},now:Date.parse('2026-09-18T12:00:00Z'),city:emptyCity(),onDispose:fn=>disposal.push(fn)};
+    const workspace=createTransportWorkspace({loadStops:async()=>[],createBoards:()=>cache});
+    document.body.replaceChildren(workspace.element);workspace.render({ctx,points:[],lines:[]});
+    expect(cache.destroy).not.toHaveBeenCalled();
+    disposal.forEach(fn=>fn());
+    expect(cache.destroy).toHaveBeenCalledTimes(1);
+  });
   it('uses native focusable buttons for mixed city/transport search without orphaned option ARIA',()=>{
     const workspace=createTransportWorkspace({loadStops:async()=>[]}),disposal:(()=>void)[]=[];
     const ctx:LayerContext={i18n:createDefaultI18n('hr'),snapshots:{},now:Date.now(),city:emptyCity(),onDispose:fn=>disposal.push(fn)};
