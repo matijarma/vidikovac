@@ -94,7 +94,8 @@
   --k-ease: cubic-bezier(0.25, 1, 0.5, 1);
   --k-dur: 180ms;
   display: grid;
-  grid-template-rows: var(--k-head-h) minmax(0, 1fr) var(--k-strip-h);
+  /* head, the alert's own row (0 while there is none), the stage, safety. */
+  grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -175,7 +176,7 @@
 /* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label). */
 .kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
 
-.k-head { display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
+.k-head { grid-row: 1; display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
 /* The brand group is the header's yielding part: the wordmark never shrinks, the chip ellipsises; the session pill keeps its own width (a flex item's automatic minimum), so it can never be squeezed under a neighbour. */
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
@@ -200,10 +201,16 @@
 .kiosk .k-weather-icon { width: var(--k-icon-lg); height: var(--k-icon-lg); flex: none; color: var(--k-amber); }
 .k-temp { font-size: var(--k-main-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
-.k-alert { position: absolute; top: calc(var(--k-head-h) + var(--k-gap) * 0.5); right: var(--k-pad); z-index: 5; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-size); font-weight: 600; box-shadow: var(--k-shadow); }
+/* The alert is a row of the page, not a pill floating over one: parked over
+   the stage it covered the first card's own head (the weather card's title at
+   every size). It sits between the header and the stage, takes the height it
+   needs from the stage, and collapses to nothing when there is no alert --
+   every region of the grid is placed explicitly so the rows do not shuffle
+   when it appears. */
+.k-alert { grid-row: 2; justify-self: end; margin: calc(var(--k-gap) * 0.5) var(--k-pad) 0; padding: calc(var(--k-gap) * 0.5) var(--k-gap); border-radius: 999px; background: var(--k-rose-soft); color: var(--k-rose); font-size: var(--k-sup-size); font-weight: 600; box-shadow: var(--k-shadow); }
 .k-alert[hidden] { display: none; }
 
-.k-stage { position: relative; min-height: 0; padding: var(--k-pad); }
+.k-stage { grid-row: 3; position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
 
 /* The header's middle: the city's news, one item at a time (kiosk/ticker.ts).
@@ -543,7 +550,7 @@
 .k-badge::before { inline-size: 0.5em; block-size: 0.5em; }
 
 /* --- Safety strip: always there, never a session's ------------------------ */
-.k-strip { display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
+.k-strip { grid-row: 4; display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
 .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
 /* safetyState's verdict with its glyph, a pill with its own colour per level; while the invitation shows it is the 44 px button that opens Osnovno (kajimafix 03.5), otherwise a plain word. */
@@ -762,7 +769,6 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-context { flex-basis: 100%; max-width: 100%; margin: calc(var(--k-gap) * 0.25) 0 0; white-space: normal; }
 .kiosk[data-size='handheld'] .k-head-mid { flex-basis: 100%; justify-content: flex-start; padding: 0; }
 .kiosk[data-size='handheld'] .k-head-mid:empty { display: none; }
-.kiosk[data-size='handheld'] .k-alert { position: static; margin: var(--k-gap) var(--k-pad) 0; }
 .kiosk[data-size='handheld'][data-phase='invitation'] .k-stage { padding: var(--k-pad); }
 .kiosk[data-size='handheld'] .k-stage > section { height: auto; }
 .kiosk[data-size='handheld'] .k-strip { height: auto; flex-wrap: wrap; gap: var(--k-gap); padding-block: var(--k-gap); }
