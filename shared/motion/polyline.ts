@@ -217,20 +217,48 @@ function segmentIndexAt(cum: readonly number[], s: number): number {
   return lo;
 }
 
+/** Arc length s held within the polyline, [0, total length]. */
+function clampArc(cum: readonly number[], s: number): number {
+  const total = cum[cum.length - 1];
+  return s < 0 ? 0 : s > total ? total : s;
+}
+
 /** The point at arc length s, clamped to both ends. */
 export function at(points: readonly XY[], cum: readonly number[], s: number): XY {
   const n = points.length;
   if (n === 0) throw new Error('at: at least one point is required');
   if (n === 1) return points[0];
 
-  const total = cum[cum.length - 1];
-  const clamped = s < 0 ? 0 : s > total ? total : s;
+  const clamped = clampArc(cum, s);
   const i = segmentIndexAt(cum, clamped);
   const segLen = cum[i + 1] - cum[i];
   const t = segLen === 0 ? 0 : (clamped - cum[i]) / segLen;
   const a = points[i];
   const b = points[i + 1];
   return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+}
+
+/**
+ * The stretch of the polyline between two arc lengths, for drawing a
+ * vehicle body along the curve of its rail: `at(from)`, every vertex
+ * strictly between the two arcs, then `at(to)`. Both ends clamp to the
+ * polyline, so a body at a terminus ends where the rail ends rather than
+ * past it; the ends may come in either order; and there are always at
+ * least two points (equal ones when from === to), so a line drawn from the
+ * result is always well-formed.
+ */
+export function slice(points: readonly XY[], cum: readonly number[], from: number, to: number): XY[] {
+  if (from > to) [from, to] = [to, from];
+  const out: XY[] = [at(points, cum, from)];
+  const lo = clampArc(cum, from);
+  const hi = clampArc(cum, to);
+  // segmentIndexAt gives the segment holding lo, so the vertex after it is
+  // the first one past lo; the walk stops at the first vertex at or past hi.
+  for (let i = segmentIndexAt(cum, lo) + 1; i < points.length - 1 && cum[i] < hi; i++) {
+    out.push(points[i]);
+  }
+  out.push(at(points, cum, to));
+  return out;
 }
 
 function samePoint(a: XY, b: XY): boolean {
@@ -249,8 +277,7 @@ export function tangent(points: readonly XY[], cum: readonly number[], s: number
   if (n < 2) return { x: 1, y: 0 }; // no direction to give; a defined, harmless default
 
   const segCount = n - 1;
-  const total = cum[cum.length - 1];
-  const clamped = s < 0 ? 0 : s > total ? total : s;
+  const clamped = clampArc(cum, s);
   const i = segmentIndexAt(cum, clamped);
 
   let j = i;

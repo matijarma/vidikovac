@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { XY } from '../../shared/motion/geo';
-import { at, cumulative, project, tangent } from '../../shared/motion/polyline';
+import { at, cumulative, project, slice, tangent } from '../../shared/motion/polyline';
 
 // A small seeded PRNG so the thousand-query hint-equivalence test is
 // deterministic across runs (a real failure must reproduce, not flicker).
@@ -95,6 +95,65 @@ describe('at / cumulative round-trip', () => {
     const cum = cumulative(points);
     expect(at(points, cum, -50)).toEqual({ x: 0, y: 0 });
     expect(at(points, cum, 500)).toEqual({ x: 100, y: 0 });
+  });
+});
+
+describe('slice', () => {
+  // An L: 100 m east, then 100 m north. A vehicle body that straddles the
+  // corner must bend with it, so the corner vertex has to survive.
+  const bend: XY[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+  ];
+  const cum = cumulative(bend);
+
+  it('keeps the bend vertex between the two sampled ends', () => {
+    expect(slice(bend, cum, 80, 120)).toEqual([
+      { x: 80, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 20 },
+    ]);
+  });
+
+  it('is two points when both ends lie within one segment', () => {
+    expect(slice(bend, cum, 20, 60)).toEqual([
+      { x: 20, y: 0 },
+      { x: 60, y: 0 },
+    ]);
+  });
+
+  it('clamps both ends to the polyline, a body at a terminus stops at the end of the rail', () => {
+    expect(slice(bend, cum, -50, 30)).toEqual([
+      { x: 0, y: 0 },
+      { x: 30, y: 0 },
+    ]);
+    expect(slice(bend, cum, 150, 500)).toEqual([
+      { x: 100, y: 50 },
+      { x: 100, y: 100 },
+    ]);
+  });
+
+  it('gives two equal points when from equals to', () => {
+    expect(slice(bend, cum, 100, 100)).toEqual([
+      { x: 100, y: 0 },
+      { x: 100, y: 0 },
+    ]);
+  });
+
+  it('swaps the ends when from is past to, so the result always runs forward', () => {
+    expect(slice(bend, cum, 120, 80)).toEqual(slice(bend, cum, 80, 120));
+  });
+
+  it('does not repeat a vertex that one end lands on exactly', () => {
+    expect(slice(bend, cum, 100, 150)).toEqual([
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+    ]);
+    expect(slice(bend, cum, 50, 100)).toEqual([
+      { x: 50, y: 0 },
+      { x: 100, y: 0 },
+    ]);
   });
 });
 

@@ -18,6 +18,7 @@
 import type { GraphNetwork, Path } from './network';
 import { evalPathPlan } from './plan';
 import { lastFix, resetOrder, type PathKnot, type Track } from './track';
+import { VEHICLE_LENGTH_M } from './vehicle';
 
 /** A vehicle placed on the graph: the path it runs, and its arc along it. */
 export interface Placed {
@@ -184,8 +185,9 @@ export function arcOnPath(path: Path, edge: number, arc: number, nearS: number |
 // Buses are exempt: they overtake. Plans never run backwards: a hold or a
 // push keeps every plan monotone.
 
-/** One ZET tram: a TMK 2200 is 32 m, a Crotram low-floor 35 m over buffers. */
-export const HEADWAY_M = 35;
+/** One ZET tram plus buffers: the drawn length of a TMK 2200 (32 m) and
+ *  3 m, which is a Crotram low-floor over its buffers. */
+export const HEADWAY_M = VEHICLE_LENGTH_M.tram + 3;
 /** Two ticks of ZET's feed: a vehicle silent this long has stale evidence and constrains nobody. */
 export const SILENT_AFTER_S = 20;
 /** Fixes this far apart along the shared stretch are an order, not scatter:

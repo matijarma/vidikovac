@@ -15,6 +15,7 @@ import { buildPlan, evalPathPlan } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
 import type { TimesProvider } from '../../shared/motion/times';
 import { newTrack, type PlaneFix, type Track } from '../../shared/motion/track';
+import { VEHICLE_LENGTH_M } from '../../shared/motion/vehicle';
 import { corridorSpec, lonLatOf, straight, syntheticNetwork } from './synthetic-network';
 
 // The geometry the ordering register and the client's clamp share (E3): the
@@ -22,6 +23,16 @@ import { corridorSpec, lonLatOf, straight, syntheticNetwork } from './synthetic-
 // edges 0 and 1), route 2 north (path 2_0, edges 0 and 2) and the shapeless
 // pattern of route 9 (edges 0 and 1); edge 5 is the opposite track, which
 // path 1_1 runs alone.
+// The gap the register holds and pushes to is the drawn tram's length plus
+// buffers: the body drawn at high zoom and the law that keeps two marks
+// apart are the same number, and the replay numbers depend on it staying 35.
+describe('HEADWAY_M', () => {
+  it('is one tram length plus 3 m of buffers, still 35', () => {
+    expect(HEADWAY_M).toBe(35);
+    expect(HEADWAY_M).toBe(VEHICLE_LENGTH_M.tram + 3);
+  });
+});
+
 describe('order.ts over the corridor', () => {
   const net = syntheticNetwork(corridorSpec());
   const path = (id: string) => net.paths[net.paths.findIndex((p) => p.id === id)];
