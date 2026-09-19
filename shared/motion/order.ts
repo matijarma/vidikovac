@@ -22,14 +22,22 @@ export interface Placed {
   s: number;
 }
 
-/** The index within `path.edges` of the edge under arc `s`. The integrator's
- *  neighbourhood index needs the index, not only the edge: a pair of marks a
- *  tram length apart is on one edge or the next, and the next is a step in
- *  this sequence, not a search over the whole graph. */
+/** The index within `path.edges` of the edge under arc `s`: the last edge
+ *  that starts at or before it, by binary search over the offsets (they
+ *  ascend). The integrator's neighbourhood index needs the index, not only
+ *  the edge -- a pair of marks a tram length apart is on one edge or the
+ *  next, and the next is a step in this sequence, not a search over the
+ *  whole graph -- and it asks once per mark per frame, sixty times a second,
+ *  over paths of dozens of edges. */
 export function edgeIndexAt(path: Path, s: number): number {
-  let k = 0;
-  while (k + 1 < path.edges.length && path.offsets[k + 1] <= s) k++;
-  return k;
+  let lo = 0;
+  let hi = path.edges.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (path.offsets[mid] <= s) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }
 
 /** The edge under arc s of a path, and the arc within that edge. */

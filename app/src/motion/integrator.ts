@@ -213,6 +213,14 @@ interface VehicleState {
    *  clamp reads, written once a frame before anything converges. */
   targetS: number;
   stepDt: number;
+  /** The clamp's own per-frame scratch, fields rather than a frame's worth of
+   *  maps and sets: the index of the edge the mark is drawn on, the leaders it
+   *  must stay behind (reused in place, never reallocated), and the sweep's
+   *  mark -- 0 not reached, 1 on the stack, 2 converged. Sixty frames a second
+   *  with two hundred marks is not the place to make rubbish. */
+  edgeK: number;
+  aheadOf: VehicleState[];
+  sweep: number;
 }
 
 function evalPath(knots: readonly (readonly [number, number])[], tMs: number): number {
@@ -331,6 +339,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         lastStepAt: now,
         targetS: target.s,
         stepDt: 0,
+        edgeK: 0,
+        aheadOf: [],
+        sweep: 0,
       };
     }
     v.routeId = fix.routeId;
@@ -451,66 +462,83 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     return v.geom !== null && v.geom.path !== null && (v.type === ROUTE_TYPE_TRAM || v.type === ROUTE_TYPE_UNKNOWN);
   }
 
+  // The clamp's working set, kept between frames so a frame allocates
+  // nothing of its own: the marks on rails, the marks on each edge, and the
+  // edges that have a mark on them at all (which is what gets cleared).
+  const onRailsNow: VehicleState[] = [];
+  const byEdge = new Map<number, VehicleState[]>();
+  const edgesUsed: number[] = [];
+
+  function add(follower: VehicleState, leader: VehicleState): void {
+    if (!follower.aheadOf.includes(leader)) follower.aheadOf.push(leader);
+  }
+
   /**
-   * Every leader each mark must stay behind this frame, from two sources in
-   * strict order. First the twin's own register, published per vehicle and
-   * held between polls: while it names a leader, nothing else may name one
-   * for that vehicle, so an order cannot flip because two plans crossed
-   * between two polls. Then, only for a pair the register has placed neither
-   * side of, this frame's plans -- all the client has to go on until the twin
-   * publishes the order, and the same rule the law itself uses: a pair within
-   * one tram length is unordered.
+   * Every leader each mark must stay behind this frame, written onto the
+   * marks themselves, from two sources in strict order. First the twin's own
+   * register, published per vehicle and held between polls: while it names a
+   * leader, nothing else may name one for that vehicle, so an order cannot
+   * flip because two plans crossed between two polls. Then, only for a pair
+   * the register has placed neither side of, this frame's plans -- all the
+   * client has to go on until the twin publishes the order, and the same rule
+   * the law itself uses: a pair within one tram length is unordered.
    *
-   * The index is by the edge each mark is drawn on. A ceiling one tram length
-   * back can only bind between marks on the same edge or on adjacent ones, so
-   * a partner is looked for there and nowhere else: two hundred marks on
-   * screen would otherwise be twenty thousand pair tests every frame.
+   * The index is by the edge each mark is drawn on, looked up one edge either
+   * side along the mark's own path. A ceiling one tram length back can only
+   * bind between marks that close together, so a partner is looked for there
+   * and nowhere else: two hundred marks on screen would otherwise be twenty
+   * thousand pair tests every frame. Every pair the index offers already
+   * satisfies onSharedRails one way round -- the bucket is on this mark's own
+   * path -- and the test is still made, cheap end first, because the rule is
+   * the pairing test and not the index.
    */
-  function leadersOf(list: readonly VehicleState[]): Map<string, VehicleState[]> {
-    const out = new Map<string, VehicleState[]>();
-    if (!graph) return out;
-    const trams = list.filter(onRails);
-    if (trams.length < 2) return out;
-    const add = (follower: VehicleState, leader: VehicleState): void => {
-      const known = out.get(follower.id);
-      if (!known) out.set(follower.id, [leader]);
-      else if (!known.includes(leader)) known.push(leader);
-    };
-    const byId = new Map(trams.map((v) => [v.id, v] as const));
-    for (const v of trams) {
+  function buildOrder(list: readonly VehicleState[]): void {
+    onRailsNow.length = 0;
+    for (const v of list) {
+      v.aheadOf.length = 0;
+      v.sweep = 0;
+      if (onRails(v)) onRailsNow.push(v);
+    }
+    if (!graph || onRailsNow.length < 2) return;
+
+    for (const edge of edgesUsed) byEdge.get(edge)!.length = 0;
+    edgesUsed.length = 0;
+    for (const v of onRailsNow) {
+      const path = graph.paths[v.geom!.path!];
+      v.edgeK = edgeIndexAt(path, v.s);
+      const edge = path.edges[v.edgeK];
+      let here = byEdge.get(edge);
+      if (!here) {
+        here = [];
+        byEdge.set(edge, here);
+      }
+      if (here.length === 0) edgesUsed.push(edge);
+      here.push(v);
+    }
+
+    for (const v of onRailsNow) {
       if (v.leader === null) continue;
-      if (!vehicles.has(v.leader)) {
+      const leader = vehicles.get(v.leader);
+      if (!leader) {
         v.leader = null; // the leader fell silent and was evicted: the relation ends with it
         continue;
       }
-      const leader = byId.get(v.leader);
-      if (leader) add(v, leader);
+      if (onRails(leader)) add(v, leader);
     }
 
-    const byEdge = new Map<number, VehicleState[]>();
-    const edgeIdx = new Map<string, number>();
-    for (const v of trams) {
-      const path = graph.paths[v.geom!.path!];
-      const k = edgeIndexAt(path, v.s);
-      edgeIdx.set(v.id, k);
-      const here = byEdge.get(path.edges[k]);
-      if (here) here.push(v);
-      else byEdge.set(path.edges[k], [v]);
-    }
-    const seen = new Set<string>();
-    for (const a of trams) {
+    for (const a of onRailsNow) {
       if (a.leader !== null) continue;
       const pathA = graph.paths[a.geom!.path!];
-      const k = edgeIdx.get(a.id)!;
-      for (let n = k - 1; n <= k + 1; n++) {
+      for (let n = a.edgeK - 1; n <= a.edgeK + 1; n++) {
         if (n < 0 || n >= pathA.edges.length) continue;
-        for (const b of byEdge.get(pathA.edges[n]) ?? []) {
+        const bucket = byEdge.get(pathA.edges[n]);
+        if (!bucket) continue;
+        for (const b of bucket) {
           if (b === a || b.leader !== null) continue;
-          const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+          // A pair reached from both sides is written twice and `add` keeps
+          // it once, which is cheaper than a set of pair keys per frame.
           const pathB = graph.paths[b.geom!.path!];
-          if (!onSharedRails({ path: pathA, s: a.s }, { path: pathB, s: b.s })) continue;
+          if (!onSharedRails({ path: pathB, s: b.s }, { path: pathA, s: a.s })) continue;
           // The two plans read in one frame; a pair whose paths have diverged
           // at both arcs has no common frame and no order to keep.
           let planA = a.targetS;
@@ -527,7 +555,6 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         }
       }
     }
-    return out;
   }
 
   /** The arc a mark may not pass this frame: one tram length behind the
@@ -535,14 +562,25 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
    *  follower's path. A leader whose arc does not map onto that path
    *  constrains nothing -- the two have diverged there, and a constraint
    *  that cannot be stated in the follower's frame is not one. */
-  function ceilingFor(v: VehicleState, leaders: readonly VehicleState[]): number {
+  function ceilingFor(v: VehicleState): number {
     let ceiling = Number.POSITIVE_INFINITY;
-    for (const leader of leaders) {
+    for (const leader of v.aheadOf) {
       const ahead = Math.min(leader.s, leader.targetS) - HEADWAY_M;
       const here = leader.geom!.path === v.geom!.path ? ahead : mapArc(graph!.paths[leader.geom!.path!], ahead, graph!.paths[v.geom!.path!]);
       if (here !== null && here < ceiling) ceiling = here;
     }
     return ceiling;
+  }
+
+  /** Converges one mark after every leader it must stay behind, marking as it
+   *  goes: a mark already on the stack is the relation that closes a cycle,
+   *  and it is the one dropped. */
+  function convergeInOrder(v: VehicleState): void {
+    if (v.sweep !== 0) return;
+    v.sweep = 1;
+    for (const leader of v.aheadOf) convergeInOrder(leader);
+    v.sweep = 2;
+    v.s = convergeArc(v, v.targetS, v.stepDt, v.aheadOf.length > 0 ? ceilingFor(v) : Number.POSITIVE_INFINITY);
   }
 
   function evict(now: number): void {
@@ -596,20 +634,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       // holds instead. The sweep enters in id order, which is also how a
       // cycle in the published order is broken: at the relation that closes
       // it, the same one every frame.
-      const ordered = [...onGeometry].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-      const leaders = leadersOf(ordered);
-      const converged = new Set<string>();
-      const converging = new Set<string>();
-      const converge = (v: VehicleState): void => {
-        if (converged.has(v.id) || converging.has(v.id)) return;
-        converging.add(v.id);
-        const ahead = leaders.get(v.id) ?? [];
-        for (const leader of ahead) converge(leader);
-        converging.delete(v.id);
-        converged.add(v.id);
-        v.s = convergeArc(v, v.targetS, v.stepDt, ahead.length > 0 ? ceilingFor(v, ahead) : Number.POSITIVE_INFINITY);
-      };
-      for (const v of ordered) converge(v);
+      onGeometry.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      buildOrder(onGeometry);
+      for (const v of onGeometry) convergeInOrder(v);
 
       for (const v of vehicles.values()) {
         const decay = silenceDecay((now - v.planAt) / 1000);
