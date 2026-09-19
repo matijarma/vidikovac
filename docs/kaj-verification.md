@@ -1555,8 +1555,12 @@ Jedan redak izgleda ovako:
   ono što planer knjiži, a mjerenja se vide samo na `/stats`.
 - `reason` je obavezan — da za pola godine piše zašto je broj tu.
 - Neispravan redak **ruši učitavanje datoteke i ispisuje se cijeli** u zapisnik; blizanac tada vozi
-  bez ijednog ručnog unosa, a ne s polovicom njih. Unos koji ne pogađa nijedan peron učitane mreže
-  (preimenovano stajalište, tipfeler) ne ruši ništa nego se **imenuje na `/stats`**.
+  bez ijednog ručnog unosa, a ne s polovicom njih. To se od popravka I3 **vidi na `/stats`**:
+  podebljano uz tablicu zadržavanja piše „Datoteka stop-dwell-overrides.json nije pročitana: …”
+  s porukom samog čitača, a brojač `twin_tick` / `overrides_unreadable` kaže od kada traje.
+  Datoteka koje uopće nema nije greška nego prazna tablica i ne piše ništa. Unos koji ne pogađa
+  nijedan peron učitane mreže (preimenovano stajalište, tipfeler) ne ruši ništa nego se
+  **imenuje na `/stats`**.
 
 Sjeme u datoteci su dvadeset okretišta tramvajskih uzoraka iz `zet-trips.json`, sva na 60 s s
 razlogom „terminus layover placeholder — owner to adjust”: popis za uređivanje, ne prazna datoteka.

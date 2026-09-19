@@ -5,13 +5,12 @@
 // the workers project runs in the same isolate as the Durable Object, so a
 // module-level override here is what the object sees.
 
-import type { DwellOverride } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
 import { upstreamFetchConditional } from '../feed/http';
 import { ZET_RT_URL } from '../feed/modules/zet-rt';
-import { fetchDwellOverrides, fetchNetwork, fetchTripIndex } from './index-load';
+import { fetchDwellOverrides, fetchNetwork, fetchTripIndex, type DwellOverridesResult } from './index-load';
 
 /** Fetches the feed, sending `If-None-Match` when an ETag is known; resolves
  *  to a 200 with bytes or a 304, throws on anything else. */
@@ -24,8 +23,9 @@ export type TwinIndexSource = () => Promise<TripIndex | null>;
 export type TwinNetworkSource = () => Promise<GraphNetwork | null>;
 
 /** Resolves to the owner's dwell overrides (F11); an empty list when the
- *  file is missing or unreadable. */
-export type TwinOverridesSource = () => Promise<DwellOverride[]>;
+ *  file is missing or unreadable, with the parser's complaint beside it in
+ *  the second case so /stats can say so. */
+export type TwinOverridesSource = () => Promise<DwellOverridesResult>;
 
 let upstreamOverride: TwinUpstream | null = null;
 let indexOverride: TwinIndexSource | null = null;

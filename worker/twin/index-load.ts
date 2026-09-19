@@ -10,7 +10,7 @@ import { parseDwellOverrides, type DwellOverride } from '../../shared/motion/dwe
 import { decodeNetwork, type GraphNetwork } from '../../shared/motion/network';
 import { decodeTripIndex, type TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
-import { logError } from '../log';
+import { describeError, logError } from '../log';
 import type { IndexPattern, IndexRows, IndexTrip } from './persist';
 
 export const TRIPS_INDEX_PATH = '/data/zet-trips.json';
@@ -54,20 +54,34 @@ export async function fetchNetwork(env: Env): Promise<GraphNetwork | null> {
   }
 }
 
+/** What one read of the owner's file left the twin with: the entries, and
+ *  the parser's own complaint when there are none because it could not read
+ *  them. `error` is null for a file that parsed and for a file that is simply
+ *  not there -- those two are the same empty table, and neither is a fault. */
+export interface DwellOverridesResult {
+  overrides: DwellOverride[];
+  error: string | null;
+}
+
 /**
  * The owner's dwell overrides (F11). A MALFORMED entry throws out of
  * parseDwellOverrides and is logged with the entry printed, and the twin runs
  * with NO overrides rather than with half of them: a table that silently
  * dropped the line an operator just wrote would be worse than one that says
  * so. A missing file is simply an empty table -- the layer is optional.
+ *
+ * The complaint comes back with the empty list and not only into the log
+ * (the review's I3): a log nobody reads and an empty table look exactly like
+ * "the owner wrote no overrides", while in fact EVERY owner default is gone.
+ * /stats says which of the two it is, out of what this returns.
  */
-export async function fetchDwellOverrides(env: Env): Promise<DwellOverride[]> {
+export async function fetchDwellOverrides(env: Env): Promise<DwellOverridesResult> {
   try {
     const raw = await fetchAsset(env, DWELL_OVERRIDES_PATH);
-    return raw === null ? [] : parseDwellOverrides(raw);
+    return { overrides: raw === null ? [] : parseDwellOverrides(raw), error: null };
   } catch (error) {
     logError('twin_dwell_overrides_unreadable', error);
-    return [];
+    return { overrides: [], error: describeError(error) };
   }
 }
 
