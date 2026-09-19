@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
+import * as cityPlaces from '../../app/src/map/city-layers';
 import { PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
 import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
@@ -94,6 +95,10 @@ class FakeMap {
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
 const lib = { ...basemap, ...overlays, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
+/** The real entry (maplibre-entry.ts) also re-exports the city-places layers;
+ *  the transport tests leave them out so they see the transport style alone,
+ *  and the test that is about those layers asks for this one. */
+const cityLib = { ...lib, ...cityPlaces };
 
 /** Every SDF image the overlays put on a map, in order: one pill and one plate
  *  for each label length a cluster can take, then the four shared marks. */
@@ -133,6 +138,8 @@ interface HarnessOptions {
   loadNetwork?: () => Promise<typeof NET | null>;
   extra?: Record<string, unknown>;
   load?: boolean;
+  /** The MapLibre entry stand-in; `cityLib` adds the city-places layers. */
+  lib?: typeof lib;
 }
 
 async function harness(opts: HarnessOptions = {}) {
@@ -160,7 +167,7 @@ async function harness(opts: HarnessOptions = {}) {
       ...(opts.extra ?? {}),
     },
     {
-      loadMaplibre: async () => lib as never,
+      loadMaplibre: async () => (opts.lib ?? lib) as never,
       raf: (cb) => { queue.set(++nextHandle, cb); return nextHandle; },
       cancel: (h) => { queue.delete(h); },
       now: () => t,
@@ -723,6 +730,22 @@ describe('selection and status', () => {
     container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(selections[2]).toBeNull();
     expect(handle.selection!()).toBeNull();
+  });
+
+  it('gives one tap over both a vehicle pill and a city place to the pill: the number is what the round drew there, and the dot is still a zoom or a pixel away', async () => {
+    const { map, selections } = await harness({ lib: cityLib });
+    // The upstream merge queried the place layers first, so a pill standing on
+    // a place dot could not be tapped at all (F6b ruling).
+    map.rendered = [
+      { layer: { id: 'city-place-dots' }, properties: { id: 'place:1' } },
+      { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1' } },
+    ];
+    map.fire('click', { point: { x: 10, y: 10 } });
+    expect(selections).toEqual([{ kind: 'vehicle', id: 'vehicle:1' }]);
+    // With no pill under it the place is still what the tap means.
+    map.rendered = [{ layer: { id: 'city-place-dots' }, properties: { id: 'place:1' } }];
+    map.fire('click', { point: { x: 10, y: 10 } });
+    expect(selections[1]).toEqual({ kind: 'place', id: 'place:1' });
   });
 
   it('a tap on a cluster eases the camera onto its members while no tap could tell them apart, and picks the nearest member once one could', async () => {

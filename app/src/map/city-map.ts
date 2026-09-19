@@ -1480,7 +1480,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicles, which is not a selection but a request to look closer. */
   type Picked = MapSelection | { kind: 'cluster'; ids: string[] };
 
-  /** The mark under a tap, by priority: a vehicle over a stop over a closure; nothing under it clears. */
+  /** The mark under a tap, by priority: a vehicle over a city place over a
+   *  stop over a closure; nothing under it clears. The vehicle wins because a
+   *  numbered pill is what this map is for -- it is drawn last, over
+   *  everything, and it moves; a place dot standing under one is still
+   *  reachable by tapping beside the pill or by zooming, where a pill covered
+   *  by a dot could not be tapped at all. */
   function pick(m: MapApi, point: { x: number; y: number }): Picked | null {
     const l = lib;
     if (!l) return null;
@@ -1489,13 +1494,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       [point.x + HIT_TOLERANCE_PX, point.y + HIT_TOLERANCE_PX],
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
-    const place = l.CITY_LAYERS ? first(['city-place-dots','city-place-badges','city-place-labels']) : undefined;
-    if (place) return {kind:'place',id:String(place.properties.id)};
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
     if (vehicle) {
       const members = clusterMembers(vehicle.properties);
       return members ? { kind: 'cluster', ids: members } : { kind: 'vehicle', id: String(vehicle.properties.id) };
     }
+    const place = l.CITY_LAYERS ? first(['city-place-dots','city-place-badges','city-place-labels']) : undefined;
+    if (place) return {kind:'place',id:String(place.properties.id)};
     const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
     if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: siblingPlatforms(String(platform.properties.name)) };
     const closure = closuresVisible ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;
