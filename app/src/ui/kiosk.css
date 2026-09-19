@@ -324,6 +324,15 @@
 .k-fr-lead { display: grid; min-width: 3.8em; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--k-ink); font-variant-numeric: tabular-nums; }
 .k-fr-day { font-size: var(--k-label-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; color: var(--k-ink-3); }
 .k-fr-lead--badge { min-width: 0; padding-top: 0.05em; }
+/* A stop's next departures (WP5b). The lead cell carries the plate over the
+   time -- the two things a rider reads first -- and a tracked estimate keeps
+   the live dot in both time branches, the countdown and the clock, so no
+   figure on the screen stands unlabelled. A row nothing tracks says "po redu
+   vožnje" on its second line instead. */
+.k-fr-eta { display: block; margin-top: calc(var(--k-gap) * 0.25); white-space: nowrap; }
+.k-eta { white-space: nowrap; }
+.k-eta[data-live='true'], .k-fr-eta[data-live='true'] { color: var(--k-ink); }
+.k-live { display: inline-block; inline-size: 0.42em; block-size: 0.42em; margin-inline-end: 0.36em; border-radius: 50%; background: var(--k-green); vertical-align: 0.12em; }
 .k-fr-main { display: grid; gap: calc(var(--k-gap) * 0.15); min-width: 0; }
 .k-fr-title { display: -webkit-box; overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--k-ink); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
 .k-fr-sub { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
