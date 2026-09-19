@@ -14,6 +14,10 @@
 // Buses are exempt: they overtake.
 
 import type { GraphNetwork, Path } from './network';
+// The geometry of the order -- which edge an arc is on, and how that arc
+// reads on another path -- is shared with the client's own copy of this law
+// (app/src/motion/integrator.ts), so it lives in order.ts (E3).
+import { mapArc } from './order';
 import { evalPathPlan } from './plan';
 import { lastFix, type PathKnot, type Track } from './track';
 
@@ -44,22 +48,6 @@ interface Framed {
   path: Path;
   knots: PathKnot[];
   fixSec: number;
-}
-
-/** The edge under arc s of a path, and the arc within that edge. */
-function edgeAt(path: Path, s: number): { edge: number; arc: number } {
-  let k = 0;
-  while (k + 1 < path.edges.length && path.offsets[k + 1] <= s) k++;
-  return { edge: path.edges[k], arc: s - path.offsets[k] };
-}
-
-/** Arc `s` of `from` expressed on `to`, or null when `to` does not run the
- *  edge `from` is on at that arc (the two have diverged). */
-function mapArc(from: Path, s: number, to: Path): number | null {
-  const { edge, arc } = edgeAt(from, s);
-  const k = to.edges.indexOf(edge);
-  if (k < 0) return null;
-  return to.offsets[k] + arc;
 }
 
 function evalOn(f: Framed, tRel: number, target: Path): number | null {
