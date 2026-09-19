@@ -908,6 +908,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       loadStops: async () => { stops = await loadStops(); return stops; },
       screen: () => ({ area, stopId: stop?.id ?? null, expiresAt: credentials?.screen?.expiresAt ?? null }),
       themePreference: () => deps.theme.getPreference(),
+      now,
       cycleTheme,
       save: (stopId, next) => {
         if (!beacon || beacon.status() !== 'live') return false;

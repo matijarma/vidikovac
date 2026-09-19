@@ -15,7 +15,7 @@ import { CITY_AREA } from '../../../worker/pairing/areas';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import type { ThemePreference } from '../ui/theme';
 import { DISTRICTS, districtBySlug } from './districts';
-import { clock, fmtDistance } from './format';
+import { clock, fmtDistance, sameZagrebDay, weekdayDayMonth } from './format';
 import { rankStops, sortRouteIds, stopById, type RankedStop } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 
@@ -50,6 +50,8 @@ export interface SettingsDeps {
   loadStops: () => Promise<ScreenStop[]>;
   screen: () => SettingsScreen;
   themePreference: () => ThemePreference;
+  /** The screen's own clock, so the expiry line can tell today from tomorrow. */
+  now: () => number;
   cycleTheme: () => void;
   /** Sends the pair to the screen's beacon; false when the socket cannot carry it now. */
   save: (stopId: string | null, area: string) => boolean;
@@ -223,9 +225,16 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   function paintTheme(): void {
     themeBtn.textContent = fill(s.header.theme, { pref: s.header.themeWord[deps.themePreference()] });
   }
+  /** A temporary screen is good for 24 hours, so the end of a screen made at
+   *  23:40 is 23:40 TOMORROW -- and "Vrijedi do 23:43" on a panel opened at
+   *  23:43 reads as "it is over now". A clock alone is only honest while the
+   *  end falls on today; past midnight the day goes with it. */
   function paintScreenRow(): void {
     const { expiresAt } = deps.screen();
-    expiryEl.textContent = expiresAt === null ? s.settings.expiryNone : fill(s.settings.expiry, { time: clock(expiresAt) });
+    if (expiresAt === null) { expiryEl.textContent = s.settings.expiryNone; return; }
+    const time = clock(expiresAt);
+    const when = sameZagrebDay(expiresAt, deps.now()) ? time : `${weekdayDayMonth(locale, expiresAt)} ${time}`;
+    expiryEl.textContent = fill(s.settings.expiry, { time: when });
   }
   function hideConfirm(): void {
     confirmBox.hidden = true;

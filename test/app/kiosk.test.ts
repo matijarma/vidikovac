@@ -484,8 +484,38 @@ describe('settings: the panel on the screen itself', () => {
     const chosen = q(box, 'input[name=settings-stop]:checked') as HTMLInputElement;
     expect(chosen.value).toBe('106_1');
     expect(text(box.querySelector('input[name=settings-stop]')!.parentElement)).toBe('Bez stajališta');
-    expect(text(q(box, '[data-testid=settings-expiry]'))).toBe('Vrijedi do 10:32');
+    // Twenty hours from 14:32 is tomorrow morning, so the day goes with the clock.
+    expect(text(q(box, '[data-testid=settings-expiry]'))).toBe('Vrijedi do sub 12. 9. 10:32');
     expect(text(q(box, '[data-testid=settings-theme]'))).toBe('Tema: po suncu');
+  });
+
+  // A temporary screen is good for 24 hours, so its end is almost always
+  // tomorrow -- and a clock with no day reads as "it is over now" at the very
+  // hour it matters. Both sides of Zagreb midnight, from the same panel.
+  it('names the day with the hour when the screen outlives today, and the hour alone when it does not', async () => {
+    const sameDay = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...SCREEN, expiresAt: NOW + 2 * 3_600_000 } });
+    const today = mount({ stored: sameDay });
+    await flush();
+    open(today);
+    await flush();
+    // 14:32 + 2 h is still Friday in Zagreb: the hour says everything.
+    expect(text(q(panel(today)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do 16:32');
+
+    const overMidnight = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...SCREEN, expiresAt: NOW + 12 * 3_600_000 } });
+    const tomorrow = mount({ stored: overMidnight });
+    await flush();
+    open(tomorrow);
+    await flush();
+    // 14:32 + 12 h is 02:32 on Saturday: without the day this reads as the small hours of today.
+    expect(text(q(panel(tomorrow)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do sub 12. 9. 02:32');
+
+    // A screen that never expires says so, with no clock at all.
+    const forever = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP, area: 'zagreb' } });
+    const venue = mount({ stored: forever });
+    await flush();
+    open(venue);
+    await flush();
+    expect(text(q(panel(venue)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do opoziva.');
   });
 
   it('saves the chosen area and stop as one screen-set frame and closes; the DO’s answer re-frames the header', async () => {
