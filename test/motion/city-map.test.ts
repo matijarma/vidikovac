@@ -980,3 +980,50 @@ describe('selection and status', () => {
     expect(map.filters['vehicle-selected']).toEqual(['==', ['get', 'id'], 'vehicle:2']);
   });
 });
+
+// Ruling 30. The whole-city window names interchanges, not the busiest
+// corners: route count put Elka (3 trams among 11 routes) and Savski
+// gaj-rotor (3 among 19) on the picture and left Trg bana Jelačića, Glavni
+// kolodvor and Savski most off it. A count of TRAM routes is no better --
+// the city's 19 tram routes overlap so heavily that 111 of the 114
+// tram-served names see two or more, so "two trams" would name nearly every
+// tram stop there is. What the flag reads is the artefact's own terminal bit.
+describe('tram interchanges on the stop features (Ruling 30)', () => {
+  const features = stopsToGeoJson(NET).features;
+  const named = (name: string) => features.filter((f) => f.properties.name === name);
+  const flagOf = (name: string) => {
+    const rows = named(name);
+    expect(rows.length, name).toBeGreaterThan(0);
+    // The answer belongs to the name: every platform of it agrees.
+    expect(new Set(rows.map((f) => f.properties.tramInterchange)).size, name).toBe(1);
+    return rows[0]!.properties.tramInterchange;
+  };
+
+  it('names a tram terminus and passes over a corner that is only busy', () => {
+    // Trams call and trips end here: the interchanges a rider means.
+    for (const hub of ['Trg bana J. Jelačića', 'Glavni kolodvor', 'Savski most', 'Črnomerec', 'Kvaternikov trg', 'Ljubljanica', 'Dubrava']) {
+      expect(flagOf(hub), hub).toBe(true);
+    }
+    // Many routes, a tram among them, nothing starts or ends here: a corner.
+    for (const busy of ['Savski gaj-rotor', 'Elka', 'Heinzelova']) {
+      expect(flagOf(busy), busy).toBe(false);
+      // Tram-served all the same -- GTFS splits the name across platforms and
+      // only some of them see the tram, which is why the flag is the name's.
+      expect(named(busy).some((f) => f.properties.tram), busy).toBe(true);
+    }
+    // Rank would have said the opposite for both of those.
+    expect(named('Savski gaj-rotor')[0]!.properties.rank).toBeGreaterThan(named('Trg bana J. Jelačića')[0]!.properties.rank);
+  });
+
+  it('picks a set the size of a city window, not of a timetable', () => {
+    const hubs = new Set(features.filter((f) => f.properties.tramInterchange).map((f) => f.properties.name));
+    const tramNames = new Set(features.filter((f) => f.properties.tram).map((f) => f.properties.name));
+    expect(hubs.size).toBe(29);
+    // The reduction is the point: the ranked reading named 41 and every
+    // tram-served name is over a hundred.
+    expect(tramNames.size).toBeGreaterThan(100);
+    expect(hubs.size).toBeLessThan(tramNames.size / 3);
+    // A stop with no tram is never an interchange however many buses end there.
+    expect([...hubs].every((n) => tramNames.has(n))).toBe(true);
+  });
+});

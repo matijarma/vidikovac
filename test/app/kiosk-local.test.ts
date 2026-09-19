@@ -17,7 +17,7 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, STOP_LABEL_MIN_RANK, STOP_LABEL_MIN_RANK_FAR, THIN_NAMES_ZOOM, stopLabelMinRank } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
@@ -600,7 +600,7 @@ describe('the one map, through the additive adapter', () => {
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
     // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2), the street names' padding R-KP17's own on the wall's field.
     // The camera is at street level (a configured stop), so the buses are on the picture with the trams.
-    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24, majorStreetNames: true });
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopLabelTramInterchanges: false, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24, majorStreetNames: true });
     // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
     expect(setProzor).toHaveBeenCalledTimes(1);
     expect(setProzor).toHaveBeenLastCalledWith(options.prozor);
@@ -728,23 +728,23 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect((options.lines as unknown[]).length).toBe(1);
   });
 
-  // Ruling 28. A stop's rank is how many routes call there, so the scale runs
-  // upwards and rank 4 is the 41 tram corners the window named -- forty-odd
-  // names among a dozen route plates, fighting for the same pixels. Under
-  // THIN_NAMES_ZOOM only the busiest corners (rank 6, 22 of them) keep a
-  // name; a quarter and a stop are framed close enough to hold rank 4.
-  it('names only the busiest corners while the field holds the whole city, and every ranked hub once it holds a quarter', () => {
+  // Ruling 30, superseding Ruling 28's rank tier: below the line the window
+  // asks for tram interchanges, and the rank it carries is the ordinary one
+  // every nearer frame uses.
+  it('asks for interchanges while the field holds the whole city, and for the ranked hubs once it holds a quarter', () => {
     const { factory, calls, adapter, maps } = stub();
     requestKioskMap(maps, base, adapter);
-    const far = (factory.mock.calls[0]![0] as { prozor: { stopLabelMinRank: number } }).prozor;
+    const far = (factory.mock.calls[0]![0] as { prozor: { stopLabelTramInterchanges: boolean; stopLabelMinRank: number } }).prozor;
     expect(FIELD_MIN_ZOOM).toBeLessThan(THIN_NAMES_ZOOM);
-    expect(far.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK_FAR);
-    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopLabelMinRank: STOP_LABEL_MIN_RANK_FAR }));
+    expect(far.stopLabelTramInterchanges).toBe(true);
+    expect(far.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopLabelTramInterchanges: true }));
     // A quarter's own frame (z14.3 on a wall) is past the line, and so is a stop's.
     const near = stub();
     requestKioskMap(near.maps, { ...base, district: 'trnje' }, near.adapter);
-    const opts = near.factory.mock.calls[0]![0] as { zoom: number; prozor: { stopLabelMinRank: number } };
+    const opts = near.factory.mock.calls[0]![0] as { zoom: number; prozor: { stopLabelTramInterchanges: boolean; stopLabelMinRank: number } };
     expect(opts.zoom).toBeGreaterThanOrEqual(THIN_NAMES_ZOOM);
+    expect(opts.prozor.stopLabelTramInterchanges).toBe(false);
     expect(opts.prozor.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK);
   });
 
@@ -761,16 +761,16 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect((near.factory.mock.calls[0]![0] as { prozor: { majorStreetNames: boolean } }).prozor.majorStreetNames).toBe(true);
   });
 
-  it('reads the rank straight off the field zoom, on either side of the line', () => {
-    expect(stopLabelMinRank(THIN_NAMES_ZOOM - 0.01)).toBe(STOP_LABEL_MIN_RANK_FAR);
-    expect(stopLabelMinRank(THIN_NAMES_ZOOM)).toBe(STOP_LABEL_MIN_RANK);
-    expect(stopLabelMinRank(THIN_NAMES_ZOOM + 0.01)).toBe(STOP_LABEL_MIN_RANK);
+  it('reads both readings straight off the field zoom, on either side of the line', () => {
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM - 0.01)).toBe(true);
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM)).toBe(false);
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM + 0.01)).toBe(false);
     // One line, two rulings: the stop names thin and the street names go together.
     expect(majorStreetNames(THIN_NAMES_ZOOM - 0.01)).toBe(false);
     expect(majorStreetNames(THIN_NAMES_ZOOM)).toBe(true);
     expect(majorStreetNames(THIN_NAMES_ZOOM + 0.01)).toBe(true);
-    // Higher rank is fewer names, not more: the ruling thins the window.
-    expect(STOP_LABEL_MIN_RANK_FAR).toBeGreaterThan(STOP_LABEL_MIN_RANK);
+    // The rank is the same one at every zoom now: the far window does not rank at all.
+    expect(STOP_LABEL_MIN_RANK).toBe(4);
   });
 
   it('keeps every tram in the city on the window, not only the lines of the screen\u2019s own stop, and still narrows to a relayed route', () => {

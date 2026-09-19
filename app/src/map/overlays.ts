@@ -203,6 +203,11 @@ export interface ProzorOptions {
    *  field of twice the ground still places at most eight names (contract 3);
    *  symbol-spacing is no lever for that count and stays the ruling's. */
   labelPadding: number;
+  /** Ruling 30: true names only the tram interchanges (the stop features'
+   *  `tramInterchange`) and ignores the rank entirely -- what the whole-city
+   *  window does. False keeps the ranked reading, which is what every frame
+   *  from a quarter's own up has always had. */
+  stopLabelTramInterchanges?: boolean;
   /** Ruling 29: false drops the promoted major street names outright
    *  (basemap.ts roads_labels_major). The promotion to a flat 22 px is sized
    *  for the wall's 2.8 km field; on a picture of the whole city those same
@@ -756,7 +761,15 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       type: 'symbol',
       source: SOURCES.stops,
       minzoom: prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM,
-      filter: prozor ? ['all', stops, ['get', 'label'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank], ['!=', ['get', 'id'], screenStopId ?? '']] : stopLabelFilter(stops),
+      filter: prozor
+        ? ['all', stops, ['get', 'label'],
+          // Ruling 30: the far window names interchanges, not the busiest
+          // corners -- route count put Elka and Savski gaj-rotor on the
+          // picture and left Trg bana Jelačića, Glavni kolodvor and Savski
+          // most off it. Nearer in, the rank is still what names a stop.
+          prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['>=', ['get', 'rank'], prozor.stopLabelMinRank],
+          ['!=', ['get', 'id'], screenStopId ?? '']]
+        : stopLabelFilter(stops),
       layout: {
         'text-field': ['get', 'name'],
         'text-font': [MAP_FONTS.medium],

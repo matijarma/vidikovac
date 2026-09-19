@@ -209,6 +209,22 @@ describe('the overlay layer list', () => {
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
 
+  // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
+  // rank stops being the question; from the line up nothing changed.
+  it('names interchanges and not ranks when the field holds the whole city', () => {
+    const far = overlayLayers(OVERLAY_LIGHT, { prozor: { ...PROZOR, stopLabelTramInterchanges: true } }).find((l) => l.id === LAYERS.stopLabels)!;
+    const json = JSON.stringify(far.filter);
+    expect(json).toContain('["get","tramInterchange"]');
+    expect(json).not.toContain('"rank"');
+    // Nearer in, the ranked reading, untouched.
+    const near = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR }).find((l) => l.id === LAYERS.stopLabels)!;
+    const nearJson = JSON.stringify(near.filter);
+    expect(nearJson).toContain('[">=",["get","rank"],4]');
+    expect(nearJson).not.toContain('tramInterchange');
+    // Either way the one label per name and the screen's own stop rule hold.
+    for (const f of [json, nearJson]) expect(f).toContain('["get","label"]');
+  });
+
   it('never labels the screen’s own stop from the hub tier: its anchor label already names it (R-KP25)', () => {
     const labels = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1' }).find((l) => l.id === LAYERS.stopLabels)!;
     expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');

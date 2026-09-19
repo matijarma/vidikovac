@@ -149,21 +149,27 @@ export const KIOSK_EMPHASIS: readonly PlaceKind[] = Object.freeze(['event', 'qua
  *  unconditional pill placement) a tenth under the field's derived zoom, so
  *  the compact and the portrait drawings keep their noses too (R-KP2). */
 export const STOP_LABEL_MIN_RANK = 4;
-/** Ruling 28. A stop's rank is how many routes call there (city-map.ts
- *  stopsToGeoJson), so the scale runs upwards: rank 4 is the 41 tram corners
- *  the window used to name, rank 6 the 22 real interchanges. On the wall's
- *  whole-city window those 41 names sit among a dozen route plates and the
- *  two fight for the same pixels -- the plates win and the names are left
- *  half readable. Under this zoom, therefore, only the busiest corners are
- *  named; a quarter (z14.3) and a stop (z15.5) are close enough that the
- *  ranked set is the picture's, and they keep rank 4. */
+/** The line the whole-city window is read differently below: the stop names
+ *  and the promoted street names both answer to it. A quarter (z14.3 on a
+ *  wall) and a stop (z15.5) are above it and are drawn as they always were;
+ *  the city window (z12.7) is below. */
 export const THIN_NAMES_ZOOM = 13.5;
-export const STOP_LABEL_MIN_RANK_FAR = 6;
 export const OVERLAP_ZOOM_MARGIN = 0.1;
 
-/** Which rank carries a name at this field zoom (THIN_NAMES_ZOOM). */
-export function stopLabelMinRank(fieldZoomNow: number): number {
-  return fieldZoomNow < THIN_NAMES_ZOOM ? STOP_LABEL_MIN_RANK_FAR : STOP_LABEL_MIN_RANK;
+/** Ruling 30, superseding Ruling 28's rank tier. Below the line the window
+ *  names tram interchanges and nothing else; the rank is what names a stop
+ *  from the line up. Rank is HOW MANY ROUTES call somewhere, which is a poor
+ *  proxy for "important": it put Elka (3 trams, 11 routes) and Savski
+ *  gaj-rotor (3 / 19) on the picture and left Trg bana Jelačića, Glavni
+ *  kolodvor and Savski most off it, because a terminus at the network's edge
+ *  has few routes overlapping. Nor is a count of TRAM routes the test -- the
+ *  city's 19 tram routes overlap so heavily that 111 of the 114 tram-served
+ *  names see two or more. What picks the names a rider uses out of the
+ *  artefact is the interchange flag the stop features carry (city-map.ts
+ *  stopsToGeoJson): 29 names, the tram termini and the junctions the lines
+ *  turn at. */
+export function stopLabelTramInterchanges(fieldZoomNow: number): boolean {
+  return fieldZoomNow < THIN_NAMES_ZOOM;
 }
 
 /** Ruling 29: whether the basemap's promoted major street names are drawn at
@@ -734,7 +740,7 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  so the stop's routes, the measured field's threshold, its padding and the
  *  camera's own band reach the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: stopLabelMinRank(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
 }
 
 export interface KioskMapInput {

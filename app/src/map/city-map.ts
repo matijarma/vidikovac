@@ -493,15 +493,31 @@ export interface StopFeatureCollection {
       bus: boolean;
       /** True on the one platform per name that carries the label. */
       label: boolean;
+      /** Ruling 30: a tram calls here and some trip starts or ends here --
+       *  the interchanges the whole-city window names. A property of the
+       *  name, so every platform of it carries the same answer. */
+      tramInterchange: boolean;
     };
   }[];
 }
 
 /** Every platform of the artefact, with the routes whose shapes call there,
  *  the modes among them (what a tram-only view keeps), a rank (how many) that
- *  decides whose label wins a crowded corner, and one labelled platform per
- *  name -- GTFS lists one platform per direction, and two labels reading
- *  "Kvaternikov trg" thirty metres apart is clutter, not information. */
+ *  decides whose label wins a crowded corner, one labelled platform per name
+ *  -- GTFS lists one platform per direction, and two labels reading
+ *  "Kvaternikov trg" thirty metres apart is clutter, not information -- and
+ *  whether the stop is a tram interchange (Ruling 30).
+ *
+ *  `tramInterchange` is a property of the NAME, not of the platform: every
+ *  platform that shares a name carries the answer for all of them, because
+ *  which of them holds the label is decided by route count and the question
+ *  "is this an interchange" is not. A stop qualifies when some tram calls
+ *  there AND some trip in the feed starts or ends there -- in this network
+ *  that is the tram termini and the junctions the lines turn at, which is
+ *  what a rider means by an interchange. Route count is NOT the test: the
+ *  city's 19 tram routes overlap so heavily that 111 of the 114 tram-served
+ *  names see two or more of them, so "two trams" names nearly every tram
+ *  stop there is (measured against the shipped artefact, 20 Sept 2026). */
 export function stopsToGeoJson(net: Network): StopFeatureCollection {
   const rows = net.stops.map((stop) => {
     const routes = [...new Set(stop.on.map((on) => net.shapes[on.shape]?.route).filter((r): r is string => Boolean(r)))].sort((a, b) =>
@@ -511,17 +527,27 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
     return { stop, routes, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
   });
   const labelled = new Map<string, { id: string; rank: number }>();
-  for (const { stop, routes } of rows) {
+  const interchange = new Map<string, { tram: boolean; terminal: boolean }>();
+  for (const { stop, routes, tram } of rows) {
     const best = labelled.get(stop.name);
     if (!best || routes.length > best.rank || (routes.length === best.rank && stop.id < best.id)) labelled.set(stop.name, { id: stop.id, rank: routes.length });
+    const seen = interchange.get(stop.name) ?? { tram: false, terminal: false };
+    interchange.set(stop.name, { tram: seen.tram || tram, terminal: seen.terminal || stop.terminal });
   }
   return {
     type: 'FeatureCollection',
-    features: rows.map(({ stop, routes, tram, bus }) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
-      properties: { id: stop.id, name: stop.name, routes, rank: routes.length, tram, bus, label: labelled.get(stop.name)?.id === stop.id },
-    })),
+    features: rows.map(({ stop, routes, tram, bus }) => {
+      const hub = interchange.get(stop.name)!;
+      return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
+        properties: {
+          id: stop.id, name: stop.name, routes, rank: routes.length, tram, bus,
+          label: labelled.get(stop.name)?.id === stop.id,
+          tramInterchange: hub.tram && hub.terminal,
+        },
+      };
+    }),
   };
 }
 
