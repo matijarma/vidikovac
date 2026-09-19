@@ -681,10 +681,15 @@ function houseLayer(layer: StyleLayerLike): StyleLayerLike {
  *  number are what a person zooms in for on a phone; a region, a country, an
  *  island and the city's own name over its own streets orient nobody who is
  *  already standing in Zagreb; no country border crosses this box; a service
- *  road and a footpath are ground texture the figure does not need. */
+ *  road and a footpath are ground texture the figure does not need. A
+ *  neighbourhood name (`places_subplace`) goes with them: on a window onto
+ *  the whole city JARUN and KUSTOSIJA in 26 px capitals were the biggest
+ *  words on a picture that is about the trams moving through them, and a
+ *  person reading a screen in a cafe is already standing in the
+ *  neighbourhood. The default (phone) profile keeps upstream's small ones. */
 export const PROZOR_DROPPED_LAYERS: readonly string[] = Object.freeze([
   'pois', 'roads_labels_minor', 'roads_shields', 'roads_oneway', 'address_label', 'boundaries', 'boundaries_country',
-  'places_locality', 'places_region', 'places_country', 'earth_label_islands', 'water_waterway_label', 'roads_other', 'roads_minor_service',
+  'places_locality', 'places_region', 'places_country', 'places_subplace', 'earth_label_islands', 'water_waterway_label', 'roads_other', 'roads_minor_service',
 ]);
 const PROZOR_DROPPED = new Set<string>(PROZOR_DROPPED_LAYERS);
 function prozorDrops(id: string): boolean {
@@ -731,14 +736,17 @@ const PROZOR_HIGHWAYS = new Set(['roads_highway', 'roads_bridges_highway']);
 type ZoomExpr = unknown[];
 const zoomSize = (...stops: number[]): ZoomExpr => ['interpolate', ['linear'], ['zoom'], ...stops];
 
-/** Line widths in CSS px across the field's own zoom range (13.5…15.5, the
- *  clamp of kiosk/mapview.ts's fieldZoom): a hairline, a line, a heavier
- *  line. Under 1 px MapLibre still draws a crisp translucent hairline; above
- *  it the majors stay thinner than the kiosk's own 1.2 to 3 px tram rail
- *  (`rail`, overlays.ts's tramNetwork). */
-const PROZOR_MINOR_WIDTH = zoomSize(13.5, 0.8, 15.5, 1.2);
-const PROZOR_MAJOR_WIDTH = zoomSize(13.5, 1.6, 15.5, 2.4);
-const PROZOR_HIGHWAY_WIDTH = zoomSize(13.5, 2, 15.5, 3);
+/** Line widths in CSS px across the field's own zoom range (12.7…15.5, the
+ *  clamp of kiosk/mapview.ts's fieldZoom, whose floor the whole-city window
+ *  lowered): a hairline, a line, a heavier line. The ramps carry a stop at
+ *  12.5 rather than holding the street level's weight flat out to the city
+ *  window, where the whole street grid is one texture and every pixel of it
+ *  competes with the rails drawn over it. Under 1 px MapLibre still draws a
+ *  crisp translucent hairline; above it the majors stay thinner than the
+ *  kiosk's own 1.2 to 3 px tram rail (`rail`, overlays.ts's tramNetwork). */
+const PROZOR_MINOR_WIDTH = zoomSize(12.5, 0.6, 13.5, 0.8, 15.5, 1.2);
+const PROZOR_MAJOR_WIDTH = zoomSize(12.5, 1.2, 13.5, 1.6, 15.5, 2.4);
+const PROZOR_HIGHWAY_WIDTH = zoomSize(12.5, 1.5, 13.5, 2, 15.5, 3);
 
 /** The prozor profile's halo, still capped per layer by haloCap(). */
 const PROZOR_HALO_PX = 2;
@@ -780,11 +788,9 @@ function street(layer: StyleLayerLike, color: string, opacity: number, width: Zo
  * after flavorFor('prozor') has already collapsed the fills.
  *
  * What it does, in order of how much it changes the picture: it drops the
- * layers listed above, so no POI name, no shop and no minor street name
- * competes with the figure; it draws every street as a hairline of one
- * colour with no casing; it brings the 224 neighbourhood names the tiles carry
- * (Jarun, Knezija, Spansko, Sveti Duh, Kustosija, Vrbani, Stara Tresnjevka)
- * up to the largest words on the ground; it keeps only the trunk of the
+ * layers listed above, so no POI name, no shop, no minor street name and no
+ * neighbourhood name competes with the figure; it draws every street as a
+ * hairline of one colour with no casing; it keeps only the trunk of the
  * street hierarchy named, spaced so a field holds a handful of names and not
  * Ilica five times; and it keeps the water labels at the promoted sizes,
  * because the Sava is the best orientation cue this city has.
@@ -810,17 +816,6 @@ function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, lab
     case 'landuse_urban_green':
       // Allotments and playgrounds at upstream's 0.7 would be a third tone between the green and the ground.
       return { ...layer, paint: { ...(layer.paint ?? {}), 'fill-opacity': 1 } };
-    case 'places_subplace':
-      // 26 to 28 px across the field's zoom range: 13.2 to 14.2 arcminutes,
-      // under the ceiling, and the biggest words on the ground. The colour is
-      // the flavour's own (the label role), haloed by the ground; padding 12
-      // keeps two names a word apart, max-width 8 keeps "Stara Tresnjevka"
-      // on one line.
-      return promoted(layer, {
-        size: zoomSize(13.5, 26, 15.5, 28),
-        font: MAP_FONTS.medium,
-        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8, 'text-padding': 12, 'text-transform': 'uppercase' },
-      });
     case 'roads_labels_major':
       // Upstream's legacy kind filter rewritten as an expression (a legacy
       // filter may not nest), narrowed to the four classes above. MapLibre

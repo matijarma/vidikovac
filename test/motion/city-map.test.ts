@@ -477,7 +477,8 @@ describe('the basemap and the overlays on it', () => {
       { layer: { id: 'places_subplace' }, properties: { name: 'Trešnjevka' } },
     ];
     expect(handle.placedNames!('roads_labels_major')).toEqual(['Ilica', 'Savska cesta']);
-    expect(handle.placedNames!('places_subplace')).toEqual(['Trešnjevka']);
+    // The neighbourhood names are not on this profile at all (basemap.ts PROZOR_DROPPED_LAYERS), so nothing of theirs is ever placed.
+    expect(handle.placedNames!('places_subplace')).toEqual([]);
     expect(handle.placedNames!('no-such-layer')).toEqual([]);
     // The screen's stop changes, or the field is re-measured: the dots, the labels, the noses and the street names' padding follow without a new map.
     handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1, labelPadding: 48 });
