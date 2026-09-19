@@ -1,5 +1,5 @@
 // The shell around the workspace: one status line for both surfaces (three
-// keyed controls on the phone, seven at the desk), the phone tab bar, the
+// keyed controls on the phone, six at the desk), the phone tab bar, the
 // "Na zaslon" FAB, and the banners for the session's own states. Pure markup
 // builders over a ShellState; the dashboard reconciles each region in place.
 // The rail and the sidebar are gone (plan D4, D10).
@@ -102,7 +102,8 @@ function frozenAttrs(s: ShellState): string {
  * The status line: ONE builder paints keyed children by surface, so the DOM is
  * honest for axe and the target rule (CSS orders and sizes, never hides a
  * control that exists). Phone: wordmark · session · safety. Desktop:
- * wordmark · Još · search · clock+weather · session · bell · safety.
+ * wordmark · spacer · clock · session · Još · domain nav. Both surfaces add
+ * the Zaslon button while the session has a screen.
  */
 export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark

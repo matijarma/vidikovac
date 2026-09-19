@@ -644,7 +644,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
     { id: LAYERS.closures, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closure, 'line-width': closureWidth(selectedClosure, 4) } },
     // A point with no `place` is the plain circle this map has always drawn:
-    // the dashboard's quake map and the kvart thumbnail's work points keep it.
+    // the dashboard's quake map and its work points keep it.
     circle(LAYERS.places, SOURCES.places, { 'circle-radius': 6 * s, 'circle-color': p.place, 'circle-stroke-color': p.halo, 'circle-stroke-width': 1.5 }, { filter: ['!', ['has', 'place']] }),
     // The radius is the magnitude and nothing else. A quake the source gave no
     // magnitude draws no circle at all -- its label alone names its region,
