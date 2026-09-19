@@ -10,6 +10,7 @@ import { emptyState, type TwinState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
 import { simulate } from '../motion/simulator';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
+import type { TripJoin } from '../../worker/twin/publish';
 import { corridorIndex, corridorJoins, frameAsFeed } from './engine-fixture';
 
 // The twin's tick over the corridor: the simulator's frames go in, the
@@ -152,5 +153,46 @@ describe('runTick on the corridor', () => {
     expect(blindBus.motion && isFreeMotion(blindBus.motion)).toBe(true);
     expect(blindBus.geo?.coordinates[0]).toBeCloseTo(busAt(180).lon, 5);
     expect(toPlane(blindBus.geo!.coordinates[0] as number, blindBus.geo!.coordinates[1] as number).x).toBeCloseTo(180, 0);
+  });
+
+  // E3: the register's leader reaches the client on the wire, and it is
+  // withdrawn the moment the register drops the relation -- `behind` is
+  // derived from track.order.leader at every publish, never latched.
+  it('publishes the register leader as data.behind and withdraws it when the relation goes', () => {
+    const trunkAt = (x: number) => lonLatOf({ x, y: 0 });
+    const twoTrams = (headerTs: number, xA: number, xB: number) => ({
+      headerTs,
+      vehicles: [
+        { vehicleId: 'A', tripId: 'ta', routeId: '1', lon: trunkAt(xA).lon, lat: trunkAt(xA).lat, atSec: headerTs },
+        { vehicleId: 'B', tripId: 'tb', routeId: '1', lon: trunkAt(xB).lon, lat: trunkAt(xB).lat, atSec: headerTs },
+      ],
+      tripUpdates: [],
+    });
+    const pairJoins = new Map<string, TripJoin>([
+      ['ta', { direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0', pathId: '1_0' }],
+      ['tb', { direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0', pathId: '1_0' }],
+    ]);
+    const behindOf = (result: { payload: { items: { id: string; data?: Record<string, unknown> }[] } }, id: string): unknown =>
+      result.payload.items.find((item) => item.id === `vehicle:${id}`)?.data?.behind;
+
+    const T = start;
+    let state = emptyState();
+    let result = runTick({ state, feed: twoTrams(T, 1000, 600), nowMs: (T + 2) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    // One reading is not yet a relation, so nothing is on the wire.
+    expect(behindOf(result, 'B')).toBeUndefined();
+    result = runTick({ state, feed: twoTrams(T + 10, 1100, 700), nowMs: (T + 12) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(state.tracks['B'].order.leader).toBe('A');
+    expect(behindOf(result, 'B')).toBe('A');
+    expect(behindOf(result, 'A')).toBeUndefined();
+    for (const key of Object.keys(result.payload.items.find((item) => item.id === 'vehicle:B')!.data ?? {})) {
+      expect(DATA_KEYS.vehicle, `vehicle:B emitted ${key}`).toContain(key);
+    }
+    // B's next fix lands 400 m past A: more than any swap on single track,
+    // so the relation is dropped -- and `behind` goes with it, that tick.
+    result = runTick({ state, feed: twoTrams(T + 20, 1150, 1600), nowMs: (T + 22) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
+    expect(result.state.tracks['B'].order.leader).toBeNull();
+    expect(behindOf(result, 'B')).toBeUndefined();
   });
 });

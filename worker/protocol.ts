@@ -237,6 +237,13 @@ export const SERVER_EVENTS = [
   // ahead_ge50|within50|behind_ge50): the plan ahead of the tram is the
   // failure the round forbids, so its share is the number /stats leads with.
   'twin_hindsight_sign',
+  // E3: what the ordering register did this tick (dim1
+  // relation|established|dropped|hold|push|concession|swap, dim2 the kind).
+  // `relation` is the standing count, the rest are events of the tick, so
+  // the table reads as "how many orders are on the books, and what happened
+  // to them"; concessions and swaps are the only two ways a standing order
+  // may reverse, which is what makes an overtake countable at all.
+  'twin_order',
   // R-TE18: the hourly HEAD of ZET's static GTFS against the artefacts' build
   // time (dim1 current|newer|unknown|error); "newer" is the call to rebuild.
   'static_watch',

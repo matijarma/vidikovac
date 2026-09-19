@@ -154,8 +154,13 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
   // A); 'speed' (m/s), 'confidence' (0..1) and 'held' are the twin's OWN
   // estimates from history, geometry and timetable (R-TE1), never ZET's
-  // position.speed, which the direct parser still drops.
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds', 'speed', 'confidence', 'held'],
+  // position.speed, which the direct parser still drops. 'behind' is the
+  // twin's ordering register (E3): the vehicle id of the tram this one is
+  // established behind, so the client draws the order the twin reasoned
+  // about rather than re-deriving one from two plans between polls. It is
+  // read off the register at every publish, so it is withdrawn the tick the
+  // relation ends, and absent for a tram the register places nowhere.
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'delaySeconds', 'speed', 'confidence', 'held', 'behind'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],

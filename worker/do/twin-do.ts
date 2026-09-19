@@ -132,6 +132,22 @@ function hindsightSignEntries(counts: HindsightSignCounts): MetricsEntry[] {
   return entries;
 }
 
+/** The ordering register's pass as metric cells (E3): one entry per counter
+ *  that moved, in the same batched write as the hindsight histograms. */
+function orderEntries(report: OrderReport | null): MetricsEntry[] {
+  if (!report) return [];
+  const counts: [string, number][] = [
+    ['relation', report.relations],
+    ['established', report.established],
+    ['dropped', report.dropped],
+    ['hold', report.holds],
+    ['push', report.pushes],
+    ['concession', report.concessions],
+    ['swap', report.swaps],
+  ];
+  return counts.filter(([, count]) => count > 0).map(([dim1, count]) => ({ event: 'twin_order' as const, dim1, dim2: 'tram', count }));
+}
+
 export class TwinDO extends DurableObject<Env> {
   private state: TwinState | null = null;
   private payload: FeedPayload | null = null;
@@ -312,10 +328,11 @@ export class TwinDO extends DurableObject<Env> {
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);
     for (const entry of unsigned) hindsightSamples += entry.count ?? 0;
-    const entries = [...unsigned, ...hindsightSignEntries(result.hindsightSign)];
+    const entries = [...unsigned, ...hindsightSignEntries(result.hindsightSign), ...orderEntries(result.order)];
     if (entries.length > 0) {
       // One batched write per tick, never one RPC per vehicle; the signed
-      // histogram rides in the same batch, so the two never drift apart.
+      // histogram and the ordering register ride in the same batch, so none
+      // of them drifts apart from the others.
       void metricsStub(this.env)
         .recordMany(entries)
         .catch((error: unknown) => logError('twin_hindsight_failed', error));

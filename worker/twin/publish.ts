@@ -146,6 +146,9 @@ export function buildPayload(
         speed: round(track.speed, 10),
         confidence: round(track.confidence, 100),
         held: placed.held,
+        // The ordering register's leader (E3), read fresh at every publish:
+        // a relation that ended is off the wire the same tick it ended.
+        behind: track.order.leader ?? undefined,
       }),
       ...(placed.motion ? { motion: placed.motion } : {}),
     });

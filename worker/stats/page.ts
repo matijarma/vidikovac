@@ -367,6 +367,8 @@ export function renderStatsPage(view: StatsView): string {
     `<p class="lede">Ista očitanja po predznaku: <em>ahead_ge50</em> je plan 50 m ili više ispred vozila (oznaka koja se mora vraćati), <em>behind_ge50</em> plan toliko iza njega (čita se kao kašnjenje GPS-a), <em>within50</em> unutar toga.</p>` +
     matrixTable('Predznak greške plana po horizontu', 'Horizont', pivot(rows, 'twin_hindsight_sign', 'dim1', 'dim2'), 'još nema ocijenjenih planova s predznakom') +
     aheadShareLine(rows) +
+    `<h3>Registar redoslijeda</h3><p class="lede">Tko je iza koga na istim tračnicama, zapisano iz očitanja i onda postojano: <em>relation</em> je koliko odnosa stoji u tom otkucaju, <em>established</em> koliko ih je upisano, <em>dropped</em> koliko palo (razišli su se ili je odnos zastario), <em>hold</em> i <em>push</em> koliko ih je taj otkucaj stvarno pomaknulo planove, a <em>concession</em> i <em>swap</em> su jedina dva načina na koja se upisani redoslijed smije obrnuti.</p>` +
+    matrixTable('Registar redoslijeda po događaju', 'Događaj', pivot(rows, 'twin_order', 'dim1', 'dim2'), 'registar još nije ništa zapisao') +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +
     `</section>` +
     `<section><h2>Evaluacija prototipa</h2><p class="lede">Privremeni zasloni i njihove sesije. Ovi brojevi ostaju odvojeni od korištenja na lokacijama i ne ulaze u grad.csv.</p>` +
