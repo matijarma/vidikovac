@@ -51,9 +51,8 @@ različiti; QR na tim zaslonima ostaje najmanje 240 CSS piksela.
 Dežurna ljekarna na karti nosi prsten i adresu. Blizu stajališta zaslona
 prsten ostaje, a sigurnosna traka nosi puni naziv.
 
-Radovi u tijeku broje se za gradsku četvrt stajališta kad je poznata i
-ploča to kaže („Radovi u kvartu”); dok četvrt nije poznata ili je izvor
-tek uveden, broje cijeli grad i kažu to izričito („Radovi u gradu”).
+Radovi u tijeku broje se za cijeli grad i ploča to kaže izričito
+(„Radovi u gradu”); nema odabira gradske četvrti.
 Adresa `/kiosk/` više ne prima dodatak `?prizor=`: nema više odabira
 prizora jer postoji samo jedan. Aplikacija i dalje poštuje sustavnu
 postavku smanjenog pokreta preglednika, ali sada zaustavlja samo glatki
@@ -61,8 +60,8 @@ prijelaz pri pomicanju vozila na karti; podaci se i dalje osvježavaju kao
 i inače.
 
 Izričit prikaz na zaslon šalje samo javni izbor: područje, liniju,
-stajalište ili stavku te javnu četvrt i vremenski raspon tog pogleda.
-Šest područja i pogled Kvart imaju raspored za gledanje s udaljenosti.
+stajalište ili stavku te vremenski raspon tog pogleda.
+Šest područja imaju raspored za gledanje s udaljenosti.
 Tekst pretrage, spremljeni popisi i koordinate uređaja ne prenose se.
 
 Nova osoba koja skenira ne prekida postojeći prikaz. Ako želi prikazati
