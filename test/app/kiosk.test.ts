@@ -18,7 +18,8 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
+import { cityWindowView, DISTRICT_SPAN_M, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
+import { districtBySlug } from '../../app/src/kiosk/districts';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 import { fakeCityStore } from '../city/fake-store';
@@ -1629,6 +1630,51 @@ describe('the field, the column and the one map', () => {
     expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-lines] li.k-line')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-panel-around] li.k-fr')).not.toBeNull();
+  });
+
+  // What Postavke set the screen to is what the invitation frames when no stop
+  // does. The header chip and the camera read the one answer, so a screen set
+  // to the whole city cannot name a quarter in words and show one in picture.
+  it('frames the invitation on the četvrt the screen was set to', async () => {
+    const map = spyMap();
+    const seat = districtBySlug('trnje')!.seat;
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }), mapFactory: map.factory as never });
+    await flush();
+    const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
+    // The seat camera holds the frame until the quarter's own rings land (mapview.ts fieldView).
+    expect(options.center).toEqual([seat.lon, seat.lat]);
+    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, seat.lat, DISTRICT_SPAN_M));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trnje');
+  });
+
+  it('opens on the whole city for `zagreb` and for a screen that named no area at all', async () => {
+    const window = cityWindowView(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide);
+    const city = spyMap();
+    const k = mount({ stored: STORED_CITY, mapFactory: city.factory as never });
+    await flush();
+    // 'zagreb' is the whole city, not a quarter: no outline, and the city window's own frame.
+    expect(city.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    k.handle.destroy();
+    const none = spyMap();
+    const n = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null } }), mapFactory: none.factory as never });
+    await flush();
+    expect(none.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(n.root, '[data-testid=kiosk-context]'))).toBe('');
+  });
+
+  it('re-frames the one live map when the DO answers a Postavke save with another area', async () => {
+    const map = spyMap();
+    const k = mount({ stored: STORED_CITY, mapFactory: map.factory as never });
+    await flush();
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'maksimir' });
+    await flush();
+    const seat = districtBySlug('maksimir')!.seat;
+    // The same map, moved -- never a second one built for the new frame.
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [seat.lon, seat.lat] }));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Maksimir');
   });
 });
 

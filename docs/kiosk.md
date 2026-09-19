@@ -28,6 +28,11 @@ rute `/api/admin/*` i `/stats`.
    sekundi, gumb se vraća uz istu obavijest; odgovor koji ipak stigne poslije
    svejedno ponovno kadrira zaslon. Postavke se ne otvaraju dok traje
    otključana sesija.
+   Odabir kadrira i kartu pozivnice: *Cijeli grad* (područje `zagreb`, kao i
+   zaslon bez ijednog područja) otvara prozor cijeloga grada, jedna gradska
+   četvrt sjeda na svoje sjedište dok joj ne stigne obris, a odabrano
+   stajalište nadjačava oboje i drži svoj ulični kadar. Zaglavlje čita isti
+   odgovor: naziv stajališta, inače naziv četvrti, a za cijeli grad ništa.
 4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Uspješna
    provjera izravno otvara desetominutni pogled, bez drugog gumba „Otključaj”.
 5. Zaslon nastavlja prikazivati pregled grada. Telefon pregledava privatno.

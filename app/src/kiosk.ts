@@ -395,13 +395,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const i = THEME_PREFERENCES.indexOf(deps.theme.getPreference());
     deps.theme.setPreference(THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length]!);
   }
+  /** The četvrt the screen is set to, or null for the whole city -- which is
+   *  both a screen set to `zagreb` and a screen that never named an area at
+   *  all. The header chip and the invitation's camera read this one answer, so
+   *  "no stop, whole city" cannot mean one thing in the words and another in
+   *  the picture. */
+  function configuredDistrict(): string | null {
+    return area && area !== CITY_AREA.slug ? area : null;
+  }
   /** The stop chip is the stop's name alone (kajimafix 03.1): a venue's kind or
    *  a temporary screen's expiry are operator facts and belong to the
    *  settings panel, never to a passer-by's header. A screen without a stop
    *  names its četvrt instead; one set to the whole city names nothing -- the
    *  brand beside it already says which city. */
   function paintContext(): void {
-    const district = area && area !== CITY_AREA.slug ? districtLabel(area) : '';
+    const district = districtLabel(configuredDistrict());
     contextEl.textContent = !credentials ? '' : stop ? stop.name : district;
     // Settings belong to a live screen showing the invitation: never before one
     // exists, never over a granted session, and never over a screen that has
@@ -536,6 +544,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const composition = compositionOf(layout);
     const container = requestKioskMap(maps, {
       stop, snapshots, now: now(), reducedMotion, locale, renderer: mapMode,
+      // What the screen was set to frames the invitation when no stop does: a
+      // četvrt opens on its outline, the whole city on the city window.
+      district: configuredDistrict(),
       city:cityStore.snapshot(),localSelection,localGroup,localCategory,localQuery,exploring,
       onSelect:exploreSelection,
       onCamera:onMapCamera,
