@@ -42,11 +42,21 @@ export const BRIEF_MAX_UNCACHED = 8;
 export const BRIEF_MAX_CHARS = 140;
 /** A word this long is specific enough that sharing it proves the answer read the text. */
 const SIGNIFICANT_TOKEN_LETTERS = 5;
+/**
+ * Below this, a text is already the one line the ticker wants and is never
+ * sent to the model. Measured, not guessed: in the first live probe eleven of
+ * seventeen answers came back LONGER than the text they were given, and every
+ * fabrication in that run -- an NBA career invented for "Dani Novoselca", a
+ * flood invented for "Trakošćanska za sve" -- was the model padding a headline
+ * that had nothing to condense. A short title is its own best ticker line.
+ */
+export const BRIEF_MIN_SOURCE_CHARS = 120;
 
 export const BRIEF_SYSTEM_PROMPT =
   'Ti si urednik gradskog informativnog zaslona u Zagrebu. Iz zadanog teksta napiši jednu rečenicu na hrvatskom jeziku, ' +
-  'najviše 110 znakova, koja sadrži samo činjenice iz tog teksta. Bez uvoda, bez navodnika, bez markdowna, bez novog retka. ' +
-  'Odgovori isključivo tom rečenicom.';
+  'najviše 110 znakova, koja sadrži samo činjenice iz tog teksta. Rečenica mora biti kraća od zadanog teksta. ' +
+  'Ne dodaj ništa čega u tekstu nema, ne nagađaj razloge, mjesta ni datume i ne prepisuj cijeli tekst. ' +
+  'Bez uvoda, bez navodnika, bez markdowna, bez novog retka. Odgovori isključivo tom rečenicom.';
 
 /** What the text is, for the model and for the cache key: the same sentence about a tram notice and about an act is not the same brief. */
 const KIND_LABEL: Record<BriefKind, string> = {
@@ -180,7 +190,7 @@ export async function briefAll(env: Env, texts: readonly string[], kind: BriefKi
   if (!ai || isTestEnvironment(env)) return briefs;
 
   try {
-    const unique = [...new Set(texts)].filter((text) => text.trim() !== '');
+    const unique = [...new Set(texts)].filter((text) => text.trim().length > BRIEF_MIN_SOURCE_CHARS);
     const looked = await Promise.all(unique.map(async (text) => {
       const key = await briefKey(kind, text);
       return { text, key, cached: await readCached(env, key) };

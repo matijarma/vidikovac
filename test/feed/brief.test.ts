@@ -9,6 +9,7 @@ import { KOMUNALNE_BRIEF_COUNT, fetchKomunalne } from '../../worker/feed/modules
 import { FIXTURE_CONTEXTS } from './fixture-contexts';
 import {
   BRIEF_MAX_UNCACHED,
+  BRIEF_MIN_SOURCE_CHARS,
   BRIEF_MODEL,
   BRIEF_NEGATIVE_TTL_SECONDS,
   BRIEF_TIMEOUT_MS,
@@ -24,8 +25,10 @@ import {
 // call; it never decides whether a test passes -- validation, caching and the
 // per-refresh cap are asserted on the returned map and on the KV contents.
 
-const ACT = 'Odluka o izmjenama i dopunama Odluke o komunalnom redu Grada Zagreba';
-const GOOD = 'Grad Zagreb mijenja Odluku o komunalnom redu.';
+/** A real gazette act title from the live probe: long enough to be worth condensing. */
+const ACT = 'Odluka o davanju koncesije za obavljanje energetske djelatnosti distribucije '
+  + 'toplinske energije na području centralnog toplinskog sustava Grada Zagreba';
+const GOOD = 'Grad Zagreb daje koncesiju za distribuciju toplinske energije.';
 /** Shares no token of five letters or more with ACT, so it must be refused. */
 const UNRELATED = 'Nema poveznice s izvornim sadržajem.';
 
@@ -89,8 +92,8 @@ describe('acceptBrief', () => {
 
   it('refuses an empty answer, a second line and anything past 140 characters', () => {
     expect(acceptBrief('   ', ACT)).toBeNull();
-    expect(acceptBrief(`${GOOD}\nI još jedan redak o komunalnom redu.`, ACT)).toBeNull();
-    expect(acceptBrief(`${'Odluka o komunalnom redu Grada Zagreba, '.repeat(4)}kraj.`, ACT)).toBeNull();
+    expect(acceptBrief(`${GOOD}\nI još jedan redak o toplinskoj energiji.`, ACT)).toBeNull();
+    expect(acceptBrief(`${'Koncesija za distribuciju toplinske energije u Zagrebu, '.repeat(3)}kraj.`, ACT)).toBeNull();
   });
 
   it('refuses markdown and a preamble list, and unwraps a quoted sentence', () => {
@@ -100,7 +103,8 @@ describe('acceptBrief', () => {
   });
 
   it('folds case and Croatian diacritics when it compares words', () => {
-    expect(acceptBrief('KOMUNALNOM redu se mijenja odluka.', ACT)).toBe('KOMUNALNOM redu se mijenja odluka.');
+    const shouting = 'Koncesija se daje na PODRUČJU centralnog toplinskog sustava.';
+    expect(acceptBrief(shouting, ACT)).toBe(shouting);
   });
 });
 
@@ -180,7 +184,7 @@ describe('briefAll', () => {
     const texts = Array.from({ length: 12 }, (_, i) => `${ACT} broj ${i}`);
     const env = makeEnv(async (_model, input) => {
       const text = String((input as { messages: { content: string }[] }).messages[1].content);
-      return { response: `Zagreb mijenja odluku o komunalnom redu, stavka ${text.slice(-1)}.` };
+      return { response: `Zagreb daje koncesiju za toplinske energije, stavka ${text.slice(-1)}.` };
     });
 
     const first = await briefAll(env, texts, 'akt');
@@ -198,6 +202,27 @@ describe('briefAll', () => {
     const briefs = await briefAll(env, [ACT, ACT, '   ', ''], 'akt');
     expect(calls).toHaveLength(1);
     expect(briefs.size).toBe(1);
+  });
+
+  // The first live probe (recorded in the task report): eleven of seventeen
+  // answers came back longer than the text they were meant to condense, and
+  // every fabricated brief in that run was the model padding a headline that
+  // had nothing to condense. A text that already reads as one line IS the
+  // ticker line, and costs no call.
+  it('never spends a call on a text that is already one readable line', async () => {
+    const env = makeEnv(answers(GOOD));
+    const short = 'U primjeni jesenski vozni red';
+    expect(short.length).toBeLessThan(BRIEF_MIN_SOURCE_CHARS);
+    const briefs = await briefAll(env, [short], 'obavijest');
+    expect(briefs.size).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect(kv.puts).toHaveLength(0);
+  });
+
+  it('condenses a text that is longer than one line', async () => {
+    const env = makeEnv(answers(GOOD));
+    expect(ACT.length).toBeGreaterThan(BRIEF_MIN_SOURCE_CHARS);
+    expect((await briefAll(env, [ACT], 'akt')).get(ACT)).toBe(GOOD);
   });
 
   it('does nothing at all without the AI binding', async () => {
