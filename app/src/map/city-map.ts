@@ -680,6 +680,14 @@ export interface CityMapOptions {
   attributionCompact?: boolean;
   /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
   placeLabels?: boolean;
+  /** false leaves the city places' own names off (map/city-layers.ts): the
+   *  public screen draws badges and dots alone until a person explores.
+   *  Default true. Changed live with setCityLabels. */
+  cityLabels?: boolean;
+  /** How far from a mark a tap may land and still pick it, CSS px. The public
+   *  screen raises it: a finger on a wall is not a mouse on a desk, and its
+   *  stop rings are small at city zoom. Default HIT_TOLERANCE_PX. */
+  hitTolerancePx?: number;
   /** Which basemap this surface reads: 'prozor' for the public screen, whose
    *  ground is two landuse tones under hairline streets with the neighbourhood
    *  names promoted and every label sized from a stated viewing geometry
@@ -700,6 +708,10 @@ export interface CityMapOptions {
   /** A user gesture ends a follow. The schema reports null because its
    *  viewport is not a geographic camera; callers must keep their saved map camera. */
   onUserMove?: (camera: MapCamera | null) => void;
+  /** Every zoom that settles, whoever asked for it (a person's gesture or one
+   *  of the wrapper's own eases): the public screen decides from it whether
+   *  the buses are on the picture (kiosk/mapview.ts busesVisible). */
+  onCamera?: (camera: MapCamera) => void;
 }
 
 export interface CityMapHandle {
@@ -727,6 +739,8 @@ export interface CityMapHandle {
   /** After the container's box changed while it sat outside the layout. */
   resize?(): void;
   setModes?(modes: ReadonlySet<number> | null): void;
+  /** The city places' own names on or off, on the one live map. */
+  setCityLabels?(on: boolean): void;
   /** The kinds of city point this chapter lights; null lights every one. */
   setEmphasis?(emphasis: readonly PlaceKind[] | null): void;
   /** "Only this line on the map": the reader's own switch, per device. A
@@ -845,7 +859,8 @@ export function documentTheme(doc: Document | undefined): MapTheme {
 
 /** The camera zooms in to here for one stop or vehicle, never out. */
 export const FOCUS_ZOOM = 15.5;
-/** How far from a mark a tap may land and still pick it, CSS px. */
+/** How far from a mark a tap may land and still pick it, CSS px; a surface
+ *  read and touched from further away raises it (CityMapOptions.hitTolerancePx). */
 const HIT_TOLERANCE_PX = 8;
 /** The camera's move to a selection, ms; 0 under reduced motion. */
 const CAMERA_MS = 600;
@@ -950,6 +965,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
+  let cityLabels = options.cityLabels !== false;
+  const hitTolerance = options.hitTolerancePx ?? HIT_TOLERANCE_PX;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
   let outline: MapOutline | null = options.outline ?? null;
@@ -1364,6 +1381,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
     // honest place to ask it what it drew (see the probe comment above).
     created.on('idle', writeRenderProbe);
@@ -1396,7 +1414,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     if (l.cityLayers) {
-      cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
+      cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale,cityLabels);
       for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>);
     }
     styled = true;
@@ -1568,8 +1586,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     if (!l) return null;
     const box = [
-      [point.x - HIT_TOLERANCE_PX, point.y - HIT_TOLERANCE_PX],
-      [point.x + HIT_TOLERANCE_PX, point.y + HIT_TOLERANCE_PX],
+      [point.x - hitTolerance, point.y - hitTolerance],
+      [point.x + hitTolerance, point.y + hitTolerance],
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
@@ -1667,6 +1685,17 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     writeFocusProbe(map, l);
   }
 
+  /** Re-derives the city-place layers for the current theme, selection and
+   *  label switch and applies what changed -- the sibling of applyOverlays for
+   *  the layers city-layers.ts owns. */
+  function applyCityOverlays(): void {
+    const l = lib;
+    if (!map || !styled || !l?.cityLayers) return;
+    const next = l.cityLayers(l.overlayPalette(theme), selection?.kind === 'place' ? selection.id : null, scale, cityLabels);
+    applyOps(map, l.styleDiff(cityOverlays, next));
+    cityOverlays = next;
+  }
+
   /** Selects (or clears with null) and marks it on the map; `fit` moves the camera to it. */
   function select(next: MapSelection | null, opts: { fit?: boolean } = {}): void {
     selection = next;
@@ -1674,10 +1703,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (typeof following === 'string' && next?.kind !== 'vehicle') following = null;
     if (following === true && next?.kind !== 'route') following = null;
     applyOverlays();
-    if(map&&styled&&lib?.cityLayers){
-      const nextLayers=lib.cityLayers(lib.overlayPalette(theme),next?.kind==='place'?next.id:null,scale);
-      applyOps(map,lib.styleDiff(cityOverlays,nextLayers));cityOverlays=nextLayers;
-    }
+    applyCityOverlays();
     if (opts.fit) fitSelection();
   }
 
@@ -1754,10 +1780,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyBasemap();
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
-    if(lib?.cityLayers){
-      const next=lib.cityLayers(lib.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
-      applyOps(map,lib.styleDiff(cityOverlays,next));cityOverlays=next;
-    }
+    applyCityOverlays();
   }
 
   function setLocale(next: string): void {
@@ -1896,6 +1919,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setModes(next) {
       modes = next;
       applyOverlays();
+    },
+    setCityLabels(on) {
+      if (on === cityLabels) return;
+      cityLabels = on;
+      applyCityOverlays();
     },
     setEmphasis,
     setLineFocus(on) {

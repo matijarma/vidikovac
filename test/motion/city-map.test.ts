@@ -77,7 +77,8 @@ class FakeMap {
   setLayerZoomRange(id: string, min: number, max: number): void { this.zoomRanges[id] = [min, max]; }
   getLayer(id: string): unknown { return this.layers.find((l) => l.id === id); }
   setSprite(url: string): void { this.sprite = url; }
-  queryRenderedFeatures(_geometry: unknown, options?: { layers?: string[] }) { return this.rendered.filter((f) => !options?.layers || options.layers.includes(f.layer.id)); }
+  readonly queries: unknown[] = [];
+  queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }) { this.queries.push(geometry); return this.rendered.filter((f) => !options?.layers || options.layers.includes(f.layer.id)); }
   easeTo(options: Record<string, unknown>): void { this.cameraCalls.push({ kind: 'easeTo', options }); this.apply(options); }
   jumpTo(options: Record<string, unknown>): void { this.cameraCalls.push({ kind: 'jumpTo', options }); this.apply(options); }
   fitBounds(bounds: unknown, options: Record<string, unknown> = {}): void { this.cameraCalls.push({ kind: 'fitBounds', options: { ...options, bounds } }); }
@@ -867,6 +868,47 @@ describe('selection and status', () => {
     container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(selections[2]).toBeNull();
     expect(handle.selection!()).toBeNull();
+  });
+
+  // The public screen is read and touched from across a room: its stop rings
+  // are small at city zoom and a finger is not a mouse, so the box a tap
+  // queries is its own (kiosk/mapview.ts passes 28).
+  it('queries a tap in the box the surface asked for: the desk’s eight pixels, the public screen’s own twenty-eight', async () => {
+    const desk = await harness({ lib: cityLib });
+    desk.map.fire('click', { point: { x: 100, y: 100 } });
+    expect(desk.map.queries[0]).toEqual([[92, 92], [108, 108]]);
+    const wall = await harness({ lib: cityLib, extra: { hitTolerancePx: 28 } });
+    wall.map.fire('click', { point: { x: 100, y: 100 } });
+    expect(wall.map.queries[0]).toEqual([[72, 72], [128, 128]]);
+  });
+
+  it('draws the city places’ names or not as the surface asked, and turns them on and off on the one live map', async () => {
+    const { map, handle } = await harness({ lib: cityLib, extra: { cityLabels: false } });
+    const labels = map.layers.find((l) => l.id === 'city-place-labels')!;
+    expect((labels.layout as Record<string, unknown>).visibility).toBe('none');
+    // The dots and the badges are untouched: a BAJS count is not a name.
+    expect((map.layers.find((l) => l.id === 'city-place-badges')!.layout as Record<string, unknown>).visibility).toBeUndefined();
+    handle.setCityLabels!(true);
+    expect(map.layout['city-place-labels']!.visibility).toBe('visible');
+    delete map.layout['city-place-labels'];
+    handle.setCityLabels!(true); // the same answer again moves nothing
+    expect(map.layout['city-place-labels']).toBeUndefined();
+    handle.setCityLabels!(false);
+    expect(map.layout['city-place-labels']!.visibility).toBe('none');
+    // A surface that asks for nothing keeps them, as every surface but the screen does.
+    const phone = await harness({ lib: cityLib });
+    expect((phone.map.layers.find((l) => l.id === 'city-place-labels')!.layout as Record<string, unknown>).visibility).toBe('visible');
+  });
+
+  it('reports every settled zoom to the surface that asked for it, whoever moved the camera', async () => {
+    const cameras: { center: [number, number]; zoom: number }[] = [];
+    const { map } = await harness({ extra: { onCamera: (camera: { center: [number, number]; zoom: number }) => cameras.push(camera) } });
+    map.zoom = 14.2;
+    map.fire('zoomend');
+    expect(cameras).toEqual([{ center: [map.center.lng, map.center.lat], zoom: 14.2 }]);
+    // A pan is not a zoom: the rule the screen reads from it is a zoom band.
+    map.fire('moveend', {});
+    expect(cameras).toHaveLength(1);
   });
 
   it('gives one tap over both a vehicle pill and a city place to the pill: the number is what the round drew there, and the dot is still a zoom or a pixel away', async () => {

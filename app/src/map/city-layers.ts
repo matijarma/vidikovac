@@ -3,7 +3,12 @@ import { MAP_FONTS } from './basemap';
 export const CITY_POINTS = 'city-places';
 export const CITY_PATHS = 'city-paths';
 export const CITY_LAYERS = ['city-place-dots','city-place-badges','city-place-labels','city-place-selection','city-path-lines'] as const;
-export function cityLayers(p:OverlayPalette, selected:string|null,scale=1):StyleLayerLike[] {
+/** `labels` false leaves the city places' own names off the picture: the
+ *  public screen's window onto the whole city is badges and dots only (a BAJS
+ *  count, a venue's programme count), because a hundred station names over
+ *  the tram network is a list, not a map. The names come back the moment a
+ *  person explores (kiosk.ts setCityLabels) or taps one. */
+export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels=true):StyleLayerLike[] {
   const color=['match',['get','category'],'culture',p.event,'heritage',p.other,'cluster',p.other,'bikes',p.bike,'air',p.other,p.place];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
@@ -14,6 +19,7 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1):Style
       'text-field':['get','badge'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-allow-overlap':false,
       'symbol-sort-key':['get','priority']},paint:{'text-color':['match',['get','category'],'bikes',p.bikeText,p.halo],'text-halo-width':0}},
     {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,layout:{
+      visibility:labels?'visible':'none',
       'text-field':['case',['==',['get','category'],'cluster'],'',['get','title']],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-anchor':'top','text-offset':[0,1.5],
       'text-max-width':12,'text-optional':true,'symbol-sort-key':['get','priority']},
       paint:{'text-color':p.label,'text-halo-color':p.halo,'text-halo-width':2}},
