@@ -22,6 +22,12 @@ export interface DogadanjaSourceEntry {
   licence: string;
 }
 
+/** The one note the page owes readers about text the Worker itself produced (WP6), not about a source. */
+export interface ObradaEntry {
+  naslov: string;
+  tekst: string;
+}
+
 /** A source considered for the dogadanja module and left out for a robots.txt reason (R-P5) -- named, not silently dropped. */
 export interface DogadanjaDroppedEntry {
   naziv: string;
@@ -32,6 +38,7 @@ export interface DogadanjaDroppedEntry {
 export const IZVORI: IzvorEntry[] = data.sources;
 export const DOGADANJA_SOURCES: DogadanjaSourceEntry[] = data.dogadanjaSources;
 export const DOGADANJA_DROPPED: DogadanjaDroppedEntry[] = data.dogadanjaDropped;
+export const OBRADA: ObradaEntry = data.obrada;
 
 /**
  * §5 of the filed proposal and docs/izvori.md both point readers at /izvori
@@ -69,7 +76,14 @@ export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): strin
   ${source.module === 'dogadanja' ? renderDogadanjaSources() : ''}
 </article>`,
     )
-    .join('\n')+renderCitySources();
+    .join('\n')+renderObrada()+renderCitySources();
+}
+/** The ticker's lines are machine-condensed; the page says so, beside the sources they come from. */
+function renderObrada(): string {
+  return `<section class="izvor-obrada" aria-labelledby="izvor-obrada-naslov">
+  <h2 id="izvor-obrada-naslov">${escapeHtml(OBRADA.naslov)}</h2>
+  <p>${escapeHtml(OBRADA.tekst)}</p>
+</section>`;
 }
 function renderCitySources():string{
   const references=REFERENCE_SOURCES.map(s=>({id:s.id,name:s.name,url:s.catalogue,licence:s.licence}));
