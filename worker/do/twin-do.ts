@@ -476,11 +476,20 @@ export class TwinDO extends DurableObject<Env> {
     const now = this.now();
     await this.ensureAssets(now);
     // The minute the last life had not flushed yet is knowledge too -- but
-    // its EDGE keys name edges of the graph that life ran, so if this one
-    // loaded a different graph (F8c) only the stop dwells carry over, the
-    // same split adoptGraph makes in the tables.
+    // its EDGE and NODE keys name edges and junctions of the graph that life
+    // ran, so if this one loaded a different graph (F8c) only the stop dwells
+    // carry over, the same split adoptGraph makes in the tables. The row
+    // itself is rewritten here and not only the live aggregates: `advance()`
+    // copies `pendingLearned` into the next state row and the first flush
+    // after this cold start would otherwise write the previous graph's minute
+    // straight back into the tables adoptGraph has just emptied. `published`
+    // goes the same way -- the hindsight rings hold plans indexed by the old
+    // artefact's path indices, which name other rails now.
+    const fromRow: TwinState = this.graphChanged
+      ? { ...saved, pendingLearned: { ...emptyAggregates(), stops: saved.pendingLearned.stops }, published: {} }
+      : saved;
     this.loadLearnedOnce();
-    mergeAggregates(this.learned, this.graphChanged ? { stops: saved.pendingLearned.stops } : saved.pendingLearned);
+    mergeAggregates(this.learned, fromRow.pendingLearned);
     // The rolling dwell window: what SQLite kept, plus whatever the last
     // life had in its state row but had not flushed, newest thirty per
     // platform inside the window (F11).
@@ -495,7 +504,7 @@ export class TwinDO extends DurableObject<Env> {
     Object.assign(this.dwellRecent, trimDwellRecent(restored, nowSec));
     const forState: DwellRecent = {};
     for (const [stopId, samples] of Object.entries(this.dwellRecent)) forState[stopId] = [...samples];
-    this.advance({ ...saved, dwellRecent: forState }, null, now, await loadZetRoutes());
+    this.advance({ ...fromRow, dwellRecent: forState }, null, now, await loadZetRoutes());
   }
 
   /** Loads the trip index and the network once, re-checks them hourly, and

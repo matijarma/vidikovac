@@ -1,10 +1,12 @@
 import { env, runInDurableObject } from 'cloudflare:test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import { TwinDO, twinStub } from '../../worker/do/twin-do';
 import { learnedGraphHash } from '../../worker/twin/persist';
 import { setTwinIndexSourceForTest, setTwinNetworkSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { binOf, edgeKey, emptyHistogram, stopKey } from '../../shared/motion/learn';
+import { nodeKey } from '../../shared/motion/junction';
+import { LEARN_FLUSH_MS } from '../../worker/twin/persist';
 import { corridorIndex } from './engine-fixture';
 import { frame, type FrameVehicle } from './frames';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
@@ -52,11 +54,46 @@ const seedLearned = (stub: DurableObjectStub<TwinDO>) =>
 const seedUnflushedMinute = (stub: DurableObjectStub<TwinDO>) =>
   runInDurableObject(stub, (_i: TwinDO, state) => {
     const row = state.storage.sql.exec<{ tick_at: number; body: string }>('SELECT tick_at, body FROM state ORDER BY tick_at DESC LIMIT 1').one();
-    const body = JSON.parse(row.body) as { pendingLearned: { edges: Record<string, number[]>; stops: Record<string, number[]> } };
+    const body = JSON.parse(row.body) as { pendingLearned: Record<string, unknown> };
     const hist = emptyHistogram();
     hist[binOf(75)] = 3;
-    body.pendingLearned = { edges: { [edgeKey(0, 3, 0)]: hist }, stops: { [stopKey('B', 3, 0)]: hist } };
+    body.pendingLearned = {
+      edges: { [edgeKey(0, 3, 0)]: hist },
+      stops: { [stopKey('B', 3, 0)]: hist },
+      nodes: { [nodeKey(1, 3, 0)]: hist },
+      nodePasses: { [nodeKey(1, 3, 0)]: 5 },
+    };
     state.storage.sql.exec('UPDATE state SET body = ? WHERE tick_at = ?', JSON.stringify(body), row.tick_at);
+  });
+
+/** The hindsight rings the last life published, as the state row carries
+ *  them: several plans for the tram in view and one for a vehicle the twin
+ *  no longer follows. Every one of them indexes the OLD artefact's paths. */
+const seedPublished = (stub: DurableObjectStub<TwinDO>) =>
+  runInDurableObject(stub, (_i: TwinDO, state) => {
+    const row = state.storage.sql.exec<{ tick_at: number; body: string }>('SELECT tick_at, body FROM state ORDER BY tick_at DESC LIMIT 1').one();
+    const body = JSON.parse(row.body) as { published: Record<string, unknown[]> };
+    const plan = (headerSec: number) => ({ headerSec, plan: { on: 'path', pathIdx: 0, anchorSec: headerSec, knots: [[0, 100], [30, 400]] } });
+    body.published = { v1: [plan(T0 - 30), plan(T0 - 20), plan(T0 - 10), plan(T0)], ghost: [plan(T0 - 10)] };
+    state.storage.sql.exec('UPDATE state SET body = ? WHERE tick_at = ?', JSON.stringify(body), row.tick_at);
+  });
+
+/** How many plans the state row holds per vehicle. */
+const publishedRings = (stub: DurableObjectStub<TwinDO>) =>
+  runInDurableObject(stub, (_i: TwinDO, state) => {
+    const row = state.storage.sql.exec<{ body: string }>('SELECT body FROM state ORDER BY tick_at DESC LIMIT 1').one();
+    const body = JSON.parse(row.body) as { published: Record<string, unknown[]> };
+    return Object.fromEntries(Object.entries(body.published).map(([id, ring]) => [id, ring.length]));
+  });
+
+/** Rows in the junction table, which a rebuilt graph renumbers exactly as it renumbers the edges. */
+const nodeRows = (stub: DurableObjectStub<TwinDO>) =>
+  runInDurableObject(stub, (_i: TwinDO, state) => state.storage.sql.exec<{ c: number }>('SELECT count(*) AS c FROM node_wait').one().c);
+
+/** The twin's own clock, so a flush can be made due without waiting a minute. */
+const pinClock = (stub: DurableObjectStub<TwinDO>, ms: number) =>
+  runInDurableObject(stub, (instance: TwinDO) => {
+    vi.spyOn(instance, 'now').mockReturnValue(ms);
   });
 
 afterEach(() => {
@@ -100,5 +137,48 @@ describe('TwinDO on a rebuilt rail graph', () => {
     const learned = await runInDurableObject(stub, (instance: TwinDO) => instance.learnedForTest());
     expect(learned.edgeKeys).toBe(0);
     expect(learned.stopKeys).toBe(2);
+  });
+
+  // The review's I1. `restore()` scrubbed the edge keys out of the live
+  // aggregates but handed `saved` -- pendingLearned whole -- to `advance()`,
+  // which copies it into the next state row; the first flush after that cold
+  // start then wrote the PREVIOUS graph's minute straight back into the
+  // tables `adoptGraph` had just emptied. The minute has to be dropped where
+  // the rows were, and the hindsight rings with it: they hold plans indexed
+  // by the old artefact's path indices, which name other rails now.
+  it('never re-flushes the previous graph unflushed minute into the tables it just emptied, and drops the published rings', async () => {
+    const stub = freshTwin();
+    await pinClock(stub, (T0 + 2) * 1000);
+    await stub.publish();
+    await seedLearned(stub);
+    await runInDurableObject(stub, (_i: TwinDO, state) => {
+      state.storage.sql.exec('INSERT OR REPLACE INTO node_wait (node, band, daytype, hist, n, passes) VALUES (?, ?, ?, ?, ?, ?)', 1, 3, 0, JSON.stringify(emptyHistogram()), 0, 9);
+    });
+    await seedUnflushedMinute(stub);
+    await seedPublished(stub);
+    expect(await publishedRings(stub)).toEqual({ v1: 4, ghost: 1 });
+    expect(await nodeRows(stub)).toBe(1);
+
+    // A rebuilt graph, a cold start, and the clock a second past the flush
+    // cadence: the restore's own advance() is the tick a flush is due on.
+    network = OTHER_GRAPH;
+    await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
+    await pinClock(stub, (T0 + 2) * 1000 + LEARN_FLUSH_MS + 1000);
+    await stub.publish();
+    expect(await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest())).toBeNull(); // restore(), not tick()
+
+    // The edge and node tables adoptGraph emptied stay empty; the stop dwells
+    // -- keyed by a platform id no rebuild renumbers -- keep the table's row
+    // and gain the one the unflushed minute carried.
+    const rows = await learnedRows(stub);
+    expect(rows.edges).toBe(0);
+    expect(await nodeRows(stub)).toBe(0);
+    expect(rows.stops).toBe(2);
+    expect(rows.graph).toBe('ffffffffffffffff');
+    expect(await runInDurableObject(stub, (instance: TwinDO) => instance.junctionCellsForTest())).toEqual({ nodes: 0, passes: 0 });
+
+    // And the rings: what comes out of the restore is only what this life
+    // published, one plan for the tram in view and nothing for the ghost.
+    expect(await publishedRings(stub)).toEqual({ v1: 1 });
   });
 });
