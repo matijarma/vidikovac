@@ -90,7 +90,7 @@ describe('the overlay layer list', () => {
     expect(layers.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toEqual(['interpolate', ['linear'], ['zoom'], 10, 0.4, 14, 0.55, 17, 0.7]);
   });
 
-  it('generates one SDF pill and one plate for every label length a cluster can take, at pills.ts\u2019s own widths, a nose and a ring, and the pill layer picks the pill by the label\u2019s length', () => {
+  it('generates one SDF pill and one plate for every label length a cluster can take, at pills.ts\u2019s own widths, a nose and a ring, and the pill layer picks a plate for a tram and a pill for a bus, by the label\u2019s length', () => {
     const images = overlayImages();
     const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
     // The longest label clusterLabel can write, and the reason the cap is
@@ -126,14 +126,21 @@ describe('the overlay layer list', () => {
     const image = JSON.stringify(layerById(LAYERS.vehicles).layout!['icon-image']);
     expect(image).toContain('"length",["get","short"]');
     expect(image).toContain(`["min",${PILL_MAX_CHARS_CLUSTER},`); // a cluster label takes the widest pill, never a clipped one
-    expect(image).not.toContain(PLATE_IMAGE_PREFIX);
+    // The badge rule on every surface, not only the public screen: a tram
+    // takes the plate of its label's length, anything else the pill; the
+    // selected vehicle's own layer draws the same mark.
+    expect(image).toContain(PLATE_IMAGE_PREFIX);
+    expect(image).toContain(PILL_IMAGE_PREFIX);
+    expect(image).toContain('"tram"');
+    expect(JSON.stringify(layerById(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
   });
 });
 
 // The public screen's overlay set (plan D4, R-KP4): the tram network is the
-// figure, buses and every stop off the screen's routes step aside, trams are
-// plates and buses capsules (the badge rule), the screen's stop is the largest
-// mark on the map, and the fixed 14.5 thresholds follow the field's own zoom.
+// figure, buses and every stop off the screen's routes step aside, the
+// screen's stop is the largest mark on the map, and the fixed 14.5 thresholds
+// follow the field's own zoom. (Trams as plates and buses as capsules began
+// here and are now every surface's rule, pinned by the block above.)
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
 
@@ -142,7 +149,7 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');
   });
 
-  it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, trams as plates and buses as pills, the screen\u2019s stop as the largest mark, and no seat', () => {
+  it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, the screen\u2019s stop as the largest mark, and no seat', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
       const layers = overlayLayers(p, { scale: 2, prozor: PROZOR });
       const by = (id: string) => layers.find((l) => l.id === id)!;
@@ -168,7 +175,7 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(JSON.stringify(labels.filter)).toContain(JSON.stringify(['>=', ['get', 'rank'], 4]));
       expect(JSON.stringify(labels.filter)).toContain(JSON.stringify(['in', '6', ['get', 'routes']]));
       expect(labels.layout!['text-size']).toBe(22);
-      // Vehicles: a tram takes the plate of its label's length, a bus the pill; every mark places unconditionally and the noses draw from the field's zoom.
+      // Vehicles: the same plate-or-pill mark as every surface; every mark places unconditionally and the noses draw from the field's zoom.
       const pills = by(LAYERS.vehicles);
       const image = JSON.stringify(pills.layout!['icon-image']);
       expect(image).toContain(PLATE_IMAGE_PREFIX);

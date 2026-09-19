@@ -440,7 +440,7 @@ describe('the basemap and the overlays on it', () => {
     expect(layer('vehicle-noses')!.minzoom).toBe(14.6);
     expect(layer('stop-labels')!.minzoom).toBe(14.6);
     expect(JSON.stringify(layer('stops')!.filter)).toContain('"6"');
-    expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('vehicle-plate-');
+    expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('vehicle-plate-'); // the mark every surface draws; the prozor-specific claims are the lines around it
     expect(layer('roads_labels_major')!.layout!['text-padding']).toBe(30); // the set's padding reaches the basemap's names layer
     // The names MapLibre actually placed, once each: the e2e's proof that few street names survive the field.
     map.rendered = [

@@ -22,8 +22,9 @@ export const PILL_EXTRA_CHAR_PX = 7;
 export const PILL_MAX_CHARS_CLUSTER = 19;
 
 export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
-/** The tram's plate on the public screen (plan D4, the badge rule: a tram is
- *  a plate, a bus a capsule): the pill's box with the corners barely rounded,
+/** The tram's plate (the badge rule of signage.css: a tram is a plate, a bus
+ *  a capsule -- first on the public screen under plan D4, on every map and in
+ *  the legend chips since): the pill's box with the corners barely rounded,
  *  one per label length like the pills. */
 export const PLATE_IMAGE_PREFIX = 'vehicle-plate-';
 export const PLATE_RADIUS_PX = 3;
@@ -54,7 +55,7 @@ export function pillWidthPx(chars: number): number {
 }
 
 /** The SDF image id for a pill (a bus, or anything not a tram) or a plate
- *  (a tram, plan D4) of the given label length. */
+ *  (a tram) of the given label length. */
 export function pillImageId(chars: number, plate = false): string {
   return `${plate ? PLATE_IMAGE_PREFIX : PILL_IMAGE_PREFIX}${chars}`;
 }

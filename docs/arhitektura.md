@@ -235,8 +235,9 @@ tipa „6·11·12·14”, najviše `CLUSTER_MAX_NUMBERS` = 4 broja pa „+n”, 
 otvara dodirom i nudi svoje članove; tramvaji i autobusi se ne miješaju u istu skupinu, pa skup jedne
 vrste ne može nestati pod filtrom druge. Natpis skupine ide do `PILL_MAX_CHARS_CLUSTER` = 19 znakova,
 koliko piše najdulji mogući autobusni skup („109·113·119·120 +12”), i kapsula raste s njim umjesto da
-ga odreže. Na javnom zaslonu tramvaj nosi pločicu s jedva zaobljenim uglovima, a autobus kapsulu (D4),
-i kutije skupina računaju se na zaslonovoj skali oznaka, pa se ne spajaju na pola stvarne udaljenosti.
+ga odreže. Tramvaj nosi pločicu s jedva zaobljenim uglovima, a autobus kapsulu (pravilo značke iz signage.css:
+najprije na javnom zaslonu, D4, od rujna 2026. na svakoj karti i u čipovima legende nad kartom, `map.css`), a na
+javnom zaslonu kutije skupina računaju se na zaslonovoj skali oznaka, pa se ne spajaju na pola stvarne udaljenosti.
 Shema crta iste oznake u istoj tinti (`schema-map.ts` čita `PILL_INKS` iz istog modula i predaje tintu slikaru u `schema-paint.ts`), s istim
 pravilom skupina i s prstenom oko skupine.
 
@@ -265,7 +266,7 @@ kontrastu prema toj boji (`app/src/ui/contrast.ts` čita hex, `rgb()` i `oklch()
 liniju**: na gradskoj karti ostala mreža nestaje (nije zatamnjena, nego je nema), na shemi se ostale
 linije prigušuju na `SCHEMA_FOCUS_DIM_ALPHA` = 0,2, a prstenovi i nazivi stajališta prate liniju u
 fokusu -- nazivi skrivene linije su šum. Linija u fokusu crta se u svojoj **ZET-ovoj boji**, dok njezina
-oznaka ostaje ista tramvajski plava kapsula kao i drugdje, pa broj ostaje čitljiv. Svako drugo vozilo
+oznaka ostaje ista tramvajski plava pločica kao i drugdje, pa broj ostaje čitljiv. Svako drugo vozilo
 i dalje nosi svoj broj. Prekidač u listu prijevoza („Samo ova linija na karti”) vraća cijelu mrežu;
 naziv prekidača je stalan, a stanje nosi `aria-checked`. Odabir je preferencija uređaja
 (`kajima:line-focus:v1`, zadano uključeno) i nikad se ne prenosi u sobu; javni zaslon ga nema.

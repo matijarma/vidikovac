@@ -26,7 +26,7 @@ import {
   LABEL_HALO_ALPHA, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema, TERMINAL_DISC_SCALE,
   type SchemaContext, type SchemaLayout, type SchemaTones,
 } from '../../app/src/motion/schema-paint';
-import { PILL_HEIGHT_PX, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_HEIGHT_PX, PLATE_RADIUS_PX, pillWidthPx } from '../../app/src/motion/pills';
 import { decodeSchema } from '../../shared/motion/schema';
 
 // Every test here runs in plain node: the geometry is pure, and the two
@@ -101,7 +101,7 @@ function recorder(): { ctx: SchemaContext; calls: Call[] } {
     moveTo: method('moveTo'), lineTo: method('lineTo'), rect: method('rect'), clip: method('clip'),
     stroke: method('stroke'), fillRect: method('fillRect'), clearRect: method('clearRect'),
     translate: method('translate'), rotate: method('rotate'),
-    // The pill painter's own surface (SchemaContext): capsules and text.
+    // The pill painter's own surface (SchemaContext): plates, capsules and text.
     arc: method('arc'), closePath: method('closePath'), fill: method('fill'), fillText: method('fillText'),
     // The names (F4): a halo stroke under the ink, and a width to lay a
     // collision box on. A monospace stand-in for a real font's metrics --
@@ -493,39 +493,53 @@ describe('paintVehicles with a selection', () => {
   });
 });
 
-describe('paintPills (F3: the schema draws numbered pills, not rectangles)', () => {
+describe('paintPills (F3: the schema draws numbered marks, not rectangles -- a tram a plate, a bus a capsule, the badge rule)', () => {
   const INKS = { fill: '#0751bf', text: '#f7faff', halo: '#fbfcfe', ink: '#16226b' };
   const LAYOUT = { w: 300, h: 200, density: 1 };
   const pill = (over: Partial<VehicleMark>): VehicleMark => ({
     id: 'a', kind: 'tram', x: 100, y: 100, angle: 0, alpha: 1,
     w: pillWidthPx(1), h: PILL_HEIGHT_PX, label: '6', pill: 'single', ...over,
   });
+  const radiiOf = (calls: { op: string; args: unknown[] }[]): number[] => calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
 
-  it('draws a capsule with its number, a one-pixel paper halo for a single and a two-pixel ink ring for a cluster', () => {
+  it('draws a tram as a plate (four corners at the plate radius) and a bus as a capsule (two half-circle ends), each with its number, a one-pixel paper halo for a single and a two-pixel ink ring for a cluster', () => {
     const { ctx, calls } = recorder();
     const cluster = pill({ id: 'c', x: 200, w: pillWidthPx(4), label: '6·11', pill: 'cluster', ids: ['a', 'b'] });
-    paintPills(ctx, LAYOUT, [pill({}), cluster], INKS);
+    const bus = pill({ id: 'b', kind: 'bus', y: 150, w: pillWidthPx(3), label: '109' });
+    paintPills(ctx, LAYOUT, [pill({}), cluster, bus], INKS);
     expect(calls[0]).toEqual({ op: 'clearRect', args: [0, 0, 300, 200] });
-    // Two arcs (the capsule's ends) and one fill per pill.
-    expect(calls.filter((c) => c.op === 'arc')).toHaveLength(4);
-    expect(calls.filter((c) => c.op === 'fill')).toHaveLength(2);
-    expect(calls.filter((c) => c.op === 'fillText').map((c) => c.args[0])).toEqual(['6', '6·11']);
+    expect(radiiOf(calls)).toEqual([...Array<number>(8).fill(PLATE_RADIUS_PX), PILL_HEIGHT_PX / 2, PILL_HEIGHT_PX / 2]);
+    expect(calls.filter((c) => c.op === 'fill')).toHaveLength(3);
+    expect(calls.filter((c) => c.op === 'fillText').map((c) => c.args[0])).toEqual(['6', '6·11', '109']);
     expect(calls.filter((c) => c.op === 'set fillStyle').map((c) => c.args[0]))
-      .toEqual([INKS.fill, INKS.text, INKS.fill, INKS.text]);
+      .toEqual([INKS.fill, INKS.text, INKS.fill, INKS.text, INKS.fill, INKS.text]);
     // A single is separated from the line under it by a hairline of paper; a
     // cluster trades that for the ink ring that says "several here".
-    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.halo, INKS.ink]);
-    expect(calls.filter((c) => c.op === 'set lineWidth').map((c) => c.args[0])).toEqual([1, 2]);
+    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.halo, INKS.ink, INKS.halo]);
+    expect(calls.filter((c) => c.op === 'set lineWidth').map((c) => c.args[0])).toEqual([1, 2, 1]);
     expect(calls.filter((c) => c.op === 'set font').every((c) => String(c.args[0]).startsWith('600 12px'))).toBe(true);
   });
 
-  it('rings the selected pill in ink, outside the capsule it already drew', () => {
+  it('scales the plate\u2019s corner with the mark, so a doubled public-screen plate keeps its proportion', () => {
+    const { ctx, calls } = recorder();
+    paintPills(ctx, LAYOUT, [pill({ w: pillWidthPx(1) * 2, h: PILL_HEIGHT_PX * 2 })], INKS);
+    expect(radiiOf(calls)).toEqual(Array<number>(4).fill(PLATE_RADIUS_PX * 2));
+  });
+
+  it('rings the selected mark in ink, in the mark\u2019s own shape and outside the plate it already drew', () => {
     const { ctx, calls } = recorder();
     paintPills(ctx, LAYOUT, [pill({})], INKS, 'a');
     expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.halo, INKS.ink]);
     expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(2);
-    const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
-    expect(Math.max(...radii)).toBeGreaterThan(PILL_HEIGHT_PX / 2);
+    // Two plates: the mark's four corners, then the ring's four -- concentric
+    // with the mark's (the same centres) and wider by the gap, so the ring
+    // stays clear of the plate at every corner, not only along the sides.
+    const arcs = calls.filter((c) => c.op === 'arc');
+    expect(arcs).toHaveLength(8);
+    const centres = (list: typeof arcs): number[][] => list.map((a) => [a.args[0] as number, a.args[1] as number]);
+    expect(centres(arcs.slice(4))).toEqual(centres(arcs.slice(0, 4)));
+    expect(arcs.slice(0, 4).map((a) => a.args[2])).toEqual(Array<number>(4).fill(PLATE_RADIUS_PX));
+    expect(arcs.slice(4).every((a) => (a.args[2] as number) > PLATE_RADIUS_PX)).toBe(true);
   });
 });
 

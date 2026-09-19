@@ -11,10 +11,15 @@
    Tokens only (tokens.css); no container queries and no :has(), so the sheet
    still loads inert on the lightweight path (R-L3, R-L5). */
 
-/* The three mode colours are the roles, not literals: the chip swatches are a
-   legend for the map, so they read the same tokens the badges (signage.css)
-   and the map pills (map/basemap.ts) paint with -- one peacock, one deep blue,
-   one rose, per theme, everywhere. The badge inks moved out with the badge. */
+/* The three chips are the map's legend, so each swatch is the map's own mark
+   in miniature, by the badge rule of signage.css (shape carries the mode and
+   colour repeats it, so it reads for a person who does not separate the two
+   blues): the two-character pill of pills.ts (24 x 18 px) at two thirds, a
+   tram's corners barely rounded (PLATE_RADIUS_PX 3 at the same scale), a
+   bus's a capsule, and a closure a thin bar, because a closure is a line on
+   the map, not a vehicle. The colours are the roles, not literals: the same
+   tokens the badges (signage.css) and the map pills (map/basemap.ts) paint
+   with -- one peacock, one deep blue, one rose, per theme, everywhere. */
 .transport {
   --t-tram: var(--tone-action-brand);
   --t-bus: var(--tone-transit);
@@ -57,12 +62,12 @@
   border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft);
   color: var(--tone-text-primary); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation;
 }
-.t-toggle::before { content: ''; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; background: var(--t-swatch, currentColor); opacity: 0.35; }
+.t-toggle::before { content: ''; inline-size: 1rem; block-size: var(--t-swatch-h, 0.75rem); border-radius: var(--t-swatch-radius, var(--r-pill)); background: var(--t-swatch, currentColor); opacity: 0.35; }
 .t-toggle[aria-pressed='true'] { background: var(--tone-surface-2); border-color: var(--tone-stroke-strong); font-weight: var(--weight-bold); }
 .t-toggle[aria-pressed='true']::before { opacity: 1; }
-.t-toggle[data-mode='0'] { --t-swatch: var(--t-tram); }
+.t-toggle[data-mode='0'] { --t-swatch: var(--t-tram); --t-swatch-radius: 0.125rem; }
 .t-toggle[data-mode='3'] { --t-swatch: var(--t-bus); }
-.t-toggle[data-action='toggle-closures'] { --t-swatch: var(--t-closure); }
+.t-toggle[data-action='toggle-closures'] { --t-swatch: var(--t-closure); --t-swatch-h: 0.25rem; }
 .t-schema-legend {
   display: inline-flex; align-items: center; flex: none; min-block-size: var(--target); padding: 0 var(--sp-3);
   border-radius: var(--r-pill); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft);

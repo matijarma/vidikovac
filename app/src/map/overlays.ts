@@ -142,10 +142,11 @@ export interface OverlayImage { id: string; image: SdfImage }
 
 /** The public screen's overlay set (plan D4, R-KP4): present, the tram network
  *  is the figure (the `figure` palette keys, 3 to 5 px), the bus lines and the
- *  stops off the screen's routes step aside, trams draw as plates and buses as
- *  the pills, the screen's stop is the largest mark on the map, the seat is
- *  never lit, and the nose's lower edge and the stop names follow the field's
- *  own zoom (R-KP2). Absent, every surface draws exactly as before. */
+ *  stops off the screen's routes step aside, the screen's stop is the largest
+ *  mark on the map, the seat is never lit, and the nose's lower edge and the
+ *  stop names follow the field's own zoom (R-KP2). Absent, every surface draws
+ *  exactly as before. (Trams as plates and buses as pills began here under D4
+ *  and are now every surface's rule: MARK_IMAGE.) */
 export interface ProzorOptions {
   /** Which network lines are drawn; the kiosk passes ['tram']. */
   networkKinds: readonly ('tram' | 'bus')[];
@@ -198,9 +199,11 @@ const zoomInterpolate = (...stops: number[]): Expr => ['interpolate', ['linear']
  *  expression: '' (route unknown) takes the smallest pill, a cluster label
  *  past the cap the widest. */
 const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS_CLUSTER, ['max', 1, ['length', ['get', 'short']]]];
-const PILL_IMAGE: Expr = ['concat', PILL_IMAGE_PREFIX, ['to-string', PILL_CHARS]];
-/** The public screen's mark: a tram takes the plate of its label's length, anything else the pill. */
-const PLATE_OR_PILL_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
+/** The vehicle's mark, the badge rule of signage.css on every surface (the
+ *  kiosk's plan D4 first, the legend chips and the city map since): a tram
+ *  takes the plate of its label's length, anything else the pill, so the two
+ *  modes differ in shape as well as ink. */
+const MARK_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
 const NOSE_OFFSET: Expr = ['match', PILL_CHARS, ...NOSE_OFFSETS_PX.slice(0, -1).flatMap((px, i) => [i + 1, ['literal', [px, 0]]]), ['literal', [NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1], 0]]];
 /** A cluster over a tram over a bus over an unknown: the `sort` the vehicle
  *  source writes (city-map.ts), read straight. With overlap allowed MapLibre
@@ -506,7 +509,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const dimmed = focus === null && sel?.kind === 'route';
   // The public screen's nose threshold follows the field's own zoom (R-KP2); every other surface keeps the fixed one.
   const noseZoom = prozor?.overlapZoom ?? NOSE_MIN_ZOOM;
-  const mark: Expr = prozor ? PLATE_OR_PILL_IMAGE : PILL_IMAGE;
+  const mark: Expr = MARK_IMAGE;
   /** A network is drawn for its mode when nothing is in focus (line focus
    *  leaves only the focused route's own layer), when the modes admit it and,
    *  on the public screen, when the option set names it. */

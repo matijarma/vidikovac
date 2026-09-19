@@ -7,7 +7,7 @@ import { vehicleLabel } from '../map/city-map';
 import { contrastRatio } from '../ui/contrast';
 import type { Drawn } from './integrator';
 import {
-  clusterPills, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, pillChars, pillWidthPx, type PillPoint,
+  clusterPills, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PLATE_RADIUS_PX, pillChars, pillWidthPx, type PillPoint,
 } from './pills';
 import {
   MIN_VEHICLE_ALPHA, ROUTE_TYPE_TRAM,
@@ -34,7 +34,7 @@ const PILL_HALO_PX = 1;
 /** A cluster trades that hairline for a 2 px ring in the ink tone: the city
  *  map's own convention (city-map.ts clusterToFeature) for "several here". */
 const PILL_CLUSTER_RING_PX = 2;
-/** The selected pill's ring, clear of the capsule so the pill's own edge
+/** The selected pill's ring, clear of the mark so the pill's own edge
  *  still reads, at the weight the rectangles' selection ring already used. */
 const PILL_SELECT_GAP_PX = 3;
 const PILL_SELECT_RING_PX = 1.5;
@@ -87,7 +87,7 @@ export const CHIP_RADIUS_PX = 3;
 /** A chip's box against the name above it. */
 const CHIP_HEIGHT_EM = 1.25;
 /** The number inside it keeps the vehicle pill's own proportion -- 12 px of
- *  text in an 18 px capsule -- so both badges on the map read at one
+ *  text in an 18 px pill -- so both badges on the map read at one
  *  weight, and it obeys the same size floor as a name: a line number no one
  *  can read is not a line number. */
 const CHIP_TEXT_RATIO = PILL_TEXT_PX / PILL_HEIGHT_PX;
@@ -188,7 +188,7 @@ export function schemaPoint(p: XY, viewport: SchemaViewport, density = 1): XY {
  *  centre has just left the canvas is still half on it, and the canvas
  *  itself is what clips it. The margin is stated in the CSS px the pill
  *  geometry is, and the pill is painted at `symbolScale` -- so on the kiosk,
- *  where every capsule is twice as wide, the margin doubles with it. Flat, a
+ *  where every mark is twice as wide, the margin doubles with it. Flat, a
  *  wide cluster pill blinked out on the public screen with ink still showing
  *  (M3), which is exactly what this margin exists to stop. */
 export function schemaInFrame(p: XY, viewport: SchemaViewport & { symbolScale?: number }): boolean {
@@ -289,13 +289,22 @@ function capsulePath(ctx: SchemaContext, x: number, y: number, w: number, h: num
   ctx.closePath();
 }
 
+/** The mark's outline, the badge rule (signage.css, the city map's
+ *  MARK_IMAGE): a tram the plate, its corner PLATE_RADIUS_PX scaled with the
+ *  mark; anything else the capsule. Centred on (x, y) like capsulePath. */
+function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: number, w: number, h: number, radius: number): void {
+  if (kind === 'tram') roundRectPath(ctx, x - w / 2, y - h / 2, w, h, radius);
+  else capsulePath(ctx, x, y, w, h);
+}
+
 /**
- * The vehicle layer as numbered pills (F3): clear, then for every pill mark
- * a capsule in the mode's fill with its number centred in it -- a single
- * ringed by a hairline of paper, a cluster by the ink ring that says it
- * stands for several -- and a wider ring around the selected one. Alpha
- * carries confidence exactly as the rectangles did; the ring is always
- * opaque, because "this one" is not a matter of confidence.
+ * The vehicle layer as numbered marks (F3): clear, then for every pill mark
+ * its shape in the mode's fill with its number centred in it -- a tram a
+ * plate, a bus a capsule, the badge rule -- a single ringed by a hairline of
+ * paper, a cluster by the ink ring that says it stands for several, and a
+ * wider ring in the mark's own shape around the selected one. Alpha carries
+ * confidence exactly as the rectangles did; the ring is always opaque,
+ * because "this one" is not a matter of confidence.
  *
  * Marks are already in backing-store pixels and already carry the size they
  * are painted at (schemaVehicleMarks), so the stroke weights and the text
@@ -316,7 +325,7 @@ export function paintPills(
     const size = m.h / PILL_HEIGHT_PX;
     ctx.save();
     ctx.globalAlpha = m.alpha;
-    capsulePath(ctx, m.x, m.y, m.w, m.h);
+    markPath(ctx, m.kind, m.x, m.y, m.w, m.h, PLATE_RADIUS_PX * size);
     ctx.fillStyle = inks.fill;
     ctx.fill();
     ctx.strokeStyle = m.pill === 'cluster' ? inks.ink : inks.halo;
@@ -328,7 +337,8 @@ export function paintPills(
     if (m.id === selectedId) {
       const gap = 2 * PILL_SELECT_GAP_PX * size;
       ctx.globalAlpha = 1;
-      capsulePath(ctx, m.x, m.y, m.w + gap, m.h + gap);
+      // The ring's corner is the plate's plus the gap, so the two stay concentric.
+      markPath(ctx, m.kind, m.x, m.y, m.w + gap, m.h + gap, (PLATE_RADIUS_PX + PILL_SELECT_GAP_PX) * size);
       ctx.strokeStyle = inks.ink;
       ctx.lineWidth = PILL_SELECT_RING_PX * size;
       ctx.stroke();
