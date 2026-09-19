@@ -184,6 +184,17 @@ export interface VehicleMark {
   /** A cluster's members. Only a 'cluster' mark carries them; the accessible
    *  list and the tap that opens one read it. */
   ids?: string[];
+  /** The direction of travel, a unit vector in the mark's own frame (y
+   *  down): on the schema the placer's forward tangent turned by the leg's
+   *  sign (schema-paint.ts). Absent when the mark does not know it -- a chord
+   *  has no track and must not borrow one. It never rotates a pill (a number
+   *  is read, not aimed); it aims the arrows of a two-way cluster. */
+  dir?: XY;
+  /** A cluster whose members head against each other along the line: two
+   *  trams of one number passing at a stop read as one pill with an arrow
+   *  each way, where a same-direction merge changes nothing (the owner's
+   *  ruling). Only a 'cluster' mark carries it. */
+  twoWay?: boolean;
 }
 
 /** The vehicle painter needs a pixel box, not a geographic crop. */

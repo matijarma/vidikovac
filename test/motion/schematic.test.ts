@@ -23,11 +23,11 @@ import {
   type VehicleMark,
 } from '../../app/src/motion/schematic';
 import {
-  LABEL_HALO_ALPHA, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema, TERMINAL_DISC_SCALE,
-  type SchemaContext, type SchemaLayout, type SchemaTones,
+  clusterSchemaMarks, LABEL_HALO_ALPHA, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema, schemaVehicleMarks, TERMINAL_DISC_SCALE,
+  type SchemaContext, type SchemaLayout, type SchemaMarkViewport, type SchemaTones,
 } from '../../app/src/motion/schema-paint';
-import { PILL_HEIGHT_PX, PLATE_RADIUS_PX, pillWidthPx } from '../../app/src/motion/pills';
-import { decodeSchema } from '../../shared/motion/schema';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PLATE_RADIUS_PX, pillWidthPx } from '../../app/src/motion/pills';
+import { decodeSchema, type SchemaPlacement } from '../../shared/motion/schema';
 
 // Every test here runs in plain node: the geometry is pure, and the two
 // painters are exercised against a recording context that only knows the
@@ -540,6 +540,101 @@ describe('paintPills (F3: the schema draws numbered marks, not rectangles -- a t
     expect(centres(arcs.slice(4))).toEqual(centres(arcs.slice(0, 4)));
     expect(arcs.slice(0, 4).map((a) => a.args[2])).toEqual(Array<number>(4).fill(PLATE_RADIUS_PX));
     expect(arcs.slice(4).every((a) => (a.args[2] as number) > PLATE_RADIUS_PX)).toBe(true);
+  });
+
+  it('aims a nose each way along the line on a cluster whose members pass each other -- two triangles after the pill and its number, in the fill with a paper halo, their bases at the ring and their tips a nose beyond it -- and none on a cluster heading one way (the owner’s ruling on an opposed merge)', () => {
+    const { ctx, calls } = recorder();
+    const oneWay = pill({ id: 'p', x: 60, label: '6', pill: 'cluster', ids: ['a', 'b'], twoWay: false, dir: { x: 1, y: 0 } });
+    const opposed = pill({ id: 'c', x: 200, label: '6', pill: 'cluster', ids: ['a', 'b'], twoWay: true, dir: { x: 1, y: 0 } });
+    paintPills(ctx, LAYOUT, [oneWay, opposed], INKS);
+    // One fill and one ring per pill; the opposed one adds two fills and two strokes.
+    expect(calls.filter((c) => c.op === 'fill')).toHaveLength(4);
+    expect(calls.filter((c) => c.op === 'stroke')).toHaveLength(4);
+    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.ink, INKS.ink, INKS.halo]);
+    expect(calls.filter((c) => c.op === 'set lineWidth').map((c) => c.args[0])).toEqual([2, 2, 1]);
+    expect(calls.filter((c) => c.op === 'set fillStyle').map((c) => c.args[0])).toEqual([INKS.fill, INKS.text, INKS.fill, INKS.text, INKS.fill]);
+    // Each arrow is its own path after the number: nothing about the pill's
+    // own sequence changes, so the plain-mark assertions above stay true.
+    const after = calls.slice(calls.findIndex((c) => c.op === 'fillText' && c.args[1] === 200) + 1).filter((c) => !c.op.startsWith('set '));
+    const triangle = ['beginPath', 'moveTo', 'lineTo', 'lineTo', 'closePath', 'fill', 'stroke'];
+    expect(after.map((c) => c.op)).toEqual([...triangle, ...triangle, 'restore']);
+    // Centred four px past the pill's edge along the direction of travel and
+    // against it, so the base lies on the edge under the ring and the tip
+    // reaches one nose length beyond; the width lies across the direction.
+    const reach = pillWidthPx(1) / 2 + 4;
+    expect(after.filter((c) => c.op === 'moveTo').map((c) => c.args))
+      .toEqual([[200 + reach + NOSE_LENGTH_PX / 2, 100], [200 - reach - NOSE_LENGTH_PX / 2, 100]]);
+    expect(after.filter((c) => c.op === 'lineTo').map((c) => c.args)).toEqual([
+      [200 + reach - NOSE_LENGTH_PX / 2, 100 + NOSE_WIDTH_PX / 2], [200 + reach - NOSE_LENGTH_PX / 2, 100 - NOSE_WIDTH_PX / 2],
+      [200 - reach + NOSE_LENGTH_PX / 2, 100 - NOSE_WIDTH_PX / 2], [200 - reach + NOSE_LENGTH_PX / 2, 100 + NOSE_WIDTH_PX / 2],
+    ]);
+  });
+
+  it('paints the arrows after the selection ring and scales them with the mark, so a doubled public-screen pill keeps its arrows in proportion', () => {
+    const { ctx, calls } = recorder();
+    const opposed = pill({ id: 'c', x: 200, w: pillWidthPx(1) * 2, h: PILL_HEIGHT_PX * 2, label: '6', pill: 'cluster', ids: ['a', 'b'], twoWay: true, dir: { x: 0, y: 1 } });
+    paintPills(ctx, LAYOUT, [opposed], INKS, 'c');
+    // The cluster's ring, the selection's ring, then the arrows' halo.
+    expect(calls.filter((c) => c.op === 'set strokeStyle').map((c) => c.args[0])).toEqual([INKS.ink, INKS.ink, INKS.halo]);
+    expect(calls.filter((c) => c.op === 'set lineWidth').map((c) => c.args[0])).toEqual([4, 3, 2]);
+    // Down the canvas this time (y down), everything twice as far and as long.
+    // The plate and both rings start with a moveTo of their own; the arrows
+    // are the last two paths, so theirs are the last two moveTo calls and
+    // the last four lineTo calls.
+    const reach = (pillWidthPx(1) / 2 + 4) * 2;
+    expect(calls.filter((c) => c.op === 'moveTo').slice(-2).map((c) => c.args))
+      .toEqual([[200, 100 + reach + NOSE_LENGTH_PX], [200, 100 - reach - NOSE_LENGTH_PX]]);
+    expect(calls.filter((c) => c.op === 'lineTo').slice(-4, -2).map((c) => c.args))
+      .toEqual([[200 - NOSE_WIDTH_PX, 100 + reach - NOSE_LENGTH_PX], [200 + NOSE_WIDTH_PX, 100 + reach - NOSE_LENGTH_PX]]);
+  });
+});
+
+describe('schemaVehicleMarks / clusterSchemaMarks: the direction of travel rides with the mark, for the arrows of an opposed merge', () => {
+  const VIEWPORT: SchemaMarkViewport = { x: 0, y: 0, scale: 1, width: 300, height: 200, density: 1 };
+  const tram = (id: string): Drawn => drawn({ id, p: CENTRE, type: GTFS_TRAM, onShape: 0, path: 0, s: 100, routeId: 'R', short: '6' });
+  const placerOf = (placement: Omit<SchemaPlacement, 'colour' | 'line'>) => ({
+    place: (): SchemaPlacement => ({ colour: '#cc706f', line: 'R', ...placement }),
+  });
+  const mark = (id: string, dir?: { x: number; y: number }): VehicleMark => ({
+    id, kind: 'tram', x: 100, y: 100, w: pillWidthPx(1), h: PILL_HEIGHT_PX, angle: 0, alpha: 1, label: '6', pill: 'single', ...(dir ? { dir } : {}),
+  });
+
+  it('carries the placer’s track turned by the leg’s sign, as a unit vector in the artwork frame, and still does not rotate the pill', () => {
+    const [forward] = schemaVehicleMarks(placerOf({ x: 100, y: 50, track: { x: 3, y: 4 }, sign: 1, chord: false }), [tram('a')], VIEWPORT);
+    expect(forward.dir!.x).toBeCloseTo(0.6);
+    expect(forward.dir!.y).toBeCloseTo(0.8);
+    const [back] = schemaVehicleMarks(placerOf({ x: 100, y: 50, track: { x: 3, y: 4 }, sign: -1, chord: false }), [tram('a')], VIEWPORT);
+    expect(back.dir!.x).toBeCloseTo(-0.6);
+    expect(back.dir!.y).toBeCloseTo(-0.8);
+    expect([forward.angle, back.angle]).toEqual([0, 0]);
+  });
+
+  it('gives a chord no direction: it has no track, and must not borrow one', () => {
+    const [chord] = schemaVehicleMarks(placerOf({ x: 100, y: 50, sign: 1, chord: true }), [tram('a')], VIEWPORT);
+    expect(chord).toMatchObject({ id: 'a', pill: 'single', angle: 0 });
+    expect(chord).not.toHaveProperty('dir');
+  });
+
+  it('calls a cluster two-way when two members head against each other (a negative dot product), and gives it the first member’s direction; one way, or no directions at all, is not two-way', () => {
+    const opposed = clusterSchemaMarks([mark('a', { x: 1, y: 0 }), mark('b', { x: -1, y: 0 })], VIEWPORT);
+    expect(opposed).toHaveLength(1);
+    expect(opposed[0]).toMatchObject({ pill: 'cluster', label: '6', twoWay: true, dir: { x: 1, y: 0 }, angle: 0 });
+    const oneWay = clusterSchemaMarks([mark('a', { x: 1, y: 0 }), mark('b', { x: 1, y: 0 })], VIEWPORT);
+    expect(oneWay[0]).toMatchObject({ pill: 'cluster', twoWay: false, dir: { x: 1, y: 0 } });
+    // A chord among the members says nothing either way; the one that knows aims the cluster.
+    const halfKnown = clusterSchemaMarks([mark('a'), mark('b', { x: 0, y: -1 })], VIEWPORT);
+    expect(halfKnown[0]).toMatchObject({ pill: 'cluster', twoWay: false, dir: { x: 0, y: -1 } });
+    const unknown = clusterSchemaMarks([mark('a'), mark('b')], VIEWPORT);
+    expect(unknown[0]).toMatchObject({ pill: 'cluster', twoWay: false });
+    expect(unknown[0]).not.toHaveProperty('dir');
+  });
+
+  it('leaves a single as it came: no two-way flag, no rotation', () => {
+    const a = mark('a', { x: 1, y: 0 });
+    const [single] = clusterSchemaMarks([a], VIEWPORT);
+    expect(single).toBe(a);
+    expect(single).toMatchObject({ pill: 'single', angle: 0, dir: { x: 1, y: 0 } });
+    expect(single).not.toHaveProperty('twoWay');
   });
 });
 

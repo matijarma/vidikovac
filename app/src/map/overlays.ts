@@ -26,7 +26,7 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX, pillImageId, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX, pillImageId, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -120,9 +120,8 @@ const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
 export { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX };
-/** The direction nose: an isosceles triangle ahead of the pill, drawn under it. */
-export const NOSE_LENGTH_PX = 8;
-export const NOSE_WIDTH_PX = 9;
+/** The direction nose (pills.ts NOSE_LENGTH_PX by NOSE_WIDTH_PX) sits ahead
+ *  of the pill, drawn under it, its centre this far out per label length. */
 const NOSE_OFFSETS_PX: readonly number[] = [12, 14, 17, 20];
 export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;

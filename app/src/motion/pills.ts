@@ -28,6 +28,13 @@ export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
  *  one per label length like the pills. */
 export const PLATE_IMAGE_PREFIX = 'vehicle-plate-';
 export const PLATE_RADIUS_PX = 3;
+/** The direction nose: an isosceles triangle, its length along the direction
+ *  of travel and its width across it. The city map draws it as an SDF image
+ *  ahead of a pill (overlays.ts); the schema paints it by hand on each side
+ *  of a cluster whose members pass each other (schema-paint.ts), so both
+ *  surfaces show one arrow. */
+export const NOSE_LENGTH_PX = 8;
+export const NOSE_WIDTH_PX = 9;
 
 /** Padding added to a pill's box (each side) before two boxes are tested for
  *  overlap: two pills that almost touch still read as one cluster, not a

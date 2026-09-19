@@ -258,7 +258,12 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     // unlabelled rectangles. A mark without a pill (the lagano crop scene's
     // rectangles) contributes nothing.
     element.dataset.pills = lastMarks.map(m => m.label ?? '').join('|');
-    const next = lastMarks.map(m => `${m.id}:${m.x.toFixed(2)},${m.y.toFixed(2)},${m.angle.toFixed(3)},${m.alpha.toFixed(2)}`).join('|');
+    // And how many of those pills stand for a pair passing each other, so
+    // the proof can see the two-way arrows without reading pixels.
+    element.dataset.twoway = String(lastMarks.filter(m => m.twoWay).length);
+    // The two-way flag is part of the frame: a pair that turns from passing
+    // to following flips its arrows off without moving the pill.
+    const next = lastMarks.map(m => `${m.id}:${m.x.toFixed(2)},${m.y.toFixed(2)},${m.angle.toFixed(3)},${m.alpha.toFixed(2)},${m.twoWay ? 1 : 0}`).join('|');
     const changed = signature !== next;
     signature = next;
     return changed;

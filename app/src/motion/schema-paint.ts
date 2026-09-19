@@ -2,12 +2,13 @@
 // an integrator arc to this plane; reported GPS coordinates never enter a
 // painter. Canvas mounting, gestures and the clock live in schema-map.ts.
 import type { XY } from '../../../shared/motion/geo';
-import { pointAt, type Schema, type SchemaStop, type createSchemaPlacer } from '../../../shared/motion/schema';
+import { pointAt, type Schema, type SchemaPlacement, type SchemaStop, type createSchemaPlacer } from '../../../shared/motion/schema';
 import { vehicleLabel } from '../map/city-map';
 import { contrastRatio } from '../ui/contrast';
 import type { Drawn } from './integrator';
 import {
-  clusterPills, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PLATE_RADIUS_PX, pillChars, pillWidthPx, type PillPoint,
+  clusterPills, NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PLATE_RADIUS_PX, pillChars, pillWidthPx,
+  type PillPoint,
 } from './pills';
 import {
   MIN_VEHICLE_ALPHA, ROUTE_TYPE_TRAM,
@@ -41,6 +42,11 @@ const PILL_SELECT_RING_PX = 1.5;
 /** The number inside the pill: the city map paints its pills at 12 px
  *  (overlays.ts's vehicle text-size), and the schema is the same badge. */
 const PILL_TEXT_PX = 12;
+/** A two-way cluster's arrows are centred this far past the pill's edge,
+ *  one on each side along the line: half a nose, so the triangle's base lies
+ *  on the edge under the ink ring and its tip reaches a nose length beyond
+ *  -- the arrow grows out of the ring rather than floating beside it. */
+const TWO_WAY_ARROW_GAP_PX = NOSE_LENGTH_PX / 2;
 /** A mark whose centre has left the canvas by less than this still has ink
  *  on it, so it is clipped by the canvas rather than culled: half of the
  *  widest pill a cluster label can take, plus its ring. Below this a pill
@@ -197,10 +203,22 @@ export function schemaInFrame(p: XY, viewport: SchemaViewport & { symbolScale?: 
   return screen.x >= -m && screen.x <= viewport.width + m && screen.y >= -m && screen.y <= viewport.height + m;
 }
 
+/** The direction of travel on the artwork: the placer's forward tangent
+ *  turned by the leg's sign and normalised, so the dot product of two marks'
+ *  directions is the cosine between their headings. A chord has no tangent
+ *  and gets none. */
+function travelDirection(p: SchemaPlacement): XY | undefined {
+  if (!p.track) return undefined;
+  const len = Math.hypot(p.track.x, p.track.y);
+  return len > 0 ? { x: (p.track.x * p.sign) / len, y: (p.track.y * p.sign) / len } : undefined;
+}
+
 /** One pill per placeable tram: no shape lookup, live-position projection or
  *  direction offset (a chord deliberately has no track; it must not borrow a
  *  geographic heading), and no rotation either -- a numbered pill is read,
- *  not aimed, and the line under it already says where the rails go. */
+ *  not aimed, and the line under it already says where the rails go. The
+ *  direction of travel rides along unpainted, for the arrows of a two-way
+ *  cluster (clusterSchemaMarks). */
 export function schemaVehicleMarks(placer: SchemaPlacer, drawn: readonly Drawn[], viewport: SchemaMarkViewport): VehicleMark[] {
   const marks: VehicleMark[] = [];
   const density = viewport.density;
@@ -210,12 +228,14 @@ export function schemaVehicleMarks(placer: SchemaPlacer, drawn: readonly Drawn[]
     const p = placer.place(v.path, v.s);
     if (!p || (v.routeId !== undefined && p.line !== v.routeId) || !schemaInFrame(p, viewport)) continue;
     const label = vehicleLabel(v);
+    const dir = travelDirection(p);
     marks.push({
       id: v.id, kind: 'tram', ...schemaPoint(p, viewport, density),
       w: pillWidthPx(pillChars(label)) * size, h: PILL_HEIGHT_PX * size,
       angle: 0,
       alpha: MIN_VEHICLE_ALPHA + (1 - MIN_VEHICLE_ALPHA) * Math.min(1, Math.max(0, v.confidence)),
       label, pill: 'single',
+      ...(dir ? { dir } : {}),
     });
   }
   return marks;
@@ -233,6 +253,11 @@ interface MarkPillPoint extends PillPoint {
  * marks are in backing-store pixels, so they are divided by density and by
  * the symbol scale, which is the size the pills are actually painted at. The
  * selected vehicle is never absorbed.
+ *
+ * A cluster is two-way when two of its members head against each other
+ * along the line (a negative dot product of their directions): two trams of
+ * one number passing at a stop. It takes the first known direction as its
+ * own, so paintPills can lay the arrows along the line.
  */
 export function clusterSchemaMarks(
   marks: readonly VehicleMark[],
@@ -259,6 +284,8 @@ export function clusterSchemaMarks(
         out.push(group.point.mark);
         continue;
       }
+      const dirs = group.members.map((m) => m.mark.dir).filter((d): d is XY => d !== undefined);
+      const dir = dirs[0];
       out.push({
         id: group.id, kind,
         x: group.x * size, y: group.y * size,
@@ -268,6 +295,8 @@ export function clusterSchemaMarks(
         // faded with its weakest would read as less certain than what it hides.
         alpha: Math.max(...group.members.map((m) => m.mark.alpha)),
         label: group.label, pill: 'cluster', ids: group.members.map((m) => m.mark.id),
+        ...(dir ? { dir } : {}),
+        twoWay: dirs.some((a) => dirs.some((b) => a.x * b.x + a.y * b.y < 0)),
       });
     }
   }
@@ -297,6 +326,20 @@ function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: n
   else capsulePath(ctx, x, y, w, h);
 }
 
+/** An isosceles triangle centred on (cx, cy): its tip half its length along
+ *  the unit direction (dx, dy), its base the same distance behind and its
+ *  width across the direction -- the schema's own drawing of the city map's
+ *  SDF nose (sdf.ts sdfTriangle), one path the caller fills and strokes. */
+function arrowPath(ctx: SchemaContext, cx: number, cy: number, dx: number, dy: number, length: number, width: number): void {
+  const ax = -dy * width / 2, ay = dx * width / 2;
+  const bx = cx - dx * length / 2, by = cy - dy * length / 2;
+  ctx.beginPath();
+  ctx.moveTo(cx + dx * length / 2, cy + dy * length / 2);
+  ctx.lineTo(bx + ax, by + ay);
+  ctx.lineTo(bx - ax, by - ay);
+  ctx.closePath();
+}
+
 /**
  * The vehicle layer as numbered marks (F3): clear, then for every pill mark
  * its shape in the mode's fill with its number centred in it -- a tram a
@@ -306,9 +349,17 @@ function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: n
  * confidence exactly as the rectangles did; the ring is always opaque,
  * because "this one" is not a matter of confidence.
  *
+ * A two-way cluster (two trams of one number passing each other) then gets
+ * a nose on each side along the line, pointing outward, in the fill with the
+ * paper halo: the owner's ruling on an opposed merge, where a same-direction
+ * merge is the plain ringed pill. The arrows are their own paths after the
+ * pill, its number and its rings, so nothing about a plain mark's sequence
+ * changes.
+ *
  * Marks are already in backing-store pixels and already carry the size they
- * are painted at (schemaVehicleMarks), so the stroke weights and the text
- * scale with the pill: a public screen's doubled pill keeps its proportions.
+ * are painted at (schemaVehicleMarks), so the stroke weights, the text and
+ * the arrows scale with the pill: a public screen's doubled pill keeps its
+ * proportions.
  */
 export function paintPills(
   ctx: SchemaContext,
@@ -342,6 +393,21 @@ export function paintPills(
       ctx.strokeStyle = inks.ink;
       ctx.lineWidth = PILL_SELECT_RING_PX * size;
       ctx.stroke();
+    }
+    if (m.pill === 'cluster' && m.twoWay && m.dir) {
+      // The arrows are part of the mark, so they carry its confidence like
+      // the pill, not the selection ring's opacity.
+      ctx.globalAlpha = m.alpha;
+      ctx.fillStyle = inks.fill;
+      ctx.strokeStyle = inks.halo;
+      ctx.lineWidth = PILL_HALO_PX * size;
+      const reach = m.w / 2 + TWO_WAY_ARROW_GAP_PX * size;
+      for (const way of [1, -1] as const) {
+        const dx = way * m.dir.x, dy = way * m.dir.y;
+        arrowPath(ctx, m.x + dx * reach, m.y + dy * reach, dx, dy, NOSE_LENGTH_PX * size, NOSE_WIDTH_PX * size);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }

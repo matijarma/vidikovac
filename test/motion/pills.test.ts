@@ -3,6 +3,8 @@ import {
   clusterLabel,
   clusterPills,
   createLineColours,
+  NOSE_LENGTH_PX,
+  NOSE_WIDTH_PX,
   pillChars,
   pillImageId,
   pillWidthPx,
@@ -99,6 +101,12 @@ describe('createLineColours: the ZET colour table with a fallback', () => {
     expect(lineColour('6', '#000000')).toBe('#0751bf');
     expect(lineColour('99', '#000000')).toBe('#000000');
     expect(lineColour(undefined, '#000000')).toBe('#000000');
+  });
+});
+
+describe('the nose: one triangle for the city map’s SDF image and the schema’s two-way arrows', () => {
+  it('is 8 px long along the direction of travel and 9 px wide across it, as the city map has always drawn it', () => {
+    expect([NOSE_LENGTH_PX, NOSE_WIDTH_PX]).toEqual([8, 9]);
   });
 });
 

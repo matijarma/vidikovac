@@ -297,10 +297,39 @@ it('merges two trams a pill apart into one cluster mark naming both lines, while
   h.frame();
   const marks = h.frames.at(-1)!.marks;
   expect(marks).toHaveLength(1);
-  expect(marks[0]).toMatchObject({ pill: 'cluster', label: '1·2' });
+  // Both eastbound on their own lines: a merge, not a passing.
+  expect(marks[0]).toMatchObject({ pill: 'cluster', label: '1·2', twoWay: false });
   expect([...(marks[0].ids ?? [])].sort()).toEqual(['a', 'b']);
   // One merged pill on the canvas is still two vehicles for a reader.
   expect(h.buttons().map((b) => b.dataset.vehicle)).toEqual(['a', 'b']);
+});
+
+it('calls a merge of two trams of one line passing each other two-way, and a merge heading one way not, and counts the two-way pills beside data-pills', async () => {
+  // The corridor's return track gets the printed line's own stops, in
+  // reverse, so the placer lays path 1_1 on line '1' with sign -1; the second
+  // tram's arc puts it on the same artwork point as the first (u about 167:
+  // 200 m into 1_0's first bracket, 1300 m into 1_1's).
+  const spec = corridorSpec();
+  spec.stops.push({ id: 'T600-w', name: 'T600', edge: 5, s: 900 }, { id: 'T0-w', name: 'T0', edge: 5, s: 1500 });
+  spec.routes[0].paths![1].served = ['T600-w', 'T0-w'];
+  const net = syntheticNetwork(spec);
+  const back: MapPoint = { ...TRAM, id: 'b', path: '1_1', plan: { on: 'path', knots: [[NOW, 1300], [NOW + 60_000, 700]] } };
+  const opposed = harness({ points: [{ ...TRAM, id: 'a' }, back], loadNetwork: async () => net });
+  await flush();
+  opposed.frame();
+  const marks = opposed.frames.at(-1)!.marks;
+  expect(marks).toHaveLength(1);
+  expect(marks[0]).toMatchObject({ pill: 'cluster', label: '1', twoWay: true, angle: 0 });
+  // Aimed along the printed line, whichever member came first.
+  expect(Math.abs(marks[0].dir!.x)).toBeCloseTo(1);
+  expect(marks[0].dir!.y).toBeCloseTo(0);
+  expect(opposed.container.querySelector<HTMLElement>('[data-testid=schema-map]')!.dataset.twoway).toBe('1');
+
+  const same = harness({ points: [{ ...TRAM, id: 'a' }, { ...TRAM, id: 'b' }] });
+  await flush();
+  same.frame();
+  expect(same.frames.at(-1)!.marks[0]).toMatchObject({ pill: 'cluster', label: '1', twoWay: false });
+  expect(same.container.querySelector<HTMLElement>('[data-testid=schema-map]')!.dataset.twoway).toBe('0');
 });
 
 it('line focus dims the other lines on the diagram instead of hiding them, and strokes the focused one last', async () => {
