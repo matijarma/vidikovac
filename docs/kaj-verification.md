@@ -1366,12 +1366,13 @@ iz njih vidi gdje ostatak živi. Udjeli su unutar svake situacije, a nazivnici s
   objavljeni pod riješili su slučaj „tramvaj stoji na peronu, a plan je otišao”; ono što je ostalo
   je „tramvaj je vozio, plan ga je produžio po kvantilu, a on je u sljedećih pola minute stao zbog
   nečega što feed ne javlja”.
-- **Križanja su prava vrsta ideje, ali premala.** Gdje čvor stupnja većeg od dva leži unutar 30 s
-  plana, stopa je 21,1 % prema 17,3 % — mjerljivo gore, dakle blokada na križanju doista je jedan od
-  uzroka. Ali takvih je ocjena samo 3,7 % svih, pa cijela ta situacija nosi 4,5 % ostatka. Sljedeći
-  korak nije viši kvantil nego **više mjesta na kojima se stajanje može predvidjeti**: semafor koji
-  nije na čvoru stupnja većeg od dva, naučeno sporo mjesto po bridu i satu, zatvorena ulica iz
-  ZET-ovih obavijesti.
+- **Križanja nose malo, a njihov predznak nije stabilan.** U ovom prozoru stopa je ondje gdje čvor
+  stupnja većeg od dva leži unutar 30 s plana viša (21,1 % prema 17,3 %), ali na **cijelom danu je
+  niža** (17,4 % prema 18,3 %) — vidi odjeljak o punom danu. Predznak se okreće, pa se na taj redak
+  ne smije nasloniti zaključak. Takvih je ocjena ionako samo 3,7 % svih, pa ta situacija nosi 4,5 %
+  ostatka. Sljedeći korak — **više mjesta na kojima se stajanje može predvidjeti** (semafor koji nije
+  na čvoru stupnja većeg od dva, naučeno sporo mjesto po bridu i satu, zatvorena ulica iz ZET-ovih
+  obavijesti) — stoji na prva dva retka podjele, koji su na oba mjerenja isti, a ne na ovom.
 - Nazivnici ovdje (338.111 ocjena) nešto su manji od zaglavnih (371.250): ocjenjivač pamti stanje
   osam zadnjih objavljenih planova po vozilu, pa ocjena protiv plana starijeg od toga ostaje bez
   situacije i ispada iz podjele. Udjeli su zato usporedivi međusobno, a zaglavni broj (15,9 %) ostaje
@@ -1424,11 +1425,14 @@ podaci cenzurirani; dotad je ovo poznata i izmjerena pristranost, a ne skrivena.
 
 #### Cijeli snimljeni dan (7.972 okvira)
 
-`node scripts/replay-twin.mjs recordings/2026/09/17`, s odabranim konstantama, protiv polazne
-tablice cijelog dana iz `replay-fullday-baseline-cd7495c.txt` (`cd7495c`, stanje **prije F8**). Ta
-polazna tablica je jedina koja za cijeli dan postoji, pa razlika ispod mjeri **cijeli krug F**
-(F8 posluženi popis stajališta, F9 klijent koji nikad ne crta unatrag, F10 registar redoslijeda,
-F11 planer i zadržavanje) — ne samo F11. Razlika koja mjeri samo F11 je tablica prozora gore.
+`node scripts/replay-twin.mjs recordings/2026/09/17`, s odabranim konstantama i poslije popravaka iz
+pregleda, protiv polazne tablice cijelog dana iz `replay-fullday-baseline-cd7495c.txt`.
+
+**Ovo nije kontrolirana razlika i ne smije se čitati kao takva.** Ta polazna tablica je `cd7495c`,
+stanje **prije F8**, i vožena je harnessom **bez povratne veze učenja** — dakle razlikuju se i
+planer (cijeli krug F: F8 posluženi popis stajališta, F9 klijent koji ne crta unatrag, F10 registar
+redoslijeda, F11 planer i zadržavanje) i harness. Kontrolirana razlika koja mjeri samo F11 je
+tablica prozora gore. Ovdje se čita veličina i smjer, ne pripisivanje.
 
 ```
 twin replay report
@@ -1442,12 +1446,12 @@ hindsight, bucket p50 / p95 (n graded fixes):
   60s:  p50 <200m   p95 ge200m  (n=1530176)
 
 signed hindsight, share of graded fixes (plan >=50 m ahead of the tram / within 50 m / >=50 m behind):
-  10s:  ahead 13.6%  within 56.7%  behind 29.7%  (n=1560618)
-  30s:  ahead 17.0%  within 40.1%  behind 42.9%  (n=1549449)
-  60s:  ahead 17.3%  within 29.8%  behind 52.8%  (n=1530176)
+  10s:  ahead 13.8%  within 56.8%  behind 29.4%  (n=1560618)
+  30s:  ahead 17.3%  within 40.1%  behind 42.6%  (n=1549449)
+  60s:  ahead 17.9%  within 29.8%  behind 52.3%  (n=1530176)
 
-between-plan regressions (>25 m):     84683  (of 841568 consecutive plan pairs)
-fix-order violations (<=5 s, >35 m):  6971  (of 4495410 fresh pairs on shared rails)
+between-plan regressions (>25 m):     85387  (of 841568 consecutive plan pairs)
+fix-order violations (<=5 s, >35 m):  6974  (of 4495247 fresh pairs on shared rails)
 phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
   shape paths:           100 paths, 7657 geometric / 2228 served / 0 phantom, median per path 76.5 / 22.0 / 0.0
   synthetic paths:       52 paths, 3347 geometric / 1074 served / 0 phantom, median per path 62.5 / 19.5 / 0.0
@@ -1455,56 +1459,70 @@ phantom stops:           0 of 11004 geometric entries on 152 paths (3302 served)
 
 client simulation (polls land at header + 3.5 s, 12 Hz; 1036562 frames, 112221628 tram-frames):
   backward frames (must be 0):        0
-  visible crossings (must be 0):      23079
-  hold-time share:                    1.1%  mean hold length: 1.7 s  (58332 holds)
+  visible crossings (must be 0):      23149
+  hold-time share:                    1.1%  mean hold length: 1.8 s  (58863 holds)
 
 overtakes (must be 0):   86
 reversals (must be 0):   0
 concessions / swaps:     309 / 170
 direction known share:   100.0%
 unknown-trip share:      0.0%
-first moving plan (s):   p50 831  p95 1781  (never moved: 8)
-per-tick wall time (ms): p50 40.44  p95 54.72
+first moving plan (s):   p50 811  p95 1781  (never moved: 8)
+per-tick wall time (ms): p50 39.73  p95 51.25
 
-planner interventions:   floor 596562  junction_wait 101495  stand_fix 137860  eta_bound_skipped 285656
+planner interventions:   floor 595235  junction_wait 101585  stand_fix 97639  eta_bound_skipped 274155
 learned by the end:      4252 edge cells / 4755 stop cells / 1317 node cells; 53164 dwell samples, 7491 junction waits of 24559 passes, 78 platforms in the recent window
+dwell candidates:        53164 kept, 9444 refused by the stationarity gate (4150 with ONE fix in the zone = ambiguous, 5294 with two or more that all moved = pass-through); ambiguous share of all candidates 6.6%
+
+why the plan was ahead at 30 s (share of the fixes graded in each situation that had the plan >=50 m ahead):
+  anchor age <10 s:           17.2%  (202990 of 1177630)
+  anchor age 10-20 s:         20.2%  (34760 of 172404)
+  anchor age 20-30 s:         26.6%  (10578 of 39798)
+  anchor age >=30 s:          25.0%  (20183 of 80737)
+  anchor standing:            16.7%  (96086 of 574127)
+  anchor moving:              19.2%  (172425 of 896442)
+  junction within 30 s:       17.4%  (9442 of 54295)
+  no junction within 30 s:    18.3%  (259069 of 1416274)
 ```
 
-| Mjera (cijeli dan) | prije kruga F (`cd7495c`) | poslije F11 | promjena |
+| Mjera (cijeli dan) | prije kruga F (`cd7495c`, bez povratne veze) | poslije F11 | promjena |
 |---|---|---|---|
 | **slike unatrag (klijent)** | 41.223.762 od 112.221.628 | **0** | nestale |
 | **preticanja (blizanac)** | 11.204 | **86** | −99,2 % |
 | **fantomska stajališta** | 6.410 od 10.599 | **0** od 11.004 | nestala |
-| **regresije među planovima** | 218.265 od 842.298 | **84.683** od 841.568 | −61,2 % |
-| **vidljiva križanja (klijent)** | 38.228 | **23.079** | −39,6 % |
-| **10 s: ispred / unutar / iza** | 23,7 / 54,2 / 22,1 % | **13,6** / 56,7 / 29,7 % | −10,1 p. b. ispred |
-| **30 s: ispred / unutar / iza** | 28,2 / 38,8 / 33,0 % | **17,0** / 40,1 / 42,9 % | −11,2 p. b. ispred |
-| **60 s: ispred / unutar / iza** | 29,1 / 29,5 / 41,4 % | **17,3** / 29,8 / 52,8 % | −11,8 p. b. ispred |
+| **regresije među planovima** | 218.265 od 842.298 | **85.387** od 841.568 | −60,9 % |
+| **vidljiva križanja (klijent)** | 38.228 | **23.149** | −39,4 % |
+| **10 s: ispred / unutar / iza** | 23,7 / 54,2 / 22,1 % | **13,8** / 56,8 / 29,4 % | −9,9 p. b. ispred |
+| **30 s: ispred / unutar / iza** | 28,2 / 38,8 / 33,0 % | **17,3** / 40,1 / 42,6 % | −10,9 p. b. ispred |
+| **60 s: ispred / unutar / iza** | 29,1 / 29,5 / 41,4 % | **17,9** / 29,8 / 52,3 % | −11,2 p. b. ispred |
 | **razred p95 na 10 s** | ≥200 m | **<200 m** | prvi pomak razreda p95 u krugu |
 | razred p50 (10/30/60 s) | <50 / <100 / <200 m | isto | drži |
-| prekršaji redoslijeda prema očitanjima | 9.356 od 5.022.158 | 6.971 od 4.495.410 | −25,5 % |
-| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | **1,1 % / 1,7 s / 58.332** | −6,7 p. b. / −60,8 % |
+| prekršaji redoslijeda prema očitanjima | 9.356 od 5.022.158 | 6.974 od 4.495.247 | −25,5 % |
+| udio držanja / prosjek / broj | 7,8 % / 4,9 s / 148.657 | **1,1 % / 1,8 s / 58.863** | −6,7 p. b. / −60,4 % |
 | vožnje unatrag u planu | 0 | 0 | drži |
 | ustupci / zamjene | 6.960 / — | 309 / 170 | −95,6 % ustupaka |
 | poznati smjer / nepoznate vožnje | 100,0 % / 0,0 % | 100,0 % / 0,0 % | drži |
-| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 831 / 1.781 s | +55 s p50 |
-| otkucaj p50 / p95 | 123,03 / 304,87 ms | **40,44 / 54,72 ms** | −67 % / −82 % |
+| prvi plan u pokretu p50 / p95 | 776 / 1.794 s | 811 / 1.781 s | +35 s p50 |
+| otkucaj p50 / p95 | 123,03 / 304,87 ms | **39,73 / 51,25 ms** | −68 % / −83 % |
 
-Tri stvari treba pročitati pažljivo:
+Četiri stvari treba pročitati pažljivo:
 
 - **Razred p95 na 10 s prvi put pada ispod 200 m.** Kroz cijeli krug F razredi p95 stajali su na
-  „≥200 m” na sva tri horizonta; na punom danu, s objavljenim podom i popravcima stanja, horizont
-  jednog otkucaja sada završava u razredu ispod 200 m. Na 30 i 60 s razred i dalje stoji — tamo je
-  rep i dalje dug.
-- **Naučeni sloj je na kraju dana pun, a kotrljajući prozor prazan.** 4.252 ćelije bridova, 4.755
-  ćelija perona i 1.317 ćelija čvorova, 53.164 uzorka zadržavanja i 7.491 čekanje od 24.559 prolaza
-  kroz križanja. „78 perona u kotrljajućem prozoru” nije mali broj zato što je prozor slab nego zato
-  što dan završava poslije ponoći: prozor drži zadnjih 90 minuta, a u to doba vozi šačica tramvaja.
-  U prozoru koji završava usred jutra ista je brojka 228.
-- **Prvi plan u pokretu je 55 s sporiji (776 → 831 s p50).** To je izravna posljedica pravila: vozilo
-  koje blizanac prvi put vidi na peronu sada **stoji** dok ne dokaže da je krenulo, umjesto da odmah
-  odveze plan brzinom izmjerenom prije perona. Pola minute čekanja na tramvaj koji doista stoji je
-  jeftinije od oznake koja otiđe bez njega i onda se mora vratiti.
+  „≥200 m” na sva tri horizonta; na punom danu horizont jednog otkucaja sada završava ispod 200 m.
+- **Podjela „zašto ispred” drži na punom danu za dva retka, a za treći se OKREĆE.** Sidro mlađe od
+  10 s i dalje nosi tri četvrtine svih „ispred” (75,6 % na punom danu prema 74,9 % u prozoru), a
+  sidro koje vozi dvije trećine (64,2 % prema 66,0 %) — ta dva zaključka su stabilna. Ali **križanje
+  unutar 30 s** u prozoru je imalo višu stopu (21,1 % prema 17,3 %), a na punom danu ima **nižu**
+  (17,4 % prema 18,3 %). Predznak se mijenja, dakle taj signal nije robustan: na punom danu planer
+  knjiži 101.585 čekanja na križanjima i ondje gdje ih knjiži plan nije češće ispred — što je upravo
+  ono što se želi ako čekanja rade. Zaključak „više mjesta na kojima se stajanje može predvidjeti”
+  stoji na prva dva retka, koja su stabilna, a ne na trećem.
+- **Pristranost preživjelih je na punom danu manja nego u prozoru** (6,6 % dvosmislenih kandidata
+  prema 10,2 %): kroz cijeli dan ima više dugih zadržavanja na okretištima i u slaboj vožnji, koja
+  ostavljaju više od jednog očitanja u zoni.
+- **Prvi plan u pokretu je 35 s sporiji (776 → 811 s p50).** Vozilo koje blizanac prvi put vidi na
+  peronu sada stoji dok ne dokaže da je krenulo. Pola minute čekanja na tramvaj koji doista stoji
+  jeftinije je od oznake koja otiđe bez njega i onda se mora vratiti.
 
 #### Ručna tablica zadržavanja (za vlasnika)
 
