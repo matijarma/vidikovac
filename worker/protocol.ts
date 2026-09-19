@@ -35,6 +35,8 @@ export interface ScreenMetadata {
   kind: 'temporary' | 'venue';
   expiresAt: number | null;
   stop: ScreenStop | null;
+  /** The area the screen is set to: one of the 17 gradske četvrti, or 'zagreb' for the whole city. */
+  area?: string;
 }
 
 /** Minted code slot, sent to the beacon client in batches. */
@@ -107,6 +109,10 @@ export type BeaconClientMessage =
   | { t: 'auth'; hmac: string; presentationVersion?: 1; capabilities?: string[] }
   | { t: 'presented'; version: 1; revision: number; status: 'displayed' | 'unavailable' }
   | { t: 'presentation-stop'; version: 1; revision: number }
+  // The screen's own settings panel: the stop it centres on (null for none)
+  // and the area it frames. The DO validates both (screenStop, isAreaSlug),
+  // stores them and answers with a 'codes' frame carrying the new screen.
+  | { t: 'screen-set'; version: 1; stopId: string | null; area: string }
   | { t: 'more' } // request the next code batch
   | { t: 'ping' } // keepalive, answered by the DO's auto-response without waking it
   | { t: 'pong' };

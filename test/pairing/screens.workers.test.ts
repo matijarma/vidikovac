@@ -40,6 +40,35 @@ describe('real temporary screens', () => {
     kiosk.ws.close(1000, 'done');
   });
 
+  it('one button, an empty body: the whole city, no stop, and the city in the label', async () => {
+    const response = await SELF.fetch('https://vidikovac.test/api/screens', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    });
+    expect(response.status).toBe(201);
+    const screen = await response.json<CreateBeaconResponse>();
+    expect(screen.screen).toMatchObject({ kind: 'temporary', stop: null, area: 'zagreb' });
+    const kiosk = await connectWs(`/ws/beacon/${screen.beaconId}`, '192.0.2.9');
+    const frame = await authKiosk(kiosk, screen.secret);
+    expect(frame.screen).toMatchObject({ stop: null, area: 'zagreb' });
+    // The settings panel's frame, over that same socket, re-frames the screen.
+    kiosk.ws.send(JSON.stringify({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' }));
+    const after = await kiosk.inbox.nextOfType('codes');
+    expect(after.screen).toMatchObject({ area: 'trnje' });
+    expect((after.screen as { stop: { name: string } }).stop.name).toContain('Jelačića');
+    kiosk.ws.close(1000, 'done');
+    const listed = (await indexStub(testEnv).listBeacons()).find((b) => b.beaconId === screen.beaconId);
+    expect(listed).toMatchObject({ area: 'zagreb', stopId: null, operatorLabel: 'Kaj ima? · Zagreb' });
+  });
+
+  it('keeps an area without a stop, and names the area in the default label', async () => {
+    const response = await SELF.fetch('https://vidikovac.test/api/screens', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ area: 'trnje' }),
+    });
+    expect(response.status).toBe(201);
+    const screen = await response.json<CreateBeaconResponse>();
+    expect(screen.screen).toMatchObject({ stop: null, area: 'trnje' });
+  });
+
   it('rejects unknown stops and cross-origin creation', async () => {
     const response = await SELF.fetch('https://vidikovac.test/api/screens', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"stopId":"invented"}',

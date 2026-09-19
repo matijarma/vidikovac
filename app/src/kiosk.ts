@@ -5,6 +5,7 @@
 // code rotation and feed polling; tests drive these same paths with fakes.
 // Screen credentials never enter public presentation markup or logs.
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import { CITY_AREA } from '../../worker/pairing/areas';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
@@ -44,8 +45,9 @@ import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, me
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
-import { mountSetup, type SetupHandle } from './kiosk/setup';
-import { DEFAULT_STOP_ID } from './kiosk/stops';
+import { districtLabel } from './kiosk/districts';
+import { mountSettings, type SettingsHandle } from './kiosk/settings';
+import { mountStart, type StartHandle } from './kiosk/start';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
@@ -94,8 +96,8 @@ export interface KioskDeps {
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
   /** The stop's last-departure table (core/lastrun.ts); the real loader by default, behind FLAGS.FEED_LASTRUN. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
-  /** One real POST /api/screens per press of the setup wizard's button. */
-  createScreen?: (input: { area: string; stopId: string }) => Promise<CreateBeaconResponse>;
+  /** One real POST /api/screens per press of the start screen's button; the body is empty (the whole city, no stop). */
+  createScreen?: () => Promise<CreateBeaconResponse>;
   loadStops?: () => Promise<ScreenStop[]>;
   createBeacon?: (deps: BeaconClientDeps) => BeaconClient;
   createSession?: (options: { roomId: string; ticket: string }) => SessionClient;
@@ -130,7 +132,7 @@ function shellMarkup(s: KioskStrings): string {
     <header class="k-head">
       <div class="k-head-brand"><p class="k-brand">${escapeHtml(s.appName)}</p><p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
-      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time><div class="k-weather" data-testid="kiosk-weather" hidden></div></div></div>
+      <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><button type="button" class="k-theme" data-testid="kiosk-settings" aria-label="${escapeAttribute(s.settings.open)}" title="${escapeAttribute(s.settings.open)}" hidden>${iconMarkup('sliders-horizontal', undefined, 'icon k-icon')}</button><button type="button" class="k-theme" data-testid="kiosk-theme"></button><time class="k-clock" data-testid="kiosk-clock"></time><div class="k-weather" data-testid="kiosk-weather" hidden></div></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
     <section class="k-basics" data-testid="kiosk-essentials" hidden aria-labelledby="ess-title">
@@ -184,7 +186,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
   const fetchLastRun = deps.loadLastRun ?? ((stopId: string) => loadLastRunImpl(stopId));
   const loadStops = deps.loadStops ?? (() => loadStopsImpl());
-  const createScreen = deps.createScreen ?? ((input: { area: string; stopId: string }) => createTemporaryScreen(input));
+  const createScreen = deps.createScreen ?? (() => createTemporaryScreen({}));
   const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
   const makeSession = deps.createSession ?? ((o: { roomId: string; ticket: string }) => createSessionClient(o));
 
@@ -206,6 +208,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const headMid = q('[data-testid=kiosk-head-mid]');
   const dateEl = q('[data-testid=kiosk-date]');
   const themeBtn = q<HTMLButtonElement>('[data-testid=kiosk-theme]');
+  const settingsBtn = q<HTMLButtonElement>('[data-testid=kiosk-settings]');
   const clockEl = q('[data-testid=kiosk-clock]');
   const weatherEl = q('[data-testid=kiosk-weather]');
   const stage = q('[data-testid=kiosk-stage]');
@@ -222,6 +225,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let phase: KioskPhase = 'setup';
   let credentials: BeaconCredentials | null = null;
   let stop: ScreenStop | null = null;
+  /** The area the screen is set to: a četvrt slug, `zagreb` for the whole city, or null on a screen that never named one. */
+  let area: string | null = null;
   let stops: ScreenStop[] | null = null;
   /** Set once the screen can issue no more codes; an open session runs on to its end. */
   let screenDead: 'expired' | 'revoked' | null = null;
@@ -238,7 +243,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let sessionLabel: HTMLElement | null = null;
   let sessionExpiresAt: number | null = null;
   let swapTimer: unknown = null;
-  let setup: SetupHandle | null = null;
+  let start: StartHandle | null = null;
+  let settings: SettingsHandle | null = null;
   let invitation: InvitationHandle | null = null;
   /** The provisioning footnote a phone carries under the invitation. */
   let provision: HTMLElement | null = null;
@@ -383,14 +389,24 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     themeBtn.innerHTML = iconMarkup(THEME_ICON[preference], undefined, 'icon k-icon');
     themeBtn.setAttribute('aria-label', label);
     themeBtn.title = label;
+    settings?.paint();
   }
   function cycleTheme(): void {
     const i = THEME_PREFERENCES.indexOf(deps.theme.getPreference());
     deps.theme.setPreference(THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length]!);
   }
-  /** The stop chip is the stop's name alone (kajimafix 03.1): a venue's kind or a temporary screen's expiry are operator facts and belong to setup, never to a passer-by's header. */
+  /** The stop chip is the stop's name alone (kajimafix 03.1): a venue's kind or
+   *  a temporary screen's expiry are operator facts and belong to the
+   *  settings panel, never to a passer-by's header. A screen without a stop
+   *  names its četvrt instead; one set to the whole city names nothing -- the
+   *  brand beside it already says which city. */
   function paintContext(): void {
-    contextEl.textContent = credentials && stop ? stop.name : '';
+    const district = area && area !== CITY_AREA.slug ? districtLabel(area) : '';
+    contextEl.textContent = !credentials ? '' : stop ? stop.name : district;
+    // Settings belong to a live screen showing the invitation: never before one
+    // exists, never over a granted session, and never over a screen that has
+    // expired or been revoked, whose notice carries the one way on.
+    settingsBtn.hidden = phase !== 'invitation';
   }
   function showSessionLabel(expiresAt: number | null): void {
     if (expiresAt === null) return;
@@ -454,9 +470,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     disarmEssentialsIdle();
     essentialsIdle = setTimer(() => closeEssentials(), ESSENTIALS_IDLE_MS);
   }
-  /** Never over a grant (the driver's layer shows more) and never over the wizard. */
+  /** Never over a grant (the driver's layer shows more) and never over the start screen. */
   function openEssentials(): void {
     if (phase === 'paired' || phase === 'setup') return;
+    closeSettings(false);
     paintEssentials();
     basics.hidden = false;
     stage.hidden = true;
@@ -768,13 +785,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // --- Phases -------------------------------------------------------------------
   function clearStage(): void {
     parkMap();
-    setup?.destroy(); setup = null;
+    start?.destroy(); start = null;
     invitation?.destroy(); invitation = null;
     provision?.remove(); provision = null;
     paired?.destroy(); paired = null;
     notice?.remove(); notice = null;
   }
   function setPhase(next: KioskPhase): void {
+    // Postavke belong to the composition that was on the stage: whatever
+    // replaces it -- a grant, a notice, the start screen -- gets the stage
+    // back at once, never behind a panel waiting out its 90 s.
+    closeSettings(false);
     phase = next;
     // The sheet reads the phase for the stage's room: the invitation is edge to edge, the wizard and the notices keep their padding.
     element.dataset.phase = next;
@@ -782,7 +803,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     clearStage();
     if (next === 'paired') closeEssentials(false);
     else removeSessionLabel();
-    if (next === 'setup') mountSetupPhase();
+    if (next === 'setup') mountStartPhase();
     else if (next === 'invitation') {
       invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase });
       // A phone gets that same invitation; only the address that set the screen up is extra, and it is a footnote, not the page's subject.
@@ -822,23 +843,53 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     clearAlert('beacon');
     rotation.stop(); rotation = newRotation(); currentSlot = null;
     forgetBeacon(storage);
-    credentials = null; stop = null; screenDead = null;
+    credentials = null; stop = null; area = null; screenDead = null;
     disarmExpiry();
     setPhase('setup');
     if (pollingStarted) void loadTeaser();
   }
-  function mountSetupPhase(): void {
-    setup = mountSetup(stage, {
+  function mountStartPhase(): void {
+    start = mountStart(stage, {
       strings: s,
-      locale,
-      loadStops: async () => { stops = await loadStops(); return stops; },
       createScreen,
       onCreated: (response) => adoptCredentials({ beaconId: response.beaconId, secret: response.secret, ...(response.screen ? { screen: response.screen } : {}) }, true),
       now,
       setTimeout: oneShot,
       clearTimeout: clearTimer,
-      initialStopId: DEFAULT_STOP_ID,
     });
+  }
+  /** Postavke, built on the first press of the gear and kept for the screen's
+   *  life. Saving is one `screen-set` frame; the DO's answer re-frames the
+   *  wall through applyScreen, exactly as a stop change from the DO does. */
+  function openSettings(): void {
+    if (!credentials || phase !== 'invitation') return;
+    closeEssentials(false);
+    settings ??= mountSettings(element, {
+      strings: s,
+      locale,
+      loadStops: async () => { stops = await loadStops(); return stops; },
+      screen: () => ({ area, stopId: stop?.id ?? null, expiresAt: credentials?.screen?.expiresAt ?? null }),
+      themePreference: () => deps.theme.getPreference(),
+      cycleTheme,
+      save: (stopId, next) => {
+        if (!beacon || beacon.status() !== 'live') return false;
+        beacon.setScreen(stopId, next);
+        return true;
+      },
+      forget: startOver,
+      onOpen: () => { stage.hidden = true; mapAdapter.handle()?.pause(); },
+      onClose: (restoreFocus) => {
+        stage.hidden = false;
+        if (mapContainer && mapContainer.parentElement !== park) resumeMap();
+        if (restoreFocus) settingsBtn.focus();
+      },
+      setTimeout: oneShot,
+      clearTimeout: clearTimer,
+    });
+    settings.open();
+  }
+  function closeSettings(restoreFocus = true): void {
+    settings?.close(restoreFocus);
   }
   /** Credentials from the fragment, storage or a fresh creation take one path.
    *  A screen already past its expiry never connects (no reconnect loop against
@@ -848,6 +899,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     credentials = creds;
     if (persist) storeBeacon(storage, creds);
     stop = creds.screen?.stop ?? null;
+    area = creds.screen?.area ?? null;
     screenDead = null;
     if (screenExpired(creds.screen, now())) {
       screenDead = 'expired';
@@ -870,6 +922,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       capabilities:['city-v1'],
       onCodes: (batch, serverNow) => { if (current()) rotation.setBatch(batch, serverNow); },
       onContext: (screen) => { if (current()) applyScreen(screen); },
+      onError: (error) => { if (current()) settings?.refused(error); },
       onUnlocked: ({ roomId, ticket }) => { if (current()) openSession(roomId, ticket); },
       onPaired: () => {
         if (!current() || phase !== 'invitation') return;
@@ -971,7 +1024,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     credentials = withScreen(credentials, screen);
     storeBeacon(storage, credentials);
     stop = screen.stop;
+    area = screen.area ?? null;
     paintContext();
+    settings?.paint();
+    // The panel is waiting for exactly this: the screen it asked for.
+    settings?.applied();
     armExpiry();
     // The screen follows its stop at once (the field's name, the camera, the last-run table dropped), then asks for that stop's own teaser.
     paintLocal();
@@ -1123,6 +1180,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   });
   basicsClose.addEventListener('click', () => closeEssentials());
   themeBtn.addEventListener('click', cycleTheme);
+  settingsBtn.addEventListener('click', openSettings);
   // Repaints on every change: the button's own clicks, ?tema= landing after
   // this mount, another tab, or the OS answer for auto -- one source of truth.
   const stopTheme = deps.theme.onChange((state) => paintTheme(state.preference));
@@ -1207,6 +1265,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stopTheme();
       beacon?.close(); beacon = null;
       session?.close(); session = null;
+      settings?.destroy(); settings = null;
       clearStage();
       maps.destroy();
       element.remove();

@@ -8,7 +8,8 @@ import { clientIp } from '../http';
 import { addressPrefix } from '../pairing/netkey';
 import { hexEncode, hmacSha256, requireSecret } from '../pairing/tokens';
 import { provisionScreen } from '../pairing/provision';
-import { DEFAULT_STOP_ID, screenStop } from '../pairing/stops';
+import { screenStop } from '../pairing/stops';
+import { areaName, CITY_AREA } from '../pairing/areas';
 import { areaSlugOf } from './admin';
 import { isSameOrigin, readCappedBody } from './pairing';
 import { logError } from '../log';
@@ -49,11 +50,14 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw ?? '') as Record<string, unknown>; } catch { return json({ error: 'bad-request' }, 400); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'bad-request' }, 400);
-    const area = areaSlugOf(body.area ?? 'donji-grad');
-    const stopId = typeof body.stopId === 'string' ? body.stopId : DEFAULT_STOP_ID;
-    const stop = screenStop(stopId);
-    if (!area || !stop) return json({ error: 'bad-request', field: !area ? 'area' : 'stopId' }, 400);
-    const label = typeof body.operatorLabel === 'string' ? body.operatorLabel.trim() : `Kaj ima? · ${stop.name}`;
+    // One button and an empty body is the ordinary way in (WP4): the whole
+    // city, no stop. Both stay optional, and the screen's own settings panel
+    // changes them later over the beacon socket ('screen-set').
+    const area = areaSlugOf(body.area ?? CITY_AREA.slug);
+    const stopId = typeof body.stopId === 'string' ? body.stopId : null;
+    const stop = stopId === null ? null : screenStop(stopId);
+    if (!area || (stopId !== null && !stop)) return json({ error: 'bad-request', field: !area ? 'area' : 'stopId' }, 400);
+    const label = typeof body.operatorLabel === 'string' ? body.operatorLabel.trim() : `Kaj ima? · ${stop ? stop.name : areaName(area)}`;
     if (!label || label.length > 80) return json({ error: 'bad-request', field: 'operatorLabel' }, 400);
     const quota = await indexStub(env).reserveScreen(principal);
     if (!quota.allowed) return json({ error: 'screen-limit', retryAfter: quota.retryAfter }, 429, { 'retry-after': String(quota.retryAfter) });

@@ -1,10 +1,11 @@
-// The 17 gradske četvrti as the setup wizard offers them: the slug the Worker
-// accepts (worker/pairing/areas.ts, `areaSlugOf`), the written name, and the
+// The 17 gradske četvrti as the screen's settings panel offers them (beside
+// "Cijeli grad", which is worker/pairing/areas.ts's CITY_AREA and no četvrt):
+// the slug the Worker accepts (`areaSlugOf`), the written name, and the
 // district's seat address with its coordinates. The seats come from the
 // City's Gradske četvrti dataset (data.zagreb.hr, Otvorena dozvola), the
 // same rows the open ckan-geo feed serves as `cetvrt:<n>` points; they are
-// used only to rank stops "nearest the district seat" in step two, never
-// shown as a location of the screen itself.
+// used only to rank stops "nearest the district seat" in the panel's stop
+// search, never shown as a location of the screen itself.
 export interface District {
   slug: string;
   name: string;

@@ -225,24 +225,18 @@ export interface KioskStrings {
     setupAgain: string;
     endsAfterSession: string;
   };
+  /** The start screen (kiosk/start.ts) and the sentences the settings panel's
+   *  stop search reuses: one vocabulary for the one thing that creates and
+   *  changes a screen. */
   setup: {
     title: string;
     intro: string;
-    step1: string;
-    step2: string;
-    districtLegend: string;
-    stopLegend: string;
     search: string;
-    searchHint: string;
-    nearest: string;
     results: PluralForms;
     noResults: string;
     routesAt: string;
-    next: string;
-    back: string;
     create: string;
     creating: string;
-    summary: string;
     validity: string;
     errorAccess: string;
     errorQuota: string;
@@ -253,7 +247,35 @@ export interface KioskStrings {
     retry: string;
     retryIn: string;
     loadingStops: string;
-    provisionHint: string;
+  };
+  /** The on-screen settings overlay (kiosk/settings.ts): the four sections and
+   *  the forget-screen confirmation. */
+  settings: {
+    open: string;
+    title: string;
+    hint: string;
+    close: string;
+    save: string;
+    saving: string;
+    saved: string;
+    /** The three ways a save does not land: no socket, a refusal, a repeat inside the DO's window. */
+    saveOffline: string;
+    saveRefused: string;
+    saveBusy: string;
+    area: string;
+    areaWhole: string;
+    areaHint: string;
+    stop: string;
+    stopNone: string;
+    stopHint: string;
+    theme: string;
+    screen: string;
+    expiry: string;
+    expiryNone: string;
+    forget: string;
+    forgetAsk: string;
+    forgetYes: string;
+    forgetNo: string;
   };
 }
 
@@ -346,12 +368,17 @@ function build(code: SupportedLocale): KioskStrings {
     notice: group('notice', ['expiredTitle', 'expiredBody', 'revokedTitle', 'revokedBody', 'setupAgain', 'endsAfterSession']),
     setup: {
       ...group('setup', [
-        'title', 'intro', 'step1', 'step2', 'districtLegend', 'stopLegend', 'search', 'searchHint', 'nearest', 'noResults', 'routesAt',
-        'next', 'back', 'create', 'creating', 'summary', 'validity', 'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid',
-        'errorFailed', 'errorStops', 'retry', 'retryIn', 'loadingStops', 'provisionHint',
+        'title', 'intro', 'search', 'noResults', 'routesAt', 'create', 'creating', 'validity',
+        'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed', 'errorStops',
+        'retry', 'retryIn', 'loadingStops',
       ]),
       results: forms('setup', 'results'),
     },
+    settings: group('settings', [
+      'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',
+      'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
+      'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
+    ]),
   };
 }
 

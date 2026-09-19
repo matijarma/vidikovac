@@ -18,7 +18,7 @@ export interface ProvisionInput {
 export async function provisionScreen(env: Env, input: ProvisionInput, origin: string): Promise<CreateBeaconResponse> {
   const secret = randomId(20);
   const stop = input.stopId ? screenStop(input.stopId) : null;
-  const screen: ScreenMetadata = { kind: input.kind, expiresAt: input.expiresAt ?? null, stop };
+  const screen: ScreenMetadata = { kind: input.kind, expiresAt: input.expiresAt ?? null, stop, area: input.area };
   for (let attempt = 0; attempt < 5; attempt++) {
     const beaconId = randomId(5);
     const record: BeaconCreateInput = {

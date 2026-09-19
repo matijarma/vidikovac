@@ -875,3 +875,28 @@ button.k-strip-verdict { cursor: pointer; }
 @media (max-width: 35rem) {
   .k-setup .k-stop-list { grid-template-columns: 1fr; max-height: none; }
 }
+
+/* The start screen: a brand, a sentence and one button, centred on the stage. */
+.k-start { justify-content: center; max-width: 46rem; }
+.k-start-form { display: flex; flex-direction: column; align-items: flex-start; }
+.k-start .k-setup-actions { margin-top: calc(var(--k-gap) * 1.2); }
+.k-start-btn { min-width: 16rem; min-height: 56px; font-size: 1.125rem; font-weight: 700; }
+
+/* Postavke: the same overlay geometry as Osnovno, with its own rows. */
+.k-settings { gap: var(--k-gap); }
+.k-settings-rows { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-gap: var(--k-gap); gap: var(--k-gap); align-content: start; min-height: 0; margin-top: var(--k-gap); overflow-y: auto; }
+.k-settings-row { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.k-settings-row[data-row='stop'] { grid-row: span 2; min-height: 0; }
+.k-settings-label { font-size: var(--k-sup-size); font-weight: 700; }
+.k-settings .k-district-pick, .k-settings .k-search { width: 100%; }
+.k-settings .k-search { margin-top: calc(var(--k-gap) * 0.5); }
+.k-settings .k-stop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 22rem; }
+.k-settings .k-btn { margin-top: calc(var(--k-gap) * 0.5); }
+.k-settings-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5); margin-top: calc(var(--k-gap) * 0.5); }
+.k-settings-confirm[hidden] { display: none; }
+.k-settings .k-setup-actions { margin-top: 0; }
+@media (max-width: 60rem) {
+  .k-settings-rows { grid-template-columns: minmax(0, 1fr); }
+  .k-settings-row[data-row='stop'] { grid-row: auto; }
+  .k-settings .k-stop-list { grid-template-columns: minmax(0, 1fr); max-height: 16rem; }
+}

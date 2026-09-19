@@ -21,7 +21,7 @@ import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, creat
 import { emptyCity, type CityState } from '../../shared/city/types';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
-import { classifySetupError } from '../../app/src/kiosk/setup';
+import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
