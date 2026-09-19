@@ -255,6 +255,9 @@ export interface ReplayReport {
   /** A published plan whose arc ran backwards in time. Must be 0. */
   reversals: number;
   concessions: number;
+  /** Swaps the register granted at once, the follower's fix having left the
+   *  shared stretch ahead of its leader (E3): the other sanctioned reversal. */
+  swaps: number;
   /** Share of vehicle-tick observations whose trip resolved to a direction. */
   directionKnownShare: number | null;
   /** Share of trip-tick observations the index could not join. */
@@ -740,6 +743,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
   let nextFrameMs: number | null = null;
   const lastFixSec = new Map<string, number>();
   let concessions = 0;
+  let swaps = 0;
   let reversals = 0;
   let overtakes = 0;
   let tripObservations = 0;
@@ -775,7 +779,10 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
 
     for (const horizon of HORIZONS_S) for (const bucket of BUCKETS) hindsightTotals[horizon][bucket] += result.hindsight[horizon][bucket];
     for (const horizon of HORIZONS_S) for (const bucket of SIGN_BUCKETS) hindsightSignTotals[horizon][bucket] += result.hindsightSign[horizon][bucket];
-    if (result.order) concessions += result.order.concessions;
+    if (result.order) {
+      concessions += result.order.concessions;
+      swaps += result.order.swaps;
+    }
 
     // The grader's view of this tick: which vehicles' newest fix is new
     // since the last tick (the tick's own `fresh` set, re-derived here).
@@ -876,6 +883,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     overtakes,
     reversals,
     concessions,
+    swaps,
     directionKnownShare: vehicleObservations > 0 ? directionKnownObservations / vehicleObservations : null,
     unknownTripShare: tripObservations > 0 ? unknownTripObservations / tripObservations : null,
     firstMovingS: { p50: numericPercentile(firstMovingDelays, 0.5), p95: numericPercentile(firstMovingDelays, 0.95) },
@@ -980,7 +988,7 @@ export function formatTable(report: ReplayReport): string {
   lines.push('');
   lines.push(`overtakes (must be 0):   ${report.overtakes}`);
   lines.push(`reversals (must be 0):   ${report.reversals}`);
-  lines.push(`concessions:             ${report.concessions}`);
+  lines.push(`concessions / swaps:     ${report.concessions} / ${report.swaps}`);
   lines.push(`direction known share:   ${fmtShare(report.directionKnownShare)}`);
   lines.push(`unknown-trip share:      ${fmtShare(report.unknownTripShare)}`);
   lines.push(`first moving plan (s):   p50 ${fmtS(report.firstMovingS.p50)}  p95 ${fmtS(report.firstMovingS.p95)}  (never moved: ${report.neverMoved})`);
