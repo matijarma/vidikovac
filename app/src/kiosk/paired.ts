@@ -395,8 +395,9 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
 /** What comes next at the tapped stop, as the card's first block: the rows
  *  the controller's board cache and the live fleet already agreed on
  *  (kiosk/arrivals.ts), then the one note that says where an estimate comes
- *  from. Four rows on a wide screen, three in a narrow column -- the row
- *  fitter hides what the box still cannot hold.
+ *  from. Four rows on a wide screen, three in a narrow column; in a paired
+ *  composition the row fitter hides any the block still cannot hold, and in
+ *  the exploration slot the column scrolls under a finger.
  *
  *  Nothing is fetched from here. A context with no `arrivals` (an older
  *  caller, a test of another card) shows the stop exactly as it always did. */
