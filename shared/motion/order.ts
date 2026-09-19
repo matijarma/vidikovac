@@ -161,7 +161,8 @@ export function arcOnPath(path: Path, edge: number, arc: number, nearS: number |
 //     the same way round on ORDER_WITNESSES consecutive fresh fixes -- or,
 //     at once, ZET's own TripUpdates naming served stops in strict sequence
 //     on that path, which is a statement about the trams and not about our
-//     arithmetic.
+//     arithmetic. The two never overrule each other: a TripUpdate pair that
+//     contradicts a fix witness holds the pair, it does not establish it.
 //   - A relation is sticky. Bunching does not end it (that is exactly when
 //     the order matters most and the evidence is weakest), and neither does
 //     a junction's metre-long micro-edge: it is filed against the rails the
@@ -475,7 +476,17 @@ export function enforceOrder(
         continue;
       }
 
-      const lead = tripWitness(net, frame, a, b, updates) ?? (witness.n >= ORDER_WITNESSES ? witness.lead : null);
+      // ZET's own witness is believed only where the fixes do not say
+      // otherwise. `next_stop` runs a stop ahead of a late tram -- the very
+      // reason F11 gated the planner's ETA bound -- so a TripUpdate pair that
+      // reads the opposite way round from two fixes more than
+      // ORDER_ESTABLISH_M apart is not better evidence than the physics, it
+      // is a contradiction, and a contradicted pair establishes nothing this
+      // tick. (A witness of '' is the pair inside the establishing gap: it
+      // reads nothing, so it contradicts nothing, and ZET still decides.)
+      const trip = tripWitness(net, frame, a, b, updates);
+      if (trip !== null && witness.lead !== '' && witness.lead !== trip) continue;
+      const lead = trip ?? (witness.n >= ORDER_WITNESSES ? witness.lead : null);
       if (lead === null || lead === '') continue;
       const leader = lead === a.track.id ? a : b;
       const follower = lead === a.track.id ? b : a;

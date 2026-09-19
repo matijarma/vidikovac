@@ -496,7 +496,12 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     integrator.update([pathFix('v', 'loop', still(t1, 1000), 8)], t1);
     const after = integrator.step(t1)[0];
     expect(after.path).toBe(loopIdx);
-    expect(after.s).toBeGreaterThan(900);
-    expect(after.s).toBeLessThan(1100);
+    // It re-seeded at the arc it was drawn at (990) and is closing the last
+    // ten metres onto the fix's own arc by the ease -- so at or above 990 and
+    // never AT 1000, which is what reseedArc falls back to when the window
+    // finds nothing. The old band (900 to 1100) admitted that fallback and so
+    // was not testing the window at all (the review's M7).
+    expect(after.s).toBeGreaterThanOrEqual(990);
+    expect(after.s).toBeLessThan(999);
   });
 });

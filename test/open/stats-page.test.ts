@@ -124,6 +124,7 @@ describe('renderStatsPage: the twin', () => {
     expect(html).toContain('>800<');
     expect(html).toContain('>unchanged<');
     expect(html).toContain('>cold<');
+    expect(html).toContain('<em>overrides_unreadable</em>'); // every twin_tick dim the operator may meet is explained
     expect(html).toContain('2 od 23 provjera');
     expect(html).toContain('npm run build:network &amp;&amp; npm run build:trips');
     // Hindsight: the histogram and the percentiles stated against the bucket bounds (80 % under 25 m, 95 % under 50 m).
@@ -155,6 +156,7 @@ describe('the twin tables on /stats', () => {
       twin: {
         at: 1_800_000_000,
         overrides: 2,
+        overridesError: null,
         unmatched: [{ stop: 'Nepostojeće', route: null }],
         dwell: [
           {
@@ -187,6 +189,42 @@ describe('the twin tables on /stats', () => {
     expect(html).toContain('floor');
     expect(html).toContain('Nepostojeće'); // an override the network no longer knows is shown, never silently dropped
     expect(html).toContain('stop-dwell-overrides.json');
+  });
+
+  // The review's I3: a malformed stop-dwell-overrides.json used to be logged
+  // and then be indistinguishable from "the owner wrote no overrides". The
+  // page has to say which of the two it is, because every owner default is
+  // gone while the file is unreadable.
+  it('warns in bold beside the dwell table when the overrides file could not be read', () => {
+    const html = renderStatsPage({
+      ...view,
+      twin: {
+        at: 1_800_000_000,
+        overrides: 0,
+        overridesError: 'Error: stop-dwell-overrides: entry 3: "defaultSec" must be a number of seconds between 0 and 600',
+        unmatched: [],
+        dwell: [{ stopId: '299_1', name: 'Trg', defaultSec: 20, override: null, p50: null, pPlan: null, samples: 0, recent: 0, lastSampleSec: null, plannedSec: 20 }],
+        junctions: [],
+      },
+    });
+    expect(html).toContain('<b>Datoteka stop-dwell-overrides.json nije pročitana:');
+    expect(html).toContain('vrijede samo mjerene i zadane vrijednosti');
+    expect(html).toContain('&quot;defaultSec&quot; must be a number'); // the parser's own words, escaped
+  });
+
+  it('says nothing about the overrides file when it was read', () => {
+    const html = renderStatsPage({
+      ...view,
+      twin: {
+        at: 1_800_000_000,
+        overrides: 1,
+        overridesError: null,
+        unmatched: [],
+        dwell: [{ stopId: '299_1', name: 'Trg', defaultSec: 20, override: null, p50: null, pPlan: null, samples: 0, recent: 0, lastSampleSec: null, plannedSec: 20 }],
+        junctions: [],
+      },
+    });
+    expect(html).not.toContain('nije pročitana');
   });
 
   it('says so plainly when the twin answered nothing', () => {

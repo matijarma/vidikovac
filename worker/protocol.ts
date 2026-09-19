@@ -231,6 +231,10 @@ export const SERVER_EVENTS = [
   // R-TE3: the twin's tick outcome (dim1 ok|unchanged|error|stale_index, dim2 cold|warm)
   // and its hindsight error histogram (dim1 horizon 10s|30s|60s, dim2 bucket
   // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
+  // dim1 also carries `overrides_unreadable`, written once per attempt to load
+  // the owner's stop-dwell-overrides.json when it would not parse (I3): not an
+  // outcome of the tick but a fault of the same object, and every hand-written
+  // dwell default is out of the planner for as long as it counts.
   'twin_tick',
   'twin_hindsight',
   // Round F: the same graded fixes by sign (dim1 horizon, dim2
@@ -257,6 +261,14 @@ export const SERVER_EVENTS = [
   'static_watch',
 ] as const;
 export type ServerEvent = (typeof SERVER_EVENTS)[number];
+
+/** Every dim1 the twin writes under `twin_tick`: the four outcomes of a tick
+ *  (worker/do/twin-do.ts TickOutcome, which is this list less the last entry)
+ *  plus `overrides_unreadable`, which is not an outcome of a tick but a fault
+ *  of the same object -- the owner's stop-dwell-overrides.json would not
+ *  parse, so every hand-written dwell default is out of the planner (I3). */
+export const TWIN_TICK_DIMS = ['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable'] as const;
+export type TwinTickDim = (typeof TWIN_TICK_DIMS)[number];
 
 // ---- Data token (stateless, verified by the Worker) -------------------------
 

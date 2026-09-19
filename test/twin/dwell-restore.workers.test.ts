@@ -4,6 +4,7 @@ import type { Env } from '../../worker/env';
 import { TwinDO, twinStub } from '../../worker/do/twin-do';
 import { setTwinIndexSourceForTest, setTwinNetworkSourceForTest, setTwinOverridesSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { parseDwellOverrides } from '../../shared/motion/dwell';
+import { fetchDwellOverrides } from '../../worker/twin/index-load';
 import { corridorIndex } from './engine-fixture';
 import { frame, type FrameVehicle } from './frames';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
@@ -62,7 +63,7 @@ describe('TwinDO keeps the F11 tables across an eviction', () => {
     network = NET;
     setTwinIndexSourceForTest(async () => INDEX);
     setTwinNetworkSourceForTest(async () => network);
-    setTwinOverridesSourceForTest(async () => parseDwellOverrides([{ stop: 'T600', defaultSec: 45, reason: 'test: an owner number' }]));
+    setTwinOverridesSourceForTest(async () => ({ overrides: parseDwellOverrides([{ stop: 'T600', defaultSec: 45, reason: 'test: an owner number' }]), error: null }));
     setTwinUpstreamForTest(async () => new Response(frame(T0, [tram(100, T0)], []), { status: 200, headers: { etag: 'W/"g1"' } }));
   });
 
@@ -92,5 +93,45 @@ describe('TwinDO keeps the F11 tables across an eviction', () => {
     expect((await f11Rows(stub)).nodes).toBe(0);
     expect((await f11Rows(stub)).recent).toBeGreaterThan(0); // keyed by stop id: no rebuild renumbers those
     expect(await runInDurableObject(stub, (instance: TwinDO) => instance.junctionCellsForTest())).toEqual({ nodes: 0, passes: 0 });
+  });
+
+  // The review's I3. A file the owner has just broken used to be logged and
+  // then be indistinguishable from "no overrides written": every hand-made
+  // default silently out of the planner. The twin keeps planning -- the
+  // layer is optional, and a broken file may never take the twin down -- but
+  // it carries the parser's own complaint to /stats.
+  it('keeps planning when the overrides file will not parse, and says why on the tables', async () => {
+    // A real read of a real malformed file, through the real parser: only
+    // the ASSETS binding under it is the test's.
+    const assets = {
+      fetch: async () =>
+        new Response(JSON.stringify([{ stop: 'T600', defaultSec: 'pola minute', reason: 'test: a broken line' }]), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    };
+    setTwinOverridesSourceForTest(() => fetchDwellOverrides({ ASSETS: assets } as unknown as Env));
+
+    const stub = freshTwin();
+    const payload = await stub.publish();
+    const tables = await stub.tables();
+    expect(tables.overrides).toBe(0);
+    expect(tables.overridesError).toContain('defaultSec');
+    // And the twin is still a twin: the tram in the frame is planned on the
+    // rails, off a tick that loaded both artefacts and reported a good frame.
+    expect(payload.items.some((item) => item.id.startsWith('vehicle:') && item.motion !== null)).toBe(true);
+    expect(await runInDurableObject(stub, (instance: TwinDO) => instance.lastReportForTest())).toMatchObject({
+      outcome: 'ok',
+      networkLoaded: true,
+      indexLoaded: true,
+    });
+  });
+
+  it('reports no error for a file that simply is not there', async () => {
+    setTwinOverridesSourceForTest(() => fetchDwellOverrides({ ASSETS: { fetch: async () => new Response('', { status: 404 }) } } as unknown as Env));
+    const stub = freshTwin();
+    await stub.publish();
+    const tables = await stub.tables();
+    expect(tables.overrides).toBe(0);
+    expect(tables.overridesError).toBeNull();
   });
 });

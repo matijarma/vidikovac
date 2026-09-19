@@ -250,6 +250,52 @@ describe('the ordering register', () => {
     expect(B.order.leader).toBe('A');
   });
 
+  // The review's I2. ZET's `next_stop` runs a stop ahead of a late tram --
+  // the very reason F11 gated the ETA bound -- so a TripUpdate pair that
+  // reads the opposite way round from two fixes more than ORDER_ESTABLISH_M
+  // apart is not better evidence than the physics, it is a contradiction.
+  // Held, not resolved: neither witness establishes anything this tick.
+  it('establishes nothing while the TripUpdates contradict fixes a hundred metres apart', () => {
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const B = tram('B');
+    // A is a hundred metres up the trunk from B: two GPS scatters, an order.
+    feed(net, matcher, A, '1_0', 0, [[900, 1980], [1000, 1990]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[800, 1980], [900, 1990]], 1990);
+    // ZET says A calls at T1200 next and B at C300, which the path serves the
+    // other way round: B would be the one ahead.
+    const contradicting = { 'trip-A': { stopId: 'T1200' }, 'trip-B': { stopId: 'C300' } };
+    expect(enforceOrder([A, B], net, 1992, 1990, contradicting).established).toBe(0);
+    expect(A.order.leader).toBeNull();
+    expect(B.order.leader).toBeNull();
+    // A second pair of fresh fixes reading the same way round is two
+    // witnesses, and still nothing is written while ZET disagrees.
+    feed(net, matcher, A, '1_0', 0, [[1100, 2000]], 2000);
+    feed(net, matcher, B, '1_0', 0, [[1000, 2000]], 2000);
+    expect(enforceOrder([A, B], net, 2002, 2000, contradicting).established).toBe(0);
+    expect(A.order.leader).toBeNull();
+    expect(B.order.leader).toBeNull();
+    // The same tick without the TripUpdates: the fixes were evidence all
+    // along, and the pair is filed the way they read.
+    expect(enforceOrder([A, B], net, 2002, 2000).established).toBe(1);
+    expect(B.order.leader).toBe('A');
+    expect(A.order.leader).toBeNull();
+  });
+
+  it('still takes the TripUpdates as the order when the two fixes are inside the establishing gap', () => {
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const B = tram('B');
+    // Fifty metres apart, inside ORDER_ESTABLISH_M: the fixes read nothing,
+    // so ZET's two next stops contradict nothing and one pass is enough.
+    feed(net, matcher, A, '1_0', 0, [[900, 1980], [1000, 1990]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[850, 1980], [950, 1990]], 1990);
+    expect(enforceOrder([A, B], net, 1992, 1990).established).toBe(0);
+    const report = enforceOrder([A, B], net, 1992, 1990, { 'trip-A': { stopId: 'C300' }, 'trip-B': { stopId: 'T1200' } });
+    expect(report.established).toBe(1);
+    expect(B.order.leader).toBe('A');
+  });
+
   it('concedes a swap only after three fresh contradicting fixes with the leader at a served stop', () => {
     const matcher = createMatcher(net);
     const A = tram('A');

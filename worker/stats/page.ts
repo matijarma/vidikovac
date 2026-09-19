@@ -151,6 +151,15 @@ function dwellTable(twin: TwinTables | null | undefined): string {
   );
 }
 
+/** The owner's override file when it could not be read (I3): bold, beside
+ *  the table it emptied, with the parser's own words. An unreadable file is
+ *  not "no overrides" -- it is every hand-written default gone at once, and
+ *  the page has to distinguish the two. */
+function overridesWarning(twin: TwinTables | null | undefined): string {
+  if (!twin || twin.overridesError === null) return '';
+  return ` <b>Datoteka stop-dwell-overrides.json nije pročitana: ${escapeHtml(twin.overridesError)} — vrijede samo mjerene i zadane vrijednosti.</b>`;
+}
+
 /** Where the rails branch, how often a tram stops there and for how long (F11). */
 function junctionTable(twin: TwinTables | null | undefined): string {
   const heading = 'Čekanje na križanjima';
@@ -441,7 +450,7 @@ export function renderStatsPage(view: StatsView): string {
     matrixTable('Dohvati izvora po ishodu', 'Izvor', pivot(rows, 'source_fetch', 'dim1', 'dim2'), 'još nema dohvata') +
     matrixTable('Zasloni online po četvrti', 'Četvrt', pivot(rows, 'kiosk_online', 'dim1', null), 'nijedan zaslon se još nije prijavio') +
     `</section>` +
-    `<section><h2>Blizanac</h2><p class="lede">Promatrač ZET-ova feeda u stvarnom vremenu, jedan otkucaj svakih 10 s: <em>ok</em> je novi okvir, <em>unchanged</em> isti okvir ili 304, <em>error</em> izvor koji nije odgovorio, <em>stale_index</em> okvir čije vožnje ugrađeni statični GTFS većinom ne poznaje; <em>cold</em> znači da se objekt probudio iz pohrane.</p>` +
+    `<section><h2>Blizanac</h2><p class="lede">Promatrač ZET-ova feeda u stvarnom vremenu, jedan otkucaj svakih 10 s: <em>ok</em> je novi okvir, <em>unchanged</em> isti okvir ili 304, <em>error</em> izvor koji nije odgovorio, <em>stale_index</em> okvir čije vožnje ugrađeni statični GTFS većinom ne poznaje, <em>overrides_unreadable</em> pokušaj čitanja ručne tablice zadržavanja koji nije uspio (tada nema nijedne ručne vrijednosti); <em>cold</em> znači da se objekt probudio iz pohrane.</p>` +
     matrixTable('Otkucaji blizanca po ishodu i startu', 'Ishod', pivot(rows, 'twin_tick', 'dim1', 'dim2'), 'blizanac se još nije oglasio') +
     `<h3>Ocjena unatrag</h3><p class="lede">Svako novo očitanje ocjenjuje planove objavljene 10, 30 i 60 s prije njega: koliko je metara plan bio od mjesta gdje se vozilo zaista našlo.</p>` +
     matrixTable('Greška plana po horizontu i razredu', 'Horizont', pivot(rows, 'twin_hindsight', 'dim1', 'dim2'), 'još nema ocijenjenih planova') +
@@ -453,7 +462,7 @@ export function renderStatsPage(view: StatsView): string {
     matrixTable('Registar redoslijeda po događaju', 'Događaj', pivot(rows, 'twin_order', 'dim1', 'dim2'), 'registar još nije ništa zapisao') +
     `<h3>Zahvati planera</h3><p class="lede">Što je planer morao ispraviti, po otkucaju: <em>floor</em> je sidro koje je unutar raspršenja GPS-a iza već objavljenog plana, pa plan kreće od objavljenog luka umjesto da se vrati unatrag; <em>junction_wait</em> je čekanje upisano na križanju na kojem tramvaji doista staju; <em>stand_fix</em> je tramvaj zadržan na peronu kojeg bi staro pravilo otpustilo; <em>eta_bound_skipped</em> je ZET-ova najava „već si otišao” za prvo sljedeće stajalište koju planer nije povjerovao.</p>` +
     matrixTable('Zahvati planera po vrsti', 'Zahvat', pivot(rows, 'twin_plan', 'dim1', 'dim2'), 'planer još nije morao zahvatiti') +
-    `<h3>Tablica zadržavanja i križanja</h3><p class="lede">Ovo nisu brojači nego ono čime planer računa <em>sada</em>: za svaki peron o kojem se nešto zna polazna vrijednost (ručna, pa vozni red, pa 20 s), ručni unos iz <code>app/public/data/stop-dwell-overrides.json</code>, naučena razdioba po satu i vrsti dana (p50 i ${DWELL_PLAN_QUANTILE_LABEL}), koliko je uzoraka u zadnjih 90 minuta i kada je zadnji, te na kraju sekunde koje planer stvarno knjiži. Ručni unos uredi u toj datoteci i objavi — između nje i blizanca nema koraka gradnje.${view.twin && view.twin.unmatched.length > 0 ? ` <b>Unosa bez perona: ${fmt(view.twin.unmatched.length)}</b> (${escapeHtml(view.twin.unmatched.map((u) => u.stop).join(', '))}) — stajalište je preimenovano ili je u imenu tipfeler.` : ''}</p>` +
+    `<h3>Tablica zadržavanja i križanja</h3><p class="lede">Ovo nisu brojači nego ono čime planer računa <em>sada</em>: za svaki peron o kojem se nešto zna polazna vrijednost (ručna, pa vozni red, pa 20 s), ručni unos iz <code>app/public/data/stop-dwell-overrides.json</code>, naučena razdioba po satu i vrsti dana (p50 i ${DWELL_PLAN_QUANTILE_LABEL}), koliko je uzoraka u zadnjih 90 minuta i kada je zadnji, te na kraju sekunde koje planer stvarno knjiži. Ručni unos uredi u toj datoteci i objavi — između nje i blizanca nema koraka gradnje.${overridesWarning(view.twin)}${view.twin && view.twin.unmatched.length > 0 ? ` <b>Unosa bez perona: ${fmt(view.twin.unmatched.length)}</b> (${escapeHtml(view.twin.unmatched.map((u) => u.stop).join(', '))}) — stajalište je preimenovano ili je u imenu tipfeler.` : ''}</p>` +
     dwellTable(view.twin) +
     junctionTable(view.twin) +
     `<h3>Statični GTFS</h3><p>${fmt(watchesNewer)} od ${fmt(watches)} provjera zatekle su noviji statični GTFS od ugrađenih artefakata. Kad se to dogodi, artefakti se grade iznova i objavljuju: <code>npm run build:network &amp;&amp; npm run build:trips</code>, zatim commit i push.</p>` +

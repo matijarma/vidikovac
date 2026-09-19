@@ -26,6 +26,7 @@ import { emptyPlanCountsByKind, PLAN_EVENTS, type PlanCountsByKind } from '../..
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
+import type { TwinTickDim } from '../protocol';
 import type { FeedPayload } from '../feed/payload';
 import { loadZetRoutes, type ZetRoutes } from '../feed/modules/zet-routes';
 import { logError, logInfo } from '../log';
@@ -75,7 +76,10 @@ export { TWIN_DO_NAME };
  *  depot move with a placeholder id) is normal on any day. */
 export const STALE_INDEX_SHARE = 0.5;
 
-export type TickOutcome = 'ok' | 'unchanged' | 'error' | 'stale_index';
+/** The four outcomes a tick reports. The fifth dim the twin writes under
+ *  `twin_tick`, `overrides_unreadable`, is a fault of the object and not of a
+ *  tick, so it is not one of these; both live in protocol.ts's TWIN_TICK_DIMS. */
+export type TickOutcome = Exclude<TwinTickDim, 'overrides_unreadable'>;
 
 /** The live F11 tables, as /stats asks for them over RPC. */
 export interface TwinTables {
@@ -85,6 +89,11 @@ export interface TwinTables {
   junctions: JunctionRow[];
   /** Entries the owner's file carries. */
   overrides: number;
+  /** Why the owner's file could not be read, when it could not be (I3).
+   *  Null when it parsed, and null when it is simply not there: both of
+   *  those are an honest empty table. Set, every owner default is missing
+   *  and /stats says so in bold. */
+  overridesError: string | null;
   /** Entries that matched no platform of the loaded network: a renamed stop,
    *  a typo. Shown rather than thrown, so a rebuilt artefact cannot take the
    *  twin down over one stale line of a hand-edited file. */
@@ -214,6 +223,8 @@ export class TwinDO extends DurableObject<Env> {
   private dwellRecent: DwellRecent = {};
   /** The owner's hand-edited dwell defaults, read once per life. */
   private dwellOverrides: DwellOverride[] = [];
+  /** The parser's complaint about that file, when it had one (I3). */
+  private dwellOverridesError: string | null = null;
   /** This life loaded a rail graph other than the one the stored rows were
    *  learned under, so nothing keyed by an edge index survives from before. */
   private graphChanged = false;
@@ -306,7 +317,7 @@ export class TwinDO extends DurableObject<Env> {
       return finish(baseline('error'));
     }
 
-    await this.ensureAssets(now);
+    await this.ensureAssets(now, cold);
     const routes = await loadZetRoutes();
 
     if (response.status === 304) {
@@ -380,6 +391,12 @@ export class TwinDO extends DurableObject<Env> {
     this.state = result.state;
     this.payload = result.payload;
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
+    // Once a minute, on the same cadence as the flush: how big the serialized
+    // row actually is, against the Durable Object's ~2 MB row cap (I5). The
+    // round's own replay measured 1.42 MB at the morning peak and production
+    // has never measured it at all; `published` is the part that grows with
+    // the fleet, and shrinking it is the next round's work.
+    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length });
 
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);
@@ -474,13 +491,23 @@ export class TwinDO extends DurableObject<Env> {
     const saved = loadLatestState(this.ctx.storage.sql);
     if (!saved) return;
     const now = this.now();
-    await this.ensureAssets(now);
+    // A restore IS the cold start, whatever the tick that reached it thought.
+    await this.ensureAssets(now, true);
     // The minute the last life had not flushed yet is knowledge too -- but
-    // its EDGE keys name edges of the graph that life ran, so if this one
-    // loaded a different graph (F8c) only the stop dwells carry over, the
-    // same split adoptGraph makes in the tables.
+    // its EDGE and NODE keys name edges and junctions of the graph that life
+    // ran, so if this one loaded a different graph (F8c) only the stop dwells
+    // carry over, the same split adoptGraph makes in the tables. The row
+    // itself is rewritten here and not only the live aggregates: `advance()`
+    // copies `pendingLearned` into the next state row and the first flush
+    // after this cold start would otherwise write the previous graph's minute
+    // straight back into the tables adoptGraph has just emptied. `published`
+    // goes the same way -- the hindsight rings hold plans indexed by the old
+    // artefact's path indices, which name other rails now.
+    const fromRow: TwinState = this.graphChanged
+      ? { ...saved, pendingLearned: { ...emptyAggregates(), stops: saved.pendingLearned.stops }, published: {} }
+      : saved;
     this.loadLearnedOnce();
-    mergeAggregates(this.learned, this.graphChanged ? { stops: saved.pendingLearned.stops } : saved.pendingLearned);
+    mergeAggregates(this.learned, fromRow.pendingLearned);
     // The rolling dwell window: what SQLite kept, plus whatever the last
     // life had in its state row but had not flushed, newest thirty per
     // platform inside the window (F11).
@@ -495,22 +522,22 @@ export class TwinDO extends DurableObject<Env> {
     Object.assign(this.dwellRecent, trimDwellRecent(restored, nowSec));
     const forState: DwellRecent = {};
     for (const [stopId, samples] of Object.entries(this.dwellRecent)) forState[stopId] = [...samples];
-    this.advance({ ...saved, dwellRecent: forState }, null, now, await loadZetRoutes());
+    this.advance({ ...fromRow, dwellRecent: forState }, null, now, await loadZetRoutes());
   }
 
   /** Loads the trip index and the network once, re-checks them hourly, and
    *  builds the engine when both are present. Never throws: a missing asset
    *  leaves the twin joining less or planning in the free plane. */
-  private ensureAssets(now: number): Promise<void> {
+  private ensureAssets(now: number, coldStart: boolean): Promise<void> {
     if (this.assetsReady && now - this.assetsCheckedMs < INDEX_RECHECK_MS) return this.assetsReady;
     this.assetsCheckedMs = now;
-    this.assetsReady = this.loadAssets(now).catch((error) => {
+    this.assetsReady = this.loadAssets(now, coldStart).catch((error) => {
       logError('twin_assets_failed', error);
     });
     return this.assetsReady;
   }
 
-  private async loadAssets(now: number): Promise<void> {
+  private async loadAssets(now: number, coldStart: boolean): Promise<void> {
     const sql = this.ctx.storage.sql;
     const cold: ColdLoad = { networkMs: 0, indexMs: 0 };
     if (!this.index) {
@@ -547,8 +574,15 @@ export class TwinDO extends DurableObject<Env> {
     if (this.net && this.index && !this.engine) {
       this.loadLearnedOnce();
       // The owner's dwell defaults, read from the same ASSETS binding as the
-      // two artefacts; a malformed file leaves the list empty and is logged.
-      this.dwellOverrides = await twinOverridesSource(this.env)();
+      // two artefacts; a malformed file leaves the list empty, and says so.
+      const overrides = await twinOverridesSource(this.env)();
+      this.dwellOverrides = overrides.overrides;
+      this.dwellOverridesError = overrides.error;
+      // Once per load attempt, not once per tick: a file the owner has just
+      // broken takes every hand-written default out of the planner, and the
+      // counter is what says when that started (I3). /stats carries the
+      // message itself beside the dwell table.
+      if (overrides.error !== null) recordMetric(this.env, 'twin_tick', 'overrides_unreadable', coldStart ? 'cold' : 'warm');
       this.engine = createEngine(this.net, this.index, this.learned, { overrides: this.dwellOverrides, dwellRecent: this.dwellRecent });
       this.coldLoad = cold;
       logInfo('twin_assets_loaded', { networkMs: cold.networkMs, indexMs: cold.indexMs, edges: this.net.edges.length, trips: this.index.tripsById.size });
@@ -578,12 +612,13 @@ export class TwinDO extends DurableObject<Env> {
   async tables(nowSec?: number): Promise<TwinTables> {
     const at = nowSec ?? Math.floor(this.now() / 1000);
     const bands = zagrebBands(at);
-    if (!this.engine) return { at, dwell: [], junctions: [], overrides: 0, unmatched: [] };
+    if (!this.engine) return { at, dwell: [], junctions: [], overrides: 0, overridesError: this.dwellOverridesError, unmatched: [] };
     return {
       at,
       dwell: this.engine.dwell.rows(at, bands.hourBand, bands.dayType),
       junctions: this.engine.junctions.rows(bands.hourBand, bands.dayType),
       overrides: this.dwellOverrides.length,
+      overridesError: this.dwellOverridesError,
       unmatched: this.engine.dwell.unmatchedOverrides.map((entry) => ({ stop: entry.stop, route: entry.route ?? null })),
     };
   }
@@ -625,6 +660,7 @@ export class TwinDO extends DurableObject<Env> {
     this.learnedLoaded = false;
     this.dwellRecent = {};
     this.dwellOverrides = [];
+    this.dwellOverridesError = null;
     this.graphChanged = false;
   }
 

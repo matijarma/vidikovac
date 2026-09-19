@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
-import { EXPORT_KINDS, LAYERS } from '../../worker/protocol';
+import { EXPORT_KINDS, LAYERS, TWIN_TICK_DIMS } from '../../worker/protocol';
 import { METRIC_EVENTS, isMetricEvent, recordMetric, zagrebDayHour } from '../../worker/metrics';
 
 describe('metric vocabulary', () => {
@@ -11,6 +11,14 @@ describe('metric vocabulary', () => {
     expect(isMetricEvent('panel_open')).toBe(true);
     expect(isMetricEvent('page_view')).toBe(false);
     expect(isMetricEvent(42)).toBe(false);
+  });
+  it("names every dim the twin writes under twin_tick, the tick outcomes and the one fault that is not one", () => {
+    // I3: `overrides_unreadable` says the owner's stop-dwell-overrides.json
+    // would not parse, so no hand-written dwell default reached the planner.
+    // It rides on twin_tick because it is the same object's own health and
+    // /stats already pivots that table by dim1; it is deliberately NOT a
+    // TickOutcome, which is what a tick of the feed did.
+    expect([...TWIN_TICK_DIMS]).toEqual(['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable']);
   });
   it('export kinds and layers are closed lists', () => {
     // EXPORT_KINDS lives only in protocol.ts (R-44); metrics.ts no longer
