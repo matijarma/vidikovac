@@ -10,10 +10,20 @@ rute `/api/admin/*` i `/stats`.
 
 1. Na računalu ili zaslonu otvoriti https://zagreb.aningfilm.hr i na početnoj
    stranici odabrati „Otvori gradski zaslon” (stranica `/kiosk/`).
-2. U istom obrascu odabrati gradsku četvrt i stvarno ZET-ovo stajalište. Zadana postava
-   je Donji grad i Trg bana J. Jelačića (`106_1`).
-3. Potvrditi stvaranje. `POST /api/screens` vraća redovnu postavu zaslona
-   koja vrijedi 24 sata. Postava sama ne daje otključanu sesiju.
+2. Pritisnuti **Pokreni zaslon**. To je cijelo postavljanje: nema gradske
+   četvrti, nema stajališta i nema parametara u adresi. `POST /api/screens` s
+   praznim tijelom vraća redovnu postavu zaslona koja vrijedi 24 sata i
+   pokazuje cijeli grad (područje `zagreb`, bez stajališta). Postava sama ne
+   daje otključanu sesiju.
+3. Područje i stajalište biraju se poslije, na samom zaslonu: zupčanik u
+   zaglavlju otvara **Postavke** (zatvara se tipkom Esc, gumbom ili nakon 90
+   sekundi bez dodira). Četiri odjeljka: *Područje* (Cijeli grad ili jedna od
+   17 gradskih četvrti), *Stajalište* (pretraga po imenu ili „Bez
+   stajališta”), *Tema* i *Zaslon* (do kada vrijedi i „Zaboravi zaslon” s
+   potvrdom). **Spremi** šalje jednu poruku `screen-set` preko postojeće veze
+   zaslona; Durable Object provjerava stajalište i područje, pamti ih i
+   odgovara redovnim okvirom s kodovima, koji zaslon ponovno kadrira.
+   Postavke se ne otvaraju dok traje otključana sesija.
 4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Uspješna
    provjera izravno otvara desetominutni pogled, bez drugog gumba „Otključaj”.
 5. Zaslon nastavlja prikazivati pregled grada. Telefon pregledava privatno.

@@ -77,6 +77,10 @@ export interface BeaconClient {
   close(): void;
   acknowledgePresentation(revision: number, status: 'displayed' | 'unavailable'): void;
   stopPresentation(revision: number): void;
+  /** The settings panel's one frame: what this screen frames from now on. The
+   *  DO validates both, stores them and answers with a `codes` frame carrying
+   *  the new screen, which reaches onContext like any other. */
+  setScreen(stopId: string | null, area: string): void;
 }
 
 export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
@@ -184,6 +188,9 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
     },
     stopPresentation(revision) {
       send({ t: 'presentation-stop', version: 1, revision });
+    },
+    setScreen(stopId, area) {
+      send({ t: 'screen-set', version: 1, stopId, area });
     },
     status: () => status,
     close() {
