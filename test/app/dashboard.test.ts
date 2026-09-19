@@ -195,6 +195,14 @@ describe('shell and navigation', () => {
     expect(text(root.querySelector('[data-testid=tab-more]'))).toBe('Vrijeme');
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-current')).toBe('page');
   });
+  it('carries the notify row the Kvart panel used to be the only way to reach the bell through; its action opens the same sheet', () => {
+    const { root } = mount();
+    click(root, '[data-testid=tab-more]');
+    expect(text(root.querySelector('[data-testid=dir-notify] .row-title'))).toBe('Obavijesti, isključene');
+    expect(text(root.querySelector('[data-testid=dir-notify] .row-sub'))).toBe('Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.');
+    click(root, '[data-testid=dir-notify]');
+    expect(document.querySelector('[data-testid=notify-sheet]')).not.toBeNull();
+  });
   it('the safety shortcut opens Sigurnost in one tap and marks itself current', () => {
     const { root } = mount();
     click(root, '[data-testid=safety-shortcut]');

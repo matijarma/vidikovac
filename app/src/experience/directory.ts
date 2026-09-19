@@ -4,6 +4,7 @@
 // the session and the open pages. Not a layer: a view of the shell.
 import type { ModuleId } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
+import { activeCount, NOTIFY_KEYS } from '../core/notify-store';
 import { zagrebDayKey, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
@@ -92,13 +93,18 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
       ? i18n.t('session.unlockedAnnounce', { time: zagrebTime(live.expiresAt) })
       : i18n.t('session.connecting');
   const sessionRow = `<li class="row row-dir" data-key="session"><button type="button" class="dir-item" data-action="session" data-testid="dir-session">${iconMarkup('sliders-horizontal', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(sessionTitle)}</span><span class="row-sub">${escapeHtml(i18n.t('directory.sessionSub'))}</span></span>${chevron}</button></li>`;
+  // The bell's own row (D7): the Kvart panel used to be the only way to reach the notify
+  // sheet; now Još carries it, reusing the bell's own label key and note (no new copy).
+  const notifyCount = ctx.notify ? activeCount(ctx.notify, NOTIFY_KEYS) : 0;
+  const notifyState = notifyCount > 0 ? i18n.t('kvart.notifyOn', { count: notifyCount }) : i18n.t('kvart.notifyOff');
+  const notifyRow = `<li class="row row-dir" data-key="notify"><button type="button" class="dir-item" data-action="notify" data-testid="dir-notify">${iconMarkup('bell', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('notify.bellLabel', { state: notifyState }))}</span><span class="row-sub">${escapeHtml(i18n.t('notify.note'))}</span></span>${chevron}</button></li>`;
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
     ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],
   ];
   return createElementFromHTML(`<section class="layer ws ws-directory" id="layer-directory" data-layer="directory" data-reconcile aria-labelledby="layer-title-directory">
 <header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
-<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}${sessionRow}</ul>
+<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}${notifyRow}${sessionRow}</ul>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }
