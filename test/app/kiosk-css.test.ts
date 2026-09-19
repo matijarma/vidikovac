@@ -48,8 +48,11 @@ describe('public-screen design invariants', () => {
     // 321 px box against an 84 px row pitch, two rows cut).
     expect(list).toContain('flex: none');
     // The height is rows and gaps only -- no bare rem cap that could land mid-row.
-    expect(list).toMatch(/max-height: calc\(var\(--k-stop-row\) \* 5 \+ var\(--k-gap\) \* 0\.6 \* 4\)/);
+    expect(list).toMatch(/max-height: calc\(var\(--k-stop-row\) \* 3 \+ var\(--k-gap\) \* 0\.6 \* 2\)/);
     expect(list).not.toMatch(/max-height:\s*\d/);
+    // The row holds a name over a two-line route list; measured on the panel,
+    // that is 132 px, and a shorter row slices the routes through the middle.
+    expect(list).toContain('--k-stop-row: 8.25rem');
     // A row that fills its fixed box clips inside it rather than growing past it.
     expect(rule('.k-settings .k-stop-list .k-choice-text')).toContain('height: 100%');
     expect(rule('.k-settings .k-stop-list .k-stop-meta')).toContain('-webkit-line-clamp: 2');

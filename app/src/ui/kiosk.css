@@ -819,7 +819,7 @@ button.k-strip-verdict { cursor: pointer; }
    number of them plus the gaps between: a cut can only ever fall between two
    rows. Five rows hold the ten the panel offers with no query; a search's
    thirteen scroll, by whole rows. */
-.k-settings .k-stop-list { --k-stop-row: 4.5rem; flex: none; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: var(--k-stop-row); max-height: calc(var(--k-stop-row) * 5 + var(--k-gap) * 0.6 * 4); scrollbar-gutter: stable; }
+.k-settings .k-stop-list { --k-stop-row: 8.25rem; flex: none; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: var(--k-stop-row); max-height: calc(var(--k-stop-row) * 3 + var(--k-gap) * 0.6 * 2); scrollbar-gutter: stable; }
 .k-settings .k-stop-list .k-choice-text { height: 100%; overflow: hidden; }
 .k-settings .k-stop-list .k-stop-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .k-settings .k-btn { margin-top: calc(var(--k-gap) * 0.5); }
@@ -829,5 +829,5 @@ button.k-strip-verdict { cursor: pointer; }
 @media (max-width: 60rem) {
   .k-settings-rows { grid-template-columns: minmax(0, 1fr); }
   .k-settings-row[data-row='stop'] { grid-row: auto; }
-  .k-settings .k-stop-list { grid-template-columns: minmax(0, 1fr); max-height: calc(var(--k-stop-row) * 3 + var(--k-gap) * 0.6 * 2); }
+  .k-settings .k-stop-list { grid-template-columns: minmax(0, 1fr); max-height: calc(var(--k-stop-row) * 2 + var(--k-gap) * 0.6); }
 }
