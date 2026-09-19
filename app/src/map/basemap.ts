@@ -395,10 +395,21 @@ export interface OverlayPalette {
   otherText: string;
   routeTram: string;
   routeBus: string;
-  /** The tram network as the public screen's figure (plan D4): the ink itself
-   *  by day, the muted paper tier by night, at `figureOpacity`; drawn only
-   *  under a ProzorOptions set. The pinned `routeTram` blue stays what every
-   *  other surface draws. */
+  /** The tram network's own line, well under the marks it carries (owner
+   *  ruling, round F "kiosk window"): one neutral grey, day or night, on
+   *  every surface (overlays.ts's tramNetwork). `routeTram` stays the tram
+   *  plate's blue; `rail` is only the thin line under it. */
+  rail: string;
+  /** BAJS bike-share: one teal for the station dot and the cycle path, the
+   *  same in both faces (city-layers.ts's cityLayers()). */
+  bike: string;
+  /** The count badge's ink over a bike dot (city-layers.ts's badges layer);
+   *  dark enough to read against `bike` in both faces. */
+  bikeText: string;
+  /** The public screen's own figure (plan D4): the ink itself by day, the
+   *  muted paper tier by night, at `figureOpacity`; drawn only under a
+   *  ProzorOptions set, now just the screen's own stop dots (the tram
+   *  network's colour moved to `rail` above). */
   figure: string;
   figureOpacity: number;
   stopFill: string;
@@ -419,20 +430,25 @@ export interface OverlayPalette {
 }
 
 /* The mode colours repeat the interface roles value for value: a tram and
- * its route line are the accent role (--tone-accent, #0751bf light, #f1f4f7
- * dark, paper-on-night so its text inverts to the dark ink); a bus and its
- * route line the transit role (--tone-transit, #142334 light, the same hex
- * as ink -- #84b5ff dark); a closure the urgency role (#b72d39, #ff9aa5).
- * The stop fill and every halo take the canvas or its brighter paper-white
- * sibling; the selection and the screen stop pin take the ink and accent
- * roles. One Zagreb blue and one ink across the map, the badges
- * (ui/signage.css) and the mode chips (ui/map.css). MapLibre paints from
- * literals, so these are the token hexes written out; tokens.css stays
- * their single source (R-D2). */
+ * its route line are the accent role (--tone-accent, #0751bf light, #84b5ff
+ * dark); a bus and its route line the transit role (--tone-transit, #34465c
+ * light, #b8c9dc dark); a closure the urgency role (#b72d39, #ff9aa5). The
+ * tram network's own line is the new rail role, one neutral grey in both
+ * faces (#8d99a8 light, #4a5768 dark), well under the plate it carries; BAJS
+ * bike-share is the new bike role, one teal in both faces (#178f7f), its
+ * count badge read in bikeText (#0b1a2a). The stop fill and every halo take
+ * the canvas or its brighter paper-white sibling; the selection and the
+ * screen stop pin take the ink and accent roles. One Zagreb blue and one ink
+ * across the map, the badges (ui/signage.css) and the mode chips
+ * (ui/map.css). MapLibre paints from literals, so these are the token hexes
+ * written out; tokens.css stays their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   ...PILL_INKS.light, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#0751bf',
   routeBus: '#34465c',
+  rail: '#8d99a8',
+  bike: '#178f7f',
+  bikeText: '#0b1a2a',
   figure: '#142334', // --palette-light-text-primary, the ink
   figureOpacity: 0.9,
   stopFill: '#f1f4f7',
@@ -452,7 +468,10 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   ...PILL_INKS.dark, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#84b5ff',
   routeBus: '#b8c9dc',
-  figure: '#b8c5d5', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
+  rail: '#4a5768',
+  bike: '#178f7f',
+  bikeText: '#0b1a2a',
+  figure: '#b8c5d5', // --palette-dark-text-muted: the screen's own stop dots, a step under the paper the plates are cut from
   figureOpacity: 0.7,
   stopFill: '#111922',
   stopStroke: '#b8c5d5',

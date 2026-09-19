@@ -42,6 +42,7 @@ meander, mandatory fixed map zoom, giant map overlays or equal-card dashboards.
 | Danger | `#b72d39` | `#ff9aa5` |
 | Success | `#176b56` | `#79d5b4` |
 | Events | `#7040a2` | `#c9aff0` |
+| Bike-share | `#178f7f` | `#178f7f` |
 
 Components consume `--tone-*` semantic roles. The token file contains both
 sRGB fallbacks and equivalent OKLCH values. `node scripts/sync-token-colors.mjs`

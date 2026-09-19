@@ -199,11 +199,12 @@ describe('the overlay layer list', () => {
   });
 });
 
-// The public screen's overlay set (plan D4, R-KP4): the tram network is the
-// figure, buses and every stop off the screen's routes step aside, the
-// screen's stop is the largest mark on the map, and the fixed 14.5 thresholds
-// follow the field's own zoom. (Trams as plates and buses as capsules began
-// here and are now every surface's rule, pinned by the block above.)
+// The public screen's overlay set (plan D4, R-KP4): the tram network is a
+// thin neutral rail, buses and every stop off the screen's routes step
+// aside, the screen's stop is the largest mark on the map, and the fixed
+// 14.5 thresholds follow the field's own zoom. (Trams as plates and buses as
+// capsules began here and are now every surface's rule, pinned by the block
+// above.)
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
 
@@ -212,16 +213,16 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');
   });
 
-  it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, the screen\u2019s stop as the largest mark, and no seat', () => {
+  it('draws the tram network as a thin neutral rail and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, the screen\u2019s stop as the largest mark, and no seat', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
       const layers = overlayLayers(p, { scale: 2, prozor: PROZOR });
       const by = (id: string) => layers.find((l) => l.id === id)!;
       expect(by(LAYERS.networkBus).layout!.visibility).toBe('none');
       const tram = by(LAYERS.networkTram);
       expect(tram.layout!.visibility).toBe('visible');
-      expect(tram.paint!['line-color']).toBe(p.figure);
-      expect(tram.paint!['line-opacity']).toBe(p.figureOpacity);
-      expect(tram.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 14, 3, 15, 5, 16, 6]);
+      expect(tram.paint!['line-color']).toBe(p.rail);
+      expect(tram.paint!['line-opacity']).toBe(0.8);
+      expect(tram.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 12.5, 1.2, 14, 2, 16, 3]);
       expect(tram.layout!['line-cap']).toBe('round');
       expect(tram.layout!['line-join']).toBe('round');
       // Stops: the screen's routes only, as filled dots in the figure colour.

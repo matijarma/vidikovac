@@ -557,12 +557,13 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     layout: { ...round, ...visible(drawn(kind)) },
     paint: { 'line-color': color, 'line-width': width, 'line-opacity': dimmed ? NETWORK_OPACITY_DIMMED : opacity },
   });
-  // The tram rails as the figure (plan D4): the ink itself, 3 to 5 px across
-  // the field's zoom, over hairline streets. Elsewhere the pinned tram blue at
-  // the network's own weight and opacity, as always.
+  // The tram network's own line, one neutral grey well below the marks it
+  // carries (owner ruling, round F "kiosk window"): on the public screen 1.2
+  // to 3 px across the field's zoom at a flat 0.8; elsewhere the network's
+  // own weight and zoom-based opacity, as always.
   const tramNetwork = prozor
-    ? network(LAYERS.networkTram, 'tram', p.figure, zoomInterpolate(14, 3, 15, 5, 16, 6), p.figureOpacity)
-    : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
+    ? network(LAYERS.networkTram, 'tram', p.rail, zoomInterpolate(12.5, 1.2, 14, 2, 16, 3), 0.8)
+    : network(LAYERS.networkTram, 'tram', p.rail, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
   /** Which platforms the ordinary ring field is about. Under line focus it is
    *  the focused line's own stops: with every other line hidden, every other
    *  line's rings are hundreds of grey circles with nothing under them to read

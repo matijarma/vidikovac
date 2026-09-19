@@ -112,6 +112,8 @@
   --palette-light-success: #176b56;
   --palette-light-events: #7040a2;
   --palette-light-transit: #34465c;
+  /* BAJS bike-share: one teal, unchanged by theme (owner ruling, round F "kiosk window"). */
+  --palette-light-bike: #178f7f;
   --palette-light-border: rgba(20, 35, 52, 0.15);
   --palette-light-border-strong: rgba(20, 35, 52, 0.48);
   --palette-light-glass: #fbfcfe;
@@ -139,6 +141,8 @@
   --palette-dark-success: #79d5b4;
   --palette-dark-events: #c9aff0;
   --palette-dark-transit: #b8c9dc;
+  /* Same teal by night: one BAJS colour in both faces. */
+  --palette-dark-bike: #178f7f;
   --palette-dark-border: rgba(238, 243, 250, 0.16);
   --palette-dark-border-strong: rgba(238, 243, 250, 0.42);
   --palette-dark-glass: #23313f;
@@ -169,6 +173,7 @@
     --palette-light-success: oklch(47.384% 0.08442 171.60);
     --palette-light-events: oklch(47.710% 0.15425 303.66);
     --palette-light-transit: oklch(38.848% 0.04412 253.82);
+    --palette-light-bike: oklch(58.515% 0.10079 180.86);
 
     --palette-dark-canvas: oklch(20.994% 0.02156 251.79);
     --palette-dark-canvas-deep: oklch(18.432% 0.02147 254.98);
@@ -187,6 +192,7 @@
     --palette-dark-success: oklch(80.639% 0.10100 168.56);
     --palette-dark-events: oklch(79.881% 0.09429 302.63);
     --palette-dark-transit: oklch(82.897% 0.03253 251.16);
+    --palette-dark-bike: oklch(58.515% 0.10079 180.86);
   }
 }
 
@@ -213,6 +219,7 @@
   --color-success: var(--palette-light-success);
   --color-events: var(--palette-light-events);
   --color-transit: var(--palette-light-transit);
+  --color-bike: var(--palette-light-bike);
   --color-border: var(--palette-light-border);
   --color-border-strong: var(--palette-light-border-strong);
   --color-glass: var(--palette-light-glass);
@@ -249,6 +256,7 @@
   --color-success: var(--palette-dark-success);
   --color-events: var(--palette-dark-events);
   --color-transit: var(--palette-dark-transit);
+  --color-bike: var(--palette-dark-bike);
   --color-border: var(--palette-dark-border);
   --color-border-strong: var(--palette-dark-border-strong);
   --color-glass: var(--palette-dark-glass);
@@ -287,6 +295,7 @@
     --color-success: var(--palette-dark-success);
     --color-events: var(--palette-dark-events);
     --color-transit: var(--palette-dark-transit);
+    --color-bike: var(--palette-dark-bike);
     --color-border: var(--palette-dark-border);
     --color-border-strong: var(--palette-dark-border-strong);
     --color-glass: var(--palette-dark-glass);
@@ -364,6 +373,8 @@
   --tone-events: var(--color-events);
   --tone-urgency: var(--color-danger);
   --tone-transit: var(--color-transit);
+  /* BAJS bike-share: one teal, both faces (owner ruling, round F "kiosk window"). */
+  --tone-bike: var(--color-bike);
   --tone-civic: var(--color-accent);
   --tone-live: var(--color-success);
   --tone-tint-action: var(--tint-action);
