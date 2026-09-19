@@ -43,6 +43,10 @@ describe('public-screen design invariants', () => {
     const list = rule('.k-settings .k-stop-list');
     expect(list).toContain('--k-stop-row');
     expect(list).toContain('grid-auto-rows: var(--k-stop-row)');
+    // The list must not be flex-shrunk to whatever the panel's grid leaves it:
+    // that lands the edge mid-row whatever the max-height says (measured: a
+    // 321 px box against an 84 px row pitch, two rows cut).
+    expect(list).toContain('flex: none');
     // The height is rows and gaps only -- no bare rem cap that could land mid-row.
     expect(list).toMatch(/max-height: calc\(var\(--k-stop-row\) \* 5 \+ var\(--k-gap\) \* 0\.6 \* 4\)/);
     expect(list).not.toMatch(/max-height:\s*\d/);
