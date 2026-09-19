@@ -29,9 +29,11 @@ const pin = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
 // The next stop on the wire, and the one thing that may be said about when
 // the vehicle gets there. The twin plans an arrival at the platform in front
 // of the vehicle (Track.next); ZET's TripUpdate names a stop of its own with
-// a delay. The pin carries ZET's stop when it has one, and only then is the
-// twin's ETA withheld -- an arrival time belongs to the stop it was computed
-// for, and publishing it beside somebody else's stop id would be a lie.
+// a delay, and the pin carries ZET's when it has one. The ETA rides whenever
+// the id that went on the wire is the id the twin planned for -- whichever
+// source named it -- and is withheld only where the two disagree: an arrival
+// time belongs to the stop it was computed for, and publishing it beside a
+// different stop id would be a lie about which platform the number is for.
 describe('buildPayload and the next-stop ETA', () => {
   it('publishes the twin ETA beside the twin stop it belongs to', () => {
     const item = pin([track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })]);
@@ -39,7 +41,17 @@ describe('buildPayload and the next-stop ETA', () => {
     expect(item.data?.nextStopEtaSec).toBe(HEADER_S + 95);
   });
 
-  it('withholds the ETA when ZET names the next stop: the wire id is not the one the twin planned for', () => {
+  it('publishes the ETA where ZET names the same stop the twin planned for: agreement, not silence', () => {
+    const item = pin(
+      [track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })],
+      { T1: update({ stopId: '231_2', delaySec: 120 }) },
+    );
+    expect(item.data?.nextStopId).toBe('231_2');
+    expect(item.data?.delaySeconds).toBe(120);
+    expect(item.data?.nextStopEtaSec).toBe(HEADER_S + 95);
+  });
+
+  it('withholds the ETA only where the two disagree about which stop is next', () => {
     const item = pin(
       [track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })],
       { T1: update({ stopId: '244_1', delaySec: 120 }) },
@@ -47,6 +59,12 @@ describe('buildPayload and the next-stop ETA', () => {
     expect(item.data?.nextStopId).toBe('244_1');
     expect(item.data?.delaySeconds).toBe(120);
     expect(item.data?.nextStopEtaSec).toBeUndefined();
+  });
+
+  it('withholds the ETA where only ZET knows the next stop: the twin planned for no stop at all', () => {
+    const item = pin([track({ id: '1', next: null })], { T1: update({ stopId: '244_1', delaySec: 30 }) });
+    expect(item.data?.nextStopId).toBe('244_1');
+    expect(item.data).not.toHaveProperty('nextStopEtaSec');
   });
 
   it('publishes ZET\'s delay beside the twin\'s own stop and ETA when the update names no stop', () => {

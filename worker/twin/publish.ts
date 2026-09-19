@@ -126,6 +126,13 @@ export function buildPayload(
     const join = track.tripId !== null ? joins.get(track.tripId) : undefined;
     const next = track.tripId !== null ? state.tripUpdates[track.tripId] : undefined;
     const placed = place(track, net);
+    // ZET's TripUpdate names the next stop where it has one; the twin's plan
+    // names it otherwise. The twin's ETA rides whenever the id that goes on
+    // the wire is the id it planned for -- whichever source named it -- and
+    // is withheld where the two disagree, because an arrival time belongs to
+    // the stop it was computed for.
+    const nextStopId = next?.stopId ?? track.next?.stopId ?? undefined;
+    const nextStopEtaSec = nextStopId !== undefined && track.next?.stopId === nextStopId ? track.next.etaSec ?? undefined : undefined;
     items.push({
       id: `vehicle:${track.id}`,
       kind: 'vehicle',
@@ -141,13 +148,9 @@ export function buildPayload(
         direction: join?.direction,
         headsign: join?.headsign,
         shapeId: join?.shapeId ?? undefined,
-        nextStopId: next?.stopId ?? track.next?.stopId ?? undefined,
-        // The twin's planned arrival, epoch seconds, and only where the id
-        // beside it is the twin's OWN next stop (WP5): an arrival time
-        // belongs to the stop it was computed for, so where ZET names a
-        // different stop the plan's ETA is withheld rather than published
-        // against somebody else's platform.
-        nextStopEtaSec: next?.stopId ? undefined : track.next?.etaSec ?? undefined,
+        nextStopId,
+        // The twin's planned arrival at THAT stop, epoch seconds (WP5).
+        nextStopEtaSec,
         delaySeconds: next?.delaySec ?? undefined,
         speed: round(track.speed, 10),
         confidence: round(track.confidence, 100),

@@ -163,9 +163,11 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // 'headsign', 'shapeId', 'nextStopId' and 'delaySeconds' are the twin's
   // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
   // A). 'nextStopEtaSec' is the twin's OWN planned arrival at that stop in
-  // epoch seconds, and rides only where 'nextStopId' is the twin's own stop
-  // rather than ZET's (WP5): an arrival time belongs to the stop it was
-  // computed for, and it is what refines a tapped stop's 'za N min'.
+  // epoch seconds, and rides whenever the 'nextStopId' beside it is the stop
+  // the twin planned for, whichever source named that stop; it is withheld
+  // only where the twin and ZET disagree about which stop is next (WP5),
+  // because an arrival time belongs to the stop it was computed for. It is
+  // what refines a tapped stop's 'za N min'.
   // 'speed' (m/s), 'confidence' (0..1) and 'held' are the twin's OWN
   // estimates from history, geometry and timetable (R-TE1), never ZET's
   // position.speed, which the direct parser still drops. 'behind' is the
