@@ -225,6 +225,43 @@ describe('the kiosk overlay set (prozor)', () => {
     for (const f of [json, nearJson]) expect(f).toContain('["get","label"]');
   });
 
+  // Ruling 30's own follow-up: route count decided which names survived a
+  // crowded corner too, so below the line an interchange is placed before
+  // anything else and the rank is only the tiebreak among them.
+  it('places an interchange before a merely busy stop when the field holds the whole city', () => {
+    const key = (prozor: ProzorOptions) => JSON.stringify(overlayLayers(OVERLAY_LIGHT, { prozor }).find((l) => l.id === LAYERS.stopLabels)!.layout!['symbol-sort-key']);
+    expect(key({ ...PROZOR, stopLabelTramInterchanges: true })).toBe('["-",["case",["get","tramInterchange"],0,100],["get","rank"]]');
+    // Nearer in, the ranked reading the hub tier has always used.
+    expect(key(PROZOR)).toBe('["-",100,["get","rank"]]');
+  });
+
+  // Ruling 31. The square marks' titles are the artefact's own names --
+  // "Igralište Sava", "Zagrebački velesajam" -- at the same 22 px a stop name
+  // gets. On a whole-city window the square is the claim and the name is not
+  // something anyone acts on from three metres, so the names go and the marks
+  // stay; the quake keeps its own label, which is a different layer.
+  it('draws the square place marks without names while the field holds the whole city', () => {
+    const squares = [LAYERS.placeWorks, LAYERS.placeEvents, LAYERS.placeSeat, LAYERS.placeAssembly, LAYERS.placePharmacy];
+    const far = overlayLayers(OVERLAY_LIGHT, { prozor: { ...PROZOR, placeTitles: false } });
+    for (const id of squares) {
+      const layer = far.find((l) => l.id === id);
+      if (!layer) continue; // the seat is never lit under the kiosk's set
+      expect(layer.layout!['text-field'], id).toBeUndefined();
+      // The mark itself is untouched: an urgent state still shows where to go.
+      expect(layer.layout!['icon-image'], id).toBeDefined();
+    }
+    // The quake keeps its words at every zoom: it is the one thing a city window should say.
+    expect(far.find((l) => l.id === LAYERS.placeQuakeLabels)!.layout!['text-field']).toBeDefined();
+    // Nearer in, and everywhere off the kiosk's option set, the names are there.
+    const near = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR });
+    for (const id of squares) {
+      const layer = near.find((l) => l.id === id);
+      if (!layer) continue;
+      expect(layer.layout!['text-field'], id).toEqual(['get', 'title']);
+    }
+    expect(overlayLayers(OVERLAY_LIGHT).find((l) => l.id === LAYERS.placeAssembly)!.layout!['text-field']).toEqual(['get', 'title']);
+  });
+
   it('never labels the screen’s own stop from the hub tier: its anchor label already names it (R-KP25)', () => {
     const labels = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1' }).find((l) => l.id === LAYERS.stopLabels)!;
     expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');

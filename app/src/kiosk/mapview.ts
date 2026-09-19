@@ -172,6 +172,18 @@ export function stopLabelTramInterchanges(fieldZoomNow: number): boolean {
   return fieldZoomNow < THIN_NAMES_ZOOM;
 }
 
+/** Ruling 31: whether the square place marks carry their names. The civil
+ *  protection's assembly points are the ones this is about -- "Igralište
+ *  Sava", "Zagrebački velesajam", "Tenis centar Maksimir" are the artefact's
+ *  own titles, drawn at the same 22 px a stop name gets, and on a picture of
+ *  the whole city a gathering point's NAME is not a thing anyone acts on from
+ *  three metres. The squares stay: in an urgent state they are the safety
+ *  information, and the strip names them in words. From the line up the names
+ *  come back with everything else. */
+export function placeTitles(fieldZoomNow: number): boolean {
+  return fieldZoomNow >= THIN_NAMES_ZOOM;
+}
+
 /** Ruling 29: whether the basemap's promoted major street names are drawn at
  *  all (basemap.ts roads_labels_major). Their promotion to a flat 22 px is
  *  derived for the wall's 2.8 km field; the whole-city window is four times
@@ -740,7 +752,7 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  so the stop's routes, the measured field's threshold, its padding and the
  *  camera's own band reach the picture without a second map. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
+  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), placeTitles: placeTitles(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
 }
 
 export interface KioskMapInput {

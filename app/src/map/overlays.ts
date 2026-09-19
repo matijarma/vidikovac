@@ -203,6 +203,14 @@ export interface ProzorOptions {
    *  field of twice the ground still places at most eight names (contract 3);
    *  symbol-spacing is no lever for that count and stays the ruling's. */
   labelPadding: number;
+  /** Ruling 31: false draws the square place marks (works, events, the seat
+   *  and the civil-protection assembly points) with no title. Their names are
+   *  the artefact's own -- "Igralište Sava", "Zagrebački velesajam" -- at the
+   *  same 22 px a stop name gets, and on a picture of the whole city a
+   *  gathering point's name is not something anyone acts on from three
+   *  metres; the square is. The marks stay, and so does the quake's own
+   *  label. Default true. */
+  placeTitles?: boolean;
   /** Ruling 30: true names only the tram interchanges (the stop features'
    *  `tramInterchange`) and ignores the rank entirely -- what the whole-city
    *  window does. False keeps the ranked reading, which is what every frame
@@ -602,6 +610,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.
   const lit = (kind: PlaceKind): boolean => (kind !== 'seat' || prozor === null) && (options.emphasis == null || options.emphasis.includes(kind));
+  /** Ruling 31: the square marks carry their names from THIN_NAMES_ZOOM up
+   *  and nowhere below it; outside the kiosk's option set they always do. */
+  const placeTitles = prozor === null || prozor.placeTitles !== false;
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the
@@ -622,13 +633,16 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       // symbol-sort-key decides which survive -- the pharmacy and the assembly
       // points first, the seat last. A pile of squares is not more honest than
       // a chosen one, it is only less readable.
-      'text-field': ['get', 'title'],
-      'text-font': [MAP_FONTS.medium],
-      'text-size': PLACE_LABEL_PX * s,
-      'text-anchor': 'top',
-      'text-offset': [0, 0.9],
-      'text-max-width': 10,
-      'text-optional': true,
+      // Ruling 31: on the whole-city window the squares draw without names.
+      ...(placeTitles ? {
+        'text-field': ['get', 'title'],
+        'text-font': [MAP_FONTS.medium],
+        'text-size': PLACE_LABEL_PX * s,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.9],
+        'text-max-width': 10,
+        'text-optional': true,
+      } : {}),
       'symbol-sort-key': spec.sort,
     },
     paint: {
@@ -778,7 +792,12 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'text-offset': [0, 0.7],
         'text-max-width': 9,
         'text-padding': 3,
-        'symbol-sort-key': ['-', 100, ['get', 'rank']],
+        // Lower sorts first. Route count alone decided this, which is the
+        // scale Ruling 30 threw out: below the line an interchange is placed
+        // before anything else and the rank is only the tiebreak among them.
+        'symbol-sort-key': prozor?.stopLabelTramInterchanges
+          ? ['-', ['case', ['get', 'tramInterchange'], 0, 100], ['get', 'rank']]
+          : ['-', 100, ['get', 'rank']],
       },
       paint: { ...labelInk, 'text-halo-width': 1.4 },
     },
