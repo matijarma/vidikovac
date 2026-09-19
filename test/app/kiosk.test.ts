@@ -1985,6 +1985,23 @@ describe('arrivals on the public screen', () => {
     k.handle.destroy();
   });
 
+  it("says what a tapped stop's empty list means: a board that failed is not an evening with no trams", async () => {
+    const map = tappableMap();
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelector('[data-testid=k-arrivals]')).toBeNull();
+    expect(text(card)).toContain('Vozni red trenutačno nije dostupan.');
+    expect(q(card, '.k-board-note')!.dataset.state).toBe('down');
+    // The stop is still named, and its lines are still there to read.
+    expect(text(card)).toContain('Trg bana J. Jelačića');
+    expect(text(card)).toContain('linija 6, 11, 12');
+    k.handle.destroy();
+  });
+
   it('keeps the city-wide exceptions when the stop board is down', async () => {
     const b = fakeBoards({});
     const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });

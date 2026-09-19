@@ -74,12 +74,20 @@ function etaMarkup(row: ArrivalRow, s: KioskStrings, className: string): string 
   return `<span class="${className}"${row.live ? ' data-live="true"' : ''}>${dot}${time}</span>`;
 }
 
+/** What a badge is called when it is read out rather than seen: "tramvaj 6",
+ *  the same shape the stop's line rows use (front.ts linesRows). */
+function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string {
+  const kind = kindOfRoute(routeId);
+  const word = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
+  return `${word} ${routeName}`.trim();
+}
+
 /** The three cells of one arrival on a kiosk board row (paired.ts's `row`):
  *  the plate and the destination on the first line, the time floated at its
  *  right, and "po redu vožnje" underneath when nothing tracks this trip. */
 export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; sub: string; aside: string } {
   return {
-    main: `${kBadge(row.routeName, kindOfRoute(row.routeId), row.routeName)} ${escapeHtml(row.headsign || row.routeName)}`,
+    main: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))} ${escapeHtml(row.headsign || row.routeName)}`,
     sub: row.live ? '' : s.arrivals.scheduled,
     aside: etaMarkup(row, s, 'k-eta'),
   };
@@ -91,17 +99,20 @@ export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; 
 export function arrivalFrontRows(arrivals: StopArrivals, s: KioskStrings, limit: number): FrontRow[] {
   return arrivals.rows.slice(0, Math.max(0, limit)).map((row) => ({
     key: `arrival:${row.tripId}|${row.atMs}`,
-    leadMarkup: `${kBadge(row.routeName, kindOfRoute(row.routeId), row.routeName)}${etaMarkup(row, s, 'k-fr-eta')}`,
+    leadMarkup: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))}${etaMarkup(row, s, 'k-fr-eta')}`,
     title: row.headsign || row.routeName,
     ...(row.live ? {} : { sub: s.arrivals.scheduled }),
   }));
 }
 
-/** The sentence a list with no rows says. 'none' is "no board in hand yet",
- *  which on a screen that never stops running means the answer is still on its
- *  way; 'down' is "every platform's board failed", which is a different thing
- *  and is said as itself. */
+/** The sentence a list with no rows says, and each of the four states is a
+ *  different sentence because they are different facts: 'none' is "no board in
+ *  hand yet", which on a screen that never stops running means the answer is
+ *  still on its way; 'down' is "every platform's board failed"; 'stale' is a
+ *  copy nobody has confirmed, which is never the same as "nothing is coming";
+ *  only a live board with nothing left on it may say the service is over. */
 export function arrivalsEmptyText(status: ArrivalsStatus, s: KioskStrings): string {
   if (status === 'none') return s.paired.noData;
-  return status === 'down' ? s.arrivals.down : s.arrivals.none;
+  if (status === 'down') return s.arrivals.down;
+  return status === 'stale' ? s.paired.unconfirmed : s.arrivals.none;
 }
