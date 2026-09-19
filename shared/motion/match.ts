@@ -296,15 +296,15 @@ export function createMatcher(net: GraphNetwork): Matcher {
    *  turned, and the other track is three to six metres away -- well inside
    *  the near band, so nothing here ever looked like a detour. Null when no
    *  such rail is within reach, and then the vehicle keeps its projection. */
-  function turnaroundMatch(track: Track, p: XY, dir: XY, routeId: string): Match | null {
-    const current = track.match.pathIdx !== null ? net.paths[track.match.pathIdx] : null;
+  function turnaroundMatch(fromPathIdx: number, p: XY, dir: XY, routeId: string): Match | null {
+    const current = net.paths[fromPathIdx];
     let best: { pathIdx: number; edge: number; s: number; d: number } | null = null;
     for (const hit of net.edgesNear(p, NEAR_M)) {
       if (!edgeTangentAgrees(hit.edge, hit.s, dir)) continue;
       for (const pathIdx of pathsByEdge.get(hit.edge) ?? []) {
         const path = net.paths[pathIdx];
-        if (path.route !== routeId || pathIdx === track.match.pathIdx) continue;
-        if (current !== null && path.direction === current.direction) continue;
+        if (path.route !== routeId || pathIdx === fromPathIdx) continue;
+        if (path.direction === current.direction) continue;
         const s = arcOnPath(path, hit.edge, hit.s, null);
         if (s === null) continue;
         if (best === null || hit.d < best.d) best = { pathIdx, edge: hit.edge, s, d: hit.d };
@@ -383,9 +383,9 @@ export function createMatcher(net: GraphNetwork): Matcher {
         // rather than read its own line backwards.
         const against = dir !== null && motion.groundM >= FOLD_MOVE_M && !pathTangentAgrees(working, onPath.s, dir);
         track.againstCount = against ? (track.againstCount ?? 0) + 1 : 0;
-        if (track.againstCount >= FOLD_FIXES) {
+        if (dir !== null && track.againstCount >= FOLD_FIXES) {
           track.againstCount = 0;
-          const turned = turnaroundMatch(track, p, dir!, prior.routeId);
+          const turned = turnaroundMatch(working, p, dir, prior.routeId);
           if (turned) {
             resetOrder(track);
             track.match = turned;

@@ -194,6 +194,12 @@ export const CONCESSION_NEAR_STOP_M = 40;
  *  dropped rather than enforced (R-TE52). On the live feed a follower six
  *  kilometres on was held at arc zero for minutes this way (16 Sept). */
 export const SWAP_LIMIT_M = 300;
+/** A pair's witness is dropped when neither of them has been seen near the
+ *  other for this long: two witnesses have to be CONSECUTIVE fresh fixes, so
+ *  an older one can no longer contribute to anything -- and a day's worth of
+ *  every tram that ever passed every other would otherwise ride in the state
+ *  row (persist.ts) for no purpose. */
+export const WITNESS_TTL_S = 60;
 
 /** What one pass of the register did, for the twin_order metric on /stats. */
 export interface OrderReport {
@@ -378,7 +384,7 @@ export function enforceOrder(
       endRelation(track);
       report.dropped++;
     }
-    for (const id of Object.keys(track.order.witnesses)) if (!known.has(id)) delete track.order.witnesses[id];
+    for (const [id, seen] of Object.entries(track.order.witnesses)) if (!known.has(id) || nowSec - seen.at > WITNESS_TTL_S) delete track.order.witnesses[id];
   }
 
   // The one geometric end: the two have left each other's rails. Read from
