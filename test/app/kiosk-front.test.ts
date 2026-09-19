@@ -94,6 +94,20 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po redu');
   });
 
+  it("becomes a stop's board when a caller supplies its arrivals, and says under it where the figures come from", () => {
+    const modules = [snap('zet-rt', [route('6', 240)])];
+    const supplied = [{ key: 'arrival:t1', leadMarkup: '<span>6</span>', title: 'Črnomerec' }];
+    const panel = prometPanel(input(modules, { prometMode: 'exceptions', prometRows: supplied }));
+    // The rows are the caller's, not the city's exceptions, and the kicker and
+    // credit the card always had are untouched.
+    expect(panel.rows).toEqual(supplied);
+    expect(panel.note).toBe('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.');
+    expect(panel.kicker).toBe(s.say.transit);
+    expect(panel.credit).toContain('ZET');
+    // With no rows supplied the card is the city's exceptions, exactly as before.
+    expect(prometPanel(input(modules, { prometMode: 'exceptions' })).rows.map((row) => row.title)).toEqual(['kasni 4 min']);
+  });
+
   it('orders late before early, trams before buses, then the largest first', () => {
     const modules = [snap('zet-rt', [
       route('109', 300), // a bus, late

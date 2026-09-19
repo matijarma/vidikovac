@@ -337,7 +337,8 @@ export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: numb
  * the front page's card: only what departs from the timetable -- the late
  * lines, the closures counted, ZET's notices counted -- and "Linije voze po
  * redu" when the network has nothing to report. A caller that has a stop's
- * arrivals passes them as `prometRows` and the card becomes that board.
+ * arrivals passes them as `prometRows` and the card becomes that board, with
+ * the arrivals note under it.
  */
 export function prometPanel(input: FrontInput): FrontPanel {
   const { strings: s, i18n, now, locale, stop } = input;
@@ -369,7 +370,12 @@ export function prometPanel(input: FrontInput): FrontPanel {
       ? [late.more > 0 ? plural(locale, s.front.moreLate, late.more) : '', closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
       : [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ');
   const empty = exceptions ? s.front.linesRegular : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
-  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
+  // A supplied board is arrivals, and no estimate on a public screen stands
+  // unattributed: the list carries the one note that says where its figures
+  // come from, exactly as it does on the phone sheet and the tapped card.
+  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable
+    : supplied && supplied.length > 0 ? s.arrivals.note
+      : rows.length === 0 ? empty : undefined;
   return {
     id: 'promet',
     kicker: s.say.transit,
