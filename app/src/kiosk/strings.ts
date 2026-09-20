@@ -66,19 +66,22 @@ export interface KioskStrings {
    *  phone sheet say the same thing about the same row, and the note under a
    *  list is the one sentence that explains where an estimate comes from. */
   arrivals: {
-    title: string;
     /** A tram due inside half a minute is the one pulling in, not "za 0 min". */
     now: string;
     /** `{n}` is the whole minutes left. */
     inMinutes: string;
     /** The live dot's own name, for a reader who cannot see it. */
     live: string;
-    /** An untracked row's second line: this time is the timetable, nothing more. */
-    scheduled: string;
     note: string;
     none: string;
     down: string;
+    /** Still waiting for a board: on a screen that never stops running, "no
+     *  board in hand" is almost always "not fetched yet". */
+    loading: string;
   };
+  /** "3 perona": the platforms of the stop a board is of, the app's own words
+   *  (transport.platforms_*), not a second kiosk vocabulary for them. */
+  platforms: PluralForms;
   lines: {
     title: string;
     nearbyTitle: string;
@@ -354,7 +357,8 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
-    arrivals: record(['title', 'now', 'inMinutes', 'live', 'scheduled', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`),
+    arrivals: { ...record(['now', 'inMinutes', 'live', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
+    platforms: { one: t('transport.platforms_one'), few: t('transport.platforms_few'), other: t('transport.platforms_other') },
     lines: {
       ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'modelNote']),
       nearby: forms('lines', 'nearby'),

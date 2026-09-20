@@ -26,6 +26,7 @@ import type { I18n } from '../i18n/i18n';
 import { reconcile } from '../ui/dom/reconcile';
 import { escapeHtml } from '../ui/dom/escape';
 import { mountField, type FieldHandle } from './field';
+import type { BoardSubject } from './arrivals';
 import { EXCEPTION_LINES, eventCardRows, frontPanels, panelMarkup, type FrontPanel, type FrontRow, type PanelId } from './front';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
@@ -86,6 +87,9 @@ export interface InvitationModel {
    *  board has nothing to say -- the card keeps the city-wide exceptions it
    *  has always shown. */
   prometRows?: FrontRow[];
+  /** What those rows are a board of: the card names its own subject with it
+   *  and counts what the budget trimmed away. */
+  prometBoard?: BoardSubject;
 }
 
 export interface InvitationHandle {
@@ -224,7 +228,8 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       lightweight, composition: model.composition, prometMode: 'exceptions', eventRows: rowBudget + ownEvents, prometLines: lineBudget,
       // A board feeds the same budget the exception lines feed: the column is
       // shared with the events card's two-row floor and the QR card's 240 px.
-      ...(model.prometRows?.length ? { prometRows: model.prometRows.slice(0, Math.max(1, lineBudget)) } : {}),
+      // What it trims stays counted: `prometBoard.total` is the whole board.
+      ...(model.prometRows?.length ? { prometRows: model.prometRows.slice(0, Math.max(1, lineBudget)), ...(model.prometBoard ? { prometBoard: model.prometBoard } : {}) } : {}),
     });
     if (venues.length) {
       built.tonight.rows = eventCardRows(venues, built.tonight.rows, rowBudget);

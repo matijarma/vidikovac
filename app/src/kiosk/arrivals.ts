@@ -25,6 +25,15 @@ export interface StopArrivals {
   status: ArrivalsStatus;
 }
 
+/** What a card showing a board needs to know about the board itself: its own
+ *  state (never the vehicle feed's), how many departures it holds before any
+ *  trimming, and how many platforms were merged into it. */
+export interface BoardSubject {
+  status: ArrivalsStatus;
+  total: number;
+  platforms: number;
+}
+
 /** How many rows a kiosk surface shows: four across a wide screen, three when
  *  the column is narrow (compact and portrait). Fewer than the six the shared
  *  module offers -- a card read from four metres away is not a departure hall
@@ -114,12 +123,14 @@ export function arrivalFrontRows(arrivals: StopArrivals, s: KioskStrings, limit:
 
 /** The sentence a list with no rows says, and each of the four states is a
  *  different sentence because they are different facts: 'none' is "no board in
- *  hand yet", which on a screen that never stops running means the answer is
- *  still on its way; 'down' is "every platform's board failed"; 'stale' is a
- *  copy nobody has confirmed, which is never the same as "nothing is coming";
- *  only a live board with nothing left on it may say the service is over. */
+ *  hand yet", which on a screen that never stops running is almost always the
+ *  answer still being on its way rather than a stop that publishes nothing --
+ *  so it says it is loading, not that there is no data; 'down' is "every
+ *  platform's board failed"; 'stale' is a copy nobody has confirmed, which is
+ *  never the same as "nothing is coming"; only a live board with nothing left
+ *  on it may say the service is over. */
 export function arrivalsEmptyText(status: ArrivalsStatus, s: KioskStrings): string {
-  if (status === 'none') return s.paired.noData;
+  if (status === 'none') return s.arrivals.loading;
   if (status === 'down') return s.arrivals.down;
   return status === 'stale' ? s.paired.unconfirmed : s.arrivals.none;
 }

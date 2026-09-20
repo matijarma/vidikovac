@@ -47,7 +47,7 @@ import { mountInvitation, type InvitationHandle, type InvitationModel } from './
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap, vehiclePoints } from './kiosk/mapview';
-import { arrivalFrontRows, ARRIVAL_ROWS, platformIds, type StopArrivals } from './kiosk/arrivals';
+import { arrivalFrontRows, ARRIVAL_ROWS, platformIds, type BoardSubject, type StopArrivals } from './kiosk/arrivals';
 import type { FrontRow } from './kiosk/front';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { districtLabel } from './kiosk/districts';
@@ -670,15 +670,24 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The scheduled boards this screen has in hand: one request per platform
    *  per minute however many surfaces ask (city/boards.ts), made once with the
    *  kiosk and destroyed with it. */
-  const boards: BoardCache = (deps.createBoards ?? (() => createBoardCache()))();
+  const boards: BoardCache = (deps.createBoards ?? (() => createBoardCache({ now })))();
   /** One function, not one per paint: the cache keeps everyone waiting for a
    *  platform in a Set, and a fresh closure each time would make a stop with
    *  eight platforms repaint 2^8 times as its boards landed one after another
    *  (the lesson is transport/workspace.ts's own onBoardSettled). */
   const onBoardSettled = (): void => { if (!disposed) paintLocal(); };
   /** The stops whose boards are worth having right now: the screen's own, and
-   *  whichever one a person or a phone is asking about. */
+   *  whichever one a person or a phone is asking about.
+   *
+   *  Ruling 31: while a presentation owns the screen its subject is the only
+   *  one -- a phone putting THAT stop on the wall is asking for exactly this
+   *  board, so it is fetched, and nothing else is. The gate was written to
+   *  stop the screen polling the city behind a presented subject, not to
+   *  starve the subject itself; a presented route, place or item still leaves
+   *  the screen quiet. */
   function arrivalSubjects(): { id: string; name?: string }[] {
+    const presented = presentation?.target;
+    if (presented) return presented.selection?.kind === 'stop' ? [{ id: presented.selection.id }] : [];
     const out: { id: string; name?: string }[] = [];
     if (stop) out.push(stop);
     if (localSelection?.kind === 'stop') out.push({ id: localSelection.id });
@@ -690,11 +699,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  list landing -- and never on a paint: the 60 s memo turns the 10 s poll
    *  into one request a minute per platform.
    *
-   *  A presentation owns the screen while it is up: the kiosk does not fetch
-   *  behind a phone's subject, and a screen still in setup, or showing the
-   *  expired notice, has no stop to ask about. */
+   *  A screen still in setup, or showing the expired notice, has no stop to
+   *  ask about; what a presentation changes is which stop is worth asking
+   *  about, not whether to ask (arrivalSubjects, Ruling 31). */
   function ensureArrivals(): void {
-    if (disposed || presentation?.target || (phase !== 'invitation' && phase !== 'paired')) return;
+    if (disposed || (phase !== 'invitation' && phase !== 'paired')) return;
     for (const subject of arrivalSubjects()) boards.ensure('zet', platformIds(subject, stops), onBoardSettled);
   }
   /** What the cache holds for these platforms, merged with the live fleet the
@@ -704,20 +713,28 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const held = stopIds.map((id) => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
     const at = now();
     const fleet = vehiclePoints((phase === 'paired' ? mergedSnapshots() : byModule(teaser))['zet-rt'], at);
-    return arrivalsAt(held, fleet, at, { stopIds, rows: ARRIVAL_ROWS.wide });
+    // The shared module's own six: what a surface shows is its own business
+    // (ARRIVAL_ROWS), but a card that trimmed the list must be able to say how
+    // many it trimmed, and that count is this one.
+    return arrivalsAt(held, fleet, at, { stopIds });
   }
-  /** The configured stop's board as the Promet card's rows: four across a
-   *  wide screen, three in a narrow one. Undefined when the screen has no
-   *  stop, and when the board has nothing to say -- the card is then the
-   *  city's exceptions, exactly as it is today. */
-  function configuredArrivals(): FrontRow[] | undefined {
-    if (!stop) return undefined;
-    const rows = arrivalFrontRows(arrivalsAtStop(platformIds(stop, stops)), s, compositionOf(layout) === 'wide' ? ARRIVAL_ROWS.wide : ARRIVAL_ROWS.compact);
-    return rows.length > 0 ? rows : undefined;
+  /** The configured stop's board as the Promet card's rows -- four across a
+   *  wide screen, three in a narrow one -- with what the card needs to caption
+   *  it (the stop, its platforms) and to count what it could not show. Null
+   *  when the screen has no stop, and when the board has nothing to say: the
+   *  card is then the city's exceptions, exactly as it is today. */
+  function configuredBoard(): { rows: FrontRow[]; board: BoardSubject } | null {
+    if (!stop) return null;
+    const ids = platformIds(stop, stops);
+    const answer = arrivalsAtStop(ids);
+    const rows = arrivalFrontRows(answer, s, compositionOf(layout) === 'wide' ? ARRIVAL_ROWS.wide : ARRIVAL_ROWS.compact);
+    if (rows.length === 0) return null;
+    return { rows, board: { status: answer.status, total: answer.rows.length, platforms: ids.length } };
   }
 
   function invitationModel(): InvitationModel {
-    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot(), prometRows: configuredArrivals() };
+    const board = configuredBoard();
+    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot(), ...(board ? { prometRows: board.rows, prometBoard: board.board } : {}) };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -1085,7 +1102,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     activeLayer = next.target.layer === 'kvart' ? 'grad-sada' : next.target.layer;
     setPhase('paired');
     showSessionLabel(next.expiresAt);
-    if (selection?.kind === 'stop') void ensureStops();
+    if (selection?.kind === 'stop') { void ensureStops(); ensureArrivals(); }
     void refreshSessionData();
   }
 

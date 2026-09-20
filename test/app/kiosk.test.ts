@@ -1930,6 +1930,24 @@ function fakeBoards(available: Record<string, DepartureBoard> = {}) {
   return { create, asked, made };
 }
 
+describe('the kiosk grid places every region explicitly', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+  it('gives the alert its own row and every other region a named one, the essentials panel included', () => {
+    // Four rows: the header, the alert (collapsed to nothing while there is
+    // none), the stage, the safety strip. Nothing may auto-place, or the next
+    // region added shuffles the page.
+    expect(css).toContain('grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);');
+    expect(css).toMatch(/\.k-head \{ grid-row: 1;/);
+    expect(css).toMatch(/\.k-alert \{ grid-row: 2;/);
+    expect(css).toMatch(/\.k-stage \{ grid-row: 3;/);
+    expect(css).toMatch(/\.k-strip \{ grid-row: 4;/);
+    // The essentials panel is absolute at every size but the handheld, where
+    // it is in the flow and must be told it belongs in the stage's row --
+    // auto-placed it lands in a fifth row, under the strip and off the screen.
+    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-basics \{ position: static; grid-row: 3; \}/);
+  });
+});
+
 describe('arrivals on the public screen', () => {
   /** A map whose only seam this test needs is the tap: the kiosk hands
    *  `onSelect` to the factory (kiosk/mapview.ts), and a tap on a stop is that
@@ -2023,8 +2041,32 @@ describe('arrivals on the public screen', () => {
     const compact = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create, viewport: { width: 1366, height: 768 } });
     await flush();
     expect(q(compact.root, '.kiosk')!.dataset.size).toBe('compact');
-    expect(q(compact.root, '[data-testid=kiosk-panel-promet]')!.querySelectorAll('.k-fr')).toHaveLength(3);
+    const narrow = q(compact.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(narrow.querySelectorAll('.k-fr')).toHaveLength(3);
+    // And the fourth is not dropped in silence: the card counts it in the row
+    // fitter's own words, so the stop does not read as having nothing else.
+    expect(text(narrow.querySelector('.k-row-more'))).toBe('prikazano 3 od 4');
     compact.handle.destroy();
+  });
+
+  it('captions the board with its own stop and counts what it could not show', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // Before the catalogue is in hand the screen knows one platform and says
+    // only the name -- never a platform count it cannot stand behind.
+    expect(text(q(promet, '.k-panel-meta'))).toBe('Trg bana J. Jelačića');
+    // The city's own counts belong to the card that is showing the city.
+    expect(text(promet)).not.toContain('zatvaranja');
+    // A tap loads the stop list; the board is then of both platforms.
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-panel-meta'))).toBe('Trg bana J. Jelačića · 2 perona');
+    // Three departures, three rows on a wide screen: nothing counted away.
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-row-more')).toBeNull();
+    k.handle.destroy();
   });
 
   it('keeps the city-wide exceptions when the stop board is down', async () => {
@@ -2050,14 +2092,43 @@ describe('arrivals on the public screen', () => {
     expect(b.made[0]!.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('asks for nothing while a phone owns the screen', async () => {
+  it('fetches for a presented stop -- the phone is asking for exactly that board -- and for no other presented subject', async () => {
     const b = fakeBoards(JELACIC_BOARDS);
     const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
     k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
     await flush();
-    k.poll();
+    expect(b.asked).toContain('106_1');
+    // And the wall shows the rows, not an empty card under the stop's name.
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
+      .toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // A presented route is not a stop: the screen keeps quiet behind it, and
+    // the screen's own stop is not polled behind the phone's subject either.
+    const other = fakeBoards(JELACIC_BOARDS);
+    const o = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: other.create });
+    o.handlers.onPresentation?.({ version: 1, revision: 2, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
     await flush();
-    expect(b.asked).toEqual([]);
+    o.poll();
+    await flush();
+    expect(other.asked).toEqual([]);
+    k.handle.destroy();
+    o.handle.destroy();
+  });
+
+  it('a dead vehicle feed does not speak for a live board: four scheduled departures, no "ZET ne odgovara"', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    // The realtime module is down; the schedule is not. This is the hour the
+    // board matters most, and every row it shows is schedule-only.
+    const down = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [], 'down') : m));
+    const k = mount({ stored: STORED, modules: down, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(promet.querySelectorAll('.k-fr').length).toBeGreaterThan(0);
+    expect(text(promet)).not.toContain('ZET trenutačno ne odgovara');
+    expect(promet.querySelector('.k-panel-note')).toBeNull();
+    // No vehicle is tracked, so no row claims to be live.
+    expect(promet.querySelector('.k-live')).toBeNull();
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
     k.handle.destroy();
   });
 });

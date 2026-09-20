@@ -776,7 +776,11 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-size='handheld'] .k-strip-items { flex-basis: 100%; overflow: visible; }
 .kiosk[data-size='handheld'] .k-strip-item { margin-right: 0; padding-right: 0; border-right: 0; flex-basis: 100%; white-space: normal; }
 .kiosk[data-size='handheld'] .k-strip-hitno { margin-left: 0; }
-.kiosk[data-size='handheld'] .k-basics { position: static; }
+/* In the flow on a handheld, so it must be told which row it is in: with the
+   grid's regions placed explicitly it would otherwise auto-place into a fifth
+   row, under the safety strip and off the screen. It shares the stage's row
+   and covers it, which is what it does at every other size. */
+.kiosk[data-size='handheld'] .k-basics { position: static; grid-row: 3; }
 .kiosk[data-size='handheld'] .k-basics-rows { grid-template-columns: minmax(0, 1fr); }
 
 /* The front page on a phone: the panels in one column on the canvas, each
