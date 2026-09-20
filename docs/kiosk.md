@@ -98,8 +98,10 @@ voze ranije, tramvaji prije autobusa. Ploča nosi do tri linije na širokom i
 okomitom zaslonu, do dvije na zbijenom, a ostatak sažima u „+N linija
 kasni”, i taj broj ostaje gradski: zakašnjela linija dvije četvrti dalje i
 dalje je vijest na zidu. Kad nema iznimke, kaže „Linije voze po redu”.
-Ploča dolazaka postavljenog stajališta dolazi s granom `kiosk-arrivals`;
-šav (`FrontInput.prometRows`) stoji, ali ga na zaslonu još nitko ne puni.
+Kad je stajalište postavljeno, ta ploča prestaje biti popis iznimaka i
+postaje ploča dolazaka tog stajališta (`kiosk/arrivals.ts`): procjena iz
+ZET-ovih podataka o vozilima gdje je vozilo praćeno, inače vozni red, i
+svaki red kaže koje je od toga. Iznimke se tada čitaju u traci zaglavlja.
 **Događanja** popunjavaju preostalu visinu: prvo aktivna mjesta s brojem
 događaja, zatim datirani događaji, a kad ni toga nema, jedna mirna
 rečenica. Ploča nikad ne ostaje prazna: nosi barem jedan cijeli redak, a
