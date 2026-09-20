@@ -37,9 +37,11 @@ These are acceptance checks, not findings against an unfinished worktree.
   Undated neighbourhood notices are never a dated agenda item.
 - Source coverage applies to the displayed subset. Successful empty sources and
   unavailable sources remain distinguishable after teaser filtering.
-- Full legal text, hourly weather values, arrival times, progress percentages,
-  spending totals, nearest pharmacies and missing place coordinates are never
-  invented.
+- Full legal text, hourly weather values, progress percentages, spending totals,
+  nearest pharmacies and missing place coordinates are never invented. Arrival
+  estimates are labelled and never invented: a countdown only where a tracked
+  vehicle carries that trip, a scheduled clock time otherwise, and the list
+  says which is which.
 - Item export/copy/share retains attribution and the item timestamp. Calendar
   actions use the actual eligibility helper; no dead enabled button.
 - A source outage is not an all-clear. Open safety and session safety agree.

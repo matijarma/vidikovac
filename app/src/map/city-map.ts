@@ -76,8 +76,8 @@ const PUSH_TOLERANCE_MS = 1;
 
 /** What a drawn point IS, when it is more than an untyped place. A point with
  *  no `place` keeps the one plain circle this map has always drawn, which is
- *  what the dashboard's quake map and the kvart thumbnail's work points still
- *  ask for; a point with one is drawn by its own layer, with its own mark and
+ *  what the dashboard's quake map and its work points still ask for; a point
+ *  with one is drawn by its own layer, with its own mark and
  *  its own honesty rule (map/overlays.ts). */
 export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat' | 'city';
 
@@ -212,7 +212,7 @@ const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'route
 
 /** Places only: a vehicle report never reaches a drawn source (R-P2). An
  *  untagged point produces exactly the properties it always did, so the
- *  dashboard's quake map and the kvart thumbnail are byte for byte unchanged. */
+ *  dashboard's quake map is byte for byte unchanged. */
 export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollection {
   return {
     type: 'FeatureCollection',
@@ -712,7 +712,7 @@ export interface CityMapOptions {
   cooperative?: boolean;
   /** A compact attribution control (the credit behind one button) for the phone stage. */
   attributionCompact?: boolean;
-  /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
+  /** false leaves the city, region and country names off the basemap, for a map inset too small to carry them. No surface asks for it today. */
   placeLabels?: boolean;
   /** false leaves the city places' own names off (map/city-layers.ts): the
    *  public screen draws badges and dots alone until a person explores.

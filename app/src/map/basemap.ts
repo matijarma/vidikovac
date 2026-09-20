@@ -17,7 +17,7 @@
 // optional `profile: 'prozor'` pass on top of it, for the public screen that
 // is read from three metres (kiosk/mapview.ts): a flavour override table
 // applied before upstream generates its layers, and a layer pass over what it
-// generated. The phone and the kvart thumbnail stay on 'default'.
+// generated. Every other surface -- the phone, the desk -- stays on 'default'.
 //
 // Pure: no DOM, no MapLibre import. The library that builds the layers is
 // 38 kB and only ever loaded through maplibre-entry.ts's dynamic import, so
@@ -30,9 +30,8 @@ import { PILL_INKS } from '../motion/pills';
 export type MapTheme = 'light' | 'dark';
 
 /** Which basemap the surface asks for: 'prozor' is the public screen's window
- *  onto the kvart, read from across a room (kiosk/mapview.ts, plan D3); the
- *  phone (transport/workspace.ts) and the kvart thumbnail (experience/kvart.ts)
- *  stay on 'default'. */
+ *  onto the city, read from across a room (kiosk/mapview.ts, plan D3); the
+ *  phone and the desk (transport/workspace.ts) stay on 'default'. */
 export type BasemapProfile = 'default' | 'prozor';
 
 /** The one vector source every basemap layer reads from. */
@@ -526,12 +525,12 @@ export interface BasemapStyleOptions {
   locale?: string;
   /** Resolves MAP_CONFIG's root-relative paths; defaults to the document's origin. */
   origin?: string;
-  /** false drops every `places_*` layer (city, region, country names): a kvart-sized thumbnail has no room for "Zagreb" over its streets. Default true. */
+  /** false drops every `places_*` layer (city, region, country names): a map inset a few centimetres across has no room for "Zagreb" over its streets. Default true; no surface asks for it today. */
   placeLabels?: boolean;
   /** 'prozor' draws the public screen's ground: two landuse tones, hairline
    *  streets, faint blocks, no POI and no neighbourhood name, and nothing that
-   *  cannot reach the readability floor; 'default' (the phone, the desk, the
-   *  kvart thumbnail) is the house pass alone. */
+   *  cannot reach the readability floor; 'default' (the phone and the desk)
+   *  is the house pass alone. */
   profile?: BasemapProfile;
   /** The prozor profile's collision padding around a major street name, in
    *  tile pixels: PROZOR_LABEL_PADDING_PX unless the kiosk's option set widens

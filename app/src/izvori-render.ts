@@ -89,7 +89,7 @@ function renderCitySources():string{
   const references=REFERENCE_SOURCES.map(s=>({id:s.id,name:s.name,url:s.catalogue,licence:s.licence}));
   const rows=[...references,...Object.values(LIVE_SOURCES)].map(s=>`<li id="city-source-${escapeAttribute(s.id)}"><a href="${escapeAttribute(s.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(s.name)}</a>: ${escapeHtml(s.licence)}</li>`).join('\n');
   return `<section aria-labelledby="city-sources-title"><h2 id="city-sources-title">Mjesta, priče i uvjeti u gradu</h2>
-    <p>Katalog gradskih mjesta osvježava se zasebno od događanja i položaja vozila. Registar nije provjera radnog vremena, pristupačnosti ili trenutačnog stanja. BAJS brojevi imaju vrijeme opažanja; zrak je preliminarni indeks pojedine postaje; polasci ZET-a i HŽPP-a su raspored, ne procjena dolaska.</p>
+    <p>Katalog gradskih mjesta osvježava se zasebno od događanja i položaja vozila. Registar nije provjera radnog vremena, pristupačnosti ili trenutačnog stanja. BAJS brojevi imaju vrijeme opažanja; zrak je preliminarni indeks pojedine postaje; dolasci ZET-a procjena su iz ZET-ovih podataka o vozilima, a polasci bez praćenog vozila i sve ploče HŽPP-a ostaju vozni red.</p>
     <ul>${rows}</ul>
     <p>Ulične priče prenose objavljene opise, uz naselje. Baština se povezuje preko registarske oznake; geometrija označava obuhvat zaštite, ne ulaz ni pravo pristupa. Nepotvrđene lokacije ostaju u popisu bez oznake na karti.</p>
     <p>Ti izvori isporučuju se aplikaciji kroz javni katalog, bez novog skupa na /open. Navođenje izvora ne dodjeljuje dodatna prava ponovne uporabe; gdje uvjeti nisu navedeni, to ostaje izričito označeno.</p></section>`;
