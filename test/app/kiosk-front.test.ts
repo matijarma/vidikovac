@@ -94,6 +94,57 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po redu');
   });
 
+  it("becomes a stop's board when a caller supplies its arrivals, and says under it where the figures come from", () => {
+    const modules = [snap('zet-rt', [route('6', 240)])];
+    const supplied = [{ key: 'arrival:t1', leadMarkup: '<span>6</span>', title: 'Črnomerec' }];
+    const panel = prometPanel(input(modules, { prometMode: 'exceptions', prometRows: supplied }));
+    // The rows are the caller's, not the city's exceptions, and the kicker and
+    // credit the card always had are untouched.
+    expect(panel.rows).toEqual(supplied);
+    // The attribution goes under the rows at the card's credit size, not as a
+    // note at row size: a note wrapped to five lines of the aside's column.
+    expect(panel.note).toBeUndefined();
+    expect(panel.footMarkup).toBe('<p class="k-panel-attrib">Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.</p>');
+    expect(panel.kicker).toBe(s.say.transit);
+    expect(panel.credit).toContain('ZET');
+    // With no rows supplied the card is the city's exceptions, exactly as before.
+    expect(prometPanel(input(modules, { prometMode: 'exceptions' })).rows.map((row) => row.title)).toEqual(['kasni 4 min']);
+  });
+
+  it('lets the board answer for itself: a dead vehicle feed never speaks under a live board', () => {
+    const supplied = [{ key: 'a', leadMarkup: '<span>6</span>', title: 'Črnomerec', trail: '01:07' }];
+    // The realtime module is down. Four good scheduled departures must not be
+    // captioned "ZET trenutačno ne odgovara" -- they came off the timetable.
+    const dead = [snap('zet-rt', [], 'down')];
+    const live = prometPanel(input(dead, { prometMode: 'exceptions', prometRows: supplied, prometBoard: { status: 'live', total: 1, platforms: 1 } }));
+    expect(live.note).toBeUndefined();
+    // Without a board the same dead feed still says so: that is its own card.
+    expect(prometPanel(input(dead, { prometMode: 'exceptions' })).note).toBe('ZET trenutačno ne odgovara.');
+    // The board's own states, each said as itself.
+    const empty = (status: 'down' | 'none' | 'stale' | 'live') =>
+      prometPanel(input([snap('zet-rt', [route('6', 240)])], { prometMode: 'exceptions', prometRows: [], prometBoard: { status, total: 0, platforms: 1 } })).note;
+    expect(empty('down')).toBe('Vozni red trenutačno nije dostupan.');
+    expect(empty('none')).toBe('Učitavanje podataka ZET-a…');
+    expect(empty('stale')).toBe('Zastarjelo: izvor ne odgovara, stanje nije potvrđeno');
+    expect(empty('live')).toBe('Nema najavljenih polazaka.');
+  });
+
+  it('captions a board with its own stop and counts the rows it had no room for', () => {
+    const supplied = [{ key: 'a', leadMarkup: '<span>6</span>', title: 'Črnomerec', trail: '01:07' }];
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.813, routes: ['6'] };
+    const panel = prometPanel(input([snap('zet-rt', [route('6', 240)])], {
+      prometMode: 'exceptions', prometRows: supplied, stop, prometBoard: { status: 'live', total: 6, platforms: 2 },
+    }));
+    expect(panel.meta).toBe('Trg bana J. Jelačića · 2 perona');
+    expect(panel.footMarkup).toContain('<p class="k-line-more k-row-more">prikazano 1 od 6</p>');
+    // One platform is not worth saying; the whole board shown is not worth counting.
+    const one = prometPanel(input([snap('zet-rt', [route('6', 240)])], {
+      prometMode: 'exceptions', prometRows: supplied, stop, prometBoard: { status: 'live', total: 1, platforms: 1 },
+    }));
+    expect(one.meta).toBe('Trg bana J. Jelačića');
+    expect(one.footMarkup).not.toContain('k-row-more');
+  });
+
   it('orders late before early, trams before buses, then the largest first', () => {
     const modules = [snap('zet-rt', [
       route('109', 300), // a bus, late

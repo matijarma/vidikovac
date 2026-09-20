@@ -23,6 +23,9 @@ import { cityWindowView, DISTRICT_SPAN_M, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN
 import { districtBySlug } from '../../app/src/kiosk/districts';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
+import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
+import type { MapSelection } from '../../app/src/map/city-map';
+import type { DepartureBoard, ScheduledDeparture } from '../../shared/city/types';
 import { fakeCityStore } from '../city/fake-store';
 import { emptyCity } from '../../shared/city/types';
 
@@ -62,7 +65,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -81,6 +84,11 @@ function fakeThemeController(initial: ThemePreference): { theme: ThemeController
   };
   return { theme, calls, listenerCount: () => listeners.size };
 }
+
+/** No test reaches the network for a departure board: a kiosk given no board
+ *  seam of its own gets a cache whose every request answers "down", so a
+ *  configured stop's card says so instead of the suite talking to port 3000. */
+const offlineBoards = (): BoardCache => createBoardCache({ fetchImpl: (async () => ({ ok: false, status: 503, json: async () => ({}) })) as unknown as typeof globalThis.fetch });
 
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
@@ -112,7 +120,7 @@ function mount(opts: MountOptions = {}) {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
-    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun,
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -1934,5 +1942,262 @@ describe('T5.3: the theme button', () => {
     expect(k.themeListenerCount()).toBe(1);
     k.handle.destroy();
     expect(k.themeListenerCount()).toBe(0);
+  });
+});
+
+
+// --- WP5b: what comes next at a stop, on the public screen ------------------
+// The shared merge (shared/city/arrivals.ts) and the board cache
+// (app/src/city/boards.ts) are proven where they live; what is proven here is
+// the kiosk's own half: the card a tap opens leads with the arrivals, a
+// configured stop turns the Promet card into its board, the cache is made once
+// and let go with the screen, and nothing is asked for that nobody is looking
+// at.
+
+/** A tracked trip and an untracked one at the screen's own platform, and a
+ *  third at its sibling: 14:32 in Zagreb is the test's `NOW`. */
+const TRIP_LIVE = 'trip-6-live';
+function dep(tripId: string, routeId: string, headsign: string, at: string): ScheduledDeparture {
+  return { operator: 'zet', tripId, routeId, routeName: routeId, headsign, at };
+}
+function board(stopId: string, departures: ScheduledDeparture[]): DepartureBoard {
+  return { operator: 'zet', stopId, stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(NOW).toISOString(), departures };
+}
+const JELACIC_BOARDS: Record<string, DepartureBoard> = {
+  // 12:33:00Z + ZET's own 120 s delay = 12:35 = "za 3 min"; the 11 is the
+  // timetable alone, six minutes out; the 13 at the sibling platform is past
+  // the countdown horizon and shows a clock.
+  '106_1': board('106_1', [dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z')]),
+  '106_2': board('106_2', [dep('trip-13', '13', 'Žitnjak', '2026-09-11T12:45:00Z')]),
+};
+/** The teaser with one tracked vehicle on the 6, carrying the trip the board names. */
+const ARRIVAL_MODULES: ModuleSnapshot[] = MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [
+  item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
+  item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: 120 } }),
+  item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 240, vehicles: 12 } }),
+])));
+
+/** The real cache (its memo and its listener set are the thing under test)
+ *  over a fetch this test answers: every platform asked for is recorded, and a
+ *  platform with no board answers like the Worker being down. */
+function fakeBoards(available: Record<string, DepartureBoard> = {}) {
+  const asked: string[] = [];
+  const fetchImpl = vi.fn(async (input: unknown) => {
+    const id = decodeURIComponent(String(input).split('stop=')[1] ?? '');
+    asked.push(id);
+    const found = available[id];
+    if (!found) return { ok: false, status: 503, json: async () => ({}) } as unknown as Response;
+    return { ok: true, status: 200, json: async () => found } as unknown as Response;
+  });
+  const made: { destroy: ReturnType<typeof vi.fn> }[] = [];
+  const create = vi.fn((): BoardCache => {
+    const real = createBoardCache({ fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, now: () => NOW });
+    const wrapped = { get: real.get, ensure: real.ensure, destroy: vi.fn(() => { real.destroy(); }) };
+    made.push(wrapped);
+    return wrapped;
+  });
+  return { create, asked, made };
+}
+
+describe('the kiosk grid places every region explicitly', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+  it('gives the alert its own row and every other region a named one, the essentials panel included', () => {
+    // Four rows: the header, the alert (collapsed to nothing while there is
+    // none), the stage, the safety strip. Nothing may auto-place, or the next
+    // region added shuffles the page.
+    expect(css).toContain('grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);');
+    expect(css).toMatch(/\.k-head \{ grid-row: 1;/);
+    expect(css).toMatch(/\.k-alert \{ grid-row: 2;/);
+    expect(css).toMatch(/\.k-stage \{ grid-row: 3;/);
+    expect(css).toMatch(/\.k-strip \{ grid-row: 4;/);
+    // The essentials panel is absolute at every size but the handheld, where
+    // it is in the flow and must be told it belongs in the stage's row --
+    // auto-placed it lands in a fifth row, under the strip and off the screen.
+    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-basics \{ position: static; grid-row: 3; \}/);
+  });
+});
+
+describe('arrivals on the public screen', () => {
+  /** A map whose only seam this test needs is the tap: the kiosk hands
+   *  `onSelect` to the factory (kiosk/mapview.ts), and a tap on a stop is that
+   *  callback with the stop's id. */
+  function tappableMap() {
+    const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn(), setFeedState: vi.fn(), setView: vi.fn() };
+    return { factory: vi.fn(() => handle), handle };
+  }
+
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const options = map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void };
+    options.onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
+    // One line per row: the time, the plate, where it is going -- and no
+    // per-row "po redu vožnje", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // The tracked row, and only it, carries the live dot and is marked live;
+    // the note under the list says what the unmarked times are.
+    expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
+    expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
+    expect(text(card)).not.toContain('po redu vožnje');
+    // One note for the list, not one per row, and the stop's lines keep their place under it.
+    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    expect(text(card)).toContain('linija 6, 11, 12');
+    const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    // The card is the column while it is open (kiosk-city.css hides the screen's
+    // own board behind this flag); going back gives the board the rail again.
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('1');
+    q(k.root, '[data-action=kiosk-leave]')!.click();
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('0');
+    k.handle.destroy();
+  });
+
+  it('a configured stop is the Promet card, asked for once a minute however often the screen paints', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // The stop list has not been loaded, so the screen asks about the platform it knows.
+    expect(b.asked).toEqual(['106_1']);
+    // A board row is the exceptions row's shape: plate, destination, time at
+    // the end, one line -- so the card costs the aside what it always cost it.
+    const rows = [...promet.querySelectorAll<HTMLElement>('.k-fr')];
+    expect(rows.map((row) => text(row))).toEqual(['6Črnomerecza 3 min', '11Velika Goricaza 6 min']);
+    expect(rows.every((row) => row.dataset.trail === '1' && row.querySelector('.k-fr-sub') === null)).toBe(true);
+    expect(text(promet)).toContain('Promet');
+    // No figure on a public screen stands unattributed: the board says under itself where it came from.
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
+    // Ten seconds later the poll comes round again; the minute's memo answers it.
+    k.poll();
+    await flush();
+    expect(b.asked).toEqual(['106_1']);
+    k.handle.destroy();
+  });
+
+  it("says what a tapped stop's empty list means: a board that failed is not an evening with no trams", async () => {
+    const map = tappableMap();
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelector('[data-testid=k-arrivals]')).toBeNull();
+    expect(text(card)).toContain('Vozni red trenutačno nije dostupan.');
+    expect(q(card, '.k-board-note')!.dataset.state).toBe('down');
+    // The stop is still named, and its lines are still there to read.
+    expect(text(card)).toContain('Trg bana J. Jelačića');
+    expect(text(card)).toContain('linija 6, 11, 12');
+    k.handle.destroy();
+  });
+
+  it("gives the narrow drawing three rows, not four: the board feeds the aside's one budget", async () => {
+    const b = fakeBoards({
+      '106_1': board('106_1', [
+        dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z'),
+        dep('trip-12', '12', 'Ljubljanica', '2026-09-11T12:40:00Z'), dep('trip-14', '14', 'Mihaljevac', '2026-09-11T12:42:00Z'),
+      ]),
+    });
+    const wide = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    expect(q(wide.root, '[data-testid=kiosk-panel-promet]')!.querySelectorAll('.k-fr')).toHaveLength(4);
+    wide.handle.destroy();
+    const compact = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create, viewport: { width: 1366, height: 768 } });
+    await flush();
+    expect(q(compact.root, '.kiosk')!.dataset.size).toBe('compact');
+    const narrow = q(compact.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(narrow.querySelectorAll('.k-fr')).toHaveLength(3);
+    // And the fourth is not dropped in silence: the card counts it in the row
+    // fitter's own words, so the stop does not read as having nothing else.
+    expect(text(narrow.querySelector('.k-row-more'))).toBe('prikazano 3 od 4');
+    compact.handle.destroy();
+  });
+
+  it('captions the board with its own stop and counts what it could not show', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // Before the catalogue is in hand the screen knows one platform and says
+    // only the name -- never a platform count it cannot stand behind.
+    expect(text(q(promet, '.k-panel-meta'))).toBe('Trg bana J. Jelačića');
+    // The city's own counts belong to the card that is showing the city.
+    expect(text(promet)).not.toContain('zatvaranja');
+    // A tap loads the stop list; the board is then of both platforms.
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-panel-meta'))).toBe('Trg bana J. Jelačića · 2 perona');
+    // Three departures, three rows on a wide screen: nothing counted away.
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-row-more')).toBeNull();
+    k.handle.destroy();
+  });
+
+  it('keeps the city-wide exceptions when the stop board is down', async () => {
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(b.asked).toEqual(['106_1']);
+    expect(text(promet)).not.toContain('za 3 min');
+    expect(text(promet)).toContain('kasni 4 min');
+    k.handle.destroy();
+  });
+
+  it('makes one cache for the screen, asks for nothing without a stop, and lets it go on destroy', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED_CITY, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.poll();
+    await flush();
+    expect(b.create).toHaveBeenCalledTimes(1);
+    expect(b.asked).toEqual([]);
+    k.handle.destroy();
+    expect(b.made[0]!.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches for a presented stop -- the phone is asking for exactly that board -- and for no other presented subject', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(b.asked).toContain('106_1');
+    // And the wall shows the rows, not an empty card under the stop's name.
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
+      .toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // A presented route is not a stop: the screen keeps quiet behind it, and
+    // the screen's own stop is not polled behind the phone's subject either.
+    const other = fakeBoards(JELACIC_BOARDS);
+    const o = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: other.create });
+    o.handlers.onPresentation?.({ version: 1, revision: 2, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    o.poll();
+    await flush();
+    expect(other.asked).toEqual([]);
+    k.handle.destroy();
+    o.handle.destroy();
+  });
+
+  it('a dead vehicle feed does not speak for a live board: four scheduled departures, no "ZET ne odgovara"', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    // The realtime module is down; the schedule is not. This is the hour the
+    // board matters most, and every row it shows is schedule-only.
+    const down = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [], 'down') : m));
+    const k = mount({ stored: STORED, modules: down, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(promet.querySelectorAll('.k-fr').length).toBeGreaterThan(0);
+    expect(text(promet)).not.toContain('ZET trenutačno ne odgovara');
+    expect(promet.querySelector('.k-panel-note')).toBeNull();
+    // No vehicle is tracked, so no row claims to be live.
+    expect(promet.querySelector('.k-live')).toBeNull();
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
+    k.handle.destroy();
   });
 });

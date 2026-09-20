@@ -27,6 +27,7 @@ import {
   routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
 } from './local';
 import { delayWord } from '../layers/shared';
+import { arrivalsEmptyText, type BoardSubject } from './arrivals';
 import { GAZETTE_CONTENTS_TITLE, kindOfRoute, rankedExceptions, zetNotices } from './exceptions';
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
@@ -57,8 +58,15 @@ export interface FrontInput {
    *  compositions, the default) or the city's exceptions (the front card). */
   prometMode?: PrometMode;
   /** Rows in place of the mode's own: a stop's arrivals, once settings can
-   *  choose one (WP5b). The panel keeps its kicker, meta and credit. */
+   *  choose one (WP5b). The panel keeps its kicker and its credit. */
   prometRows?: FrontRow[];
+  /** What those rows are a board OF: the stop's own state, how many rows the
+   *  board actually holds, and how many platforms were merged into it. With
+   *  this the card names its own subject rather than the city's counts, says
+   *  how many departures it had no room for, and takes its note from the
+   *  board -- never from the vehicle feed, whose being down is exactly when a
+   *  timetable board is worth most. */
+  prometBoard?: BoardSubject;
   /** How many rows the events card's measured room holds (kiosk/invitation.ts
    *  measures it); the composition's own cap otherwise. A card that fills the
    *  aside's height must be given enough rows to fill it with. */
@@ -82,6 +90,11 @@ export interface FrontRow {
   leadMarkup?: string;
   title: string;
   sub?: string;
+  /** Trusted markup at the row's end, hard right: a departure's time. A row
+   *  that carries one is ONE line at every size -- the title ellipsises rather
+   *  than wrapping under the trail -- because a board read from across a room
+   *  is a column of times, not a column of paragraphs. */
+  trail?: string;
   tone?: 'late' | 'early' | 'ontime' | 'unknown';
 }
 
@@ -339,7 +352,8 @@ export function exceptionRows(input: FrontInput): { rows: FrontRow[]; more: numb
  * the front page's card: only what departs from the timetable -- the late
  * lines, the closures counted, ZET's notices counted -- and "Linije voze po
  * redu" when the network has nothing to report. A caller that has a stop's
- * arrivals passes them as `prometRows` and the card becomes that board.
+ * arrivals passes them as `prometRows` and the card becomes that board, with
+ * the arrivals attribution under it.
  */
 export function prometPanel(input: FrontInput): FrontPanel {
   const { strings: s, i18n, now, locale, stop } = input;
@@ -348,6 +362,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
   const exceptions = input.prometMode === 'exceptions';
   const board = linesAtStop(input.modules, stop, i18n, PROMET_LINES);
   const supplied = input.prometRows;
+  const boardOf = supplied ? input.prometBoard : undefined;
   const late = exceptions && !supplied && !input.lightweight ? exceptionRows(input) : { rows: [], more: 0 };
   const rows: FrontRow[] = supplied ?? (input.lightweight ? [] : exceptions ? late.rows : linesRows(input, board));
   const notices = zetNotices(input.modules, now);
@@ -358,20 +373,43 @@ export function prometPanel(input: FrontInput): FrontPanel {
   }
   // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
   const departures = exceptions ? [] : lastDeparturesAhead(input.lastRun, stop, now);
-  const foot = departures.length > 0
-    ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
-    : undefined;
+  // A trimmed board says so in the row fitter's own words (paired.ts fitRows,
+  // "prikazano N od M"): a card that quietly dropped the next three trams
+  // would read as a stop with nothing else coming.
+  const trimmed = supplied && boardOf && boardOf.total > supplied.length
+    ? `<p class="k-line-more k-row-more">${escapeHtml(fill(s.paired.coverage, { shown: supplied.length, total: boardOf.total }))}</p>`
+    : '';
+  // No estimate on a public screen stands unattributed: the sentence the phone
+  // sheet and the tapped card carry goes under the rows here too, at the
+  // card's credit size -- a note's size wrapped it to five lines of a 320 px
+  // column and pushed the QR card out of the aside.
+  const foot = supplied && supplied.length > 0
+    ? `${trimmed}<p class="k-panel-attrib">${escapeHtml(s.arrivals.note)}</p>`
+    : departures.length > 0
+      ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
+      : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
   const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
   const closed = closuresByDistance(byModule(input.modules).prometnice, null, now).length;
-  // The exceptions card counts what it does not list; the board names the vehicles near and the lines beyond its cap.
-  const meta = state === 'loading' || state === 'down'
+  // A board's caption is the board's own subject -- which stop this is, and
+  // how many platforms were merged into it. The city's closure and notice
+  // counts belong to the card that is showing the city. The exceptions card
+  // counts what it does not list; the lines board names the vehicles near.
+  const meta = supplied
+    ? [stop?.name ?? '', boardOf && boardOf.platforms > 1 ? plural(locale, s.platforms, boardOf.platforms) : ''].filter(Boolean).join(' · ')
+    : state === 'loading' || state === 'down'
     ? ''
     : exceptions
       ? [late.more > 0 ? plural(locale, s.front.moreLate, late.more) : '', closed > 0 ? plural(locale, s.front.closures, closed) : '', notices.length > 0 ? plural(locale, s.front.notices, notices.length) : ''].filter(Boolean).join(' · ')
       : [nearby === 0 ? s.say.nearbyNone : plural(locale, s.say.nearby, nearby), board.more > 0 ? plural(locale, s.lines.more, board.more) : ''].filter(Boolean).join(' · ');
   const empty = exceptions ? s.front.linesRegular : rows.length === 0 && !foot ? s.lines.noneNearby : undefined;
-  const note = state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
+  // A board answers for itself. The vehicle feed being down is not a reason to
+  // print "ZET trenutačno ne odgovara" under four good scheduled departures --
+  // that is the hour a timetable board is worth most, and those rows are
+  // simply schedule-only, which the estimate note under them already allows for.
+  const note = supplied
+    ? (rows.length > 0 ? undefined : arrivalsEmptyText(boardOf?.status ?? 'none', s))
+    : state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
   return {
     id: 'promet',
     kicker: s.say.transit,
@@ -478,7 +516,8 @@ function rowMarkup(row: FrontRow): string {
     ? `<span class="k-fr-lead k-fr-lead--badge">${row.leadMarkup}</span>`
     : `<span class="k-fr-lead">${row.day ? `<span class="k-fr-day">${escapeHtml(row.day)}</span>` : ''}${escapeHtml(row.lead ?? '')}</span>`;
   const tone = row.tone ? ` data-tone="${escapeAttribute(row.tone)}"` : '';
-  return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span></li>`;
+  const trail = row.trail ? `<span class="k-fr-trail">${row.trail}</span>` : '';
+  return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${row.trail ? ' data-trail="1"' : ''}${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span>${trail}</li>`;
 }
 
 /** One panel's inner markup: the head (kicker and meta), the figure, the rows or the note, the foot, the credit. */

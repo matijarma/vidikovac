@@ -16,6 +16,9 @@ import { createCityStore, type CityStore } from './core/city-store';
 import { discover,dynamicPlaces,type CityGroup,GROUP_SOURCES,CATEGORY_SOURCE } from './city/discovery';
 import { placeDetail,placesMarkup,streetDetail } from './city/markup';
 import { locatedEvents } from '../../shared/city/events';
+import { arrivalsAt } from '../../shared/city/arrivals';
+import type { DepartureBoard } from '../../shared/city/types';
+import { createBoardCache, type BoardCache } from './city/boards';
 import { ct, type CityWord } from './city/strings';
 import { reconcile } from './ui/dom/reconcile';
 import type { MapSelection } from './map/city-map';
@@ -43,7 +46,9 @@ import { frameStrip, stripMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap, vehiclePoints } from './kiosk/mapview';
+import { arrivalFrontRows, ARRIVAL_ROWS, platformIds, type BoardSubject, type StopArrivals } from './kiosk/arrivals';
+import type { FrontRow } from './kiosk/front';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { districtLabel } from './kiosk/districts';
 import { mountSettings, type SettingsHandle } from './kiosk/settings';
@@ -102,6 +107,10 @@ export interface KioskDeps {
   /** One real POST /api/screens per press of the start screen's button; the body is empty (the whole city, no stop). */
   createScreen?: () => Promise<CreateBeaconResponse>;
   loadStops?: () => Promise<ScreenStop[]>;
+  /** How the scheduled boards are fetched and remembered; defaults to
+   *  city/boards.ts's createBoardCache. The kiosk owns what this makes for
+   *  its whole life and destroys it with itself. */
+  createBoards?: () => BoardCache;
   createBeacon?: (deps: BeaconClientDeps) => BeaconClient;
   createSession?: (options: { roomId: string; ticket: string }) => SessionClient;
   setInterval?: (fn: () => void, ms: number) => unknown;
@@ -252,6 +261,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintExplore():void {
     const slot=element.querySelector<HTMLElement>('.k-discovery-slot');
     element.dataset.exploring=String(exploring);
+    // A tapped subject is the answer this person asked for, and the rail is
+    // theirs while its card is open (kiosk-city.css): under a four-row
+    // arrivals board the discovery slot was a 68 px sliver.
+    element.dataset.exploreSubject=exploring&&localSelection?'1':'0';
     if(!slot)return;
     if(!exploring){slot.replaceChildren();return;}
     const city=cityStore.snapshot(),events=locatedEvents(teaser.find(m=>m.module==='dogadanja')?.items??[],city.places,now());
@@ -283,7 +296,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function exploreSelection(sel:MapSelection|null):void {
     if(phase!=='invitation'||presentation?.target)return;
     exploring=true;exploreUntil=now()+90_000;localSelection=sel;
-    if(sel?.kind==='stop')void ensureStops();
+    if(sel?.kind==='stop'){void ensureStops();ensureArrivals();}
     paintExplore();
   }
   element.addEventListener('click',event=>{
@@ -668,13 +681,80 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     });
   }
 
+  // --- Arrivals (WP5b): what comes next at a stop, on the screen's own beat ---
+  /** The scheduled boards this screen has in hand: one request per platform
+   *  per minute however many surfaces ask (city/boards.ts), made once with the
+   *  kiosk and destroyed with it. */
+  const boards: BoardCache = (deps.createBoards ?? (() => createBoardCache({ now })))();
+  /** One function, not one per paint: the cache keeps everyone waiting for a
+   *  platform in a Set, and a fresh closure each time would make a stop with
+   *  eight platforms repaint 2^8 times as its boards landed one after another
+   *  (the lesson is transport/workspace.ts's own onBoardSettled). */
+  const onBoardSettled = (): void => { if (!disposed) paintLocal(); };
+  /** The stops whose boards are worth having right now: the screen's own, and
+   *  whichever one a person or a phone is asking about.
+   *
+   *  Ruling 31: while a presentation owns the screen its subject is the only
+   *  one -- a phone putting THAT stop on the wall is asking for exactly this
+   *  board, so it is fetched, and nothing else is. The gate was written to
+   *  stop the screen polling the city behind a presented subject, not to
+   *  starve the subject itself; a presented route, place or item still leaves
+   *  the screen quiet. */
+  function arrivalSubjects(): { id: string; name?: string }[] {
+    const presented = presentation?.target;
+    if (presented) return presented.selection?.kind === 'stop' ? [{ id: presented.selection.id }] : [];
+    const out: { id: string; name?: string }[] = [];
+    if (stop) out.push(stop);
+    if (localSelection?.kind === 'stop') out.push({ id: localSelection.id });
+    if (selection?.kind === 'stop') out.push({ id: selection.id });
+    return out;
+  }
+  /** Asks for what the cache does not already hold, on the beats that can
+   *  change the answer -- the teaser poll, a tap, a relayed stop, the stop
+   *  list landing -- and never on a paint: the 60 s memo turns the 10 s poll
+   *  into one request a minute per platform.
+   *
+   *  A screen still in setup, or showing the expired notice, has no stop to
+   *  ask about; what a presentation changes is which stop is worth asking
+   *  about, not whether to ask (arrivalSubjects, Ruling 31). */
+  function ensureArrivals(): void {
+    if (disposed || (phase !== 'invitation' && phase !== 'paired')) return;
+    for (const subject of arrivalSubjects()) boards.ensure('zet', platformIds(subject, stops), onBoardSettled);
+  }
+  /** What the cache holds for these platforms, merged with the live fleet the
+   *  map is already drawing (kiosk/mapview.ts vehiclePoints): the screen has
+   *  one source of live vehicles and this is it, not a second one. */
+  function arrivalsAtStop(stopIds: readonly string[]): StopArrivals {
+    const held = stopIds.map((id) => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
+    const at = now();
+    const fleet = vehiclePoints((phase === 'paired' ? mergedSnapshots() : byModule(teaser))['zet-rt'], at);
+    // The shared module's own six: what a surface shows is its own business
+    // (ARRIVAL_ROWS), but a card that trimmed the list must be able to say how
+    // many it trimmed, and that count is this one.
+    return arrivalsAt(held, fleet, at, { stopIds });
+  }
+  /** The configured stop's board as the Promet card's rows -- four across a
+   *  wide screen, three in a narrow one -- with what the card needs to caption
+   *  it (the stop, its platforms) and to count what it could not show. Null
+   *  when the screen has no stop, and when the board has nothing to say: the
+   *  card is then the city's exceptions, exactly as it is today. */
+  function configuredBoard(): { rows: FrontRow[]; board: BoardSubject } | null {
+    if (!stop) return null;
+    const ids = platformIds(stop, stops);
+    const answer = arrivalsAtStop(ids);
+    const rows = arrivalFrontRows(answer, s, compositionOf(layout) === 'wide' ? ARRIVAL_ROWS.wide : ARRIVAL_ROWS.compact);
+    if (rows.length === 0) return null;
+    return { rows, board: { status: answer.status, total: answer.rows.length, platforms: ids.length } };
+  }
+
   function invitationModel(): InvitationModel {
-    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot() };
+    const board = configuredBoard();
+    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot(), ...(board ? { prometRows: board.rows, prometBoard: board.board } : {}) };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
     const target = presentation?.target;
-    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops,city:cityStore.snapshot(), ...(target ? { target } : {}) };
+    return { layer: activeLayer, strings: s, i18n, locale, snapshots: mergedSnapshots(), now: now(), stop, selection, lightweight, size: layout.size === 'wide' ? 'wide' : 'compact', stops,city:cityStore.snapshot(), arrivals: arrivalsAtStop, ...(target ? { target } : {}) };
   }
   /** Both tiers of one module: the session copy, unless it is no longer live and the teaser holds a live one. */
   function mergedSnapshots(): Partial<Record<ModuleId, ModuleSnapshot>> {
@@ -1037,7 +1117,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     activeLayer = next.target.layer === 'kvart' ? 'grad-sada' : next.target.layer;
     setPhase('paired');
     showSessionLabel(next.expiresAt);
-    if (selection?.kind === 'stop') void ensureStops();
+    if (selection?.kind === 'stop') { void ensureStops(); ensureArrivals(); }
     void refreshSessionData();
   }
 
@@ -1071,7 +1151,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     armExpiry();
     // The screen follows its stop at once (the field's name, the camera, the last-run table dropped), then asks for that stop's own teaser.
     paintLocal();
-    if (stop?.id !== before) void loadTeaser();
+    if (stop?.id !== before) { ensureArrivals(); void loadTeaser(); }
   }
 
   // --- Expiry: past 24 h a temporary screen issues no codes; a session runs on ---
@@ -1116,6 +1196,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // public item key. Filters, search text and coordinates never arrive here.
       selection = params ? parseSelection(params) : null;
       if (selection?.kind === 'stop' && !stops) void ensureStops();
+      if (selection?.kind === 'stop') ensureArrivals();
       paintLocal();
       void refreshSessionData();
     });
@@ -1157,7 +1238,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   async function ensureStops(): Promise<void> {
     try {
       stops = await loadStops();
-      if (!disposed) paintLocal();
+      // The sibling platforms of a named stop are only knowable now.
+      if (!disposed) { ensureArrivals(); paintLocal(); }
     } catch {
       // Resolved failure is distinct from a stop list still loading. A later
       // explicit request may retry; this one must not claim a rendered stop.
@@ -1185,6 +1267,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       if (outdated()) return;
       clearAlert('teaser');
       teaser = response.modules;
+      // The poll's own beat is the arrivals' beat, and the memo decides what
+      // that costs: one request a minute per platform, never one per paint.
+      ensureArrivals();
       paintLocal();
     } catch {
       if (outdated()) return;
@@ -1306,6 +1391,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       beacon?.close(); beacon = null;
       session?.close(); session = null;
       settings?.destroy(); settings = null;
+      boards.destroy();
       clearStage();
       maps.destroy();
       element.remove();
