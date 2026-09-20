@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
+import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import type { ArrivalRow } from '../../shared/city/arrivals';
+import { stopDetailMarkup } from '../../app/src/transport/view';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
@@ -178,6 +181,60 @@ describe('delay words beside a .line badge', () => {
     for (const key of keys) {
       expect(leaf(HR, key), `${key} (hr)`).toBeTypeOf('string');
       expect(leaf(EN, key), `${key} (en)`).toBeTypeOf('string');
+    }
+  });
+});
+
+describe('an arrival time is never bare (WP5)', () => {
+  // The owner reversed the "no inferred ETA" rule: the sheet may now say when a
+  // tram comes. The price of that is that no arrival time may stand unlabelled
+  // -- a reader has to be able to see, per row, whether a figure came off a
+  // tracked vehicle or straight off the timetable -- and that the sentence
+  // naming the estimate's source is on the surface that shows the rows.
+  const STOP = { id: '106', ids: ['106_1'], name: 'Kvaternikov trg', lon: 15.99, lat: 45.81, routes: ['11'] };
+  const NOW = Date.parse('2026-09-19T10:00:00Z');
+  /** Every shape a row can take: tracked and untracked, counting down and on the clock. */
+  const ROWS: ArrivalRow[] = [
+    { tripId: 'a', routeId: '11', routeName: '11', headsign: 'Dubec', atMs: NOW + 3 * 60_000, live: true, minutes: 3 },
+    { tripId: 'b', routeId: '11', routeName: '11', headsign: 'Dubec', atMs: NOW + 4 * 60_000, live: false, minutes: 4 },
+    { tripId: 'c', routeId: '11', routeName: '11', headsign: 'Dubec', atMs: NOW + 14 * 60_000, live: true, minutes: null },
+    { tripId: 'd', routeId: '11', routeName: '11', headsign: 'Dubec', atMs: NOW + 18 * 60_000, live: false, minutes: null },
+  ];
+  const sheet = (locale: 'hr' | 'en', frozenAt?: number): string => stopDetailMarkup(createDefaultI18n(locale), {
+    stop: STOP, routes: [{ id: '11', short: '11', long: 'Črnomerec - Dubec', type: 0 }], counts: new Map(), delays: new Map(),
+    isScreenStop: false, kiosk: false, arrivals: ROWS, arrivalsStatus: 'live', frozenAt,
+  });
+  const arrivalRows = (html: string): string[] => {
+    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
+    return list.split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
+  };
+
+  it.each(['hr', 'en'] as const)('%s: every row carries the live marker or the schedule mark, and the note names the source', (locale) => {
+    const html = sheet(locale);
+    const rows = arrivalRows(html);
+    expect(rows).toHaveLength(ROWS.length);
+    for (const row of rows) {
+      const live = row.includes('class="t-live"');
+      const scheduled = row.includes(leaf(locale === 'hr' ? HR : EN, 'arrivals.scheduled')!);
+      expect(live || scheduled, row).toBe(true);
+      // Never both: a row is one thing or the other.
+      expect(live && scheduled, row).toBe(false);
+    }
+    expect(html).toContain(leaf(locale === 'hr' ? HR : EN, 'arrivals.note'));
+  });
+
+  it('a frozen sheet keeps the marker but never says the live word', () => {
+    const html = sheet('hr', Date.parse('2026-09-19T10:02:00Z'));
+    for (const row of arrivalRows(html)) {
+      expect(row.includes('class="t-live"') || row.includes(leaf(HR, 'arrivals.scheduled')!), row).toBe(true);
+    }
+    expect(html).not.toContain(leaf(HR, 'arrivals.live'));
+    expect(html).toContain(leaf(HR, 'session.snapshotAt')!.replace('{time}', '12:02'));
+  });
+
+  it('neither catalogue still says ZET publishes no arrivals', () => {
+    for (const [name, catalogue] of [['hr', hr], ['en', en]] as const) {
+      expect(JSON.stringify(catalogue), name).not.toMatch(/ne objavljuje dolaske|publishes no arrival/);
     }
   });
 });

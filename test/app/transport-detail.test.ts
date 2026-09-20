@@ -6,6 +6,8 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
+import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
+import { stopDetailMarkup } from '../../app/src/transport/view';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
@@ -67,5 +69,119 @@ describe('closures and ZET notices', () => {
     ]);
     expect(closureItems(closures).map((c) => c.id)).toEqual(['c1']);
     expect(closureItems(undefined)).toEqual([]);
+  });
+});
+
+describe('the stop sheet says what comes next, first', () => {
+  const STOP = { id: '106', ids: ['106_1', '106_2', '106_3'], name: 'Kvaternikov trg', lon: 15.99, lat: 45.81, routes: ['11'] };
+  const ROUTES = [{ id: '11', short: '11', long: 'Črnomerec - Dubec', type: 0 }];
+  const NOW = Date.parse('2026-09-19T10:00:00Z');
+  const row = (over: Partial<ArrivalRow> = {}): ArrivalRow => ({
+    tripId: 't1', routeId: '11', routeName: '11', headsign: 'Dubec', atMs: NOW + 3 * 60_000, live: true, minutes: 3, ...over,
+  });
+  const stop = (arrivals: ArrivalRow[], arrivalsStatus: ArrivalsStatus = 'live', frozenAt?: number): string =>
+    stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map([['11', 2]]), delays: new Map(), isScreenStop: false, kiosk: false, arrivals, arrivalsStatus, frozenAt });
+
+  /** One row's own markup, by its trip id. */
+  const rowOf = (html: string, tripId: string): string => html.split(`data-key="${tripId}|`)[1]!.split('</li>')[0]!;
+
+  it('puts the arrivals section above the platform count and the lines, with a live countdown, a clock row and one note', () => {
+    const html = stop([
+      row({ tripId: 't0', atMs: NOW + 20_000, minutes: 0 }),
+      row(),
+      row({ tripId: 't2', headsign: 'Črnomerec', atMs: Date.parse('2026-09-19T10:24:00Z'), live: false, minutes: null }),
+    ]);
+    // First under the head: before "3 perona" and before the lines list.
+    expect(html.indexOf('data-testid="stop-arrivals"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-testid="stop-arrivals"')).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
+    expect(html.indexOf('data-testid="stop-meta"')).toBeLessThan(html.indexOf('data-testid="stop-routes"'));
+    expect(html).toContain('Sljedeći polasci');
+    expect(html).toContain('sada');
+    expect(html).toContain('za 3 min');
+    // 10:24 UTC is 12:24 in Zagreb; a clock row carries the scheduled mark, a live row does not.
+    expect(html).toContain('12:24');
+    expect(html.split('po redu vožnje').length - 1).toBe(1);
+    expect(html.split('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.').length - 1).toBe(1);
+    expect(html).toContain('aria-label="uživo"');
+    expect(html).toContain('Dubec');
+    // The retired sentence is gone, and the platform count and lines still stand.
+    expect(html).not.toContain('ZET ne objavljuje dolaske');
+    expect(html).toContain('3 perona');
+  });
+
+  it('counts down for every row inside the horizon, whatever stands behind it, and keeps the clock for the rest', () => {
+    const html = stop([
+      row({ tripId: 'near', headsign: 'Črnomerec', atMs: NOW + 4 * 60_000, live: false, minutes: 4 }),
+      row({ tripId: 'far', headsign: 'Črnomerec', atMs: NOW + 14 * 60_000, live: false, minutes: null }),
+      row({ tripId: 'tracked', atMs: NOW + 4 * 60_000, live: true, minutes: 4 }),
+    ]);
+    // Inside the horizon the question is how long the wait is, and the timetable
+    // answers it too: said as a wait, marked as the timetable, with no live dot.
+    const near = rowOf(html, 'near');
+    expect(near).toContain('za 4 min');
+    expect(near).toContain('po redu vožnje');
+    expect(near).not.toContain('t-live');
+    expect(near).not.toContain('data-live');
+    // The same wait with a vehicle behind it: the dot and the live tone.
+    const tracked = rowOf(html, 'tracked');
+    expect(tracked).toContain('za 4 min');
+    expect(tracked).toContain('data-live="true"');
+    expect(tracked).toContain('aria-label="uživo"');
+    expect(tracked).not.toContain('po redu vožnje');
+    // Beyond it a countdown would be a guess dressed as a fact: 10:14 UTC is 12:14 in Zagreb.
+    const far = rowOf(html, 'far');
+    expect(far).toContain('12:14');
+    expect(far).not.toContain('za 1');
+    expect(far).toContain('po redu vožnje');
+  });
+
+  it('labels a row beyond the horizon too: a tracked clock keeps the live dot, a timetable clock keeps the mark', () => {
+    // The clock on a tracked row is the schedule plus ZET's delay, not the
+    // timetable moment. Unlabelled it would read as the timetable, and the note
+    // under the list would then be saying the wrong thing about it.
+    const html = stop([
+      row({ tripId: 'farLive', atMs: NOW + 14 * 60_000, live: true, minutes: null }),
+      row({ tripId: 'farPlan', headsign: 'Črnomerec', atMs: NOW + 18 * 60_000, live: false, minutes: null }),
+    ]);
+    const live = rowOf(html, 'farLive');
+    expect(live).toContain('12:14');
+    expect(live).toContain('class="t-live"');
+    expect(live).toContain('aria-label="uživo"');
+    expect(live).toContain('data-live="true"');
+    expect(live).not.toContain('po redu vožnje');
+    const plan = rowOf(html, 'farPlan');
+    expect(plan).toContain('12:18');
+    expect(plan).toContain('po redu vožnje');
+    expect(plan).not.toContain('class="t-live"');
+  });
+
+  it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {
+    const frozenAt = Date.parse('2026-09-19T10:02:00Z');
+    const html = stop([row()], 'live', frozenAt);
+    // The dot stays -- the figure did come off a tracked vehicle -- but it says
+    // the shell's own snapshot sentence and loses the live tone with it.
+    expect(html).toContain('class="t-live"');
+    expect(html).toContain('aria-label="podaci od 12:02"');
+    expect(html).not.toContain('uživo');
+    expect(html).not.toContain('data-live="true"');
+    // A stop first opened after the freeze has no board and will never get one.
+    const nothing = stop([], 'none', frozenAt);
+    expect(nothing).toContain('Sesija je završila prije nego što je red vožnje stigao.');
+    expect(nothing).not.toContain(i18n.t('status.loading'));
+    // Live, with nothing in hand yet, still says it is loading.
+    expect(stop([], 'none')).toContain(i18n.t('status.loading'));
+    expect(stop([], 'none')).not.toContain('Sesija je završila');
+  });
+
+  it('says nothing comes in the next hour when the boards are answering and empty, and names the outage when every board is down', () => {
+    // The sentence claims only what is known: no hour is enforced anywhere.
+    expect(stop([])).toContain('Nema najavljenih polazaka.');
+    expect(stop([])).not.toContain('sat vremena');
+    expect(stop([], 'down')).toContain('Vozni red trenutačno nije dostupan.');
+    expect(stop([], 'down')).not.toContain('Nema najavljenih');
+    // No board in hand yet is neither: the section says it is still loading.
+    expect(stop([], 'none')).toContain(i18n.t('status.loading'));
+    // The note explains rows; with none it has nothing to explain.
+    expect(stop([])).not.toContain('Procjena iz ZET-ovih podataka');
   });
 });

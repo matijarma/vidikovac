@@ -378,6 +378,17 @@
     "vehiclesMoving_other": "{count} vozila ZET-a u pokretu",
     "noDelayData": "nema podataka"
   },
+  "arrivals": {
+    "title": "Sljedeći polasci",
+    "now": "sada",
+    "inMinutes": "za {n} min",
+    "live": "uživo",
+    "scheduled": "po redu vožnje",
+    "note": "Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.",
+    "none": "Nema najavljenih polazaka.",
+    "frozen": "Sesija je završila prije nego što je red vožnje stigao.",
+    "down": "Vozni red trenutačno nije dostupan."
+  },
   "transport": {
     "search": "Traži liniju ili stanicu",
     "searchLabel": "Pretraga linija i stanica",
@@ -413,7 +424,6 @@
     "vehiclesNow_few": "{count} vozila u pokretu",
     "vehiclesNow_other": "{count} vozila u pokretu",
     "noVehiclesNow": "Trenutačno nijedno vozilo ove linije nije u pokretu.",
-    "noArrivals": "ZET ne objavljuje dolaske; prikazana su vozila koja su sada u pokretu.",
     "screenStop": "Stanica ovog zaslona",
     "mapLoading": "Karta se učitava…",
     "tilesFailed": "Podloga karte trenutačno nije dostupna; linije, stanice i vozila su i dalje prikazani.",

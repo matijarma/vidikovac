@@ -9,7 +9,9 @@ import { parseSelection } from '../../worker/public-selection';
 import { emptyCity,type Place } from '../../shared/city/types';
 import { discover,dynamicPlaces } from '../../app/src/city/discovery';
 import type { FeedItem } from '../../worker/feed/schema';
-import {referenceDate} from '../../app/src/city/markup';
+import {departuresMarkup,referenceDate} from '../../app/src/city/markup';
+import {createDefaultI18n} from '../../app/src/i18n/create-default-i18n';
+import type {DepartureBoard} from '../../shared/city/types';
 import {bikeAvailability} from '../../shared/city/bikes';
 const now=Date.parse('2026-09-18T12:00:00Z');
 const place:Place={id:'culture-1',name:'Gavella',category:'culture',lon:15.97,lat:45.81,sourceId:'culture',sourceRecord:'1'};
@@ -88,5 +90,21 @@ describe('place and time',()=>{
     const part={schema:1 as const,operator:'hz' as const,generatedAt:new Date(now).toISOString(),days:['2026-09-18'],validUntil:'2026-09-19T04:00:00Z',stops:{a:{name:'Zagreb',lon:15.9,lat:45.8,runs:[[1,25*3600,'t','r','r','Sesvete'] as [number,number,string,string,string,string]]}}};
     expect(departuresFrom(part,'hz','a',now).departures[0].at).toBe(new Date(at).toISOString());
     expect(departuresFrom(part,'hz','a',now+86400000).status).toBe('down');
+  });
+});
+
+describe('the HŽ board shows only trains still to come',()=>{
+  const i18n=createDefaultI18n('hr');
+  const run=(minutes:number,headsign:string)=>({operator:'hz' as const,tripId:`t${minutes}`,routeId:'r',routeName:'r',headsign,at:new Date(now+minutes*60_000).toISOString()});
+  const board=(departures:DepartureBoard['departures']):DepartureBoard=>({operator:'hz',stopId:'a',stopName:'Zagreb GK',status:'live',generatedAt:new Date(now).toISOString(),departures});
+  it('drops a train that left more than a minute ago and keeps the one just leaving',()=>{
+    const html=departuresMarkup(i18n,board([run(-15,'Otisao'),run(-0.5,'Upravo'),run(12,'Sesvete')]),now);
+    expect(html).not.toContain('Otisao');
+    expect(html).toContain('Upravo');
+    expect(html).toContain('Sesvete');
+    expect(html).toContain('Sljedeći polasci');
+  });
+  it('says the board is empty rather than printing a page of departed trains',()=>{
+    expect(departuresMarkup(i18n,board([run(-20,'Otisao')]),now)).toContain('Nema potvrđenog rasporeda za ovo razdoblje.');
   });
 });

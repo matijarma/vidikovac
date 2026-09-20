@@ -36,6 +36,10 @@ const DEAD_KEYS = [
   // T3: the kiosk sets itself up with one button (no address to open on the
   // wall) and a screen without a stop simply has no such note to print.
   'kiosk.setup.handheld', 'kiosk.lines.noStop', 'kiosk.say.forecast',
+  // WP5: the stop sheet now says what comes next, so the sentence that said
+  // ZET publishes no arrivals is retired. It may not come back beside rows
+  // that carry arrival times.
+  'transport.noArrivals',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';

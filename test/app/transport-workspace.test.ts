@@ -407,13 +407,14 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('half');
     expect(text(q('[data-testid=route-title]'))).toContain('6');
     expect(q('[data-testid=route-title] .line[data-size="l"][data-kind="tram"]')).not.toBeNull();
-    // The detail head: "Natrag" first as a 44 px ghost, the title, the kind and the delay at body, the arrivals sentence once.
+    // The detail head: "Natrag" first as a 44 px ghost, the title, the kind and the delay at body.
     const back = q<HTMLButtonElement>('#t-clear-selection');
     expect(text(back)).toBe('Natrag');
     expect(back.classList.contains('btn-ghost')).toBe(true);
     expect(back.compareDocumentPosition(q('[data-testid=route-title]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(text(q('[data-testid=route-meta]'))).toBe('tramvaj · kasni 2 min');
-    expect(text(q('[data-testid=transport-detail]')).split('ZET ne objavljuje dolaske').length - 1).toBe(1);
+    // A route is not a place to wait: the retired "ZET publishes no arrivals" sentence is gone from here, and arrivals live on the stop.
+    expect(text(q('[data-testid=transport-detail]'))).not.toContain('ZET ne objavljuje dolaske');
     const vehicleRows = all<HTMLElement>('[data-testid=route-vehicles] .row');
     expect(vehicleRows).toHaveLength(2);
     expect(q<HTMLElement>('[data-testid=route-vehicles] button').id).toBe('t-row-vehicle-vehicle_1');
@@ -810,5 +811,82 @@ describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-s
     shell.querySelector<HTMLButtonElement>('.t-save')!.click();
     expect(shell.querySelector('[data-testid=detail-cast]')).toBeNull();
     expect(heard).toEqual(['save']);
+  });
+});
+
+describe('what comes next at a stop', () => {
+  const at = (minutes: number): string => new Date(NOW + minutes * 60_000).toISOString();
+  const departure = (tripId: string, routeId: string, headsign: string, minutes: number) =>
+    ({ operator: 'zet', tripId, routeId, routeName: routeId, headsign, at: at(minutes) });
+
+  /** Every platform of the stop answers with the same three runs: one a tracked
+   *  vehicle carries, one only the timetable knows, one that has already gone. */
+  function stubBoards(asked: string[]): void {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const stop = new URL(url, 'http://test.local').searchParams.get('stop')!;
+      asked.push(stop);
+      return {
+        ok: true,
+        json: async () => ({
+          operator: 'zet', stopId: stop, stopName: 'Črnomerec', status: 'live', generatedAt: at(0),
+          departures: [departure('trip-live', '6', 'Sopot', 4), departure('trip-plan', '11', 'Dubec', 26), departure('trip-gone', '6', 'Sopot', -9)],
+        }),
+      };
+    }));
+  }
+
+  it('asks every platform once, merges the boards with the live fleet and puts the list above everything else in the sheet', async () => {
+    const asked: string[] = [];
+    stubBoards(asked);
+    const tracked = vehicle('vehicle:9', '6', 0, { tripId: 'trip-live', delaySeconds: 60 });
+    const { maps } = fakeMaps({ vehicles: [...VEHICLES, tracked], net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    // Before any board lands the section stands and says it is still loading.
+    expect(q('[data-testid=stop-arrivals]')).not.toBeNull();
+    await vi.waitFor(() => expect(q('[data-testid=arrival-rows]')).not.toBeNull());
+    // One request per platform of the named stop, and no more.
+    const platforms = Number(/^(\d+)/.exec(text(q('[data-testid=stop-meta]')))![1]);
+    expect(platforms).toBeGreaterThan(1);
+    expect(new Set(asked).size).toBe(platforms);
+    expect(asked).toHaveLength(platforms);
+    // The same trip on three sibling boards is one row; the run that has gone is none.
+    const rows = all<HTMLElement>('[data-testid=arrival-rows] li');
+    expect(rows).toHaveLength(2);
+    // Scheduled 12:36 plus ZET's own minute of delay: five minutes away, and said so with the live dot.
+    expect(text(rows[0])).toContain('Sopot');
+    expect(text(rows[0])).toContain('za 5 min');
+    expect(rows[0]!.querySelector('.t-live')).not.toBeNull();
+    expect(rows[0]!.querySelector('.line[data-kind=tram]')).not.toBeNull();
+    // Beyond the countdown horizon, and with no vehicle behind it: the clock and the timetable mark.
+    expect(text(rows[1])).toContain('Dubec');
+    expect(text(rows[1])).toContain('po redu vožnje');
+    expect(rows[1]!.querySelector('time')).not.toBeNull();
+    expect(rows[1]!.querySelector('.t-live')).toBeNull();
+    // One note, first in the sheet, and the retired sentence and slot are gone.
+    const detail = q<HTMLElement>('[data-testid=transport-detail]');
+    expect(text(detail).split('Procjena iz ZET-ovih podataka o vozilima').length - 1).toBe(1);
+    expect(text(detail)).not.toContain('ZET ne objavljuje dolaske');
+    expect(detail.querySelector('[data-city-departures]')).toBeNull();
+    const arrivals = q<HTMLElement>('[data-testid=stop-arrivals]');
+    expect(arrivals.compareDocumentPosition(q('[data-testid=stop-meta]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(arrivals.compareDocumentPosition(q('[data-testid=stop-routes]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says the timetable is unavailable when every platform is down, and never invents a row', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    await vi.waitFor(() => expect(text(q('[data-testid=stop-arrivals]'))).toContain('Vozni red trenutačno nije dostupan.'));
+    expect(q('[data-testid=arrival-rows]')).toBeNull();
   });
 });
