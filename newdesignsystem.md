@@ -21,7 +21,7 @@ One time axis, one tile, one blue. What to change in `app/src/ui/*.css`, `app/sr
 4. **Sign before word.** Time of day, walking, vehicle counts and line membership are glyphs or line badges. Words are reserved for state (*na vrijeme · rani 3 min · kasni 4 min · nema podataka*) and for names.
 5. **Weather is status.** Temperature, condition glyph and sunset sit beside the clock in the status line, at 14 px. The full Vrijeme workspace still exists; it is not on Sada.
 6. **Blue is material, not accent.** Ink is ultramarine, canvas is paper, Zagreb blue is reserved for line badges and primary actions. No grey exists in the palette.
-7. **Honest data, unchanged.** Missing is not zero; fetch time is not observation time; ZET delay is per line, never an arrival. Every tile inherits the existing loading / stale / down states.
+7. **Honest data, unchanged.** Missing is not zero; fetch time is not observation time; a route's median delay is a reading of the line, not one rider's arrival. (Superseded 19 September 2026 for stop arrivals: a trip with a tracked vehicle may show a countdown built from its scheduled departure and ZET's own reported delay for that vehicle, labelled as an estimate; everything else keeps its scheduled clock time.) Every tile inherits the existing loading / stale / down states.
 
 ## 2. Colour — layer 1 values for `tokens.css`
 
@@ -165,7 +165,7 @@ Only `--palette-light-*` and `--palette-dark-*` change. The `--color-*` assignme
 | Vehicles on line | `tram-front`/`bus-front` 14 px muted + count | "6 vozila" | `vehicleCount`, `u-pokretu.ts` |
 | Reachable by line | `.line[data-size=xs]` badges after the venue | "tramvaj 6, 13" | stop.routes of the nearest stop to the venue |
 | Domain | label colour + shape: tram rectangle · bus/mobility capsule · komunalno square · events circle · civic ink · hitno triangle · mirno check outline | colour alone | — |
-| State | word in role colour: **na vrijeme** · **rani 3 min** · **kasni 4 min** · nema podataka | arrows, ± signs, arrival times | `delayWord`, `delayTone` |
+| State | word in role colour: **na vrijeme** · **rani 3 min** · **kasni 4 min** · nema podataka | arrows, ± signs, an unlabelled arrival time | `delayWord`, `delayTone` |
 
 Add `footprints`, `bike`, `car-front`, `trash-2`, `cast`, `bell`, `star` to `ICON_NAMES` in `icons.ts` (Lucide ISC). Every glyph keeps an `aria-label` or adjacent text; none carries meaning alone.
 
@@ -229,7 +229,7 @@ Every new module follows `ModuleSnapshot` (status, fetchedAt, sourceUpdatedAt, a
 
 - **Accessibility:** tiles ≥ 44 px; text ≥ 12 px only for labels/context, ≥ 15 px body; every glyph labelled; focus ring 2 px accent; 200% zoom collapses the band to 3 → 1 lanes via the existing `@container ws` queries; reduced motion stops scene rotation.
 - **Copy:** sentence case, no sentences in tiles, state words from `delayWord`, dates via `zagrebWeekdayDate`. New i18n keys: `timeband.{sada,afternoon,tonight,tomorrow,week,today,night}`, `kvart.*`, `tiles.{bikesFree,parkingFree,waste.*,lastRun,worksOpen}`, `notify.*`, `cast.toScreen`. hr/en parity test.
-- **Do not:** render arrivals; show weather as a tile; use grey; put more than one ink tile per screen; add a domain column; write "vozila", "pješice", "zalazak" where a glyph is defined.
+- **Do not:** invent an arrival (since 19 September 2026 a stop's arrivals are rendered, but only as labelled estimates: a countdown where a tracked vehicle carries the trip, a scheduled clock time otherwise); show weather as a tile; use grey; put more than one ink tile per screen; add a domain column; write "vozila", "pješice", "zalazak" where a glyph is defined.
 
 ---
 

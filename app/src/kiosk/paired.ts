@@ -18,12 +18,13 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kBadge, kicker, linesMarkup, weatherMarkup } from './markup';
 import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
+import { arrivalCells, arrivalsEmptyText, ARRIVAL_ROWS, platformIds, type StopArrivals } from './arrivals';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
 import { frontPanels, panelMarkup } from './front';
+import { kindOfRoute } from './exceptions';
 import { columnsFor } from '../experience/timeband';
-import { districtLabel } from './districts';
 import type { CityState } from '../../../shared/city/types';
 import { dynamicPlaces } from '../city/discovery';
 import { placeDetail,streetDetail } from '../city/markup';
@@ -56,6 +57,11 @@ export interface PairedContext {
   size: 'wide' | 'compact';
   /** The stop list once the controller has loaded it, so a stop selection can be named. */
   stops?: readonly ScreenStop[] | null;
+  /** What comes next at these platforms, read from the controller's one board
+   *  cache (app/src/kiosk.ts). A closure, not rows: the card knows which stop
+   *  it is drawing and how many rows its size holds, and the controller owns
+   *  the asking -- a card that fetched would fetch on every paint. */
+  arrivals?: (stopIds: readonly string[]) => StopArrivals;
   target?: PresentationTarget;
 }
 
@@ -277,8 +283,8 @@ function linesBox(ctx: PairedContext): string {
  *  region, the side column's block box, and the join card the controller
  *  paints the small QR into. Polls rewrite the boxes, never the shell, so
  *  the map container parked in the host is never torn out by a repaint. */
-export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolean, district = false, codeBase?: string): string {
-  const left = PAIRED_MAP_LAYERS.has(layer) || district
+export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolean, codeBase?: string): string {
+  const left = PAIRED_MAP_LAYERS.has(layer)
     ? `<div class="k-present-local"><div class="k-map" data-testid="kiosk-live"${lightweight ? ' hidden' : ''}><div class="k-map-host" data-testid="kiosk-map-host"></div></div><div class="k-lines k-present-board" data-testid="kiosk-lines"></div></div>`
     : `<div class="k-main" data-testid="kiosk-main"></div>`;
   return `${left}<aside class="k-side"><div class="k-side-blocks" data-testid="kiosk-side"></div>
@@ -340,27 +346,8 @@ function renderSada(ctx: PairedContext): PairedMarkup {
     });
   }
   const front = frontPanels({ modules, stop: ctx.stop, now: ctx.now, lastRun: null, strings: ctx.strings, i18n: ctx.i18n, locale: ctx.locale, lightweight: false, composition: ctx.size });
-  if (ctx.target?.layer === 'kvart') {
-    const district = ctx.target.district ?? ctx.stop?.district;
-    const closures = (ctx.snapshots.prometnice?.items ?? []).filter(item => item.data?.district === district && (!item.until || Date.parse(item.until) >= ctx.now));
-    const works = (ctx.snapshots.dogadanja?.items ?? []).filter(item => item.data?.source === 'komunalne' && item.data?.district === district && /tijek/i.test(String(item.data?.phase ?? '')));
-    const rows = [...closures, ...works].slice(0, ctx.size === 'wide' ? 3 : 2).map(item => ({
-      key: `${item.module}:${item.id}`, title: item.title,
-      lead: item.kind === 'closure' ? ctx.strings.say.closure : ctx.strings.front.worksLead,
-      sub: item.kind === 'closure' && item.until
-        ? fill(ctx.strings.paired.untilTime, { time: dayTime(item.until) })
-        : dataText(item, 'phase'),
-    }));
-    const confirmed = ctx.snapshots.prometnice?.status === 'live' && ctx.snapshots.dogadanja?.status === 'live';
-    return {
-      lines: `<section class="k-panel" data-panel="around">${panelMarkup({
-        id: 'around', kicker: districtLabel(district) || ctx.i18n.t('nav.kvart'), rows,
-        note: rows.length ? undefined : confirmed ? ctx.i18n.t('presentation.districtEmpty') : ctx.strings.paired.unconfirmed,
-        credit: 'Grad Zagreb (data.zagreb.hr)', state: confirmed ? 'live' : 'stale',
-      })}</section>`,
-      main: '', side: '',
-    };
-  }
+  // A legacy phone may still send the retired 'kvart' target (worker/presentation.ts keeps
+  // accepting the wire literal); it falls straight through to the plain Sada below.
   const panels = ['promet', 'tonight', 'weather', 'city'] as const;
   // The QR rail has room for one local fact, not a full list with a second
   // large provenance block. Use the same budgeted fact as the public overview.
@@ -371,12 +358,6 @@ function renderSada(ctx: PairedContext): PairedMarkup {
     main: panels.map(id => `<section class="k-panel" data-panel="${id}">${panelMarkup(front[id])}</section>`).join(''),
     side: ctx.size === 'compact' ? localSummary : warnings ? warningsBlock(ctx, true) : closuresBlock(ctx, 2, true),
   };
-}
-
-/** The mode a route number is drawn in: tram, bus, or the plain badge for a route the table does not know. */
-function kindOfRoute(routeId: string): 'tram' | 'bus' | 'other' {
-  const type = routeType(routeId);
-  return type === 0 ? 'tram' : type === 3 ? 'bus' : 'other';
 }
 
 function renderPromet(ctx: PairedContext): PairedMarkup {
@@ -398,7 +379,7 @@ function findItem(ctx: PairedContext, module: ModuleId, key: string): { item: Fe
  *  never the same thing as an unrelated overview that happened to render. */
 function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavailable' {
   const pick = ctx.selection;
-  if (!pick || ctx.target?.layer === 'kvart') return 'displayed';
+  if (!pick) return 'displayed';
   if (pick.kind === 'route') return routeType(pick.id) === null ? 'unavailable' : 'displayed';
   if (pick.kind === 'stop') {
     if (pick.id === ctx.stop?.id || ctx.stops?.some(stop => stop.id === pick.id)) return 'displayed';
@@ -409,6 +390,29 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
   if(pick.kind==='street')return !ctx.city||ctx.city.loading?'loading':ctx.city.streets.some(s=>s.id===pick.id)?'displayed':'unavailable';
   if (!ctx.snapshots[pick.module]) return 'loading';
   return findItem(ctx, pick.module, pick.id) ? 'displayed' : 'unavailable';
+}
+
+/** What comes next at the tapped stop, as the card's first block: the rows
+ *  the controller's board cache and the live fleet already agreed on
+ *  (kiosk/arrivals.ts), then the one note that says where an estimate comes
+ *  from. Four rows on a wide screen, three in a narrow column; in a paired
+ *  composition the row fitter hides any the block still cannot hold, and in
+ *  the exploration slot the column scrolls under a finger.
+ *
+ *  Nothing is fetched from here. A context with no `arrivals` (an older
+ *  caller, a test of another card) shows the stop exactly as it always did. */
+function arrivalsBody(ctx: PairedContext, stop: { id: string; name?: string }): string {
+  if (!ctx.arrivals) return '';
+  const answer = ctx.arrivals(platformIds(stop, ctx.stops));
+  const rows = answer.rows.slice(0, ARRIVAL_ROWS[ctx.size]);
+  if (rows.length === 0) {
+    return `<p class="k-board-note"${answer.status === 'down' ? ' data-state="down"' : ''}>${escapeHtml(arrivalsEmptyText(answer.status, ctx.strings))}</p>`;
+  }
+  const list = rows.map((arrival) => {
+    const cells = arrivalCells(arrival, ctx.strings);
+    return `<li class="k-row">${row(cells.main, '', cells.aside)}</li>`;
+  }).join('');
+  return `<ul class="k-rows" data-testid="k-arrivals">${list}</ul><p class="k-board-note">${escapeHtml(ctx.strings.arrivals.note)}</p>`;
 }
 
 /** One card naming what the driver's phone selected: a line with its delay
@@ -437,7 +441,12 @@ export function selectionCard(ctx: PairedContext): string {
   if (selection.kind === 'stop') {
     const named = selection.id === ctx.stop?.id ? ctx.stop : ctx.stops?.find((stop) => stop.id === selection.id) ?? null;
     const routes = named ? sortRouteIds(named.routes).join(', ') : '';
-    const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>${routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : ''}`;
+    // The rider's own question first: which tram comes next, and in how long.
+    // The lines this stop serves are the answer to a different question and
+    // keep their place under it.
+    const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>`
+      + arrivalsBody(ctx, named ?? { id: selection.id })
+      + (routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : '');
     return block(s.session.selected, body, o);
   }
   if(selection.kind==='place'){
@@ -766,7 +775,7 @@ function renderKultura(ctx: PairedContext): PairedMarkup {
 // --- Dispatch and mount ------------------------------------------------------------
 
 export function pairedMarkup(ctx: PairedContext): PairedMarkup {
-  if (ctx.selection && ctx.layer !== 'u-pokretu' && ctx.target?.layer !== 'kvart') {
+  if (ctx.selection && ctx.layer !== 'u-pokretu') {
     return { lines: '', main: selectionCard(ctx), side: '' };
   }
   switch (ctx.layer) {
@@ -797,12 +806,12 @@ export function mountPaired(host: HTMLElement, deps: PairedDeps): PairedHandle {
     element,
     mapHost: null,
     update(ctx) {
-      const nextKey = `${ctx.layer}:${ctx.target?.layer === 'kvart'}`;
+      const nextKey = ctx.layer;
       if (nextKey !== shellKey) {
         shellKey = nextKey;
         layer = ctx.layer;
         element.dataset.layer = layer;
-        element.innerHTML = pairedShell(layer, deps.strings, deps.lightweight, ctx.target?.layer === 'kvart', deps.codeBase);
+        element.innerHTML = pairedShell(layer, deps.strings, deps.lightweight, deps.codeBase);
         linesEl = element.querySelector<HTMLElement>('[data-testid=kiosk-lines]');
         mainEl = element.querySelector<HTMLElement>('[data-testid=kiosk-main]');
         sideEl = element.querySelector<HTMLElement>('[data-testid=kiosk-side]');

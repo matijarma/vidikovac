@@ -23,9 +23,23 @@ export const AREAS = [
   { slug: 'brezovica', name: 'Brezovica' },
 ] as const;
 
-export type AreaSlug = (typeof AREAS)[number]['slug'];
+/**
+ * The whole city: what a screen carries as its area when no single četvrt is
+ * chosen (the one-button start, and "Cijeli grad" in the screen's settings).
+ * Deliberately outside AREAS, which is the 17-polygon table the district
+ * lookup (worker/feed/geo/districts.ts), the kiosk's district list and the
+ * Kvart menu all read: Zagreb is an area a screen may be set to, never a
+ * gradska četvrt. Valid everywhere a district slug is -- isAreaSlug,
+ * areaName, and areaSlugOf through SCREEN_AREAS.
+ */
+export const CITY_AREA = { slug: 'zagreb', name: 'Zagreb' } as const;
 
-const AREA_NAMES: ReadonlyMap<string, string> = new Map(AREAS.map((a) => [a.slug, a.name]));
+/** Every area a screen may be provisioned or reconfigured with. */
+export const SCREEN_AREAS = [...AREAS, CITY_AREA] as const;
+
+export type AreaSlug = (typeof SCREEN_AREAS)[number]['slug'];
+
+const AREA_NAMES: ReadonlyMap<string, string> = new Map(SCREEN_AREAS.map((a) => [a.slug, a.name]));
 
 export function isAreaSlug(value: unknown): value is AreaSlug {
   return typeof value === 'string' && AREA_NAMES.has(value);

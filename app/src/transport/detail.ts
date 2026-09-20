@@ -2,9 +2,11 @@
 // a vehicle faces, what a route or a stop is made of, and which ZET notices
 // belong beside the closures. No DOM, so every function here is unit-tested
 // in node. Every vehicle figure is the motion model's own estimate
-// (VehicleInfo, city-map.ts), never a reported position (R-P2), and nothing
-// here computes an arrival time: ZET publishes none, and the sheet says so
-// instead of inventing one.
+// (VehicleInfo, city-map.ts), never a reported position (R-P2).
+//
+// Arrival times are not made here either -- they are shared/city/arrivals.ts's,
+// estimated from ZET's own vehicle data joined to the schedule and labelled on
+// every row as live or by the timetable.
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { I18n } from '../i18n/i18n';
 import { summariseRoutes, type RouteSummaryRow } from '../layers/route-summary';

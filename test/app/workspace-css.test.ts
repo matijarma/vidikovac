@@ -53,14 +53,10 @@ describe('links on tinted fills use the on-tint brand tone', () => {
   });
 });
 
-describe('dashboard.css kvart aside under text zoom', () => {
-  it('pins the aside at 18.75rem, a rem track that grows with the text it holds, beside a workspace column that can shrink to zero', () => {
-    expect(DASHBOARD).toContain('--ki-kvart: 18.75rem;');
+describe('dashboard.css has no side rail', () => {
+  it('never reintroduces an aside width variable: the workspace column is the whole width', () => {
     expect(DASHBOARD).not.toContain('--ki-side');
-    // At the 60rem desktop switch the aside is under a third of the width; at 200% text (30rem viewport) it is 62.5%, and
-    // the minmax(0, 1fr) workspace column gives way rather than the page widening (shell-css.test.ts pins the columns).
-    expect(18.75 / 60).toBeLessThan(1 / 3);
-    expect(18.75 / 30).toBeLessThan(1);
+    expect(DASHBOARD).not.toContain('--ki-kvart');
   });
 });
 

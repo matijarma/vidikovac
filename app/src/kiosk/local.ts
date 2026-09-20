@@ -367,12 +367,15 @@ export const PHARMACY_POINTS: Readonly<Record<string, { lon: number; lat: number
   'Ljekarna ZEUS': { lon: 16.0275, lat: 45.8145 },
 };
 
-export interface OnDutyPharmacy { label: string; address: string; hours: string; phoneDisplay: string | null; distanceM: number | null }
+/** `label` is the City's own short handle for the unit, which for five of the
+ *  six is a street address; `name` is what the place is called -- the operator,
+ *  the only one of the two a person reads as a name on a map. */
+export interface OnDutyPharmacy { label: string; name: string; address: string; hours: string; phoneDisplay: string | null; distanceM: number | null }
 
 export function pharmaciesByDistance(stop: ScreenStop | null): OnDutyPharmacy[] {
   return LJEKARNE.map((p) => {
     const point = PHARMACY_POINTS[p.label];
-    return { label: p.label, address: p.address, hours: p.hours, phoneDisplay: p.phoneDisplay, distanceM: stop && point ? stopDistanceM(point, stop) : null };
+    return { label: p.label, name: p.operator, address: p.address, hours: p.hours, phoneDisplay: p.phoneDisplay, distanceM: stop && point ? stopDistanceM(point, stop) : null };
   }).sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
 }
 
@@ -541,16 +544,10 @@ export function eventsTonight(modules: readonly ModuleSnapshot[], now: number): 
 }
 
 export interface Nearest { title: string; distanceM: number | null }
-export interface WorksInKvart { state: SourceState; scope: 'kvart' | 'city'; count: number; nearest: Nearest | null }
+export interface WorksInKvart { state: SourceState; count: number; nearest: Nearest | null }
 
 /** The register's phase for works one can see on the street (komunalne.ts's closed vocabulary). */
 const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
-
-/** The stop's district slug once area D stamps it (ScreenStop.district, D6); a stop stored before the field existed has none. */
-function stopDistrict(stop: ScreenStop | null): string {
-  const district = (stop as (ScreenStop & { district?: unknown }) | null)?.district;
-  return typeof district === 'string' ? district : '';
-}
 
 function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
   if (!stop || item.geo?.type !== 'Point') return null;
@@ -558,21 +555,16 @@ function pointDistance(item: FeedItem, stop: ScreenStop | null): number | null {
   return typeof lon === 'number' && typeof lat === 'number' && Number.isFinite(lon) && Number.isFinite(lat) ? stopDistanceM({ lon, lat }, stop) : null;
 }
 
-/** Komunalne works in progress in the stop's district, nearest first by geometry (D18); the whole city before the worker stamps districts or when the stop has none. */
+/** Komunalne works in progress city-wide, nearest the stop first by geometry (D18, always city scope since the reader's own district choice was removed). */
 export function worksInKvart(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): WorksInKvart {
   const dogadanja = byModule(modules).dogadanja;
   const ongoing = (isLive(dogadanja) ? dogadanja.items : []).filter((item) =>
     dataText(item, 'source') === 'komunalne' && dataText(item, 'phase') === WORKS_ONGOING_PHASE && windowOf(item, now) !== 'expired');
-  // Kvart scope needs both halves of D6: a stop that knows its district and rows the worker has stamped. Live rows without a district
-  // prove the worker has not shipped them yet (a kvart count would be a false zero); with no row to judge by, the stop's district decides,
-  // so a district stop's band never flips its label while the source is down or loading.
-  const district = stopDistrict(stop);
-  const scope = district && (ongoing.length === 0 || ongoing.some((item) => dataText(item, 'district') !== '')) ? 'kvart' : 'city';
-  const counted = (scope === 'kvart' ? ongoing.filter((item) => dataText(item, 'district') === district) : ongoing)
+  const counted = ongoing
     .map((item) => ({ item, distanceM: pointDistance(item, stop) }))
     .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity) || 0);
   const first = counted[0];
-  return { state: sourceState(dogadanja), scope, count: counted.length, nearest: first ? { title: first.item.title, distanceM: first.distanceM } : null };
+  return { state: sourceState(dogadanja), count: counted.length, nearest: first ? { title: first.item.title, distanceM: first.distanceM } : null };
 }
 
 export interface ClosuresNearby { state: SourceState; count: number; nearest: Nearest | null }

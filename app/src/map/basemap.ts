@@ -17,7 +17,7 @@
 // optional `profile: 'prozor'` pass on top of it, for the public screen that
 // is read from three metres (kiosk/mapview.ts): a flavour override table
 // applied before upstream generates its layers, and a layer pass over what it
-// generated. The phone and the kvart thumbnail stay on 'default'.
+// generated. Every other surface -- the phone, the desk -- stays on 'default'.
 //
 // Pure: no DOM, no MapLibre import. The library that builds the layers is
 // 38 kB and only ever loaded through maplibre-entry.ts's dynamic import, so
@@ -30,9 +30,8 @@ import { PILL_INKS } from '../motion/pills';
 export type MapTheme = 'light' | 'dark';
 
 /** Which basemap the surface asks for: 'prozor' is the public screen's window
- *  onto the kvart, read from across a room (kiosk/mapview.ts, plan D3); the
- *  phone (transport/workspace.ts) and the kvart thumbnail (experience/kvart.ts)
- *  stay on 'default'. */
+ *  onto the city, read from across a room (kiosk/mapview.ts, plan D3); the
+ *  phone and the desk (transport/workspace.ts) stay on 'default'. */
 export type BasemapProfile = 'default' | 'prozor';
 
 /** The one vector source every basemap layer reads from. */
@@ -286,9 +285,10 @@ const DARK_OVERRIDES: Partial<Flavor> = {
 
 // --- The prozor ground (plan D3, D12; R-KP3) --------------------------------
 //
-// Under the figure the public screen draws over it (the tram rails, the
-// vehicles, the screen's stop: map/overlays.ts), the basemap is the ground and
-// nothing on it competes. Upstream paints landuse as eleven layers from twenty
+// Under what the public screen draws over it -- the tram network's own rail,
+// the vehicle marks and the screen's own stop dots (the `figure` palette key:
+// map/overlays.ts) -- the basemap is the ground and nothing on it competes.
+// Upstream paints landuse as eleven layers from twenty
 // flavour keys; here the whole of it collapses onto two tones -- one green for
 // everything planted, the canvas for everything else -- with the buildings
 // one step off the canvas as faint blocks. Applied over the house palette
@@ -395,10 +395,21 @@ export interface OverlayPalette {
   otherText: string;
   routeTram: string;
   routeBus: string;
-  /** The tram network as the public screen's figure (plan D4): the ink itself
-   *  by day, the muted paper tier by night, at `figureOpacity`; drawn only
-   *  under a ProzorOptions set. The pinned `routeTram` blue stays what every
-   *  other surface draws. */
+  /** The tram network's own line, well under the marks it carries (owner
+   *  ruling, round F "kiosk window"): one neutral grey, day or night, on
+   *  every surface (overlays.ts's tramNetwork). `routeTram` stays the tram
+   *  plate's blue; `rail` is only the thin line under it. */
+  rail: string;
+  /** BAJS bike-share: one teal for the station dot and the cycle path, the
+   *  same in both faces (city-layers.ts's cityLayers()). */
+  bike: string;
+  /** The count badge's ink over a bike dot (city-layers.ts's badges layer);
+   *  dark enough to read against `bike` in both faces. */
+  bikeText: string;
+  /** The public screen's own figure (plan D4): the ink itself by day, the
+   *  muted paper tier by night, at `figureOpacity`; drawn only under a
+   *  ProzorOptions set, now just the screen's own stop dots (the tram
+   *  network's colour moved to `rail` above). */
   figure: string;
   figureOpacity: number;
   stopFill: string;
@@ -419,20 +430,25 @@ export interface OverlayPalette {
 }
 
 /* The mode colours repeat the interface roles value for value: a tram and
- * its route line are the accent role (--tone-accent, #0751bf light, #f1f4f7
- * dark, paper-on-night so its text inverts to the dark ink); a bus and its
- * route line the transit role (--tone-transit, #142334 light, the same hex
- * as ink -- #84b5ff dark); a closure the urgency role (#b72d39, #ff9aa5).
- * The stop fill and every halo take the canvas or its brighter paper-white
- * sibling; the selection and the screen stop pin take the ink and accent
- * roles. One Zagreb blue and one ink across the map, the badges
- * (ui/signage.css) and the mode chips (ui/map.css). MapLibre paints from
- * literals, so these are the token hexes written out; tokens.css stays
- * their single source (R-D2). */
+ * its route line are the accent role (--tone-accent, #0751bf light, #84b5ff
+ * dark); a bus and its route line the transit role (--tone-transit, #34465c
+ * light, #b8c9dc dark); a closure the urgency role (#b72d39, #ff9aa5). The
+ * tram network's own line is the new rail role, one neutral grey in both
+ * faces (#8d99a8 light, #5b6a7c dark), well under the plate it carries; BAJS
+ * bike-share is the new bike role, one teal in both faces (#178f7f), its
+ * count badge read in bikeText (#08131f). The stop fill and every halo take
+ * the canvas or its brighter paper-white sibling; the selection and the
+ * screen stop pin take the ink and accent roles. One Zagreb blue and one ink
+ * across the map, the badges (ui/signage.css) and the mode chips
+ * (ui/map.css). MapLibre paints from literals, so these are the token hexes
+ * written out; tokens.css stays their single source (R-D2). */
 export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   ...PILL_INKS.light, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#0751bf',
   routeBus: '#34465c',
+  rail: '#8d99a8',
+  bike: '#178f7f',
+  bikeText: '#08131f',
   figure: '#142334', // --palette-light-text-primary, the ink
   figureOpacity: 0.9,
   stopFill: '#f1f4f7',
@@ -452,7 +468,10 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   ...PILL_INKS.dark, // tram/tramText/bus/busText/other/otherText/halo: motion/pills.ts (F1)
   routeTram: '#84b5ff',
   routeBus: '#b8c9dc',
-  figure: '#b8c5d5', // --palette-dark-text-muted: rails a step under the paper the plates are cut from
+  rail: '#5b6a7c',
+  bike: '#178f7f',
+  bikeText: '#08131f',
+  figure: '#b8c5d5', // --palette-dark-text-muted: the screen's own stop dots, a step under the paper the plates are cut from
   figureOpacity: 0.7,
   stopFill: '#111922',
   stopStroke: '#b8c5d5',
@@ -506,18 +525,23 @@ export interface BasemapStyleOptions {
   locale?: string;
   /** Resolves MAP_CONFIG's root-relative paths; defaults to the document's origin. */
   origin?: string;
-  /** false drops every `places_*` layer (city, region, country names): a kvart-sized thumbnail has no room for "Zagreb" over its streets. Default true. */
+  /** false drops every `places_*` layer (city, region, country names): a map inset a few centimetres across has no room for "Zagreb" over its streets. Default true; no surface asks for it today. */
   placeLabels?: boolean;
   /** 'prozor' draws the public screen's ground: two landuse tones, hairline
-   *  streets, faint blocks, the neighbourhood names promoted, and nothing that
-   *  cannot reach the readability floor; 'default' (the phone, the desk, the
-   *  kvart thumbnail) is the house pass alone. */
+   *  streets, faint blocks, no POI and no neighbourhood name, and nothing that
+   *  cannot reach the readability floor; 'default' (the phone and the desk)
+   *  is the house pass alone. */
   profile?: BasemapProfile;
   /** The prozor profile's collision padding around a major street name, in
    *  tile pixels: PROZOR_LABEL_PADDING_PX unless the kiosk's option set widens
    *  it for a field that shows more ground than the wall's
    *  (overlays.ts ProzorOptions.labelPadding). */
   labelPadding?: number;
+  /** Ruling 29: false drops `roads_labels_major` from the prozor profile.
+   *  The promotion below is derived for a field 2.8 km across; a field that
+   *  holds the whole city reads those 22 px names as its subject, over the
+   *  route plates that are. Default true. */
+  majorStreetNames?: boolean;
 }
 
 // --- Reading a map from three metres ---------------------------------------
@@ -661,10 +685,15 @@ function houseLayer(layer: StyleLayerLike): StyleLayerLike {
  *  number are what a person zooms in for on a phone; a region, a country, an
  *  island and the city's own name over its own streets orient nobody who is
  *  already standing in Zagreb; no country border crosses this box; a service
- *  road and a footpath are ground texture the figure does not need. */
+ *  road and a footpath are ground texture the figure does not need. A
+ *  neighbourhood name (`places_subplace`) goes with them: on a window onto
+ *  the whole city JARUN and KUSTOSIJA in 26 px capitals were the biggest
+ *  words on a picture that is about the trams moving through them, and a
+ *  person reading a screen in a cafe is already standing in the
+ *  neighbourhood. The default (phone) profile keeps upstream's small ones. */
 export const PROZOR_DROPPED_LAYERS: readonly string[] = Object.freeze([
   'pois', 'roads_labels_minor', 'roads_shields', 'roads_oneway', 'address_label', 'boundaries', 'boundaries_country',
-  'places_locality', 'places_region', 'places_country', 'earth_label_islands', 'water_waterway_label', 'roads_other', 'roads_minor_service',
+  'places_locality', 'places_region', 'places_country', 'places_subplace', 'earth_label_islands', 'water_waterway_label', 'roads_other', 'roads_minor_service',
 ]);
 const PROZOR_DROPPED = new Set<string>(PROZOR_DROPPED_LAYERS);
 function prozorDrops(id: string): boolean {
@@ -711,13 +740,17 @@ const PROZOR_HIGHWAYS = new Set(['roads_highway', 'roads_bridges_highway']);
 type ZoomExpr = unknown[];
 const zoomSize = (...stops: number[]): ZoomExpr => ['interpolate', ['linear'], ['zoom'], ...stops];
 
-/** Line widths in CSS px across the field's own zoom range (13.5…15.5, the
- *  clamp of kiosk/mapview.ts's fieldZoom): a hairline, a line, a heavier
- *  line. Under 1 px MapLibre still draws a crisp translucent hairline; above
- *  it the majors stay thinner than the 3 to 5 px rails of the figure. */
-const PROZOR_MINOR_WIDTH = zoomSize(13.5, 0.8, 15.5, 1.2);
-const PROZOR_MAJOR_WIDTH = zoomSize(13.5, 1.6, 15.5, 2.4);
-const PROZOR_HIGHWAY_WIDTH = zoomSize(13.5, 2, 15.5, 3);
+/** Line widths in CSS px across the field's own zoom range (12.7…15.5, the
+ *  clamp of kiosk/mapview.ts's fieldZoom, whose floor the whole-city window
+ *  lowered): a hairline, a line, a heavier line. The ramps carry a stop at
+ *  12.5 rather than holding the street level's weight flat out to the city
+ *  window, where the whole street grid is one texture and every pixel of it
+ *  competes with the rails drawn over it. Under 1 px MapLibre still draws a
+ *  crisp translucent hairline; above it the majors stay thinner than the
+ *  kiosk's own 1.2 to 3 px tram rail (`rail`, overlays.ts's tramNetwork). */
+const PROZOR_MINOR_WIDTH = zoomSize(12.5, 0.6, 13.5, 0.8, 15.5, 1.2);
+const PROZOR_MAJOR_WIDTH = zoomSize(12.5, 1.2, 13.5, 1.6, 15.5, 2.4);
+const PROZOR_HIGHWAY_WIDTH = zoomSize(12.5, 1.5, 13.5, 2, 15.5, 3);
 
 /** The prozor profile's halo, still capped per layer by haloCap(). */
 const PROZOR_HALO_PX = 2;
@@ -759,16 +792,14 @@ function street(layer: StyleLayerLike, color: string, opacity: number, width: Zo
  * after flavorFor('prozor') has already collapsed the fills.
  *
  * What it does, in order of how much it changes the picture: it drops the
- * layers listed above, so no POI name, no shop and no minor street name
- * competes with the figure; it draws every street as a hairline of one
- * colour with no casing; it brings the 224 neighbourhood names the tiles carry
- * (Jarun, Knezija, Spansko, Sveti Duh, Kustosija, Vrbani, Stara Tresnjevka)
- * up to the largest words on the ground; it keeps only the trunk of the
+ * layers listed above, so no POI name, no shop, no minor street name and no
+ * neighbourhood name competes with the figure; it draws every street as a
+ * hairline of one colour with no casing; it keeps only the trunk of the
  * street hierarchy named, spaced so a field holds a handful of names and not
  * Ilica five times; and it keeps the water labels at the promoted sizes,
  * because the Sava is the best orientation cue this city has.
  */
-function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number): StyleLayerLike | null {
+function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, labelPadding: number, majorStreetNames: boolean): StyleLayerLike | null {
   if (prozorDrops(layer.id)) return null;
   const streets = PROZOR_STREETS[theme];
   if (PROZOR_MINOR_ROADS.has(layer.id)) return street(layer, streets.minor, streets.minorOpacity, PROZOR_MINOR_WIDTH);
@@ -789,18 +820,14 @@ function prozorLayer(layer: StyleLayerLike, flavor: Flavor, theme: MapTheme, lab
     case 'landuse_urban_green':
       // Allotments and playgrounds at upstream's 0.7 would be a third tone between the green and the ground.
       return { ...layer, paint: { ...(layer.paint ?? {}), 'fill-opacity': 1 } };
-    case 'places_subplace':
-      // 26 to 28 px across the field's zoom range: 13.2 to 14.2 arcminutes,
-      // under the ceiling, and the biggest words on the ground. The colour is
-      // the flavour's own (the label role), haloed by the ground; padding 12
-      // keeps two names a word apart, max-width 8 keeps "Stara Tresnjevka"
-      // on one line.
-      return promoted(layer, {
-        size: zoomSize(13.5, 26, 15.5, 28),
-        font: MAP_FONTS.medium,
-        layout: { 'text-letter-spacing': 0.12, 'text-max-width': 8, 'text-padding': 12, 'text-transform': 'uppercase' },
-      });
     case 'roads_labels_major':
+      // Ruling 29: everything below is derived for the wall's 2.8 km field.
+      // A field that holds the whole city (Črnomerec to Maksimir, z12.7) is
+      // four times that ground, and the same 22 px names become the picture's
+      // subject -- the route plates, which ARE the subject, end up sharing
+      // their pixels with a street name. There, the names go entirely; from
+      // the quarter's own frame up they are exactly as derived.
+      if (!majorStreetNames) return null;
       // Upstream's legacy kind filter rewritten as an expression (a legacy
       // filter may not nest), narrowed to the four classes above. MapLibre
       // reads symbol-spacing and text-padding in TILE pixels at the tile's
@@ -840,7 +867,7 @@ export function basemapLayers(theme: MapTheme, options: BasemapStyleOptions = {}
   for (const raw of upstream) {
     if (options.placeLabels === false && raw.id.startsWith('places_')) continue;
     const house = houseLayer(raw);
-    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX) : house;
+    const layer = options.profile === 'prozor' ? prozorLayer(house, flavor, theme, options.labelPadding ?? PROZOR_LABEL_PADDING_PX, options.majorStreetNames !== false) : house;
     if (layer) out.push(layer);
   }
   return out;

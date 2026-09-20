@@ -58,8 +58,11 @@ describe('POST /api/admin/beacons', () => {
     expect(slug.status).toBe(201);
     const written = await admin('/api/admin/beacons', { method: 'POST', body: { ...VALID, area: 'PEŠČENICA - ŽITNJAK' } });
     expect(written.status).toBe(201);
+    // The whole city is an area a screen may be set to (WP4), though never a četvrt.
+    const city = await admin('/api/admin/beacons', { method: 'POST', body: { ...VALID, area: 'Zagreb' } });
+    expect(city.status).toBe(201);
     for (const body of [
-      { ...VALID, area: 'Zagreb' },
+      { ...VALID, area: 'Sisak' },
       { ...VALID, venueType: 'bar' },
       { ...VALID, operatorLabel: '   ' },
       { ...VALID, operatorLabel: 'x'.repeat(81) },

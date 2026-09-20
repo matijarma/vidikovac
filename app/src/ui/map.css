@@ -169,9 +169,21 @@
 .t-prose { margin: 0; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); max-inline-size: 68ch; }
 .t-status { color: var(--tone-state-warning); }
 .t-block { display: flex; flex-direction: column; gap: var(--sp-2); }
-.t-block + .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
+/* A general sibling, not an adjacent one: the stop's arrivals block and its
+   lines block have the platform count and the map action between them, and the
+   hairline that separates two sections must not depend on nothing standing in
+   between. */
+.t-block ~ .t-block { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); }
 .t-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .t-fold { align-self: flex-start; }
+
+/* What comes next at a stop (shared/city/arrivals.ts): the time sits at the
+   row's end, bold and never wrapped, like the delay word it replaces there.
+   An estimate carries the live dot and the live tone; a timetable row is plain
+   ink, and says "po redu vožnje" on its second line. */
+.t-eta { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--type-control); font-weight: var(--weight-bold); white-space: nowrap; }
+.t-eta[data-live='true'] { color: var(--tone-live); }
+.t-live { flex: none; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: currentColor; }
 
 /* "Samo ova linija na karti" (F5) is the app's shared switch and is styled
    entirely by ui/base.css `.switch` -- the same control the alert rows are.

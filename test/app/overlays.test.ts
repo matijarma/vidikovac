@@ -3,6 +3,7 @@ import { OVERLAY_DARK, OVERLAY_LIGHT, basemapLayers, styleDiff } from '../../app
 import {
   BELOW_LABELS,
   BODY_ZOOM,
+  CITY_STOP_ZOOM,
   LAYERS,
   NETWORK_OPACITY,
   NETWORK_OPACITY_DIMMED,
@@ -199,29 +200,83 @@ describe('the overlay layer list', () => {
   });
 });
 
-// The public screen's overlay set (plan D4, R-KP4): the tram network is the
-// figure, buses and every stop off the screen's routes step aside, the
-// screen's stop is the largest mark on the map, and the fixed 14.5 thresholds
-// follow the field's own zoom. (Trams as plates and buses as capsules began
-// here and are now every surface's rule, pinned by the block above.)
+// The public screen's overlay set (plan D4, R-KP4): the tram network is a
+// thin neutral rail, buses and every stop off the screen's routes step
+// aside, the screen's stop is the largest mark on the map, and the fixed
+// 14.5 thresholds follow the field's own zoom. (Trams as plates and buses as
+// capsules began here and are now every surface's rule, pinned by the block
+// above.)
 describe('the kiosk overlay set (prozor)', () => {
-  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
+  const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
+
+  // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
+  // rank stops being the question; from the line up nothing changed.
+  it('names interchanges and not ranks when the field holds the whole city', () => {
+    const far = overlayLayers(OVERLAY_LIGHT, { prozor: { ...PROZOR, stopLabelTramInterchanges: true } }).find((l) => l.id === LAYERS.stopLabels)!;
+    const json = JSON.stringify(far.filter);
+    expect(json).toContain('["get","tramInterchange"]');
+    expect(json).not.toContain('"rank"');
+    // Nearer in, the ranked reading, untouched.
+    const near = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR }).find((l) => l.id === LAYERS.stopLabels)!;
+    const nearJson = JSON.stringify(near.filter);
+    expect(nearJson).toContain('[">=",["get","rank"],4]');
+    expect(nearJson).not.toContain('tramInterchange');
+    // Either way the one label per name and the screen's own stop rule hold.
+    for (const f of [json, nearJson]) expect(f).toContain('["get","label"]');
+  });
+
+  // Ruling 30's own follow-up: route count decided which names survived a
+  // crowded corner too, so below the line an interchange is placed before
+  // anything else and the rank is only the tiebreak among them.
+  it('places an interchange before a merely busy stop when the field holds the whole city', () => {
+    const key = (prozor: ProzorOptions) => JSON.stringify(overlayLayers(OVERLAY_LIGHT, { prozor }).find((l) => l.id === LAYERS.stopLabels)!.layout!['symbol-sort-key']);
+    expect(key({ ...PROZOR, stopLabelTramInterchanges: true })).toBe('["-",["case",["get","tramInterchange"],0,100],["get","rank"]]');
+    // Nearer in, the ranked reading the hub tier has always used.
+    expect(key(PROZOR)).toBe('["-",100,["get","rank"]]');
+  });
+
+  // Ruling 31. The square marks' titles are the artefact's own names --
+  // "Igralište Sava", "Zagrebački velesajam" -- at the same 22 px a stop name
+  // gets. On a whole-city window the square is the claim and the name is not
+  // something anyone acts on from three metres, so the names go and the marks
+  // stay; the quake keeps its own label, which is a different layer.
+  it('draws the square place marks without names while the field holds the whole city', () => {
+    const squares = [LAYERS.placeWorks, LAYERS.placeEvents, LAYERS.placeSeat, LAYERS.placeAssembly, LAYERS.placePharmacy];
+    const far = overlayLayers(OVERLAY_LIGHT, { prozor: { ...PROZOR, placeTitles: false } });
+    for (const id of squares) {
+      const layer = far.find((l) => l.id === id);
+      if (!layer) continue; // the seat is never lit under the kiosk's set
+      expect(layer.layout!['text-field'], id).toBeUndefined();
+      // The mark itself is untouched: an urgent state still shows where to go.
+      expect(layer.layout!['icon-image'], id).toBeDefined();
+    }
+    // The quake keeps its words at every zoom: it is the one thing a city window should say.
+    expect(far.find((l) => l.id === LAYERS.placeQuakeLabels)!.layout!['text-field']).toBeDefined();
+    // Nearer in, and everywhere off the kiosk's option set, the names are there.
+    const near = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR });
+    for (const id of squares) {
+      const layer = near.find((l) => l.id === id);
+      if (!layer) continue;
+      expect(layer.layout!['text-field'], id).toEqual(['get', 'title']);
+    }
+    expect(overlayLayers(OVERLAY_LIGHT).find((l) => l.id === LAYERS.placeAssembly)!.layout!['text-field']).toEqual(['get', 'title']);
+  });
 
   it('never labels the screen’s own stop from the hub tier: its anchor label already names it (R-KP25)', () => {
     const labels = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1' }).find((l) => l.id === LAYERS.stopLabels)!;
     expect(JSON.stringify(labels.filter)).toContain('["!=",["get","id"],"106_1"]');
   });
 
-  it('draws the tram network as the figure and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, the screen\u2019s stop as the largest mark, and no seat', () => {
+  it('draws the tram network as a thin neutral rail and hides the bus lines, stops only on the screen\u2019s routes as dots labelled from the hub rank at the field\u2019s zoom, the screen\u2019s stop as the largest mark, and no seat', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
       const layers = overlayLayers(p, { scale: 2, prozor: PROZOR });
       const by = (id: string) => layers.find((l) => l.id === id)!;
       expect(by(LAYERS.networkBus).layout!.visibility).toBe('none');
       const tram = by(LAYERS.networkTram);
       expect(tram.layout!.visibility).toBe('visible');
-      expect(tram.paint!['line-color']).toBe(p.figure);
-      expect(tram.paint!['line-opacity']).toBe(p.figureOpacity);
-      expect(tram.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 14, 3, 15, 5, 16, 6]);
+      expect(tram.paint!['line-color']).toBe(p.rail);
+      expect(tram.paint!['line-opacity']).toBe(0.8);
+      expect(tram.paint!['line-width']).toEqual(['interpolate', ['linear'], ['zoom'], 12.5, 1.2, 14, 2, 16, 3]);
       expect(tram.layout!['line-cap']).toBe('round');
       expect(tram.layout!['line-join']).toBe('round');
       // Stops: the screen's routes only, as filled dots in the figure colour.
@@ -232,6 +287,18 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(stops.paint!['circle-radius']).toBe(6);
       expect(stops.paint!['circle-color']).toBe(p.figure);
       expect(stops.paint!['circle-stroke-width']).toBe(0);
+      // With stopRadius the same dots grow with the camera instead: 1.5 px at the whole-city
+      // window's own floor, 5 at street level, on a one-pixel stroke of the same ink, so a
+      // three-pixel bead on a city full of stops is still a mark and still tappable. Drawn
+      // pixels, never the surface's symbol scale: a stop says where it is, not what it says,
+      // and at the screen's scale 2 the street end outweighed the plates standing on it.
+      const ramped = overlayLayers(p, { scale: 2, prozor: { ...PROZOR, stopRadius: true } }).find((l) => l.id === LAYERS.stops)!;
+      expect(ramped.paint!['circle-radius']).toEqual(['interpolate', ['linear'], ['zoom'], CITY_STOP_ZOOM, 1.5, 15.5, 5]);
+      expect(CITY_STOP_ZOOM).toBe(12.7);
+      expect(ramped.paint!['circle-stroke-width']).toBe(1);
+      expect(ramped.paint!['circle-stroke-color']).toBe(p.figure);
+      expect(ramped.paint!['circle-stroke-opacity']).toBe(p.figureOpacity);
+      expect(ramped.minzoom).toBe(stops.minzoom);
       // Their names: hubs only (rank 4 and up), from the field's zoom, never below it; the same routes filter as the dots.
       const labels = by(LAYERS.stopLabels);
       expect(labels.minzoom).toBe(14.6);

@@ -71,12 +71,17 @@ for (const theme of ['light', 'dark'] as const) {
       const issues = await page.evaluate(() => {
         const out: string[] = [];
         const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+        // The window's grammar: the map inside it, the aside beside or under it, nothing over the picture.
+        const front = rect('[data-testid=kiosk-invitation]');
         const map = rect('.k-geography');
-        const board = rect('.k-local-facts');
-        if (map.bottom > board.top + 1) out.push('transport board covers geography');
+        if (map.width < 200 || map.height < 200) out.push('the map is not the page');
+        if (map.left < front.left - 1 || map.right > front.right + 1 || map.bottom > front.bottom + 1) out.push('the map leaves the window');
         const qr = rect('[data-testid=kiosk-qr]');
         if (qr.width < 239 || qr.height < 239) out.push('QR below scannable floor');
         for (const panel of document.querySelectorAll<HTMLElement>('.k-panel[data-panel]')) {
+          // Nothing is drawn over the picture: every card is beside the map or under it.
+          const box = panel.getBoundingClientRect();
+          if (box.left < map.right - 1 && box.top < map.bottom - 1) out.push(`${panel.dataset.panel}: over the map`);
           if (panel.scrollHeight > panel.clientHeight + 1) out.push(`${panel.dataset.panel}: vertical overflow`);
           if (panel.scrollWidth > panel.clientWidth + 1) out.push(`${panel.dataset.panel}: horizontal overflow`);
           const rows = [...panel.querySelectorAll<HTMLElement>('.k-fr')];
@@ -185,17 +190,7 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await expect(kiosk.locator('.k-select-main')).toHaveText(eventTitle);
     await b.locator('[data-action=presentation-close]').click();
-    await b.getByTestId('tab-more').click();
-    await b.getByTestId('tab-kvart').click();
-    await b.getByTestId('kvart-panel').getByTestId('kvart-select').selectOption('trnje');
-    await expect(b.getByTestId('kvart-panel')).toBeVisible();
-    await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', 'kultura');
     await b.getByTestId('screen-control').click();
-    await b.getByTestId('present-view').click();
-    await expect(b.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 25_000 });
-    await expect(kiosk.locator('.k-present-board .k-panel-kicker')).toHaveText('Trnje');
-    await expect(kiosk.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready');
-    await kiosk.screenshot({ path: 'test-results/redesign/presented-district.png' });
     await b.getByTestId('stop-presentation').click();
     await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(b.getByTestId('session-label')).toHaveAttribute('data-state', 'live');

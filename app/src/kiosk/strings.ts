@@ -61,6 +61,27 @@ export interface KioskStrings {
     /** A live observation with no temperature: said in a word, never a dash. */
     noReading: string;
   };
+  /** What comes next at a stop (WP5b). The words are the app's own
+   *  `arrivals.*`, not a kiosk copy of them: the tapped stop's card and the
+   *  phone sheet say the same thing about the same row, and the note under a
+   *  list is the one sentence that explains where an estimate comes from. */
+  arrivals: {
+    /** A tram due inside half a minute is the one pulling in, not "za 0 min". */
+    now: string;
+    /** `{n}` is the whole minutes left. */
+    inMinutes: string;
+    /** The live dot's own name, for a reader who cannot see it. */
+    live: string;
+    note: string;
+    none: string;
+    down: string;
+    /** Still waiting for a board: on a screen that never stops running, "no
+     *  board in hand" is almost always "not fetched yet". */
+    loading: string;
+  };
+  /** "3 perona": the platforms of the stop a board is of, the app's own words
+   *  (transport.platforms_*), not a second kiosk vocabulary for them. */
+  platforms: PluralForms;
   lines: {
     title: string;
     nearbyTitle: string;
@@ -71,7 +92,6 @@ export interface KioskStrings {
     more: PluralForms;
     unavailable: string;
     loading: string;
-    noStop: string;
     modelNote: string;
     vehiclesMoving: PluralForms;
   };
@@ -103,6 +123,23 @@ export interface KioskStrings {
     actLead: string;
     kvartLead: string;
     worksLead: string;
+    /** The promet card's sentence when the network has no exception to report. */
+    linesRegular: string;
+    /** "2 zatvaranja": the closures the promet card counts rather than lists. */
+    closures: PluralForms;
+    /** "1 obavijest ZET-a": ZET's own fresh notices, counted. */
+    notices: PluralForms;
+    /** "+2 linije kasne": the exceptions the card had no room for. */
+    moreLate: PluralForms;
+  };
+  /** The header ticker's five kicker words (kiosk/ticker.ts), printed uppercase
+   *  by the sheet: the weather, the network, the works, tonight, the city. */
+  ticker: {
+    weather: string;
+    transit: string;
+    works: string;
+    tonight: string;
+    city: string;
   };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
    *  transit's three value states, its "N vozila u blizini" plural and its
@@ -111,8 +148,6 @@ export interface KioskStrings {
   say: {
     /** "Večeras u gradu": the events kicker. */
     tonight: string;
-    /** "Sutra": tomorrow's forecast kicker. */
-    forecast: string;
     allDay: string;
     tonightMore: PluralForms;
     transit: string;
@@ -123,8 +158,6 @@ export interface KioskStrings {
     quake: string;
     closure: string;
     zet: string;
-    kvart: string;
-    worksKvart: string;
     worksCity: string;
     works: PluralForms;
     today: string;
@@ -227,24 +260,18 @@ export interface KioskStrings {
     setupAgain: string;
     endsAfterSession: string;
   };
+  /** The start screen (kiosk/start.ts) and the sentences the settings panel's
+   *  stop search reuses: one vocabulary for the one thing that creates and
+   *  changes a screen. */
   setup: {
     title: string;
     intro: string;
-    step1: string;
-    step2: string;
-    districtLegend: string;
-    stopLegend: string;
     search: string;
-    searchHint: string;
-    nearest: string;
     results: PluralForms;
     noResults: string;
     routesAt: string;
-    next: string;
-    back: string;
     create: string;
     creating: string;
-    summary: string;
     validity: string;
     errorAccess: string;
     errorQuota: string;
@@ -255,7 +282,35 @@ export interface KioskStrings {
     retry: string;
     retryIn: string;
     loadingStops: string;
-    provisionHint: string;
+  };
+  /** The on-screen settings overlay (kiosk/settings.ts): the four sections and
+   *  the forget-screen confirmation. */
+  settings: {
+    open: string;
+    title: string;
+    hint: string;
+    close: string;
+    save: string;
+    saving: string;
+    saved: string;
+    /** The three ways a save does not land: no socket, a refusal, a repeat inside the DO's window. */
+    saveOffline: string;
+    saveRefused: string;
+    saveBusy: string;
+    area: string;
+    areaWhole: string;
+    areaHint: string;
+    stop: string;
+    stopNone: string;
+    stopHint: string;
+    theme: string;
+    screen: string;
+    expiry: string;
+    expiryNone: string;
+    forget: string;
+    forgetAsk: string;
+    forgetYes: string;
+    forgetNo: string;
   };
 }
 
@@ -302,21 +357,27 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
+    arrivals: { ...record(['now', 'inMinutes', 'live', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
+    platforms: { one: t('transport.platforms_one'), few: t('transport.platforms_few'), other: t('transport.platforms_other') },
     lines: {
-      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'noStop', 'modelNote']),
+      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'modelNote']),
       nearby: forms('lines', 'nearby'),
       more: forms('lines', 'more'),
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
     front: {
-      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead']),
+      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead', 'linesRegular']),
       eventsToday: forms('front', 'eventsToday'),
       eventsTomorrow: forms('front', 'eventsTomorrow'),
       acts: forms('front', 'acts'),
+      closures: forms('front', 'closures'),
+      notices: forms('front', 'notices'),
+      moreLate: forms('front', 'moreLate'),
     },
+    ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
     say: {
-      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'kvart', 'worksKvart', 'worksCity', 'today', 'tomorrow', 'tonight', 'forecast', 'allDay']),
+      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'worksCity', 'today', 'tomorrow', 'tonight', 'allDay']),
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
       tonightMore: forms('say', 'tonightMore'),
@@ -348,12 +409,17 @@ function build(code: SupportedLocale): KioskStrings {
     notice: group('notice', ['expiredTitle', 'expiredBody', 'revokedTitle', 'revokedBody', 'setupAgain', 'endsAfterSession']),
     setup: {
       ...group('setup', [
-        'title', 'intro', 'step1', 'step2', 'districtLegend', 'stopLegend', 'search', 'searchHint', 'nearest', 'noResults', 'routesAt',
-        'next', 'back', 'create', 'creating', 'summary', 'validity', 'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid',
-        'errorFailed', 'errorStops', 'retry', 'retryIn', 'loadingStops', 'provisionHint',
+        'title', 'intro', 'search', 'noResults', 'routesAt', 'create', 'creating', 'validity',
+        'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed', 'errorStops',
+        'retry', 'retryIn', 'loadingStops',
       ]),
       results: forms('setup', 'results'),
     },
+    settings: group('settings', [
+      'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',
+      'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
+      'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
+    ]),
   };
 }
 

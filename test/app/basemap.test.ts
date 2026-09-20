@@ -148,6 +148,9 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_LIGHT.bus).toBe('#34465c');
     expect(OVERLAY_LIGHT.routeTram).toBe('#0751bf');
     expect(OVERLAY_LIGHT.routeBus).toBe('#34465c');
+    expect(OVERLAY_LIGHT.rail).toBe('#8d99a8');
+    expect(OVERLAY_LIGHT.bike).toBe('#178f7f');
+    expect(OVERLAY_LIGHT.bikeText).toBe('#08131f');
     expect(OVERLAY_LIGHT.closure).toBe('#b72d39');
     expect(OVERLAY_LIGHT.stopFill).toBe('#f1f4f7');
     expect(OVERLAY_LIGHT.label).toBe('#142334');
@@ -160,6 +163,9 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_DARK.busText).toBe('#102236');
     expect(OVERLAY_DARK.routeTram).toBe('#84b5ff');
     expect(OVERLAY_DARK.routeBus).toBe('#b8c9dc');
+    expect(OVERLAY_DARK.rail).toBe('#5b6a7c');
+    expect(OVERLAY_DARK.bike).toBe('#178f7f');
+    expect(OVERLAY_DARK.bikeText).toBe('#08131f');
     expect(OVERLAY_DARK.closure).toBe('#ff9aa5');
     expect(OVERLAY_DARK.label).toBe('#f1f4f7');
     expect(OVERLAY_DARK.halo).toBe('#111922');
@@ -339,8 +345,10 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       expect(major.paint!['line-opacity']).toBe(ink.majorOpacity);
       expect(highway.paint!['line-color']).toBe(ink.major);
       expect(highway.paint!['line-opacity']).toBe(ink.majorOpacity);
-      // Widths at the two ends of the field's zoom range: a hairline, a line, a heavier line.
-      for (const [zoom, m, M, H] of [[13.5, 0.8, 1.6, 2], [15.5, 1.2, 2.4, 3]] as const) {
+      // Widths across the field's zoom range, whose floor the whole-city window took to
+      // 12.7 (kiosk/mapview.ts FIELD_MIN_ZOOM): thinner still where the whole grid is one
+      // texture, then a hairline, a line, a heavier line.
+      for (const [zoom, m, M, H] of [[12.5, 0.6, 1.2, 1.5], [13.5, 0.8, 1.6, 2], [15.5, 1.2, 2.4, 3]] as const) {
         expect(textSizeAt(minor.paint!['line-width'], zoom), `${theme} minor @${zoom}`).toBeCloseTo(m, 5);
         expect(textSizeAt(major.paint!['line-width'], zoom), `${theme} major @${zoom}`).toBeCloseTo(M, 5);
         expect(textSizeAt(highway.paint!['line-width'], zoom), `${theme} highway @${zoom}`).toBeCloseTo(H, 5);
@@ -361,9 +369,12 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       expect(seenMinor, `${theme} minor`).toBeGreaterThan(1.15);
       expect(seenMajor, `${theme} major`).toBeGreaterThan(seenMinor);
       expect(seenMajor, `${theme} major`).toBeGreaterThan(theme === 'dark' ? 2 : 1.5);
-      // Texture, never the figure: the tram rails stay well ahead of any street.
-      const figure = theme === 'dark' ? OVERLAY_DARK : OVERLAY_LIGHT;
-      expect(contrast(over(figure.figure, ground, figure.figureOpacity), ground)).toBeGreaterThan(seenMajor);
+      // Texture, never the figure: the tram network's own rail grey (owner
+      // ruling, round F "kiosk window") still sits above the boldest street
+      // ink, in both faces, at the plan's own opacity.
+      const overlay = theme === 'dark' ? OVERLAY_DARK : OVERLAY_LIGHT;
+      const seenRail = contrast(over(overlay.rail, ground, 0.8), ground);
+      expect(seenRail, `${theme} rail`).toBeGreaterThanOrEqual(seenMajor);
     }
   });
 
@@ -381,7 +392,7 @@ describe('the prozor basemap profile: the ground under the figure, readable from
     for (const theme of ['light', 'dark'] as const) {
       const layers = layersOf(theme);
       const labels = layers.filter((l) => l.type === 'symbol' && l.layout?.['text-size'] !== undefined);
-      expect(labels.map((l) => l.id).sort()).toEqual(['places_subplace', 'roads_labels_major', 'water_label_lakes', 'water_label_ocean']);
+      expect(labels.map((l) => l.id).sort()).toEqual(['roads_labels_major', 'water_label_lakes', 'water_label_ocean']);
       expect(layers.some((l) => l.type === 'symbol' && l.layout?.['text-size'] === undefined)).toBe(false); // no icon-only layer (shields, one-way arrows) either
       for (const layer of labels) {
         const halo = layer.paint?.['text-halo-width'];
@@ -395,20 +406,12 @@ describe('the prozor basemap profile: the ground under the figure, readable from
           expect(halo as number, `${layer.id} @ ${zoom}`).toBeLessThanOrEqual(haloCap(size));
         }
       }
-      const flavor = flavorFor(theme, 'prozor');
       const ground = TONES[theme].ground;
-      // The 224 neighbourhood names the tiles carry: the biggest words on the ground, in the label role.
-      const hood = byId(layers, 'places_subplace');
-      expect(textSizeAt(hood.layout!['text-size'], 13.5)).toBe(26);
-      expect(textSizeAt(hood.layout!['text-size'], 15.5)).toBe(28);
-      expect(hood.layout!['text-transform']).toBe('uppercase');
-      expect(hood.layout!['text-letter-spacing']).toBe(0.12);
-      expect(hood.layout!['text-padding']).toBe(12);
-      expect(hood.layout!['text-font']).toEqual([MAP_FONTS.medium]);
-      expect(hood.paint!['text-color']).toBe(theme === 'light' ? '#40536b' : '#b8c5d5');
-      expect(flavor.subplace_label).toBe(hood.paint!['text-color']);
-      expect(hood.paint!['text-halo-color']).toBe(ground);
-      expect(hood.paint!['text-halo-width']).toBe(2);
+      // The 224 neighbourhood names the tiles carry are the screen's own: on a window onto the
+      // whole city JARUN in 26 px capitals was the biggest word on a picture about the trams
+      // crossing it. The phone keeps upstream's small ones.
+      expect(layers.map((l) => l.id)).not.toContain('places_subplace');
+      expect(basemapLayers(theme).map((l) => l.id)).toContain('places_subplace');
       // Major street names: the trunk of the hierarchy only, spaced so one field holds a handful.
       const street = byId(layers, 'roads_labels_major');
       expect(street.layout!['text-size']).toBe(22);
@@ -421,7 +424,17 @@ describe('the prozor basemap profile: the ground under the figure, readable from
       const wider = byId(basemapLayers(theme, { profile: 'prozor', labelPadding: 48 }), 'roads_labels_major');
       expect(wider.layout!['text-padding']).toBe(48);
       expect(wider.layout!['symbol-spacing']).toBe(360);
-      expect(byId(basemapLayers(theme, { profile: 'prozor', labelPadding: 48 }), 'places_subplace').layout!['text-padding']).toBe(12);
+      // Ruling 29: every size above is derived for the wall's 2.8 km field, so
+      // on a window four times that ground the names go rather than shrink --
+      // a 22 px street name there is the picture's subject, over the plates
+      // that are it. Only that layer goes: the ground, the streets themselves
+      // and the Sava's own labels are what the window is read from.
+      const far = basemapLayers(theme, { profile: 'prozor', majorStreetNames: false });
+      expect(far.map((l) => l.id)).not.toContain('roads_labels_major');
+      expect(far.map((l) => l.id)).toContain('water_label_lakes');
+      expect(far.map((l) => l.id)).toEqual(layers.map((l) => l.id).filter((id) => id !== 'roads_labels_major'));
+      // The default is unchanged, and so is the profile without the option.
+      expect(basemapLayers(theme, { profile: 'prozor', majorStreetNames: true }).map((l) => l.id)).toEqual(layers.map((l) => l.id));
       expect(street.layout!['text-font']).toEqual([MAP_FONTS.medium]);
       expect(PROZOR_MAJOR_ROAD_DETAILS).toEqual(['motorway', 'trunk', 'primary', 'secondary']);
       const filter = JSON.stringify(street.filter);

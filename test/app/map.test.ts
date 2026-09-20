@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { districtBySlug } from '../../app/src/kiosk/districts';
+import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
+import { BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM, BIKE_SPENT_BADGES, BIKE_SPENT_OPACITY, cityLayers } from '../../app/src/map/city-layers';
 import * as basemap from '../../app/src/map/basemap';
 import {
   createCityMap,
@@ -269,6 +272,91 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
 // view carries no selection and no padding -- the enlarged screen-stop ring is
 // the anchor. The paired phase keeps today's Promet contract (R-KP8). Pure: no
 // map, no DOM, no clock.
+// The city's own places on the public screen's window: a BAJS station is one
+// dot among a hundred at city zoom and a thing to walk to once the camera is
+// in a neighbourhood, so its mark and its count follow the camera; a station
+// with no bike, none to rent or a source gone quiet recedes behind the ones a
+// person can use. Every other kind of city place is untouched.
+describe('the city places’ marks', () => {
+  /** Enough of the MapLibre expression language to read these layers back. */
+  function evaluate(expr: unknown, props: Record<string, unknown>, zoom: number): unknown {
+    if (!Array.isArray(expr)) return expr;
+    const [op, ...rest] = expr as [string, ...unknown[]];
+    const ev = (x: unknown) => evaluate(x, props, zoom);
+    switch (op) {
+      case 'literal': return rest[0];
+      case 'zoom': return zoom;
+      case 'get': return props[rest[0] as string];
+      case '*': return (rest as unknown[]).reduce((n, x) => (n as number) * (ev(x) as number), 1);
+      case '==': return ev(rest[0]) === ev(rest[1]);
+      case '>': return (ev(rest[0]) as number) > (ev(rest[1]) as number);
+      case 'all': return rest.every((x) => ev(x) === true);
+      case 'in': return (ev(rest[1]) as unknown[]).includes(ev(rest[0]));
+      case 'min': return Math.min(...rest.map((x) => ev(x) as number));
+      case '+': return rest.reduce((n: number, x) => n + (ev(x) as number), 0);
+      case 'sqrt': return Math.sqrt(ev(rest[0]) as number);
+      case 'case': {
+        for (let i = 0; i + 1 < rest.length; i += 2) if (ev(rest[i]) === true) return ev(rest[i + 1]);
+        return ev(rest[rest.length - 1]);
+      }
+      case 'interpolate': {
+        const flat = rest.slice(2);
+        const stops: [number, unknown][] = [];
+        for (let i = 0; i + 1 < flat.length; i += 2) stops.push([flat[i] as number, flat[i + 1]]);
+        if (zoom <= stops[0]![0]) return ev(stops[0]![1]);
+        const last = stops[stops.length - 1]!;
+        if (zoom >= last[0]) return ev(last[1]);
+        for (let i = 0; i + 1 < stops.length; i++) {
+          const [z0, a] = stops[i]!, [z1, b] = stops[i + 1]!;
+          if (zoom >= z0 && zoom <= z1) return (ev(a) as number) + (((ev(b) as number) - (ev(a) as number)) * (zoom - z0)) / (z1 - z0);
+        }
+        return Number.NaN;
+      }
+      default: throw new Error(`unhandled expression ${op}`);
+    }
+  }
+  const layers = cityLayers(basemap.overlayPalette('light'), null, 2);
+  const byId = (id: string) => layers.find((l) => l.id === id)!;
+  const bike = (badge: string) => ({ category: 'bikes', badge, eventCount: 0, priority: 2 });
+  const venue = { category: 'culture', badge: '3', eventCount: 3, priority: 0 };
+
+  it('sizes a BAJS station and its count from the camera: small on the whole city, a thing to walk to in a neighbourhood', () => {
+    expect([BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM]).toEqual([13, 14]);
+    const radius = byId('city-place-dots').paint!['circle-radius'];
+    const size = byId('city-place-badges').layout!['text-size'];
+    // At the screen's symbol scale 2: 5 and 8 px before the scale, 9 and 12 for the count.
+    expect(evaluate(radius, bike('7'), 13)).toBe(10);
+    expect(evaluate(radius, bike('7'), 14)).toBe(16);
+    expect(evaluate(size, bike('7'), 13)).toBe(18);
+    expect(evaluate(size, bike('7'), 14)).toBe(24);
+    // Below the far stop and above the near one the ramp holds its ends; between them it interpolates.
+    expect(evaluate(radius, bike('7'), 12.7)).toBe(10);
+    expect(evaluate(radius, bike('7'), 16)).toBe(16);
+    expect(evaluate(radius, bike('7'), 13.5)).toBe(13);
+    // Every other kind of place keeps exactly the mark it had, at every zoom.
+    for (const zoom of [12.7, 13, 13.5, 14, 16]) {
+      expect(evaluate(radius, venue, zoom), `venue @${zoom}`).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
+      expect(evaluate(radius, { category: 'cluster', badge: '+4', eventCount: 0 }, zoom), `cluster @${zoom}`).toBe(36);
+      expect(evaluate(radius, { category: 'water', badge: '', eventCount: 0 }, zoom), `plain @${zoom}`).toBe(16);
+      expect(evaluate(size, venue, zoom), `venue text @${zoom}`).toBe(24);
+    }
+  });
+
+  it('lets a station with nothing to give recede: no bike, none to rent, or a source gone quiet', () => {
+    expect(BIKE_SPENT_BADGES).toEqual(['0', '—', '?']);
+    const dots = byId('city-place-dots').paint!, badges = byId('city-place-badges').paint!;
+    for (const badge of BIKE_SPENT_BADGES) {
+      expect(evaluate(dots['circle-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+      expect(evaluate(dots['circle-stroke-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+      expect(evaluate(badges['text-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+    }
+    expect(evaluate(dots['circle-opacity'], bike('7'), 14)).toBe(1);
+    expect(evaluate(dots['circle-opacity'], bike('0'), 14)).toBe(BIKE_SPENT_OPACITY);
+    // A "0" that is not a station's count is not a spent station: only the bikes read this.
+    expect(evaluate(dots['circle-opacity'], { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(1);
+  });
+});
+
 describe('the field camera and the paired camera', () => {
   const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6'], district: 'donji-grad' };
   const LAT = 45.815;
@@ -284,20 +372,70 @@ describe('the field camera and the paired camera', () => {
     expect(FIELD_SPAN_M).toBe(1500);
     expect(HANDHELD_SPAN_M).toBe(1400);
     // The clamp: a tiny box never leaves the archive's readable floor, a huge one never overzooms past its ceiling; no width yet is the floor, never NaN.
-    expect(fieldZoom(200, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
+    expect(fieldZoom(100, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
     expect(fieldZoom(6000, LAT, FIELD_SPAN_M)).toBe(FIELD_MAX_ZOOM);
     expect(fieldZoom(0, LAT, FIELD_SPAN_M)).toBe(FIELD_MIN_ZOOM);
-    expect([FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]).toEqual([13.5, 15.5]);
+    expect([FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]).toEqual([12.7, 15.5]);
   });
 
   it('the field view is the stop at its derived zoom with the kiosk emphasis and the outline, and no selection, no follow, no padding', () => {
-    const view = fieldView({ stop: STOP, widthPx: 1400, spanM: FIELD_SPAN_M });
+    const view = fieldView({ stop: STOP, district: null, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M });
     expect(view).toEqual({ zoom: fieldZoom(1400, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
     expect(KIOSK_EMPHASIS).toEqual(['event', 'quake', 'assembly', 'pharmacy']);
-    // A screen with no stop still frames the city, at the city's own latitude.
-    const none = fieldView({ stop: null, widthPx: 1400, spanM: FIELD_SPAN_M });
-    expect(none.center).toBeUndefined();
-    expect(none.zoom).toBeCloseTo(fieldZoom(1400, LAT, FIELD_SPAN_M), 6);
+  });
+
+  // The screen a person sets up with one button has no stop and no district:
+  // it opens on the whole city (CITY_WINDOW, Crnomerec to Maksimir, the Sava
+  // to Mirogoj), fitted to whatever box the composition gives it.
+  it('frames the whole city when neither a stop nor a district is configured: the window fitted with 24 px of clearance, the tighter axis governing, never below the zoom that still carries plates and stop rings', () => {
+    expect(CITY_WINDOW).toEqual({ west: 15.925, south: 45.775, east: 16.035, north: 45.838 });
+    // The floor is map/overlays.ts's PILL_ZOOM (and STOP_ZOOM) plus a fifth: under it the
+    // plates and the stop rings stop drawing and the window would be a basemap with nothing on it.
+    expect(FIELD_MIN_ZOOM).toBe(overlays.PILL_ZOOM + 0.2);
+    expect(FIELD_MIN_ZOOM).toBe(12.7);
+    // Every field the kiosk lays out is smaller than the window's 8.5 x 7.0 km asks for, so each sits on the floor.
+    for (const [w, h] of [[1300, 880], [880, 620], [1032, 900], [358, 420]] as const) {
+      expect(cityWindowView(w, h).zoom, `${w}x${h}`).toBe(FIELD_MIN_ZOOM);
+    }
+    expect(cityWindowView(0, 0).zoom).toBe(FIELD_MIN_ZOOM); // a box not yet laid out is the floor, never NaN
+    expect(cityWindowView(1300, 880).center).toEqual([(15.925 + 16.035) / 2, (45.775 + 45.838) / 2]);
+    // A field with room for the window takes the tighter of the two axes: 2600 x 1760 could
+    // carry the window's width at z13.99 and only its height at z13.70.
+    const big = cityWindowView(2600, 1760);
+    expect(big.zoom).toBeCloseTo(13.70, 2);
+    const mid = (45.775 + 45.838) / 2;
+    const ppm = 1 / metresPerPixel(big.zoom, mid);
+    expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M * ppm).toBeCloseTo(1760 - 48, 0);
+    expect(((16.035 - 15.925) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((mid * Math.PI) / 180) * ppm).toBeLessThan(2600 - 48);
+    // The same window is what the field view hands back for a screen with neither.
+    const none = fieldView({ stop: null, district: null, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M });
+    expect(none).toEqual({ ...cityWindowView(1300, 880), emphasis: KIOSK_EMPHASIS, outline: true });
+  });
+
+  it('fits a configured district\u2019s own rings through the window\u2019s arithmetic: its middle, the tighter axis, the same clearance', () => {
+    // A box a shade over a kilometre each way, in a field with room for it.
+    const ring: [number, number][] = [[15.96, 45.8], [15.98, 45.8], [15.98, 45.81], [15.96, 45.81], [15.96, 45.8]];
+    const fit = outlineView({ id: 'x', polygons: [[ring]] }, 1300, 880);
+    expect(fit.center).toEqual([15.97, 45.805]);
+    const ppm = 1 / metresPerPixel(fit.zoom, 45.805);
+    const acrossPx = ((15.98 - 15.96) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((45.805 * Math.PI) / 180) * ppm;
+    const upPx = ((45.81 - 45.8) / 360) * EARTH_CIRCUMFERENCE_M * ppm;
+    // The tighter axis touches the clearance, the looser one has room to spare.
+    expect(Math.max(acrossPx / (1300 - 2 * CITY_WINDOW_PADDING_PX), upPx / (880 - 2 * CITY_WINDOW_PADDING_PX))).toBeCloseTo(1, 6);
+    expect(CITY_WINDOW_PADDING_PX).toBe(24);
+    // Never past the overzoom ceiling: a pinhead of a quarter does not take the camera to z19.
+    expect(outlineView({ id: 'x', polygons: [[[[15.97, 45.8], [15.9701, 45.8], [15.9701, 45.8001], [15.97, 45.8], [15.97, 45.8]]]] }, 1300, 880).zoom).toBe(FIELD_MAX_ZOOM);
+  });
+
+  it('frames a configured district on its seat until its outline lands, and a configured stop keeps its own centred camera', () => {
+    const kvart = fieldView({ stop: null, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M });
+    const seat = districtBySlug('maksimir')!.seat;
+    expect(kvart.center).toEqual([seat.lon, seat.lat]);
+    expect(kvart.zoom).toBeCloseTo(fieldZoom(1300, seat.lat, DISTRICT_SPAN_M), 6);
+    // An area that is not one of the seventeen gradske cetvrti ('zagreb' is the whole city) is the window.
+    expect(fieldView({ stop: null, district: 'zagreb', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual(cityWindowView(1300, 880).center);
+    // A stop outranks both.
+    expect(fieldView({ stop: STOP, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual([STOP.lon, STOP.lat]);
   });
 
   it('the worker\u2019s teaser box reaches past the field by one stop spacing (TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400, D2): a vehicle has given the motion model one fix of its own before it enters the picture', () => {

@@ -11,12 +11,11 @@ export type ExportKind = 'ics' | 'geojson' | 'print';
 /**
  * Everything a layer renderer is allowed to know. No fetching, no timers.
  *
- * `ExperienceActions` (extended below) also carries the kvart, cast, saved and notify
- * state (B.3, D6, D9): `kvart`/`kvartLabel`/`kvartChoice` for the reader's district,
- * `saved` for what is starred in Promet, `notify` for the alert switches, `cast` for
- * whether "Na zaslon" can fire and why not when it can't, and `stops` for the fetched
- * stop catalogue. A layer reads them exactly as it reads `i18n` or `now`; none of them
- * is fetched or owned here.
+ * `ExperienceActions` (extended below) also carries the cast, saved and notify
+ * state (B.3, D9): `saved` for what is starred in Promet, `notify` for the alert
+ * switches, `cast` for whether "Na zaslon" can fire and why not when it can't, and
+ * `stops` for the fetched stop catalogue. A layer reads them exactly as it reads
+ * `i18n` or `now`; none of them is fetched or owned here.
  */
 export interface LayerContext extends ExperienceActions {
   i18n: I18n;

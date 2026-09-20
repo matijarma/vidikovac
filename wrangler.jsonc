@@ -42,6 +42,8 @@
   "kv_namespaces": [
     { "binding": "FEED", "id": "8cb66336f0424a8ea1246bfc6a4ae29b" } // last-good copy of every feed module
   ],
+  // Workers AI: one-line briefs for the kiosk ticker (worker/feed/brief.ts).
+  "ai": { "binding": "AI" },
   "r2_buckets": [
     { "binding": "MAPS", "bucket_name": "vidikovac-maps" },
     { "binding": "RECORDINGS", "bucket_name": "vidikovac-feed" } // raw ZET frames for replay; 7-day expiry rule set on the bucket itself

@@ -32,7 +32,7 @@ test('phone: navigation is private; one explicit request waits for acknowledgeme
 
 test('desktop: the visible transport selection is the public target, with no competing map sidebar', async ({ page }) => {
   const fixture = await open(page, true);
-  await expect(page.getByTestId('kvart-aside')).toBeHidden();
+  await expect(page.getByTestId('kvart-aside')).toHaveCount(0);
   await page.locator('.ki-domains [data-layer=u-pokretu]').click();
   await page.getByTestId('transport-search').fill('6');
   await page.locator('[data-action=select-route][data-id="6"]').first().click();

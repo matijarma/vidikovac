@@ -1,7 +1,10 @@
 import type { CreateBeaconResponse } from '../../../worker/protocol';
 import type { ScreenStop } from './contracts';
 
-export interface CreateScreenInput { area: string; stopId: string; operatorLabel?: string }
+/** Everything is optional: the one-button start posts an empty body and the
+ *  Worker answers with a whole-city screen (area `zagreb`, no stop). An area
+ *  or a stop is only ever named by a caller that already has one. */
+export interface CreateScreenInput { area?: string; stopId?: string | null; operatorLabel?: string }
 
 export class ScreenError extends Error {
   constructor(readonly reason: string, readonly status: number, readonly retryAfter = 0) {

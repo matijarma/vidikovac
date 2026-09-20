@@ -15,12 +15,13 @@ import { essentialsRows } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
-import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
+import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { createKioskMapAdapter, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
+import { emptyCity, type CityState } from '../../shared/city/types';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
-import { classifySetupError } from '../../app/src/kiosk/setup';
+import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
@@ -456,15 +457,13 @@ describe('readers moved from scenes.ts (P3 deletes it): eventsTonight, worksInKv
     expect(eventsTonight(withModule(TONIGHT_MODULES, 'dogadanja', { status: 'down' }), NOW)).toEqual([]);
   });
 
-  it('worksInKvart (D18) counts the district’s ongoing works nearest first, falls back to the whole city without a district match, and never flips scope on an outage', () => {
+  it('worksInKvart (D18) counts every ongoing work city-wide, nearest the stop first (D6 is removed: no district scoping)', () => {
     const works = worksInKvart(READER_MODULES, KVART_STOP, NOW);
-    expect(works).toMatchObject({ state: 'live', scope: 'kvart', count: 1 });
+    expect(works).toMatchObject({ state: 'live', count: 2 });
     expect(works.nearest).toMatchObject({ title: 'Ilica 120' });
     const city = worksInKvart(READER_MODULES, STOP, NOW);
-    expect(city).toMatchObject({ scope: 'city', count: 2 });
+    expect(city).toMatchObject({ count: 2 });
     expect(city.nearest).toMatchObject({ title: 'Ilica 120' });
-    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), KVART_STOP, NOW).scope).toBe('kvart');
-    expect(worksInKvart(withModule(READER_MODULES, 'dogadanja', { status: 'down', items: [] }), STOP, NOW).scope).toBe('city');
   });
 
   it('closuresNearby counts only what lies within the nearby radius and gives no nearest beyond it', () => {
@@ -600,7 +599,8 @@ describe('the one map, through the additive adapter', () => {
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     expect(options.basemapProfile).toBe(KIOSK_BASEMAP_PROFILE);
     // The prozor set (contract 2): the tram figure, stops on the screen's routes only, hubs labelled from rank 4, the overlap thresholds a tenth under the field's own zoom (R-KP2), the street names' padding R-KP17's own on the wall's field.
-    expect(options.prozor).toEqual({ networkKinds: ['tram'], stopRoutes: STOP.routes, stopLabelMinRank: 4, overlapZoom: zoom - 0.1, labelPadding: 24 });
+    // The camera is at street level (a configured stop), so the buses are on the picture with the trams.
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: STOP.routes, stopLabelMinRank: 4, stopLabelTramInterchanges: false, placeTitles: true, stopRadius: true, overlapZoom: zoom - 0.1, labelPadding: 24, majorStreetNames: true });
     // The live handle hears the same set beside the outline, every request (R-KP19): the map is created once, the stop is not.
     expect(setProzor).toHaveBeenCalledTimes(1);
     expect(setProzor).toHaveBeenLastCalledWith(options.prozor);
@@ -633,16 +633,16 @@ describe('the one map, through the additive adapter', () => {
     expect(createKioskMapAdapter(undefined).factory).toBeUndefined();
     expect(requestKioskMap(createMapSlots(undefined), input)).toBeNull();
   });
-  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s map panel and grows in step with the ground a panel shows beyond it -- more on the totem, whose panel is taller than the wall’s -- in whole pixels, never below 24, and 24 for a box not yet laid out or a phone’s band', () => {
+  it('labelPadding (contract 3, R-KP17): the street names’ collision padding is the ruling’s 24 tile px on the wall’s map panel and grows in step with the ground a panel shows beyond it -- more on the totem and on a phone’s band, both taller for their width than the wall’s -- in whole pixels, never below 24, and 24 for a box not yet laid out', () => {
     expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
-    // The totem's panel: 360 x 340 px at the same 1500 m span shows 1.24 of the wall's ground, so 30.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(30);
+    // The totem's panel: 1042 x 968 px at the same 1500 m span shows 1.33 of the wall's ground, so 32.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBe(32);
     // The compact wall's field is a little taller than the wide one's for its width: a pixel more, not the same 24 by fiat.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(25);
+    expect(labelPadding(FIELD_DESIGN_WIDTH.compact, FIELD_DESIGN_HEIGHT.compact, FIELD_SPAN_M)).toBe(26);
     // A wall wider than 16:9 (a 3840 x 2160 panel's 3138 x 1900 field) shows less ground north to south than the design wall: the ruling's literal, never less.
     expect(labelPadding(3138, 1900, FIELD_SPAN_M)).toBe(24);
-    // The phone's band spans half the ground across and a quarter of the wall's field in all.
-    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBe(24);
+    // The phone's band is taller than it is wide: at 1400 m across it shows half again the wall's ground north to south, so 35.
+    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBe(35);
     expect(labelPadding(1400, 0, FIELD_SPAN_M)).toBe(24);
     expect(labelPadding(0, 0, FIELD_SPAN_M)).toBe(24);
   });
@@ -681,18 +681,206 @@ describe('the one map, through the additive adapter', () => {
   });
 });
 
+// A screen the one-button setup made has no stop and no district: it opens
+// on the whole city, with the trams, the BAJS stations and the closures on
+// it and no names over them.
+describe('the kiosk\u2019s whole-city window', () => {
+  const ISO = new Date(NOW - 60_000).toISOString();
+  const CITY: CityState = {
+    ...emptyCity(),
+    places: [
+      { id: 'culture-1', category: 'culture', name: 'Kino Europa', lon: 15.9738, lat: 45.8105, sourceId: 'culture', sourceRecord: '1' },
+      { id: 'culture-2', category: 'culture', name: 'Mocvara', lon: 15.9611, lat: 45.8009, sourceId: 'culture', sourceRecord: '2' },
+    ],
+    live: {
+      schema: 1 as never,
+      generatedAt: ISO,
+      sources: [{ id: 'bajs', name: 'BAJS', url: 'https://example.test/', licence: 'x', status: 'live', count: 2 }],
+      bikes: [
+        { id: 'b1', name: 'Trg bana Jelacica', lon: 15.9772, lat: 45.8128, bikes: 7, docks: 5, capacity: 12, installed: true, renting: true, returning: true, observedAt: ISO },
+        { id: 'b2', name: 'Jarun', lon: 15.9312, lat: 45.7833, bikes: 0, docks: 12, capacity: 12, installed: true, renting: true, returning: true, observedAt: ISO },
+      ],
+      air: [],
+      consultations: [],
+    },
+  };
+  const EVENTS = [item('dogadanja', 'kvartovske:e1', 'event', 'Koncert', { at: new Date(NOW + 3_600_000).toISOString(), dateBasis: 'event', data: { source: 'kvartovske', venue: 'Kino Europa', precision: 'time' } })];
+  const stub = () => {
+    const calls = { setModes: vi.fn(), setCityLabels: vi.fn(), setProzor: vi.fn(), setOutline: vi.fn(), update: vi.fn() };
+    const factory = vi.fn(() => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
+    const adapter = createKioskMapAdapter(factory);
+    return { calls, factory, adapter, maps: createMapSlots(adapter.factory) };
+  };
+  const base = { stop: null, city: CITY, snapshots: { dogadanja: snap('dogadanja', EVENTS), prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+
+  it('opens on the city window with the transit picture on it, a tap box for a wall, and no quarter nobody asked for', () => {
+    const { calls, factory, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options.center).toEqual(cityWindowView(1300, 880).center);
+    expect(options.zoom).toBe(FIELD_MIN_ZOOM);
+    expect(options.hitTolerancePx).toBe(KIOSK_HIT_TOLERANCE_PX);
+    expect(options.outline).toBeNull();
+    // The gate that used to empty the map whenever the default 'living' group was
+    // active is gone: the network, the stops and the vehicles are the invitation.
+    expect(options.prozor).toMatchObject({ networkKinds: ['tram'], stopRoutes: null, stopRadius: true });
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    expect((options.lines as unknown[]).length).toBe(1);
+  });
+
+  // Ruling 30, superseding Ruling 28's rank tier: below the line the window
+  // asks for tram interchanges, and the rank it carries is the ordinary one
+  // every nearer frame uses.
+  it('asks for interchanges while the field holds the whole city, and for the ranked hubs once it holds a quarter', () => {
+    const { factory, calls, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const far = (factory.mock.calls[0]![0] as { prozor: { stopLabelTramInterchanges: boolean; placeTitles: boolean; stopLabelMinRank: number } }).prozor;
+    expect(FIELD_MIN_ZOOM).toBeLessThan(THIN_NAMES_ZOOM);
+    expect(far.stopLabelTramInterchanges).toBe(true);
+    expect(far.placeTitles).toBe(false);
+    expect(far.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopLabelTramInterchanges: true }));
+    // A quarter's own frame (z14.3 on a wall) is past the line, and so is a stop's.
+    const near = stub();
+    requestKioskMap(near.maps, { ...base, district: 'trnje' }, near.adapter);
+    const opts = near.factory.mock.calls[0]![0] as { zoom: number; prozor: { stopLabelTramInterchanges: boolean; placeTitles: boolean; stopLabelMinRank: number } };
+    expect(opts.zoom).toBeGreaterThanOrEqual(THIN_NAMES_ZOOM);
+    expect(opts.prozor.stopLabelTramInterchanges).toBe(false);
+    expect(opts.prozor.placeTitles).toBe(true);
+    expect(opts.prozor.stopLabelMinRank).toBe(STOP_LABEL_MIN_RANK);
+  });
+
+  // Ruling 29: the same line drops the basemap's promoted major street names
+  // outright on the whole-city window, and leaves them exactly as derived from
+  // a quarter's frame up.
+  it('drops the promoted street names while the field holds the whole city, and keeps them from a quarter up', () => {
+    const { factory, calls, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    expect((factory.mock.calls[0]![0] as { prozor: { majorStreetNames: boolean } }).prozor.majorStreetNames).toBe(false);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ majorStreetNames: false }));
+    const near = stub();
+    requestKioskMap(near.maps, { ...base, district: 'trnje' }, near.adapter);
+    expect((near.factory.mock.calls[0]![0] as { prozor: { majorStreetNames: boolean } }).prozor.majorStreetNames).toBe(true);
+  });
+
+  it('reads both readings straight off the field zoom, on either side of the line', () => {
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM - 0.01)).toBe(true);
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM)).toBe(false);
+    expect(stopLabelTramInterchanges(THIN_NAMES_ZOOM + 0.01)).toBe(false);
+    // Ruling 31 rides the same line: the square marks lose their names below it.
+    expect(placeTitles(THIN_NAMES_ZOOM - 0.01)).toBe(false);
+    expect(placeTitles(THIN_NAMES_ZOOM)).toBe(true);
+    expect(placeTitles(THIN_NAMES_ZOOM + 0.01)).toBe(true);
+    // One line, two rulings: the stop names thin and the street names go together.
+    expect(majorStreetNames(THIN_NAMES_ZOOM - 0.01)).toBe(false);
+    expect(majorStreetNames(THIN_NAMES_ZOOM)).toBe(true);
+    expect(majorStreetNames(THIN_NAMES_ZOOM + 0.01)).toBe(true);
+    // The rank is the same one at every zoom now: the far window does not rank at all.
+    expect(STOP_LABEL_MIN_RANK).toBe(4);
+  });
+
+  it('keeps every tram in the city on the window, not only the lines of the screen\u2019s own stop, and still narrows to a relayed route', () => {
+    const zet = MODULES.find((m) => m.module === 'zet-rt')!;
+    const withStop = { ...base, stop: { ...STOP, routes: ['11'] }, snapshots: { ...base.snapshots, 'zet-rt': zet } };
+    const one = stub();
+    requestKioskMap(one.maps, withStop, one.adapter);
+    // The teaser's two vehicles are on route 6 and the screen's stop is not: the
+    // invitation used to drop them, which left the window showing a line or two.
+    expect(((one.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).filter((p) => p.id.startsWith('vehicle:')).map((p) => p.id)).toEqual(['vehicle:1', 'vehicle:2']);
+    // A relayed route is still the one line the picture is about.
+    const two = stub();
+    requestKioskMap(two.maps, { ...withStop, phase: 'paired' as const, selection: { kind: 'route' as const, id: '11' } }, two.adapter);
+    expect(((two.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).some((p) => p.id.startsWith('vehicle:'))).toBe(false);
+  });
+
+  it('carries every BAJS station and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
+    const { calls, factory, adapter, maps } = stub();
+    requestKioskMap(maps, base, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    const city = (options.points as { id: string; title: string; place?: string; props?: Record<string, unknown> }[]).filter((p) => p.place === 'city');
+    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
+    expect(city.every((p) => p.title === '')).toBe(true);
+    expect(city.find((p) => p.id === 'bajs-b1')!.props).toEqual({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
+    expect(city.find((p) => p.id === 'bajs-b2')!.props!.badge).toBe('0');
+    expect(city.find((p) => p.id === 'culture-1')!.props).toEqual({ category: 'culture', badge: '1', eventCount: 1, priority: 0 });
+    expect(options.cityLabels).toBe(false);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(false);
+    // The one on-duty pharmacy keeps its ring and loses its address: a street number is not a fact anyone reads a city window for.
+    expect((options.points as { place?: string; title: string; props?: Record<string, unknown> }[]).find((p) => p.place === 'pharmacy')).toMatchObject({ title: '' });
+    // The same call, exploring: discover() answers the question with the few places it is about, named.
+    requestKioskMap(maps, { ...base, exploring: true }, adapter);
+    const drawn = calls.update.mock.calls.at(-1)![0] as { id: string; title: string; place?: string }[];
+    expect(drawn.filter((p) => p.place === 'city').some((p) => p.title !== '')).toBe(true);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+  });
+
+  it('puts the buses on the picture only once the camera is in a neighbourhood, and follows the camera without a new map', () => {
+    expect(CITY_DETAIL_ZOOM).toBe(14);
+    expect([busesVisible(13.99), busesVisible(14), busesVisible(15.5)]).toEqual([false, true, true]);
+    const { calls, adapter, maps, factory } = stub();
+    requestKioskMap(maps, base, adapter);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram'] }));
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    // A tap took the camera in: the same map hears both, no second one is made.
+    requestKioskMap(maps, { ...base, cameraZoom: 14.2 }, adapter);
+    expect(calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'] }));
+    expect(calls.setModes).toHaveBeenLastCalledWith(null);
+    requestKioskMap(maps, { ...base, cameraZoom: 13.4 }, adapter);
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  // The window's rules are the INVITATION's. A paired presentation is a phone
+  // putting one subject on the wall, and the wall has to name it.
+  it('a paired presentation keeps the city’s names on and the points it always had: the presented place is named', () => {
+    const { calls, factory, adapter, maps } = stub();
+    const paired = { ...base, phase: 'paired' as const, selection: { kind: 'place' as const, id: 'culture-1' } };
+    requestKioskMap(maps, paired, adapter);
+    const options = factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options.cityLabels).toBe(true);
+    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+    // discover()'s own points, named -- not the window's nameless badges.
+    const city = (options.points as { id: string; title: string; place?: string }[]).filter((p) => p.place === 'city');
+    expect(city.find((p) => p.id === 'culture-1')!.title).toBe('Kino Europa');
+    expect(city.find((p) => p.id === 'bajs-b1')!.title).toBe('Trg bana Jelacica');
+    // The camera is on the place and the picture is about it alone, as before this round.
+    expect(options.center).toEqual([15.9738, 45.8105]);
+    expect(calls.setModes).toHaveBeenLastCalledWith(new Set());
+    expect((options.prozor as { networkKinds: string[] }).networkKinds).toEqual([]);
+    // The invitation beside it is still the nameless window.
+    const invitation = stub();
+    requestKioskMap(invitation.maps, base, invitation.adapter);
+    const first = invitation.factory.mock.calls[0]![0] as Record<string, unknown>;
+    expect(first.cityLabels).toBe(false);
+    expect((first.points as { id: string; title: string }[]).find((p) => p.id === 'culture-1')!.title).toBe('');
+  });
+
+  it('cityWindowPoints reads the live BAJS rows and the week\u2019s venues, and nothing a source did not place', () => {
+    expect(cityWindowPoints(CITY, EVENTS, NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
+    // A station whose own source is not live cannot claim a count: bikeAvailability says so.
+    const stale: CityState = { ...CITY, live: { ...CITY.live!, sources: [{ ...CITY.live!.sources[0]!, status: 'stale' }] } };
+    expect(cityWindowPoints(stale, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props!.badge).toBe('?');
+    // No events, no venue marks: a venue is on the window because something is on there.
+    expect(cityWindowPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
+  });
+});
+
 describe('the on-duty pharmacy on the map (R-KP18)', () => {
-  it('keeps its hollow ring but drops the address label when it sits on the screen\u2019s own stop, and labels it in full from 150 m out', () => {
+  it('keeps its hollow ring but drops its label when it sits on the screen\u2019s own stop, and names the pharmacy from 150 m out', () => {
     // The hand-entered point for "Trg bana J. Jelačića 3" (local.ts PHARMACY_POINTS); a stop is put due south of it by a latitude offset.
     const ring = { lon: 15.9776, lat: 45.8131 };
     const stopAt = (metresSouth: number) => ({ ...STOP, lon: ring.lon, lat: ring.lat - metresSouth / 111_320 });
-    // The label is the short form the strip prints; the address (worker/hitno/ljekarne.ts) is the exact, full one the map labels with.
+    // The label is the short form the strip prints; the address (worker/hitno/ljekarne.ts) is the exact one, and it is a detail, not a name.
     const address = 'Trg bana Josipa Jelačića 3, Zagreb';
     const [onTheStop] = pharmacyPoint(stopAt(80));
     expect(onTheStop).toEqual({ id: 'pharmacy:Trg bana J. Jelačića 3', lon: ring.lon, lat: ring.lat, title: '', place: 'pharmacy', props: { address } });
     const [downTheStreet] = pharmacyPoint(stopAt(400));
-    expect(downTheStreet).toMatchObject({ id: 'pharmacy:Trg bana J. Jelačića 3', title: address, props: { address } });
-    // The strip names the pharmacy in full either way: the map and the strip can never name two different ones.
+    // What the mark says is what the place is called; the address stays in the detail the props carry.
+    expect(downTheStreet).toMatchObject({ id: 'pharmacy:Trg bana J. Jelačića 3', title: 'Gradska ljekarna Zagreb', props: { address } });
+    expect(downTheStreet!.title).not.toContain('3');
+    // A unit whose own handle IS a name keeps it: the operator is the name either way.
+    expect(pharmaciesByDistance(null).find((p) => p.label === 'Ljekarna ZEUS')!.name).toBe('Ljekarna ZEUS');
+    // The strip names the pharmacy by its address either way: the map and the strip can never name two different ones.
     expect(safetyStrip(MODULES, stopAt(80), i18n, hr, NOW).pharmacy.label).toBe('Trg bana J. Jelačića 3');
   });
 });

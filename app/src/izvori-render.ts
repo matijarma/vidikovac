@@ -22,6 +22,12 @@ export interface DogadanjaSourceEntry {
   licence: string;
 }
 
+/** The one note the page owes readers about text the Worker itself produced (WP6), not about a source. */
+export interface ObradaEntry {
+  naslov: string;
+  tekst: string;
+}
+
 /** A source considered for the dogadanja module and left out for a robots.txt reason (R-P5) -- named, not silently dropped. */
 export interface DogadanjaDroppedEntry {
   naziv: string;
@@ -32,6 +38,7 @@ export interface DogadanjaDroppedEntry {
 export const IZVORI: IzvorEntry[] = data.sources;
 export const DOGADANJA_SOURCES: DogadanjaSourceEntry[] = data.dogadanjaSources;
 export const DOGADANJA_DROPPED: DogadanjaDroppedEntry[] = data.dogadanjaDropped;
+export const OBRADA: ObradaEntry = data.obrada;
 
 /**
  * §5 of the filed proposal and docs/izvori.md both point readers at /izvori
@@ -69,13 +76,20 @@ export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): strin
   ${source.module === 'dogadanja' ? renderDogadanjaSources() : ''}
 </article>`,
     )
-    .join('\n')+renderCitySources();
+    .join('\n')+renderObrada()+renderCitySources();
+}
+/** The ticker's lines are machine-condensed; the page says so, beside the sources they come from. */
+function renderObrada(): string {
+  return `<section class="izvor-obrada" aria-labelledby="izvor-obrada-naslov">
+  <h2 id="izvor-obrada-naslov">${escapeHtml(OBRADA.naslov)}</h2>
+  <p>${escapeHtml(OBRADA.tekst)}</p>
+</section>`;
 }
 function renderCitySources():string{
   const references=REFERENCE_SOURCES.map(s=>({id:s.id,name:s.name,url:s.catalogue,licence:s.licence}));
   const rows=[...references,...Object.values(LIVE_SOURCES)].map(s=>`<li id="city-source-${escapeAttribute(s.id)}"><a href="${escapeAttribute(s.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(s.name)}</a>: ${escapeHtml(s.licence)}</li>`).join('\n');
   return `<section aria-labelledby="city-sources-title"><h2 id="city-sources-title">Mjesta, priče i uvjeti u gradu</h2>
-    <p>Katalog gradskih mjesta osvježava se zasebno od događanja i položaja vozila. Registar nije provjera radnog vremena, pristupačnosti ili trenutačnog stanja. BAJS brojevi imaju vrijeme opažanja; zrak je preliminarni indeks pojedine postaje; polasci ZET-a i HŽPP-a su raspored, ne procjena dolaska.</p>
+    <p>Katalog gradskih mjesta osvježava se zasebno od događanja i položaja vozila. Registar nije provjera radnog vremena, pristupačnosti ili trenutačnog stanja. BAJS brojevi imaju vrijeme opažanja; zrak je preliminarni indeks pojedine postaje; dolasci ZET-a procjena su iz ZET-ovih podataka o vozilima, a polasci bez praćenog vozila i sve ploče HŽPP-a ostaju vozni red.</p>
     <ul>${rows}</ul>
     <p>Ulične priče prenose objavljene opise, uz naselje. Baština se povezuje preko registarske oznake; geometrija označava obuhvat zaštite, ne ulaz ni pravo pristupa. Nepotvrđene lokacije ostaju u popisu bez oznake na karti.</p>
     <p>Ti izvori isporučuju se aplikaciji kroz javni katalog, bez novog skupa na /open. Navođenje izvora ne dodjeljuje dodatna prava ponovne uporabe; gdje uvjeti nisu navedeni, to ostaje izričito označeno.</p></section>`;

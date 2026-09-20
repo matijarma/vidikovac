@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The kiosk controller with every dependency faked: the setup wizard, the
-// invitation (the front page: five panels, one map), codes, the paired
+// invitation (the front page: the map and three cards), codes, the paired
 // compositions, expiry and revocation, the basics panel, alerts, polling and
 // disposal. The panels are the real kiosk/front.ts over the fixture teaser;
 // what is proven here is that the controller paints them on the right beats,
@@ -16,10 +16,16 @@ import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
+import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
+import { TICKER_PERIOD_MS } from '../../app/src/kiosk/ticker';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
+import { cityWindowView, DISTRICT_SPAN_M, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
+import { districtBySlug } from '../../app/src/kiosk/districts';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
+import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
+import type { MapSelection } from '../../app/src/map/city-map';
+import type { DepartureBoard, ScheduledDeparture } from '../../shared/city/types';
 import { fakeCityStore } from '../city/fake-store';
 import { emptyCity } from '../../shared/city/types';
 
@@ -27,8 +33,11 @@ import { emptyCity } from '../../shared/city/types';
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
 const STOPS = [STOP, { id: '106_2', name: 'Trg bana J. Jelačića', lon: 15.9779, lat: 45.81286, routes: ['6', '11'] }, { id: '200_1', name: 'Zapruđe', lon: 15.99, lat: 45.77, routes: ['7'] }];
-const SCREEN: ScreenMetadata = { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP };
+const SCREEN: ScreenMetadata = { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'gornji-grad-medvescak' };
+/** What one press of Pokreni zaslon makes: the whole city, no stop. */
+const CITY_SCREEN: ScreenMetadata = { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'zagreb' };
 const STORED = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: SCREEN });
+const STORED_CITY = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: CITY_SCREEN });
 const attr = { text: 'Izvor: test', url: 'https://example.test/', licence: 'Otvorena dozvola (NN 67/17)' };
 type Item = ModuleSnapshot['items'][number];
 function snap(module: ModuleId, items: Item[], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot {
@@ -44,7 +53,7 @@ const MODULES: ModuleSnapshot[] = [
   snap('zet-rt', [
     item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
     item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0 } }),
-    item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 130, vehicles: 12 } }),
+    item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 240, vehicles: 12 } }),
   ]),
   snap('emsc', [item('emsc', 'q1', 'quake', 'Potres', { at: '2026-09-11T10:11:00Z', data: { mag: 1.6, depth: 10, region: 'CROATIA' } })]),
   snap('dogadanja', [item('dogadanja', 'skupstina:13', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T07:00:00Z', dateBasis: 'event', data: { source: 'skupstina', precision: 'time' } })]),
@@ -56,7 +65,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -76,13 +85,19 @@ function fakeThemeController(initial: ThemePreference): { theme: ThemeController
   return { theme, calls, listenerCount: () => listeners.size };
 }
 
+/** No test reaches the network for a departure board: a kiosk given no board
+ *  seam of its own gets a cache whose every request answers "down", so a
+ *  configured stop's card says so instead of the suite talking to port 3000. */
+const offlineBoards = (): BoardCache => createBoardCache({ fetchImpl: (async () => ({ ok: false, status: 503, json: async () => ({}) })) as unknown as typeof globalThis.fetch });
+
 function mount(opts: MountOptions = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = {};
   if (opts.stored) raw[BEACON_STORAGE_KEY] = opts.stored;
   const storage = { getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
-  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => 'live' as const, close: vi.fn(), acknowledgePresentation: vi.fn(), stopPresentation: vi.fn() };
+  let beaconStatus: 'live' | 'offline' = 'live';
+  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => beaconStatus, close: vi.fn(), acknowledgePresentation: vi.fn(), stopPresentation: vi.fn(), setScreen: vi.fn() };
   let handlers: Parameters<NonNullable<KioskDeps['createBeacon']>>[0] | null = null;
   const timers: Timer[] = [];
   const sessions: { close: ReturnType<typeof vi.fn> }[] = [];
@@ -91,7 +106,7 @@ function mount(opts: MountOptions = {}) {
   let secondsLeft = 600;
   const modules = opts.modules ?? MODULES;
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => modules.find((m) => m.module === module) ?? snap(module, []));
-  const createScreen = opts.createScreen ?? vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: SCREEN }));
+  const createScreen = opts.createScreen ?? vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: CITY_SCREEN }));
   const loadStops = opts.loadStops ?? vi.fn(async () => STOPS);
   /** The stop's last-departure table: none by default (the stop is not in the generated set), so nothing reaches the wire from here. */
   const loadLastRun = opts.loadLastRun ?? vi.fn(async () => null);
@@ -105,7 +120,7 @@ function mount(opts: MountOptions = {}) {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
-    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun,
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -123,6 +138,7 @@ function mount(opts: MountOptions = {}) {
   return {
     root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, loadLastRun, requestFullscreen, requestWakeLock,
     theme: themeFake.theme, themeCalls: themeFake.calls, themeListenerCount: themeFake.listenerCount,
+    goOffline: () => { beaconStatus = 'offline'; },
     get handlers() { return handlers!; },
     repaint: () => repaint?.(),
     expire: () => sessionExpired?.(),
@@ -393,45 +409,41 @@ describe('versioned explicit public presentation', () => {
   });
 });
 
-describe('setup: one form, one creation per press', () => {
-  it('opens the wizard when nothing is provisioned, without touching the beacon; the strip is already there', () => {
+describe('start: one button, one creation per press', () => {
+  it('offers one button and nothing to choose when nothing is provisioned; the strip is already there', () => {
     const k = mount();
     expect(k.handle.phase()).toBe('setup');
     expect(q(k.root, '[data-testid=kiosk-setup]')).not.toBeNull();
-    expect(q(k.root, '[data-testid=setup-step]')).toBeNull();
-    expect(k.root.querySelectorAll('select[name=district] option')).toHaveLength(17);
-    expect((q(k.root, 'select[name=district]') as HTMLSelectElement).value).toBe('donji-grad');
+    expect(text(q(k.root, 'h1'))).toBe('Pokreni gradski zaslon');
+    expect(text(q(k.root, '[data-testid=setup-create]'))).toBe('Pokreni zaslon');
+    // No district, no stop, no list to load: the choice moved onto the screen itself.
+    expect(q(k.root, 'select[name=district]')).toBeNull();
+    expect(k.root.querySelectorAll('input[name=stop]')).toHaveLength(0);
+    expect(k.loadStops).not.toHaveBeenCalled();
     expect(k.beacon.connect).not.toHaveBeenCalled();
-    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
+    // The gear belongs to a screen that exists.
+    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the start screen or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Sigurnost');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
-  it('lists stops nearest the district seat with 106_1 chosen, searches by name, creates the screen once and boots the beacon', async () => {
-    const k = mount({ createScreen: vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.S3CR3TXYZ', screen: SCREEN })) });
+  it('creates the whole-city screen with no area and no stop on one press, and boots the beacon', async () => {
+    const createScreen = vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.S3CR3TXYZ', screen: CITY_SCREEN }));
+    const k = mount({ createScreen });
     await flush();
-    expect(k.loadStops).toHaveBeenCalledTimes(1);
-    expect(q(k.root, '[data-testid=setup-next]')).toBeNull();
-    expect((q(k.root, 'input[name=stop]:checked') as HTMLInputElement).value).toBe('106_1');
-    expect(text(q(k.root, '[data-testid=setup-summary]'))).toBe('Trg bana J. Jelačića · Donji grad');
-    const search = q(k.root, '[data-testid=setup-search]') as HTMLInputElement;
-    search.value = 'zapr';
-    search.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(k.root.querySelectorAll('input[name=stop]')).toHaveLength(1);
-    expect(text(q(k.root, '[data-testid=setup-stop-count]'))).toBe('1 stanica');
-    const zaprude = q(k.root, 'input[name=stop][value=200_1]') as HTMLInputElement;
-    zaprude.checked = true;
-    zaprude.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(text(q(k.root, '[data-testid=setup-summary]'))).toBe('Zapruđe · Donji grad');
     submit(k.root);
     await flush();
-    expect(k.createScreen).toHaveBeenCalledTimes(1);
-    expect(k.createScreen).toHaveBeenCalledWith({ area: 'donji-grad', stopId: '200_1' });
+    expect(createScreen).toHaveBeenCalledTimes(1);
+    expect(createScreen).toHaveBeenCalledWith();
     expect(k.handle.phase()).toBe('invitation');
-    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', screen: SCREEN });
+    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', screen: CITY_SCREEN });
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
     expect(k.root.innerHTML).not.toContain('S3CR3TXYZ');
     expect(q(k.root, '[data-testid=kiosk-setup]')).toBeNull();
+    // A whole-city screen names no place in the header; the gear is there instead.
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(false);
   });
   it('a 403 ends in the refused-connection sentence with no retry, a 429 counts its retry down, a network failure offers one; nothing loops', async () => {
     const attempts: unknown[] = [new ScreenError('evaluation-access-required', 403), new ScreenError('screen-limit', 429, 90), new TypeError('Failed to fetch')];
@@ -456,19 +468,242 @@ describe('setup: one form, one creation per press', () => {
     expect(k.handle.phase()).toBe('setup');
     expect(k.beacon.connect).not.toHaveBeenCalled();
   });
-  it('a stop list that fails to load is one sentence and one retry button', async () => {
-    const loadStops = vi.fn(async () => { throw new Error('stops-unavailable'); });
-    const k = mount({ loadStops });
+});
+
+describe('settings: the panel on the screen itself', () => {
+  const open = (k: ReturnType<typeof mount>) => { q(k.root, '[data-testid=kiosk-settings]')!.click(); };
+  const panel = (k: ReturnType<typeof mount>) => q(k.root, '[data-testid=kiosk-settings-panel]');
+
+  it('opens from the header gear with the screen’s own area and stop, the whole city first in the list', async () => {
+    const k = mount({ stored: STORED });
     await flush();
-    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Popis stanica nije dostupan.');
-    expect(q(k.root, '[data-testid=setup-next]')).toBeNull();
-    expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(false);
+    expect(panel(k)).toBeNull(); // built on the first press, not at mount
+    open(k);
+    await flush();
+    const box = panel(k)!;
+    expect(box.hidden).toBe(false);
+    expect([...box.querySelectorAll('.k-settings-row')].map((el) => (el as HTMLElement).dataset.row)).toEqual(['area', 'stop', 'theme', 'screen']);
+    const area = q(box, '[data-testid=settings-area]') as HTMLSelectElement;
+    expect(area.options).toHaveLength(18);
+    expect(area.options[0]!.textContent).toBe('Cijeli grad');
+    expect(area.value).toBe('gornji-grad-medvescak');
+    // The stop list carries "no stop" and the screen's own stop, checked.
+    expect(k.loadStops).toHaveBeenCalledTimes(1);
+    const chosen = q(box, 'input[name=settings-stop]:checked') as HTMLInputElement;
+    expect(chosen.value).toBe('106_1');
+    expect(text(box.querySelector('input[name=settings-stop]')!.parentElement)).toBe('Bez stajališta');
+    // Twenty hours from 14:32 is tomorrow morning, so the day goes with the clock.
+    expect(text(q(box, '[data-testid=settings-expiry]'))).toBe('Vrijedi do sub 12. 9. 10:32');
+    expect(text(q(box, '[data-testid=settings-theme]'))).toBe('Tema: po suncu');
+  });
+
+  // A temporary screen is good for 24 hours, so its end is almost always
+  // tomorrow -- and a clock with no day reads as "it is over now" at the very
+  // hour it matters. Both sides of Zagreb midnight, from the same panel.
+  it('names the day with the hour when the screen outlives today, and the hour alone when it does not', async () => {
+    const sameDay = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...SCREEN, expiresAt: NOW + 2 * 3_600_000 } });
+    const today = mount({ stored: sameDay });
+    await flush();
+    open(today);
+    await flush();
+    // 14:32 + 2 h is still Friday in Zagreb: the hour says everything.
+    expect(text(q(panel(today)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do 16:32');
+
+    const overMidnight = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...SCREEN, expiresAt: NOW + 12 * 3_600_000 } });
+    const tomorrow = mount({ stored: overMidnight });
+    await flush();
+    open(tomorrow);
+    await flush();
+    // 14:32 + 12 h is 02:32 on Saturday: without the day this reads as the small hours of today.
+    expect(text(q(panel(tomorrow)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do sub 12. 9. 02:32');
+
+    // A screen that never expires says so, with no clock at all.
+    const forever = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP, area: 'zagreb' } });
+    const venue = mount({ stored: forever });
+    await flush();
+    open(venue);
+    await flush();
+    expect(text(q(panel(venue)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do opoziva.');
+  });
+
+  it('saves the chosen area and stop as one screen-set frame and closes; the DO’s answer re-frames the header', async () => {
+    const k = mount({ stored: STORED_CITY });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    open(k);
+    await flush();
+    const box = panel(k)!;
+    const area = q(box, '[data-testid=settings-area]') as HTMLSelectElement;
+    area.value = 'trnje';
+    area.dispatchEvent(new Event('change', { bubbles: true }));
+    const search = q(box, '[data-testid=settings-search]') as HTMLInputElement;
+    search.value = 'zapr';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    const zaprude = q(box, 'input[name=settings-stop][value=200_1]') as HTMLInputElement;
+    zaprude.checked = true;
+    zaprude.dispatchEvent(new Event('change', { bubbles: true }));
+    q(box, '[data-testid=settings-save]')!.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    expect(k.beacon.setScreen).toHaveBeenCalledWith('200_1', 'trnje');
+    // The panel waits for the answer rather than claiming the change itself.
+    expect(box.hidden).toBe(false);
+    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(true);
+    expect(text(q(box, '[data-testid=settings-save]'))).toBe('Spremanje…');
+    // Nothing is painted from the panel: the DO's answer is what re-frames the screen.
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOPS[2]!, area: 'trnje' });
+    expect(box.hidden).toBe(true);
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
+    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!).screen).toMatchObject({ area: 'trnje', stop: { id: '200_1' } });
+  });
+
+  it('names the četvrt in the header when the screen has an area and no stop', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }) });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trnje');
+  });
+
+  it('chooses no stop at all, and says so when the socket cannot carry the change', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k);
+    await flush();
+    const box = panel(k)!;
+    const none = box.querySelector('input[name=settings-stop]') as HTMLInputElement;
+    none.checked = true;
+    none.dispatchEvent(new Event('change', { bubbles: true }));
+    k.goOffline();
+    q(box, '[data-testid=settings-save]')!.click();
+    expect(k.beacon.setScreen).not.toHaveBeenCalled();
+    expect(box.hidden).toBe(false);
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
+    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a refused pair and a repeat inside the DO\u2019s window each keep the panel open with their own sentence', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    const box = panel(k)!;
+    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
+    saveBtn.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    // An error word that belongs to something else on the socket is not this panel's.
+    k.handlers.onError?.('bad-frame');
+    expect(saveBtn.disabled).toBe(true);
+    k.handlers.onError?.('bad-stop');
+    expect(box.hidden).toBe(false);
+    expect(saveBtn.disabled).toBe(false);
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio odabir. Odaberi područje i stajalište ponovno.');
+    saveBtn.click();
+    k.handlers.onError?.('screen-set-rate');
+    expect(box.hidden).toBe(false);
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa spremi ponovno.');
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
+  });
+
+  it('a save with no answer in eight seconds gives the button back, and the late answer still closes the panel', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    const box = panel(k)!;
+    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
+    saveBtn.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    expect(saveBtn.disabled).toBe(true);
+    k.tick(SAVE_TIMEOUT_MS);
+    expect(box.hidden).toBe(false);
+    expect(saveBtn.disabled).toBe(false);
+    expect(text(saveBtn)).toBe('Spremi');
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
+    // Nothing is re-sent by the clock: one press is one screen-set.
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    // The DO's answer is the truth whenever it lands: late, it re-frames the
+    // screen and closes the panel that is still open on it.
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'gornji-grad-medvescak' });
+    expect(box.hidden).toBe(true);
+  });
+
+  it('an expiring screen takes the stage back from an open panel, so the notice is what shows', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(true);
+    k.timers.find((t) => t.ms === SCREEN.expiresAt! - NOW && !t.cleared)!.fn();
+    expect(k.handle.phase()).toBe('expired');
+    expect(panel(k)!.hidden).toBe(true);
+    expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(false);
+    expect(text(q(k.root, '[data-testid=kiosk-notice]'))).toContain('Ovaj privremeni zaslon je istekao.');
+    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
+  });
+
+  it('closes on Escape, on the close button and after 90 seconds untouched', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k); await flush();
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    open(k);
+    q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
+    expect(panel(k)!.hidden).toBe(true);
+    open(k);
+    expect(panel(k)!.hidden).toBe(false);
+    k.tick(SETTINGS_IDLE_MS);
+    expect(panel(k)!.hidden).toBe(true);
+  });
+
+  it('forgets the screen only after an inline confirmation, and never opens over a granted session', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'grad-sada' }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(k.handle.phase()).toBe('paired');
+    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
+    open(k);
+    expect(panel(k)).toBeNull();
+    k.handlers.onPresentation?.({ version: 1, revision: 2, target: null, expiresAt: null });
+    await flush();
+    open(k); await flush();
+    const box = panel(k)!;
+    q(box, '[data-testid=settings-forget]')!.click();
+    expect(q(box, '[data-testid=settings-forget-confirm]')!.hidden).toBe(false);
+    q(box, '[data-testid=settings-forget-no]')!.click();
+    expect(q(box, '[data-testid=settings-forget-confirm]')!.hidden).toBe(true);
+    expect(k.handle.phase()).toBe('invitation');
+    q(box, '[data-testid=settings-forget]')!.click();
+    q(box, '[data-testid=settings-forget-yes]')!.click();
+    expect(k.handle.phase()).toBe('setup');
+    expect(k.raw[BEACON_STORAGE_KEY]).toBeUndefined();
+    expect(box.hidden).toBe(true);
+    expect(k.beacon.close).toHaveBeenCalled();
+  });
+
+  it('a stop list that fails to load is one sentence in the panel, and the rest of it still works', async () => {
+    const loadStops = vi.fn(async () => { throw new Error('stops-unavailable'); });
+    const k = mount({ stored: STORED, loadStops });
+    await flush();
+    open(k);
+    await flush();
+    const box = panel(k)!;
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Popis stanica nije dostupan.');
+    expect(box.querySelectorAll('input[name=settings-stop]')).toHaveLength(0);
     expect(loadStops).toHaveBeenCalledTimes(1);
+    q(box, '[data-testid=settings-save]')!.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledWith('106_1', 'gornji-grad-medvescak');
+  });
+
+  it('cycles the theme from the panel, through the one controller the header button uses', async () => {
+    const k = mount({ stored: STORED, themeInitial: 'auto' });
+    await flush();
+    open(k); await flush();
+    q(panel(k)!, '[data-testid=settings-theme]')!.click();
+    expect(k.themeCalls).toEqual(['light']);
+    expect(text(q(panel(k)!, '[data-testid=settings-theme]'))).toBe('Tema: svijetla');
   });
 });
 
 describe('invitation: the screen a passer-by sees', () => {
-  it('boots the beacon from stored credentials and composes the stop context, one field with its map host, the column of statements over the card, the header weather and the strip', async () => {
+  it('boots the beacon from stored credentials and composes the stop context, the map as the whole left column, the three cards over the invitation, the header ticker and the strip', async () => {
     const k = mount({ stored: STORED });
     await flush();
     expect(k.handle.phase()).toBe('invitation');
@@ -489,38 +724,38 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(field.getAttribute('aria-label')).toBe('Trg bana J. Jelačića');
     expect([...field.children].map((el) => (el as HTMLElement).dataset.testid)).toEqual(['kiosk-map-host']);
     expect(k.root.querySelectorAll('[data-testid=kiosk-live]')).toHaveLength(1);
-    // The front page: tonight across the top left, the lines, the field and the surroundings under it, the forecast, the city and the card on the right (kiosk/invitation.ts).
+    // The front page: the map the whole left column, the aside of weather, the network's exceptions and tonight over the card (kiosk/invitation.ts).
     const front = q(k.root, '[data-testid=kiosk-invitation]')!;
-    expect(front.classList.contains('k-front')).toBe(true);
-    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-local', 'k-overview','k-explore btn-ghost']);
-    expect(q(front, '.k-local .k-geography .k-field')).not.toBeNull();
-    expect(q(front, '.k-local-facts > [data-panel=promet]')).not.toBeNull();
+    expect(front.className).toBe('k-city-window');
+    expect([...front.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['k-geography', 'k-overview','k-explore btn-ghost']);
+    expect(q(front, '.k-geography .k-field')).not.toBeNull();
     const column = q(front, '.k-overview')!;
     expect(column.tagName).toBe('ASIDE');
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-discovery-slot','k-panel--card']);
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'promet', 'tonight', 'k-discovery-slot','k-panel--card']);
     expect(q(column, '.k-panel--card [data-testid=kiosk-invite]')).not.toBeNull();
-    // The lines panel: the stop's routes as rows with their badges, the state word and the vehicles near, capped at eight of the stop's nine; the kicker names the count beyond.
+    // The three panels the front page dropped are the paired compositions' now: closures are on the map and in the ticker.
+    for (const gone of ['around', 'city']) expect(q(front, `[data-testid=kiosk-panel-${gone}]`), gone).toBeNull();
+    // The promet card is exceptions only: the one route whose median a rider would notice, and the closures counted beside it.
     const promet = q(front, '[data-testid=kiosk-panel-promet]')!;
     expect(promet.dataset.say).toBe('transit');
     const rows = [...promet.querySelectorAll<HTMLElement>('[data-testid=kiosk-lines] li.k-fr')];
-    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6', 'line:11']);
+    expect(rows.map((el) => el.dataset.key)).toEqual(['line:6']);
     expect(text(q(rows[0]!, '.k-fr-lead'))).toBe('6');
-    expect(text(q(rows[0]!, '.k-fr-sub'))).toBe('kasni 2 min · 1 vozilo u blizini');
+    expect(text(q(rows[0]!, '.k-fr-title'))).toBe('kasni 4 min');
     expect(rows[0]!.dataset.tone).toBe('late');
-    expect(text(q(promet, '.k-panel-meta'))).toContain('6 / 9');
-    expect(text(q(promet, '.k-panel-meta'))).toContain('1 vozilo u blizini');
+    expect(text(q(promet, '.k-panel-meta'))).toBe('1 zatvaranje');
     expect(text(q(promet, '.k-panel-credit'))).toContain('ZET 14:31');
-    // The city panel names the Assembly's next session with its day; the surroundings the closure by distance; the forecast and the gazette, not in this teaser, say so honestly.
-    expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-title'))).toBe('13. sjednica Gradske skupštine');
-    expect(text(q(front, '[data-testid=kiosk-panel-city] li[data-key="session:skupstina:13"] .k-fr-day'))).toBe('čet 17. 9.');
-    expect(text(q(front, '[data-testid=kiosk-panel-around] li[data-key="closure:c1"] .k-fr-title'))).toBe('Ilica');
-    expect(q(front, '[data-testid=kiosk-panel-weather] .k-weather-outlook .k-panel-text')).not.toBeNull();
+    // The weather card: the observation, and an honest word where the forecast would be (this teaser carries none).
+    expect(text(q(front, '[data-testid=kiosk-panel-weather] .k-weather-current .k-temp'))).toBe('21 °C');
+    expect(text(q(front, '[data-testid=kiosk-panel-weather] .k-panel-note'))).toBe('Učitavanje podataka DHMZ-a…');
     expect(q(front, '[data-testid=kiosk-panel-tonight] .k-panel-note')).not.toBeNull();
     for (const gone of ['kiosk-scene', 'kiosk-scene-meta', 'kiosk-tiles', 'tile-vehicles', 'tile-closures', 'kiosk-tonight', 'kiosk-city', 'k-city-ink']) expect(q(k.root, `[data-testid=${gone}]`), gone).toBeNull();
     for (const gone of ['.k-scene', '.k-rail', '.k-side-tiles', '.k-dot', '.k-scene-head']) expect(q(k.root, gone), gone).toBeNull();
-    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
-    // One element per testid on the whole screen: the header's group is the only weather (D11; T2.8 report, Ruling 5).
-    expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
+    // The header's middle says the city in one line (kiosk/ticker.ts); the weather is the card's and nowhere else.
+    const ticker = q(k.root, '.k-head [data-testid=kiosk-head-mid] [data-testid=kiosk-ticker]')!;
+    expect(text(q(ticker, '.k-ticker-kicker'))).toMatch(/^(Promet|Vrijeme|Radovi|Večeras|Grad)$/);
+    expect(text(q(ticker, '.k-ticker-text')).length).toBeGreaterThan(0);
+    expect(q(k.root, '[data-testid=kiosk-weather]')).toBeNull();
     expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(1);
     const strip = text(q(k.root, '[data-testid=safety-strip]'));
     expect(strip).toContain('žuto upozorenje · Grmljavina');
@@ -554,8 +789,9 @@ describe('invitation: the screen a passer-by sees', () => {
     k.handlers.onCodes(batch(NOW - 7_000), NOW);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('0.80');
   });
-  it('nothing rotates (R-KP1, R-KP11): the two ticks at mount are the 1 s clock and the 20 s paired refresh, the strip counts nothing down, and twenty seconds change nothing on the invitation', async () => {
-    const k = mount({ stored: STORED });
+  it('only the header ticker rotates (R-KP1, R-KP11): the ticks at mount are the 1 s clock, the poll and the 20 s paired refresh, the strip counts nothing down, and twenty seconds change nothing on the page itself', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
     await flush();
     // The clock, the teaser poll, the paired refresh and the screen's own expiry: no rotation clock among them.
     expect(k.timers.map((t) => t.ms).sort((a, b) => a - b)).toEqual([CODE_TICK_MS, POLL_FALLBACK_MS, REFRESH_MS, SCREEN.expiresAt! - NOW]);
@@ -568,6 +804,38 @@ describe('invitation: the screen a passer-by sees', () => {
     k.tick(REFRESH_MS);
     expect(k.root.querySelector('[data-testid=kiosk-invitation]')!.innerHTML).toBe(before);
     expect(k.timers.filter((t) => t.ms === CODE_TICK_MS && !t.cleared)).toHaveLength(1);
+    // The one thing that does move: the header's line, one item per 8 s period, with the page beneath it untouched.
+    const ticker = q(k.root, '[data-testid=kiosk-ticker]')!;
+    const first = text(ticker);
+    const firstKey = ticker.dataset.key;
+    now += TICKER_PERIOD_MS;
+    k.tick(CODE_TICK_MS);
+    expect(ticker.dataset.key).not.toBe(firstKey);
+    expect(text(ticker)).not.toBe(first);
+    expect(k.root.querySelector('[data-testid=kiosk-invitation]')!.innerHTML).toBe(before);
+    // Back round the loop it says the same thing again: the list is ordered, not shuffled.
+    now += 2 * TICKER_PERIOD_MS;
+    k.tick(CODE_TICK_MS);
+    expect(ticker.dataset.key).toBe(firstKey);
+  });
+  it('the pairing notice borrows the header\u2019s middle and gives it back: the ticker returns when the notice expires', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    const headMid = q(k.root, '[data-testid=kiosk-head-mid]')!;
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).not.toBeNull();
+    // A phone pairs: the notice speaks, and it speaks as a status region, so the ticker stands aside.
+    k.handlers.onPaired!();
+    expect(text(headMid)).toBe('Pogled je otvoren na tvom uređaju.');
+    expect(headMid.getAttribute('role')).toBe('status');
+    k.tick(CODE_TICK_MS);
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).toBeNull();
+    // Four and a half seconds later the notice is done -- and takes its role with it, or the middle reads as taken for the life of the screen.
+    now += 5_000;
+    k.tick(CODE_TICK_MS);
+    expect(headMid.getAttribute('role')).toBeNull();
+    expect(q(headMid, '[data-testid=kiosk-ticker]')).not.toBeNull();
+    expect(text(q(headMid, '.k-ticker-kicker')).length).toBeGreaterThan(0);
   });
   it('stores fresher screen metadata from the beacon beside the same secret and names the stop, nothing else', () => {
     const k = mount({ hash: '#BEACON01.tajna' });
@@ -600,11 +868,11 @@ describe('invitation: the screen a passer-by sees', () => {
     const board = q(field, '[data-testid=kiosk-lines]')!;
     expect(board.classList.contains('k-lines--board')).toBe(true);
     expect(board.querySelectorAll('li.k-line')).toHaveLength(9);
-    expect(text(board)).toContain('kasni 2 min');
+    expect(text(board)).toContain('kasni 4 min');
     expect(k.root.querySelectorAll('canvas')).toHaveLength(0);
-    // The lines panel does not repeat the board's rows (R-L2); the other panels stand.
+    // The promet card does not repeat the board's rows (R-L2); the other cards stand.
     expect(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr')).toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-panel-city] li.k-fr')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-current .k-temp'))).toBe('21 °C');
     // Ten rows at most, then "još N" (R-V1, e2e/lagano.spec.ts): the board's cap is its own, not the composition's slot count.
     const eleven = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', Array.from({ length: 11 }, (_, i) => item('zet-rt', `vehicle:${i}`, 'vehicle', String(i + 1), { geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: String(i + 1), routeType: 0 } }))) : m));
     const many = mount({ hash: '#BEACON01.tajna', lightweight: true, fetchTeaser: async () => ({ modules: eleven }) });
@@ -637,12 +905,41 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(text(q(k.root, '[data-testid=pair-code]'))).toBe('ABCD·EFG0');
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the wizard or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
-    // The weather is the header's status group; the Sada column holds the warnings and the closures only.
-    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
+    // The Sada *rail* holds the warnings and the closures only -- Vrijeme's own
+    // block belongs to the zrak-i-nebo layer -- and a session owns the header's
+    // middle: no ticker beside the pill.
     expect(q(k.root, '[data-testid=kiosk-layer] [data-testid=k-weather]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-ticker]')).toBeNull();
     expect(text(q(k.root, '[data-testid=k-warnings]'))).toContain('Grmljavina');
     expect(k.fetchData).toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-invitation]')).toBeNull();
+  });
+  // Ruling 18: the header's weather group is gone for good (WP3), so the paired
+  // Sada must carry the city's weather itself. It does -- renderSada's main
+  // column is front.ts's own cards, and the VRIJEME card is the observation as
+  // its figure with today's and tomorrow's ranges under it, capped at the two
+  // rows the paired column holds. This case is the proof that the one weather
+  // a paired screen shows is really on the screen.
+  it('the paired Sada carries the city weather itself: the observation as the figure, today and tomorrow as its two rows', async () => {
+    const withForecast = [...MODULES, snap('dhmz-forecast', [
+      item('dhmz-forecast', 'f-today', 'forecast', 'Prognoza 11.9.', { at: '2026-09-11T00:00:00Z', data: { tmin: 16, tmax: 25 } }),
+      item('dhmz-forecast', 'f-tomorrow', 'forecast', 'Prognoza 12.9.', { at: '2026-09-12T00:00:00Z', data: { tmin: 13, tmax: 27 } }),
+      item('dhmz-forecast', 'f-later', 'forecast', 'Prognoza 13.9.', { at: '2026-09-13T00:00:00Z', data: { tmin: 12, tmax: 26 } }),
+    ])];
+    const k = await pairedKiosk({ modules: withForecast });
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer).toBe('grad-sada');
+    const weather = q(k.root, '[data-testid=kiosk-layer] [data-testid=kiosk-main] [data-panel=weather]')!;
+    expect(weather).not.toBeNull();
+    expect(text(q(weather, '.k-panel-kicker'))).toBe('Vrijeme');
+    // The reading the header used to carry, now inside the card.
+    expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
+    expect(text(q(weather, '.k-condition'))).toBe('vedro');
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
+    // Sized for the paired column: two ranges, never the whole forecast run.
+    const rows = [...weather.querySelectorAll('.k-panel-rows .k-fr')];
+    expect(rows.map((row) => text(row.querySelector('.k-fr-lead')))).toEqual(['danas', 'sutra']);
+    expect(rows.map((row) => text(row.querySelector('.k-fr-title')))).toEqual(['16 do 25 °C', '13 do 27 °C']);
+    expect(q(weather, '.k-panel-note')).toBeNull();
   });
   it('on a calm day the Sada column gives the closures the whole column and shows no warnings block: green notices stay one line on the strip', async () => {
     const calm = MODULES.map((m) => (m.module === 'dhmz-cap' ? snap('dhmz-cap', [item('dhmz-cap', 'w1', 'warning', 'Zeleno upozorenje za vjetar', { severity: 'minor' })]) : m));
@@ -693,7 +990,7 @@ describe('paired: selection and ending', () => {
     await flush();
     const route = text(q(k.root, '[data-testid=k-selection]'));
     expect(route).toContain('Odabrano na telefonu');
-    expect(route).toContain('kasni 2 min');
+    expect(route).toContain('kasni 4 min');
     expect(route).toContain('12 vozila');
     k.view('u-pokretu', { kind: 'stop', id: '200_1' });
     await flush();
@@ -833,17 +1130,17 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
 });
 
 describe('alerts, polling, the first tap and disposal', () => {
-  it('a cold screen waits for readings: every panel says it is loading, no row is invented, and no weather', async () => {
+  it('a cold screen waits for readings: every card says it is loading, no row is invented, and the header says nothing', async () => {
     const k = mount({ stored: STORED, fetchTeaser: () => new Promise(() => {}) });
     await flush();
-    // The lines panel lists the stop's own routes from the stop alone, each with the honest "no data" word; every other panel has no row to show yet.
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(2);
-    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] li.k-fr .k-fr-sub'))).toBe('Nema podataka o kašnjenju · nijedno vozilo u blizini');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(2);
+    // Nothing has answered: no exception is claimed, no range is invented, and no venue is listed.
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] li.k-fr')).toHaveLength(0);
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-note'))).toBe('Učitavanje podataka ZET-a…');
-    for (const id of ['around', 'city', 'tonight']) expect(text(q(k.root, `[data-testid=kiosk-panel-${id}] .k-panel-note`)), id).toBe('učitavanje podataka');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-tonight] .k-panel-note'))).toBe('učitavanje podataka');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-panel-note'))).toBe('Učitavanje podataka DHMZ-a…');
     expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-note'))).toBe('Učitavanje podataka DHMZ-a…');
-    expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
+    // A ticker with nothing to say is not there at all: the header never prints an empty line.
+    expect(q(k.root, '[data-testid=kiosk-ticker]')).toBeNull();
     k.handle.destroy();
   });
   it('the paired safety strip agrees with the live session copy when the preview request fails', async () => {
@@ -883,7 +1180,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     // The panels are told, source by source: the last-good copies are stale (the lines panel says so in its credit), and the field is still one field with its map.
     expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.dataset.state).toBe('stale');
     expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-credit'))).toContain('zastarjelo');
-    expect(q(k.root, '[data-testid=kiosk-weather] .k-chip--stale')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-panel-meta'))).toContain('zastarjelo');
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-map]')).not.toBeNull();
     fail = false;
     k.poll();
@@ -896,12 +1193,13 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
     expect(text(q(k.root, '[data-testid=strip-warning]'))).toBe('Upozorenja DHMZ-a: podaci trenutačno nedostupni');
-    // Every panel reads its source as down (never absent, which would read as loading): the honest word in rose, no loading word anywhere.
-    for (const id of ['tonight', 'city', 'promet', 'around']) expect(q(k.root, `[data-testid=kiosk-panel-${id}]`)!.dataset.state, id).toBe('down');
-    expect(q(k.root, '[data-testid=kiosk-panel-around] .k-panel-note')!.dataset.state).toBe('down');
+    // Every card reads its source as down (never absent, which would read as loading): the honest word in rose, no loading word anywhere.
+    for (const id of ['tonight', 'promet', 'weather']) expect(q(k.root, `[data-testid=kiosk-panel-${id}]`)!.dataset.state, id).toBe('down');
+    expect(q(k.root, '[data-testid=kiosk-panel-tonight] .k-panel-note')!.dataset.state).toBe('down');
     expect(text(q(k.root, '[data-testid=kiosk-invitation]'))).not.toContain('Učitavanje');
-    // The clock stands alone (D11): no sentence and no dash where the reading was.
-    expect(q(k.root, '[data-testid=kiosk-weather]')!.hidden).toBe(true);
+    // No source answers, so the header's line has nothing to say and is not drawn; no dash stands in for the reading.
+    expect(q(k.root, '[data-testid=kiosk-ticker]')).toBeNull();
+    expect(text(q(k.root, '.k-head'))).not.toMatch(/[\u2013\u2014]/);
   });
   it('a failed session request leaves its copy stale and the teaser\u2019s live copy speaks; only when both fail does the map hold', async () => {
     let failZet = false;
@@ -1009,7 +1307,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     poll[0]!.fn();
     await flush();
     expect(alert.hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=kiosk-weather]'))).toContain('21 °C');
+    expect(text(q(k.root, '.k-weather-current .k-temp'))).toBe('21 °C');
     // The one that fired cleared itself; exactly one fresh poll is armed (still the fallback: the fixture has no source timestamp).
     expect(k.timers.slice(armedAtMount).filter((t) => t.ms === POLL_FALLBACK_MS && !t.cleared)).toHaveLength(1);
   });
@@ -1034,8 +1332,9 @@ describe('alerts, polling, the first tap and disposal', () => {
     const k = mount({ stored: STORED, locale: 'en' });
     await flush();
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
-    expect(text(q(k.root, '[data-testid=kiosk-panel-around] .k-panel-kicker'))).toBe('Around the stop');
-    expect(text(q(k.root, '[data-testid=kiosk-panel-city] .k-panel-kicker'))).toBe('City');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-kicker'))).toBe('Transit');
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet] .k-panel-meta'))).toBe('1 closure');
+    expect(text(q(k.root, '[data-testid=kiosk-ticker] .k-ticker-kicker'))).toMatch(/^(Transit|Weather|Works|Tonight|City)$/);
   });
   it('destroy() clears every timer, closes both sockets and removes the DOM', async () => {
     const k = await pairedKiosk();
@@ -1047,22 +1346,19 @@ describe('alerts, polling, the first tap and disposal', () => {
   });
 });
 
-// The invitation composed (plan "Frame", R-KP1, R-KP5): one field, one column
-// of statements over the card, the header's weather group, the strip.
-describe('the invitation composition: the card, the header group, the strip', () => {
-  it('orders the column forecast, city, then the card; the header carries the weather group with the condition icon, the reading and the sun time; the card is the lead over the hint beside the QR, then the code (R-KP21)', async () => {
+// The invitation composed (plan "Frame", R-KP1, R-KP5): the map, the three
+// cards over the invitation card, the header's ticker, the strip.
+describe('the invitation composition: the cards, the header ticker, the strip', () => {
+  it('orders the aside weather, promet, tonight, then the card; the weather card carries the condition icon and the reading; the card is the QR beside the lead, the hint and the code (R-KP21)', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const column = q(k.root, '[data-testid=kiosk-invitation] .k-overview')!;
-    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'tonight', 'k-discovery-slot','k-panel--card']);
-    const weather = q(k.root, '.k-head .k-clock-row [data-testid=kiosk-weather]')!;
-    expect(weather.hidden).toBe(false);
-    expect(weather.dataset.state).toBe('live');
+    expect([...column.children].map((el) => (el as HTMLElement).dataset.panel ?? el.className)).toEqual(['weather', 'promet', 'tonight', 'k-discovery-slot','k-panel--card']);
+    const weather = q(k.root, '[data-testid=kiosk-panel-weather]')!;
     expect(q(weather, '.k-weather-icon use')!.getAttribute('href')).toBe('#icon-sun'); // 'vedro'
-    expect(text(q(k.root, '.k-weather-current .k-temp'))).toBe('21 °C');
-    expect(text(q(weather, '.k-sun time'))).toMatch(/^\d\d:\d\d$/);
+    expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
     expect(q(weather, '.k-weather-details')).toBeNull();
-    expect(q(weather, '.k-kicker')).toBeNull();
     expect(q(k.root, '[data-testid=strip-sun]')).toBeNull();
     const card = q(k.root, '[data-testid=kiosk-invite]')!;
     expect(q(card, '.k-support')).toBeNull();
@@ -1072,32 +1368,31 @@ describe('the invitation composition: the card, the header group, the strip', ()
     expect(text(q(card, '.k-hint-host'))).toBe('zagreb.aningfilm.hr/s');
     expect(q(card, '.k-hint-host')!.querySelectorAll('wbr').length).toBeGreaterThan(0);
     expect(text(q(card, '.k-hint'))).toBe('ili upiši kod na zagreb.aningfilm.hr/s');
-    // The card's pieces in reading order: the lead and the hint together (the side the QR stands beside on a wall), the QR, the code and its bar across.
-    expect([...card.children].map((el) => el.className)).toEqual(['k-invite-side', 'k-qr', 'k-invite-code']);
-    expect([...q(card, '.k-invite-side')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint']);
-    expect(q(card, '.k-invite-code [data-testid=pair-code]')).not.toBeNull();
+    // The card is one row: the column of words the code closes, and the QR beside it.
+    expect([...card.children].map((el) => el.className)).toEqual(['k-invite-side', 'k-qr']);
+    expect([...q(card, '.k-invite-side')!.children].map((el) => el.className)).toEqual(['k-lead', 'k-hint', 'k-invite-code']);
+    expect(q(card, '.k-invite-side .k-invite-code [data-testid=pair-code]')).not.toBeNull();
     expect(q(card, '.k-invite-code [data-testid=code-progress] .k-progress-bar')).not.toBeNull();
-    // One h1 on the screen (the card's lead); each of the five panels is headed by its kicker as an h2, the field is a labelled section.
+    // One h1 on the screen (the card's lead); each of the three cards is headed by its kicker as an h2, the field is a labelled section.
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
-    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] h2')).toHaveLength(5);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-invitation] h2')).toHaveLength(3);
   });
-  it('DHMZ down: the header weather group hides, the clock stands alone and no dash stands in for the reading', async () => {
+  it('DHMZ down: the weather card says so in a word, the header carries no reading and no dash stands in for one', async () => {
     const down = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [], 'down') : m));
     const k = mount({ stored: STORED, fetchTeaser: async () => ({ modules: down }) });
     await flush();
-    const weather = q(k.root, '[data-testid=kiosk-weather]')!;
-    expect(weather.hidden).toBe(true);
-    expect(text(weather)).toBe('');
-    expect(weather.dataset.state).toBeUndefined();
+    const weather = q(k.root, '[data-testid=kiosk-panel-weather]')!;
+    expect(text(q(weather, '.k-weather-note'))).toBe('Podaci DHMZ-a trenutačno nisu dostupni.');
+    expect(q(weather, '.k-temp')).toBeNull();
     expect(text(q(k.root, '[data-testid=kiosk-clock]'))).toBe('14:32');
     const head = text(q(k.root, '.k-head'));
     expect(head).not.toMatch(/[\u2013\u2014]|(^|\s)-(\s|$)/);
     expect(head).not.toContain('°C');
     expect(head).not.toContain('DHMZ');
     expect(q(k.root, '[data-testid=kiosk-temp]')).toBeNull();
-    // The rest of the screen is unaffected: the strip still speaks and the lines panel still lists the stop.
+    // The rest of the screen is unaffected: the strip still speaks and the promet card still names its exception.
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(2);
+    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-promet] li.k-fr')).toHaveLength(1);
   });
   it('builds the hostname sentence from codeBase, never from a literal', async () => {
     const k = mount({ stored: STORED, codeBase: 'https://example.test' });
@@ -1215,7 +1510,9 @@ describe('the field, the column and the one map', () => {
     expect(options.selectedStop).toBeUndefined();
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
-    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(mapMode==='schema'?STOP.routes:[]);
+    // The invitation is the transit picture on either renderer now: the gate that emptied the
+    // geographic map whenever the default 'living' group was active is gone.
+    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
     expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: true, stop: STOP });
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
@@ -1228,10 +1525,10 @@ describe('the field, the column and the one map', () => {
     expect(map.handle.setView).not.toHaveBeenCalled();
     expect(container.parentElement).toBe(host);
     // A resize within the same composition re-measures the field and moves the camera on the same map.
-    layOut(host, 1500);
+    layOut(host, 700);
     k.repaint();
     expect(map.handle.setView).toHaveBeenCalledTimes(1);
-    expect(map.handle.setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(1500, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
+    expect(map.handle.setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(700, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
     expect(map.factory).toHaveBeenCalledTimes(1);
     // A session parks the container (paused), the paired Sada view re-hosts it at street zoom with the stop selected; the invitation takes it back.
     k.handlers.onCodes(batch(NOW), NOW);
@@ -1258,8 +1555,7 @@ describe('the field, the column and the one map', () => {
     await flush();
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     const row = q(promet, 'li[data-key="line:6"]')!;
-    const sub = q(row, '.k-fr-sub')!;
-    expect(text(sub)).toBe('kasni 2 min · 1 vozilo u blizini');
+    expect(text(q(row, '.k-fr-title'))).toBe('kasni 4 min');
     // The same answer on the next poll: the same nodes stand (a reader mid-glance is never interrupted).
     k.poll();
     await flush();
@@ -1273,18 +1569,17 @@ describe('the field, the column and the one map', () => {
     ]) : m));
     k.poll();
     await flush();
+    // Line 6 comes back inside the on-time band: it is no exception any more, so the card says the network runs to plan.
     expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(promet);
-    expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
-    expect(text(q(row, '.k-fr-sub'))).toBe('na vrijeme · 2 vozila u blizini');
-    expect(row.dataset.tone).toBe('ontime');
-    // A ZET notice arrives: it joins the lines panel as its last row; the line rows are untouched.
+    expect(q(promet, 'li[data-key="line:6"]')).toBeNull();
+    expect(text(q(promet, '.k-panel-note'))).toBe('Linije voze po redu');
+    // A ZET notice arrives: the card counts it rather than printing it; the header's line carries its words.
     modules = modules.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [...m.items, item('dogadanja', 'zet-promet:1', 'event', 'Linija 6 mijenja trasu', { at: '2026-09-11T10:00:00Z', dateBasis: 'published', data: { source: 'zet-promet' } })]) : m));
     k.poll();
     await flush();
-    expect(q(promet, 'li[data-key="line:6"]')).toBe(row);
-    expect(q(promet, 'li[data-key="notice:zet-promet:1"]')).toBeNull(); // The fixed six-row route budget is not displaced by a seventh row.
-    // The same notice appears in no other panel: the city panel keeps its Assembly row alone.
-    expect(k.root.querySelectorAll('[data-testid=kiosk-panel-city] li.k-fr')).toHaveLength(1);
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')).toBe(promet);
+    expect(q(promet, 'li[data-key="notice:zet-promet:1"]')).toBeNull();
+    expect(text(q(promet, '.k-panel-meta'))).toBe('1 zatvaranje · 1 obavijest ZET-a');
   });
 
   it('reports a layout defect instead of silently hiding useful rows to pass a geometry check', async () => {
@@ -1292,9 +1587,9 @@ describe('the field, the column and the one map', () => {
     await flush();
     const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
     const rows = [...promet.querySelectorAll<HTMLElement>('li.k-fr')];
-    expect(rows).toHaveLength(2);
-    // A box that holds five rows of eight (happy-dom lays nothing out: the box is stubbed at 300 px and each shown row costs 60).
-    let height = 100;
+    expect(rows).toHaveLength(1);
+    // A box smaller than its own rows (happy-dom lays nothing out: the box is stubbed and each shown row costs 60).
+    let height = 40;
     Object.defineProperty(promet, 'clientHeight', { get: () => height, configurable: true });
     Object.defineProperty(promet, 'scrollHeight', { get: () => rows.filter((el) => !el.hidden).length * 60, configurable: true });
     k.tick(CODE_TICK_MS);
@@ -1303,7 +1598,7 @@ describe('the field, the column and the one map', () => {
     expect(rows.every(el => !el.hidden)).toBe(true);
     expect(promet.dataset.overflow).toBe('true');
     // Even a broken box cannot erase useful rows to pretend that it fits.
-    height = 30;
+    height = 10;
     k.repaint();
     expect(rows.every((el) => !el.hidden)).toBe(true);
     // The box grows (a resize): every row comes back.
@@ -1318,8 +1613,9 @@ describe('the field, the column and the one map', () => {
     mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: phone.factory as never });
     await flush();
     expect((phone.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.handheld, STOP.lat, HANDHELD_SPAN_M));
-    // The band shows less ground than the wall's field, so the names keep the ruling's own padding.
-    expect((phone.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(24);
+    // A phone's band is taller than it is wide, so it shows more ground north to south than the wall's field and pads its names by that ratio.
+    expect((phone.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M));
+    expect(labelPadding(FIELD_DESIGN_WIDTH.handheld, FIELD_DESIGN_HEIGHT.handheld, HANDHELD_SPAN_M)).toBeGreaterThan(24);
     const totem = spyMap({ setProzor: vi.fn() });
     const k = mount({ stored: STORED, viewport: { width: 1080, height: 1920 }, mapFactory: totem.factory as never });
     await flush();
@@ -1338,7 +1634,7 @@ describe('the field, the column and the one map', () => {
     expect(labelPadding(1080, 1500, FIELD_SPAN_M)).toBeGreaterThan(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
   });
 
-  it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN, shown in the lines panel from 20:00, and fetched again once now passes validUntil', async () => {
+  it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN and again once now passes validUntil; the exceptions card does not print it (the arrivals board will, WP5b)', async () => {
     // 21:32 in Zagreb: the evening window is open and the 23:58 departure is ahead within ten hours.
     const EVENING = NOW + 7 * 3_600_000;
     let now = EVENING;
@@ -1348,8 +1644,7 @@ describe('the field, the column and the one map', () => {
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
     expect(loadLastRun).toHaveBeenCalledWith('106_1');
-    const foot = q(k.root, '[data-testid=kiosk-panel-promet] [data-testid=kiosk-lastrun]')!;
-    expect(text(foot)).toBe('Zadnji polazak 6 23:58 po rasporedu · ZET GTFS');
+    expect(q(k.root, '[data-testid=kiosk-panel-promet] [data-testid=kiosk-lastrun]')).toBeNull();
     // Polls within the table's validity never refetch.
     k.poll();
     await flush();
@@ -1431,16 +1726,100 @@ describe('the field, the column and the one map', () => {
     expect(map.factory).not.toHaveBeenCalled();
     expect(q(k.root, '[data-testid=kiosk-map]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live] [data-testid=kiosk-lines] li.k-line')).not.toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-panel-around] li.k-fr')).not.toBeNull();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-current .k-temp'))).toBe('21 °C');
+  });
+
+  // What Postavke set the screen to is what the invitation frames when no stop
+  // does. The header chip and the camera read the one answer, so a screen set
+  // to the whole city cannot name a quarter in words and show one in picture.
+  it('frames the invitation on the četvrt the screen was set to', async () => {
+    const map = spyMap();
+    const seat = districtBySlug('trnje')!.seat;
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }), mapFactory: map.factory as never });
+    await flush();
+    const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
+    // The seat camera holds the frame until the quarter's own rings land (mapview.ts fieldView).
+    expect(options.center).toEqual([seat.lon, seat.lat]);
+    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, seat.lat, DISTRICT_SPAN_M));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trnje');
+  });
+
+  it('opens on the whole city for `zagreb` and for a screen that named no area at all', async () => {
+    const window = cityWindowView(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide);
+    const city = spyMap();
+    const k = mount({ stored: STORED_CITY, mapFactory: city.factory as never });
+    await flush();
+    // 'zagreb' is the whole city, not a quarter: no outline, and the city window's own frame.
+    expect(city.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    k.handle.destroy();
+    const none = spyMap();
+    const n = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null } }), mapFactory: none.factory as never });
+    await flush();
+    expect(none.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(n.root, '[data-testid=kiosk-context]'))).toBe('');
+  });
+
+  it('re-frames the one live map when the DO answers a Postavke save with another area', async () => {
+    const map = spyMap();
+    const k = mount({ stored: STORED_CITY, mapFactory: map.factory as never });
+    await flush();
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'maksimir' });
+    await flush();
+    const seat = districtBySlug('maksimir')!.seat;
+    // The same map, moved -- never a second one built for the new frame.
+    expect(map.factory).toHaveBeenCalledTimes(1);
+    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [seat.lon, seat.lat] }));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Maksimir');
+  });
+  // The camera above is pushed on the beat Postavke closes, and while the
+  // panel was open the stage -- and with it the map's box -- was hidden. A
+  // MapLibre transform measured behind the panel is 0 x 0, and a move against
+  // it lands the subject about a third of the field off centre (seen on the
+  // real map: correct after a reload, wrong after a save). The order is the
+  // whole fix, so the order is what this case holds.
+  it('re-measures the map before it moves it when Postavke closes: a box behind the panel is no box at all', async () => {
+    const order: string[] = [];
+    const handle = {
+      update: vi.fn(), destroy: vi.fn(), setFeedState: vi.fn(),
+      pause: () => { order.push('pause'); },
+      resume: () => { order.push('resume'); },
+      resize: () => { order.push('resize'); },
+      setView: vi.fn(() => { order.push('setView'); }),
+    };
+    const k = mount({ stored: STORED_CITY, mapFactory: vi.fn(() => handle) as never });
+    await flush();
+    q(k.root, '[data-testid=kiosk-settings]')!.click();
+    await flush();
+    // The panel is over the stage and the map is held.
+    expect(order).toContain('pause');
+    expect(q(k.root, '.k-stage')!.hidden).toBe(true);
+    const box = q(k.root, '[data-testid=kiosk-settings-panel]')!;
+    const chosen = q(box, 'input[name=settings-stop][value=106_1]') as HTMLInputElement;
+    chosen.checked = true;
+    chosen.dispatchEvent(new Event('change', { bubbles: true }));
+    q(box, '[data-testid=settings-save]')!.click();
+    expect(k.beacon.setScreen).toHaveBeenCalledWith('106_1', 'zagreb');
+    order.length = 0;
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'zagreb' });
+    await flush();
+    expect(box.hidden).toBe(true);
+    expect(handle.setView).toHaveBeenCalled();
+    expect(order).toContain('resize');
+    expect(order).toContain('setView');
+    expect(order.indexOf('resize')).toBeLessThan(order.indexOf('setView'));
+    // And the stage is back, so the box the resize read is the real one.
+    expect(q(k.root, '.k-stage')!.hidden).toBe(false);
   });
 });
 
 // T4.4: /kiosk/ opened on a phone. A handheld (kiosk/layout.ts, below
 // core/breakpoints.ts KIOSK_HANDHELD_MAX_PX) still asks for no fullscreen and
 // no wake lock and still scrolls its wizard -- but there is no separate
-// handheld composition: after creation a phone gets the same invitation a
-// wall gets, drawn with the handheld tokens, and the address that provisions
-// the wall is a footnote under it rather than the page's subject.
+// handheld composition: after creation a phone gets the same page a wall
+// gets, drawn with the handheld tokens and scrolling. Setup is one button
+// (T3), so nothing tells the hand to open an address on the wall.
 describe('handheld: the kiosk on a phone', () => {
   const PHONE = { width: 390, height: 844 };
   it('lays out as handheld and never asks for fullscreen or a wake lock, however often it is tapped', () => {
@@ -1452,22 +1831,22 @@ describe('handheld: the kiosk on a phone', () => {
     expect(k.requestWakeLock).not.toHaveBeenCalled();
     k.handle.destroy();
   });
-  it('kiosk.css lets a handheld scroll instead of cropping (the body through :has, no mirrored attribute), keeps the stage padding a wall drops, folds the wizard grids and stands the invitation up under a 280 px map band', () => {
+  it('kiosk.css lets a handheld scroll instead of cropping (the body through :has, no mirrored attribute), keeps the stage padding a wall drops, folds the wizard grids and stacks the window under a 420 px map band', () => {
     const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+    const city = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk-city.css'), 'utf8');
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \{[^}]*block-size: auto;\s*overflow: visible;/);
     expect(css).toContain(".kiosk-body:has(.kiosk[data-size='handheld']) { overflow: visible; }");
     expect(css).toContain(".kiosk[data-size='handheld'] .k-choice-grid, .kiosk[data-size='handheld'] .k-stop-list { grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }");
     expect(css).not.toContain('data-kiosk-size');
-    // No separate handheld composition: the phone draws the invitation with a map band, the column in flow beneath it, the card stood up.
-    expect(css).toContain('--k-map-band: 280px;');
-    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-field \{[^}]*height: var\(--k-map-band\);/);
-    expect(css).toContain(".kiosk[data-size='handheld'] .k-local");
-    expect(css).toContain(".kiosk[data-size='handheld'] .k-overview");
+    // No separate handheld composition: the phone draws the same window with a map band and the cards in flow beneath it.
+    expect(css).toContain('--k-map-band: 420px;');
     expect(css).toContain(".kiosk[data-size='handheld'] .k-field { height: var(--k-map-band); border-radius: var(--k-radius); }");
+    expect(city).toContain(".kiosk[data-size='handheld'] .k-city-window { display: flex; flex-direction: column;");
+    expect(city).toContain(".kiosk[data-size='handheld'] .k-city-window .k-overview");
     expect(css).toMatch(/\.kiosk\[data-size='handheld'\]\[data-phase='invitation'\] \.k-stage \{ padding: var\(--k-pad\); \}/);
-    for (const dead of ['k-handheld', 'k-invite-text', 'k-support', 'k-scene', 'k-rail']) expect(css, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
+    for (const dead of ['k-handheld', 'k-invite-text', 'k-support', 'k-scene', 'k-rail', 'k-provision']) expect(css, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
   });
-  it('after creation gives a phone the whole invitation, with the provisioning address as a footnote under it', async () => {
+  it('after creation gives a phone the whole page, with no address to open on a wall', async () => {
     const k = mount({ viewport: PHONE });
     expect(k.handle.phase()).toBe('setup');
     await flush();
@@ -1475,18 +1854,13 @@ describe('handheld: the kiosk on a phone', () => {
     await flush();
     expect(k.handle.phase()).toBe('invitation');
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
-    // The same composition a wall gets: the field with its map host, the column of statements and the card.
-    for (const present of ['kiosk-invitation', 'kiosk-live', 'kiosk-map-host', 'kiosk-panel-tonight', 'kiosk-panel-promet', 'kiosk-invite']) {
+    // The same composition a wall gets: the field with its map host, the three cards and the invitation card.
+    for (const present of ['kiosk-invitation', 'kiosk-live', 'kiosk-map-host', 'kiosk-panel-tonight', 'kiosk-panel-promet', 'kiosk-panel-weather', 'kiosk-invite']) {
       expect(q(k.root, `[data-testid=${present}]`), present).not.toBeNull();
     }
-    // The address that provisions the wall is an aside with an h2, so the page's one h1 is the invitation's lead here as everywhere.
-    const block = q(k.root, '[data-testid=handheld-link-block]')!;
-    expect(block).not.toBeNull();
-    expect(block.tagName).toBe('ASIDE');
-    expect(text(q(block, 'h2'))).toBe('Ovu adresu otvori na zaslonu koji postavljaš.');
-    const link = q(block, '[data-testid=handheld-link]') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
-    expect(text(link)).toBe('https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova');
+    // Setup is one button now: no address to type on the wall, so no footnote and no second heading.
+    expect(q(k.root, '[data-testid=handheld-link-block]')).toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link]')).toBeNull();
     expect(k.root.querySelectorAll('h1')).toHaveLength(1);
     expect(text(q(k.root, 'h1.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     // The code card is the same one the rotation paints on a wall.
@@ -1495,23 +1869,18 @@ describe('handheld: the kiosk on a phone', () => {
     expect(k.root.querySelector('[data-testid=kiosk-qr] svg')).not.toBeNull();
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
-    // The header's weather group paints on a handheld too (C.3), the only weather there.
-    expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(1);
-    expect(text(q(k.root, '.k-head [data-testid=kiosk-weather]'))).toContain('21 °C');
-  });
-  it('a stored screen opened on a phone rebuilds the link from its credentials on the code base', () => {
-    const k = mount({ stored: STORED, viewport: PHONE });
-    expect((q(k.root, '[data-testid=handheld-link]') as HTMLAnchorElement).getAttribute('href')).toBe('https://zagreb.aningfilm.hr/kiosk/#BEACON01.tajna');
+    // The weather is the card's on a phone as on a wall, and the header's line still says the city.
+    expect(k.root.querySelectorAll('[data-testid=kiosk-weather]')).toHaveLength(0);
+    expect(text(q(k.root, '.k-weather-current .k-temp'))).toBe('21 °C');
   });
   it('speaks English when the page does', () => {
     const k = mount({ stored: STORED, viewport: PHONE, i18n: createDefaultI18n('en'), locale: 'en' });
-    expect(text(q(k.root, '[data-testid=handheld-link-block] h2'))).toBe('Open this address on the screen you are setting up.');
     expect(text(q(k.root, '.k-lead'))).toBe('Scan for 10 minutes of the city.');
   });
-  it('crossing the handheld bound keeps the invitation both ways: only the provisioning footnote comes and goes', () => {
+  it('crossing the handheld bound keeps the same page both ways, with no provisioning footnote either side', () => {
     const viewport = { ...PHONE };
     const k = mount({ stored: STORED, viewport });
-    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
+    expect(q(k.root, '[data-testid=handheld-link-block]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     viewport.width = 1366; viewport.height = 768;
     k.repaint();
@@ -1521,7 +1890,6 @@ describe('handheld: the kiosk on a phone', () => {
     expect(text(q(k.root, '.k-lead'))).toBe('Skeniraj za 10 minuta grada.');
     viewport.width = 390; viewport.height = 844;
     k.repaint();
-    expect(q(k.root, '[data-testid=handheld-link-block]')).not.toBeNull();
     expect(q(k.root, '[data-testid=kiosk-live]')).not.toBeNull();
     expect(k.handle.phase()).toBe('invitation');
   });
@@ -1574,5 +1942,262 @@ describe('T5.3: the theme button', () => {
     expect(k.themeListenerCount()).toBe(1);
     k.handle.destroy();
     expect(k.themeListenerCount()).toBe(0);
+  });
+});
+
+
+// --- WP5b: what comes next at a stop, on the public screen ------------------
+// The shared merge (shared/city/arrivals.ts) and the board cache
+// (app/src/city/boards.ts) are proven where they live; what is proven here is
+// the kiosk's own half: the card a tap opens leads with the arrivals, a
+// configured stop turns the Promet card into its board, the cache is made once
+// and let go with the screen, and nothing is asked for that nobody is looking
+// at.
+
+/** A tracked trip and an untracked one at the screen's own platform, and a
+ *  third at its sibling: 14:32 in Zagreb is the test's `NOW`. */
+const TRIP_LIVE = 'trip-6-live';
+function dep(tripId: string, routeId: string, headsign: string, at: string): ScheduledDeparture {
+  return { operator: 'zet', tripId, routeId, routeName: routeId, headsign, at };
+}
+function board(stopId: string, departures: ScheduledDeparture[]): DepartureBoard {
+  return { operator: 'zet', stopId, stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(NOW).toISOString(), departures };
+}
+const JELACIC_BOARDS: Record<string, DepartureBoard> = {
+  // 12:33:00Z + ZET's own 120 s delay = 12:35 = "za 3 min"; the 11 is the
+  // timetable alone, six minutes out; the 13 at the sibling platform is past
+  // the countdown horizon and shows a clock.
+  '106_1': board('106_1', [dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z')]),
+  '106_2': board('106_2', [dep('trip-13', '13', 'Žitnjak', '2026-09-11T12:45:00Z')]),
+};
+/** The teaser with one tracked vehicle on the 6, carrying the trip the board names. */
+const ARRIVAL_MODULES: ModuleSnapshot[] = MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [
+  item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }),
+  item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: 120 } }),
+  item('zet-rt', 'route:6', 'vehicle', '6', { data: { routeId: '6', routeShortName: '6', medianDelaySeconds: 240, vehicles: 12 } }),
+])));
+
+/** The real cache (its memo and its listener set are the thing under test)
+ *  over a fetch this test answers: every platform asked for is recorded, and a
+ *  platform with no board answers like the Worker being down. */
+function fakeBoards(available: Record<string, DepartureBoard> = {}) {
+  const asked: string[] = [];
+  const fetchImpl = vi.fn(async (input: unknown) => {
+    const id = decodeURIComponent(String(input).split('stop=')[1] ?? '');
+    asked.push(id);
+    const found = available[id];
+    if (!found) return { ok: false, status: 503, json: async () => ({}) } as unknown as Response;
+    return { ok: true, status: 200, json: async () => found } as unknown as Response;
+  });
+  const made: { destroy: ReturnType<typeof vi.fn> }[] = [];
+  const create = vi.fn((): BoardCache => {
+    const real = createBoardCache({ fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, now: () => NOW });
+    const wrapped = { get: real.get, ensure: real.ensure, destroy: vi.fn(() => { real.destroy(); }) };
+    made.push(wrapped);
+    return wrapped;
+  });
+  return { create, asked, made };
+}
+
+describe('the kiosk grid places every region explicitly', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'kiosk.css'), 'utf8');
+  it('gives the alert its own row and every other region a named one, the essentials panel included', () => {
+    // Four rows: the header, the alert (collapsed to nothing while there is
+    // none), the stage, the safety strip. Nothing may auto-place, or the next
+    // region added shuffles the page.
+    expect(css).toContain('grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);');
+    expect(css).toMatch(/\.k-head \{ grid-row: 1;/);
+    expect(css).toMatch(/\.k-alert \{ grid-row: 2;/);
+    expect(css).toMatch(/\.k-stage \{ grid-row: 3;/);
+    expect(css).toMatch(/\.k-strip \{ grid-row: 4;/);
+    // The essentials panel is absolute at every size but the handheld, where
+    // it is in the flow and must be told it belongs in the stage's row --
+    // auto-placed it lands in a fifth row, under the strip and off the screen.
+    expect(css).toMatch(/\.kiosk\[data-size='handheld'\] \.k-basics \{ position: static; grid-row: 3; \}/);
+  });
+});
+
+describe('arrivals on the public screen', () => {
+  /** A map whose only seam this test needs is the tap: the kiosk hands
+   *  `onSelect` to the factory (kiosk/mapview.ts), and a tap on a stop is that
+   *  callback with the stop's id. */
+  function tappableMap() {
+    const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn(), setFeedState: vi.fn(), setView: vi.fn() };
+    return { factory: vi.fn(() => handle), handle };
+  }
+
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const options = map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void };
+    options.onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
+    // One line per row: the time, the plate, where it is going -- and no
+    // per-row "po redu vožnje", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // The tracked row, and only it, carries the live dot and is marked live;
+    // the note under the list says what the unmarked times are.
+    expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
+    expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
+    expect(text(card)).not.toContain('po redu vožnje');
+    // One note for the list, not one per row, and the stop's lines keep their place under it.
+    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    expect(text(card)).toContain('linija 6, 11, 12');
+    const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    // The card is the column while it is open (kiosk-city.css hides the screen's
+    // own board behind this flag); going back gives the board the rail again.
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('1');
+    q(k.root, '[data-action=kiosk-leave]')!.click();
+    expect(q(k.root, '.kiosk')!.dataset.exploreSubject).toBe('0');
+    k.handle.destroy();
+  });
+
+  it('a configured stop is the Promet card, asked for once a minute however often the screen paints', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // The stop list has not been loaded, so the screen asks about the platform it knows.
+    expect(b.asked).toEqual(['106_1']);
+    // A board row is the exceptions row's shape: plate, destination, time at
+    // the end, one line -- so the card costs the aside what it always cost it.
+    const rows = [...promet.querySelectorAll<HTMLElement>('.k-fr')];
+    expect(rows.map((row) => text(row))).toEqual(['6Črnomerecza 3 min', '11Velika Goricaza 6 min']);
+    expect(rows.every((row) => row.dataset.trail === '1' && row.querySelector('.k-fr-sub') === null)).toBe(true);
+    expect(text(promet)).toContain('Promet');
+    // No figure on a public screen stands unattributed: the board says under itself where it came from.
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
+    // Ten seconds later the poll comes round again; the minute's memo answers it.
+    k.poll();
+    await flush();
+    expect(b.asked).toEqual(['106_1']);
+    k.handle.destroy();
+  });
+
+  it("says what a tapped stop's empty list means: a board that failed is not an evening with no trams", async () => {
+    const map = tappableMap();
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelector('[data-testid=k-arrivals]')).toBeNull();
+    expect(text(card)).toContain('Vozni red trenutačno nije dostupan.');
+    expect(q(card, '.k-board-note')!.dataset.state).toBe('down');
+    // The stop is still named, and its lines are still there to read.
+    expect(text(card)).toContain('Trg bana J. Jelačića');
+    expect(text(card)).toContain('linija 6, 11, 12');
+    k.handle.destroy();
+  });
+
+  it("gives the narrow drawing three rows, not four: the board feeds the aside's one budget", async () => {
+    const b = fakeBoards({
+      '106_1': board('106_1', [
+        dep(TRIP_LIVE, '6', 'Črnomerec', '2026-09-11T12:33:00Z'), dep('trip-11', '11', 'Velika Gorica', '2026-09-11T12:38:00Z'),
+        dep('trip-12', '12', 'Ljubljanica', '2026-09-11T12:40:00Z'), dep('trip-14', '14', 'Mihaljevac', '2026-09-11T12:42:00Z'),
+      ]),
+    });
+    const wide = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    expect(q(wide.root, '[data-testid=kiosk-panel-promet]')!.querySelectorAll('.k-fr')).toHaveLength(4);
+    wide.handle.destroy();
+    const compact = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create, viewport: { width: 1366, height: 768 } });
+    await flush();
+    expect(q(compact.root, '.kiosk')!.dataset.size).toBe('compact');
+    const narrow = q(compact.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(narrow.querySelectorAll('.k-fr')).toHaveLength(3);
+    // And the fourth is not dropped in silence: the card counts it in the row
+    // fitter's own words, so the stop does not read as having nothing else.
+    expect(text(narrow.querySelector('.k-row-more'))).toBe('prikazano 3 od 4');
+    compact.handle.destroy();
+  });
+
+  it('captions the board with its own stop and counts what it could not show', async () => {
+    const map = tappableMap();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    // Before the catalogue is in hand the screen knows one platform and says
+    // only the name -- never a platform count it cannot stand behind.
+    expect(text(q(promet, '.k-panel-meta'))).toBe('Trg bana J. Jelačića');
+    // The city's own counts belong to the card that is showing the city.
+    expect(text(promet)).not.toContain('zatvaranja');
+    // A tap loads the stop list; the board is then of both platforms.
+    (map.factory.mock.calls[0]![0] as { onSelect: (selection: MapSelection | null) => void }).onSelect({ kind: 'stop', id: '106_1' });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-panel-meta'))).toBe('Trg bana J. Jelačića · 2 perona');
+    // Three departures, three rows on a wide screen: nothing counted away.
+    expect(q(k.root, '[data-testid=kiosk-panel-promet]')!.querySelector('.k-row-more')).toBeNull();
+    k.handle.destroy();
+  });
+
+  it('keeps the city-wide exceptions when the stop board is down', async () => {
+    const b = fakeBoards({});
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(b.asked).toEqual(['106_1']);
+    expect(text(promet)).not.toContain('za 3 min');
+    expect(text(promet)).toContain('kasni 4 min');
+    k.handle.destroy();
+  });
+
+  it('makes one cache for the screen, asks for nothing without a stop, and lets it go on destroy', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED_CITY, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.poll();
+    await flush();
+    expect(b.create).toHaveBeenCalledTimes(1);
+    expect(b.asked).toEqual([]);
+    k.handle.destroy();
+    expect(b.made[0]!.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches for a presented stop -- the phone is asking for exactly that board -- and for no other presented subject', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(b.asked).toContain('106_1');
+    // And the wall shows the rows, not an empty card under the stop's name.
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
+      .toEqual(['za 3 min6 Črnomerec', 'za 6 min11 Velika Gorica', '14:4513 Žitnjak']);
+    // A presented route is not a stop: the screen keeps quiet behind it, and
+    // the screen's own stop is not polled behind the phone's subject either.
+    const other = fakeBoards(JELACIC_BOARDS);
+    const o = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: other.create });
+    o.handlers.onPresentation?.({ version: 1, revision: 2, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    o.poll();
+    await flush();
+    expect(other.asked).toEqual([]);
+    k.handle.destroy();
+    o.handle.destroy();
+  });
+
+  it('a dead vehicle feed does not speak for a live board: four scheduled departures, no "ZET ne odgovara"', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    // The realtime module is down; the schedule is not. This is the hour the
+    // board matters most, and every row it shows is schedule-only.
+    const down = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', [], 'down') : m));
+    const k = mount({ stored: STORED, modules: down, createBoards: b.create });
+    await flush();
+    const promet = q(k.root, '[data-testid=kiosk-panel-promet]')!;
+    expect(promet.querySelectorAll('.k-fr').length).toBeGreaterThan(0);
+    expect(text(promet)).not.toContain('ZET trenutačno ne odgovara');
+    expect(promet.querySelector('.k-panel-note')).toBeNull();
+    // No vehicle is tracked, so no row claims to be live.
+    expect(promet.querySelector('.k-live')).toBeNull();
+    expect(text(promet)).toContain('Procjena iz ZET-ovih podataka o vozilima');
+    k.handle.destroy();
   });
 });

@@ -1,10 +1,8 @@
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
-import type { AreaSlug } from '../../../worker/pairing/areas';
 import type { LayerId, ScreenStop } from '../../../worker/protocol';
 import type { PublicSelection } from '../../../worker/public-selection';
 import type { LocaleCode } from '../i18n/i18n';
 import type { ResolvedTheme, ThemePreference } from '../ui/theme';
-import type { KvartChoice } from './kvart-store';
 import type { MobilitySnapshot, WasteSnapshot } from './mobility';
 import type { LastRunSnapshot } from './lastrun';
 import type { NotifyFlags } from './notify-store';
@@ -39,8 +37,8 @@ export type FeedErrors = Partial<Record<ModuleId, string>>;
  *  peer (never the driver), the session frozen, or the socket still connecting. */
 export type CastReason = 'no-screen' | 'peer' | 'frozen' | 'connecting' | 'screen-offline' | 'unsupported';
 
-/** The cast button's state, computed once by the dashboard and read by the Kvart panel,
- *  the FAB and the transport detail head alike (D5). */
+/** The cast button's state, computed once by the dashboard and read by the presentation
+ *  panel and the transport detail head alike (D5). */
 export interface CastState {
   can: boolean;
   reason: CastReason | null;
@@ -63,24 +61,18 @@ export interface ExperienceActions {
   onItemExport?: (kind: 'ics' | 'geojson' | 'print', item: FeedItem, snapshot: ModuleSnapshot) => void;
   onItemCopy?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
   onItemShare?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
-  /** The reader's kvart (D6): the resolved district (`null` is the whole city), its
-   *  label, and the raw choice driving the select's `selected` option. */
-  kvart?: AreaSlug | null;
-  kvartLabel?: string;
-  kvartChoice?: KvartChoice;
-  /** The kvart alert switches (spec §4.9); local tile highlighting only, never a push. */
+  /** Local tile highlighting only, never a push (spec §4.9). */
   notify?: NotifyFlags;
   /** Read-only: a layer only checks and lists what is saved, it never mutates the store directly. */
   saved?: Pick<SavedStore, 'list' | 'has'>;
   cast?: CastState;
-  /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the
-   *  kvart panel's walking row (D16) and the kvart select's district option list. */
+  /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the saved stop's walking row (D16). */
   stops?: readonly ScreenStop[];
   /** The nearest bike-share and parking stations (plan T3.2, D7): undefined until
    *  FEED_BIKES / FEED_PARKING turn on with their worker module. */
   bikes?: MobilitySnapshot;
   parking?: MobilitySnapshot;
-  /** The kvart's waste pickups (plan T3.2, D7): undefined until FEED_WASTE turns on. */
+  /** The city's waste pickups (plan T3.2, D7): undefined until FEED_WASTE turns on. */
   waste?: WasteSnapshot;
   /** The screen stop's last scheduled departures per line (T3.1, behind FEED_LASTRUN): loaded once per
    *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */

@@ -11,7 +11,7 @@ import { json } from '../http';
 import type { RouteHandler } from '../index';
 import { logError, logInfo } from '../log';
 import { verifyAccess } from '../pairing/access';
-import { AREAS, isVenueType, type AreaSlug } from '../pairing/areas';
+import { SCREEN_AREAS, isVenueType, type AreaSlug } from '../pairing/areas';
 import type { CreateBeaconRequest } from '../protocol';
 import { readCappedBody } from './pairing';
 import { provisionScreen } from '../pairing/provision';
@@ -33,7 +33,7 @@ export function areaSlugOf(value: unknown): AreaSlug | null {
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return AREAS.find((area) => area.slug === key)?.slug ?? null;
+  return SCREEN_AREAS.find((area) => area.slug === key)?.slug ?? null;
 }
 
 function notFound(): Response {

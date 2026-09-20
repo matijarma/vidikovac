@@ -101,6 +101,11 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
+/** The lower end of the public screen's own stop ramp (ProzorOptions
+ *  stopRadius): the floor of the whole-city window (kiosk/mapview.ts
+ *  FIELD_MIN_ZOOM), a fifth above STOP_ZOOM, so the smallest ring the ramp
+ *  states is the smallest ring the window ever draws. */
+export const CITY_STOP_ZOOM = 12.7;
 /** The vehicle bodies appear. At Zagreb's latitude (map/scale.ts) a 32 m tram
  *  is 38 px here, 77 at 17 and 154 at 18, against a 24 px two-character pill;
  *  a 12 m bus 14, 29 and 58 px. A zoom earlier the body is shorter than the
@@ -167,12 +172,13 @@ export const QUAKE_RADIUS_PER_MAG_PX = 3;
 export interface OverlayImage { id: string; image: SdfImage }
 
 /** The public screen's overlay set (plan D4, R-KP4): present, the tram network
- *  is the figure (the `figure` palette keys, 3 to 5 px), the bus lines and the
- *  stops off the screen's routes step aside, the screen's stop is the largest
- *  mark on the map, the seat is never lit, and the nose's lower edge and the
- *  stop names follow the field's own zoom (R-KP2). Absent, every surface draws
- *  exactly as before. (Trams as plates and buses as pills began here under D4
- *  and are now every surface's rule: MARK_IMAGE.) */
+ *  is a thin neutral rail (the `rail` palette key, 1.2 to 3 px on the kiosk),
+ *  the bus lines and the stops off the screen's routes step aside, the
+ *  screen's stop is the largest mark on the map, the seat is never lit, and
+ *  the nose's lower edge and the stop names follow the field's own zoom
+ *  (R-KP2). Absent, every surface draws exactly as before. (Trams as plates
+ *  and buses as pills began here under D4 and are now every surface's rule:
+ *  MARK_IMAGE.) */
 export interface ProzorOptions {
   /** Which network lines are drawn; the kiosk passes ['tram']. */
   networkKinds: readonly ('tram' | 'bus')[];
@@ -184,6 +190,12 @@ export interface ProzorOptions {
    *  (the field's own zoom, R-KP2; NOSE_MIN_ZOOM elsewhere). Its name is
    *  older than the rule: pills place unconditionally at every zoom now. */
   overlapZoom: number;
+  /** The stops of the screen's routes as rings that grow with the camera
+   *  rather than one fixed dot: on the whole-city window (kiosk/mapview.ts
+   *  CITY_WINDOW, z12.7) a dot sized for street level is a bead every few
+   *  pixels across the whole picture, and at street level a city-sized dot is
+   *  a crumb. false keeps the fixed dot. */
+  stopRadius: boolean;
   /** Collision padding around a major street name, in the tile pixels
    *  basemap.ts's roads_labels_major reads (R-KP17: 24 on the wall's field).
    *  The kiosk raises it in step with the ground a field shows beyond the
@@ -191,6 +203,25 @@ export interface ProzorOptions {
    *  field of twice the ground still places at most eight names (contract 3);
    *  symbol-spacing is no lever for that count and stays the ruling's. */
   labelPadding: number;
+  /** Ruling 31: false draws the square place marks (works, events, the seat
+   *  and the civil-protection assembly points) with no title. Their names are
+   *  the artefact's own -- "Igralište Sava", "Zagrebački velesajam" -- at the
+   *  same 22 px a stop name gets, and on a picture of the whole city a
+   *  gathering point's name is not something anyone acts on from three
+   *  metres; the square is. The marks stay, and so does the quake's own
+   *  label. Default true. */
+  placeTitles?: boolean;
+  /** Ruling 30: true names only the tram interchanges (the stop features'
+   *  `tramInterchange`) and ignores the rank entirely -- what the whole-city
+   *  window does. False keeps the ranked reading, which is what every frame
+   *  from a quarter's own up has always had. */
+  stopLabelTramInterchanges?: boolean;
+  /** Ruling 29: false drops the promoted major street names outright
+   *  (basemap.ts roads_labels_major). The promotion to a flat 22 px is sized
+   *  for the wall's 2.8 km field; on a picture of the whole city those same
+   *  names are the loudest thing on it and the route plates have to share
+   *  their pixels. Default true -- only the kiosk's far window turns it off. */
+  majorStreetNames?: boolean;
 }
 
 /** Every SDF image the overlays reference, generated once per map. One pill
@@ -557,12 +588,13 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     layout: { ...round, ...visible(drawn(kind)) },
     paint: { 'line-color': color, 'line-width': width, 'line-opacity': dimmed ? NETWORK_OPACITY_DIMMED : opacity },
   });
-  // The tram rails as the figure (plan D4): the ink itself, 3 to 5 px across
-  // the field's zoom, over hairline streets. Elsewhere the pinned tram blue at
-  // the network's own weight and opacity, as always.
+  // The tram network's own line, one neutral grey well below the marks it
+  // carries (owner ruling, round F "kiosk window"): on the public screen 1.2
+  // to 3 px across the field's zoom at a flat 0.8; elsewhere the network's
+  // own weight and zoom-based opacity, as always.
   const tramNetwork = prozor
-    ? network(LAYERS.networkTram, 'tram', p.figure, zoomInterpolate(14, 3, 15, 5, 16, 6), p.figureOpacity)
-    : network(LAYERS.networkTram, 'tram', p.routeTram, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
+    ? network(LAYERS.networkTram, 'tram', p.rail, zoomInterpolate(12.5, 1.2, 14, 2, 16, 3), 0.8)
+    : network(LAYERS.networkTram, 'tram', p.rail, zoomInterpolate(10, 0.6, 13, 1.1, 16, 2.4));
   /** Which platforms the ordinary ring field is about. Under line focus it is
    *  the focused line's own stops: with every other line hidden, every other
    *  line's rings are hundreds of grey circles with nothing under them to read
@@ -578,6 +610,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.
   const lit = (kind: PlaceKind): boolean => (kind !== 'seat' || prozor === null) && (options.emphasis == null || options.emphasis.includes(kind));
+  /** Ruling 31: the square marks carry their names from THIN_NAMES_ZOOM up
+   *  and nowhere below it; outside the kiosk's option set they always do. */
+  const placeTitles = prozor === null || prozor.placeTitles !== false;
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the
@@ -598,13 +633,16 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       // symbol-sort-key decides which survive -- the pharmacy and the assembly
       // points first, the seat last. A pile of squares is not more honest than
       // a chosen one, it is only less readable.
-      'text-field': ['get', 'title'],
-      'text-font': [MAP_FONTS.medium],
-      'text-size': PLACE_LABEL_PX * s,
-      'text-anchor': 'top',
-      'text-offset': [0, 0.9],
-      'text-max-width': 10,
-      'text-optional': true,
+      // Ruling 31: on the whole-city window the squares draw without names.
+      ...(placeTitles ? {
+        'text-field': ['get', 'title'],
+        'text-font': [MAP_FONTS.medium],
+        'text-size': PLACE_LABEL_PX * s,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.9],
+        'text-max-width': 10,
+        'text-optional': true,
+      } : {}),
       'symbol-sort-key': spec.sort,
     },
     paint: {
@@ -631,7 +669,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
     { id: LAYERS.closures, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closure, 'line-width': closureWidth(selectedClosure, 4) } },
     // A point with no `place` is the plain circle this map has always drawn:
-    // the dashboard's quake map and the kvart thumbnail's work points keep it.
+    // the dashboard's quake map and its work points keep it.
     circle(LAYERS.places, SOURCES.places, { 'circle-radius': 6 * s, 'circle-color': p.place, 'circle-stroke-color': p.halo, 'circle-stroke-width': 1.5 }, { filter: ['!', ['has', 'place']] }),
     // The radius is the magnitude and nothing else. A quake the source gave no
     // magnitude draws no circle at all -- its label alone names its region,
@@ -650,19 +688,27 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     ),
     circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5 }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
     // On the public screen the stops of the screen's own routes are filled
-    // dots in the figure colour, no stroke: beads on the rails, not rings
-    // competing with the screen's stop. Elsewhere the hollow ring as always.
+    // dots in the figure colour: beads on the rails, not rings competing with
+    // the screen's stop. With stopRadius they grow with the camera instead of
+    // holding one size: 1.5 px at the whole-city window's own floor, 5 at
+    // street level, with a one-pixel stroke of the same ink under them, which
+    // is what keeps a three-pixel bead legible over the street grid. These
+    // are drawn pixels, NOT multiplied by the surface's symbol scale as the
+    // marks are: a stop is the one thing on this map a person reads by where
+    // it is and not by what it says, and at the screen's scale 2 the street
+    // end came out heavier than the plates standing on it. Elsewhere the
+    // hollow ring as always.
     circle(
       LAYERS.stops,
       SOURCES.stops,
       prozor
         ? {
-            'circle-radius': 3 * s,
+            'circle-radius': prozor.stopRadius ? zoomInterpolate(CITY_STOP_ZOOM, 1.5, 15.5, 5) : 3 * s,
             'circle-color': p.figure,
             'circle-stroke-color': p.figure,
-            'circle-stroke-width': 0,
+            'circle-stroke-width': prozor.stopRadius ? 1 : 0,
             'circle-opacity': p.figureOpacity,
-            'circle-stroke-opacity': 0,
+            'circle-stroke-opacity': prozor.stopRadius ? p.figureOpacity : 0,
           }
         : {
             'circle-radius': zoomInterpolate(STOP_ZOOM, 1.5 * s, 14, 2.6 * s, 16, 4.5 * s),
@@ -729,7 +775,15 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       type: 'symbol',
       source: SOURCES.stops,
       minzoom: prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM,
-      filter: prozor ? ['all', stops, ['get', 'label'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank], ['!=', ['get', 'id'], screenStopId ?? '']] : stopLabelFilter(stops),
+      filter: prozor
+        ? ['all', stops, ['get', 'label'],
+          // Ruling 30: the far window names interchanges, not the busiest
+          // corners -- route count put Elka and Savski gaj-rotor on the
+          // picture and left Trg bana Jelačića, Glavni kolodvor and Savski
+          // most off it. Nearer in, the rank is still what names a stop.
+          prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['>=', ['get', 'rank'], prozor.stopLabelMinRank],
+          ['!=', ['get', 'id'], screenStopId ?? '']]
+        : stopLabelFilter(stops),
       layout: {
         'text-field': ['get', 'name'],
         'text-font': [MAP_FONTS.medium],
@@ -738,7 +792,12 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'text-offset': [0, 0.7],
         'text-max-width': 9,
         'text-padding': 3,
-        'symbol-sort-key': ['-', 100, ['get', 'rank']],
+        // Lower sorts first. Route count alone decided this, which is the
+        // scale Ruling 30 threw out: below the line an interchange is placed
+        // before anything else and the rank is only the tiebreak among them.
+        'symbol-sort-key': prozor?.stopLabelTramInterchanges
+          ? ['-', ['case', ['get', 'tramInterchange'], 0, 100], ['get', 'rank']]
+          : ['-', 100, ['get', 'rank']],
       },
       paint: { ...labelInk, 'text-halo-width': 1.4 },
     },

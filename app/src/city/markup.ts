@@ -30,7 +30,7 @@ export function placesMarkup(i18n:I18n,places:readonly Place[],events:readonly L
     return `<button type="button" class="city-row" data-action="select-place" data-id="${a(p.id)}" id="city-result-${a(p.id)}">
       <span class="city-row-main"><span class="city-kicker">${e(placeCategory(i18n,p))}</span><strong>${e(p.name)}</strong>
       <span class="city-meta">${e(p.address??'')}${at.length?` · ${at.length} ${ct(i18n,'events')}`:''}${!located(p)?` · ${ct(i18n,'noLocation')}`:''}</span></span>
-      <span class="city-row-value">${at.length?e(String(at.length)):p.sourceId==='bajs'?`${e(bikeAvailability(p,bikeMode))}<span class="city-meta">${ct(i18n,bikeMode==='return'?'returns':'available')}</span>`:'↗'}</span></button>`;
+      <span class="city-row-value">${at.length?e(String(at.length)):p.sourceId==='bajs'?`<span class="city-bike-count">${e(bikeAvailability(p,bikeMode))}</span><span class="city-meta">${ct(i18n,bikeMode==='return'?'returns':'available')}</span>`:'↗'}</span></button>`;
   }).join('')}${places.length>limit?button('city-more','',`${ct(i18n,'more')} (${places.length-limit})`):''}</div>`;
 }
 export function eventLinks(i18n:I18n,events:readonly LocatedEvent[],interactive=true):string {
@@ -43,7 +43,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const en=i18n.getLocale().startsWith('en');
   const facts=Object.entries(p.facts??{}).filter(([key])=>SAFE_FACTS[key]).map(([key,value])=>`<div><dt>${e(SAFE_FACTS[key][en?1:0])}</dt><dd>${e(value)}</dd></div>`).join('');
-  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong>${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong>${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div><p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`:'';
+  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div><p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`:'';
   const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(p.facts?.index)}</p><p class="city-meta">${e(en?'Preliminary station index, not a citywide assessment.':'Preliminarni indeks postaje, ne ocjena za cijeli grad.')} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`:'';
   return `<article class="city-detail" data-testid="city-detail" data-place-id="${a(p.id)}">
     ${publicDisplay?'':`<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n,'back'))}</button>`}
@@ -65,8 +65,18 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
 export function streetDetail(i18n:I18n,s:StreetStory):string {
   return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${e(s.name)}</h3><p class="city-meta">${e(s.settlement)}</p><p lang="hr">${e(s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
 }
-export function departuresMarkup(i18n:I18n,board:DepartureBoard):string {
+/** A minute of grace: a train due at 10:00 is still the one you are running
+ *  for at 10:00:45. Anything older has left. */
+const DEPARTED_GRACE_MS=60_000;
+/** The clock-time board, now HŽ's alone: ZET's stops answer through the
+ *  arrivals list (shared/city/arrivals.ts), which merges the live fleet in.
+ *  The endpoint also returns the departures of the last quarter hour (the
+ *  arrivals list needs them to place a late vehicle); a board printed as it
+ *  arrives would open on trains that have already gone, so they are dropped
+ *  here rather than at the source. */
+export function departuresMarkup(i18n:I18n,board:DepartureBoard,nowMs:number=Date.now()):string {
+  const due=board.departures.filter(d=>{const at=Date.parse(d.at);return !Number.isFinite(at)||at>=nowMs-DEPARTED_GRACE_MS;});
   return `<section class="city-departures"><h4>${ct(i18n,'departures')}</h4><p class="city-meta">${ct(i18n,'schedule')} · ${board.operator==='hz'?'HŽPP':'ZET'}${board.status==='stale'?` · ${ct(i18n,'stale')}`:''}</p>
-    ${board.status==='down'?`<p>${ct(i18n,'noDepartures')}</p>`:board.departures.length?board.departures.slice(0,6).map(d=>`<div class="city-departure"><strong>${e(zagrebTime(d.at))}</strong><span>${e(d.headsign||d.routeName)}</span></div>`).join(''):`<p>${ct(i18n,'noDepartures')}</p>`}
+    ${board.status==='down'?`<p>${ct(i18n,'noDepartures')}</p>`:due.length?due.slice(0,6).map(d=>`<div class="city-departure"><strong>${e(zagrebTime(d.at))}</strong><span>${e(d.headsign||d.routeName)}</span></div>`).join(''):`<p>${ct(i18n,'noDepartures')}</p>`}
     <p class="city-meta">${ct(i18n,'scheduleNote')}</p></section>`;
 }

@@ -77,7 +77,8 @@ class FakeMap {
   setLayerZoomRange(id: string, min: number, max: number): void { this.zoomRanges[id] = [min, max]; }
   getLayer(id: string): unknown { return this.layers.find((l) => l.id === id); }
   setSprite(url: string): void { this.sprite = url; }
-  queryRenderedFeatures(_geometry: unknown, options?: { layers?: string[] }) { return this.rendered.filter((f) => !options?.layers || options.layers.includes(f.layer.id)); }
+  readonly queries: unknown[] = [];
+  queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }) { this.queries.push(geometry); return this.rendered.filter((f) => !options?.layers || options.layers.includes(f.layer.id)); }
   easeTo(options: Record<string, unknown>): void { this.cameraCalls.push({ kind: 'easeTo', options }); this.apply(options); }
   jumpTo(options: Record<string, unknown>): void { this.cameraCalls.push({ kind: 'jumpTo', options }); this.apply(options); }
   fitBounds(bounds: unknown, options: Record<string, unknown> = {}): void { this.cameraCalls.push({ kind: 'fitBounds', options: { ...options, bounds } }); }
@@ -309,6 +310,22 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(toB).toBeGreaterThan(0.5);
     expect(toB).toBeLessThan(100);
   });
+
+  it('carries the trip, the reported delay and the twin’s next-stop ETA through to the lists (WP5 arrivals)', async () => {
+    const eta = T0 + 120_000;
+    const joined: MapPoint = { ...B, tripId: 'T-118', delaySeconds: 95, nextStopId: '231_2', nextStopEtaMs: eta };
+    const { handle, frame } = await harness({ points: [{ ...joined, lon: A.lon, at: A.at }] });
+    handle.update([joined], [CLOSURE]);
+    for (let i = 0; i < 10; i++) frame();
+    expect(handle.vehicles!()[0]).toMatchObject({ id: 'vehicle:1', tripId: 'T-118', delaySeconds: 95, nextStopId: '231_2', nextStopEtaMs: eta });
+    // A vehicle the twin joined to nothing carries none of the three keys at all.
+    handle.update([B], [CLOSURE]);
+    for (let i = 0; i < 10; i++) frame();
+    const bare = handle.vehicles!()[0];
+    expect(bare).not.toHaveProperty('tripId');
+    expect(bare).not.toHaveProperty('delaySeconds');
+    expect(bare).not.toHaveProperty('nextStopEtaMs');
+  });
 });
 
 describe('12 Hz source updates, not one per frame', () => {
@@ -477,7 +494,8 @@ describe('the basemap and the overlays on it', () => {
       { layer: { id: 'places_subplace' }, properties: { name: 'Trešnjevka' } },
     ];
     expect(handle.placedNames!('roads_labels_major')).toEqual(['Ilica', 'Savska cesta']);
-    expect(handle.placedNames!('places_subplace')).toEqual(['Trešnjevka']);
+    // The neighbourhood names are not on this profile at all (basemap.ts PROZOR_DROPPED_LAYERS), so nothing of theirs is ever placed.
+    expect(handle.placedNames!('places_subplace')).toEqual([]);
     expect(handle.placedNames!('no-such-layer')).toEqual([]);
     // The screen's stop changes, or the field is re-measured: the dots, the labels, the noses and the street names' padding follow without a new map.
     handle.setProzor!({ ...prozor, stopRoutes: ['1', '17'], overlapZoom: 15.1, labelPadding: 48 });
@@ -868,6 +886,65 @@ describe('selection and status', () => {
     expect(handle.selection!()).toBeNull();
   });
 
+  // The public screen is read and touched from across a room: its stop rings
+  // are small at city zoom and a finger is not a mouse, so the box a tap
+  // queries is its own (kiosk/mapview.ts passes 28).
+  it('queries a tap in the box the surface asked for: the desk’s eight pixels, the public screen’s own twenty-eight', async () => {
+    const desk = await harness({ lib: cityLib });
+    desk.map.fire('click', { point: { x: 100, y: 100 } });
+    expect(desk.map.queries[0]).toEqual([[92, 92], [108, 108]]);
+    const wall = await harness({ lib: cityLib, extra: { hitTolerancePx: 28 } });
+    wall.map.fire('click', { point: { x: 100, y: 100 } });
+    expect(wall.map.queries[0]).toEqual([[72, 72], [128, 128]]);
+  });
+
+  it('puts the city’s places UNDER the vehicles and its selection ring over them: a standing dot never hides a passing pill', async () => {
+    const { map } = await harness({ lib: cityLib });
+    const at = (id: string) => map.layers.findIndex((l) => l.id === id);
+    const dots = at('vehicle-dots');
+    expect(dots).toBeGreaterThan(0);
+    // Everything the city publishes goes in below the first vehicle layer, in its own order.
+    for (const id of ['city-path-lines', 'city-place-dots', 'city-place-badges', 'city-place-labels']) {
+      expect(at(id), id).toBeGreaterThan(-1);
+      expect(at(id), id).toBeLessThan(dots);
+    }
+    expect(at('city-path-lines')).toBeLessThan(at('city-place-dots'));
+    expect(at('city-place-dots')).toBeLessThan(at('city-place-badges'));
+    expect(at('city-place-badges')).toBeLessThan(at('city-place-labels'));
+    // The ring marking what a person just tapped stays over every vehicle.
+    expect(at('city-place-selection')).toBeGreaterThan(at('vehicles'));
+    expect(at('city-place-selection')).toBeGreaterThan(dots);
+  });
+
+  it('draws the city places’ names or not as the surface asked, and turns them on and off on the one live map', async () => {
+    const { map, handle } = await harness({ lib: cityLib, extra: { cityLabels: false } });
+    const labels = map.layers.find((l) => l.id === 'city-place-labels')!;
+    expect((labels.layout as Record<string, unknown>).visibility).toBe('none');
+    // The dots and the badges are untouched: a BAJS count is not a name.
+    expect((map.layers.find((l) => l.id === 'city-place-badges')!.layout as Record<string, unknown>).visibility).toBeUndefined();
+    handle.setCityLabels!(true);
+    expect(map.layout['city-place-labels']!.visibility).toBe('visible');
+    delete map.layout['city-place-labels'];
+    handle.setCityLabels!(true); // the same answer again moves nothing
+    expect(map.layout['city-place-labels']).toBeUndefined();
+    handle.setCityLabels!(false);
+    expect(map.layout['city-place-labels']!.visibility).toBe('none');
+    // A surface that asks for nothing keeps them, as every surface but the screen does.
+    const phone = await harness({ lib: cityLib });
+    expect((phone.map.layers.find((l) => l.id === 'city-place-labels')!.layout as Record<string, unknown>).visibility).toBe('visible');
+  });
+
+  it('reports every settled zoom to the surface that asked for it, whoever moved the camera', async () => {
+    const cameras: { center: [number, number]; zoom: number }[] = [];
+    const { map } = await harness({ extra: { onCamera: (camera: { center: [number, number]; zoom: number }) => cameras.push(camera) } });
+    map.zoom = 14.2;
+    map.fire('zoomend');
+    expect(cameras).toEqual([{ center: [map.center.lng, map.center.lat], zoom: 14.2 }]);
+    // A pan is not a zoom: the rule the screen reads from it is a zoom band.
+    map.fire('moveend', {});
+    expect(cameras).toHaveLength(1);
+  });
+
   it('gives one tap over both a vehicle pill and a city place to the pill: the number is what the round drew there, and the dot is still a zoom or a pixel away', async () => {
     const { map, selections } = await harness({ lib: cityLib });
     // The upstream merge queried the place layers first, so a pill standing on
@@ -901,5 +978,52 @@ describe('selection and status', () => {
     map.fire('click', { point: map.project([second.lon, second.lat]) });
     expect(selections).toEqual([{ kind: 'vehicle', id: 'vehicle:2' }]);
     expect(map.filters['vehicle-selected']).toEqual(['==', ['get', 'id'], 'vehicle:2']);
+  });
+});
+
+// Ruling 30. The whole-city window names interchanges, not the busiest
+// corners: route count put Elka (3 trams among 11 routes) and Savski
+// gaj-rotor (3 among 19) on the picture and left Trg bana Jelačića, Glavni
+// kolodvor and Savski most off it. A count of TRAM routes is no better --
+// the city's 19 tram routes overlap so heavily that 111 of the 114
+// tram-served names see two or more, so "two trams" would name nearly every
+// tram stop there is. What the flag reads is the artefact's own terminal bit.
+describe('tram interchanges on the stop features (Ruling 30)', () => {
+  const features = stopsToGeoJson(NET).features;
+  const named = (name: string) => features.filter((f) => f.properties.name === name);
+  const flagOf = (name: string) => {
+    const rows = named(name);
+    expect(rows.length, name).toBeGreaterThan(0);
+    // The answer belongs to the name: every platform of it agrees.
+    expect(new Set(rows.map((f) => f.properties.tramInterchange)).size, name).toBe(1);
+    return rows[0]!.properties.tramInterchange;
+  };
+
+  it('names a tram terminus and passes over a corner that is only busy', () => {
+    // Trams call and trips end here: the interchanges a rider means.
+    for (const hub of ['Trg bana J. Jelačića', 'Glavni kolodvor', 'Savski most', 'Črnomerec', 'Kvaternikov trg', 'Ljubljanica', 'Dubrava']) {
+      expect(flagOf(hub), hub).toBe(true);
+    }
+    // Many routes, a tram among them, nothing starts or ends here: a corner.
+    for (const busy of ['Savski gaj-rotor', 'Elka', 'Heinzelova']) {
+      expect(flagOf(busy), busy).toBe(false);
+      // Tram-served all the same -- GTFS splits the name across platforms and
+      // only some of them see the tram, which is why the flag is the name's.
+      expect(named(busy).some((f) => f.properties.tram), busy).toBe(true);
+    }
+    // Rank would have said the opposite for both of those.
+    expect(named('Savski gaj-rotor')[0]!.properties.rank).toBeGreaterThan(named('Trg bana J. Jelačića')[0]!.properties.rank);
+  });
+
+  it('picks a set the size of a city window, not of a timetable', () => {
+    const hubs = new Set(features.filter((f) => f.properties.tramInterchange).map((f) => f.properties.name));
+    const tramNames = new Set(features.filter((f) => f.properties.tram).map((f) => f.properties.name));
+    expect(hubs.size).toBe(29);
+    // The reduction is the point: the ranked reading named 41 and every
+    // tram-served name is over a hundred.
+    expect(tramNames.size).toBeGreaterThan(100);
+    expect(hubs.size).toBeLessThan(tramNames.size / 3);
+    // A stop with no tram is never an interchange however many buses end there.
+    expect([...hubs].every((n) => tramNames.has(n))).toBe(true);
   });
 });

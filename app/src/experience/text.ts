@@ -138,3 +138,10 @@ export function pointOf(item: FeedItem): [number, number] | null {
   const [lon, lat] = item.geo.coordinates as number[];
   return Number.isFinite(lon) && Number.isFinite(lat) ? [lon!, lat!] : null;
 }
+
+/** A straight-line distance over a fixed walking speed (1.2 m/s), rounded up -- never a route, always
+ *  labelled an estimate (the bikes/parking tiles' own walking row from the screen's stop). */
+export function walkMinutes(from: { lon: number; lat: number }, to: { lon: number; lat: number }): number {
+  const meters = distanceKm(from.lon, from.lat, to.lon, to.lat) * 1000;
+  return Math.ceil(meters / 1.2 / 60);
+}

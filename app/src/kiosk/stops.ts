@@ -1,7 +1,8 @@
-// Stop choice for the setup wizard and stop context for the compositions.
-// Pure: the stop list is handed in (core/screens.ts's loadStops fetches it
-// lazily, never on the lightweight entry graph), ranking and search happen
-// here, and the Worker validates the id again on creation.
+// Stop choice for the screen's settings panel (kiosk/settings.ts) and stop
+// context for the compositions. Pure: the stop list is handed in
+// (core/screens.ts's loadStops fetches it lazily, never on the lightweight
+// entry graph), ranking and search happen here, and the Worker validates the
+// id again when the screen is set.
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';

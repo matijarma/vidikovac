@@ -1,12 +1,10 @@
-// The shell around the workspace: one status line for both surfaces (four
-// keyed controls on the phone, eight at the desk), the phone tab bar with the
-// Kvart tab, the "Na zaslon" FAB, and the banners for the session's own
-// states. Pure markup builders over a ShellState; the dashboard reconciles
-// each region in place. The rail and the sidebar are gone (plan D4, D10).
-import { AREAS, type AreaSlug } from '../../../worker/pairing/areas';
+// The shell around the workspace: one status line for both surfaces (three
+// keyed controls on the phone, six at the desk), the phone tab bar, the
+// "Na zaslon" FAB, and the banners for the session's own states. Pure markup
+// builders over a ShellState; the dashboard reconciles each region in place.
+// The rail and the sidebar are gone (plan D4, D10).
 import type { LayerId, Role } from '../../../worker/protocol';
 import type { CastReason } from '../core/contracts';
-import type { KvartChoice } from '../core/kvart-store';
 import type { NotifyFlags, NotifyKey } from '../core/notify-store';
 import { countdown, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -20,11 +18,10 @@ import { presentationButton } from './presentation';
 import { ct } from '../city/strings';
 
 export type Surface = 'phone' | 'desktop';
-/** A phone tab: a domain, or the Kvart panel, which is a shell surface and never a LayerId (D9). */
-export type PhoneTab = { kind: 'layer'; layer: LayerId } | { kind: 'kvart' };
+/** A phone tab: a domain, a shell surface and never a LayerId (D9). */
+export type PhoneTab = { kind: 'layer'; layer: LayerId };
 export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'layer', layer: 'kultura' }];
 export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo'];
-export const KVART_ICON: IconName = 'map-pin';
 
 export const LAYER_ICONS: Record<LayerId, IconName> = {
   'grad-sada': 'home',
@@ -63,13 +60,7 @@ export interface ShellState {
   /** Active modules whose last fetch failed or whose snapshot is down, said once in a quiet banner. */
   sourcesDown: number;
   surface: Surface;
-  /** The open shell surface besides the directory: the Kvart panel on the phone (D9). */
-  panel: 'kvart' | null;
-  /** The reader's choice in the kvart select and what it resolves to (D6). */
-  kvartChoice: KvartChoice;
-  kvart: AreaSlug | null;
-  kvartLabel: string;
-  /** The screen stop's name, for the select's first option and the cast reason line. */
+  /** The screen stop's name, for the cast reason line. */
   stopName: string | null;
   hasScreen: boolean;
   canCast: boolean;
@@ -82,9 +73,6 @@ export interface ShellState {
   notifyActive: number;
   notifyKeys: readonly NotifyKey[];
 }
-
-/** What the kvart select needs from the shell; the Kvart panel builds the same control from its context. */
-export type KvartMenuState = Pick<ShellState, 'kvartChoice' | 'kvartLabel' | 'stopName'>;
 
 export function remainingText(seconds: number): string {
   return countdown(seconds);
@@ -113,22 +101,21 @@ function frozenAttrs(s: ShellState): string {
 /**
  * The status line: ONE builder paints keyed children by surface, so the DOM is
  * honest for axe and the target rule (CSS orders and sizes, never hides a
- * control that exists). Phone: wordmark · kvart · session · safety. Desktop:
- * wordmark · kvart · Još · search · clock+weather · session · bell · safety.
+ * control that exists). Phone: wordmark · session · safety. Desktop:
+ * wordmark · spacer · clock · session · Još · domain nav. Both surfaces add
+ * the Zaslon button while the session has a screen.
  */
 export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
   // becomes the way home instead (the session is over), as on the empty page.
   const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' });
-  // The phone's face carries the name up to its dash (the kvart is the reader's home and must not ellipsise); the desk has the room for the whole name.
-  const kvart = kvartMenuMarkup(i18n, s, { id: 'ki-kvart', short: s.surface === 'phone' });
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
   const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
-  if (s.surface === 'phone') return `${wordmark}${kvart}${display}${session}${safety}`;
+  if (s.surface === 'phone') return `${wordmark}${display}${session}${safety}`;
   const domains: LayerId[] = ['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost'];
-  const navigation = `<nav class="ki-domains" data-key="domains" aria-label="${escapeAttribute(i18n.t('nav.label'))}"><ul>${domains.map(layer => layerTab(i18n, s, layer)).join('')}<li>${kvartTab(i18n, s).replace(/^<li>|<\/li>$/g, '')}</li></ul></nav>`;
-  return `${wordmark}${kvart}<div class="ki-status-space" data-key="space"></div>${clockMarkup(i18n, s, now, null)}${display}${session}${moreButtonMarkup(i18n, s)}${navigation}`;
+  const navigation = `<nav class="ki-domains" data-key="domains" aria-label="${escapeAttribute(i18n.t('nav.label'))}"><ul>${domains.map(layer => layerTab(i18n, s, layer)).join('')}</ul></nav>`;
+  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${clockMarkup(i18n, s, now, null)}${display}${session}${moreButtonMarkup(i18n, s)}${navigation}`;
 }
 
 /**
@@ -145,30 +132,10 @@ export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId
   return `<a class="ki-wordmark" data-key="wordmark" href="${escapeAttribute(home.href)}"${nav} aria-label="${escapeAttribute(label)}"><span class="ki-wordmark-text">${escapeHtml(stem)}${mark ? '<span class="ki-wordmark-mark">?</span>' : ''}</span></a>`;
 }
 
-/**
- * The kvart control (B.5): a native select under a styled ink face. Every age
- * knows the platform picker, arrows and type-ahead come free, the accessible
- * name is the label plus the selected option with no authored ARIA, and the
- * reconciler syncs `selected`. The closed face shows the *resolved* name.
- */
-/** "Gornji grad – Medveščak" reads "Gornji grad" on a 390 px face; the select, the label and the aria keep the whole name. */
-export function shortKvartName(name: string): string {
-  return name.split(/\s[\u2013-]\s/)[0]!.trim() || name;
-}
-
-export function kvartMenuMarkup(i18n: I18n, s: KvartMenuState, o: { id: string; className?: string; short?: boolean }): string {
-  const screenOption = s.stopName ? i18n.t('kvart.screenOption', { stop: s.stopName }) : i18n.t('kvart.wholeCity');
-  const face = o.short ? shortKvartName(s.kvartLabel) : s.kvartLabel;
-  const option = (value: string, label: string): string => `<option value="${value}"${s.kvartChoice === value ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  const options = [option('screen', screenOption), ...AREAS.map((area) => option(area.slug, area.name))].join('');
-  const className = o.className ? `ki-kvart-pick ${o.className}` : 'ki-kvart-pick';
-  return `<div class="${escapeAttribute(className)}" data-key="kvart" data-testid="kvart-pick"><span class="ki-kvart-face" aria-hidden="true">${iconMarkup(KVART_ICON)}<span class="ki-kvart-name">${escapeHtml(face)}</span>${iconMarkup('chevron-down', undefined, 'icon icon-sm')}</span><label class="visually-hidden" for="${escapeAttribute(o.id)}">${escapeHtml(i18n.t('kvart.select'))}</label><select id="${escapeAttribute(o.id)}" class="ki-kvart-select" data-action="kvart-pick" data-testid="kvart-select">${options}</select></div>`;
-}
-
 /** Desktop: Još opens the directory of every domain but Sada (D10). Current while the directory or an extra domain is open. */
 export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
   const inMore = MORE_LAYERS.includes(s.layer);
-  const current = s.panel === null && (s.directory || inMore);
+  const current = s.directory || inMore;
   return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
 }
 
@@ -198,39 +165,34 @@ export function bellMarkup(i18n: I18n, s: ShellState): string {
 
 /** One-tap safety, icon-only on both surfaces: the word lives in the aria-label and the title. Frozen keeps /hitno open. */
 export function safetyMarkup(i18n: I18n, s: ShellState): string {
-  const current = s.layer === 'sigurnost' && !s.directory && s.panel === null;
+  const current = s.layer === 'sigurnost' && !s.directory;
   return `<a class="ki-safety" data-key="safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}</a>`;
 }
 
 /** A domain tab; frozen it keeps its handler (navigate() declines) so its hash never replaces the fragment. */
 function layerTab(i18n: I18n, s: ShellState, layer: LayerId): string {
-  const current = s.layer === layer && !s.directory && s.panel === null;
+  const current = s.layer === layer && !s.directory;
   if (s.frozen && layer === 'sigurnost') {
     return `<li><a class="ki-tab" href="/hitno" data-layer="sigurnost">${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
   }
   return `<li><a class="ki-tab" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
 }
 
-function kvartTab(i18n: I18n, s: ShellState): string {
-  const open = s.panel === 'kvart';
-  return `<li><button type="button" class="ki-tab" data-action="kvart" data-testid="tab-kvart" aria-current="${open ? 'page' : 'false'}" aria-expanded="${open ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(KVART_ICON)}<span class="ki-nav-label">${escapeHtml(i18n.t('nav.kvart'))}</span></button></li>`;
-}
-
-/** The phone tab bar: Sada, Promet, Kvart and Još, which names the open extra domain. Nothing at the desk. */
+/** The phone tab bar: Sada, Promet, Događanja and Još, which names the open extra domain. Nothing at the desk. */
 export function tabbarMarkup(i18n: I18n, s: ShellState): string {
   if (s.surface === 'desktop') return '';
   const inMore = MORE_LAYERS.includes(s.layer);
-  const showsLayer = inMore && !s.directory && s.panel === null;
-  const moreCurrent = s.panel === 'kvart' || (s.panel === null && (s.directory || inMore));
-  const moreLabel = s.panel === 'kvart' ? i18n.t('nav.kvart') : showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
-  const tabs = PHONE_TABS.map((tab) => (tab.kind === 'layer' ? layerTab(i18n, s, tab.layer) : kvartTab(i18n, s))).join('');
+  const showsLayer = inMore && !s.directory;
+  const moreCurrent = s.directory || inMore;
+  const moreLabel = showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
+  const tabs = PHONE_TABS.map((tab) => layerTab(i18n, s, tab.layer)).join('');
   return `<ul class="ki-tabs" role="list">${tabs}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(showsLayer ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
 }
 
 /**
  * "Na zaslon" (D5): the phone's one primary touch action, for a scanner with a
  * screen, on every place but Promet (whose detail head carries the ghost cast
- * button), the directory and the Kvart panel (whose primary casts). '' when hidden.
+ * button) and the directory. '' when hidden.
  */
 export function fabMarkup(i18n: I18n, s: ShellState): string {
   // One stable header control on every workspace. Never cover city content.

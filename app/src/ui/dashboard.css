@@ -1,15 +1,14 @@
 /* Kaj ima? - the /d/ shell. One DOM for both surfaces; the grid places the
    same regions differently. Phone: a sticky 52 px status line (wordmark, the
-   kvart control, the session pill, an icon-only safety control), banners in
+   session pill, an icon-only safety control), banners in
    flow, the workspace, a fixed tab bar and, for a scanner with a screen, the
    "Na zaslon" FAB above it. Desktop (>= 60rem): the same status line at 56 px
    with Još, the search launcher, the clock with the weather group and the
-   bell, spanning a workspace column and the sticky kvart aside (plan D4, D10:
+   bell, spanning one full workspace column (plan D4, D10:
    the rail is gone; every domain is reached through Još and the tiles). */
 .ki {
   --ki-top: calc(3.25rem + env(safe-area-inset-top, 0px));
   --ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));
-  --ki-kvart: 18.75rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto 1fr;
@@ -18,7 +17,7 @@
   min-height: 100svh;
   background: var(--tone-surface-canvas);
 }
-/* The status line never scrolls away: four keyed controls on one 44 px line, 3.25rem tall plus the notch. */
+/* The status line never scrolls away: three keyed controls on one 44 px line, 3.25rem tall plus the notch. */
 .ki-head {
   grid-area: status;
   position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
@@ -52,8 +51,6 @@
 /* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
 .ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
 .ki[data-loading='true'] .ki-head::after { opacity: 1; }
-/* The kvart aside is a desk device; on the phone the Kvart tab's workspace carries the panel. */
-.ki-kvart { display: none; }
 /* Banners sit in flow between the header and the workspace; nothing overlays content. */
 .ki-banners { grid-area: banners; display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) 0; }
 .ki-banners:empty { display: none; }
@@ -81,18 +78,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .ki-wordmark-text { font-size: var(--type-body); font-weight: var(--weight-bold); letter-spacing: -0.04em; white-space: nowrap; }
 .ki-wordmark-mark { color: var(--tone-action-brand); }
 
-/* The kvart control (B.5): a native select at opacity 0 over a 44 px ink face,
-   so the platform picker does the list and the arrows, the reconciler syncs
-   `selected`, and e2e/geometry.ts measures the real control. The closed face
-   shows the resolved district's name. */
-.ki-kvart-pick { position: relative; display: inline-flex; min-block-size: var(--target); min-inline-size: var(--target); max-inline-size: 100%; justify-self: start; }
-.ki-kvart-face { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); max-inline-size: 100%; padding: 0 var(--sp-1); border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font-size: var(--type-control); font-weight: var(--weight-medium); }
-.ki-head .ki-kvart-face > .icon:first-child { display: none; }
-.ki-kvart-face .icon { flex: none; width: 1rem; height: 1rem; color: inherit; }
-.ki-kvart-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ki-kvart-select { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; font: inherit; cursor: pointer; touch-action: manipulation; }
-.ki-kvart-pick:has(.ki-kvart-select:focus-visible) .ki-kvart-face { outline: 2px solid var(--tone-action-brand); outline-offset: 2px; }
-
 /* Session pill: ring and remaining time on a surface-2 pill; the sentence is
    for readers. Amber for the last minute, rose for the last twenty seconds:
    the ring strokes with --tone-action-brand, so one override recolours the
@@ -113,10 +98,9 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    the spec's 40 px reading is the icon). The aria-label carries the word at every width. */
 .ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-text-muted); background: transparent; text-decoration: none; touch-action: manipulation; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
-/* Zoom-compact (390 px at 200 % is 12.2rem): four 44 px controls do not fit, so the kvart control leaves the header (the Kvart tab's panel head carries the same selector). Ceiling 56 px × scale. */
+/* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only and the session ring leaves, so the three controls still fit. Ceiling 56 px × scale. */
 @container header (max-width: 18rem) {
   .ki-head { column-gap: var(--sp-1); padding-inline: var(--sp-2); }
-  .ki-kvart-pick { display: none; }
   .ki-wordmark { min-inline-size: 44px; justify-content: center; }
   .ki-wordmark-text { font-size: 0; }
   .ki-wordmark-mark { font-size: var(--type-title); }
@@ -179,15 +163,14 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
 .banner-dismiss { margin-inline-start: auto; flex: none; min-inline-size: var(--target); }
 
-/* Desktop: the status line spans the page at 56 px over two columns, the
-   workspace and the sticky kvart aside (spec §3, D4, D10). The same keyed
-   controls as the phone plus Još, the search launcher taking the room, the
-   clock with the weather group and the bell; the tab bar and the FAB leave,
-   the aside is the panel the phone reaches through its Kvart tab. */
+/* Desktop: the status line spans the page at 56 px over one full workspace
+   column (spec §3, D4, D10). The same keyed controls as the phone plus Još,
+   the search launcher taking the room, the clock with the weather group and
+   the bell; the tab bar and the FAB leave. */
 @media (min-width: 60rem) {
   .ki { --ki-top: 6.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
   html:has(.ki) { scroll-padding-block: 6.5rem 0; }
-  .ki-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto; grid-template-rows: 3.5rem 3rem; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-rows: 3.5rem 3rem; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
   .ki-wordmark-text { font-size: var(--type-title); }
   .ki-screen { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
   .ki-screen > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
@@ -216,8 +199,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
   .ki-bell { position: relative; color: var(--tone-text-muted); }
   .ki-bell[data-active]:not([data-active='0'])::after { content: ''; position: absolute; inset-block-start: 0.6rem; inset-inline-end: 0.6rem; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
-  .ki-kvart { display: none; }
-  .ki-kvart[hidden] { display: none; }
   .ki-tabbar, .ki-fab { display: none; }
   .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-6) 0; }
   .ki-main { grid-area: main; padding: var(--sp-3) var(--sp-6) var(--sp-10); }   /* spec §3: page inset 24 px, band to content 12 px */

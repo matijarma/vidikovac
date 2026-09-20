@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {buildSchedule,departuresFrom,stopShard} from '../../worker/city/schedules';
+import {DEPARTURES_PAST_WINDOW_MS,buildSchedule,departuresFrom,scheduleInstant,stopShard} from '../../worker/city/schedules';
 /** Minimal stored ZIP fixtures exercise the same streamed CSV reader as imports. */
 function zip(files:Record<string,string>):Uint8Array{
   const locals:Buffer[]=[],directory:Buffer[]=[];let offset=0;
@@ -31,6 +31,51 @@ describe('rolling GTFS import',()=>{
     const board=departuresFrom(part,'hz','a',Date.parse('2026-09-18T23:00:00Z'));
     expect(board.status).toBe('live');expect(board.departures[0].at).toBe('2026-09-18T23:30:00.000Z');
   });
+  // A board of nothing but future departures drops a trip the moment its
+  // scheduled minute passes -- which is exactly when a late tram is closest
+  // and the rider most wants it (WP5, the join-rate probe's largest miss).
+  // The board therefore carries a quarter of an hour of scheduled past, and
+  // shared/city/arrivals.ts decides which of those rows has actually gone.
+  it('carries a quarter of an hour of scheduled past so a late trip is still on the board',()=>{
+    const day='2026-09-18';
+    const run=(seconds:number,tripId:string):[number,number,string,string,string,string]=>[1,seconds,tripId,'r','1','Sesvete'];
+    const part={schema:1 as const,operator:'zet' as const,generatedAt:'2026-09-18T00:00:00Z',days:[day],validUntil:'2026-09-19T04:00:00Z',
+      stops:{a:{name:'Trg',lon:15.97,lat:45.81,runs:[
+        run(11*3600+40*60,'gone'),run(11*3600+44*60,'gone-too'),
+        run(11*3600+46*60,'late'),run(11*3600+58*60,'just-left'),
+        run(12*3600+1*60,'next'),run(12*3600+9*60,'after'),
+      ]}}};
+    const now=scheduleInstant(day,12*3600);
+    expect(DEPARTURES_PAST_WINDOW_MS).toBe(15*60_000);
+    const board=departuresFrom(part,'zet','a',now);
+    // Sixteen and twenty minutes gone are off the board; fourteen and two are on it.
+    expect(board.departures.map(d=>d.tripId)).toEqual(['late','just-left','next','after']);
+    expect(Date.parse(board.departures[0].at)).toBe(now-14*60_000);
+  });
+
+  // The twelve rows are twelve rows of FUTURE. The scheduled past rides on top
+  // of that count rather than eating into it: it is there so a late trip has a
+  // row to be matched to, and a busy platform must not pay for it with the
+  // departures a rider is actually waiting for.
+  it('keeps twelve future rows at a one-minute headway, with the scheduled past on top',()=>{
+    const day='2026-09-18';
+    const runs=Array.from({length:40},(_,i):[number,number,string,string,string,string]=>[1,11*3600+46*60+i*60,`t${i}`,'r','1','Sesvete']);
+    const part={schema:1 as const,operator:'zet' as const,generatedAt:'2026-09-18T00:00:00Z',days:[day],validUntil:'2026-09-19T04:00:00Z',
+      stops:{a:{name:'Trg',lon:15.97,lat:45.81,runs}}};
+    const now=scheduleInstant(day,12*3600);
+    const board=departuresFrom(part,'zet','a',now);
+    const future=board.departures.filter(d=>Date.parse(d.at)>=now);
+    const past=board.departures.filter(d=>Date.parse(d.at)<now);
+    expect(future).toHaveLength(12);
+    expect(future[0].tripId).toBe('t14');
+    // Fourteen minutes of past at this headway, none of it older than the window.
+    expect(past).toHaveLength(14);
+    expect(past.every(d=>Date.parse(d.at)>=now-DEPARTURES_PAST_WINDOW_MS)).toBe(true);
+    // Sorted as one list, past first.
+    expect(board.departures.map(d=>d.at)).toEqual([...board.departures].sort((x,y)=>x.at.localeCompare(y.at)).map(d=>d.at));
+    expect(board.departures[0].tripId).toBe('t0');
+  });
+
   it('rejects malformed, unsupported and expired archives',async()=>{
     await expect(buildSchedule(new Uint8Array(5),'hz',NOW)).rejects.toThrow('gtfs-zip-size');
     const broken=zip(files);broken[broken.length-22+16]=255;

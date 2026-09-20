@@ -10,8 +10,7 @@ import { mobilityStaleBadge, nearestStation, type MobilityStation } from '../../
 import type { LayerContext } from '../../layers/types';
 import { escapeHtml } from '../../ui/dom/escape';
 import { iconMarkup } from '../../ui/icons';
-import { walkMinutes } from '../kvart';
-import { numberText } from '../text';
+import { numberText, walkMinutes } from '../text';
 import type { ProduceOptions, TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
 
@@ -65,7 +64,7 @@ export const bikesProducer: TileProducer = {
     if (!FLAGS.FEED_BIKES) return [];
     const snapshot = ctx.bikes;
     if (!snapshot || snapshot.status === 'down') return [];
-    const station = nearestStation(snapshot.stations, ctx.screen?.stop, o.kvart);
+    const station = nearestStation(snapshot.stations, ctx.screen?.stop);
     if (!station) return [];
     const tile = stationTile(ctx, `bikes:${station.id}`, ctx.i18n.t('tiles.bikesFree'), station, 'tile-bikes');
     // A degraded fetch still shows the last free count, but never as if it were current

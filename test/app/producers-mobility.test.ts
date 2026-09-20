@@ -13,7 +13,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { LayerContext } from '../../app/src/layers/types';
 import type { MobilitySnapshot, WasteSnapshot } from '../../app/src/core/mobility';
 import { nearestStation } from '../../app/src/core/mobility';
-import { walkMinutes } from '../../app/src/experience/kvart';
+import { walkMinutes } from '../../app/src/experience/text';
 import { bikesProducer } from '../../app/src/experience/producers/bikes';
 import { parkingProducer } from '../../app/src/experience/producers/parking';
 import { wasteProducer } from '../../app/src/experience/producers/waste';
@@ -33,6 +33,8 @@ const WASTE = wasteFixture as unknown as WasteSnapshot;
 const STOP: ScreenStop = { id: 'st1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.812, routes: [] };
 // Sesvete: far enough from every bikes/parking fixture station that none is within 600 m.
 const FAR_STOP: ScreenStop = { id: 'st2', name: 'Sesvete', lon: 16.14, lat: 45.876, routes: [] };
+// Beside garage-far/bike-far (Trnje), the fixtures' other station in each module.
+const TRNJE_STOP: ScreenStop = { id: 'st3', name: 'Trnjanski nasip', lon: 15.985, lat: 45.7965, routes: [] };
 
 function ctx(over: Partial<LayerContext> = {}): LayerContext {
   return { i18n: hr, snapshots: {}, now: NOW, ...over };
@@ -40,7 +42,7 @@ function ctx(over: Partial<LayerContext> = {}): LayerContext {
 
 function options(over: Partial<ProduceOptions> = {}, now = NOW): ProduceOptions {
   const columns = columnsFor(hr, now);
-  return { columns, surface: 'desktop', kvart: null, bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay), ...over };
+  return { columns, surface: 'desktop', bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay), ...over };
 }
 
 async function setFlags(flags: Partial<{ FEED_BIKES: boolean; FEED_PARKING: boolean; FEED_WASTE: boolean }>): Promise<void> {
@@ -57,21 +59,12 @@ beforeEach(async () => {
 
 describe('nearestStation', () => {
   it('picks the nearest station within 600 m of the stop over a farther one that is still within range', () => {
-    expect(nearestStation(BIKES.stations, STOP, null)?.id).toBe('bike-near');
+    expect(nearestStation(BIKES.stations, STOP)?.id).toBe('bike-near');
   });
 
-  it('falls back to the nearest station in the kvart when nothing is within 600 m of the stop', () => {
-    expect(nearestStation(BIKES.stations, FAR_STOP, 'trnje')?.id).toBe('bike-far');
-  });
-
-  it('without a stop, returns the first station in the kvart', () => {
-    expect(nearestStation(BIKES.stations, undefined, 'trnje')?.id).toBe('bike-far');
-  });
-
-  it('is null without a stop within range and without a matching kvart', () => {
-    expect(nearestStation(BIKES.stations, undefined, null)).toBeNull();
-    expect(nearestStation(BIKES.stations, FAR_STOP, null)).toBeNull();
-    expect(nearestStation(BIKES.stations, FAR_STOP, 'maksimir')).toBeNull();
+  it('is null without a screen stop, or without one station within 600 m of it (no district fallback: D6 is removed)', () => {
+    expect(nearestStation(BIKES.stations, undefined)).toBeNull();
+    expect(nearestStation(BIKES.stations, FAR_STOP)).toBeNull();
   });
 });
 
@@ -114,17 +107,14 @@ describe('bikesProducer', () => {
     expect(tile.stale).toBeUndefined(); // a live snapshot carries no stale badge
   });
 
-  it('without a screen stop, falls back to the kvart\'s station, with no walking minutes and "nema podataka" for a station the source has no figure for', async () => {
-    await setFlags({ FEED_BIKES: true });
-    const tiles = bikesProducer.produce(ctx({ bikes: BIKES }), options({ kvart: 'trnje' }));
-    expect(tiles).toHaveLength(1);
-    expect(tiles[0]).toMatchObject({ key: 'bikes:bike-far', value: 'nema podataka', context: 'Sajam' });
-    expect(tiles[0]!.contextMarkup).toBeUndefined();
-  });
-
-  it('is empty when no station is honestly nearby (no stop within range, no kvart match)', async () => {
+  it('is empty without a screen stop: no district fallback (D6 is removed), never a distant, misleading station', async () => {
     await setFlags({ FEED_BIKES: true });
     expect(bikesProducer.produce(ctx({ bikes: BIKES }), options())).toEqual([]);
+  });
+
+  it('is empty when the screen stop is too far from every station', async () => {
+    await setFlags({ FEED_BIKES: true });
+    expect(bikesProducer.produce(ctx({ bikes: BIKES, screen: screenWith(FAR_STOP) }), options())).toEqual([]);
   });
 
   it('a stale snapshot still renders the last known free count, badged rather than shown as live', async () => {
@@ -155,7 +145,7 @@ describe('parkingProducer', () => {
 
   it('reads a station\'s zero free places as "0", never as missing data', async () => {
     await setFlags({ FEED_PARKING: true });
-    const tiles = parkingProducer.produce(ctx({ parking: PARKING }), options({ kvart: 'trnje' }));
+    const tiles = parkingProducer.produce(ctx({ parking: PARKING, screen: screenWith(TRNJE_STOP) }), options());
     expect(tiles[0]).toMatchObject({ key: 'parking:garage-far', value: '0' });
   });
 
@@ -172,41 +162,35 @@ describe('parkingProducer', () => {
 
 describe('wasteProducer', () => {
   it('is empty while FEED_WASTE is off', () => {
-    expect(wasteProducer.produce(ctx({ waste: WASTE }), options({ kvart: 'trnje' }))).toEqual([]);
+    expect(wasteProducer.produce(ctx({ waste: WASTE }), options())).toEqual([]);
   });
 
   it('is empty without ctx.waste', async () => {
     await setFlags({ FEED_WASTE: true });
-    expect(wasteProducer.produce(ctx(), options({ kvart: 'trnje' }))).toEqual([]);
+    expect(wasteProducer.produce(ctx(), options())).toEqual([]);
   });
 
   it('is empty when the snapshot is down', async () => {
     await setFlags({ FEED_WASTE: true });
-    expect(wasteProducer.produce(ctx({ waste: { ...WASTE, status: 'down' } }), options({ kvart: 'trnje' }))).toEqual([]);
+    expect(wasteProducer.produce(ctx({ waste: { ...WASTE, status: 'down' } }), options())).toEqual([]);
   });
 
-  it('in the kvart: tomorrow\'s and this week\'s pickups, titled by their own kind, today\'s and another district\'s left out', async () => {
+  it('city-wide: every district\'s tomorrow and this-week pickups appear, titled by their own kind, today\'s left out, labelled "Cijeli grad" (D6 is removed: no district scoping)', async () => {
     await setFlags({ FEED_WASTE: true });
-    const tiles = wasteProducer.produce(ctx({ waste: WASTE }), options({ kvart: 'trnje' }));
+    const tiles = wasteProducer.produce(ctx({ waste: WASTE }), options());
     expect(tiles.map((t) => ({ title: t.title, bucket: t.bucket, context: t.context, domain: t.domain, variant: t.variant, testid: t.testid }))).toEqual([
-      { title: 'Miješani otpad', bucket: 'sutra', context: 'Trnje', domain: 'komunalno', variant: 'time', testid: 'tile-waste' },
-      { title: 'Papir i karton', bucket: 'tjedan', context: 'Trnje', domain: 'komunalno', variant: 'time', testid: 'tile-waste' },
+      { title: 'Miješani otpad', bucket: 'sutra', context: 'Cijeli grad', domain: 'komunalno', variant: 'time', testid: 'tile-waste' },
+      { title: 'Papir i karton', bucket: 'tjedan', context: 'Cijeli grad', domain: 'komunalno', variant: 'time', testid: 'tile-waste' },
+      { title: 'Plastika', bucket: 'sutra', context: 'Cijeli grad', domain: 'komunalno', variant: 'time', testid: 'tile-waste' },
     ]);
     expect(tiles.every((t) => t.label === 'Odvoz')).toBe(true);
-  });
-
-  it('city-wide (no kvart chosen), every district\'s next pickups appear, labelled "Cijeli grad"', async () => {
-    await setFlags({ FEED_WASTE: true });
-    const tiles = wasteProducer.produce(ctx({ waste: WASTE }), options({ kvart: null }));
-    expect(tiles.map((t) => t.title)).toEqual(['Miješani otpad', 'Papir i karton', 'Plastika']);
-    expect(tiles.every((t) => t.context === 'Cijeli grad')).toBe(true);
     expect(tiles.every((t) => t.stale === undefined)).toBe(true); // live snapshot: no stale badge
   });
 
   it('a stale snapshot still renders the last known pickups, every tile badged rather than shown as live', async () => {
     await setFlags({ FEED_WASTE: true });
-    const tiles = wasteProducer.produce(ctx({ waste: { ...WASTE, status: 'stale' } }), options({ kvart: 'trnje' }));
-    expect(tiles).toHaveLength(2); // same pickups as the live case: stale is not hidden
+    const tiles = wasteProducer.produce(ctx({ waste: { ...WASTE, status: 'stale' } }), options());
+    expect(tiles).toHaveLength(3); // same pickups as the live case: stale is not hidden
     expect(tiles.every((t) => t.stale?.includes('data-status="stale"'))).toBe(true);
     expect(tiles[0]!.stale).toContain('zastarjelo od 14:00'); // fetchedAt 2026-09-11T12:00Z in Zagreb time
   });

@@ -5,7 +5,7 @@ description: "Useful city information, a public overview and deliberate presenta
 
 # Kaj ima? Design system
 
-Approved direction: 17 September 2026, extended on 18 September 2026.
+Approved direction: 17 September 2026, extended on 18 and 19 September 2026.
 Product intent is in `PRODUCT.md`; current implementation and verification
 are tracked in `docs/upgrade-city-2026-09-18.md`.
 The authoritative values are `app/src/ui/tokens.css`, not a second palette
@@ -42,6 +42,7 @@ meander, mandatory fixed map zoom, giant map overlays or equal-card dashboards.
 | Danger | `#b72d39` | `#ff9aa5` |
 | Success | `#176b56` | `#79d5b4` |
 | Events | `#7040a2` | `#c9aff0` |
+| Bike-share | `#178f7f` | `#178f7f` |
 
 Components consume `--tone-*` semantic roles. The token file contains both
 sRGB fallbacks and equivalent OKLCH values. `node scripts/sync-token-colors.mjs`
@@ -76,30 +77,59 @@ honour reduced motion. Do not animate layout width for countdown bars.
 
 ### Public screen
 
-The normal `/kiosk/` surface is an ambient city overview, not a locked
-dashboard. Pairing acknowledges access without replacing it. Landscape
-uses local geography with compact local facts below; weather,
-active cultural venues and a QR share the other column. Transport stays
-available in discovery but does not dominate default city cartography.
-Compact landscape and portrait have their own arrangements.
+The normal `/kiosk/` surface is a live city window, not a locked dashboard
+and not an ambient decoration. Pairing acknowledges access without replacing
+it. The map takes the whole left column and opens on the whole city, with the
+live transit picture on it: the tram network as a thin neutral ground, tram
+plates, bike-share stations as dots carrying their count, closures, the
+on-duty pharmacy and active venues. On this surface transport is the default
+cartography; the earlier rule that it must not dominate applies to the phone
+and the desk. Place names are a reader's, not a passer-by's: no neighbourhood
+names, no station or venue names on the window. Buses join the picture only
+once the camera is in a neighbourhood. Compact landscape and portrait keep the
+same grammar in their own arrangements.
+
+The other column carries weather, a transit-exceptions card, an events card
+that fills the room it is given, and the pairing card. Weather is an
+observation with today's and tomorrow's ranges. The transit card names only
+what a rider would change a plan over and says so plainly when there is
+nothing to name. The events card never renders empty: it holds at least one
+whole row, and the card above it yields lines before that floor is broken.
+
+The header carries one line of city news at a time: a coloured kicker and one
+sentence, replaced on a fixed period with a short crossfade, instant under
+reduced motion. No marquee and no scrolling text. Session and pairing
+notices outrank it. Long source texts are condensed once, server-side, into a
+single sentence; the original title is the fallback and stays on the phone.
 
 Keep location/date/time in the header and safety/on-duty pharmacy in the
-footer. The QR stays at least 240 CSS pixels at the design display sizes.
-Show whole pairing codes and readable instructions. Setup is one form,
-not a screen full of large district pills.
+footer. The QR stays at least 240 CSS pixels at the design display sizes, with
+the code under the text at a fixed size, never stretched across a column.
+Starting a screen is one button and no configuration; area, stop, theme and
+expiry belong to an on-screen settings panel, not a setup wizard and not a
+screen full of large district pills. A refused or rate-dropped save is stated
+in the panel, never swallowed.
 
 The map is a meaningful geographic view, not a background beneath a route
-board. Public selections determine framing. Do not force every vehicle
-number to overlap at terminals: retain dots and collision-aware labels.
+board. Configured area or stop, and public selections, determine framing. Do
+not force every vehicle number to overlap at terminals: retain dots and
+collision-aware labels. Stops stay tap-able at city zoom, with a hit tolerance
+sized for a finger on a wall, and a tapped stop leads with its arrivals. A
+window onto the whole city is four times the ground the wall's field was sized
+for, so below the thinning zoom it names less, not smaller: the basemap's
+promoted street names go, the assembly points keep their squares and lose their
+titles, and of the stops only the tram interchanges are named -- a tram calls
+there and some trip begins or ends there. Route count is not a measure of
+importance and is not used for this. From the thinning zoom up every name is
+back, exactly as derived.
 Preserve the map instance across polling and composition changes.
 
 Overview content has deliberate budgets. A fitting routine may not hide
 every row of a populated panel to make a screenshot test pass. A genuine
 empty, loading or unavailable source is stated explicitly.
 
-Compact displays carry one complete cultural venue row, wide two, portrait
-three. Quiet-day discovery uses a real cultural or heritage record with its
-own attribution. Touch exploration has search, categories, list/details and
+Quiet-day discovery uses a real cultural or heritage record with its own
+attribution. Touch exploration has search, categories, list/details and
 an explicit return action; 90-second inactivity restores the overview.
 Refreshes preserve focus and scroll. Remote presentation makes the map inert.
 
@@ -108,8 +138,8 @@ Refreshes preserve focus and scroll. Remote presentation makes the map inert.
 A deliberate presentation gives the public subject a distance-readable
 layout, not a cropped phone screen. Route/stop selections have geography
 and a separate subject board. Events and civic selections lead with their
-title and source-supported details. Kvart means the selected public
-district, not the private layer hidden underneath it.
+title and source-supported details. A legacy phone that still sends the
+retired `kvart` layer renders as the plain Sada overview, never a district.
 
 Safety, the invitation and return-to-overview action remain available.
 Private browsing never automatically changes the presentation. The
@@ -117,10 +147,10 @@ controller distinguishes a pending request from a kiosk-confirmed render.
 
 ### Phone and desktop
 
-Phone destinations are Sada, Karta, Događanja and Još. Kvart is reached
-through location and Još. The current destination retains a readable
-label at text zoom. Desktop exposes all six domains and Kvart directly.
-Do not reintroduce the permanent competing neighborhood-map sidebar.
+Phone destinations are Sada, Karta, Događanja and Još. The current
+destination retains a readable label at text zoom. Desktop exposes all
+six domains directly. Do not reintroduce the permanent competing
+neighborhood-map sidebar or a Kvart workspace.
 
 Sada has two reading regions: local facts now, and what comes next. Names
 and destinations are readable; weather is useful in the first view.
@@ -158,10 +188,16 @@ redundant second unlock button.
 
 Missing is not zero. A request time is not an observation or event time.
 An unavailable safety source is not an all-clear. Vehicle positions are
-estimates; route delay is not an arrival forecast. BAJS counts require a
-recent observation; air is a preliminary station observation; ZET and HŽ
-departures are scheduled times, not ETA. Inventory capacity is never live
-availability. No push delivery or unverified open-now claims are implied.
+estimates; a route's median delay is a reading of the line, not a forecast for
+one rider's vehicle. BAJS counts require a recent observation; air is a
+preliminary station observation. A ZET arrival is an estimate and is labelled
+one: a countdown only where a tracked vehicle carries that trip, built from
+the scheduled departure and ZET's own reported delay for that vehicle, with
+every other row keeping its scheduled clock time. No tracked vehicle, no
+countdown; HŽ boards stay scheduled times only. Text the Worker condensed for
+the public screen is a derived reading, carries its source, and is never
+republished as the source. Inventory capacity is never live availability. No
+push delivery or unverified open-now claims are implied.
 
 Verify both themes, Croatian/English, reduced motion, 200% text,
 keyboard navigation, small phones, tablet, landscape/portrait displays

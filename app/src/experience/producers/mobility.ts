@@ -4,42 +4,16 @@
 // where the band's own state does the telling.
 //
 // The band is komunalno work seen from the street (kajimafix 01.5): amber,
-// the hard hat, and, with a kvart chosen and closures the worker stamped
-// with a district, the nearest closed street in that kvart with its end as
-// the trail and the kvart's count in the label. Without a kvart match the
-// band falls back to the one street (a single closure) or the city count.
+// the hard hat, and, city-wide, the one street to name (a single closure) or
+// the count when there is more than one.
 import type { FeedItem } from '../../../../worker/feed/schema';
-import type { AreaSlug } from '../../../../worker/pairing/areas';
 import { zagrebDayKey, zagrebTime, zagrebWeekdayShort } from '../../format';
 import type { I18n } from '../../i18n/i18n';
 import type { LayerContext } from '../../layers/types';
 import { dataText } from '../../panels/panel';
-import { referencePoint } from '../kvart';
 import { activeClosures } from '../safety-state';
-import { distanceKm } from '../text';
 import type { ProduceOptions, TileProducer } from '../timeband';
 import type { Tile } from '../tiles';
-
-/** A closure's first vertex (a closure is filed where it starts), or its point; null without a geometry. */
-function firstVertex(item: FeedItem): [number, number] | null {
-  if (!item.geo) return null;
-  const point = item.geo.type === 'Point' ? (item.geo.coordinates as number[]) : (item.geo.coordinates as number[][])[0];
-  return point && Number.isFinite(point[0]) && Number.isFinite(point[1]) ? [point[0]!, point[1]!] : null;
-}
-
-/** The active closures in the kvart, nearest to the reference point first (unknown geometry last). */
-function closuresInKvart(ctx: LayerContext, kvart: string | null, active: readonly FeedItem[]): FeedItem[] {
-  if (!kvart) return [];
-  const ref = referencePoint(ctx, kvart as AreaSlug);
-  return active
-    .filter((c) => dataText(c, 'district') === kvart)
-    .map((c) => {
-      const p = firstVertex(c);
-      return { c, d: p ? distanceKm(ref.lon, ref.lat, p[0], p[1]) : Infinity };
-    })
-    .sort((a, b) => a.d - b.d)
-    .map(({ c }) => c);
-}
 
 function endText(i18n: I18n, now: number, item: FeedItem): string {
   const until = item.until;
@@ -50,12 +24,9 @@ function endText(i18n: I18n, now: number, item: FeedItem): string {
 
 function closuresBand(ctx: LayerContext, o: ProduceOptions, active: readonly FeedItem[]): Tile {
   const { i18n, now } = ctx;
-  const inKvart = closuresInKvart(ctx, o.kvart, active);
-  // One street to name: the nearest in the kvart, else the only closure in the city; a city-wide plural is a count.
-  const subject = inKvart[0] ?? (active.length === 1 ? active[0] : undefined);
-  const label = inKvart.length > 0
-    ? `${i18n.t('tiles.closures')} · ${i18n.t('tiles.inKvart', { count: inKvart.length })}`
-    : i18n.t('tiles.closures');
+  // One street to name: the only closure in the city; more than one is a plural count.
+  const subject = active.length === 1 ? active[0] : undefined;
+  const label = i18n.t('tiles.closures');
   const title = subject ? subject.title : i18n.t('panels.closuresCount', { count: active.length });
   return {
     key: 'mobility:closures',

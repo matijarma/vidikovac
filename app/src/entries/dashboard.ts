@@ -26,7 +26,6 @@ import '../ui/layers.css';
 import '../ui/overview.css';
 import '../ui/city.css';
 import '../ui/dashboard.css';
-import '../ui/kvart.css';
 import '../ui/dialog.css';
 import '../ui/qr.css';
 import '../ui/print.css';
@@ -183,9 +182,8 @@ if (!params) {
       session.event('export', exportDim(kind));
     },
   });
-  // Warm Promet's geographic renderer only while that is the device's choice.
-  // The separate Kvart thumbnail may still need MapLibre on a desktop; this
-  // guard avoids an unnecessary transit prefetch, not every page's map load.
+  // Warm Promet's geographic renderer only while that is the device's choice;
+  // this guard avoids an unnecessary transit prefetch, not every page's map load.
   const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
   const prefetch = () => { if (mapMode.snapshot() === 'map') void import('../map/maplibre-entry'); };
   if (!lightweight && mapMode.snapshot() === 'map') {

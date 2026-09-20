@@ -76,8 +76,8 @@ const PUSH_TOLERANCE_MS = 1;
 
 /** What a drawn point IS, when it is more than an untyped place. A point with
  *  no `place` keeps the one plain circle this map has always drawn, which is
- *  what the dashboard's quake map and the kvart thumbnail's work points still
- *  ask for; a point with one is drawn by its own layer, with its own mark and
+ *  what the dashboard's quake map and its work points still ask for; a point
+ *  with one is drawn by its own layer, with its own mark and
  *  its own honesty rule (map/overlays.ts). */
 export type PlaceKind = 'event' | 'quake' | 'assembly' | 'pharmacy' | 'seat' | 'city';
 
@@ -212,7 +212,7 @@ const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'route
 
 /** Places only: a vehicle report never reaches a drawn source (R-P2). An
  *  untagged point produces exactly the properties it always did, so the
- *  dashboard's quake map and the kvart thumbnail are byte for byte unchanged. */
+ *  dashboard's quake map is byte for byte unchanged. */
 export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollection {
   return {
     type: 'FeatureCollection',
@@ -493,15 +493,31 @@ export interface StopFeatureCollection {
       bus: boolean;
       /** True on the one platform per name that carries the label. */
       label: boolean;
+      /** Ruling 30: a tram calls here and some trip starts or ends here --
+       *  the interchanges the whole-city window names. A property of the
+       *  name, so every platform of it carries the same answer. */
+      tramInterchange: boolean;
     };
   }[];
 }
 
 /** Every platform of the artefact, with the routes whose shapes call there,
  *  the modes among them (what a tram-only view keeps), a rank (how many) that
- *  decides whose label wins a crowded corner, and one labelled platform per
- *  name -- GTFS lists one platform per direction, and two labels reading
- *  "Kvaternikov trg" thirty metres apart is clutter, not information. */
+ *  decides whose label wins a crowded corner, one labelled platform per name
+ *  -- GTFS lists one platform per direction, and two labels reading
+ *  "Kvaternikov trg" thirty metres apart is clutter, not information -- and
+ *  whether the stop is a tram interchange (Ruling 30).
+ *
+ *  `tramInterchange` is a property of the NAME, not of the platform: every
+ *  platform that shares a name carries the answer for all of them, because
+ *  which of them holds the label is decided by route count and the question
+ *  "is this an interchange" is not. A stop qualifies when some tram calls
+ *  there AND some trip in the feed starts or ends there -- in this network
+ *  that is the tram termini and the junctions the lines turn at, which is
+ *  what a rider means by an interchange. Route count is NOT the test: the
+ *  city's 19 tram routes overlap so heavily that 111 of the 114 tram-served
+ *  names see two or more of them, so "two trams" names nearly every tram
+ *  stop there is (measured against the shipped artefact, 20 Sept 2026). */
 export function stopsToGeoJson(net: Network): StopFeatureCollection {
   const rows = net.stops.map((stop) => {
     const routes = [...new Set(stop.on.map((on) => net.shapes[on.shape]?.route).filter((r): r is string => Boolean(r)))].sort((a, b) =>
@@ -511,17 +527,27 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
     return { stop, routes, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
   });
   const labelled = new Map<string, { id: string; rank: number }>();
-  for (const { stop, routes } of rows) {
+  const interchange = new Map<string, { tram: boolean; terminal: boolean }>();
+  for (const { stop, routes, tram } of rows) {
     const best = labelled.get(stop.name);
     if (!best || routes.length > best.rank || (routes.length === best.rank && stop.id < best.id)) labelled.set(stop.name, { id: stop.id, rank: routes.length });
+    const seen = interchange.get(stop.name) ?? { tram: false, terminal: false };
+    interchange.set(stop.name, { tram: seen.tram || tram, terminal: seen.terminal || stop.terminal });
   }
   return {
     type: 'FeatureCollection',
-    features: rows.map(({ stop, routes, tram, bus }) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
-      properties: { id: stop.id, name: stop.name, routes, rank: routes.length, tram, bus, label: labelled.get(stop.name)?.id === stop.id },
-    })),
+    features: rows.map(({ stop, routes, tram, bus }) => {
+      const hub = interchange.get(stop.name)!;
+      return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
+        properties: {
+          id: stop.id, name: stop.name, routes, rank: routes.length, tram, bus,
+          label: labelled.get(stop.name)?.id === stop.id,
+          tramInterchange: hub.tram && hub.terminal,
+        },
+      };
+    }),
   };
 }
 
@@ -578,8 +604,16 @@ export interface VehicleInfo {
   onShape: number | null;
   /** The trip's headsign from the twin's join, when known (R-TE2). */
   headsign?: string;
+  /** The realtime trip id from the twin's join, when known: what shared/city/
+   *  arrivals.ts matches a scheduled departure against (WP5). */
+  tripId?: string;
   /** The next stop's id from the twin, when known. */
   nextStopId?: string;
+  /** ZET's reported delay at that stop, seconds; negative is early. */
+  delaySeconds?: number;
+  /** The twin's own planned arrival at that stop, epoch ms. It refines the
+   *  arrivals row for the platform the vehicle is actually approaching. */
+  nextStopEtaMs?: number;
 }
 
 export interface MapCamera {
@@ -678,12 +712,20 @@ export interface CityMapOptions {
   cooperative?: boolean;
   /** A compact attribution control (the credit behind one button) for the phone stage. */
   attributionCompact?: boolean;
-  /** false leaves the city, region and country names off the basemap (the kvart thumbnail). */
+  /** false leaves the city, region and country names off the basemap, for a map inset too small to carry them. No surface asks for it today. */
   placeLabels?: boolean;
+  /** false leaves the city places' own names off (map/city-layers.ts): the
+   *  public screen draws badges and dots alone until a person explores.
+   *  Default true. Changed live with setCityLabels. */
+  cityLabels?: boolean;
+  /** How far from a mark a tap may land and still pick it, CSS px. The public
+   *  screen raises it: a finger on a wall is not a mouse on a desk, and its
+   *  stop rings are small at city zoom. Default HIT_TOLERANCE_PX. */
+  hitTolerancePx?: number;
   /** Which basemap this surface reads: 'prozor' for the public screen, whose
-   *  ground is two landuse tones under hairline streets with the neighbourhood
-   *  names promoted and every label sized from a stated viewing geometry
-   *  (map/basemap.ts). Default 'default'. */
+   *  ground is two landuse tones under hairline streets, with no POI, no
+   *  neighbourhood name and every label that remains sized from a stated
+   *  viewing geometry (map/basemap.ts). Default 'default'. */
   basemapProfile?: BasemapProfile;
   /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. Changed live with setProzor. */
   prozor?: ProzorOptions;
@@ -700,6 +742,10 @@ export interface CityMapOptions {
   /** A user gesture ends a follow. The schema reports null because its
    *  viewport is not a geographic camera; callers must keep their saved map camera. */
   onUserMove?: (camera: MapCamera | null) => void;
+  /** Every zoom that settles, whoever asked for it (a person's gesture or one
+   *  of the wrapper's own eases): the public screen decides from it whether
+   *  the buses are on the picture (kiosk/mapview.ts busesVisible). */
+  onCamera?: (camera: MapCamera) => void;
 }
 
 export interface CityMapHandle {
@@ -727,6 +773,8 @@ export interface CityMapHandle {
   /** After the container's box changed while it sat outside the layout. */
   resize?(): void;
   setModes?(modes: ReadonlySet<number> | null): void;
+  /** The city places' own names on or off, on the one live map. */
+  setCityLabels?(on: boolean): void;
   /** The kinds of city point this chapter lights; null lights every one. */
   setEmphasis?(emphasis: readonly PlaceKind[] | null): void;
   /** "Only this line on the map": the reader's own switch, per device. A
@@ -845,7 +893,8 @@ export function documentTheme(doc: Document | undefined): MapTheme {
 
 /** The camera zooms in to here for one stop or vehicle, never out. */
 export const FOCUS_ZOOM = 15.5;
-/** How far from a mark a tap may land and still pick it, CSS px. */
+/** How far from a mark a tap may land and still pick it, CSS px; a surface
+ *  read and touched from further away raises it (CityMapOptions.hitTolerancePx). */
 const HIT_TOLERANCE_PX = 8;
 /** The camera's move to a selection, ms; 0 under reduced motion. */
 const CAMERA_MS = 600;
@@ -950,6 +999,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
+  let cityLabels = options.cityLabels !== false;
+  const hitTolerance = options.hitTolerancePx ?? HIT_TOLERANCE_PX;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
   let outline: MapOutline | null = options.outline ?? null;
@@ -1364,6 +1415,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
     // honest place to ask it what it drew (see the probe comment above).
     created.on('idle', writeRenderProbe);
@@ -1396,8 +1448,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     if (l.cityLayers) {
-      cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
-      for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>);
+      cityOverlays = l.cityLayers(l.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale,cityLabels);
+      // Under the vehicles. A BAJS station stands still and a tram does not:
+      // appended on top, a standing teal dot sat over the plate of a passing
+      // cluster, hiding the one mark on this map that is about right now.
+      // Only the selection ring stays over them, so what a person just tapped
+      // is never hidden by a pill crossing it.
+      for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>, layer.id === l.CITY_SELECTION ? undefined : l.LAYERS.vehicleDots);
     }
     styled = true;
     // A resize or a deliberate presentation can arrive before the library or
@@ -1568,8 +1625,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     if (!l) return null;
     const box = [
-      [point.x - HIT_TOLERANCE_PX, point.y - HIT_TOLERANCE_PX],
-      [point.x + HIT_TOLERANCE_PX, point.y + HIT_TOLERANCE_PX],
+      [point.x - hitTolerance, point.y - hitTolerance],
+      [point.x + hitTolerance, point.y + hitTolerance],
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
@@ -1667,6 +1724,17 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     writeFocusProbe(map, l);
   }
 
+  /** Re-derives the city-place layers for the current theme, selection and
+   *  label switch and applies what changed -- the sibling of applyOverlays for
+   *  the layers city-layers.ts owns. */
+  function applyCityOverlays(): void {
+    const l = lib;
+    if (!map || !styled || !l?.cityLayers) return;
+    const next = l.cityLayers(l.overlayPalette(theme), selection?.kind === 'place' ? selection.id : null, scale, cityLabels);
+    applyOps(map, l.styleDiff(cityOverlays, next));
+    cityOverlays = next;
+  }
+
   /** Selects (or clears with null) and marks it on the map; `fit` moves the camera to it. */
   function select(next: MapSelection | null, opts: { fit?: boolean } = {}): void {
     selection = next;
@@ -1674,10 +1742,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (typeof following === 'string' && next?.kind !== 'vehicle') following = null;
     if (following === true && next?.kind !== 'route') following = null;
     applyOverlays();
-    if(map&&styled&&lib?.cityLayers){
-      const nextLayers=lib.cityLayers(lib.overlayPalette(theme),next?.kind==='place'?next.id:null,scale);
-      applyOps(map,lib.styleDiff(cityOverlays,nextLayers));cityOverlays=nextLayers;
-    }
+    applyCityOverlays();
     if (opts.fit) fitSelection();
   }
 
@@ -1734,7 +1799,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  a silent regression on the surface that flips theme twice a day. The
    *  kiosk set's street-name padding rides along (basemap.ts roads_labels_major). */
   function basemapOptions(): BasemapStyleOptions {
-    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding } : {}) };
+    return { locale, origin: deps.origin, placeLabels: options.placeLabels, profile: options.basemapProfile, ...(prozor ? { labelPadding: prozor.labelPadding, majorStreetNames: prozor.majorStreetNames !== false } : {}) };
   }
 
   /** Re-derives the basemap for the current theme and options and applies what moved: a face flip, a locale switch, a changed prozor set. */
@@ -1754,10 +1819,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyBasemap();
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
-    if(lib?.cityLayers){
-      const next=lib.cityLayers(lib.overlayPalette(theme),selection?.kind==='place'?selection.id:null,scale);
-      applyOps(map,lib.styleDiff(cityOverlays,next));cityOverlays=next;
-    }
+    applyCityOverlays();
   }
 
   function setLocale(next: string): void {
@@ -1825,7 +1887,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         held: v.held === true,
         onShape: v.onShape,
         ...(v.headsign !== undefined ? { headsign: v.headsign } : {}),
+        ...(v.tripId !== undefined ? { tripId: v.tripId } : {}),
         ...(v.nextStopId !== undefined ? { nextStopId: v.nextStopId } : {}),
+        ...(v.delaySeconds !== undefined ? { delaySeconds: v.delaySeconds } : {}),
+        ...(v.nextStopEtaMs !== undefined ? { nextStopEtaMs: v.nextStopEtaMs } : {}),
       };
     });
   }
@@ -1896,6 +1961,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setModes(next) {
       modes = next;
       applyOverlays();
+    },
+    setCityLabels(on) {
+      if (on === cityLabels) return;
+      cityLabels = on;
+      applyCityOverlays();
     },
     setEmphasis,
     setLineFocus(on) {

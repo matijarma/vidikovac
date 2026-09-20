@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AA_TEXT, contrastRatio, luminance, parseCssColour, parseHex } from '../../app/src/ui/contrast';
 import { deltaE, hexToLinear, mixOklab, parseOklch, toHex, type Linear } from './oklab';
+import { OVERLAY_DARK, OVERLAY_LIGHT } from '../../app/src/map/basemap';
 
 const TOKENS = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'tokens.css'), 'utf8');
 
@@ -62,6 +63,21 @@ describe.each(['dark', 'light'] as const)('%s palette text pairs meet WCAG AA 4.
   it('keeps subtle and muted distinct so the hierarchy survives', () => {
     expect(palette(theme, 'text-subtle')).not.toBe(palette(theme, 'text-muted'));
   });
+});
+
+// BAJS bike-share: one teal in both faces (owner ruling, round F "kiosk
+// window"). The dot is a non-text graphic (WCAG 1.4.11's 3:1 floor); the
+// count badge painted over it is text and clears the full AA text minimum.
+describe.each(['dark', 'light'] as const)('BAJS bike-share teal (WP1)', (theme) => {
+  it(`bike reads as a graphic at >= 3:1 on the ${theme} canvas`, () => {
+    const ratio = contrastRatio(palette(theme, 'bike'), palette(theme, 'canvas'));
+    expect(Number(ratio.toFixed(2)), `${theme} bike on canvas = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+  });
+});
+it('the count badge ink reads at 4.5:1 on the bike teal, in both faces', () => {
+  for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
+    expect(contrastRatio(p.bikeText, p.bike)).toBeGreaterThanOrEqual(AA_TEXT);
+  }
 });
 
 describe('tokens.css structure', () => {

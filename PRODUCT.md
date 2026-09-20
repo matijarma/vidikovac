@@ -43,6 +43,30 @@ WCAG AA rendered contrast, visible keyboard focus, 44px minimum targets, 48px pr
 
 ## Approval
 
+On 19 September 2026 (evening) the owner approved the city-window round for
+the public screen. Opening `/kiosk/` gives one button, **Pokreni zaslon**, and
+nothing else to decide: the screen it creates covers the whole city and carries
+no stop. Area, stop, theme and expiry move to an on-screen settings panel
+behind a gear in the header. The map takes the whole left column and opens on
+the city a passer-by means by Zagreb, Črnomerec to Maksimir and the Sava to
+Mirogoj, with trams, the tram network in neutral grey, BAJS stations as teal
+discs carrying their bike count, closures, the on-duty pharmacy and active
+cultural venues; neighbourhood names leave the basemap and buses join the
+picture only once the camera is in a neighbourhood. A tapped stop says first
+which vehicles come next and in how many minutes: trips with a tracked vehicle
+show a countdown derived from the schedule and ZET's own reported delay, the
+rest keep their timetable clock time, and the list says which is which. The
+header carries one line of city news at a time, whose long source texts are
+condensed once, server-side, into a single machine-written sentence that is a
+derived reading and never a republished source. Kvart is removed from every
+surface.
+
+This supersedes two earlier rules. "Transport stays available in discovery but
+does not dominate default city cartography" no longer holds for the public
+screen: the live transit picture IS the screen's invitation. The "no inferred
+ETA" rule is reversed for ZET; arrival estimates are labelled as estimates,
+never invented, and HŽ boards stay schedule-only.
+
 On 18 September 2026 the owner approved the city-data upgrade in
 `docs/upgrade-city-2026-09-18.md`, superseding the navigation and
 transport-led map composition below. Phone: Sada, Karta, Događanja, Još.
@@ -60,6 +84,6 @@ protection boundaries, not entrances. New sources retain their attribution,
 timestamps and uncertainty; missing licence metadata is recorded without
 inventing a licence or a new `/open` export.
 
-On 17 September 2026 the owner approved the whole-product redesign in `docs/redesign-2026-09-17.md`: a light-led high-contrast system; public overview plus explicit presentation; confirmed takeover; all six domains directly accessible on desktop; Sada, Promet, Događanja and Još on the phone. Kvart is a workspace reached through location and Još.
+On 17 September 2026 the owner approved the whole-product redesign in `docs/redesign-2026-09-17.md`: a light-led high-contrast system; public overview plus explicit presentation; confirmed takeover; all six domains directly accessible on desktop; Sada, Promet, Događanja and Još on the phone. Kvart, once a workspace reached through location and Još, is removed everywhere; the wire literal `'kvart'` is still accepted from an older phone and renders as the plain Sada overview.
 
 This approval supersedes earlier pixel layouts, fixed map spans, header-only weather, compulsory time-band columns and automatic paired layouts. It does not authorize changing the submitted documents in `docs/prijava` or `app/prijava`. Review real rendered interfaces, not only tests. Keep heavy verification work sequential to conserve the owner's quota.
