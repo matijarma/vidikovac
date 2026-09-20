@@ -1338,6 +1338,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       'NavigationControl.ZoomOut': tr(strings, 'zoomOut'),
       'NavigationControl.ResetBearing': tr(strings, 'resetBearing'),
       'AttributionControl.ToggleAttribution': tr(strings, 'mapAttribution'),
+      'GeolocateControl.FindMyLocation': tr(strings, 'findMyLocation'),
+      'GeolocateControl.LocationNotAvailable': tr(strings, 'locationUnavailable'),
       'CooperativeGesturesHandler.WindowsHelpText': tr(strings, 'coopWindows'),
       'CooperativeGesturesHandler.MacHelpText': tr(strings, 'coopMac'),
       'CooperativeGesturesHandler.MobileHelpText': tr(strings, 'coopMobile'),
@@ -1397,7 +1399,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // The compact credit sits bottom-left: on the phone stage the right edge holds the zoom and the tools, and on a
     // short stage (a small phone, a landscape one) the two would collide.
     const compact = options.attributionCompact === true;
-    created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), compact ? 'bottom-left' : 'bottom-right');
+    created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), 'bottom-right');
     if (compact) {
       // MapLibre initially expands even its compact control. Keep the full
       // credit in the native disclosure, without covering the phone's map
@@ -1408,6 +1410,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // A scale bar belongs to a map one can move; on a thumbnail it only collided with the credit (kajimafix 01.8).
     if (interactive) created.addControl(new l.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
     if (interactive) created.addControl(new l.NavigationControl({ showCompass: false }), 'top-right');
+    // A person's own position, under the zoom on the right: asked for only on the tap, never on load. A public wall has no owner to locate.
+    if (interactive && !options.prozor && typeof l.GeolocateControl === 'function') created.addControl(new l.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, fitBoundsOptions: { maxZoom: 16 }, showAccuracyCircle: true }), 'top-right');
     created.on('error', onMapError);
     created.on('styleimagemissing', (event) => onImageMissing(created, event));
     created.on('sourcedata', onSourceData);
@@ -1837,6 +1841,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       ['.maplibregl-ctrl-zoom-in', labels['NavigationControl.ZoomIn']],
       ['.maplibregl-ctrl-zoom-out', labels['NavigationControl.ZoomOut']],
       ['.maplibregl-ctrl-attrib-button', labels['AttributionControl.ToggleAttribution']],
+      ['.maplibregl-ctrl-geolocate', labels['GeolocateControl.FindMyLocation']],
     ];
     for (const [selector, label] of pairs) {
       const el = container.querySelector<HTMLElement>(selector);

@@ -430,6 +430,8 @@
     "runningRoutes": "Routes running",
     "noRunning": "No vehicle is moving right now.",
     "zoomIn": "Zoom in",
+    "findMyLocation": "My location",
+    "locationUnavailable": "Location unavailable",
     "zoomOut": "Zoom out",
     "mapAttribution": "Map attribution",
     "resetBearing": "Reset bearing to north",

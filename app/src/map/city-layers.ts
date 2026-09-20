@@ -19,6 +19,13 @@ export const BIKE_FAR_ZOOM = 13;
  *  that can be used (shared/city/bikes.ts bikeAvailability writes the three). */
 export const BIKE_SPENT_BADGES: readonly string[] = Object.freeze(['0', '—', '?']);
 export const BIKE_SPENT_OPACITY = 0.55;
+/** A station's dot, in drawn px before the surface's symbol scale: a minor
+ *  mark on the whole city, a small one to walk to in a neighbourhood. */
+export const BIKE_FAR_RADIUS_PX = 3;
+export const BIKE_NEAR_RADIUS_PX = 5;
+/** A merged group of places (city/discovery.ts clusterPlaces) is a counted
+ *  dot of this radius, never the 18 px bubble that hid the map beneath it. */
+export const CLUSTER_RADIUS_PX = 11;
 /** `labels` false leaves the city places' own names off the picture: the
  *  public screen's window onto the whole city is badges and dots only (a BAJS
  *  count, a venue's programme count), because a hundred station names over
@@ -31,18 +38,24 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
   // allows ['zoom'] only at the top of a property, so the category case sits
   // INSIDE each stop rather than the interpolation inside a case.
   const byZoom=(far:unknown,near:unknown)=>['interpolate',['linear'],['zoom'],BIKE_FAR_ZOOM,far,BIKE_NEAR_ZOOM,near];
-  const dotRadius=(bike:number)=>['*',scale,['case',isBike,bike,['==',['get','category'],'cluster'],18,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
-  const badgeSize=(bike:number)=>['*',scale,['case',isBike,bike,12]];
+  // A BAJS station is a secondary dot at every zoom -- there are dozens of
+  // them, and a hundred large discs bury the trams -- and a merged cluster is
+  // a small counted dot, never a bubble. The station's count only appears
+  // once the camera is close enough for the number to fit inside the dot.
+  const dotRadius=(bike:number)=>['*',scale,['case',isBike,bike,['==',['get','category'],'cluster'],CLUSTER_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
+  const badgeSize=(bike:number)=>['*',scale,['case',isBike,bike,['==',['get','category'],'cluster'],10,12]];
   const spent=['case',['all',isBike,['in',['get','badge'],['literal',BIKE_SPENT_BADGES]]],BIKE_SPENT_OPACITY,1];
+  /** The count fades in with the camera: nothing on the whole city, the spent rule once near. */
+  const countOpacity=byZoom(['case',isBike,0,1],spent);
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
-      'circle-radius':byZoom(dotRadius(5),dotRadius(8)),
-      'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':2,
+      'circle-radius':byZoom(dotRadius(BIKE_FAR_RADIUS_PX),dotRadius(BIKE_NEAR_RADIUS_PX)),
+      'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',isBike,1,2],
       'circle-opacity':spent,'circle-stroke-opacity':spent}},
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
-      'text-field':['get','badge'],'text-font':[MAP_FONTS.medium],'text-size':byZoom(badgeSize(9),badgeSize(12)),'text-allow-overlap':false,
-      'symbol-sort-key':['get','priority']},paint:{'text-color':['match',['get','category'],'bikes',p.bikeText,p.halo],'text-halo-width':0,'text-opacity':spent}},
+      'text-field':['get','badge'],'text-font':[MAP_FONTS.medium],'text-size':byZoom(badgeSize(7),badgeSize(8)),'text-allow-overlap':false,
+      'symbol-sort-key':['get','priority']},paint:{'text-color':['match',['get','category'],'bikes',p.bikeText,p.halo],'text-halo-width':0,'text-opacity':countOpacity}},
     {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,layout:{
       visibility:labels?'visible':'none',
       'text-field':['case',['==',['get','category'],'cluster'],'',['get','title']],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-anchor':'top','text-offset':[0,1.5],

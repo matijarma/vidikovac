@@ -446,6 +446,8 @@
     "runningRoutes": "Linije u pokretu",
     "noRunning": "Trenutačno nema vozila u pokretu.",
     "zoomIn": "Približi",
+    "findMyLocation": "Moja lokacija",
+    "locationUnavailable": "Lokacija nije dostupna",
     "zoomOut": "Udalji",
     "mapAttribution": "Izvori karte",
     "resetBearing": "Okreni na sjever",

@@ -230,10 +230,10 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
     expect((en.map.options.locale as Record<string, string>)['AttributionControl.ToggleAttribution']).toBe('Map attribution');
   });
 
-  it('attributionCompact: true builds the compact control with the same custom credit, bottom-left where the stage keeps its zoom and tools clear', async () => {
+  it('attributionCompact: true builds the compact control with the same custom credit, bottom-right, out of the way of the locate button under the zoom', async () => {
     const { attribution, corner, container } = await stageMap({ attributionCompact: true });
     expect(attribution.options).toEqual({ compact: true, customAttribution: basemap.MAP_ATTRIBUTION_HTML });
-    expect(corner).toBe('bottom-left');
+    expect(corner).toBe('bottom-right');
     expect(container.querySelector('details')?.open).toBe(false);
     expect(container.querySelector('details')?.classList.contains('maplibregl-compact-show')).toBe(false);
     expect(container.querySelector('details')?.textContent).toContain('OpenStreetMap');
@@ -324,21 +324,29 @@ describe('the city places’ marks', () => {
     expect([BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM]).toEqual([13, 14]);
     const radius = byId('city-place-dots').paint!['circle-radius'];
     const size = byId('city-place-badges').layout!['text-size'];
-    // At the screen's symbol scale 2: 5 and 8 px before the scale, 9 and 12 for the count.
-    expect(evaluate(radius, bike('7'), 13)).toBe(10);
-    expect(evaluate(radius, bike('7'), 14)).toBe(16);
-    expect(evaluate(size, bike('7'), 13)).toBe(18);
-    expect(evaluate(size, bike('7'), 14)).toBe(24);
+    // At the screen's symbol scale 2: 3 and 5 px before the scale, 7 and 8 for the count, which is invisible far out.
+    const opacity = byId('city-place-badges').paint!['text-opacity'];
+    expect(evaluate(radius, bike('7'), 13)).toBe(6);
+    expect(evaluate(radius, bike('7'), 14)).toBe(10);
+    expect(evaluate(size, bike('7'), 13)).toBe(14);
+    expect(evaluate(size, bike('7'), 14)).toBe(16);
+    expect(evaluate(opacity, bike('7'), 13)).toBe(0);
+    expect(evaluate(opacity, bike('7'), 14)).toBe(1);
     // Below the far stop and above the near one the ramp holds its ends; between them it interpolates.
-    expect(evaluate(radius, bike('7'), 12.7)).toBe(10);
-    expect(evaluate(radius, bike('7'), 16)).toBe(16);
-    expect(evaluate(radius, bike('7'), 13.5)).toBe(13);
-    // Every other kind of place keeps exactly the mark it had, at every zoom.
+    expect(evaluate(radius, bike('7'), 12.7)).toBe(6);
+    expect(evaluate(radius, bike('7'), 16)).toBe(10);
+    expect(evaluate(radius, bike('7'), 13.5)).toBe(8);
+    // A station's ring is a hairline; every other mark keeps its 2 px stroke.
+    const stroke = byId('city-place-dots').paint!['circle-stroke-width'];
+    expect(evaluate(stroke, bike('7'), 14)).toBe(1);
+    expect(evaluate(stroke, venue, 14)).toBe(2);
+    // Every other kind of place keeps exactly the mark it had, at every zoom; a cluster is a small counted dot.
     for (const zoom of [12.7, 13, 13.5, 14, 16]) {
       expect(evaluate(radius, venue, zoom), `venue @${zoom}`).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
-      expect(evaluate(radius, { category: 'cluster', badge: '+4', eventCount: 0 }, zoom), `cluster @${zoom}`).toBe(36);
+      expect(evaluate(radius, { category: 'cluster', badge: '+4', eventCount: 0 }, zoom), `cluster @${zoom}`).toBe(22);
       expect(evaluate(radius, { category: 'water', badge: '', eventCount: 0 }, zoom), `plain @${zoom}`).toBe(16);
       expect(evaluate(size, venue, zoom), `venue text @${zoom}`).toBe(24);
+      expect(evaluate(opacity, venue, zoom), `venue text opacity @${zoom}`).toBe(1);
     }
   });
 

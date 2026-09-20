@@ -9,7 +9,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // core/map-worker.ts names them through setWorkerUrl. Imported here and only
 // here, so the lightweight graph never carries either file.
 import '../core/map-worker';
-export { AttributionControl, LngLatBounds, Map, NavigationControl, ScaleControl } from 'maplibre-gl';
+export { AttributionControl, GeolocateControl, LngLatBounds, Map, NavigationControl, ScaleControl } from 'maplibre-gl';
 export * from './basemap';
 export * from './overlays';
 export * from './city-layers';
