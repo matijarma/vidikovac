@@ -23,6 +23,10 @@ rute `/api/admin/*` i `/stats`.
    potvrdom). **Spremi** šalje jednu poruku `screen-set` preko postojeće veze
    zaslona; Durable Object provjerava stajalište i područje, pamti ih i
    odgovara redovnim okvirom s kodovima, koji zaslon ponovno kadrira. Ploča
+   prekriva pozornicu dok je otvorena, pa karta pod njom nema svoje kutije:
+   zato se karta pri zatvaranju najprije ponovno izmjeri, a tek onda pomakne
+   kameru -- bez toga je spremljeno stajalište sletjelo otprilike trećinu
+   kadra gore lijevo umjesto u sredinu. Ploča
    čeka taj odgovor: zatvara se kad stigne, a odbijenicu ili prebrzo ponovno
    spremanje kaže rečenicom i ostaje otvorena. Ako odgovor ne stigne u osam
    sekundi, gumb se vraća uz istu obavijest; odgovor koji ipak stigne poslije
@@ -59,7 +63,16 @@ svega ostaloga, pločice tramvaja u brendiranoj plavoj, sve BAJS stanice
 kao tirkizni diskovi s brojem raspoloživih bicikala, zatvorene prometnice,
 prsten dežurne ljekarne i aktivna kulturna mjesta. Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
-mjesta. Stanica bez bicikala ili sa zastarjelim očitanjem stoji blijeđa.
+mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
+imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
+jer u izvanrednom stanju oznaka je ta koja govori, a ne ime -- a od
+stajališta imenuje samo tramvajska čvorišta: ona na kojima staje tramvaj i
+na kojima neka vožnja počinje ili završava (`terminal` iz mrežnog
+artefakta), njih 29 u gradu i dvanaest na zadnjoj snimci. Broj linija nije
+mjerilo: 111 od 114 tramvajskih stajališta vidi dvije ili više tramvajskih
+linija, pa bi "dva tramvaja" imenovalo gotovo sve. Od 13,5 naviše sva se
+imena vraćaju onakva kakva su izvedena za kadar od 2,8 km. Stanica bez
+bicikala ili sa zastarjelim očitanjem stoji blijeđa.
 Autobusi -- kapsule i njihove linije -- pridružuju se tramvajima tek kad je
 kamera na zumu 14 ili bliže; tristo kapsula nad cijelim gradom zakrilo bi
 tramvaje o kojima slika govori. Brojevi vozila prorjeđuju se pri
@@ -77,11 +90,16 @@ temperatura, riječ stanja) te današnji i sutrašnji raspon; pripovjedni
 tekst DHMZ-a preselio se u traku zaglavlja. **Promet**: samo iznimke,
 linije čiji je medijan izvan pojasa točnosti za najmanje tri minute, jer
 je manje od toga vozni red koji diše, a ne vijest, uz broj zatvaranja i
-broj ZET-ovih obavijesti. Linije koje kasne idu prije onih koje voze
-ranije, a tramvaji prije autobusa; ploča nosi do tri linije na širokom i
+broj ZET-ovih obavijesti. Kad je stajalište postavljeno, prve
+idu njegove vlastite linije -- zaslon pod zaglavljem koje imenuje Trg bana
+J. Jelačića ispisivao je dva autobusa koji ondje uopće ne staju -- a unutar
+svake skupine vrijedi gradski redoslijed: linije koje kasne prije onih koje
+voze ranije, tramvaji prije autobusa. Ploča nosi do tri linije na širokom i
 okomitom zaslonu, do dvije na zbijenom, a ostatak sažima u „+N linija
-kasni”. Kad nema iznimke, kaže „Linije voze po redu”. Kad je stajalište
-postavljeno, ta ploča postaje ploča dolazaka tog stajališta.
+kasni”, i taj broj ostaje gradski: zakašnjela linija dvije četvrti dalje i
+dalje je vijest na zidu. Kad nema iznimke, kaže „Linije voze po redu”.
+Ploča dolazaka postavljenog stajališta dolazi s granom `kiosk-arrivals`;
+šav (`FrontInput.prometRows`) stoji, ali ga na zaslonu još nitko ne puni.
 **Događanja** popunjavaju preostalu visinu: prvo aktivna mjesta s brojem
 događaja, zatim datirani događaji, a kad ni toga nema, jedna mirna
 rečenica. Ploča nikad ne ostaje prazna: nosi barem jedan cijeli redak, a

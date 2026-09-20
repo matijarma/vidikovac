@@ -114,7 +114,14 @@ The map is a meaningful geographic view, not a background beneath a route
 board. Configured area or stop, and public selections, determine framing. Do
 not force every vehicle number to overlap at terminals: retain dots and
 collision-aware labels. Stops stay tap-able at city zoom, with a hit tolerance
-sized for a finger on a wall, and a tapped stop leads with its arrivals.
+sized for a finger on a wall, and a tapped stop leads with its arrivals. A
+window onto the whole city is four times the ground the wall's field was sized
+for, so below the thinning zoom it names less, not smaller: the basemap's
+promoted street names go, the assembly points keep their squares and lose their
+titles, and of the stops only the tram interchanges are named -- a tram calls
+there and some trip begins or ends there. Route count is not a measure of
+importance and is not used for this. From the thinning zoom up every name is
+back, exactly as derived.
 Preserve the map instance across polling and composition changes.
 
 Overview content has deliberate budgets. A fitting routine may not hide

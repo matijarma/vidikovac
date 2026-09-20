@@ -31,6 +31,23 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 - `hitTolerancePx` -- 28 on the kiosk (`KIOSK_HIT_TOLERANCE_PX`), against the
   map's 8 px default: a finger on a wall is not a mouse on a desk, and on the
   city window the stop rings it aims at are three pixels across.
+- The names, all on one line: `THIN_NAMES_ZOOM` (13.5). Below it the window
+  reads differently in three ways, and above it nothing changes at all.
+  `majorStreetNames` false drops the basemap's promoted `roads_labels_major`
+  (its flat 22 px is derived for a field 2.8 km across, and the whole city is
+  four times that ground). `placeTitles` false draws the square place marks --
+  works, events, the seat, the civil protection's assembly points -- with no
+  `text-field` at all; the marks stay, because in an urgent state the square is
+  the information and the name is not, and the quake's own label and the Sava's
+  are kept at every zoom. `stopLabelTramInterchanges` true names only the tram
+  interchanges, from the `tramInterchange` flag `stopsToGeoJson` computes per
+  NAME: a tram calls there and some trip starts or ends there (the artefact's
+  own `terminal` bit), 29 names city-wide. `stopLabelMinRank` stays 4 and is
+  simply not consulted below the line -- rank is route count, which named Elka
+  and Savski gaj-rotor and left Trg bana Jelacica, Glavni kolodvor and Savski
+  most off the picture; nor is a count of tram routes a filter, since 111 of
+  the 114 tram-served names see two or more. The measured result on a
+  1920 x 1080 wall is twelve stop names.
 
 The invitation is the transit picture, so the old `transit` gate is gone from
 it: the network, the stops and the vehicles are always on the window. Only a

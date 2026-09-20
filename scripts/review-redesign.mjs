@@ -132,7 +132,9 @@ try {
   }
   await kiosk.setViewportSize({ width: 1920, height: 1080 });
   // The other half of the round: the same screen after somebody set a stop in
-  // Postavke -- the camera on the stop, the Promet card its board.
+  // Postavke -- the camera on the stop, and the Promet card reading that
+  // stop's own lines first (the card is still the city's exceptions; the
+  // arrivals board arrives with the kiosk-arrivals branch).
   await setScreen(STOP_SCREEN);
   await capture(kiosk, 'kiosk-1920-light-stop');
   await setScreen(CITY_SCREEN);
