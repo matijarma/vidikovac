@@ -22,6 +22,7 @@ import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { bodiesToGeoJson } from '../motion/bodies';
 import { clusterPills, createLineColours, type Cluster, type PillPoint } from '../motion/pills';
+import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
@@ -319,6 +320,7 @@ export interface VehicleGeoJsonOptions {
    *  and with the collision pass no longer thinning anything, a busy hub would
    *  pile up worse than before. */
   symbolScale?: number;
+  clusterMaxNumbers?: number;
   /** The line the map is about (F5). A cluster of several routes has no one
    *  route id and carries '' -- which, under a selection, is every route but
    *  the lit one, so a merged mark standing partly *on* the lit line took the
@@ -443,7 +445,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   }
   const merged: VehicleFeature[] = [...alone];
   for (const points of byKind.values()) {
-    for (const group of clusterPills(points, { selectedId })) {
+    for (const group of clusterPills(points, { selectedId, maxNumbers: options.clusterMaxNumbers })) {
       merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
   }
@@ -648,7 +650,12 @@ export interface FitPadding {
   left?: number;
 }
 
+export interface MapHighlight {
+  id: string;
+  geometry: {type:'Point';coordinates:[number,number]} | {type:'LineString';coordinates:[number,number][]} | {type:'MultiPolygon';coordinates:[number,number][][][]};
+}
 export interface CityMapOptions {
+  presentationProfile?: MapPresentation;
   container: HTMLElement;
   ariaLabel: string;
   /** The page factory's output; absent means the geographic city map.
@@ -787,6 +794,9 @@ export interface CityMapHandle {
   /** The district outline to draw, dashed; null clears it. */
   setOutline?(outline: MapOutline | null): void;
   setCityPaths?(lines: MapLine[]): void;
+  /** Ambient emphasis never changes personal selection, camera or follow. */
+  setHighlight?(highlight: MapHighlight | null): void;
+  setPresentationProfile?(profile: MapPresentation, symbolScale?: number): void;
   /** The inner city, the current selection, or the screen's stop. */
   fit?(target: 'city' | 'selection' | 'stop'): void;
   /** The covered part of the viewport every later fit keeps clear (the sheet's height on the phone stage). */
@@ -963,7 +973,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const p = paddingFor(extra);
     return [(p.left - p.right) / 2, (p.top - p.bottom) / 2];
   }
-  const scale = options.symbolScale ?? 1;
+  let profile=MAP_PRESENTATIONS[options.presentationProfile??'desktop'];
+  container.dataset.presentationProfile=options.presentationProfile??'desktop';
+  let scale = options.symbolScale ?? profile.symbolScale;
+  let highlight: MapHighlight | null = null;
+  const highlightData=()=>({type:'FeatureCollection',features:highlight?[{type:'Feature',properties:{id:highlight.id},geometry:highlight.geometry}]:[]});
   let points = options.points ?? [];
   let lines = options.lines ?? [];
   let disposed = false;
@@ -1000,7 +1014,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
   let cityLabels = options.cityLabels !== false;
-  const hitTolerance = options.hitTolerancePx ?? HIT_TOLERANCE_PX;
+  let hitTolerance = options.hitTolerancePx ?? profile.hitTolerancePx;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
   let outline: MapOutline | null = options.outline ?? null;
@@ -1225,7 +1239,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
       const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, clusterMaxNumbers: profile.clusterMaxNumbers });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
       lastPushedSignature = signature;
@@ -1447,6 +1461,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
     created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
     const palette = l.overlayPalette(theme);
+    created.addSource('ambient-highlight',geojson(highlightData()));
+    created.addLayer({id:'ambient-highlight-area',type:'fill',source:'ambient-highlight',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':palette.selection,'fill-opacity':0.12}});
     overlays = l.overlayLayers(palette, overlayOptions(palette));
     focusedApplied = focusRouteId();
     const beforeId = l.firstSymbolLayer(basemap);
@@ -1460,6 +1476,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // is never hidden by a pill crossing it.
       for (const layer of cityOverlays) created.addLayer(layer as unknown as Record<string,unknown>, layer.id === l.CITY_SELECTION ? undefined : l.LAYERS.vehicleDots);
     }
+    created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
+    created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
     styled = true;
     // A resize or a deliberate presentation can arrive before the library or
     // style finishes loading. Apply the latest request before reporting ready,
@@ -1824,6 +1842,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     map.setSprite?.(l.spriteUrl(next, deps.origin));
     applyOverlays();
     applyCityOverlays();
+    applyHighlightStyle();
+  }
+
+  function applyHighlightStyle(): void {
+    if(!map||!styled||!lib)return;
+    const color=lib.overlayPalette(theme).selection;
+    map.setPaintProperty('ambient-highlight-area','fill-color',color);
+    map.setPaintProperty('ambient-highlight-line','line-color',color);
+    map.setPaintProperty('ambient-highlight-line','line-width',3*scale);
+    map.setPaintProperty('ambient-highlight-point','circle-stroke-color',color);
+    map.setPaintProperty('ambient-highlight-point','circle-radius',18*scale);
+    map.setPaintProperty('ambient-highlight-point','circle-stroke-width',2*scale);
   }
 
   function setLocale(next: string): void {
@@ -1979,6 +2009,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,linesToGeoJson(next)); },
+    setHighlight(next) {
+      if(JSON.stringify(next)===JSON.stringify(highlight))return;
+      highlight=next;
+      if(styled)setData('ambient-highlight',highlightData());
+    },
+    setPresentationProfile(name,nextScale) {
+      const next=MAP_PRESENTATIONS[name],size=nextScale??next.symbolScale;
+      if(next===profile&&size===scale)return;
+      profile=next;scale=size;hitTolerance=next.hitTolerancePx;
+      container.dataset.presentationProfile=name;
+      lastPushedSignature='';
+      applyOverlays();applyCityOverlays();applyHighlightStyle();
+    },
     setClosuresVisible(visible) {
       closuresVisible = visible;
       applyOverlays();

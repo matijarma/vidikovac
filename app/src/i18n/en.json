@@ -488,13 +488,13 @@
     "connecting": "Connecting to the screen…"
   },
   "notify": {
-    "title": "Alerts",
+    "title": "In-app highlights",
     "delays": "Delays over 5 min on saved lines",
     "works": "Works in the city",
     "waste": "Waste pickup tomorrow",
     "dhmz": "DHMZ warnings",
     "note": "Nothing is sent: a switched-on alert only highlights tiles in this browser.",
-    "bellLabel": "Alerts, {state}"
+    "bellLabel": "In-app highlights, {state}"
   },
   "directory": {
     "domains": "Domains",
@@ -833,7 +833,7 @@
     },
     "invite": {
       "lead": "Scan for 10 minutes of the city.",
-      "support": "Transit, weather, events and safety on your phone. No account, nothing to install.",
+      "support": "Your departures, places, events and saved choices. No account or installation.",
       "typeCode": "or type the code at {host}",
       "qrLabel": "QR code to unlock. Code: {code}",
       "qrWaiting": "Code on its way…",

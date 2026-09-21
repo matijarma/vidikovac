@@ -22,6 +22,9 @@ export default defineConfig({
         plugins: [
           cloudflareTest({
             wrangler: { configPath: './wrangler.jsonc' },
+            // Integration tests use local bindings; never start a paid AI
+            // proxy or require production credentials just to run the suite.
+            remoteBindings: false,
             // Each test file gets its own storage; DO state never leaks between files.
             isolatedStorage: true,
             miniflare: {

@@ -147,17 +147,14 @@ export function matchesWork(item: FeedItem, query: string): boolean {
 /** Komunalni radovi: chips, search, eight rows then more, the coverage line, and on a desk the phases counted as bars. */
 function worksSection(i18n: I18n, ctx: LayerContext): string {
   const dogadanja = ctx.snapshots.dogadanja;
-  const works = bySource(dogadanja, 'komunalne');
+  const works = bySource(dogadanja, 'komunalne').sort((a,b)=>Number(/tijek|uveden/i.test(dataText(b,'phase')))-Number(/tijek|uveden/i.test(dataText(a,'phase'))));
   const phase = ctx.view?.filters.phase ?? '';
   const query = ctx.view?.filters.wq ?? '';
   const counts = new Map<string, number>();
   for (const w of works) counts.set(dataText(w, 'phase'), (counts.get(dataText(w, 'phase')) ?? 0) + 1);
   const phases = KNOWN_PHASES.filter((p) => counts.has(p));
   const filtered = works.filter((w) => (!phase || dataText(w, 'phase') === phase) && matchesWork(w, query));
-  const chips = filterChips([
-    chip(i18n.t('civic.allPhases'), { action: 'filter', extra: { 'filter-key': 'phase', 'filter-value': '' }, selected: !phase, count: works.length }),
-    ...phases.map((p) => chip(p, { action: 'filter', extra: { 'filter-key': 'phase', 'filter-value': p }, selected: phase === p, count: counts.get(p) })),
-  ], i18n.t('civic.phase'));
+  const chips = `<label class="ev-category"><span>${escapeHtml(i18n.t('civic.phase'))}</span><select data-filter-key="phase"><option value="">${escapeHtml(i18n.t('civic.allPhases'))} (${works.length})</option>${phases.map(p=>`<option value="${escapeAttribute(p)}"${phase===p?' selected':''}>${escapeHtml(p)} (${counts.get(p)})</option>`).join('')}</select></label>`;
   // The figure names itself through its caption; the bar list carries no second name of its own.
   const figure = phases.length
     ? `<figure class="cv-phases"><figcaption>${escapeHtml(i18n.t('civic.phasesTitle'))}</figcaption>${bars(phases.map((p) => ({ id: p, label: p, value: counts.get(p)!, valueText: String(counts.get(p)), tone: 'action' as const })), Math.max(...counts.values()))}<p class="sec-note">${escapeHtml(i18n.t('civic.phasesNote'))}</p></figure>`
@@ -175,7 +172,7 @@ function worksSection(i18n: I18n, ctx: LayerContext): string {
     body: sectionHead(i18n, { title: i18n.t('civic.works'), snapshot: dogadanja, error: ctx.errors?.dogadanja, id: 'cv-works-title' }) +
       `<p class="sec-note">${escapeHtml(i18n.t('civic.worksIntro'))}</p>${toolbar}` +
       (state || `<ul class="rows" role="list" data-testid="works">${filtered.slice(0, shownWorks).map((w) => workRow(i18n, w, ctx)).join('')}</ul>${moreWorks}`) +
-      figure +
+      (figure?`<details class="cv-phase-reference"><summary>${escapeHtml(i18n.t('civic.phasesTitle'))}</summary>${figure}</details>`:'') +
       `<p class="sec-note">${escapeHtml(i18n.t('civic.amountNote'))}${coverage ? ` · ${escapeHtml(coverage)}` : ''}</p>`,
   });
 }
@@ -266,10 +263,11 @@ export function renderUpravaIPravo(ctx: LayerContext): HTMLElement {
   const selected = findSelected(glasnik, ctx.view?.selection) ?? findSelected(dogadanja, ctx.view?.selection);
   const detail = selected && (selected.module === 'glasnik' || cityWorkEvents(dogadanja).includes(selected)) ? detailFor(i18n, selected, ctx) : null;
   // Sessions and gazette side by side on a desk, the long works register below them.
-  const list = `<div class="cv-grid">${sessionsSection(i18n, ctx)}${gazetteSection(i18n, ctx)}${worksSection(i18n, ctx)}${consultationsMarkup(ctx)}</div>`;
+  const list = `<div class="cv-grid"><div class="cv-column">${worksSection(i18n, ctx)}</div><div class="cv-column">${sessionsSection(i18n, ctx)}${gazetteSection(i18n, ctx)}${consultationsMarkup(ctx)}</div></div>`;
   // The domain's name is the tab's; it stays for assistive technology and the focus after a switch, not as a repeated title.
   return createElementFromHTML(`<section class="layer ws ws-civic" id="layer-uprava-i-pravo" data-layer="uprava-i-pravo" data-reconcile aria-labelledby="layer-title-uprava-i-pravo">
 <h2 class="layer-title visually-hidden" id="layer-title-uprava-i-pravo" tabindex="-1">${escapeHtml(i18n.t('layers.uprava-i-pravo'))}</h2>
+<nav class="cv-jump" aria-label="${escapeAttribute(i18n.t('layers.uprava-i-pravo'))}">${[['cv-works',i18n.t('civic.works')],['cv-sessions',i18n.t('civic.assembly')],['cv-gazette',i18n.t('civic.gazette')],['cv-consultations',ctx.i18n.getLocale().startsWith('en')?'National consultations':'Nacionalna savjetovanja']].map(([id,label])=>`<button type="button" data-action="section-jump" data-id="${id}">${escapeHtml(label)}</button>`).join('')}</nav>
 ${listDetail(i18n, { list, detail, detailTitle: i18n.t('civic.actDetail') })}
 ${provenanceBlock(i18n, [dogadanja, glasnik])}
 </section>`);

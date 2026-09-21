@@ -4,6 +4,14 @@ import { distanceM, located, normalName } from '../../../shared/city/geo';
 import type { FeedItem } from '../../../worker/feed/schema';
 import type { MapPoint } from '../map/city-map';
 import {bikeAvailability} from '../../../shared/city/bikes';
+import { groupWifi } from './search';
+const CATEGORY_TERMS: Record<string, string> = {
+  water:'voda cesma pitka drinking water',toilet:'wc zahod javni toalet toilet',
+  wifi:'wifi wi fi internet',sport:'sport igraliste courts',dogs:'psi pse dog',
+  recycling:'recikliranje otpad recycling',market:'trznica market',
+  garage:'garaza parking',charging:'punionica charging','cycle-parking':'bicikl stalak bicycle',
+  culture:'kultura culture muzej museum',heritage:'bastina heritage',rail:'vlak train',
+};
 export type CityGroup = 'living' | 'transport' | 'culture' | 'useful' | 'heritage';
 export interface DiscoveryOptions { group: CityGroup; category: string; window: ActivityWindow; query: string; center: {lon:number;lat:number}; radius: number; now:number;bikeMode?:'rent'|'return' }
 export interface Discovery {
@@ -29,9 +37,12 @@ export function discover(state: CityState, items: readonly FeedItem[], o: Discov
   const events = locatedEvents(items,state.places,o.now,o.window);
   const venues = new Map(activeVenues(events,state.places).map(v=>[v.place.id,v]));
   const query=normalName(o.query), dynamic=dynamicPlaces(state,o.now);
-  const all=[...state.places,...dynamic];
+  const all=groupWifi([...state.places,...dynamic]);
   let places=all.filter(p=>{
-    if(query) return normalName(`${p.name} ${p.address??''} ${p.subtype??''}`).includes(query);
+    if(query) {
+      const text=normalName(`${p.name} ${p.address??''} ${p.subtype??''} ${CATEGORY_TERMS[p.category]??''}`);
+      return query.split(' ').every(word=>text.includes(word));
+    }
     if(!located(p)||distanceM(o.center,p)>o.radius) return false;
     if(o.category) {
       if(o.category==='bikes')return p.sourceId==='bajs';

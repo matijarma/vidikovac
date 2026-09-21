@@ -505,13 +505,13 @@
     "connecting": "Povezivanje sa zaslonom…"
   },
   "notify": {
-    "title": "Obavijesti",
+    "title": "Isticanje u aplikaciji",
     "delays": "Kašnjenja dulja od 5 min na spremljenim linijama",
     "works": "Radovi u gradu",
     "waste": "Odvoz sutra",
     "dhmz": "Upozorenja DHMZ-a",
     "note": "Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.",
-    "bellLabel": "Obavijesti, {state}"
+    "bellLabel": "Isticanje u aplikaciji, {state}"
   },
   "directory": {
     "domains": "Domene",
@@ -855,7 +855,7 @@
     },
     "invite": {
       "lead": "Skeniraj za 10 minuta grada.",
-      "support": "Promet, vrijeme, događanja i sigurnost na tvom telefonu. Bez računa i bez instalacije.",
+      "support": "Tvoji polasci, mjesta, događanja i spremljeni izbori. Bez računa i instalacije.",
       "typeCode": "ili upiši kod na {host}",
       "qrLabel": "QR kod za otključavanje. Kod: {code}",
       "qrWaiting": "Kod stiže…",

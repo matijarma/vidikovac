@@ -108,6 +108,7 @@ function mount(opts: MountOptions = {}) {
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => (opts.snapshot ?? snapshotOf)(module));
   const handle = mountDashboard(root, {
     cityStore:fakeCityStore(),
+    createBoards:()=>({get:()=>undefined,ensure:vi.fn(),destroy:vi.fn()}),
     i18n: createDefaultI18n('hr'), session: session.client, now, fetchData: fetchData as never,
     label: 'Kavana Velebit', mapFactory: opts.mapFactory as never, lightweight: opts.lightweight ?? false,
     loadNetwork: opts.loadNetwork ?? (async () => null), matchMedia: () => ({ matches: Boolean(opts.wide) }),
@@ -198,7 +199,7 @@ describe('shell and navigation', () => {
   it('carries the notify row the Kvart panel used to be the only way to reach the bell through; its action opens the same sheet', () => {
     const { root } = mount();
     click(root, '[data-testid=tab-more]');
-    expect(text(root.querySelector('[data-testid=dir-notify] .row-title'))).toBe('Obavijesti, isključene');
+    expect(text(root.querySelector('[data-testid=dir-notify] .row-title'))).toBe('Isticanje u aplikaciji, isključene');
     expect(text(root.querySelector('[data-testid=dir-notify] .row-sub'))).toBe('Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.');
     click(root, '[data-testid=dir-notify]');
     expect(document.querySelector('[data-testid=notify-sheet]')).not.toBeNull();
@@ -395,21 +396,21 @@ describe('session states', () => {
     expect(text(dialog)).toContain(`upiše slova na ${location.host}/s.`);
     expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: A B C D, E F G H');
     const fill = dialog.querySelector<HTMLElement>('.share-progress-fill')!;
-    expect(fill.style.width).toBe('0%');
+    expect(fill.style.transform).toBe('scaleX(0)');
     expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 30 s');
     at = NOW + 18_000;
     tick();
-    expect(fill.style.width).toBe('60%');
+    expect(fill.style.transform).toBe('scaleX(0.6)');
     expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 12 s');
     at = NOW + 30_000;
     tick();
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('JKMN-PQRS');
     expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: J K M N, P Q R S');
-    expect(fill.style.width).toBe('0%');
+    expect(fill.style.transform).toBe('scaleX(0)');
     expect(fill.style.transition, 'the reset switches the transition off only for the committed zero').toBe('');
     at = NOW + 31_000;
     tick();
-    expect(fill.style.width).toBe('3.3%');
+    expect(fill.style.transform).toBe('scaleX(0.033)');
     expect(fill.style.transition).toBe('');
     expect(text(dialog.querySelector('.share-rotates'))).toBe('Novi kod za 29 s');
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
@@ -748,7 +749,7 @@ describe('the full map view (transport)', () => {
     await flush();
     desk.handle.selectLayer('u-pokretu');
     await flush();
-    expect(mapFactory.mock.calls.find(([o])=>o.container.dataset.testid==='map-canvas')?.[0].renderer).toBe('map');
+    expect(mapFactory.mock.calls.find(([o])=>o.container.dataset.testid==='map-canvas')?.[0].renderer).toBe('schema');
     click(desk.root,'[data-action=city-group][data-group=transport]');
     await flush();
     expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas').at(-1)?.[0].renderer).toBe('schema');
@@ -1308,11 +1309,10 @@ describe('the desktop directory (D10)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(more.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo']);
-    expect(text(root.querySelector('[data-testid=dir-u-pokretu] .row-sub'))).toBe('0 vozila ZET-a u pokretu');
+    expect(root.querySelectorAll('.dir-item[data-layer]')).toHaveLength(0);
+    expect(root.querySelector('[data-testid=saved-section]')).not.toBeNull();
     expect(root.querySelector('.ki-domains [data-layer=kultura]')).not.toBeNull();
-    expect(text(root.querySelector('[data-testid=dir-zrak-i-nebo] .row-sub'))).toBe('21 °C, vedro');
-    click(root, '[data-testid=dir-u-pokretu]');
+    click(root, '.ki-domains [data-layer=u-pokretu]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
     expect(root.querySelector('[data-testid=status-more]')?.getAttribute('aria-expanded')).toBe('false');
   });

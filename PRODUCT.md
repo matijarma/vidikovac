@@ -43,6 +43,31 @@ WCAG AA rendered contrast, visible keyboard focus, 44px minimum targets, 48px pr
 
 ## Approval
 
+On 20 September 2026 the owner approved the passive-view refinement. This
+supersedes the kiosk touch-discovery, 90-second exploration reset, separate
+header ticker and competing rotating-card rules below. The wall is useful
+without interaction: one anchored geographic map, compact current conditions,
+one map-linked highlight held for 20 seconds, and a permanently reserved QR
+invitation. Mobility and city-life subjects alternate when both are available.
+Safety remains persistent. Highlighting can be paused and does not send a
+presentation command, change a personal selection or move the camera.
+
+Search, filters, saved choices and general discovery belong on personal
+devices. A handheld opening `/kiosk/` sees the code/setup information before a
+compact map preview. Scanning grants access only; deliberate presentation,
+confirmed takeover and acknowledged delivery retain their existing protocol.
+The QR is at least 240 CSS pixels at documented display sizes. Settings retain
+unsaved input and have a bounded scroll area with visible actions.
+
+On personal devices, search opens usable results immediately, ranks names
+and transport matches ahead of incidental addresses, and groups only
+co-located Wi-Fi entries. Sada leads with local departures rather than
+line-wide fleet statistics. Još retrieves saved routes, stops and places.
+Location context is named explicitly. Timetable-only rows show clock times;
+tracked estimates are labelled on every row. No feeds, accounts, tracking or
+route planning are added. Release remains gated on visual review; physical
+display, distance scan and Safari/VoiceOver checks are required before a pilot.
+
 On 19 September 2026 (evening) the owner approved the city-window round for
 the public screen. Opening `/kiosk/` gives one button, **Pokreni zaslon**, and
 nothing else to decide: the screen it creates covers the whole city and carries

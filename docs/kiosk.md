@@ -1,5 +1,28 @@
 # Kaj ima? · zaslon, postavljanje i provjera
 
+## Pasivni pregled, odobrena izmjena 20. rujna 2026.
+
+Ovaj ugovor zamjenjuje ranije upute u nastavku o pretraživanju dodirom,
+traci vijesti u zaglavlju i zasebnim karticama događanja i iznimaka:
+
+- Karta ostaje na jednom mjestu. Nema automatskih obilazaka ni općih
+  kontrola istraživanja na zidu. Osobno istraživanje dostupno je na telefonu.
+- Uz kartu stoje trenutni uvjeti, jedan istaknuti sadržaj i trajno rezerviran
+  QR. Mobilnost i gradski život izmjenjuju se svakih 20 sekundi, s gumbom za
+  zaustavljanje. Sigurnosne informacije ostaju vidljive.
+- Istaknuti sadržaj navodi što, gdje, kada, izvor i starost. Odgovarajuća
+  geometrija označena je bez pomicanja kamere; obuhvat baštine nije ulaz.
+- QR ostaje najmanje 240 CSS piksela na dokumentiranim veličinama zaslona.
+  Telefon na `/kiosk/` dobiva upute za postavljanje, kod i mali pregled.
+- Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija pauzira
+  ambijentalnu izmjenu; potvrda preuzimanja i potvrda iscrtavanja ostaju.
+- Postavke pamte nespremljeni unos; tijelo se pomiče unutar ograničene
+  ploče, odvojeno od gumba za spremanje i poruke pogreške.
+
+Provedba i rezultati provjere: `docs/readable-city-2026-09-20.md`.
+Snimka preglednika nije dokaz čitljivosti stvarnog zida ili skeniranja s
+udaljenosti. Ti testovi te Safari/VoiceOver ostaju uvjet prije pilota.
+
 Upute za redizajnirani prototip od 17. rujna 2026. Zamjenjuju prethodne
 rasporede i automatsko preuzimanje prikaza pri skeniranju.
 Tehničko ime `vidikovac`, domena i ključevi pohrane ostaju nepromijenjeni.

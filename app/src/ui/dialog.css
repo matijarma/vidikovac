@@ -22,7 +22,7 @@
   flex-direction: column;
   width: min(32rem, calc(100vw - 2rem));
   max-width: min(40rem, calc(100vw - 2rem));
-  max-height: min(86vh, 48rem);
+  max-height: min(86dvh, 48rem, calc(var(--dialog-visible-height, 100dvh) - 1rem));
   padding: 0;
   margin: auto;
   border: 1px solid var(--tone-stroke-strong);
@@ -71,6 +71,7 @@
 }
 
 .dialog-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,6 +97,7 @@
    and the system Back button did not close it either (fixed separately, in
    native-back.ts). The glyph itself stays 16px — only the target grew. */
 .dialog-close {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -179,10 +181,10 @@
    goes: the sheet belongs to the content under it, and a blurred city behind a
    settings sheet reads as a different app. */
 .dialog-sheet {
-  inset: auto 0 0 0;
+  inset: auto 0 var(--dialog-keyboard-inset, 0px) 0;
   inline-size: 100%;
   max-inline-size: none;
-  max-block-size: 86svh;
+  max-block-size: min(86svh, calc(var(--dialog-visible-height, 100dvh) - 1rem));
   margin: 0;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding-block-end: env(safe-area-inset-bottom, 0px);

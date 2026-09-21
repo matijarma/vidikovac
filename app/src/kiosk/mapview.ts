@@ -56,6 +56,7 @@ import { fmtNumber, sameZagrebDay } from './format';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from './layout';
 import { isLive, kioskQuakes, nearestPharmacy, PHARMACY_POINTS, recentQuakes, windowOf } from './local';
 import { stopDistanceM } from './stops';
+import { MAP_PRESENTATIONS } from '../map/presentation';
 
 export const KIOSK_MAP_SLOT_ID = 'kiosk-map';
 /** The paired compositions' street level around one stop: named streets, the stop, the vehicles near it (R-KP8). */
@@ -229,7 +230,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'selection' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor' | 'cityLabels' | 'hitTolerancePx'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor' | 'cityLabels' | 'hitTolerancePx' | 'presentationProfile'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -756,6 +757,8 @@ export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, lab
 }
 
 export interface KioskMapInput {
+  handheld?: boolean;
+  displayScale?: number;
   city?:CityState;
   localSelection?:MapSelection|null;
   localGroup?:CityGroup;
@@ -883,7 +886,8 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     renderer: input.renderer ?? 'map',
     stop: input.stop,
     interactive: Boolean(input.onSelect),
-    symbolScale: KIOSK_SYMBOL_SCALE,
+    symbolScale: MAP_PRESENTATIONS[input.handheld?'handheld':'public-display'].symbolScale*(input.handheld?1:input.displayScale??1),
+    presentationProfile: input.handheld?'handheld':'public-display',
     basemapProfile: KIOSK_BASEMAP_PROFILE,
     locale: input.locale,
     outline: input.renderer !== 'schema' ? outline : null,
@@ -936,6 +940,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   // neighbourhood; nothing at all where the picture is not about transit.
   adapter?.handle()?.setModes?.(transit?(buses?null:new Set([ROUTE_TYPE_TRAM])):new Set());
   adapter?.handle()?.setCityLabels?.(extras.cityLabels ?? true);
+  adapter?.handle()?.setPresentationProfile?.(input.handheld?'handheld':'public-display',extras.symbolScale);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.
   if (container && input.renderer !== 'schema' && district && !request.outline) {

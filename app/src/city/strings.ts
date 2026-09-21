@@ -48,3 +48,13 @@ const en: Record<keyof typeof hr,string> = {
 };
 export type CityWord = keyof typeof hr;
 export const ct = (i18n: Pick<I18n,'getLocale'>, key: CityWord): string => i18n.getLocale().startsWith('en') ? en[key] : hr[key];
+
+/** A numeric availability and its noun, on the wall and the phone alike. */
+export function bikeCount(i18n: Pick<I18n,'getLocale'>, value: unknown): string {
+  const n=typeof value==='number'?value:Number.NaN;
+  const english=i18n.getLocale().startsWith('en');
+  const label=english?(n===1?'bike':'bikes'):
+    n%10===1&&n%100!==11?'bicikl':
+    n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'bicikla':'bicikala';
+  return `${Number.isFinite(n)?n:'?'} ${label}`;
+}

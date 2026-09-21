@@ -42,7 +42,7 @@ const panel = (section: HTMLElement, id: string): HTMLElement => {
 
 describe('every layer renders the real feed output', () => {
   it('shows the Maksimir observation as numbers with pressure as a measured fact', () => {
-    const weather = panel(renderLayer('zrak-i-nebo', ctx()), 'wx-now');
+    const weather = renderLayer('zrak-i-nebo', ctx());
     expect(clean(weather.querySelector('.wx-figures'))).toMatch(/\d+([.,]\d+)? hPa/);
     expect(clean(weather)).not.toContain(UNAVAILABLE);
     expect(clean(weather)).not.toContain(DASH);
@@ -92,7 +92,8 @@ describe('every layer renders the real feed output', () => {
     expect(deviating.length).toBeGreaterThan(0);
     const gradSada = renderLayer('grad-sada', ctx());
     const tiles = [...gradSada.querySelectorAll('.tl[data-domain=transit]:not([data-skeleton])')];
-    expect(tiles).toHaveLength(Math.min(4, deviating.length));
+    expect(tiles).toHaveLength(0);
+    expect(gradSada.querySelector('.day-stop-prompt')).not.toBeNull();
     for (const tile of tiles) expect(clean(tile.querySelector('.tl-value'))).toMatch(/^(na vrijeme|kasni \d+ min|rani \d+ min)$/);
     expect(clean(gradSada)).not.toMatch(/\d+ vozil/);
     // The per-route summary rows are the only source of a delay; the pins carry none.

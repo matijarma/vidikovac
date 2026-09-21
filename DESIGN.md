@@ -77,6 +77,27 @@ honour reduced motion. Do not animate layout width for countdown bars.
 
 ### Public screen
 
+**20 September passive-view contract, superseding the historical composition
+below:** one steady geographic map beside a reserved 520–760px information
+column at 1×, scaled for 4K. Conditions, one attributed highlight and the QR
+occupy independent grid regions. No kiosk discovery/search/filter list or
+idle map-navigation controls. The map has a compact tram/BAJS/culture legend.
+Highlights hold for 20 seconds, alternate mobility and city life, and use
+real cultural/heritage records when events are quiet. A separate geometry
+overlay identifies the subject without fitting or moving the camera.
+Presentation suspends the sequence; safety and QR remain available.
+
+Portrait puts the map above conditions, highlight and invitation, allocating
+space to legible content and the 240px QR before the map. Handheld `/kiosk/`
+puts setup/code information first and uses handheld symbols in its compact
+preview. Short opacity transitions only; pause/resume and reduced motion
+preserve useful information. The settings body scrolls independently of its
+header, errors and save action, preserving a closed unsaved draft.
+
+The earlier public-screen description is retained as implementation history;
+its references to touch discovery, the header ticker and separate events and
+exceptions cards no longer define the current product.
+
 The normal `/kiosk/` surface is a live city window, not a locked dashboard
 and not an ambient decoration. Pairing acknowledges access without replacing
 it. The map takes the whole left column and opens on the whole city, with the
@@ -160,6 +181,20 @@ Karta has one map, one search entry, a peek/detail/open sheet on a phone,
 and a contextual board on desktop. Secondary map actions live in one
 disclosure. The peek state keeps search visible; focus must not wait for
 an animation to clear the navigation bar.
+
+Search focus now opens the full available sheet immediately. Its geometry
+uses the visual viewport, visible navigation and keyboard occlusion. Short
+landscape is list-first. Filters use one labelled disclosure rather than an
+unmarked horizontal strip. Routes, stops, places and streets share one
+keyboard result system and one scoped count. Detail/back preserves the
+query, filters and list position; private tab filters survive refresh.
+Map symbols use explicit handheld, desktop and public-display profiles;
+visual size is independent of hit tolerance and device pixel ratio.
+
+Sada reads the same departure cache and arrival logic as the stop detail.
+Its agenda flows vertically without empty time quadrants or duplicated
+preview events. Još separates Saved, preferences, additional destinations
+and help. “In-app highlights” describes local emphasis, never push delivery.
 
 Living city, culture, transport, useful places and heritage are progressive
 map groups. Active venue pins have bounded size and explicit event counts;

@@ -16,18 +16,20 @@
   <p class="page-nav"><a class="page-brand" href="/">Kaj ima<span class="mark">?</span></a></p>
   <h1 id="sadrzaj">Izjava o pristupačnosti</h1>
   <p>Aning Film d.o.o. razvija Kaj ima? (zagreb.aningfilm.hr) s ciljem pristupačnosti prema smjernicama WCAG 2.2, razina AA. Ova izjava opisuje javno dostupan prototip i poznata ograničenja. Nije potvrda neovisne revizije pristupačnosti.</p>
-  <h2>Stupanj usklađenosti</h2>
+  <nav class="page-nav" aria-label="Na ovoj stranici"><a href="#uskladenost">Usklađenost</a><a href="#odstupanje">Vremensko ograničenje</a><a href="#podrska">Podržane mogućnosti</a><a href="#kontakt">Povratne informacije</a></nav>
+  <h2 id="uskladenost">Stupanj usklađenosti</h2>
   <p>Prototip se provjerava automatiziranim testovima i pregledom u pregledniku. Posebno je prijavljeno vremensko ograničenje sesije. Provjera na fizičkim uređajima i s korisnicima pomoćnih tehnologija ostaje dio daljnje evaluacije.</p>
-  <h2>Prijavljeno odstupanje</h2>
-  <p>Odstupanje: vremensko ograničenje sesije. Prikaz nadzorne ploče traje najviše 10 minuta po skeniranju i ne može se produljiti, isključiti ni prilagoditi (WCAG 2.2, kriterij uspješnosti 2.2.1 Prilagodljivo vrijeme). Prije otključavanja prikazuje se trajanje, a sesija upozorava 60 i 20 sekundi prije isteka. Nakon isteka posljednji prikaz ostaje zamrznut, a dostupni izvozi ostaju uporabivi. Sigurnosni sloj /hitno radi javno, bez skeniranja i bez ograničenja trajanja; zaslon pruža pregled bez telefona, a dopušteni izvedeni podaci i poveznice na izvorne objave dostupni su bez kratke sesije. Posljednji otvoreni sloj čuva se lokalno u kartici i vraća pri sljedećem skeniranju. Tekst pretrage ostaje samo u memoriji te stranice.</p>
-  <h2>Što smo napravili</h2>
+  <h2 id="odstupanje">Prijavljeno odstupanje</h2>
+  <p>Odstupanje: vremensko ograničenje sesije. Prikaz nadzorne ploče traje najviše 10 minuta po skeniranju i ne može se produljiti, isključiti ni prilagoditi (WCAG 2.2, kriterij uspješnosti 2.2.1 Prilagodljivo vrijeme). Prije otključavanja prikazuje se trajanje, a sesija upozorava 60 i 20 sekundi prije isteka. Nakon isteka posljednji prikaz ostaje zamrznut, a dostupni izvozi ostaju uporabivi. Sigurnosni sloj /hitno radi javno, bez skeniranja i bez ograničenja trajanja; zaslon pruža pregled bez telefona, a dopušteni izvedeni podaci i poveznice na izvorne objave dostupni su bez kratke sesije. Posljednji otvoreni sloj čuva se lokalno u kartici i vraća pri sljedećem skeniranju. Tekst pretrage i filtri čuvaju se samo u sessionStorage te kartice kako bi preživjeli osvježavanje.</p>
+  <h2 id="podrska">Što smo napravili</h2>
   <ul>
     <li>Upozorenja i stanja izvora imaju tekstualne oznake, ne oslanjaju se samo na boju.</li>
     <li>QR kod ima tekstualnu zamjenu, a kod se uvijek može upisati rukom; slova I, L i O ne postoje u kodu.</li>
     <li>Odbrojavanje se može sakriti, a osvježavanje zaustaviti.</li>
+    <li>Izmjena istaknutog sadržaja na javnom zaslonu može se zaustaviti. Skeniranje ne mijenja njegov javni prikaz.</li>
     <li>Raspored se provjerava do 200 posto zumiranja; poštuje se postavka smanjenog kretanja. Lagani prikaz ne učitava kartu ni web-fontove.</li>
   </ul>
-  <h2>Povratne informacije</h2>
+  <h2 id="kontakt">Povratne informacije</h2>
   <p>Ako naiđeš na prepreku, javi se na <a href="mailto:kontakt@aningfilm.hr">kontakt@aningfilm.hr</a>. Odgovaramo u roku od 15 dana.</p>
   <nav class="page-nav" aria-label="Stranice"><a href="/hitno">Sigurnost</a> <a href="/s/">Upiši kod</a> <a href="/izvori/">Izvori</a> <a href="/open/">Otvoreni podaci</a> <a href="/privatnost/">Privatnost</a> <a href="/pristupacnost/" aria-current="page">Pristupačnost</a></nav>
 </main>

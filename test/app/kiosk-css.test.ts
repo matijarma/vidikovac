@@ -27,11 +27,12 @@ describe('public-screen design invariants', () => {
   });
   it('draws the window in four compositions: the map beside the aside, stacked on a totem, in one column on a phone', () => {
     for (const selector of ["data-size='wide'", "data-size='compact'", "data-portrait='1'", "data-size='handheld'"]) expect(css).toContain(selector);
-    expect(windowRule('.kiosk .k-city-window')).toContain('grid-template-columns: minmax(0, 1fr) var(--k-side-w)');
+    expect(windowRule('.kiosk .k-city-window').replace(/\s/g,'')).toContain('grid-template-columns:minmax(0,1fr)var(--k-side-w)');
     expect(cityCss).toContain(".kiosk[data-portrait='1'] .k-city-window");
-    expect(cityCss).toContain(".kiosk[data-size='handheld'] .k-city-window");
+    expect(cityCss).toContain(".kiosk[data-size=handheld] .k-city-window");
     // The events card takes the aside's slack: no dead space between the exceptions and the card.
-    expect(windowRule(".kiosk .k-city-window [data-panel='tonight']")).toContain('flex: 1 1 auto');
+    expect(windowRule('.kiosk .k-city-window .k-overview')).toContain('grid-template-rows:auto minmax(0,1fr) auto');
+    expect(cityCss).not.toContain('.k-discovery-slot');
     // The three panels the front page draws, and no shell of the ones it dropped.
     for (const dead of ['k-local', 'k-local-facts', 'k-neighborhood', 'k-context-stack', 'k-column', 'k-bottom', 'k-provision', 'k-front'])
       for (const sheet of [css, cityCss]) expect(sheet, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
@@ -89,7 +90,7 @@ describe('public-screen design invariants', () => {
     expect(css).not.toContain('container-type');
     expect(rule(".kiosk[data-size='wide']")).toContain('--k-code-size: calc(36px * var(--k-sign-zoom))');
     // The card is one row in the window and stood up in the narrow rails; either way one column of words the code closes.
-    expect(windowRule('.kiosk .k-city-window .k-invite')).toContain("grid-template-areas: 'qr side'");
+    expect(windowRule('.kiosk .k-city-window .k-invite')).toContain("grid-template-areas:'qr side'");
     expect(rule('.k-invite')).toContain("grid-template-areas: 'qr' 'side'");
     expect(rule('.k-invite-side')).toContain('grid-area: side');
   });

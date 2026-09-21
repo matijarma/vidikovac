@@ -34,6 +34,9 @@ import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { discover, dynamicPlaces, clusterPlaces, CATEGORY_SOURCE, GROUP_SOURCES, type CityGroup, type Discovery } from '../city/discovery';
 import { ct, type CityWord } from '../city/strings';
+import { searchCity, type CitySearchResult } from '../city/search';
+import { placeCategory } from '../city/markup';
+import { defaultLocation, locationLabel, type LocationContext } from '../city/location';
 import { placeDetail, placesMarkup, streetDetail, departuresMarkup } from '../city/markup';
 import { createBoardCache, type BoardCache, type BoardOperator } from '../city/boards';
 import { arrivalsAt } from '../../../shared/city/arrivals';
@@ -43,11 +46,11 @@ import { matchStreet } from '../../../shared/city/geo';
 import { reconcile } from '../ui/dom/reconcile';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehicleNextStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
-import { searchTransport, type StopGroup } from './search';
+import type { StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
 import { tr, trPlural } from './strings';
 import {
-  closureDetailMarkup, closuresMarkup, delaysMarkup, NOTICE_ROWS, overviewMarkup, PEEK_BADGES, peekMarkup, resultsMarkup, routeDetailMarkup, safeId, statusLine, stopDetailMarkup, vehicleDetailMarkup, vehicleTitle,
+  closureDetailMarkup, closuresMarkup, delaysMarkup, NOTICE_ROWS, overviewMarkup, PEEK_BADGES, peekMarkup, routeDetailMarkup, safeId, statusLine, stopDetailMarkup, vehicleDetailMarkup, vehicleTitle,
   type DelayRow, type Fold,
 } from './view';
 
@@ -111,7 +114,7 @@ const LANDSCAPE_QUERY = '(max-height: 30rem) and (orientation: landscape)';
 function unplaced(p: MapPoint): VehicleInfo {
   const type = p.type ?? -1;
   const short = p.routeId === undefined ? '' : routeEntry(p.routeId).short;
-  return { id: p.id, routeId: p.routeId, short, kind: type === ROUTE_TYPE_TRAM ? 'tram' : type === ROUTE_TYPE_BUS ? 'bus' : 'other', type, lon: Number.NaN, lat: Number.NaN, bearing: null, confidence: 0, held: false, onShape: null };
+  return { id: p.id, routeId: p.routeId, tripId:p.tripId, delaySeconds:p.delaySeconds, nextStopId:p.nextStopId, nextStopEtaMs:p.nextStopEtaMs, short, kind: type === ROUTE_TYPE_TRAM ? 'tram' : type === ROUTE_TYPE_BUS ? 'bus' : 'other', type, lon: Number.NaN, lat: Number.NaN, bearing: null, confidence: 0, held: false, onShape: null };
 }
 
 function toMapSelection(pub: { kind: string; id: string } | null | undefined, groups: readonly StopGroup[] | null): MapSelection | null {
@@ -150,7 +153,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     search: `${id}-search`,
     results: `${id}-results`,
     body: `${id}-body`,
-    option: (kind: 'route' | 'stop', value: string): string => `${id}-opt-${kind}-${safeId(value)}`,
+    option: (kind: CitySearchResult['kind'], value: string): string => `${id}-opt-${kind}-${safeId(value)}`,
   };
   const element = document.createElement('div');
   element.className = 'transport';
@@ -191,14 +194,17 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           <button type="button" class="btn-quiet icon-btn t-sheet-toggle" id="${id}-sheet" data-action="toggle-sheet" aria-expanded="false" aria-controls="${ids.body}">${iconMarkup('chevron-down')}</button>
         </div>
         <div class="transport-toolbar" data-testid="transport-toolbar">
-          <div class="city-groups" role="group" data-testid="city-groups"></div>
-          <div class="city-filters" data-testid="city-filters"></div>
           <div class="t-search">
             <label class="visually-hidden" for="${ids.search}" data-ref="search-label"></label>
             <input id="${ids.search}" class="t-search-input" type="search" role="combobox" aria-expanded="false" aria-controls="${ids.results}" aria-autocomplete="list" aria-describedby="${id}-hint" autocomplete="off" spellcheck="false" data-testid="transport-search">
             <button type="button" class="t-search-clear" id="${id}-clear" data-action="clear-search" hidden>&#215;</button>
             <p class="visually-hidden" id="${id}-hint" data-ref="search-hint"></p>
           </div>
+          <details class="city-filter-disclosure">
+            <summary data-ref="filter-label"></summary>
+            <div class="city-groups" role="group" data-testid="city-groups"></div>
+            <div class="city-filters" data-testid="city-filters"></div>
+          </details>
         </div>
         <div class="t-sheet-body" id="${ids.body}" data-testid="transport-detail">
           <div class="t-sheet-content" data-ref="content"></div>
@@ -230,10 +236,18 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const body = q<HTMLElement>(`#${ids.body}`);
   const content = q<HTMLElement>('[data-ref=content]');
   const note = q<HTMLElement>('[data-testid=transport-note]');
+  const filtersDisclosure = q<HTMLDetailsElement>('.city-filter-disclosure');
+  filtersDisclosure.addEventListener('toggle', () => {
+    if (filtersDisclosure.open) sheet?.set('open', { animate: false });
+    stage.scrollTop = 0;
+  });
 
   // --- State that survives every poll -------------------------------------
   let input: WorkspaceInput | null = null;
   let query = '';
+  let browseReturn: { query: string; scroll: number; group: CityGroup; category: string } | null = null;
+  let stateRestored = false;
+  let restoreSearchSheet = false;
   let activeOption: string | null = null;
   let selection: MapSelection | null = null;
   let following: string | null = null;
@@ -273,6 +287,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let cityCategory = '';
   let activityWindow: ActivityWindow = 'week';
   let cityCenter: {lon:number;lat:number}|null = null;
+  let cityReferenceKind: 'area' | 'device' = 'area';
+  const referenceLocation = (): LocationContext => cityCenter
+    ? {...cityCenter,kind:cityReferenceKind,name:''}
+    : ctx().location??defaultLocation(ctx().screen);
   /** The screen's stop centres the camera once, the first render only. */
   let stopCentered = false;
   let cityLimit = 20;
@@ -292,7 +310,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const c=ctx(),stop=c.screen?.stop;
     return discover(cityState(),c.snapshots.dogadanja?.items??[],{
       group:cityGroup,category:cityCategory,query,window:activityWindow,
-      center:cityCenter??{lon:stop?.lon??15.97726,lat:stop?.lat??45.81286},radius:5000,now:c.frozenAt??c.now,bikeMode});
+      center:referenceLocation(),radius:5000,now:c.frozenAt??c.now,bikeMode});
   }
   function askCity():void {
     const c=ctx(); if(c.session?.frozen)return;
@@ -346,12 +364,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
    *  workspace's, as it always was: a frozen session neither asks nor repaints. */
   function ensureBoards(operator:BoardOperator,stopIds:readonly string[]):void {
     if(disposed||ctx().session?.frozen)return;
-    boards.ensure(operator,stopIds,onBoardSettled);
+    (ctx().boards??boards).ensure(operator,stopIds,onBoardSettled);
   }
   /** Every board this stop's platforms have answered with so far. An empty
    *  list is "nothing in hand yet", which arrivalsAt reads as 'none'. */
   function boardsFor(operator:BoardOperator,stopIds:readonly string[]):DepartureBoard[] {
-    return stopIds.map(id=>boards.get(operator,id)).filter((board):board is DepartureBoard=>board!==undefined);
+    return stopIds.map(id=>(ctx().boards??boards).get(operator,id)).filter((board):board is DepartureBoard=>board!==undefined);
   }
 
   // --- Derived, per render ----------------------------------------------------
@@ -412,6 +430,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
     if(ctx().session?.frozen)return;
+    if (next && query) {
+      browseReturn = { query, scroll: body.scrollTop, group: cityGroup, category: cityCategory };
+      ctx().setFilter?.('city-scroll',String(body.scrollTop));
+    }
     if(next?.kind==='place'&&next.id.startsWith('cluster-')){
       const clusterId=next.id;
       const point=clusterPlaces(discovery().points,camera?.zoom??14).find(p=>p.id===clusterId);
@@ -441,6 +463,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     activeOption = null;
     renderSheet();
+    if (!next && browseReturn) {
+      const back = browseReturn;
+      browseReturn = null;
+      query = back.query; searchInput.value = query;
+      cityGroup = back.group; cityCategory = back.category;
+      sheet?.set('open', { animate: false });
+      renderSheet(); body.scrollTop = back.scroll;
+      searchInput.focus({ preventScroll: true });
+    }
   }
 
   /** The switch's one effect: the live map draws the one line or the whole
@@ -465,7 +496,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
 
   // --- The stage: detents on the portrait phone, a column elsewhere -----------------
   function stageMode(): StageMode {
-    if (kiosk() || deskMedia?.matches) return 'desk';
+    if (ctx().lightweight || kiosk() || deskMedia?.matches) return 'desk';
     if (landscapeMedia?.matches) return 'landscape';
     return 'phone';
   }
@@ -493,6 +524,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       handle?.resize?.();
     }
     syncFitPadding();
+    stage.scrollTop = 0;
     if (input) renderSheetToggle();
   }
 
@@ -533,7 +565,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
 
   /** A peeking sheet rises to half; a higher one stays where it is. */
   function raise(): void {
-    if (sheet?.detent() === 'peek') sheet.set('half');
+    sheet?.set('open', { animate: false });
   }
 
   // --- Rendering ---------------------------------------------------------------
@@ -564,6 +596,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     searchInput.placeholder = ct(i18n, 'search');
     searchLabel.textContent = ct(i18n,'search');
     paintCityFilters();
+    q<HTMLElement>('[data-ref=filter-label]').textContent = ct(i18n,'layers');
     searchHint.textContent = tr(i18n, 'searchHint');
     clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'));
     clearButton.hidden = query === '';
@@ -617,21 +650,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const active = document.activeElement;
     const focusId = active instanceof HTMLElement && content.contains(active) ? active.id : '';
     const next=document.createElement('div');next.innerHTML=html;
-    if(query&&ctx().city){
-      // Mixed city results are a normal button list, not a partial combobox
-      // whose active descendant excludes places and street stories.
-      next.querySelectorAll('[role=listbox]').forEach(list=>list.setAttribute('role','list'));
-      next.querySelectorAll<HTMLElement>('[role=option]').forEach(option=>{
-        const button=document.createElement('button');
-        button.type='button';button.id=option.id;button.className=option.className;
-        button.dataset.action=option.dataset.action;button.dataset.id=option.dataset.id;
-        button.innerHTML=option.innerHTML;option.removeAttribute('id');option.removeAttribute('role');
-        for(const attribute of ['aria-selected','class','data-action','data-id'])option.removeAttribute(attribute);
-        option.replaceChildren(button);
-      });
-    }
+    const scroll = body.scrollTop;
     reconcile(content,next);
-    if (focusId) document.getElementById(focusId)?.focus();
+    body.scrollTop = scroll;
+    if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
   }
 
   /** The sheet: search results while typing, the selection's detail, else the overview; and the peek line above it. */
@@ -645,13 +667,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     let peekText: string | null = null;
     cityData=discovery();
     if (query) {
-      const results = searchTransport(query, routeCatalogue(), groups ?? []);
-      const total = results.routes.length + results.stops.length + cityData.places.length + cityData.streets.length;
-      if (activeOption && !results.routes.some((r) => ids.option('route', r.id) === activeOption) && !results.stops.some((s) => ids.option('stop', s.id) === activeOption)) activeOption = null;
-      html = ctx().city&&!results.routes.length&&!results.stops.length?'':resultsMarkup(i18n, { query, results, counts: countByRoute(vehicles), delays: delays(), routeOf: routeEntry, active: activeOption, ids: { list: ids.results, option: ids.option } });
-      html = placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode)
-        +cityData.streets.slice(0,20).map(s=>`<button type="button" id="city-street-${esc(s.id)}" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span><span>↗</span></button>`).join('')+html;
-      if(!total)html+=`<p role="status">${ct(i18n,'noResults')}</p>`;
+      const results = searchCity(query, routeCatalogue(), groups ?? [], cityData.places, cityData.streets);
+      const total = results.length;
+      if (activeOption && !results.some(r => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
+      const label = (r: CitySearchResult) => r.kind === 'place' ? placeCategory(i18n,r.record) : r.kind === 'street' ? ct(i18n,'streets') : tr(i18n,r.kind === 'stop' ? 'stop' : 'route');
+      html = `<div id="${ids.results}" role="listbox" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(r =>
+        `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(r.name)}</strong><span class="city-meta">${esc(r.detail)}</span></span></div>`).join('')}</div>`;
+      if(total>cityLimit)html+=`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')} (${total-cityLimit})</button>`;
+      if(!total)html+=`<p role="status">${ct(i18n,cityState().loading?'loading':'noResults')}</p>`;
+      else if(cityState().loading)html+=`<p class="city-meta" role="status">${ct(i18n,'partial')} ${ct(i18n,'loading')}</p>`;
       peekText = trPlural(i18n, 'resultsCount', total);
       peekHtml = esc(peekText);
       searchInput.setAttribute('aria-expanded', total > 0 ? 'true' : 'false');
@@ -671,10 +695,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       } else {
         const transport=cityGroup==='transport'&&!cityCategory;
         html = transport ? overview(shown) : `<section class="city-browse"><h3>${esc(ct(i18n,'list'))}</h3>
+          <p class="city-meta" data-testid="location-context">${esc(locationLabel(i18n,referenceLocation()))}</p>
           <p class="city-meta">${esc(ct(i18n,'legend'))}</p>${cityState().loading?`<p role="status">${ct(i18n,'loading')}</p>`:''}
           ${cityCategory==='streets'?`<p class="city-meta">${ct(i18n,'streetBrowse')}</p>${cityData.streets.slice(0,cityLimit).map(s=>`<button type="button" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span></button>`).join('')}${cityData.streets.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
             cityCategory==='cycle-paths'?`<p>${cityState().paths.length} ${ct(i18n,'cycle-paths')}</p>${cityState().paths.slice(0,cityLimit).map(p=>`<p>${esc(p.name)}${p.surface?` · ${esc(p.surface)}`:''}</p>`).join('')}${cityState().paths.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
-            cityData.places.length?placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode):`<p>${ct(i18n,'noResults')}</p>`}
+            cityData.places.length?placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode,referenceLocation()):`<p>${ct(i18n,'noResults')}</p>`}
           ${cityState().errors.length?`<p class="city-meta" role="status">${ct(i18n,'unavailable')}</p>`:''}
           <button type="button" class="btn-quiet" data-action="city-area">${ct(i18n,'here')}</button>
           <button type="button" class="btn-quiet" data-action="city-locate">${ct(i18n,'locate')}</button></section>`;
@@ -683,9 +708,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     if (query && activeOption) searchInput.setAttribute('aria-activedescendant', activeOption);
     else searchInput.removeAttribute('aria-activedescendant');
-    if(ctx().city)for(const attribute of ['role','aria-expanded','aria-controls','aria-autocomplete','aria-activedescendant'])searchInput.removeAttribute(attribute);
     peek.innerHTML = following && selection?.kind === 'vehicle' && peekText !== null ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
     swapBody(html);
+    if(activeOption)document.getElementById(activeOption)?.scrollIntoView?.({block:'nearest'});
+    element.dataset.searching=String(Boolean(query));
     for(const slot of content.querySelectorAll<HTMLElement>('[data-city-air]')){
       const station=slot.dataset.cityAir!;
       if(pollutants.has(station))slot.innerHTML=pollutants.get(station)!;
@@ -701,7 +727,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     for(const slot of content.querySelectorAll<HTMLElement>('[data-city-departures]')){
       const operator=slot.dataset.cityDepartures as BoardOperator,stopId=slot.dataset.stop!;
-      ensureBoards(operator,[stopId]);const board=boards.get(operator,stopId);
+      ensureBoards(operator,[stopId]);const board=(ctx().boards??boards).get(operator,stopId);
       slot.innerHTML=board?departuresMarkup(i18n,board,ctx().now):`<p>${ct(i18n,'loading')}</p>`;
     }
     renderChrome();
@@ -762,7 +788,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       case 'place': {
         const p=[...cityState().places,...dynamicPlaces(cityState(),c.now)].find(p=>p.id===sel.id);
         if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected')];}
-        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,activityWindow),c.saved?.has('place',p.id)),p.name];
+        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,activityWindow),c.saved?.has('place',p.id),false,referenceLocation()),p.name];
       }
       case 'street': {
         const s=cityState().streets.find(s=>s.id===sel.id);
@@ -827,7 +853,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const heading = content.querySelector<HTMLElement>('h3');
     if (!heading) return;
     heading.tabIndex = -1;
-    heading.focus();
+    heading.focus({ preventScroll: true });
+    body.scrollTop = 0;
+    stage.scrollTop = 0;
   }
 
   function choose(kind: string | undefined, value: string): void {
@@ -845,6 +873,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     query = '';
     searchInput.value = '';
     activeOption = null;
+    ctx().setFilter?.('city-query','');
     renderSheet();
   }
 
@@ -878,10 +907,17 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         activityWindow=target.dataset.window as ActivityWindow;saveCityFilters();updateCityMap();renderSheet();break;
       case 'city-more': cityLimit+=20;renderSheet();break;
       case 'city-area':
-        if(camera)cityCenter={lon:camera.center[0],lat:camera.center[1]};
+        if(camera){cityCenter={lon:camera.center[0],lat:camera.center[1]};cityReferenceKind='area';ctx().setLocation?.(referenceLocation());}
         updateCityMap();renderSheet();break;
       case 'city-locate':
-        navigator.geolocation?.getCurrentPosition(p=>{cityCenter={lon:p.coords.longitude,lat:p.coords.latitude};handle?.setView?.({center:[cityCenter.lon,cityCenter.lat],zoom:15});updateCityMap();renderSheet();},
+        navigator.geolocation?.getCurrentPosition(p=>{
+          if(disposed||ctx().session?.frozen)return;
+          cityCenter={lon:p.coords.longitude,lat:p.coords.latitude};
+          cityReferenceKind='device';
+          ctx().setLocation?.(referenceLocation());
+          handle?.setView?.({center:[cityCenter.lon,cityCenter.lat],zoom:15});
+          updateCityMap();renderSheet();
+        },
           ()=>{statusEl.hidden=false;statusEl.textContent=ct(ctx().i18n,'locationDenied');},{timeout:10000,maximumAge:60000});
         break;
       case 'clear-selection':
@@ -963,10 +999,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   searchInput.addEventListener('focus', () => {
     // Keyboard focus must be visible immediately, not after the sheet's
     // transition. Its taller summary must never travel under the tab bar.
-    if (sheet?.detent() === 'peek') sheet.set('half', { animate: false });
+    sheet?.set('open', { animate: false });
+    q<HTMLDetailsElement>('.city-filter-disclosure').open = false;
   });
   searchInput.addEventListener('input', () => {
     query = searchInput.value;
+    browseReturn = null;
+    ctx().setFilter?.('city-query',query);
     activeOption = null;
     if (query) {
       askCity();
@@ -978,11 +1017,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   });
 
   searchInput.addEventListener('keydown', (event) => {
-    if(ctx().city&&(event.key==='ArrowDown'||event.key==='Enter')){
-      const first=content.querySelector<HTMLButtonElement>('button[data-action^="select-"]');
-      if(first){event.preventDefault();if(event.key==='Enter')choose(first.dataset.action,first.dataset.id??'');else first.focus();}
-      return;
-    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const options = optionIds();
       if (options.length === 0) return;
@@ -1065,6 +1099,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // The public screen keeps its own contract: the whole network, always.
         lineFocus: kiosk() ? undefined : lineFocus,
         symbolScale: kiosk() ? KIOSK_SYMBOL_SCALE : 1,
+        presentationProfile: kiosk() ? 'public-display' : mode === 'desk' ? 'desktop' : 'handheld',
+        hitTolerancePx: mode === 'desk' ? 8 : 22,
         // The compact credit on the phone stage, where the sheet leaves the map little room; the full line on the desk and the kiosk.
         attributionCompact: !kiosk(),
         fitPadding: fitPadding(),
@@ -1087,7 +1123,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         onUserMove: (cam) => {
           if (epoch !== mapEpoch) return;
           if (cam !== null && renderer === 'map') camera = cam;
+          if(cam){cityCenter={lon:cam.center[0],lat:cam.center[1]};cityReferenceKind='area';ctx().setLocation?.(referenceLocation());}
           updateCityMap();
+          renderSheet();
           if (following) {
             following = null;
             handle?.follow?.(null);
@@ -1114,12 +1152,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       status = 'unavailable';
     }
     renderStatus();
+    handle?.setPresentationProfile?.(kiosk()?'public-display':mode==='desk'?'desktop':'handheld');
   }
 
   function render(next: WorkspaceInput): void {
     if(disposed)return;
     input = next;
     const c = next.ctx;
+    if (!stateRestored) {
+      stateRestored = true;
+      const remembered = c.view?.filters['city-query'] ?? '';
+      if (c.view?.selection && remembered) browseReturn = {query:remembered,scroll:Number(c.view.filters['city-scroll'])||0,group:(c.view.filters['city-group'] as CityGroup)??'living',category:c.view.filters['city-category']??''};
+      else { query=remembered; searchInput.value=query; restoreSearchSheet=Boolean(query); }
+    }
     if(c.onDispose&&!disposalRegistered){
       disposalRegistered=true;c.onDispose(()=>{disposed=true;boards.destroy();sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
     }
@@ -1143,6 +1188,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       if (kiosk()) modes.delete(ROUTE_TYPE_BUS);
     }
     syncStage();
+    if(restoreSearchSheet){restoreSearchSheet=false;sheet?.set('open',{animate:false});ensureCatalogue();}
     // The device's own switch, changed here or anywhere else on the page.
     setLineFocus(c.lineFocus?.snapshot() ?? lineFocus);
     // The page's view mode changed elsewhere (its Escape, another domain): the detent follows it.
@@ -1157,6 +1203,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const pub = c.view?.selection ?? null;
     const key = JSON.stringify(pub);
     let changed = false;
+    let returnScroll: number | null = null;
     if (key !== viewKey) {
       viewKey = key;
       // The page reports something new; unless it is the echo of this workspace's own relay, it is the person's
@@ -1170,6 +1217,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           selection = incoming;
           following = null;
           changed = true;
+          if(!incoming&&browseReturn){
+            query=browseReturn.query;searchInput.value=query;
+            cityGroup=browseReturn.group;cityCategory=browseReturn.category;
+            returnScroll=browseReturn.scroll;browseReturn=null;
+            sheet?.set('open',{animate:false});
+          }
         }
         relayedKey = key;
       }
@@ -1190,6 +1243,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (changed) handle?.select?.(selection, { fit: selection !== null });
     onStageBox();
     renderSheet();
+    if(returnScroll!==null)body.scrollTop=returnScroll;
   }
 
   return { element, render };

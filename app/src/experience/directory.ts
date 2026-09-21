@@ -18,10 +18,13 @@ import { LAYER_ICONS, MORE_LAYERS, type Surface } from './chrome';
 import { safetyState } from './safety-state';
 import { unusable } from './status';
 import { conditionText } from './text';
+import { sourceForPlaceId, dynamicPlaces } from '../city/discovery';
+import { routeEntry } from '../transport/catalogue';
+import { ct } from '../city/strings';
 
 /** The domains the directory lists: the MORE layers, with Promet first at the desk (its tab is a phone device). */
 export function directoryLayers(surface: Surface): readonly LayerId[] {
-  return surface === 'desktop' ? ['u-pokretu', ...MORE_LAYERS] : MORE_LAYERS;
+  return surface === 'desktop' ? [] : MORE_LAYERS;
 }
 
 /** What the directory polls: the modules of the domains it summarises, once each. */
@@ -78,6 +81,20 @@ const LINES: Record<string, (i18n: I18n, ctx: LayerContext) => string> = {
 export function renderDirectory(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const surface: Surface = ctx.screen?.surface === 'desktop' ? 'desktop' : 'phone';
+  const en=i18n.getLocale().startsWith('en');
+  const refs=ctx.saved?.list()??[];
+  const sources=refs.filter(ref=>ref.kind==='place').map(ref=>sourceForPlaceId(ref.id)).filter((source):source is string=>Boolean(source));
+  if(sources.length)ctx.ensureCity?.(sources);
+  const places=ctx.city?[...ctx.city.places,...dynamicPlaces(ctx.city,ctx.now)]:[];
+  const savedRows=refs.map(ref=>{
+    const place=ref.kind==='place'?places.find(place=>place.id===ref.id):null;
+    const stop=ref.kind==='stop'?ctx.stops?.find(stop=>stop.id===ref.id):null;
+    const route=ref.kind==='route'?routeEntry(ref.id):null;
+    const name=route?`${route.short} · ${route.long}`:place?.name??stop?.name??`${en?'Saved record':'Spremljeni zapis'} ${ref.id}`;
+    const kind=ref.kind==='route'?(en?'Route':'Linija'):ref.kind==='stop'?(en?'Stop':'Stajalište'):ct(i18n,'venues');
+    return `<li class="row saved-row" data-key="saved-${ref.kind}-${escapeAttribute(ref.id)}"><a class="dir-item" href="#layer=u-pokretu&kind=${ref.kind}&id=${encodeURIComponent(ref.id)}" data-action="nav" data-layer="u-pokretu" data-selection="${escapeAttribute(JSON.stringify(ref))}"><span class="row-main"><span class="row-title">${escapeHtml(name)}</span><span class="row-sub">${escapeHtml(kind)}</span></span></a><button class="btn-quiet" type="button" data-action="saved-remove" data-kind="${ref.kind}" data-id="${escapeAttribute(ref.id)}" aria-label="${escapeAttribute(`${en?'Remove':'Ukloni'}: ${name}`)}">${escapeHtml(en?'Remove':'Ukloni')}</button></li>`;
+  }).join('');
+  const savedSection=`<section class="dir-saved" data-testid="saved-section"><h3>${en?'Saved':'Spremljeno'}</h3>${savedRows?`<ul class="rows">${savedRows}</ul>`:`<p class="city-meta">${en?'Save a route, stop or place on the map. Find it here next time, on this device.':'Spremi liniju, stajalište ili mjesto na karti. Ovdje ih možeš ponovno otvoriti na ovom uređaju.'}</p>`}</section>`;
   const chevron = iconMarkup('chevron-right', undefined, 'icon row-chevron');
   const items = directoryLayers(surface).map((layer: LayerId) => {
     const line = LINES[layer]?.(i18n, ctx) ?? i18n.t('directory.noSummary');
@@ -104,7 +121,9 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   ];
   return createElementFromHTML(`<section class="layer ws ws-directory" id="layer-directory" data-layer="directory" data-reconcile aria-labelledby="layer-title-directory">
 <header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
-<ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}${notifyRow}${sessionRow}</ul>
+${savedSection}
+${items?`<section><h3>${en?'Destinations':'Odredišta'}</h3><ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}</ul></section>`:''}
+<section><h3>${en?'Preferences':'Osobne postavke'}</h3><ul class="dir-list rows" role="list">${notifyRow}${sessionRow}</ul></section>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }

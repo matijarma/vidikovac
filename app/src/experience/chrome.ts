@@ -135,7 +135,7 @@ export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId
 /** Desktop: Još opens the directory of every domain but Sada (D10). Current while the directory or an extra domain is open. */
 export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
   const inMore = MORE_LAYERS.includes(s.layer);
-  const current = s.directory || inMore;
+  const current = s.directory;
   return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
 }
 

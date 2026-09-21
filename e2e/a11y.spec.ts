@@ -222,7 +222,7 @@ async function assertTextPath(page: Page, surface: string, interactiveTransport 
 }
 
 test.describe('the moving map has a text path (R-F5)', () => {
-  test('/kiosk/ has a readable route board beside its named map, and every interactive control has a name', async ({ page, request }) => {
+  test('/kiosk/ has readable passive content beside its named map, and every interactive control has a name', async ({ page, request }) => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
     // The screen's stop: the readable route board is the transit statement's badge row, which is the stop's own lines.
     const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
@@ -236,11 +236,10 @@ test.describe('the moving map has a text path (R-F5)', () => {
     // A public screen's route board is glanceable, not a hidden interactive
     // phone list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
-    // The readable route board beside the map is the lines panel's rows
-    // (kiosk/front.ts: data-testid="kiosk-lines" on the list), the stop's own
-    // lines with their badges, from the first paint.
-    await expect(page.locator('[data-testid=kiosk-panel-promet][data-say=transit] [data-testid=kiosk-lines] li.k-fr').first()).toBeAttached({ timeout: 15_000 });
-    await expect(page.locator('[data-testid=kiosk-panel-promet] [data-testid=kiosk-lines]')).toContainText('6');
+    await expect(page.getByTestId('kiosk-highlight').getByRole('heading')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zaustavi izmjenu' })).toBeVisible();
+    await expect(page.locator('.k-map-legend')).toContainText('Tramvajska linija');
+    await expect(page.locator('[data-action=kiosk-explore], #kiosk-city-search')).toHaveCount(0);
   });
 
   test('/d/ in a session with U pokretu open: no nested-interactive violation, a name on every Tab stop (the map’s zoom buttons and the OpenStreetMap link included), and the vehicle list among them', async ({
@@ -265,7 +264,10 @@ test.describe('the moving map has a text path (R-F5)', () => {
       await unlockOnPhone(phone, scanUrl, '10 minuta');
       await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click();
       await waitForFrames(phone, '[data-testid=map-canvas]');
-      await phone.locator('[data-action=toggle-sheet]').click();
+      await phone.getByTestId('transport-search').focus();
+      await phone.locator('.city-filter-disclosure > summary').click();
+      await phone.locator('[data-action=city-group][data-group=transport]').click();
+      await phone.locator('.city-filter-disclosure > summary').click();
       const route = phone.locator('[data-testid=running-routes] button').first();
       await expect(route).toBeVisible();
       await route.click();

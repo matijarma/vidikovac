@@ -24,6 +24,7 @@ for(const light of [false,true])test(`city discovery: accessible venue, event, h
   await expect(page.getByTestId('street-story')).toContainText('Opis imena iz izvornog registra.');
   await search.fill('Povijesna');await page.locator('[data-action=select-place]').first().click();
   await expect(page.getByTestId('city-detail')).toContainText('Obuhvat zaštite, ne ulaz');
+  await page.locator('.city-filter-disclosure > summary').click();
   await page.locator('[data-action=city-group][data-group=transport]').click();
   await page.locator('[data-action=city-category][data-category=bikes]').click();
   await page.locator('[data-action=bike-mode][data-mode=return]').click();

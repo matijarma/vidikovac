@@ -19,6 +19,7 @@ import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
 import { eventVenueLinks } from '../city/day';
 import { deduplicateEvents } from '../../../shared/city/events';
+import { ct } from '../city/strings';
 
 /** One default page of agenda rows; the chips and the search narrow the list first, so a filter always covers every match. */
 const AGENDA_PAGE = 12;
@@ -305,7 +306,7 @@ function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
   const summary = typeof item.summary === 'string' && item.summary ? `<p class="detail-summary">${escapeHtml(item.summary)}</p>` : '';
   const calendar = canExportCalendarItem(item);
   const actions = `<div class="ev-actions">${eventVenueLinks(ctx,item)}${itemActions(i18n, item, { calendar })}${item.link ? externalLink(item.link, i18n.t('common.openSource')) : ''}</div>`;
-  return `<article class="detail ev-detail" data-key="detail-${escapeAttribute(item.id)}" data-testid="event-detail"><h3 class="detail-title" id="ws-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3><p class="ev-when">${escapeHtml(sentence(when))}</p>${dl}${summary}${actions}${calendar ? '' : `<p class="sec-note">${escapeHtml(i18n.t('events.noCalendar'))}</p>`}</article>`;
+  return `<article class="detail ev-detail" data-key="detail-${escapeAttribute(item.id)}" data-testid="event-detail"><h3 class="detail-title" id="ws-detail-title" tabindex="-1">${escapeHtml(item.title)}</h3><p class="ev-when">${escapeHtml(sentence(when))}</p>${actions}${dl}${summary}${calendar ? '' : `<p class="sec-note">${escapeHtml(i18n.t('events.noCalendar'))}</p>`}</article>`;
 }
 
 export function renderKultura(ctx: LayerContext): HTMLElement {
@@ -314,13 +315,17 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const all = deduplicateEvents(cultureEvents(dogadanja),ctx.city?.places??[]);
   const query = ctx.view?.filters.q ?? '';
   const category = ctx.view?.filters.category ?? '';
+  const window = ctx.view?.filters['event-window'] ?? 'week';
   const inZagreb = all.filter((item) => !venueOutsideZagreb(item));
   const outside = all.filter(venueOutsideZagreb);
-  const upcoming = upcomingEvents(inZagreb, ctx.now);
+  const upcoming = upcomingEvents(inZagreb, ctx.now).filter(item=>{
+    const offset=dayOffset(zagrebDayKey(item.at),zagrebDayKey(ctx.now));
+    return window==='today'?offset===0:window==='tomorrow'?offset===1:offset!==null&&offset>=0&&offset<7;
+  });
   const ongoing = ongoingEvents(inZagreb, ctx.now);
   const undated = inZagreb.filter((item) => !isDated(item));
   const counts = new Map<string, number>();
-  for (const item of upcoming) counts.set(eventCategory(item), (counts.get(eventCategory(item)) ?? 0) + 1);
+  for (const item of upcoming.filter(item=>matchesQuery(item,query))) counts.set(eventCategory(item), (counts.get(eventCategory(item)) ?? 0) + 1);
   const keep = (item: FeedItem): boolean => (!category || eventCategory(item) === category) && matchesQuery(item, query);
   const filtered = upcoming.filter(keep);
   const ongoingShown = ongoing.filter(keep);
@@ -334,7 +339,8 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const badge = statusBadge(i18n, dogadanja, ctx.errors?.dogadanja);
   const countLine = countText || badge ? `<p class="ev-count" data-testid="ev-count">${countText ? `<span>${escapeHtml(countText)}</span>` : ''}${badge}</p>` : '';
   // Filters only when there is something to filter; the empty state speaks for itself.
-  const toolbar = `<div class="ws-toolbar ev-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? categories : ''}${countLine}</div>`;
+  const days=`<div class="ev-days" role="group" aria-label="${escapeAttribute(ct(i18n,'program'))}">${(['today','tomorrow','week'] as const).map(day=>`<button type="button" class="day-time" data-action="filter" data-filter-key="event-window" data-filter-value="${day}" aria-pressed="${window===day}">${ct(i18n,day)}</button>`).join('')}</div>`;
+  const toolbar = `${days}<div class="ws-toolbar ev-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? categories : ''}${countLine}</div>`;
   const emptyText = query || category ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
   const shown = shownCount(ctx, 'events', AGENDA_PAGE, filtered.length);
@@ -348,7 +354,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const detail = selected && CULTURE_EVENT_SOURCES.includes(dataText(selected,'source') as DogadanjaSourceId) ? eventDetail(i18n, selected, ctx) : null;
   const list = agenda + ongoingSection(i18n, ongoingShown, ctx) + undatedSection(i18n, undated.filter(keep), ctx) + outsideSection(i18n, outside.filter(keep), ctx);
   const down = downSources(dogadanja);
-  const notes = [coverageText(i18n, dogadanja), down.length ? i18n.t('status.sourcesDown', { list: down.join(', ') }) : '']
+  const notes = [down.length ? i18n.t('status.sourcesDown', { list: down.join(', ') }) : '']
     .filter(Boolean).map((t) => `<p class="sec-note">${escapeHtml(t)}</p>`).join('');
   // The domain's name is the tab's: hidden on the phone, shown as the desk's title (layers.css .ev-title); it stays for aria-labelledby and the focus after a switch.
   return createElementFromHTML(`<section class="layer ws ws-events" id="layer-kultura" data-layer="kultura" data-reconcile aria-labelledby="layer-title-kultura">

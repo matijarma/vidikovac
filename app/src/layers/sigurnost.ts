@@ -338,7 +338,7 @@ export function renderSigurnost(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-safety" id="layer-sigurnost" data-layer="sigurnost" data-reconcile aria-labelledby="layer-title-sigurnost" data-level="${state.level}">
 <header class="ws-head sf-head"><h2 class="layer-title" id="layer-title-sigurnost" tabindex="-1">${escapeHtml(i18n.t('layers.sigurnost'))}</h2></header>
 ${verdictBand(i18n, state, ctx.now)}
-<div class="sf-grid">${numbersSection(i18n)}${warningsSection(i18n, ctx, state)}${closuresSection(i18n, ctx, state)}${pharmaciesSection(i18n, ctx)}${quakesSection(i18n, ctx, state)}${assemblySection(i18n, ctx)}</div>
+<div class="sf-grid">${numbersSection(i18n)}${warningsSection(i18n, ctx, state)}${pharmaciesSection(i18n, ctx)}${closuresSection(i18n, ctx, state)}${quakesSection(i18n, ctx, state)}${assemblySection(i18n, ctx)}</div>
 ${provenanceBlock(i18n, [ctx.snapshots['dhmz-cap'], ctx.snapshots.prometnice, ctx.snapshots.emsc, ctx.snapshots['ckan-geo']])}
 </section>`);
 }

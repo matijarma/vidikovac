@@ -9,6 +9,7 @@ import {
   type CityMapHandle, type CityMapOptions, type FitPadding, type MapSelection, type MapStatus,
 } from '../map/city-map';
 import { DENSITY, tone } from '../ui/canvas';
+import { MAP_PRESENTATIONS } from '../map/presentation';
 import { escapeHtml } from '../ui/dom/escape';
 import { createPanZoom, MAX_ZOOM_FROM_FIT, type PanZoom, type PanZoomViewport } from '../ui/pan-zoom';
 import { createIntegrator, type Drawn, type Model } from './integrator';
@@ -195,7 +196,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       routeShort: (routeId: string) => net?.routes.get(routeId)?.short ?? routeId };
   }
   function markViewport(): SchemaMarkViewport {
-    return { ...viewport(), density, symbolScale: options.symbolScale };
+    const profile=MAP_PRESENTATIONS[options.presentationProfile??'desktop'];
+    return { ...viewport(), density, symbolScale: options.symbolScale??profile.symbolScale, clusterMaxNumbers:profile.clusterMaxNumbers };
   }
   /** One mark per vehicle: the accessible list's membership and the keyboard
    *  walk are per vehicle even where the canvas merges the pills. */

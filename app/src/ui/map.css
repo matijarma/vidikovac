@@ -246,7 +246,7 @@
 .ki[data-stage='map'] .transport[data-sheet='open'] .t-map-canvas .maplibregl-ctrl-bottom-left, .ki[data-stage='map'] .transport[data-sheet='open'] .t-map-canvas .maplibregl-ctrl-bottom-right, .ki[data-stage='map'] .transport[data-sheet='open'] .t-map-status { visibility: hidden; }
 /* The sheet: sized to its open height, moved by transform to the detent's height; no transition while a finger holds it. */
 .ki[data-stage='map'] .transport-sheet {
-  position: absolute; inset-inline: 0; inset-block-end: 0; z-index: 3;
+  position: absolute; inset-inline: 0; inset-block-end: var(--sheet-bottom, 0px); z-index: 3;
   block-size: var(--sheet-open-h, 60%); transform: translateY(calc(var(--sheet-open-h, 60%) - var(--sheet-h, 5rem)));
   transition: transform var(--dur-slow) var(--ease-enter);
   border: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--tone-shadow-md);

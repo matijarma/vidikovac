@@ -20,7 +20,8 @@ import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/es
 import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
 import { dayOpportunities } from '../city/day';
-import { ct } from '../city/strings';
+import { defaultLocation, locationLabel } from '../city/location';
+import { nextDepartures } from '../city/next-departures';
 
 export function renderGradSada(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
@@ -30,10 +31,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   const weather = weatherStatus(i18n, ctx.snapshots, ctx.now);
   const observation = ctx.snapshots['dhmz-now']?.items[0];
   const next = model.lanes.filter(lane => lane.col !== 'sada' && (selected === 'sada' || lane.col === selected));
-  const allDated = next.flatMap(lane => lane.tiles.map(tile => ({ tile, col: lane.col })));
-  const preview = allDated[0];
-  const remainder=next.flatMap(lane=>lane.foot).filter(f=>f.kind==='more');
-  const local = sada.tiles.filter(tile => tile.domain !== 'civic');
+  const local = sada.tiles.filter(tile => tile.domain !== 'civic' && tile.domain !== 'transit');
   const civic = sada.tiles.filter(tile => tile.domain === 'civic');
   const link = (layer: string, label: string, aria?: string, testid?: string) => `<a class="day-link" data-action="nav" data-layer="${layer}" href="#layer=${layer}"${aria ? ` aria-label="${escapeAttribute(aria)}"` : ''}${testid ? ` data-testid="${testid}"` : ''}>${escapeHtml(label)}${iconMarkup('arrow-up-right', undefined, 'icon icon-sm')}</a>`;
   const event = (tile: Tile, col: string) => {
@@ -41,8 +39,9 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     return `<div class="day-event" data-col="${escapeAttribute(col)}" data-key="ahead:${escapeAttribute(tile.key)}">${date ? `<p class="day-event-date">${escapeHtml(date)}</p>` : ''}${tileMarkup(i18n, tile)}</div>`;
   };
   const choices = model.columns.map(col => `<button class="day-time" type="button" data-action="filter" data-filter-key="${FILTER_KEY}" data-filter-value="${col.id}" aria-pressed="${selected === col.id}"${col.id === 'sada' ? ' data-testid="day-next-all"' : ''}>${escapeHtml(col.id === 'sada' ? i18n.t('timeband.next') : col.seg)}</button>`).join('');
-  const feet = sada.foot.map(foot => foot.kind === 'state' ? foot.markup : link(foot.layer, foot.text, foot.aria, `tb-more-${foot.domain}`)).join('');
+  const feet = sada.foot.filter(foot=>foot.kind==='state'||foot.domain!=='transit').map(foot => foot.kind === 'state' ? foot.markup : link(foot.layer, foot.text, foot.aria, `tb-more-${foot.domain}`)).join('');
   const laneMarkup = next.map(lane => {
+    if (!lane.tiles.length && !lane.foot.length && !lane.busy) return '';
     const column=model.columns.find(c=>c.id===lane.col)!;
     const body=lane.tiles.map(tile=>event(tile,lane.col)).join('');
     const more=lane.foot.map(f=>f.kind==='state'?f.markup:link(f.layer,f.text,f.aria,`tb-more-${f.domain}`)).join('');
@@ -53,11 +52,13 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     : `<a class="day-weather day-weather-empty" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo">${iconMarkup('cloud-sun')}<span>${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</span><span class="day-weather-source">${escapeHtml(i18n.t(ctx.errors?.['dhmz-now'] || ctx.snapshots['dhmz-now']?.status === 'down' ? 'status.down' : 'status.loading'))}</span></a>`;
   return createElementFromHTML(`<section class="layer ws ws-overview" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">
 <header class="day-heading"><div><p class="day-date">${escapeHtml(zagrebWeekdayDate(ctx.now))} · <time class="day-clock" datetime="${new Date(ctx.now).toISOString()}">${escapeHtml(model.clock)}</time></p><h2 class="day-title layer-title" id="layer-title-grad-sada" tabindex="-1">${escapeHtml(i18n.t('cityOverview.title'))}</h2></div>${weatherMarkup}</header>
-${preview?`<section class="day-next-peek" aria-label="${escapeAttribute(ct(i18n,'next'))}"><p class="city-kicker">${escapeHtml(ct(i18n,'next'))}</p>${tileMarkup(i18n,{...preview.tile,key:`peek:${preview.tile.key}`,testid:undefined})}</section>`:''}
 <div class="day-overview" data-testid="tb">
   <section class="day-now" aria-labelledby="day-now-title"><header class="day-section-head"><h3 id="day-now-title">${escapeHtml(i18n.t('cityOverview.nearby'))}</h3>${link('u-pokretu', i18n.t('layers.u-pokretu'))}</header>
-    <div class="day-facts" data-testid="tb-lane-sada" data-col="sada" aria-busy="${sada.busy}">${local.map(tile => tileMarkup(i18n, tile)).join('')}${sada.skeletons.map(s => skeletonTileMarkup(s.variant, s.key)).join('')}</div>
-    ${dayOpportunities(ctx)}<div class="day-more">${feet}</div>
+    <p class="city-meta" data-testid="location-context">${escapeHtml(locationLabel(i18n,ctx.location??defaultLocation(ctx.screen)))}</p>
+    ${nextDepartures(ctx)}
+    ${dayOpportunities(ctx)}
+    <div class="day-facts" data-testid="tb-lane-sada" data-col="sada" aria-busy="${sada.busy}">${local.map(tile => tileMarkup(i18n, tile)).join('')}</div>
+    <div class="day-more">${feet}</div>
   </section>
   <section class="day-ahead" aria-labelledby="day-ahead-title"><header class="day-section-head"><h3 id="day-ahead-title">${escapeHtml(i18n.t('cityOverview.next'))}</h3>${link('kultura', i18n.t('layers.kultura'))}</header>
     <div class="day-times" role="group" aria-label="${escapeAttribute(i18n.t('timeband.segLabel'))}" data-testid="tb-seg">${choices}</div>

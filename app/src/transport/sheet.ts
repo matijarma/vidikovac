@@ -79,19 +79,38 @@ export function createSheet(deps: SheetDeps): SheetController {
   let drag: Drag | null = null;
   let dragEndedAt = Number.NEGATIVE_INFINITY;
 
+  function visibleStage(): { height: number; bottom: number } {
+    const stage = deps.stage();
+    const rect = stage.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    // A layout-less test or an unmounted stage falls back to clientHeight.
+    if (!rect.height || !viewport) return { height: stage.clientHeight, bottom: 0 };
+    let end = Math.min(rect.bottom, viewport.offsetTop + viewport.height);
+    const nav = root.closest('.ki')?.querySelector('.ki-tabs')?.getBoundingClientRect();
+    if (nav?.height && nav.top < end && nav.bottom > rect.top) end = nav.top;
+    return { height: Math.max(0, end - Math.max(rect.top, viewport.offsetTop)), bottom: Math.max(0, rect.bottom - end) };
+  }
   function heightFor(detent: Detent): number {
     const rem = remPx();
-    const stage = deps.stage().clientHeight;
-    const peek = PEEK_REM * rem;
+    const stage = visibleStage().height;
+    const peek = stage > 0 ? Math.min(PEEK_REM * rem, stage) : PEEK_REM * rem;
     if (detent === 'peek') return peek;
-    const open = Math.max(peek, stage - OPEN_GAP_REM * rem);
+    const open = Math.max(peek, stage - (stage < 360 || document.activeElement?.matches('.t-search-input') ? 0 : OPEN_GAP_REM * rem));
     if (detent === 'open') return open;
     return clamp(stage * 0.38, peek, open);
   }
 
   function write(heightPx: number): void {
+    const viewport=visibleStage();
+    root.style.setProperty('--sheet-bottom', `${viewport.bottom}px`);
+    root.dataset.keyboard=String(viewport.bottom>0);
     root.style.setProperty('--sheet-open-h', `${heightFor('open')}px`);
     root.style.setProperty('--sheet-h', `${heightPx}px`);
+    // A translated sheet is physically taller than its visible detent.
+    // Keep its scrollport inside the visible part, not below navigation.
+    const toolbar = sheet.querySelector<HTMLElement>('.transport-toolbar');
+    const chrome = head.offsetHeight + (toolbar?.offsetHeight ?? 0);
+    body.style.maxHeight = `${Math.max(0, heightPx - chrome)}px`;
   }
 
   function set(detent: Detent, opts: { animate?: boolean } = {}): void {
@@ -129,13 +148,17 @@ export function createSheet(deps: SheetDeps): SheetController {
 
   // --- The stage's size --------------------------------------------------------
   function onResize(): void {
-    if (deps.stage().clientHeight === stageHeight) return;
     set(current, { animate: false });
   }
+  window.visualViewport?.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('scroll', onResize);
   let observer: ResizeObserver | null = null;
   if (typeof ResizeObserver === 'function') {
     observer = new ResizeObserver(onResize);
     observer.observe(deps.stage());
+    observer.observe(head);
+    const toolbar = sheet.querySelector('.transport-toolbar');
+    if (toolbar) observer.observe(toolbar);
   } else {
     window.addEventListener('resize', onResize);
   }
@@ -264,14 +287,19 @@ export function createSheet(deps: SheetDeps): SheetController {
     destroy() {
       observer?.disconnect();
       window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onResize);
       body.removeEventListener('scroll', markTop);
       sheet.removeEventListener('pointerdown', onDown);
       sheet.removeEventListener('click', onClick, true);
       endDrag();
       root.style.removeProperty('--sheet-h');
       root.style.removeProperty('--sheet-open-h');
+      root.style.removeProperty('--sheet-bottom');
+      body.style.removeProperty('max-height');
       delete root.dataset.dragging;
       delete root.dataset.sheetMotion;
+      delete root.dataset.keyboard;
       delete body.dataset.atTop;
     },
   };

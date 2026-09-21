@@ -19,7 +19,7 @@ describe('createNotifySheet', () => {
     sheet.open();
     expect(sheet.isOpen()).toBe(true);
     const dialog = document.querySelector('[data-testid=notify-sheet]')!;
-    expect(dialog.querySelector('#notify-sheet-title')?.textContent).toBe('Obavijesti');
+    expect(dialog.querySelector('#notify-sheet-title')?.textContent).toBe('Isticanje u aplikaciji');
     const rows = dialog.querySelectorAll('[role=switch]');
     expect(rows).toHaveLength(4);
     for (const row of rows) expect(row.getAttribute('aria-checked')).toBe('false');

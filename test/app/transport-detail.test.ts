@@ -118,7 +118,8 @@ describe('the stop sheet says what comes next, first', () => {
     // Inside the horizon the question is how long the wait is, and the timetable
     // answers it too: said as a wait, marked as the timetable, with no live dot.
     const near = rowOf(html, 'near');
-    expect(near).toContain('za 4 min');
+    expect(near).toContain('12:04');
+    expect(near).not.toContain('za 4 min');
     expect(near).toContain('po redu vožnje');
     expect(near).not.toContain('t-live');
     expect(near).not.toContain('data-live');

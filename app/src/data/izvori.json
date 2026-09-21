@@ -131,6 +131,6 @@
   ],
   "obrada": {
     "naslov": "Strojno sažimanje za traku na javnom zaslonu",
-    "tekst": "Traka vijesti na javnom zaslonu prikazuje jednu rečenicu po stavci, a te su rečenice strojno sažete. Duge izvorne tekstove — nazive akata iz Službenog glasnika, pripovjedni tekst prognoze DHMZ-a (zg_text), obavijesti ZET-a, opise komunalnih radova i kvartovske novosti — poslužitelj jednom sažme modelom Workers AI u jednu rečenicu na hrvatskom i sprema je u predmemoriju. To je prilagodba, a ne izvorni tekst: izvorni naslov, sažetak i poveznica na izvor ostaju uz svaku stavku, a traka prikazuje izvorni naslov kad sažetka nema. Sažimaju se samo izvori s otvorenom licencom; Kulturpunkt (CC BY-SA 3.0 HR) i Etnografski muzej nikada. Sažeci se ne objavljuju na /open."
+    "tekst": "Istaknuti sadržaj na javnom zaslonu može koristiti strojno sažetu rečenicu uz navod izvora. Duge izvorne tekstove (nazive akata iz Službenog glasnika, pripovjedni tekst prognoze DHMZ-a, obavijesti ZET-a, opise komunalnih radova i kvartovske novosti) poslužitelj jednom sažme modelom Workers AI u jednu rečenicu na hrvatskom i sprema je u predmemoriju. To je prilagodba, a ne izvorni tekst: izvorni naslov, sažetak i poveznica na izvor ostaju uz svaku stavku. Bez sažetka ostaje izvorni naslov ili jasno imenovana vrsta promjene. Sažimaju se samo izvori s otvorenom licencom; Kulturpunkt (CC BY-SA 3.0 HR) i Etnografski muzej nikada. Sažeci se ne objavljuju na /open."
   }
 }

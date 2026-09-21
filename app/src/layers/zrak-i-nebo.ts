@@ -99,19 +99,20 @@ function nowSection(i18n: I18n, ctx: LayerContext): string {
     const condition = conditionText(dataText(o, 'weather'));
     const icon = weatherIcon(condition);
     const cond = condition ? `<p class="wx-cond">${icon ? iconMarkup(icon) : ''}<span>${escapeHtml(condition)}</span></p>` : '';
-    body = `<div class="wx-lead"><p class="wx-temp" data-testid="temp-now">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p>${cond}<p class="wx-obs">${observed(i18n, o, observation, error)}</p></div>${facts(i18n, o)}`;
+    body = `<div class="wx-lead"><p class="wx-temp" data-testid="temp-now">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 1) }))}</p>${cond}<p class="wx-obs">${observed(i18n, o, observation, error)}</p></div>`;
   }
   // The observation has no visible head: the temperature is the head. The heading stays for readers of the tree.
   return wxSection({ id: 'wx-now', tone: 'weather', wide: true, body: `<h2 class="visually-hidden" id="wx-now-title">${escapeHtml(i18n.t('weather.now'))}</h2>${body}` });
 }
 
-function rangeSection(i18n: I18n, ctx: LayerContext): string {
+function rangeSection(i18n: I18n, ctx: LayerContext, offset=0): string {
   const forecast = ctx.snapshots['dhmz-forecast'];
   const error = ctx.errors?.['dhmz-forecast'];
-  const f = forecast?.items[0];
+  const day=zagrebDayKey(new Date(`${zagrebDayKey(ctx.now)}T12:00:00Z`).getTime()+offset*DAY_MS);
+  const f = forecast?.items.find(item=>zagrebDayKey(item.at)===day);
   const tmin = dataNumber(f, 'tmin');
   const tmax = dataNumber(f, 'tmax');
-  const temp = dataNumber(ctx.snapshots['dhmz-now']?.items[0], 'temp');
+  const temp = offset===0?dataNumber(ctx.snapshots['dhmz-now']?.items[0], 'temp'):null;
   let body: string;
   if (!forecast) body = loadingOrDown(i18n, ctx, 'dhmz-forecast');
   else if (!f || tmin === null || tmax === null) body = listState(i18n, forecast, 'dhmz-forecast', 0, i18n.t('status.empty'), error);
@@ -125,8 +126,8 @@ function rangeSection(i18n: I18n, ctx: LayerContext): string {
       `<p class="sec-note">${escapeHtml(validity)}</p>`;
   }
   return wxSection({
-    id: 'wx-range', tone: 'weather',
-    body: sectionHead(i18n, { title: i18n.t('freshness.danas'), snapshot: forecast, error, id: 'wx-range-title' }) + body,
+    id: offset?'wx-tomorrow':'wx-range', tone: 'weather',
+    body: sectionHead(i18n, { title: i18n.t(offset?'events.tomorrow':'freshness.danas'), snapshot: forecast, error, id: offset?'wx-tomorrow-title':'wx-range-title' }) + body,
   });
 }
 
@@ -257,7 +258,8 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   const headObs = o ? `<p class="wx-head-obs">${observed(i18n, o, observation, ctx.errors?.['dhmz-now'])}</p>` : '';
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
-<div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${warningsSection(i18n, ctx)}${quakesSection(i18n, ctx)}</div>
+<div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}</div>
+<details class="wx-reference"><summary>${i18n.getLocale().startsWith('en')?'Measurements, sun, air and river bulletin':'Mjerenja, sunce, zrak i bilten Save'}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
 ${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
 </section>`);
 }

@@ -67,7 +67,7 @@ ${dropped}
 }
 
 export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): string {
-  return sources
+  return `<nav class="page-nav" aria-label="Skupine izvora"><a href="#izvor-zet-rt">Prijevoz</a><a href="#izvor-dhmz-now">Vrijeme</a><a href="#izvor-dogadanja">Događanja</a><a href="#city-sources-title">Gradski katalog</a><a href="#izvor-obrada-naslov">Obrada podataka</a></nav>` + sources
     .map(
       (source) => `<article class="izvor" id="izvor-${escapeAttribute(source.module)}">
   <h2>${escapeHtml(source.naziv)}</h2>

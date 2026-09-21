@@ -10,18 +10,12 @@ import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '..
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { codeUrl, formatCode, speakableCode } from './code';
-import { parseSelection, publicItemKey, type PublicSelection, type ScreenStop } from './core/contracts';
+import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
-import { discover,dynamicPlaces,type CityGroup,GROUP_SOURCES,CATEGORY_SOURCE } from './city/discovery';
-import { placeDetail,placesMarkup,streetDetail } from './city/markup';
-import { locatedEvents } from '../../shared/city/events';
 import { arrivalsAt } from '../../shared/city/arrivals';
 import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
-import { ct, type CityWord } from './city/strings';
-import { reconcile } from './ui/dom/reconcile';
-import type { MapSelection } from './map/city-map';
 import { matchStreet } from '../../shared/city/geo';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
@@ -46,15 +40,15 @@ import { frameStrip, stripMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, feedStateOf, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap, vehiclePoints } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, feedStateOf, fieldView, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap, vehiclePoints } from './kiosk/mapview';
 import { arrivalFrontRows, ARRIVAL_ROWS, platformIds, type BoardSubject, type StopArrivals } from './kiosk/arrivals';
 import type { FrontRow } from './kiosk/front';
-import { fitRows, KIOSK_LAYER_MODULES, mountPaired, selectionCard, type PairedContext, type PairedHandle } from './kiosk/paired';
+import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { districtLabel } from './kiosk/districts';
 import { mountSettings, type SettingsHandle } from './kiosk/settings';
 import { mountStart, type StartHandle } from './kiosk/start';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
-import { tickerIndex, tickerItems, type TickerItem } from './kiosk/ticker';
+import { createHighlightSequence, highlightBounds, kioskHighlights, type KioskHighlight } from './kiosk/highlights';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
@@ -239,89 +233,26 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let start: StartHandle | null = null;
   let settings: SettingsHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  /** The header's news line; built when the middle is free, removed when the session pill or the return button needs it. */
-  let ticker: HTMLElement | null = null;
-  let tickerSwap: unknown = null;
-  /** What the last built list was read from: the visible copy of the sources, the city catalogue and the minute. */
-  let tickerFrom: { modules: readonly ModuleSnapshot[]; city: unknown; minute: number } | null = null;
-  let tickerList: TickerItem[] = [];
+  const highlightSequence = createHighlightSequence();
+  let highlightsPaused = false;
+  let ambient: KioskHighlight | null = null;
+  let highlightItems: KioskHighlight[] = [];
+  let highlightDataKey = '';
+  let highlightModules: readonly ModuleSnapshot[] | null = null;
+  let highlightCity: ReturnType<CityStore['snapshot']> | null = null;
   let paired: PairedHandle | null = null;
   let presentation: ScreenPresentation | null = null;
   let acknowledgedRevision = -1;
   let acknowledgedStatus: 'displayed' | 'unavailable' | null = null;
   let presentationLoaded = false;
   let pairingNoticeUntil = 0;
-  let exploring=false;
-  let exploreUntil=0;
-  let localSelection:MapSelection|null=null;
-  let localGroup:CityGroup='living';
-  let localCategory='';
-  let localQuery='';
-  let localLimit=20;
-  function paintExplore():void {
-    const slot=element.querySelector<HTMLElement>('.k-discovery-slot');
-    element.dataset.exploring=String(exploring);
-    // A tapped subject is the answer this person asked for, and the rail is
-    // theirs while its card is open (kiosk-city.css): under a four-row
-    // arrivals board the discovery slot was a 68 px sliver.
-    element.dataset.exploreSubject=exploring&&localSelection?'1':'0';
-    if(!slot)return;
-    if(!exploring){slot.replaceChildren();return;}
-    const city=cityStore.snapshot(),events=locatedEvents(teaser.find(m=>m.module==='dogadanja')?.items??[],city.places,now());
-    const p=localSelection?.kind==='place'?[...city.places,...dynamicPlaces(city,now())].find(p=>p.id===localSelection!.id):null;
-    const street=localSelection?.kind==='street'?city.streets.find(s=>s.id===localSelection!.id):null;
-    const transportSelection:PublicSelection|null=localSelection?.kind==='route'||localSelection?.kind==='stop'?{kind:localSelection.kind,id:localSelection.id}:
-      localSelection?.kind==='vehicle'||localSelection?.kind==='closure'?{kind:'item',module:localSelection.kind==='vehicle'?'zet-rt':'prometnice',id:publicItemKey(localSelection.kind==='vehicle'?'zet-rt':'prometnice',localSelection.id)}:null;
-    const result=discover(city,teaser.find(m=>m.module==='dogadanja')?.items??[],{group:localGroup,category:localCategory,window:'week',query:localQuery,center:stop??{lon:15.97726,lat:45.81286},radius:5000,now:now()});
-    const categories:CityWord[]=localGroup==='useful'?['water','toilet','sport','dogs','recycling','market','wifi','cycle-parking','garage','charging']:
-      localGroup==='heritage'?['heritage','streets']:localGroup==='culture'?['activeVenues','allVenues']:localGroup==='transport'?['bikes','rail','air']:[];
-    const next=document.createElement('div');
-    next.innerHTML=`<button class="btn-ghost" data-key="leave" data-action="kiosk-leave">${ct(i18n,'leave')}</button>${p?placeDetail(i18n,p,city,events):street?streetDetail(i18n,street):transportSelection?`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button>${selectionCard({...pairedContext(),selection:transportSelection})}</article>`:
-      `<div data-key="browse"><label for="kiosk-city-search">${ct(i18n,'search')}</label><input id="kiosk-city-search" class="city-search" type="search" value="${escapeAttribute(localQuery)}" autocomplete="off">
-      <div class="city-groups">${(['living','culture','useful','heritage','transport'] as CityGroup[]).map(g=>`<button class="city-group" data-key="${g}" data-action="kiosk-group" data-group="${g}" aria-pressed="${localGroup===g}">${ct(i18n,g==='living'?'all':g==='transport'?'movement':g)}</button>`).join('')}</div>
-      <div class="city-filters">${categories.map(c=>{const key=c==='activeVenues'?'':c==='allVenues'?'culture':c;return `<button class="city-filter" data-action="kiosk-category" data-category="${key}" aria-pressed="${localCategory===key}">${ct(i18n,c)}</button>`;}).join('')}</div>
-      ${placesMarkup(i18n,result.places,result.events,localLimit)}
-      ${result.streets.slice(0,localLimit).map(s=>`<button class="city-row" data-key="${escapeAttribute(s.id)}" data-action="select-street" data-id="${escapeAttribute(s.id)}"><span><strong>${escapeHtml(s.name)}</strong><span class="city-meta">${escapeHtml(s.settlement)}</span></span></button>`).join('')}
-      ${result.streets.length>localLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}
-      ${city.loading?`<p role="status">${ct(i18n,'loading')}</p>`:!result.places.length&&!result.streets.length?`<p>${ct(i18n,'noResults')}</p>`:''}</div>`}`;
-    // Public exploration does not save a stranger's preference on the venue device.
-    next.querySelectorAll('[data-action=city-save],[data-action=city-copy]').forEach(e=>e.remove());
-    // Third-party pages belong on the visitor's device, not in a public kiosk tab.
-    next.querySelectorAll<HTMLElement>('a[href],[data-action=nav]').forEach(link=>{
-      const text=document.createElement('div');text.className=link.className;text.innerHTML=link.innerHTML;link.replaceWith(text);
-    });
-    reconcile(slot,next);
-  }
-  function endExplore():void {exploring=false;localSelection=null;localGroup='living';localCategory='';localQuery='';localLimit=20;paintExplore();paintMap();element.querySelector<HTMLElement>('[data-action=kiosk-explore]')?.focus();}
-  function exploreSelection(sel:MapSelection|null):void {
-    if(phase!=='invitation'||presentation?.target)return;
-    exploring=true;exploreUntil=now()+90_000;localSelection=sel;
-    if(sel?.kind==='stop'){void ensureStops();ensureArrivals();}
-    paintExplore();
-  }
   element.addEventListener('click',event=>{
     if(phase!=='invitation'||presentation?.target)return;
     const target=(event.target as Element)?.closest<HTMLElement>('[data-action]');
     if(!target)return;
     const action=target.dataset.action;
-    if(action==='kiosk-explore'){exploreSelection(null);void cityStore.ensure(['culture','heritage','streets','settlements']);}
-    if(action==='kiosk-leave')endExplore();
-    if(action==='clear-selection'){exploreSelection(null);paintMap();}
-    if(action==='select-place'){exploreSelection({kind:'place',id:target.dataset.id!});paintMap();mapAdapter.handle()?.select?.(localSelection,{fit:true});}
-    if(action==='select-street')exploreSelection({kind:'street',id:target.dataset.id!});
-    if(action==='kiosk-group'){localGroup=target.dataset.group as CityGroup;localCategory='';localLimit=20;localSelection=null;void cityStore.ensure(GROUP_SOURCES[localGroup]);paintExplore();paintMap();}
-    if(action==='kiosk-category'){localCategory=target.dataset.category??'';localLimit=20;void cityStore.ensure(CATEGORY_SOURCE[localCategory]??[]);paintExplore();paintMap();}
-    if(action==='city-more'){localLimit+=20;paintExplore();}
+    if(action==='pause-highlights'){highlightsPaused=!highlightsPaused;paintTicker();return;}
   });
-  element.addEventListener('input',event=>{
-    const target=event.target as HTMLInputElement;
-    if(!exploring||phase!=='invitation'||presentation?.target||target.id!=='kiosk-city-search')return;
-    localQuery=target.value;localLimit=20;exploreUntil=now()+90_000;
-    if(localQuery)void cityStore.ensure(Object.values(CATEGORY_SOURCE).flat());
-    paintExplore();paintMap();
-  });
-  element.addEventListener('pointerdown',()=>{if(exploring)exploreUntil=now()+90_000;});
-  element.addEventListener('keydown',e=>{if(exploring){exploreUntil=now()+90_000;if(e.key==='Escape')endExplore();}});
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
   let essentialsIdle: unknown = null;
@@ -373,41 +304,28 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     headMid.removeAttribute('role');
   }
 
-  /** The header's one line of city news (kiosk/ticker.ts): a kicker and one
-   *  sentence, the item chosen by the clock alone, crossfaded on a swap and
-   *  changed instantly under reduced motion. The middle of the header belongs
-   *  first to the session pill and the return button: while either is there
-   *  the ticker is not. The list itself is rebuilt only when the sources, the
-   *  city catalogue or the minute change; the second hand only picks from it. */
+  /** One passive sequence. The legacy function name remains internal only;
+   * the header no longer rotates. Never runs a presentation command. */
   function paintTicker(): void {
-    const taken = sessionLabel !== null || headMid.hasAttribute('role') || headMid.querySelector('[data-testid=kiosk-stop-presentation]') !== null;
-    if (taken || phase !== 'invitation') { ticker?.remove(); ticker = null; return; }
-    const modules = currentSafetyModules();
-    const city = cityStore.snapshot();
-    const minute = Math.floor(now() / 60_000);
-    if (!tickerFrom || tickerFrom.modules !== modules || tickerFrom.city !== city || tickerFrom.minute !== minute) {
-      tickerFrom = { modules, city, minute };
-      tickerList = tickerItems(modules, city, now(), s, i18n);
+    const composition=compositionOf(layout);
+    const width=invitation?.measureWidth()||FIELD_DESIGN_WIDTH[composition];
+    const height=invitation?.measureHeight()||FIELD_DESIGN_HEIGHT[composition];
+    const camera=fieldView({stop,district:configuredDistrict(),widthPx:width,heightPx:height,spanM:composition==='handheld'?HANDHELD_SPAN_M:FIELD_SPAN_M});
+    const actualCamera=phase==='invitation'?mapAdapter.handle()?.camera?.():null;
+    const boardTimes=stop?platformIds(stop,stops).map(id=>boards.get('zet',id)?.generatedAt).filter((value):value is string=>Boolean(value)).sort():[];
+    const bounds=!lightweight&&mapAdapter.handle()?.status?.()==='ready'?highlightBounds(actualCamera?.center??camera.center??[15.97726,45.81286],actualCamera?.zoom??camera.zoom,width,height):undefined;
+    const city=cityStore.snapshot();
+    const dataKey=JSON.stringify([Math.floor(now()/60_000),stop?.id,boardTimes,bounds]);
+    if(dataKey!==highlightDataKey||highlightModules!==teaser||highlightCity!==city){
+      highlightDataKey=dataKey;highlightModules=teaser;highlightCity=city;
+      const answer=stop?arrivalsAtStop(platformIds(stop,stops)):undefined;
+      highlightItems=kioskHighlights({modules:teaser,city,stop,now:now(),i18n,bounds,
+        arrivals:answer?.rows,arrivalStatus:answer?.status,arrivalUpdatedAt:boardTimes[0]});
     }
-    const index = tickerIndex(tickerList.length, now());
-    if (index < 0) { ticker?.remove(); ticker = null; return; }
-    if (!ticker) {
-      ticker = document.createElement('p');
-      ticker.className = 'k-ticker';
-      ticker.dataset.testid = 'kiosk-ticker';
-      headMid.appendChild(ticker);
-    }
-    const item = tickerList[index]!;
-    if (ticker.dataset.key === item.key) return;
-    // The first item is simply there; only a change from one sentence to another is a swap.
-    const swapping = ticker.dataset.key !== undefined;
-    ticker.dataset.key = item.key;
-    ticker.innerHTML = `<span class="k-ticker-kicker">${escapeHtml(item.kicker)}</span><span class="k-ticker-text">${escapeHtml(item.text)}</span>`;
-    if (!swapping || reducedMotion || lightweight) return;
-    const swapped = ticker;
-    swapped.dataset.swap = '1';
-    if (tickerSwap !== null) clearTimer(tickerSwap);
-    tickerSwap = oneShot(() => { tickerSwap = null; delete swapped.dataset.swap; }, TICKER_SWAP_MS);
+    const suspended=phase!=='invitation'||Boolean(presentation?.target);
+    ambient=highlightSequence.read(highlightItems,now(),highlightsPaused||suspended);
+    if(!suspended)invitation?.highlight(ambient,highlightsPaused,reducedMotion||lightweight);
+    mapAdapter.handle()?.setHighlight?.(suspended?null:ambient?.map??null);
   }
   /** The modules the strip and the ticker both read from: the
    *  session's own copy once paired (fresher, when it has one), the open
@@ -598,8 +516,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // What the screen was set to frames the invitation when no stop does: a
       // četvrt opens on its outline, the whole city on the city window.
       district: configuredDistrict(),
-      city:cityStore.snapshot(),localSelection,localGroup,localCategory,localQuery,exploring,
-      onSelect:exploreSelection,
+      city:cityStore.snapshot(),
+      handheld: composition === 'handheld',
+      displayScale: layout.zoom,
       onCamera:onMapCamera,
       cameraZoom:mapZoom ?? undefined,
       resolveStreet:(name,point)=>matchStreet(name,point,cityStore.snapshot().streets,cityStore.snapshot().settlements)?.id??null,
@@ -614,7 +533,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
     if (!container) return;
-    container.inert=phase!=='invitation'||Boolean(presentation?.target);
+    container.inert=true;
+    mapAdapter.handle()?.setHighlight?.(phase==='invitation'?ambient?.map??null:null);
     mapContainer = container;
     if (container.parentElement !== host) {
       // The box changed while the container sat outside the layout; resumeMap re-measures it.
@@ -705,7 +625,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (presented) return presented.selection?.kind === 'stop' ? [{ id: presented.selection.id }] : [];
     const out: { id: string; name?: string }[] = [];
     if (stop) out.push(stop);
-    if (localSelection?.kind === 'stop') out.push({ id: localSelection.id });
     if (selection?.kind === 'stop') out.push({ id: selection.id });
     return out;
   }
@@ -775,7 +694,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintTicker();
     paintStrip();
     paintMap();
-    paintExplore();
     if (!basics.hidden) paintEssentials();
     fitAll();
     acknowledgePresentation();
@@ -915,7 +833,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     parkMap();
     start?.destroy(); start = null;
     invitation?.destroy(); invitation = null;
-    ticker?.remove(); ticker = null;
     paired?.destroy(); paired = null;
     notice?.remove(); notice = null;
   }
@@ -1101,7 +1018,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       return;
     }
     presentation = next;
-    exploring=false;localSelection=null;localQuery='';localCategory='';localLimit=20;paintExplore();
     presentationLoaded = false;
     pairingNoticeUntil = 0;
     headMid.textContent = '';
@@ -1341,7 +1257,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   });
 
   const codeTimer = setTimer(() => {
-    if(exploring&&now()>=exploreUntil)endExplore();
     paintClock();
     paintProgress();
     // The notice's own end comes before the repaint that reads the middle: the
@@ -1370,7 +1285,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
     else void refreshSessionData();
   }, REFRESH_MS);
-  const stopCity=cityStore.subscribe(()=>{if(!disposed){paintLocal();paintExplore();}});
+  const stopCity=cityStore.subscribe(()=>{if(!disposed)paintLocal();});
 
   return {
     element,
@@ -1382,7 +1297,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(refreshTimer);
       clearTimer(codeTimer);
       if (swapTimer !== null) { clearTimer(swapTimer); swapTimer = null; }
-      if (tickerSwap !== null) { clearTimer(tickerSwap); tickerSwap = null; }
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
       disarmExpiry();
       disarmEssentialsIdle();

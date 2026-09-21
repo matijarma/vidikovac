@@ -8,6 +8,8 @@ import type { LastRunSnapshot } from './lastrun';
 import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 import type { CityState } from '../../../shared/city/types';
+import type { LocationContext } from '../city/location';
+import type { BoardCache } from '../city/boards';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -48,6 +50,10 @@ export interface CastState {
 
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
+  location?: LocationContext;
+  setLocation?: (location: LocationContext) => void;
+  boards?: BoardCache;
+  onLocalData?: () => void;
   city?: CityState;
   ensureCity?: (ids: readonly string[]) => void;
   /** Disposes persistent workspace listeners when the owning surface ends. */

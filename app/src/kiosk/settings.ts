@@ -175,6 +175,8 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   /** Whether that pair is still being waited for; one save is in flight at a time. */
   let pending = false;
   let saveTimer: unknown = null;
+  let dirty = false;
+  let drafted = false;
 
   function showError(text: string): void { errorEl.textContent = text; errorEl.hidden = false; }
   function clearError(): void { errorEl.hidden = true; errorEl.textContent = ''; }
@@ -246,9 +248,12 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     // An area the list does not offer (a venue screen provisioned with one
     // that is neither a četvrt nor the city) leaves the select empty; area()
     // then reads the whole city, which is what such a panel can honestly say.
-    areaSelect.value = screen.area ?? CITY_AREA.slug;
-    selectedStopId = screen.stopId;
-    search.value = '';
+    if (!drafted || !dirty) {
+      areaSelect.value = screen.area ?? CITY_AREA.slug;
+      selectedStopId = screen.stopId;
+      search.value = '';
+      drafted = true;
+    }
     paintTheme();
     paintScreenRow();
     renderStops();
@@ -319,6 +324,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     if (!requested) return;
     const current = deps.screen();
     if (current.area !== requested.area || current.stopId !== requested.stopId) return;
+    dirty = false;
     endSave();
     close();
   }
@@ -329,13 +335,14 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     armIdle();
   }
 
-  areaSelect.addEventListener('change', () => { armIdle(); renderStops(); });
-  search.addEventListener('input', () => { armIdle(); renderStops(); });
+  areaSelect.addEventListener('change', () => { dirty=true; armIdle(); renderStops(); });
+  search.addEventListener('input', () => { dirty=true; armIdle(); renderStops(); });
   search.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
   list.addEventListener('change', (event) => {
     const input = event.target as HTMLInputElement;
     if (input.name !== 'settings-stop') return;
     selectedStopId = input.value || null;
+    dirty = true;
     armIdle();
   });
   themeBtn.addEventListener('click', () => { deps.cycleTheme(); paintTheme(); armIdle(); });

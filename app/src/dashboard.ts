@@ -19,6 +19,8 @@ import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './c
 import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
+import { createBoardCache, type BoardCache } from './city/boards';
+import { defaultLocation, type LocationContext } from './city/location';
 import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
@@ -96,6 +98,7 @@ export function parseSessionHash(hash: string): SessionHashParams | null {
 export interface MediaLike { matches: boolean; addEventListener?(type: 'change', listener: () => void): void; removeEventListener?(type: 'change', listener: () => void): void }
 
 export interface DashboardDeps {
+  createBoards?: () => BoardCache;
   cityStore?: CityStore;
   i18n: I18n;
   session: SessionClient;
@@ -176,6 +179,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const notifyStore = createNotifyStore({ storage: local });
   const mapMode = deps.mapMode ?? createMapModeStore({ storage: local });
   const lineFocus = createLineFocusStore({ storage: local });
+  const boards = deps.createBoards?.() ?? createBoardCache({now});
+  let locationContext: LocationContext | undefined;
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
   /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
   let stops: readonly ScreenStop[] | null = null;
@@ -203,6 +208,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let paused = false;
   let countdownHidden = false;
   let directory = false;
+  const agendaScroll=new Map<LayerId,{top:number;focus:string}>();
   /** The moment the last cast frame went out; the cast buttons say "sent" for CAST_SENT_MS after it. */
   let castSentAt: number | null = null;
   let castTimer: unknown = null;
@@ -398,6 +404,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       ensureCity: ids => { if (!frozen && !disposed) void cityStore.ensure(ids); },
       onDispose:fn=>workspaceDisposals.add(fn),
       i18n, snapshots: feed.snapshots, now: frozenAt??now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
+      location: locationContext ?? defaultLocation(screen()),
+      setLocation: value => { locationContext=value; },
+      boards, onLocalData: repaintLocalData,
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
@@ -410,8 +419,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
+  function repaintLocalData():void { if(!disposed&&!frozen)render(); }
   function render(): void {
-    if (saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
+    if (screen().stop || saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
     ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
@@ -529,6 +539,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     const previous = view.snapshot().layer;
     const wasDirectory = directory;
+    if (selection && !view.snapshot().selection && layer===previous) {
+      agendaScroll.set(layer,{top:globalThis.scrollY??0,focus:doc.activeElement instanceof HTMLElement?doc.activeElement.id:''});
+    }
     directory = false;
     if (layer !== 'u-pokretu' && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
     // One history entry per distinct place: repeating the same selection replaces instead of pushing.
@@ -547,6 +560,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       scrollToTop();
     } else {
       focusWorkspace(layer);
+      const position=agendaScroll.get(layer);
+      if(position){globalThis.scrollTo?.({top:position.top});if(position.focus)doc.getElementById(position.focus)?.focus({preventScroll:true});}
     }
   }
 
@@ -805,9 +820,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       const slot = shareRotation?.current();
       if (!slot || !shareRotation) return;
       const at = shareRotation.serverNow();
-      const width = `${Math.round(slotProgress(slot, at) * 1000) / 10}%`;
-      if (fresh) { fill.style.transition = 'none'; fill.style.width = width; void fill.offsetWidth; fill.style.transition = ''; }
-      else fill.style.width = width;
+      const transform = `scaleX(${Math.round(slotProgress(slot, at) * 1000) / 1000})`;
+      if (fresh) { fill.style.transition = 'none'; fill.style.transform = transform; void fill.offsetWidth; fill.style.transition = ''; }
+      else fill.style.transform = transform;
       rotates.textContent = i18n.t('session.shareRotates', { seconds: Math.max(0, Math.ceil((slot.slotEnd - at) / 1000)) });
     };
     // The dialog lives in the top layer outside the shell root, so its one action is handled here.
@@ -961,6 +976,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (!target || !element.contains(target)) return;
     const d = target.dataset;
     switch (d.action) {
+      case 'section-jump':
+        if(d.id){const heading=doc.getElementById(d.id)?.querySelector<HTMLElement>('h2,h3');if(heading){heading.tabIndex=-1;heading.focus();heading.scrollIntoView?.({block:'start'});}}
+        return;
+      case 'saved-remove':
+        if(!frozen&&d.id&&(d.kind==='place'||d.kind==='stop'||d.kind==='route'))saved.remove({kind:d.kind,id:d.id});
+        return;
       case 'city-save':
         if(!frozen&&d.id)saved.toggle({kind:'place',id:d.id});return;
       case 'city-copy': {
@@ -1132,6 +1153,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       sheet.destroy();
       notifySheet.destroy();
       maps.destroy();
+      boards.destroy();
       schematic.destroy();
       store.destroy();
       element.remove();

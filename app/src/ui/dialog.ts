@@ -130,6 +130,14 @@ export function createDialog(options: DialogOptions): DialogHandle {
   }
 
   let opener: HTMLElement | null = null;
+  function viewportChanged(): void {
+    const viewport=window.visualViewport;
+    if(!viewport||!dialog.open)return;
+    dialog.style.setProperty('--dialog-visible-height',`${viewport.height}px`);
+    dialog.style.setProperty('--dialog-keyboard-inset',`${Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop)}px`);
+  }
+  window.visualViewport?.addEventListener('resize',viewportChanged);
+  window.visualViewport?.addEventListener('scroll',viewportChanged);
 
   function handleCloseButtonClick(): void {
     dialog.close();
@@ -185,6 +193,7 @@ export function createDialog(options: DialogOptions): DialogHandle {
       }
       if (!dialog.open) {
         dialog.showModal();
+        viewportChanged();
         forget(dialog);
         openDialogs.push(dialog);
         moveInitialFocus();
@@ -199,6 +208,8 @@ export function createDialog(options: DialogOptions): DialogHandle {
       return dialog.open;
     },
     destroy() {
+      window.visualViewport?.removeEventListener('resize',viewportChanged);
+      window.visualViewport?.removeEventListener('scroll',viewportChanged);
       forget(dialog);
       dialog
         .querySelector('[data-dialog-close]')

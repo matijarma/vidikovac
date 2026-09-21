@@ -178,6 +178,7 @@ try {
     await layer(phone, 'grad-sada');
     await capture(phone, 'desktop', variant, [720, 1280], '/d/ Sada');
     await layer(phone, 'u-pokretu');
+    await phone.locator('.city-filter-disclosure > summary').click();
     await phone.locator('[data-action=city-group][data-group=transport]').click();
     await phone.waitForTimeout(3000);
     await capture(phone, 'transport', variant, [720, 1280], '/d/ Karta / Kretanje');

@@ -122,7 +122,7 @@ for (const scene of [
     if (scene.zoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
     for (const layer of ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost']) {
       const direct = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
-      if (await direct.count()) await direct.click();
+      if (scene.name==='desktop' || await direct.count()) await direct.click();
       else {
         await page.locator('[data-testid=tab-more]:visible, [data-testid=status-more]:visible').first().click();
         await page.getByTestId(`dir-${layer}`).click();

@@ -59,6 +59,8 @@
 .ld-lead { max-inline-size: 38ch; font-size: 1.125rem; line-height: 1.55; }
 .ld-intro { max-inline-size: 40ch; font-size: 1rem; line-height: 1.55; color: var(--tone-text-muted); }
 .ld-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem 1.5rem; margin-block-start: .25rem; }
+.ld-actions [data-testid=cta-kiosk-primary]{background:transparent;color:var(--tone-action-brand);box-shadow:none}
+@media(min-width:60rem){.ld-actions .ld-visitor{background:transparent;color:var(--tone-action-brand);box-shadow:none}.ld-actions [data-testid=cta-kiosk-primary]{order:-1;background:var(--tone-action-brand);color:var(--tone-action-brand-fg)}}
 .ld-hero-figure { margin-block-start: clamp(1.5rem, 3vw, 2.5rem); }
 .ld-hero-visual { position: relative; padding-block-end: 1rem; }
 .ld-device { position: relative; min-inline-size: 0; overflow: hidden; background: var(--tone-surface-1); border: .35rem solid var(--palette-light-text-primary); box-shadow: var(--tone-shadow-md); }

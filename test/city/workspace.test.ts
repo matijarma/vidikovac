@@ -41,17 +41,20 @@ describe('persistent city workspace',()=>{
     disposal.forEach(fn=>fn());
     expect(cache.destroy).toHaveBeenCalledTimes(1);
   });
-  it('uses native focusable buttons for mixed city/transport search without orphaned option ARIA',()=>{
+  it('uses one combobox and owned listbox for every kind of result',()=>{
     const workspace=createTransportWorkspace({loadStops:async()=>[]}),disposal:(()=>void)[]=[];
     const ctx:LayerContext={i18n:createDefaultI18n('hr'),snapshots:{},now:Date.now(),city:emptyCity(),onDispose:fn=>disposal.push(fn)};
     document.body.replaceChildren(workspace.element);workspace.render({ctx,points:[],lines:[]});
     const input=workspace.element.querySelector<HTMLInputElement>('[data-testid=transport-search]')!;
     input.value='6';input.dispatchEvent(new Event('input',{bubbles:true}));
     expect(input.hasAttribute('aria-activedescendant')).toBe(false);
-    expect(workspace.element.querySelector('[role=option]')).toBeNull();
+    expect(input.getAttribute('role')).toBe('combobox');
+    expect(workspace.element.querySelector('[role=option]')?.closest('[role=listbox]')?.id).toBe(input.getAttribute('aria-controls'));
     expect(workspace.element.querySelector('li[aria-selected]')).toBeNull();
-    expect(workspace.element.querySelector('button[data-action=select-route]')).not.toBeNull();
-    workspace.element.querySelector<HTMLButtonElement>('button[data-action=select-route]')!.click();
+    expect(workspace.element.querySelector('[role=option][data-action=select-route]')).not.toBeNull();
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+    expect(input.getAttribute('aria-activedescendant')).toBe(workspace.element.querySelector('[role=option]')?.id);
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     expect(workspace.element.dataset.cityGroup).toBe('transport');
     disposal.forEach(fn=>fn());
   });

@@ -20,6 +20,14 @@ export interface ViewStore {
 
 export function createViewStore(deps: ViewStoreDeps = {}): ViewStore {
   const perLayer: Partial<Record<LayerId, Record<string, string>>> = {};
+  // Private tab state only. It never becomes a URL or a presentation message.
+  try {
+    const stored: unknown = JSON.parse(deps.storage?.getItem('vidikovac.view-filters') ?? '{}');
+    if (stored && typeof stored === 'object') for (const [layer, values] of Object.entries(stored)) {
+      if (!validLayer(layer) || !values || typeof values !== 'object') continue;
+      perLayer[layer] = Object.fromEntries(Object.entries(values).filter((entry): entry is [string,string] => /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/.test(entry[0]) && typeof entry[1] === 'string' && entry[1].length <= 200));
+    }
+  } catch { /* storage is optional */ }
   let state: ViewState = { layer: deps.initialLayer ?? 'grad-sada', selection: null, filters: {} };
   const listeners = new Set<(state: ViewState) => void>();
   const emit = () => { for (const listener of listeners) listener(state); };
@@ -59,6 +67,7 @@ export function createViewStore(deps: ViewStoreDeps = {}): ViewStore {
       if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/.test(key)) return;
       const filters = { ...state.filters, [key]: value.slice(0, 200) };
       perLayer[state.layer] = filters;
+      try { deps.storage?.setItem('vidikovac.view-filters', JSON.stringify(perLayer)); } catch { /* tab still works */ }
       state = { ...state, filters };
       // Search text stays in browser memory, not URLs or the shared screen.
       emit();

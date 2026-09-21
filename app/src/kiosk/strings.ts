@@ -72,6 +72,7 @@ export interface KioskStrings {
     inMinutes: string;
     /** The live dot's own name, for a reader who cannot see it. */
     live: string;
+    scheduled: string;
     note: string;
     none: string;
     down: string;
@@ -357,7 +358,7 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
-    arrivals: { ...record(['now', 'inMinutes', 'live', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
+    arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
     platforms: { one: t('transport.platforms_one'), few: t('transport.platforms_few'), other: t('transport.platforms_other') },
     lines: {
       ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'modelNote']),

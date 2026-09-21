@@ -121,11 +121,12 @@ function compareClusterLabel(a: string, b: string): number {
 /** A cluster's name: distinct labels, numeric order, capped at
  *  CLUSTER_MAX_NUMBERS then folded into a "+n" tail (a stop with a dozen
  *  trams reads as "6·11·12·14 +2", not a wall of digits). */
-export function clusterLabel(labels: string[]): string {
+export function clusterLabel(labels: string[], maxNumbers = CLUSTER_MAX_NUMBERS): string {
   const distinct = [...new Set(labels)].sort(compareClusterLabel);
-  if (distinct.length <= CLUSTER_MAX_NUMBERS) return distinct.join(CLUSTER_SEPARATOR);
-  const shown = distinct.slice(0, CLUSTER_MAX_NUMBERS).join(CLUSTER_SEPARATOR);
-  return `${shown} +${distinct.length - CLUSTER_MAX_NUMBERS}`;
+  const cap=Math.max(1,Math.min(CLUSTER_MAX_NUMBERS,maxNumbers));
+  if (distinct.length <= cap) return distinct.join(CLUSTER_SEPARATOR);
+  const shown = distinct.slice(0, cap).join(CLUSTER_SEPARATOR);
+  return `${shown} +${distinct.length - cap}`;
 }
 
 /** A vehicle's pill in screen px: the box `clusterPills` tests for overlap is
@@ -176,7 +177,7 @@ function intersects(a: Box, b: Box): boolean {
  *  own single, so a tap never loses the mark it was aimed at. */
 export function clusterPills<T extends PillPoint>(
   points: readonly T[],
-  opts: { selectedId?: string | null } = {},
+  opts: { selectedId?: string | null; maxNumbers?: number } = {},
 ): Array<Single<T> | Cluster<T>> {
   const selectedId = opts.selectedId ?? null;
   const rest = selectedId === null ? points : points.filter((p) => p.id !== selectedId);
@@ -224,7 +225,7 @@ export function clusterPills<T extends PillPoint>(
       id: `cluster:${ids.join(',')}`,
       x,
       y,
-      label: clusterLabel(members.map((m) => m.label)),
+      label: clusterLabel(members.map((m) => m.label),opts.maxNumbers),
       members,
     });
   }

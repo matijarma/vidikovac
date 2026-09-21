@@ -465,11 +465,12 @@ describe('the basemap and the overlays on it', () => {
     expect(ids.indexOf('network-tram')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('closures')).toBeLessThan(ids.indexOf('address_label'));
     expect(ids.indexOf('vehicles')).toBeGreaterThan(ids.indexOf('places_locality'));
-    expect(ids[ids.length - 1]).toBe('selection-ring');
+    expect(ids[ids.length - 1]).toBe('ambient-highlight-point');
+    expect(ids.indexOf('selection-ring')).toBeGreaterThan(ids.indexOf('vehicles'));
     expect([...map.images.keys()]).toEqual(OVERLAY_IMAGE_IDS);
     expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
     expect(map.images.get('vehicle-plate-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
-    expect([...map.sources.keys()].sort()).toEqual(['bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
+    expect([...map.sources.keys()].sort()).toEqual(['ambient-highlight', 'bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
     expect(map.getSource('bodies')!.data).toEqual({ type: 'FeatureCollection', features: [] });
   });
 

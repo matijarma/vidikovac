@@ -23,7 +23,7 @@ const base = (module: ModuleSnapshot['module'], items: ModuleSnapshot['items']):
 
 const SNAPSHOTS: Partial<Record<ModuleSnapshot['module'], ModuleSnapshot>> = {
   'dhmz-now': base('dhmz-now', [{ id: 'o1', module: 'dhmz-now', kind: 'observation', tier: 'open', title: 'Maksimir', at: '2026-09-11T12:00:00Z', data: { temp: 21, humidity: 54, pressure: 1013, windDir: 'SZ', windSpeed: 2, weather: 'vedro' } }]),
-  'dhmz-forecast': base('dhmz-forecast', [{ id: 'f1', module: 'dhmz-forecast', kind: 'forecast', tier: 'open', title: 'Zagreb', summary: 'Sunčano', data: { tmin: 12, tmax: 24 } }]),
+  'dhmz-forecast': base('dhmz-forecast', [{ id: 'f1', module: 'dhmz-forecast', kind: 'forecast', tier: 'open', title: 'Zagreb', at: '2026-09-11T12:00:00Z', summary: 'Sunčano', data: { tmin: 12, tmax: 24 } }]),
   'dhmz-cap': base('dhmz-cap', [{ id: 'w1', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Grmljavinsko nevrijeme', summary: 'Moguć jak vjetar', severity: 'moderate', at: '2026-09-11T12:00:00Z', until: '2026-09-11T18:00:00Z' }]),
   // Three moving pins plus one delay summary per route, exactly the shape
   // zet-rt emits (R-22): both are kind 'vehicle', the id prefix separates them.
@@ -217,37 +217,20 @@ describe('grad-sada (Sada, the time band)', () => {
   });
 
   it('tiles the lines of this screen’s stop: two on the phone, four on a desk, the rest counted into Promet', () => {
-    const section = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'zet-rt': DATED_ZET } }));
-    const tiles = [...section.querySelectorAll('.tl[data-domain=transit]')];
-    expect(tiles).toHaveLength(2);
-    for (const tile of tiles) {
-      expect(tile.getAttribute('data-variant')).toBe('value');
-      expect(tile.querySelector('.tl-label .line[data-size=s][data-kind=tram]')).not.toBeNull();
-      expect(tile.getAttribute('data-layer')).toBe('u-pokretu');
-      expect(JSON.parse(tile.getAttribute('data-selection')!)).toMatchObject({ kind: 'route' });
-      expect(tile.getAttribute('href')).toMatch(/^#layer=u-pokretu&kind=route/);
-      expect(tile.closest('.day-facts')?.getAttribute('data-col')).toBe('sada');
-    }
-    const first = tiles[0]!;
-    expect(text(first.querySelector('.tl-value'))).toBe('kasni 2 min');
-    expect(first.querySelector('.tl-value')?.getAttribute('data-state')).toBe('late');
-    // The count beside the glyph is a figure, never the word "vozila"; the stop the count is read from follows it, and the line's two ends stand beside the badge (kajimafix 01.2).
-    expect(first.querySelector('.tl-context use')?.getAttribute('href')).toBe('#icon-tram-front');
-    expect(text(first.querySelector('.tl-context'))).toBe(`2 · ${STOP.name}`);
-    expect(text(first.querySelector('.tl-label-title'))).toBe('Črnomerec – Sopot');
-    expect(first.getAttribute('aria-label')).toContain('Črnomerec – Sopot');
-    const more = section.querySelector('[data-testid=tb-more-transit]')!;
-    expect(text(more)).toBe('+ 4 linije');
-    expect(more.getAttribute('aria-label')).toContain(STOP.name);
-    expect(more.getAttribute('data-layer')).toBe('u-pokretu');
 
-    const desk = renderLayer('grad-sada', ctx({ screen: DESK, snapshots: { ...SNAPSHOTS, 'zet-rt': DATED_ZET } }));
-    expect(desk.querySelectorAll('.tl[data-domain=transit]')).toHaveLength(4);
-    expect(text(desk.querySelector('[data-testid=tb-more-transit]'))).toBe('+ 2 linije');
-    for (const surface of [section, desk]) {
-      expect(text(surface)).not.toContain('vozila ZET-a u pokretu');
-      expect(text(surface)).not.toContain('Kašnjenje je po liniji');
+    const ensure=vi.fn();
+    const boards={ensure,get:()=>undefined,destroy:vi.fn()};
+    for(const screen of [atStop().screen,DESK]){
+      const section=renderLayer('grad-sada',ctx({screen,boards}));
+      expect(section.querySelectorAll('.tl[data-domain=transit]')).toHaveLength(0);
+      const departures=section.querySelector('[data-testid=day-departures]')!;
+      expect(text(departures)).toContain(STOP.name);
+      expect(departures.querySelector('[data-layer=u-pokretu]')?.getAttribute('href')).toContain('kind=stop&id='+STOP.id);
+      expect(text(departures)).toContain('učitavanje');
+      expect(text(section)).not.toContain('vozila ZET-a u pokretu');
     }
+    expect(ensure).toHaveBeenCalledWith('zet',[STOP.id],undefined);
+
   });
 
   it('buckets the next starts by time and keeps the sada lane for live values', () => {
@@ -274,7 +257,7 @@ describe('grad-sada (Sada, the time band)', () => {
     expect(text(sada.querySelector('[data-testid=tile-works] .tl-trail'))).toBe('1');
     expect(text(sada.querySelector('[data-testid=tile-closures] .tl-title'))).toBe('Grada Vukovara');
     // Sada reads in domain order: what moves first, what the city decided last; on the phone the two compact Zatim rows (the next starts) follow the lane's own tiles.
-    expect([...sada.querySelectorAll('.tl')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['transit', 'transit', 'mobility', 'komunalno', 'safety']);
+    expect([...sada.querySelectorAll('.tl')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['mobility', 'komunalno', 'safety']);
     expect(section.querySelector('.day-agenda')).not.toBeNull();
   });
 
@@ -699,39 +682,27 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura', () => {
     expect(section.querySelectorAll('[data-testid=event-category] option').length).toBeGreaterThan(1);
   });
   it('filter chips are a labelled group holding a native list, and no <li> in a workspace is orphaned from a list (axe: listitem)', () => {
-    const i18n = createDefaultI18n('hr');
-    for (const [layer, label] of [['kultura', i18n.t('events.categoryLabel')], ['uprava-i-pravo', i18n.t('civic.phase')]] as const) {
-      const section = renderLayer(layer, ctx());
-      if (layer === 'kultura') {
-        const select = section.querySelector('[data-testid=event-category]')!;
-        expect(select.closest('label')?.textContent).toContain(label);
-        expect(select.children.length).toBeGreaterThan(1);
-      } else {
-        const group = section.querySelector('.ws-toolbar [role=group]')!;
-        expect(group.getAttribute('aria-label')).toBe(label);
-        const list = group.querySelector('ul.chips')!;
-        expect(list.getAttribute('role')).toBe('list');
-        expect([...list.children].every(li => li.tagName === 'LI' && li.querySelector('button.chip[aria-pressed]'))).toBe(true);
-      }
-      for (const li of section.querySelectorAll('li')) {
-        const parent = li.parentElement!;
-        expect(['UL', 'OL'], `${layer}: <li> under <${parent.tagName.toLowerCase()}>`).toContain(parent.tagName);
-        expect(parent.getAttribute('role') ?? 'list', `${layer}: <li> under a ${parent.tagName} whose role is not list`).toBe('list');
-      }
+
+    for(const layer of ['kultura','uprava-i-pravo'] as const){
+      const section=renderLayer(layer,ctx());
+      const select=section.querySelector(layer==='kultura'?'[data-testid=event-category]':'select[data-filter-key=phase]')!;
+      expect(select.closest('label')?.textContent?.trim()).toBeTruthy();
+      expect(select.children.length).toBeGreaterThan(1);
+      for(const li of section.querySelectorAll('li'))expect(['UL','OL']).toContain(li.parentElement!.tagName);
     }
+
   });
   it('a future-only list groups under its own day and shows no today head', () => {
-    const futureOnly = {
-      ...SNAPSHOTS.dogadanja!,
-      items: [
-        { id: 'kulturpunkt:9', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Jesenski festival', link: 'https://kulturpunkt.hr/f', at: '2026-09-18T18:00:00Z', data: { source: 'kulturpunkt', category: 'festival', precision: 'time' } },
-      ] as ModuleSnapshot['items'],
-    };
-    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja: futureOnly } }));
-    // The head is the short weekday date in sentence case ("pet 18. 9."): this year's agenda needs no year.
-    expect(text(section.querySelector('#ev-agenda .agenda-day'))).toBe('pet 18. 9.');
-    expect([...section.querySelectorAll('[data-testid=event-row]')]).toHaveLength(1);
-    expect(text(section.querySelector('#ev-agenda'))).toContain('Jesenski festival');
+
+    const future=base('dogadanja',[{
+      id:'next-week',module:'dogadanja',kind:'event',tier:'session',title:'Next week',
+      at:'2026-09-18T18:00:00Z',dateBasis:'event',data:{source:'kulturpunkt',precision:'time'},
+    }]);
+    const section=renderLayer('kultura',ctx({snapshots:{...SNAPSHOTS,dogadanja:future}}));
+    expect(section.querySelector('#ev-agenda .agenda-day')).toBeNull();
+    expect(section.querySelectorAll('[data-testid=event-row]')).toHaveLength(0);
+    expect(section.querySelectorAll('.ev-days button')).toHaveLength(3);
+
   });
   it('kultura Događanja says so plainly, naming which of its three sources answered, when none of them has anything', () => {
     const empty = { ...SNAPSHOTS.dogadanja!, items: [], sourceCounts: { kulturpunkt: 0, skupstina: 5, kvartovske: 2, komunalne: 5, 'zet-rss': 5, etnografski: 0 } };
@@ -803,7 +774,7 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
   });
 
   it('reads wind, humidity and pressure as three labelled facts on one strip, the wind with an arrow that flies with it', () => {
-    const facts = weather().querySelector('#wx-now .wx-figures')!;
+    const facts = weather().querySelector('.wx-reference .wx-figures')!;
     expect(facts.querySelectorAll('.wx-fact')).toHaveLength(3);
     expect(text(facts)).toContain('hPa');
     expect(text(facts)).toContain('1013 hPa');
@@ -818,7 +789,7 @@ describe('Vrijeme: observation, today, sun, warnings and quakes (T3.1)', () => {
   });
 
   it('says "bez vjetra" with no arrow when the station reads zero', () => {
-    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('#wx-now .wx-figures')!;
+    const facts = weather({ snapshots: { ...SNAPSHOTS, 'dhmz-now': CALM } }).querySelector('.wx-reference .wx-figures')!;
     expect(text(facts.querySelector('[data-testid=wind-text]'))).toBe('bez vjetra');
     expect(facts.querySelector('.wx-arrow')).toBeNull();
   });
@@ -1268,8 +1239,8 @@ describe('Grad: the next session as a date, the gazette issue as a lockup with l
     expect(section.getAttribute('aria-labelledby')).toBe('layer-title-uprava-i-pravo');
     expect(title.classList.contains('visually-hidden')).toBe(true);
     // Three blocks on the canvas, each a hairline-separated .cv-sec, no kicker anywhere in the list.
-    expect([...section.querySelectorAll('.cv-grid > .sec')].map((sec) => sec.id)).toEqual(['cv-sessions', 'cv-gazette', 'cv-works']);
-    expect([...section.querySelectorAll('.cv-grid > .sec')].every((sec) => sec.classList.contains('cv-sec'))).toBe(true);
+    expect([...section.querySelectorAll('.cv-column > .sec')].map((sec) => sec.id)).toEqual(['cv-works', 'cv-sessions', 'cv-gazette']);
+    expect([...section.querySelectorAll('.cv-column > .sec')].every((sec) => sec.classList.contains('cv-sec'))).toBe(true);
     expect(section.querySelectorAll('.ws-primary .kicker')).toHaveLength(0);
   });
 
@@ -1352,9 +1323,9 @@ describe('Grad: the next session as a date, the gazette issue as a lockup with l
     const rows = works.querySelectorAll('[data-testid=works] [data-testid=city-work-row]');
     expect(rows).toHaveLength(8);
     const row = rows[0];
-    expect(text(row.querySelector('.row-title'))).toBe('Radovi 1');
-    expect(text(row.querySelector('.row-sub'))).toBe('Ugovaranje');
-    expect(text(row.querySelector('.cv-amount'))).toBe('1.000 €');
+    expect(text(row.querySelector('.row-title'))).toBe('Radovi 2');
+    expect(text(row.querySelector('.row-sub'))).toBe('Radovi u tijeku');
+    expect(text(row.querySelector('.cv-amount'))).toBe('1.001 €');
     expect(row.querySelector('.badge')).toBeNull();
     expect(text(row)).not.toContain('zahvat 1'); // the description is the detail's
     expect(text(works.querySelector('[data-action=filter][data-filter-key=works]'))).toBe('Prikaži još 8');

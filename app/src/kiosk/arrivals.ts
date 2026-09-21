@@ -76,11 +76,11 @@ export function platformIds(stop: { id: string; name?: string }, stops?: readonl
  * list say the wrong thing about it.
  */
 function etaMarkup(row: ArrivalRow, s: KioskStrings, className: string): string {
-  const time = row.minutes === null
+  const time = !row.live || row.minutes === null
     ? `<time datetime="${escapeAttribute(new Date(row.atMs).toISOString())}">${escapeHtml(clock(row.atMs))}</time>`
     : escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }));
   const dot = row.live ? `<span class="k-live" role="img" aria-label="${escapeAttribute(s.arrivals.live)}"></span>` : '';
-  return `<span class="${className}"${row.live ? ' data-live="true"' : ''}>${dot}${time}</span>`;
+  return `<span class="${className}"${row.live ? ' data-live="true"' : ''}>${dot}${time}<small class="k-eta-kind">${escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)}</small></span>`;
 }
 
 /** What a badge is called when it is read out rather than seen: "tramvaj 6",

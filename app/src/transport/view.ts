@@ -526,8 +526,8 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
  *  Frozen, the marker stays -- the figure did come off a tracked vehicle -- but
  *  it says the shell's own snapshot sentence (chrome.ts snapshotLine, "podaci
  *  od 13:57") and loses the live tone with it. */
-function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
-  const time = row.minutes === null
+export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
+  const time = !row.live || row.minutes === null
     ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
     : esc(row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes }));
   if (!row.live) return `<span class="t-eta">${time}</span>`;
@@ -545,7 +545,7 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
     .map((row) => signRow({
       lead: badge(row.routeName, routeTypeAt(d.routes, row.routeId), 'm'),
       title: row.headsign || row.routeName,
-      sub: row.live ? '' : i18n.t('arrivals.scheduled'),
+      sub: row.live && d.frozenAt !== undefined ? snapshotLine(i18n,d.frozenAt) : row.live ? (i18n.getLocale().startsWith('en')?'Estimate':'Procjena') : i18n.t('arrivals.scheduled'),
       trail: arrivalTime(i18n, row, d.frozenAt),
       key: `${row.tripId}|${row.atMs}`,
     }))

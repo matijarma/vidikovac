@@ -262,7 +262,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .share-qr .qr { box-sizing: border-box; inline-size: 200px; max-inline-size: none; }
 .share-code { margin: 0; font-family: var(--font-mono); font-size: var(--type-numeral); font-weight: var(--weight-bold); line-height: var(--lh-tight); letter-spacing: 0.08em; }
 .share-progress { inline-size: 200px; block-size: 4px; border-radius: var(--r-pill); background: var(--tone-surface-2); overflow: hidden; }
-.share-progress-fill { inline-size: 0; block-size: 100%; border-radius: inherit; background: var(--tone-action-brand); transition: width 1s linear; }
+.share-progress-fill { inline-size: 100%; block-size: 100%; transform: scaleX(0); transform-origin: left; border-radius: inherit; background: var(--tone-action-brand); transition: transform 1s linear; }
 @media (prefers-reduced-motion: reduce) {
   .share-progress-fill { transition: none; }
 }

@@ -20,6 +20,12 @@ Tehničko ime repozitorija, Workera, domena i postojeći ključevi pohrane ostaj
 
 ## Pokretanje
 
+Pasivni javni zaslon, pretraga prilagođena telefonu, spremljena mjesta i
+lokalni polasci opisani su u `docs/readable-city-2026-09-20.md`, zajedno s
+rezultatima provjere i preostalim provjerama na fizičkim uređajima.
+Javni zaslon nema opću pretragu dodirom; skeniranje otvara osobni pogled,
+a prikazivanje na zidu ostaje zasebna, potvrđena radnja.
+
 Lokalna nadogradnja od 18. rujna 2026. uvodi Sada, Karta, Događanja i Još
 na telefonu. Dodaje gradska mjesta, BAJS, priče ulica, baštinu, zrak,
 hidrološki bilten, savjetovanja i vozni red. Status i ograničenja:

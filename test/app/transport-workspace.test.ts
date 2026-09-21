@@ -453,7 +453,8 @@ describe('search and selection', () => {
     q<HTMLButtonElement>('#t-clear-selection').click();
     expect(last().select!.mock.lastCall?.[0]).toBeNull();
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', null);
-    expect(q('[data-testid=transport-total]')).not.toBeNull();
+    expect(q<HTMLInputElement>('[data-testid=transport-search]').value).toBe('crnomerec');
+    expect(q('[role=listbox]')).not.toBeNull();
   });
 });
 
@@ -603,7 +604,7 @@ describe('detents on the phone stage', () => {
     const input = q<HTMLInputElement>('[data-testid=transport-search]');
     input.value = '6';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(ws.dataset.sheet).toBe('half');
+    expect(ws.dataset.sheet).toBe('open');
     // "Proširi kartu" collapses to peek and asks the page for the map view; "Skupi kartu" returns to half.
     q<HTMLButtonElement>('[data-testid=map-full-toggle]').click();
     expect(ws.dataset.sheet).toBe('peek');
