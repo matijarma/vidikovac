@@ -164,8 +164,8 @@ try {
     await kiosk.getByTestId('setup-create').waitFor();
     await kiosk.getByTestId('setup-create').click();
   }
-  await kiosk.getByTestId('pair-code').waitFor({ timeout: 30_000 });
-  await kiosk.waitForFunction(() => document.querySelector('[data-testid=pair-code]')?.getAttribute('data-state') === 'live');
+  await kiosk.getByTestId('kiosk-code').waitFor({ timeout: 30_000 });
+  await kiosk.waitForFunction(() => document.querySelector('[data-testid=kiosk-code]')?.getAttribute('data-state') === 'live');
   // Warm the actual public and session feeds before recording the invitation.
   await kiosk.waitForTimeout(15_000);
   for (const variant of variants) {

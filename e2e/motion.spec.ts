@@ -179,7 +179,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     // model.update() sees these two fixes -- i.e. the instant this route's
     // first response is actually fulfilled, not when the test happened to
     // set it up. loadTeaser() fires at mount (kiosk.ts), long before
-    // `pair-code` becomes visible (a BeaconDO WebSocket handshake with a
+    // `kiosk-code` becomes visible (a BeaconDO WebSocket handshake with a
     // 30 s allowance), so holding that first response gated on `release`
     // and only calling it once pairing is done -- with the fixture itself
     // built at that same moment (`snapshot` is a factory, so its `now` is
@@ -194,7 +194,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     // One fixed window (R-KP1): the map stands for the screen's life, so no wait can outlast it.
     await page.goto(kioskUrl);
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
     // Load the real tiles and worker before starting the five-second ease.
     // Otherwise map startup can consume the entire interpolation window.
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
@@ -233,7 +233,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.goto(kioskUrl);
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
 
     const schematicSel = '[data-testid=kiosk-map]';
     await waitForFrames(page, schematicSel);
@@ -314,7 +314,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     const lightweightUrl = kioskUrl.replace('#', '?lagano=1#');
     await page.goto(lightweightUrl);
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
 
     const board = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
     await expect(board).toBeVisible();

@@ -2,7 +2,7 @@ import { SELF, env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import { beaconStub, type BeaconDO } from '../../worker/do/beacon-do';
-import { indexStub } from '../../worker/do/index-do';
+import { indexStub, type IndexDO } from '../../worker/do/index-do';
 import type { CodeSlot, CreateBeaconResponse } from '../../worker/protocol';
 import { connectWs, authKiosk, connectRoom } from './helpers';
 import { cityRows } from '../../worker/stats/export';
@@ -112,7 +112,7 @@ describe('real temporary screens', () => {
     expect((await index.reserveScreen(principal)).allowed).toBe(false);
     expect((await index.reserveScreen('b'.repeat(64))).allowed).toBe(true);
     let clock: { mockRestore(): void } | undefined;
-    await runInDurableObject(index, (instance: { now(): number }) => { clock = vi.spyOn(instance, 'now').mockReturnValue(Date.now() + 3_600_001); });
+    await runInDurableObject(index, (instance: IndexDO) => { clock = vi.spyOn(instance, 'now').mockReturnValue(Date.now() + 3_600_001); });
     try {
       expect((await index.reserveScreen(principal)).allowed).toBe(true);
     } finally {

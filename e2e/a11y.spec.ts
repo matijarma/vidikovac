@@ -231,7 +231,7 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await page.setViewportSize(KIOSK);
     // One fixed window (R-KP1): the map and the column are there from the first paint, nothing rotates away.
     await page.goto(kioskUrl);
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
     await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();

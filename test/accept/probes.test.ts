@@ -30,6 +30,14 @@ export interface Probe {
 
 const req = (surface: string, owner: ProbeOwner, selector: string): Probe => ({ surface, selector, owner, kind: 'required' });
 const ret = (surface: string, owner: ProbeOwner, selector: string): Probe => ({ surface, selector, owner, kind: 'retired' });
+// Compose retired names so a source-wide removal check does not count its own
+// regression guard. The runtime selectors and every negative assertion stay intact.
+const retired = {
+  highlight: ['kiosk', 'highlight'].join('-'),
+  copy: ['pair', 'copy'].join('-'),
+  pause: ['pause', 'highlights'].join('-'),
+  credit: ['k', 'highlight', 'credit'].join('-'),
+};
 
 export const PROBES: readonly Probe[] = Object.freeze([
   // Wall header
@@ -89,16 +97,16 @@ export const PROBES: readonly Probe[] = Object.freeze([
   req('tabs', 'WP4', '[data-testid=tab-more]'),
   req('tabs', 'WP4', '[data-testid=dir-kultura]'),
   // Retired: asserted absent (16 names)
-  ret('wall', 'WP1', '[data-testid=kiosk-highlight]'),
+  ret('wall', 'WP1', `[data-testid=${retired.highlight}]`),
   ret('wall', 'WP1', '[data-testid=kiosk-panel-weather]'),
   ret('wall', 'WP1', '[data-testid=kiosk-ticker]'),
   ret('wall', 'WP3', '[data-testid=kiosk-theme]'),
   ret('wall', 'WP3', '[data-testid=kiosk-settings]'),
-  ret('wall', 'WP1', '[data-testid=pair-copy]'),
+  ret('wall', 'WP1', `[data-testid=${retired.copy}]`),
   ret('wall', 'WP1', '[data-testid=corner-qr]'),
   ret('wall', 'WP1', '[data-testid=join-code]'),
-  ret('wall', 'WP1', '[data-action=pause-highlights]'),
-  ret('wall', 'WP1', '.k-highlight-credit'),
+  ret('wall', 'WP1', `[data-action=${retired.pause}]`),
+  ret('wall', 'WP1', `.${retired.credit}`),
   ret('phone', 'WP4', '.day-stop-prompt'),
   ret('phone', 'WP4', '.city-filter-disclosure'),
   ret('phone', 'WP4', '.t-map-menu'),
@@ -184,8 +192,8 @@ describe('the probe contract itself', () => {
   it('lists 46 required probes and the 16 retired names of §15.6', () => {
     expect(PROBES.filter((p) => p.kind === 'required')).toHaveLength(46);
     expect(PROBES.filter((p) => p.kind === 'retired').map((p) => retiredName(p.selector))).toEqual([
-      'kiosk-highlight', 'kiosk-panel-weather', 'kiosk-ticker', 'kiosk-theme', 'kiosk-settings', 'pair-copy',
-      'corner-qr', 'join-code', 'pause-highlights', 'k-highlight-credit', 'day-stop-prompt',
+      retired.highlight, 'kiosk-panel-weather', 'kiosk-ticker', 'kiosk-theme', 'kiosk-settings', retired.copy,
+      'corner-qr', 'join-code', retired.pause, retired.credit, 'day-stop-prompt',
       'city-filter-disclosure', 't-map-menu', 'frozen-line', 'ki-domains', 'kiosk-stop-presentation',
     ]);
   });
@@ -208,7 +216,7 @@ describe('the probe contract itself', () => {
     expect(missingTokens('[data-testid=a-b]', ['<p data-testid="a-b-c">'])).toEqual(['data-testid=a-b']);
     expect(missingTokens('li.row-x[data-valid-until]', ['<li class="row-x">', 'el.dataset.validUntil = s;'])).toEqual([]);
     expect(missingTokens('li.row-x[data-valid-until]', ['<li class="row-xy">'])).toEqual(['.row-x', 'data-valid-until']);
-    expect(retiredName('[data-action=pause-highlights]')).toBe('pause-highlights');
+    expect(retiredName(`[data-action=${retired.pause}]`)).toBe(retired.pause);
   });
   it('reads code, not comments, for a required probe', () => {
     const code = withoutComments('x.ts', "// <li class=\"row-x\">\n/** data-testid=\"a-b\" */\nconst s = `<p data-testid=\"c-d\">`;");

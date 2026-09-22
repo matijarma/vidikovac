@@ -97,13 +97,16 @@ describe('kiosk copy', () => {
     expect(hr.header.unlockedUntil).toBe(i18n.t('shared.unlockedUntil'));
     expect(hr.safety.hitno).toBe(i18n.t('shared.safetyPage'));
     expect(hr.safety.label).toBe(i18n.t('shared.safetyPage'));
-    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' });
+    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Karta', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' });
     expect(hr.weather.compass.NW).toBe(i18n.t('motion.compass.NW'));
     expect(kioskStrings('en').status.offline).toBe('Screen offline; no code can be issued');
     expect(hr.setup.errorAccess).toBe('Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.');
   });
   it('speaks to one person, never promises "Uskoro", and never a login', () => {
-    expect(JSON.stringify(hr)).not.toMatch(/\bVi\b|\bVaš|Skenirajte|Uskoro|Cloudflare Access|Prijavi se|ocjenjivaču/);
+    const forbidden = /(?<!\p{L})Vi(?!\p{L})|(?<!\p{L})Vaš|Skenirajte|Uskoro|Cloudflare Access|Prijavi se|ocjenjivaču/u;
+    expect('Vi ste ovdje.').toMatch(forbidden);
+    expect('Više ulica ima to ime.').not.toMatch(forbidden);
+    expect(JSON.stringify(hr)).not.toMatch(forbidden);
   });
 });
 
@@ -287,6 +290,7 @@ describe('local content from the stop-scoped teaser', () => {
     expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
     const cards = teaserCards(MODULES, i18n, NOW);
     expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'city', 'invitation']);
+    expect(cards.find(c => c.id === 'invitation')?.body).toBe('Skeniraj za 10 minuta grada.');
     expect(cards[0]!.body).toBe('21,4 °C · vedro');
     expect(cards[1]!.body).toBe('M 1,6 · CROATIA');
     expect(cards[2]!.body).toBe('2 zatvaranja');

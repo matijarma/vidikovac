@@ -143,7 +143,7 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
       const frozen = phone.getByTestId('frozen-line');
       await expect(frozen).toBeVisible({ timeout: 45_000 });
       await expect(frozen).toContainText('Sesija je završila. Prikaz je zamrznut.');
-      await expect(kiosk.getByTestId('pair-code')).toBeVisible({ timeout: 45_000 });
+      await expect(kiosk.getByTestId('kiosk-code')).toBeVisible({ timeout: 45_000 });
       await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
 
       // The token carries its own expiry; the Worker refuses it without asking any DO.

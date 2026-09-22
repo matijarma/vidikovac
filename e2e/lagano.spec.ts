@@ -108,7 +108,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]')).toBeAttached();
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: `${SHOTS_DIR}/kiosk-lagano.png`, fullPage: false });
@@ -125,7 +125,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
 
     // The layout (R-F4). The code is inside the viewport and the page has
     // nothing to scroll: what the screen shows is the whole page.
-    const code = await page.getByTestId('pair-code').boundingBox();
+    const code = await page.getByTestId('kiosk-code').boundingBox();
     expect(code).not.toBeNull();
     expect(code!.y, 'the code starts inside the viewport').toBeGreaterThanOrEqual(0);
     expect(code!.y + code!.height, 'the code ends inside the viewport').toBeLessThanOrEqual(KIOSK.height);
@@ -152,7 +152,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
 
     const list = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
     await expect(list).toBeAttached();
@@ -196,7 +196,7 @@ test.describe('the lightweight kiosk at 1920 by 1080 (?lagano=1)', () => {
     const { kioskUrl } = await provisionKiosk(request, APP_URL);
     await page.setViewportSize(KIOSK);
     await page.goto(kioskUrl.replace('#', '?lagano=1#'));
-    await expect(page.getByTestId('pair-code')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
 
     const list = page.locator('[data-testid=kiosk-live] [data-testid=kiosk-lines]');
     await expect(list).toBeAttached();

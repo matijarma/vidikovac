@@ -61,7 +61,7 @@ for (const theme of ['light', 'dark'] as const) {
     await feeds(page);
     await page.addInitScript(theme => localStorage.setItem('vidikovac-theme', theme), theme);
     await page.goto(kioskUrl);
-    await expect(page.getByTestId('pair-code')).toHaveAttribute('data-state', 'live');
+    await expect(page.getByTestId('kiosk-code')).toHaveAttribute('data-state', 'live');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
     await page.evaluate(() => document.fonts.ready);
     for (const size of displaySizes) {

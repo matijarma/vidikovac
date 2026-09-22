@@ -176,7 +176,7 @@ test('passive kiosk keeps whole rows, one short sentence and a scannable QR thro
   const {kioskUrl}=await provisionKiosk(request,APP_URL);
   await page.clock.install({time:now});
   await page.goto(kioskUrl);
-  await expect(page.getByTestId('pair-code')).toHaveAttribute('data-state','live');
+  await expect(page.getByTestId('kiosk-code')).toHaveAttribute('data-state','live');
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status','ready',{timeout:30000});
   await page.evaluate(()=>document.fonts.ready);
   const fastForward=async(ms:number)=>{await page.clock.fastForward(ms);ahead+=ms;};
@@ -262,7 +262,7 @@ test('the wall at night: the dark palette at 21:30 under ?tema=tamna, 1920×1080
   clockAt=Date.now();
   await page.goto(url.toString());
   await expect(page.locator('html')).toHaveAttribute('data-theme-resolved','dark');
-  await expect(page.getByTestId('pair-code')).toHaveAttribute('data-state','live');
+  await expect(page.getByTestId('kiosk-code')).toHaveAttribute('data-state','live');
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status','ready',{timeout:30000});
   await page.evaluate(()=>document.fonts.ready);
   await expect(page.getByTestId('kiosk-sentence-text')).not.toBeEmpty();

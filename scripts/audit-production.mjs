@@ -259,7 +259,7 @@ async function freshCode(kiosk) {
   const norm = (s) => (s || '').replace(/\s+/g, '');
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    for (const tid of ['pair-code']) {
+    for (const tid of ['kiosk-code']) {
       const el = kiosk.getByTestId(tid);
       if ((await el.count()) && (await el.first().isVisible())) {
         // The kiosk shows the two groups with a middle dot (kajimafix 03.4); the URL and a person type the hyphen.
@@ -474,7 +474,7 @@ try {
     );
   }
   }
-  await kiosk.getByTestId('pair-code').waitFor({ timeout: 30_000 });
+  await kiosk.getByTestId('kiosk-code').waitFor({ timeout: 30_000 });
   await kiosk.waitForFunction(() => document.querySelector('[data-testid=kiosk-map]') && document.querySelector('[data-testid=kiosk-map]').getAttribute('data-map-status') === 'ready', null, { timeout: 30_000 }).catch(() => log('kiosk map not ready in 30 s'));
   await kiosk.waitForTimeout(3000);
   await shot(kiosk, 'kiosk-invitation-1366');
