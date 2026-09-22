@@ -1,6 +1,6 @@
 // Seam S5: app/src/city/nearby.ts. The row and input shapes (radiusM, not a
 // Kadar), the head over the measured circle, and the row budget; selectNearby
-// is WP1's and answers no rows until it lands.
+// is WP1's (its scenes are in kiosk-nearby.test.ts).
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { emptyCity } from '../../shared/city/types';
 import { ROW_MAX_PX, ROW_MIN_PX, nearbyHead, rowBudget, selectNearby, type NearbyInput, type NearbyKind, type NearbyRow } from '../../app/src/city/nearby';
@@ -31,7 +31,8 @@ describe('nearby contract', () => {
   it('takes the measured radius, not a Kadar', () => {
     expectTypeOf<NearbyInput['radiusM']>().toEqualTypeOf<number>();
     expectTypeOf<NearbyInput>().not.toHaveProperty('frame');
-    expect(selectNearby(input)).toEqual([]);
+    // No boards, no feeds, an empty city and no stop file at 17:45: only the next solar event.
+    expect(selectNearby(input).map((row) => row.kind)).toEqual(['solar']);
   });
 
   it('heads the list with the measured circle', () => {
