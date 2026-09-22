@@ -3,7 +3,6 @@ import {searchCity,groupWifi} from '../../app/src/city/search';
 import {discover} from '../../app/src/city/discovery';
 import {emptyCity,type Place} from '../../shared/city/types';
 import {createDefaultI18n} from '../../app/src/i18n/create-default-i18n';
-import {createHighlightSequence,kioskHighlights,highlightBounds,inHighlightBounds,type KioskHighlight} from '../../app/src/kiosk/highlights';
 import {MAP_PRESENTATIONS} from '../../app/src/map/presentation';
 import {clusterLabel} from '../../app/src/motion/pills';
 import {bikeCount} from '../../app/src/city/strings';
@@ -35,47 +34,12 @@ describe('one ranked city search',()=>{
   });
 });
 
-const highlight=(id:string,subject:KioskHighlight['subject']):KioskHighlight=>({
-  id,subject,kicker:'Subject',what:id,where:'Zagreb',when:'Today',source:'Source',freshness:'Reference',
-  map:{id,geometry:{type:'Point',coordinates:[15.977,45.813]}},
-});
-describe('passive highlight sequence',()=>{
-  it('holds 20 seconds through feed refreshes and alternates subject families',()=>{
-    const sequence=createHighlightSequence(),items=[highlight('m1','mobility'),highlight('m2','mobility'),highlight('c1','city-life')];
-    expect(sequence.read(items,now)?.id).toBe('m1');
-    expect(sequence.read(items.map(x=>({...x})),now+19_999)?.id).toBe('m1');
-    expect(sequence.read(items,now+20_000)?.id).toBe('c1');
-    expect(sequence.read(items,now+40_000)?.id).toBe('m2');
-  });
-  it('pauses through a presentation and resumes with a full reading period',()=>{
-    const sequence=createHighlightSequence(),items=[highlight('m1','mobility'),highlight('c1','city-life')];
-    sequence.read(items,now);
-    expect(sequence.read(items,now+80_000,true)?.id).toBe('m1');
-    expect(sequence.read(items,now+90_000)?.id).toBe('m1');
-    expect(sequence.read(items,now+109_999)?.id).toBe('m1');
-    expect(sequence.read(items,now+110_000)?.id).toBe('c1');
-  });
-  it('withdraws invalid subjects even when paused and recovers from an outage',()=>{
-    const sequence=createHighlightSequence(),items=[highlight('c1','city-life')];
-    sequence.read(items,now);
-    expect(sequence.read([],now+1000,true)).toBeNull();
-    expect(sequence.read(items,now+2000)?.id).toBe('c1');
-  });
-  it('uses attributed real records on a quiet day, without implying an entrance',()=>{
-    const city={...emptyCity(),places:[{...wifi,id:'heritage-a',category:'heritage' as const,name:'A real protected site',polygons:[[[[15.97,45.81],[15.98,45.81],[15.98,45.82],[15.97,45.81]]]] as [number,number][][][]}]};
-    const items=kioskHighlights({city,modules:[],stop:null,now,i18n:createDefaultI18n('hr')});
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({subject:'city-life',source:'wifi',map:{geometry:{type:'MultiPolygon'}}});
-    expect(items[0]!.when).toContain('ne ulaz');
-  });
-  it('never presents off-map point geometry or claims a fresh bike observation after expiry',()=>{
-    const bounds=highlightBounds([15.977,45.813],15,700,600);
-    expect(inHighlightBounds(highlight('a','mobility').map,bounds)).toBe(true);
-    expect(inHighlightBounds({id:'far',geometry:{type:'Point',coordinates:[16.3,46]}},bounds)).toBe(false);
-    const city={...emptyCity(),places:[{...wifi,id:'heritage-far',category:'heritage' as const,lon:16.3,lat:46}]};
-    expect(kioskHighlights({city,modules:[],stop:null,now,i18n:createDefaultI18n('hr'),bounds})).toEqual([]);
-  });
-  it('keeps the bounds independent of DPR and bounds route summaries without losing individual numbers',()=>{
+// The wall's passive 20-second sequence is gone (WP1): the header sentence and
+// the "U blizini" list replace it, tested in test/app/kiosk-sentence.test.ts and
+// test/app/kiosk-nearby.test.ts. What stays here is the map presentations' own
+// readability rule.
+describe('map presentations',()=>{
+  it('bound route summaries without losing individual numbers and keep the handheld hit target at 44 px',()=>{
     for(const profile of Object.values(MAP_PRESENTATIONS)){
       expect(clusterLabel(['6'],profile.clusterMaxNumbers)).toBe('6');
       expect(clusterLabel(['109','113','119','120','121'],profile.clusterMaxNumbers).length).toBeLessThanOrEqual(12);

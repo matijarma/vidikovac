@@ -259,7 +259,7 @@ async function freshCode(kiosk) {
   const norm = (s) => (s || '').replace(/\s+/g, '');
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    for (const tid of ['pair-code', 'join-code']) {
+    for (const tid of ['pair-code']) {
       const el = kiosk.getByTestId(tid);
       if ((await el.count()) && (await el.first().isVisible())) {
         // The kiosk shows the two groups with a middle dot (kajimafix 03.4); the URL and a person type the hyphen.

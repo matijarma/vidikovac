@@ -222,7 +222,7 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   const today = forecastFor(snap, dayKey(now));
   const tomorrow = forecastFor(snap, zagrebDayAfter(now, 1));
   // The card is the reading and the two ranges. DHMZ's narrative is a
-  // sentence, not a figure: the header ticker says it (kiosk/ticker.ts).
+  // sentence, not a figure, so the card leaves it out.
   const observed = weatherNow(input.modules, s, locale);
   const glyph = weatherIcon(observed.condition);
   // A source that is loading or down says so; only a live observation without a

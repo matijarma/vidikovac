@@ -44,7 +44,7 @@ export function teaserCards(modules: readonly ModuleSnapshot[], i18n: I18n, now:
     { id: 'quake', title: s.story.quake, body: quake ? quakeCard(quake) : isLive(quakes) ? s.paired.quakeNone : quakes ? s.paired.sourceDown : loading, attribution: filled(quakes, quake) },
     { id: 'closures', title: s.paired.closures, body: near.state === 'loading' ? loading : near.state === 'down' ? s.safety.closuresUnknown : i18n.t('panels.closuresCount', { count: near.count }), attribution: filled(map.prometnice) },
     { id: 'city', title: s.story.city, body: city ? (cityRow ? cityTeaserBody(cityRow, i18n) : s.story.empty) : loading, attribution: cityTeaserAttribution(city, cityRow) },
-    { id: 'invitation', title: s.appName, body: `${s.invitation.lead} ${s.invitation.support}` },
+    { id: 'invitation', title: s.appName, body: s.invitation.lead },
   ];
   /** "M 1,6 · CROATIA"; a magnitude the source did not give is named missing, never zero. */
   function quakeCard(q: ModuleSnapshot['items'][number]): string {
