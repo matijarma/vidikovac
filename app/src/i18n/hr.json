@@ -968,6 +968,52 @@
       "tonight": "Večeras",
       "city": "Grad"
     },
+    "nearby": {
+      "title": "U blizini",
+      "pill": "{km} km · ~{min} min",
+      "always": "uvijek",
+      "until": "do",
+      "sunrise": "Izlazak sunca",
+      "sunset": "Zalazak sunca",
+      "lastTrams": "Zadnji tramvaji",
+      "firstTram": "Prvi tramvaj",
+      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu."
+    },
+    "sentence": {
+      "kicker": {
+        "promet": "Promet",
+        "kultura": "Kultura",
+        "vrijeme": "Vrijeme",
+        "bicikli": "Bicikli",
+        "nocas": "Noćas",
+        "radovi": "Radovi"
+      },
+      "departureIn": "Tramvaj {route} prema {to} za {n} min.",
+      "departureAt": "Tramvaj {route} prema {to} u {time}.",
+      "busIn": "Autobus {route} prema {to} za {n} min.",
+      "busAt": "Autobus {route} prema {to} u {time}.",
+      "closureUntil": "{street} zatvorena do {until}.",
+      "weather": "{temp}, {condition}; danas do {max} °C.",
+      "weatherNoRange": "{temp}, {condition}.",
+      "bikes": "BAJS {station}: {bikes}.",
+      "sunset": "Sunce zalazi u {time}.",
+      "sunrise": "Sunce izlazi u {time}.",
+      "lastTram": "Zadnji tramvaj {route} večeras u {time}.",
+      "firstTram": "Prvi tramvaj {route} ujutro u {time}.",
+      "event": "{time} {title}, {venue}.",
+      "pharmacy": "Dežurna ljekarna 24/7: {address}.",
+      "always": "{name}: {text}",
+      "outage": "ZET ne šalje položaje vozila; polasci su po voznom redu.",
+      "weatherTemperature": "Temperatura u Zagrebu je {temp}.",
+      "sunsetAt": "Zalazak sunca je u {time}.",
+      "sunsetTime": "U {time} zalazi sunce.",
+      "sunriseAt": "Izlazak sunca je u {time}.",
+      "sunriseTime": "U {time} izlazi sunce.",
+      "opening": "{name} se otvara {time}."
+    },
+    "handheld": {
+      "info": "Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz."
+    },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",
       "warningsStale": "Upozorenja DHMZ-a: zastarjelo, nepotvrđeno",

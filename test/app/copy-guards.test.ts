@@ -250,3 +250,38 @@ describe('leaves', () => {
     }
   });
 });
+
+// The wall of 22 September (WP1) owns three key groups. The rule is scoped to
+// them: older kiosk copy still carries loading ellipses ("Kod stiže…") that
+// belong to other surfaces and other packages.
+describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP1)', () => {
+  const GROUPS = ['nearby', 'sentence', 'handheld'] as const;
+  const values = (catalogue: Catalogue): (readonly [string, string])[] =>
+    GROUPS.flatMap((group) => leafKeys((catalogue.kiosk as Catalogue)[group], `kiosk.${group}`).map((key) => [key, leaf(catalogue, key)!] as const));
+  const slots = (text: string): string[] => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort();
+
+  it('carries the owner\'s strings byte-exact', () => {
+    expect(hr.kiosk.nearby.title).toBe('U blizini');
+    expect(hr.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
+    expect(en.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
+    expect(hr.kiosk.nearby.always).toBe('uvijek');
+    expect(hr.kiosk.nearby.outageNote).toBe('ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu.');
+    expect(hr.kiosk.sentence.kicker).toEqual({ promet: 'Promet', kultura: 'Kultura', vrijeme: 'Vrijeme', bicikli: 'Bicikli', nocas: 'Noćas', radovi: 'Radovi' });
+    expect(hr.kiosk.sentence.pharmacy).toContain('24/7');
+    expect(hr.kiosk.handheld.info).toBe('Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz.');
+  });
+
+  it.each([['hr', HR], ['en', EN]] as const)('%s: no ellipsis, never "unavailable" as a headline, never "zid"', (name, catalogue) => {
+    const all = values(catalogue);
+    expect(all.length, name).toBeGreaterThanOrEqual(30);
+    for (const [key, value] of all) {
+      expect(value, `${key} (${name})`).not.toMatch(/…|\.\.\./);
+      expect(value, `${key} (${name})`).not.toMatch(/nedostupn|unavailable/i);
+      expect(value, `${key} (${name})`).not.toMatch(/(?<![\p{L}\p{N}_])zid/iu);
+    }
+  });
+
+  it('every template names the same slots in both languages', () => {
+    for (const [key, value] of values(HR)) expect(slots(leaf(EN, key)!), key).toEqual(slots(value));
+  });
+});
