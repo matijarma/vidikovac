@@ -132,5 +132,15 @@
   "obrada": {
     "naslov": "Strojno sažimanje za traku na javnom zaslonu",
     "tekst": "Istaknuti sadržaj na javnom zaslonu može koristiti strojno sažetu rečenicu uz navod izvora. Duge izvorne tekstove (nazive akata iz Službenog glasnika, pripovjedni tekst prognoze DHMZ-a, obavijesti ZET-a, opise komunalnih radova i kvartovske novosti) poslužitelj jednom sažme modelom Workers AI u jednu rečenicu na hrvatskom i sprema je u predmemoriju. To je prilagodba, a ne izvorni tekst: izvorni naslov, sažetak i poveznica na izvor ostaju uz svaku stavku. Bez sažetka ostaje izvorni naslov ili jasno imenovana vrsta promjene. Sažimaju se samo izvori s otvorenom licencom; Kulturpunkt (CC BY-SA 3.0 HR) i Etnografski muzej nikada. Sažeci se ne objavljuju na /open."
-  }
+  },
+  "staticSources": [
+    {
+      "id": "streets-geo",
+      "naziv": "Ulične osi za pretragu adrese",
+      "url": "https://www.openstreetmap.org/copyright",
+      "text": "© OpenStreetMap contributors · Protomaps",
+      "licence": "ODbL 1.0",
+      "opis": "Nazivi i osi ulica za polje „Adresa ili stajalište” na javnom zaslonu, izvedeni iz karte koju aplikacija sama poslužuje. Izvedena baza podataka objavljuje se pod istom licencom."
+    }
+  ]
 }

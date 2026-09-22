@@ -35,10 +35,25 @@ export interface DogadanjaDroppedEntry {
   reason: string;
 }
 
+/**
+ * A dataset the application ships as a built file rather than fetches as a module
+ * (docs/izvori.md, "Statički skupovi"): named on the page in its own section, never as
+ * one more `sources` article, which stay the nine feed modules.
+ */
+export interface StaticSourceEntry {
+  id: string;
+  naziv: string;
+  url: string;
+  text: string;
+  licence: string;
+  opis: string;
+}
+
 export const IZVORI: IzvorEntry[] = data.sources;
 export const DOGADANJA_SOURCES: DogadanjaSourceEntry[] = data.dogadanjaSources;
 export const DOGADANJA_DROPPED: DogadanjaDroppedEntry[] = data.dogadanjaDropped;
 export const OBRADA: ObradaEntry = data.obrada;
+export const STATIC_SOURCES: StaticSourceEntry[] = data.staticSources;
 
 /**
  * §5 of the filed proposal and docs/izvori.md both point readers at /izvori
@@ -76,7 +91,7 @@ export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): strin
   ${source.module === 'dogadanja' ? renderDogadanjaSources() : ''}
 </article>`,
     )
-    .join('\n')+renderObrada()+renderCitySources();
+    .join('\n')+renderObrada()+renderCitySources()+renderStaticSources();
 }
 /** The ticker's lines are machine-condensed; the page says so, beside the sources they come from. */
 function renderObrada(): string {
@@ -93,4 +108,10 @@ function renderCitySources():string{
     <ul>${rows}</ul>
     <p>Ulične priče prenose objavljene opise, uz naselje. Baština se povezuje preko registarske oznake; geometrija označava obuhvat zaštite, ne ulaz ni pravo pristupa. Nepotvrđene lokacije ostaju u popisu bez oznake na karti.</p>
     <p>Ti izvori isporučuju se aplikaciji kroz javni katalog, bez novog skupa na /open. Navođenje izvora ne dodjeljuje dodatna prava ponovne uporabe; gdje uvjeti nisu navedeni, to ostaje izričito označeno.</p></section>`;
+}
+/** The static datasets (the ODbL street index behind "Adresa ili stajalište"), after the city catalogue. */
+export function renderStaticSources(sources: readonly StaticSourceEntry[] = STATIC_SOURCES): string {
+  const rows = sources.map((s) => `<li id="static-source-${escapeAttribute(s.id)}"><a href="${escapeAttribute(s.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(s.naziv)}</a>: ${escapeHtml(s.licence)} · ${escapeHtml(s.text)}. ${escapeHtml(s.opis)}</li>`).join('\n');
+  return `<section class="izvor-staticni" aria-labelledby="static-sources-title"><h2 id="static-sources-title">Statički skupovi</h2>
+    <ul>${rows}</ul></section>`;
 }

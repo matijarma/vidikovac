@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import izvori from '../../app/src/data/izvori.json';
-import { DOGADANJA_DROPPED, DOGADANJA_SOURCES, OBRADA, renderIzvoriHtml } from '../../app/src/izvori-render';
+import { DOGADANJA_DROPPED, DOGADANJA_SOURCES, OBRADA, STATIC_SOURCES, renderIzvoriHtml, renderStaticSources } from '../../app/src/izvori-render';
 
 const registryMissing = await import('../../worker/feed/registry').then(
   () => false,
@@ -151,5 +151,32 @@ describe('renderIzvoriHtml', () => {
       expect(article, `${dropped.naziv} reason`).toContain(dropped.reason);
       expect(article, `${dropped.naziv} reason mentions robots.txt`).toMatch(/robots\.txt/);
     }
+  });
+});
+
+// WP3 step 2: the street index behind "Adresa ili stajalište" is OpenStreetMap
+// data (ODbL 1.0). It is a static dataset, not a feed module, so the page names
+// it in a section of its own and `sources` stays the nine modules.
+describe('static datasets', () => {
+  it('names the ODbL street index in its own section, not as a tenth source', () => {
+    expect(izvori.sources.length).toBe(9);
+    expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo']);
+    const [streets] = STATIC_SOURCES;
+    expect(streets).toMatchObject({ licence: 'ODbL 1.0', url: 'https://www.openstreetmap.org/copyright', text: '© OpenStreetMap contributors · Protomaps' });
+    const html = renderIzvoriHtml();
+    expect(html).toContain('aria-labelledby="static-sources-title"');
+    expect(html).toContain('id="static-source-streets-geo"');
+    expect(html).toContain('© OpenStreetMap contributors · Protomaps');
+    expect(html).toContain('ODbL 1.0');
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+    const section = html.slice(html.indexOf('static-sources-title'));
+    expect(section).not.toContain('<article');
+  });
+
+  it('escapes the static entries too', () => {
+    const html = renderStaticSources([{ id: 'x"y', naziv: '<b>n</b>', url: 'https://x.test/"a', text: 't & u', licence: 'l', opis: 'o' }]);
+    expect(html).not.toContain('<b>');
+    expect(html).toContain('t &amp; u');
+    expect(html).not.toContain('"a"');
   });
 });
