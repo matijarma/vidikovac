@@ -86,6 +86,29 @@ describe('place and time',()=>{
     expect(eventInWindow({...show('20:00'),at:new Date(at('20:00')+86_400_000).toISOString()},at('14:32'),'tonight')).toBe(false);
     expect(eventInWindow(show('20:00','22:00'),at('22:30'),'tonight')).toBe(false);
     expect(eventInWindow({...show('20:00'),dateBasis:'published'},at('14:32'),'tonight')).toBe(false);
+    // A programme running past midnight is still on: whatever day it began, running now is tonight.
+    const run=(start:string,until:string):FeedItem=>({...event,at:start,until,data:{...event.data,precision:'time'}});
+    const late=run('2026-09-22T21:00:00Z','2026-09-22T23:00:00Z'); // 22 Sep 23:00 → 23 Sep 01:00 Zagreb
+    expect(eventInWindow(late,Date.parse('2026-09-22T22:30:00Z'),'tonight')).toBe(true); // 00:30
+    expect(eventInWindow(late,Date.parse('2026-09-22T21:30:00Z'),'tonight')).toBe(true); // 23:30
+    expect(eventInWindow(late,Date.parse('2026-09-22T23:30:00Z'),'tonight')).toBe(false); // 01:30, over
+    // Spring forward (29 Mar 2026, 02:00 CET → 03:00 CEST): 28 Mar 23:00 CET → 29 Mar 04:00 CEST.
+    const spring=run('2026-03-28T22:00:00Z','2026-03-29T02:00:00Z');
+    expect(eventInWindow(spring,Date.parse('2026-03-29T00:59:00Z'),'tonight')).toBe(true); // 01:59 CET
+    expect(eventInWindow(spring,Date.parse('2026-03-29T01:00:00Z'),'tonight')).toBe(true); // 03:00 CEST, the skipped hour behind it
+    expect(eventInWindow(spring,Date.parse('2026-03-29T02:01:00Z'),'tonight')).toBe(false); // 04:01 CEST, over
+    // Fall back (25 Oct 2026, 03:00 CEST → 02:00 CET): 24 Oct 23:00 CEST → 25 Oct 03:00 CET; 02:30 happens twice.
+    const autumn=run('2026-10-24T21:00:00Z','2026-10-25T02:00:00Z');
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T00:30:00Z'),'tonight')).toBe(true); // 02:30 CEST, the first
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T01:30:00Z'),'tonight')).toBe(true); // 02:30 CET, the repeat
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T02:30:00Z'),'tonight')).toBe(false); // 03:30 CET, over
+    // An upcoming programme is read in Zagreb wall time on both DST days: 17:00 is the evening, 16:00 is not.
+    expect(eventInWindow(run('2026-03-29T15:00:00Z','2026-03-29T17:00:00Z'),Date.parse('2026-03-29T08:00:00Z'),'tonight')).toBe(true); // 17:00 CEST
+    expect(eventInWindow(run('2026-03-29T14:00:00Z','2026-03-29T15:00:00Z'),Date.parse('2026-03-29T08:00:00Z'),'tonight')).toBe(false); // 16:00 CEST
+    expect(eventInWindow(run('2026-10-25T16:00:00Z','2026-10-25T18:00:00Z'),Date.parse('2026-10-25T09:00:00Z'),'tonight')).toBe(true); // 17:00 CET
+    expect(eventInWindow(run('2026-10-25T15:00:00Z','2026-10-25T15:30:00Z'),Date.parse('2026-10-25T09:00:00Z'),'tonight')).toBe(false); // 16:00 CET
+    // Tomorrow's late programme is not tonight's, even a few hours ahead: 23 Sep 17:30 at 22 Sep 23:30.
+    expect(eventInWindow(run('2026-09-23T15:30:00Z','2026-09-23T17:00:00Z'),Date.parse('2026-09-22T21:30:00Z'),'tonight')).toBe(false);
     // The other windows answer as before.
     expect(eventInWindow(show('12:00','13:30'),at('14:32'),'today')).toBe(false);
     expect(eventInWindow(show('16:00','18:00'),at('14:32'),'today')).toBe(true);

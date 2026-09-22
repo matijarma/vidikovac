@@ -71,13 +71,16 @@ export function eventInWindow(item: FeedItem, now: number, window: EventWindow):
   if (!item.at || item.dateBasis !== 'event' || !Number.isFinite(Date.parse(item.at))) return false;
   const start = Date.parse(item.at), end = item.until ? Date.parse(item.until) : start;
   const allDay = item.data?.precision === 'day' || item.data?.precision === 'range';
-  // Tonight is something to go to now or this evening: a timed item that
-  // starts today from TONIGHT_FROM_HOUR, or one already running and not over.
+  // Tonight is something to go to now or this evening: a timed item already
+  // running and not over, whatever day it began on (a 23:00 programme is
+  // still on at 00:30), or one still to start today from TONIGHT_FROM_HOUR.
   // An all-day listing (an exhibition, a festival's date range) is not an
-  // occasion of this evening, and a matinee that has ended is gone.
+  // occasion of this evening, and a matinee that has ended is gone. Both
+  // readings compare instants or Zagreb wall time, so a DST night is no edge.
   if (window === 'tonight') {
-    if (allDay || !Number.isFinite(end) || end < now || dayKey(start) !== dayKey(now)) return false;
-    return zagrebHour(start) >= TONIGHT_FROM_HOUR || (start <= now && now <= end);
+    if (allDay || !Number.isFinite(end) || end < now) return false;
+    if (start <= now) return true;
+    return dayKey(start) === dayKey(now) && zagrebHour(start) >= TONIGHT_FROM_HOUR;
   }
   if (Number.isFinite(end) && end < now && !(allDay && dayKey(end) === dayKey(now))) return false;
   const currentDay = dayKey(now);
