@@ -1,0 +1,10 @@
+// Tests that run inside workerd (vitest project `workers`, *.workers.test.ts):
+// workers-types, the cloudflare:test module and node (nodejs_compat), no lib.dom.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types", "node"]
+  },
+  "include": ["./**/*.workers.test.ts", "./workers-env.d.ts"]
+}

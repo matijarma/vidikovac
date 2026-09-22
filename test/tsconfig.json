@@ -1,9 +1,28 @@
+// Unit tests that run against app code (lib.dom), plus e2e/ and scripts/*.ts.
+// Vitest also reads this file (nearest tsconfig.json) when it transpiles any
+// test file, so `target` must stay ES2022.
+// Unit tests of worker code are in tsconfig.unit-worker.json, tests that need
+// both sides in tsconfig.unit-mixed.json, workerd tests in tsconfig.workers.json.
+// scripts/typecheck-tests.mjs runs all four and checks that every test file
+// belongs to exactly one of them.
 {
-  "extends": "../worker/tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
-    "resolveJsonModule": true
+    "types": ["node"]
   },
-  "include": ["./**/*.ts", "../worker/**/*.ts", "../app/src/**/*.ts", "../shared/**/*.ts"]
+  "include": ["./**/*.ts", "../e2e/**/*.ts", "../scripts/**/*.ts", "../app/src/vite-env.d.ts"],
+  "exclude": [
+    "./**/*.workers.test.ts",
+    "./workers-env.d.ts",
+    "./feed/**",
+    "./open/**",
+    "./pairing/**",
+    "./smoke/**",
+    "./twin/**",
+    "./docs/prijava.test.ts",
+    "./e2e/local-network.test.ts",
+    "./city/city.test.ts",
+    "./city/reliability.test.ts"
+  ]
 }

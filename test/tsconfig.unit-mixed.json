@@ -1,0 +1,13 @@
+// Unit tests that import app modules (lib.dom) and worker modules that name
+// workers-types bindings (worker/env.ts), so they need both libraries. This is
+// safe only while their imports stay clear of the two overlaps (Element.append
+// on DOM nodes, caches.default); if tsc reports `HTMLElement` not assignable to
+// `ParentNode` or `CacheStorage.default` here, move the test to one side.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["./city/city.test.ts", "./city/reliability.test.ts", "../app/src/vite-env.d.ts"]
+}

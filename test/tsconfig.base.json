@@ -1,0 +1,19 @@
+// Shared compiler options of the four test programs (scripts/typecheck-tests.mjs).
+// Each program adds its own `lib` and `types`: lib.dom and @cloudflare/workers-types
+// both declare globals such as Element, CacheStorage and Response, so a program
+// that loads both mistypes DOM code (HTMLElement is no longer a ParentNode) and
+// worker code (caches.default disappears). Only test/tsconfig.unit-mixed.json
+// loads both, for the few tests that need both and touch neither overlap.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    // Tests import build scripts written as .mjs; their types are inferred, not checked.
+    "allowJs": true
+  }
+}

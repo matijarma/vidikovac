@@ -1,0 +1,20 @@
+// Unit tests (vitest project `unit`, node) of worker code: @cloudflare/workers-types
+// and node, no lib.dom. Keep this list and the exclude list of tsconfig.json in step;
+// scripts/typecheck-tests.mjs fails when a test file is in neither or in both.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": [
+    "./feed/**/*.test.ts",
+    "./open/**/*.test.ts",
+    "./pairing/**/*.test.ts",
+    "./smoke/**/*.test.ts",
+    "./twin/**/*.test.ts",
+    "./docs/prijava.test.ts",
+    "./e2e/local-network.test.ts"
+  ],
+  "exclude": ["./**/*.workers.test.ts"]
+}
