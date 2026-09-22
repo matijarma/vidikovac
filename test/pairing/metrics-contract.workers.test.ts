@@ -68,7 +68,7 @@ describe('metrics contract (R-14, R-29, R-42, R-44)', () => {
 
   it('drops events outside SERVER_EVENTS and CLIENT_EVENTS and keeps EXPORT_KINDS in protocol.ts', async () => {
     const id = env.METRICS_DO.idFromName(METRICS_DO_NAME);
-    await runInDurableObject(env.METRICS_DO.get(id), async (instance: MetricsDO) => {
+    await runInDurableObject(env.METRICS_DO.get(id) as unknown as DurableObjectStub<MetricsDO>, async (instance: MetricsDO) => {
       await instance.record('not_an_event', 'x', 'y');
       const rows = await instance.query('2000-01-01');
       expect(rows.some((r) => r.event === 'not_an_event')).toBe(false);

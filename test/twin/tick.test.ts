@@ -3,7 +3,7 @@ import { toLonLat, toPlane } from '../../shared/motion/geo';
 import { HEADWAY_M } from '../../shared/motion/order';
 import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
-import { isFreeMotion, isPathMotion } from '../../shared/motion/wire';
+import { isFreeMotion, isPathMotion, type PathMotion } from '../../shared/motion/wire';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import { createEngine } from '../../worker/twin/engine';
 import { emptyState, type TwinState } from '../../worker/twin/state';
@@ -62,7 +62,7 @@ describe('runTick on the corridor', () => {
         const pathIdx = net.paths.findIndex((p) => p.id === motion.path);
         expect(pathIdx).toBeGreaterThanOrEqual(0);
         for (let i = 1; i < motion.plan.length; i++) expect(motion.plan[i][1]).toBeGreaterThanOrEqual(motion.plan[i - 1][1] - 1e-6);
-        const [lon, lat] = toLonLat(net.toPathPoint(pathIdx, evalPathPlan(motion.plan, 0)));
+        const [lon, lat] = toLonLat(net.toPathPoint(pathIdx, evalPathPlan(motion.plan as [number, number][], 0)));
         expect(pin.geo?.coordinates[0]).toBeCloseTo(lon, 5);
         expect(pin.geo?.coordinates[1]).toBeCloseTo(lat, 5);
         expect(pin.data).toMatchObject({ direction: expect.any(Number), headsign: expect.stringContaining('Kraj'), shapeId: motion.path });
@@ -78,8 +78,8 @@ describe('runTick on the corridor', () => {
           const a = tramById.get(pins[i].id.slice('vehicle:'.length))!.truth(frame.headerSec);
           const b = tramById.get(pins[j].id.slice('vehicle:'.length))!.truth(frame.headerSec);
           if (!a.started || !b.started || a.s >= 1500 || b.s >= 1500 || Math.abs(a.s - b.s) <= HEADWAY_M) continue;
-          const pa = evalPathPlan((pins[i].motion as { plan: [number, number][] }).plan, 0);
-          const pb = evalPathPlan((pins[j].motion as { plan: [number, number][] }).plan, 0);
+          const pa = evalPathPlan((pins[i].motion as PathMotion).plan as [number, number][], 0);
+          const pb = evalPathPlan((pins[j].motion as PathMotion).plan as [number, number][], 0);
           orderChecks++;
           expect(Math.sign(pa - pb), `frame ${k}: ${pins[i].id} vs ${pins[j].id}`).toBe(Math.sign(a.s - b.s));
         }
@@ -182,7 +182,7 @@ describe('runTick on the corridor', () => {
     const bus = result.payload.items.find((item) => item.id === 'vehicle:bus1')!;
     expect(bus.motion && isPathMotion(bus.motion) && bus.motion.path).toBe('B109');
     const shape = net.shapes[net.shapes.findIndex((s) => s.id === 'B109')];
-    const busPlan = (bus.motion as { plan: [number, number][] }).plan;
+    const busPlan = (bus.motion as PathMotion).plan as [number, number][];
     const [blon, blat] = toLonLat(at(shape.pts, shape.cum, evalPathPlan(busPlan, 0)));
     expect(bus.geo?.coordinates[0]).toBeCloseTo(blon, 5);
     expect(bus.geo?.coordinates[1]).toBeCloseTo(blat, 5);

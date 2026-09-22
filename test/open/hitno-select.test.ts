@@ -191,7 +191,7 @@ describe('selectHitno', () => {
     },
   );
 
-  it.each([undefined, {}, { 'gradske-cetvrti': { status: 'live' as const, itemCount: 17 } }])(
+  it.each<ModuleSnapshot['sources']>([undefined, {}, { 'gradske-cetvrti': { status: 'live' as const, itemCount: 17 } }])(
     'does not infer assembly health from a legacy snapshot or unrelated sources: %s',
     (sources) => {
       const ckan = { ...snapshot('ckan-geo', []), sources };
