@@ -1,0 +1,21 @@
+{
+  "about": "Data for test/accept/wrong-turn.test.ts, never tuned to pass: the rows scripts/grade-branches-core.ts measured on the committed sample at two commits. The test asserts the targets and the two preconditions; it only prints these rows beside what it measures now.",
+  "fixture": "test/fixtures/frames/2026-09-21-1715-1744",
+  "frames": 162,
+  "artefact": { "feed": "000395", "graphHash": "d421e3a1f7b23b4f" },
+  "targets": "stage1",
+  "baseline": {
+    "commit": "b300af3",
+    "engine": "before WP0, the tree the brief's baselines were measured on",
+    "graphHash": "d421e3a1f7b23b4f",
+    "unknownTripShare": 0.001133,
+    "rows": { "A": 75.3, "Aprime": 43.9, "B": 15, "C_vh": 2.8, "C_fixes": 420, "D": 9, "E": 2, "F": 4, "G": 36, "G_p95": 545, "H": 392, "S_count": 327, "S_max": 1020.3, "S_pastNextStop": 7, "I": 15 }
+  },
+  "measured": {
+    "commit": "38a65f3",
+    "engine": "WP0 lane T merged, the D1 acceptance run",
+    "graphHash": "3b9fbb7ccba66ad6",
+    "unknownTripShare": 0.000694,
+    "rows": { "A": 10.67, "Aprime": 22, "B": 0, "C_vh": 0, "C_fixes": 0, "D": 0, "E": 1, "F": 0, "G": 36, "G_p95": 215.2, "H": 242, "S_count": 327, "S_max": 540.1, "S_pastNextStop": 1, "I": 0 }
+  }
+}
