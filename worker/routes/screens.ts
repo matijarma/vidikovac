@@ -8,13 +8,27 @@ import { clientIp } from '../http';
 import { addressPrefix } from '../pairing/netkey';
 import { hexEncode, hmacSha256, requireSecret } from '../pairing/tokens';
 import { provisionScreen } from '../pairing/provision';
+import { parseFrame, parsePlaceInput, resolvePlace } from '../pairing/place';
 import { screenStop } from '../pairing/stops';
 import { areaName, CITY_AREA } from '../pairing/areas';
+import { districtOf } from '../feed/geo/districts';
+import { DEFAULT_FRAME_STOPS } from '../../shared/city/frame';
 import { areaSlugOf } from './admin';
 import { isSameOrigin, readCappedBody } from './pairing';
 import { logError } from '../log';
 
 export const TEMPORARY_SCREEN_MS = 24 * 60 * 60_000;
+/** BeaconDO's operator-label bound (OPERATOR_LABEL_MAX there). */
+const LABEL_MAX = 80;
+
+/** The default operator label, shortened with an ellipsis when a long street name would pass the bound. */
+function defaultLabel(name: string): string {
+  const label = `Kaj ima? · ${name}`;
+  if (label.length <= LABEL_MAX) return label;
+  let cut = label.slice(0, LABEL_MAX - 1);
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}…`;
+}
 
 /**
  * The quota key for a caller without an Access identity: the network the request
@@ -50,14 +64,28 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     let body: Record<string, unknown>;
     try { body = JSON.parse(raw ?? '') as Record<string, unknown>; } catch { return json({ error: 'bad-request' }, 400); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'bad-request' }, 400);
-    // One button and an empty body is the ordinary way in (WP4): the whole
-    // city, no stop. Both stay optional, and the screen's own settings panel
-    // changes them later over the beacon socket ('screen-set').
-    const area = areaSlugOf(body.area ?? CITY_AREA.slug);
-    const stopId = typeof body.stopId === 'string' ? body.stopId : null;
+    // An empty body is the ordinary way in (the field left empty): the whole
+    // city, no stop, no place stored; the read path names Trg bana Jelačića
+    // with placeSet false. `{ place, frame? }` is the one field "Adresa ili
+    // stajalište" (place-v2): a stop by its id (name and point from the
+    // server's own table) or an address point inside Zagreb; the area then
+    // follows from the place. The legacy `{ area?, stopId? }` body stays
+    // accepted. The screen's own settings panel changes all of it later over
+    // the beacon socket ('screen-set').
+    const hasPlace = body.place !== undefined && body.place !== null;
+    const placeInput = hasPlace ? parsePlaceInput(body.place) : null;
+    const place = placeInput ? resolvePlace(placeInput) : null;
+    if (hasPlace && !place) return json({ error: 'bad-request', field: 'place' }, 400);
+    // One way to say where the screen is: a place, or the legacy stop, never both.
+    if (hasPlace && body.stopId !== undefined) return json({ error: 'bad-request', field: 'stopId' }, 400);
+    const frame = body.frame === undefined ? DEFAULT_FRAME_STOPS : parseFrame(body.frame);
+    if (frame === null) return json({ error: 'bad-request', field: 'frame' }, 400);
+    const placeArea = place ? (districtOf(place.lon, place.lat) ?? CITY_AREA.slug) : CITY_AREA.slug;
+    const area = areaSlugOf(body.area ?? placeArea);
+    const stopId = place ? (place.stopId ?? null) : typeof body.stopId === 'string' ? body.stopId : null;
     const stop = stopId === null ? null : screenStop(stopId);
     if (!area || (stopId !== null && !stop)) return json({ error: 'bad-request', field: !area ? 'area' : 'stopId' }, 400);
-    const label = typeof body.operatorLabel === 'string' ? body.operatorLabel.trim() : `Kaj ima? · ${stop ? stop.name : areaName(area)}`;
+    const label = typeof body.operatorLabel === 'string' ? body.operatorLabel.trim() : defaultLabel(place ? place.name : stop ? stop.name : areaName(area));
     if (!label || label.length > 80) return json({ error: 'bad-request', field: 'operatorLabel' }, 400);
     const quota = await indexStub(env).reserveScreen(principal);
     if (!quota.allowed) return json({ error: 'screen-limit', retryAfter: quota.retryAfter }, 429, { 'retry-after': String(quota.retryAfter) });
@@ -65,6 +93,8 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     const result = await provisionScreen(env, {
       venueType: 'ostalo', area, operatorLabel: label, stopId,
       kind: 'temporary', expiresAt: Date.now() + TEMPORARY_SCREEN_MS,
+      // Without a place the stop (if any) is the place, derived in provisionScreen.
+      ...(place ? { place } : {}), frame,
     }, url.origin);
     return json(result, 201, { 'cache-control': 'no-store' });
   } catch (error) {
