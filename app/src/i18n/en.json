@@ -989,6 +989,17 @@
       "sjednica-skupstine": "Assembly session",
       "sjednica-odbora": "committee session"
     },
+    "nearby": {
+      "title": "Nearby",
+      "pill": "{km} km · ~{min} min",
+      "always": "always",
+      "until": "until",
+      "sunrise": "Sunrise",
+      "sunset": "Sunset",
+      "lastTrams": "Last trams",
+      "firstTram": "First tram",
+      "outageNote": "ZET is not sending vehicle positions right now; departures follow the timetable."
+    },
     "paired": {
       "warnings": "DHMZ warnings",
       "closures": "Road closures",
