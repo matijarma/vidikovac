@@ -91,8 +91,9 @@ Portrait puts the map above conditions, highlight and invitation, allocating
 space to legible content and the 240px QR before the map. Handheld `/kiosk/`
 puts setup/code information first and uses handheld symbols in its compact
 preview. Short opacity transitions only; pause/resume and reduced motion
-preserve useful information. The settings body scrolls independently of its
-header, errors and save action, preserving a closed unsaved draft.
+preserve useful information. The settings panel is a column of
+click-toggles, each naming its current state and changing it at once; there
+is no draft and no save action (22 September 2026).
 
 The earlier public-screen description is retained as implementation history;
 its references to touch discovery, the header ticker and separate events and
@@ -126,13 +127,18 @@ single sentence; the original title is the fallback and stays on the phone.
 Keep location/date/time in the header and safety/on-duty pharmacy in the
 footer. The QR stays at least 240 CSS pixels at the design display sizes, with
 the code under the text at a fixed size, never stretched across a column.
-Starting a screen is one button and no configuration; area, stop, theme and
-expiry belong to an on-screen settings panel, not a setup wizard and not a
-screen full of large district pills. A refused or rate-dropped save is stated
-in the panel, never swallowed.
+Starting a screen is one optional field, "Adresa ili stajalište", a line
+under it saying what the screen will show, and "Pokreni"; place, frame, view,
+theme, rhythm and expiry belong to an on-screen settings panel opened by a long
+press on the brand, not a setup wizard, not a gear or theme glyph in the header
+and not a screen full of large district pills. A refused or rate-dropped change
+is stated in the panel, never swallowed, and the toggles return to what the
+server holds.
 
 The map is a meaningful geographic view, not a background beneath a route
-board. Configured area or stop, and public selections, determine framing. Do
+board. The screen's place and frame (Kadar: 4, 6 or 8 stops around it,
+measured per place), and public selections, determine framing; without a
+chosen place the whole-city window stays. Do
 not force every vehicle number to overlap at terminals: retain dots and
 collision-aware labels. Stops stay tap-able at city zoom, with a hit tolerance
 sized for a finger on a wall, and a tapped stop leads with its arrivals. A

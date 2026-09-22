@@ -16,8 +16,7 @@ traci vijesti u zaglavlju i zasebnim karticama događanja i iznimaka:
   Telefon na `/kiosk/` dobiva upute za postavljanje, kod i mali pregled.
 - Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija pauzira
   ambijentalnu izmjenu; potvrda preuzimanja i potvrda iscrtavanja ostaju.
-- Postavke pamte nespremljeni unos; tijelo se pomiče unutar ograničene
-  ploče, odvojeno od gumba za spremanje i poruke pogreške.
+- Postavke su prekidači: svaki klik odmah mijenja stanje; jedan okvir prema poslužitelju najviše svakih pet sekundi.
 
 Provedba i rezultati provjere: `docs/readable-city-2026-09-20.md`.
 Snimka preglednika nije dokaz čitljivosti stvarnog zida ili skeniranja s
@@ -33,33 +32,84 @@ rute `/api/admin/*` i `/stats`.
 
 1. Na računalu ili zaslonu otvoriti https://zagreb.aningfilm.hr i na početnoj
    stranici odabrati „Otvori gradski zaslon” (stranica `/kiosk/`).
-2. Pritisnuti **Pokreni zaslon**. To je cijelo postavljanje: nema gradske
-   četvrti, nema stajališta i nema parametara u adresi. `POST /api/screens` s
-   praznim tijelom vraća redovnu postavu zaslona koja vrijedi 24 sata i
-   pokazuje cijeli grad (područje `zagreb`, bez stajališta). Postava sama ne
+2. U polje **Adresa ili stajalište** upisati ulicu ili ime stajališta, ili
+   polje ostaviti prazno. Već nakon dva slova polje predlaže tramvajska i
+   autobusna stajališta te ulice; duga ulica nudi se po dijelovima, uz
+   stajališta na njoj. Upisani kućni broj ostaje zapisan kao tekst, jer
+   izvanmrežni popis ulica (`/data/streets-geo.json`, podaci OpenStreetMap,
+   licenca ODbL 1.0) nema kućnih brojeva. Odabrano stajalište postaje mjesto
+   zaslona. Kad je odabrana ulica, mjesto postaje najbliže tramvajsko
+   stajalište unutar 400 m, inače najbliže autobusno stajalište unutar
+   300 m, inače sama adresa. Redak ispod polja kaže što će zaslon prikazati:
+   za odabrano mjesto „Na zaslonu: Kvaternikov trg i 6 stajališta uokolo”,
+   a za prazno polje „Na zaslonu: cijeli grad.” Upisani tekst koji nije
+   odabran među prijedlozima vrijedi samo kad je točno ime stajališta ili
+   jedne ulice; inače polje javlja da takvog stajališta ni ulice nema i
+   zaslon se ne stvara. Zatim pritisnuti **Pokreni**.
+
+   S praznim poljem zaslon šalje `POST /api/screens` s praznim tijelom, kao
+   i dosad, i dobiva redovnu postavu zaslona koja vrijedi 24 sata: prozor
+   cijeloga grada, bez stajališta, a za popis i polaske mjesto je
+   Trg bana J. Jelačića. S odabranim mjestom šalje `{ place, frame }`
+   (stajalište kao `stopId`, adresa kao točka unutar Zagreba, kadar 6). Ime
+   i točku stajališta poslužitelj uzima iz vlastite tablice, a područje
+   (`area`, za statistiku) izvodi iz mjesta, inače `zagreb`. Postava sama ne
    daje otključanu sesiju.
-3. Područje i stajalište biraju se poslije, na samom zaslonu: zupčanik u
-   zaglavlju otvara **Postavke** (zatvara se tipkom Esc, gumbom ili nakon 90
-   sekundi bez dodira). Četiri odjeljka: *Područje* (Cijeli grad ili jedna od
-   17 gradskih četvrti), *Stajalište* (pretraga po imenu ili „Bez
-   stajališta”), *Tema* i *Zaslon* (do kada vrijedi i „Zaboravi zaslon” s
-   potvrdom). **Spremi** šalje jednu poruku `screen-set` preko postojeće veze
-   zaslona; Durable Object provjerava stajalište i područje, pamti ih i
-   odgovara redovnim okvirom s kodovima, koji zaslon ponovno kadrira. Ploča
-   prekriva pozornicu dok je otvorena, pa karta pod njom nema svoje kutije:
-   zato se karta pri zatvaranju najprije ponovno izmjeri, a tek onda pomakne
-   kameru -- bez toga je spremljeno stajalište sletjelo otprilike trećinu
-   kadra gore lijevo umjesto u sredinu. Ploča
-   čeka taj odgovor: zatvara se kad stigne, a odbijenicu ili prebrzo ponovno
-   spremanje kaže rečenicom i ostaje otvorena. Ako odgovor ne stigne u osam
-   sekundi, gumb se vraća uz istu obavijest; odgovor koji ipak stigne poslije
-   svejedno ponovno kadrira zaslon. Postavke se ne otvaraju dok traje
-   otključana sesija.
-   Odabir kadrira i kartu pozivnice: *Cijeli grad* (područje `zagreb`, kao i
-   zaslon bez ijednog područja) otvara prozor cijeloga grada, jedna gradska
-   četvrt sjeda na svoje sjedište dok joj ne stigne obris, a odabrano
-   stajalište nadjačava oboje i drži svoj ulični kadar. Zaglavlje čita isti
-   odgovor: naziv stajališta, inače naziv četvrti, a za cijeli grad ništa.
+3. Sve ostalo mijenja se poslije, na samom zaslonu. Dugi pritisak (0,8 s) na
+   natpis „Kaj ima?” u zaglavlju otvara **Postavke**; s tipkovnice isto čini
+   Enter ili razmaknica na tom natpisu. Kratak dodir i prst koji se pomakne
+   za više od 12 piksela ne otvaraju ništa, a zaglavlje nema ni zupčanika ni
+   gumba teme. Ploča se zatvara tipkom Esc, gumbom ili nakon 90 sekundi bez
+   dodira i ne otvara se dok traje otključana sesija.
+
+   Redovi su *Mjesto* (**Promijeni** otvara isto polje
+   „Adresa ili stajalište” i gumb **Cijeli grad** za povratak na prozor
+   cijeloga grada), *Kadar* („Kadar: 6 stajališta odavde”, redom 4, 6 i 8),
+   *Prikaz* („Prikaz: karta” ili „Prikaz: shema”), *Tema*, *Ritam*
+   („Ritam: 20 s”, redom 20, 30 i 60 s) i *Zaslon* (do kada vrijedi i
+   „Zaboravi zaslon” s potvrdom). Kadar, Prikaz, Tema i Ritam imaju po jedan
+   gumb koji kaže trenutačno stanje i klikom prelazi na sljedeće; gumba za
+   spremanje nema. Prikaz, Tema i Ritam primjenjuju se odmah i ostaju u
+   pregledniku zaslona (`vidikovac-kiosk-view`, `vidikovac-kiosk-rhythm` i
+   postavka teme); poslužitelju se ne šalju.
+
+   Mjesto i Kadar pripadaju postavi. Nakon posljednjeg klika zaslon čeka
+   0,8 s i šalje jednu poruku `screen-set` verzije 2 (`place`, `frame`)
+   preko postojeće veze zaslona, pa tri brza klika postaju jedna poruka s
+   posljednjim stanjem. Sljedeća poruka ide tek pet sekundi nakon
+   posljednjeg odgovora poslužitelja, a stanje koje poslužitelj već drži ne
+   šalje se. Durable Object provjerava mjesto i kadar, iz mjesta izvodi
+   područje, pamti sve troje i odgovara redovnim okvirom s kodovima svim
+   otvorenim vezama zaslona. Tek taj odgovor ponovno kadrira kartu i
+   mijenja zaglavlje; ploča pritom ostaje otvorena. Dok je ploča otvorena,
+   prekriva pozornicu, pa karta pod pločom nema svoje kutije; zato se
+   kamera ne pomiče dok ploča ne bude zatvorena, a pri zatvaranju karta se
+   najprije ponovno izmjeri pa tek onda pomakne kameru. Bez toga je novo
+   stajalište sletjelo otprilike trećinu kadra gore lijevo umjesto u
+   sredinu.
+
+   Za odbijenicu (`bad-place`, `bad-frame`) ploča piše
+   „Poslužitelj nije prihvatio mjesto. Odaberi ponovno.” Za prebrzu
+   promjenu (`screen-set-rate`) piše
+   „Pričekaj koji trenutak pa odaberi ponovno.” Kad odgovor ne stigne u
+   osam sekundi, ploča kaže da promjena nije poslana. U sva tri slučaja
+   prekidači se vraćaju na stanje koje drži poslužitelj i ništa se ne šalje
+   ponovno samo od sebe; odgovor koji ipak stigne poslije svejedno ponovno
+   kadrira zaslon. Poruku `screen-set` verzije 1 (`stopId`, `area`) Durable
+   Object i dalje prima, za zaslone na kojima je otvorena starija inačica
+   aplikacije; uz takvu poruku kadar ostaje kakav je bio, a mjesto se izvodi
+   iz stajališta.
+
+   Mjesto kadrira i kartu pozivnice. Odabrano mjesto sjeda u sredinu, a
+   polumjer kadra je zračna udaljenost do četvrtog, šestog ili osmog
+   najbližeg tramvajskog stajališta oko mjesta (prema Kadru; peroni istog
+   imena broje se jednom, a stajalište koje je samo mjesto ne broji se),
+   izmjerena za svako mjesto posebno i uvijek između 500 m i 3 km. Gdje u
+   krugu od 3 km nema tramvajskog stajališta, broje se autobusna. Zaslon
+   bez odabranog mjesta (prazno polje ili **Cijeli grad**) drži prozor
+   cijeloga grada. Zaglavlje čita isti odgovor i uvijek imenuje mjesto:
+   stajalište ili ulicu, a za zaslon bez odabranog mjesta
+   Trg bana J. Jelačića.
 4. Telefonom skenirati aktualni QR ili utipkati kod na `/s/`. Uspješna
    provjera izravno otvara desetominutni pogled, bez drugog gumba „Otključaj”.
 5. Zaslon nastavlja prikazivati pregled grada. Telefon pregledava privatno.
@@ -101,8 +151,8 @@ kamera na zumu 14 ili bliže; tristo kapsula nad cijelim gradom zakrilo bi
 tramvaje o kojima slika govori. Brojevi vozila prorjeđuju se pri
 preklapanju, a položaji ostaju označeni točkama.
 
-Postavljeno stajalište nadjačava prozor i drži svoj ulični kadar;
-postavljena gradska četvrt sjeda na svoj obris. Stajališta ostaju
+Odabrano mjesto nadjačava prozor kadrom od 4, 6 ili 8 stajališta (Kadar);
+gradska četvrt više se ne bira. Stajališta ostaju
 dodirljivi prstenovi i na gradskom kadru, uz toleranciju dodira od 28 CSS
 piksela, jer prst na zidu nije miš na stolu. Dodir na stajalište otvara
 istraživanje grada, s imenima, i prvo kaže koji tramvaji i autobusi dolaze
@@ -154,8 +204,8 @@ je kamera u kvartu, a na prozoru cijeloga grada puni naziv nosi sigurnosna
 traka.
 
 Radovi u tijeku broje se za cijeli grad i ploča to kaže izričito
-(„Radovi u gradu”); ni postavljena gradska četvrt ne sužava taj broj, ona
-kadrira samo kartu.
+(„Radovi u gradu”); ni odabrano mjesto ne sužava taj broj, nego kadrira
+samo kartu.
 Adresa `/kiosk/` više ne prima dodatak `?prizor=`: nema više odabira
 prizora jer postoji samo jedan. Aplikacija i dalje poštuje sustavnu
 postavku smanjenog pokreta preglednika, ali sada zaustavlja samo glatki
@@ -282,9 +332,9 @@ polje i ploče naslovnice: `prikaz` bira samo renderer, a umirovljeni `prizor`
 ne vraća rotaciju poglavlja.
 
 Zaslon sa stajalištem koje postoji na shemi pokazuje čitljiv kadar oko njega,
-s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta -- a to je zadano
-stanje otkad se zaslon pokreće jednim gumbom -- pokazuje cijelu mrežu bez
-sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
+s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta, a tako je na
+zaslonu pokrenutom s praznim poljem ili s adresom kao mjestom, pokazuje
+cijelu mrežu bez sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
 geografsku kameru. Ploče ne prekrivaju polje pa nema donje tračnice ni
 dodatnog odmaka kadra.
 Prikazuje samo tramvaje čija se postojeća staza može smjestiti na nacrt.
@@ -328,10 +378,10 @@ bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
 
 | Simptom | Provjera i postupak |
 |---|---|
-| Pojavljuje se početni zaslon | Nema valjane lokalne postave; pritisnuti **Pokreni zaslon**. Područje i stajalište nisu potrebni. |
+| Pojavljuje se početni zaslon | Nema valjane lokalne postave; upisati adresu ili stajalište, ili polje ostaviti prazno za cijeli grad, pa pritisnuti **Pokreni**. |
 | Stvaranje je odbijeno | Kod 429 znači dosegnuto ograničenje po mreži ili ukupno; slijediti navedeno vrijeme ponovnog pokušaja. Kod 403 znači zahtjev s druge domene. |
-| Treba promijeniti područje ili stajalište | Zupčanik u zaglavlju otvara **Postavke**. Postavke se ne otvaraju dok traje otključana sesija; pričekati njezin istek ili je zaustaviti. |
-| Spremanje u Postavkama ne uspijeva | Ploča ostaje otvorena i kaže razlog. Odbijenica znači da Durable Object nije prihvatio stajalište ili područje; poruka o prebrzom spremanju znači više od jedne promjene u pet sekundi, pa pričekati i pokušati ponovno. Ako odgovor ne stigne u osam sekundi, gumb se vraća; odgovor koji ipak stigne poslije svejedno ponovno kadrira zaslon. |
+| Treba promijeniti mjesto ili kadar | Dugi pritisak (0,8 s) na „Kaj ima?” u zaglavlju otvara **Postavke**. Postavke se ne otvaraju dok traje otključana sesija; pričekati da sesija istekne ili zaustaviti sesiju. |
+| Promjena u Postavkama ne uspijeva | Ploča ostaje otvorena, kaže razlog i vraća prekidače na stanje koje drži poslužitelj. Odbijenica (`bad-place`, `bad-frame`) znači da Durable Object nije prihvatio mjesto ili kadar. Poruka o prebrzoj promjeni (`screen-set-rate`) znači da je od prethodne prihvaćene promjene prošlo manje od pet sekundi, pa pričekati i odabrati ponovno. Ako odgovor ne stigne u osam sekundi, ploča kaže da promjena nije poslana; odgovor koji ipak stigne poslije svejedno ponovno kadrira zaslon. |
 | Postava je istekla ili opozvana | Pokrenuti novu postavu izričito. Ne ponavljati automatski stvaranje. |
 | Kod je istekao ili iskorišten | Upisati novi aktualni kod; provjeriti automatsko podešavanje sata uređaja. |
 | Telefon ne završava povezivanje | Nakon kratkih ponovnih pokušaja sučelje nudi novi ulazak; upotrijebiti svježi kod. |
