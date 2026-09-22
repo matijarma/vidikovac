@@ -1195,5 +1195,8 @@
       "W": "zapad",
       "NW": "sjeverozapad"
     }
+  },
+  "sada": {
+    "departuresAt": "Sljedeći polasci, {stop}"
   }
 }

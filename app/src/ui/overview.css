@@ -65,10 +65,20 @@
   .day-overview { gap: var(--sp-6); }
   .day-facts .tl { padding: var(--sp-4) var(--sp-5); }
 }
-.day-departures{padding-block:var(--sp-3);margin-bottom:var(--sp-3);border-bottom:1px solid var(--tone-stroke)}
-.day-departure{display:grid;grid-template-columns:2rem minmax(0,1fr) auto;align-items:baseline;gap:var(--sp-2);padding-block:var(--sp-2)}
-.day-departure small{display:block;font-size:var(--type-meta);color:var(--tone-text-muted)}
-.day-stop-prompt{padding-block:var(--sp-3);max-width:45ch;font-size:var(--type-control)}
+/* The departures block (city/next-departures.ts) and the stop sheet's rows
+   (transport/view.ts departureRow): badge, destination, time. A tracked time
+   is blue with its dot, a timetable time a grey tabular clock [O-27]; an
+   empty block keeps one row of the same height. */
+.sada-departures { padding-block: var(--sp-2); }
+.sada-departures-title { font-size: var(--type-head); margin-bottom: var(--sp-1); }
+.sada-departure-list { list-style: none; margin: 0; padding: 0; }
+.sada-departure, .sada-departure-empty { min-block-size: 3.5rem; border-block-end: 1px solid var(--tone-stroke); }
+.sada-departure { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); }
+.sada-dest { min-width: 0; font-size: var(--type-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.sada-departure .t-eta[data-live] { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
+.sada-departure .t-eta:not([data-live]) time { color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sada-departure-empty { display: flex; align-items: center; color: var(--tone-text-muted); font-size: var(--type-control); }
+.sada-departure-empty .skeleton { min-block-size: 2rem; }
 @media (max-width: 23rem) {
   .day-title, .day-weather-now strong { font-size: var(--type-title); }
   .day-weather-now > .icon { width: 1.5rem; height: 1.5rem; }

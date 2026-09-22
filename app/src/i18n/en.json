@@ -1158,5 +1158,8 @@
       "W": "west",
       "NW": "north-west"
     }
+  },
+  "sada": {
+    "departuresAt": "Next departures, {stop}"
   }
 }
