@@ -20,6 +20,9 @@ export interface BeaconCredentials {
 
 export type BeaconStatus = 'idle' | 'connecting' | 'live' | 'offline' | 'revoked' | 'replaced';
 
+/** What the settings panel sends (screen-set version 2): the place, null for the whole city, and the frame. */
+export type ScreenSetInput = Omit<Extract<BeaconClientMessage, { t: 'screen-set'; version: 2 }>, 't' | 'version'>;
+
 /** '#BEACON01.s3cr3t' from the one-time provisioning URL. */
 export function parseProvisionHash(hash: string): BeaconCredentials | null {
   const raw = decodeURIComponent(hash.replace(/^#/, '')).trim();
@@ -64,7 +67,7 @@ export interface BeaconClientDeps {
   onRevoked: () => void;
   onStatus: (status: BeaconStatus) => void;
   onContext?: (screen: ScreenMetadata) => void;
-  /** The DO refused a frame this client sent (its `error` word, e.g. 'bad-stop'). */
+  /** The DO refused a frame this client sent (its `error` word, e.g. 'bad-place'). */
   onError?: (error: string) => void;
   presentationVersion?: 1;
   capabilities?: string[];
@@ -79,10 +82,14 @@ export interface BeaconClient {
   close(): void;
   acknowledgePresentation(revision: number, status: 'displayed' | 'unavailable'): void;
   stopPresentation(revision: number): void;
-  /** The settings panel's one frame: what this screen frames from now on. The
-   *  DO validates both, stores them and answers with a `codes` frame carrying
-   *  the new screen, which reaches onContext like any other. */
-  setScreen(stopId: string | null, area: string): void;
+  /** The settings panel's one frame: the place this screen is about (a stop
+   *  by its id, an address with its point, or null for the whole city) and its
+   *  frame, as screen-set version 2. The DO validates both, stores them and
+   *  answers with a `codes` frame carrying the new screen, which reaches
+   *  onContext like any other; a refusal reaches onError. Version 1 stays on
+   *  the wire for kiosk bundles from before place-v2; this client never sends
+   *  it. */
+  setScreen(input: ScreenSetInput): void;
 }
 
 export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
@@ -194,8 +201,8 @@ export function createBeaconClient(deps: BeaconClientDeps): BeaconClient {
     stopPresentation(revision) {
       send({ t: 'presentation-stop', version: 1, revision });
     },
-    setScreen(stopId, area) {
-      send({ t: 'screen-set', version: 1, stopId, area });
+    setScreen(input) {
+      send({ t: 'screen-set', version: 2, place: input.place, frame: input.frame });
     },
     status: () => status,
     close() {
