@@ -317,7 +317,7 @@ export interface ReplayReport {
 /** The static join per trip id, from the trip index alone (no SQLite
  *  fallback: a one-shot replay never restarts mid-run the way the Durable
  *  Object does, worker/do/twin-do.ts's `joinsFor`). */
-function joinsFor(index: TripIndex, tripIds: Iterable<string>, patternPathIds: readonly (string | null)[] = []): Map<string, TripJoin> {
+export function joinsFor(index: TripIndex, tripIds: Iterable<string>, patternPathIds: readonly (string | null)[] = []): Map<string, TripJoin> {
   const out = new Map<string, TripJoin>();
   for (const id of tripIds) {
     const record = index.tripsById.get(id);
