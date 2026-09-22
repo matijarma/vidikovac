@@ -53,10 +53,13 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   host.appendChild(element);
   const geography=element.querySelector<HTMLElement>('.k-geography')!;
   const field=mountField(geography,{lightweight});
-  const legend=document.createElement('p');
-  legend.className='k-map-legend';
-  legend.innerHTML=`<span><b class="k-legend-tram">6</b> ${en?'Tram route':'Tramvajska linija'}</span><span><b class="k-legend-bike">●</b> BAJS: ${en?'bike count, ? unconfirmed':'broj bicikala, ? nepotvrđeno'}</span><span><b class="k-legend-culture">●</b> ${en?'Events this week':'Događanja ovaj tjedan'}</span>`;
-  geography.appendChild(legend);
+  // The legend explains the map, so it stands only where there is one (not under lagano's board).
+  if(!lightweight){
+    const legend=document.createElement('p');
+    legend.className='k-map-legend';
+    legend.innerHTML=`<span><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
+    geography.appendChild(legend);
+  }
   const weather=element.querySelector<HTMLElement>('[data-panel=weather]')!;
   const content=element.querySelector<HTMLElement>('.k-highlight-content')!;
   const pause=element.querySelector<HTMLButtonElement>('.k-highlight-pause')!;

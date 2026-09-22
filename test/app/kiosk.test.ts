@@ -22,6 +22,7 @@ import { TICKER_PERIOD_MS } from '../../app/src/kiosk/ticker';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
 import { FRAME_RADIUS_M, frameSpanM } from '../../shared/city/frame';
+import { frameView } from '../../app/src/map/frame';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
@@ -1169,6 +1170,9 @@ describe('invitation: the screen a passer-by sees', () => {
     // The header's middle says the city in one line (kiosk/ticker.ts); the weather is the card's and nowhere else.
     expect(q(k.root,'[data-testid=kiosk-ticker]')).toBeNull();
     expect(q(k.root,'.k-map-legend')).not.toBeNull();
+    // Three plain items from kiosk.legend.* (WP2), never a caveat: a BAJS disc with no count is grey and blank, not "?".
+    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(3);
+    expect(text(q(k.root, '.k-map-legend'))).not.toContain('?');
     expect(q(k.root, '[data-testid=kiosk-weather]')).toBeNull();
     expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(1);
     const strip = text(q(k.root, '[data-testid=safety-strip]'));
@@ -1831,7 +1835,7 @@ describe('the invitation composition: the cards, the header ticker, the strip', 
     expect(text(label)).toBe('Otključano do 14:42 · Sada');
     k.view('u-pokretu');
     await flush();
-    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Promet');
+    expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Karta');
     k.view('kultura');
     await flush();
     expect(text(q(k.root, '[data-testid=session-label]'))).toBe('Otključano do 14:42 · Događanja');
@@ -1915,15 +1919,19 @@ describe('the field, the column and the one map', () => {
     await flush();
     expect(map.factory).toHaveBeenCalledTimes(1);
     const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
-    // Before layout the wide drawing's design width stands; the field carries the kiosk emphasis and no selection (R-KP11).
-    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, STOP.lat, FIELD_SPAN_M));
+    // Before layout the wide drawing's design box stands, framed on the screen's stop at Kadar 6 (WP2: the fallback
+    // 2 km until the stop table and the network's line order are in); the field carries the kiosk emphasis and no selection (R-KP11).
+    expect(options.zoom).toBe(frameView(STOP, FRAME_RADIUS_M[6], FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide).zoom);
     expect(options.selectedStop).toBeUndefined();
     expect(options.padding).toBeUndefined();
     expect(options.emphasis).toEqual(KIOSK_EMPHASIS);
     // The invitation is the transit picture on either renderer now: the gate that emptied the
     // geographic map whenever the default 'living' group was active is gone.
-    expect((options.prozor as { stopRoutes: string[] }).stopRoutes).toEqual(STOP.routes);
-    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: STOP });
+    // The frame draws every stop in it and both networks.
+    expect((options.prozor as { stopRoutes: string[] | null }).stopRoutes).toBeNull();
+    expect((options.prozor as { networkKinds: string[] }).networkKinds).toEqual(['tram', 'bus']);
+    // ?prikaz=shema on the wall is the whole network without zoom [O-72]: the diagram is handed no stop to crop round.
+    expect(map.factory.mock.calls[0]?.[0]).toMatchObject({ renderer: mapMode, interactive: false, stop: mapMode === 'schema' ? null : STOP });
     expect(map.calls.at(-1)).toBe('feed:live');
     const container = q(k.root, '[data-testid=kiosk-map]')!;
     const host = q(k.root, '[data-testid=kiosk-map-host]')!;
@@ -1938,7 +1946,7 @@ describe('the field, the column and the one map', () => {
     layOut(host, 700);
     k.repaint();
     expect(map.handle.setView).toHaveBeenCalledTimes(1);
-    expect(map.handle.setView).toHaveBeenLastCalledWith({ zoom: fieldZoom(700, STOP.lat, FIELD_SPAN_M), emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
+    expect(map.handle.setView).toHaveBeenLastCalledWith({ zoom: frameView(STOP, FRAME_RADIUS_M[6], 700, FIELD_DESIGN_HEIGHT.wide).zoom, emphasis: KIOSK_EMPHASIS, center: [STOP.lon, STOP.lat] });
     expect(map.factory).toHaveBeenCalledTimes(1);
     // A session parks the container (paused), the paired Sada view re-hosts it at street zoom with the stop selected; the invitation takes it back.
     k.handlers.onCodes(batch(NOW), NOW);
@@ -2013,7 +2021,7 @@ describe('the field, the column and the one map', () => {
     expect(rows.every((el) => !el.hidden)).toBe(true);
   });
 
-  it('a handheld frames 1400 m across its band and a totem 1500 m across its map panel, each at its design box before layout; the names’ padding follows the ground the panel shows and the measured box on a repaint (R-KP17, contract 3)', async () => {
+  it('a handheld frames 1400 m across its band and a totem frames Kadar 6 on its map panel, each at its design box before layout; the names’ padding follows the ground the panel shows and the measured box on a repaint (R-KP17, contract 3)', async () => {
     type Prozor = { prozor: { labelPadding: number } };
     const phone = spyMap();
     mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: phone.factory as never });
@@ -2025,8 +2033,9 @@ describe('the field, the column and the one map', () => {
     const totem = spyMap({ setProzor: vi.fn() });
     const k = mount({ stored: STORED, viewport: { width: 1080, height: 1920 }, mapFactory: totem.factory as never });
     await flush();
-    expect((totem.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.portrait, STOP.lat, FIELD_SPAN_M));
-    expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
+    // The totem is a wall: the frame's 2R (Kadar 6's fallback 2 km) on its panel, the names padded for the frame's 4 km of ground.
+    expect((totem.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBe(frameView(STOP, FRAME_RADIUS_M[6], FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait).zoom);
+    expect((totem.factory.mock.calls[0]![0] as Prozor).prozor.labelPadding).toBe(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, frameSpanM(FRAME_RADIUS_M[6])));
     // The wall's own panel is the ruling's 24; the totem's taller panel shows more ground north to south and pads its names more.
     expect(labelPadding(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, FIELD_SPAN_M)).toBe(24);
     expect(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M)).toBeGreaterThan(24);
@@ -2036,8 +2045,8 @@ describe('the field, the column and the one map', () => {
     Object.defineProperty(host, 'clientHeight', { value: 1500, configurable: true });
     k.repaint();
     await flush();
-    expect(totem.handle.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: labelPadding(1080, 1500, FIELD_SPAN_M) }));
-    expect(labelPadding(1080, 1500, FIELD_SPAN_M)).toBeGreaterThan(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, FIELD_SPAN_M));
+    expect(totem.handle.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ labelPadding: labelPadding(1080, 1500, frameSpanM(FRAME_RADIUS_M[6])) }));
+    expect(labelPadding(1080, 1500, frameSpanM(FRAME_RADIUS_M[6]))).toBeGreaterThan(labelPadding(FIELD_DESIGN_WIDTH.portrait, FIELD_DESIGN_HEIGHT.portrait, frameSpanM(FRAME_RADIUS_M[6])));
   });
 
   it('last departures (R-KP6): the stop\u2019s table is fetched once on stop change behind FEED_LASTRUN and again once now passes validUntil; the exceptions card does not print it (the arrivals board will, WP5b)', async () => {
@@ -2147,7 +2156,8 @@ describe('the field, the column and the one map', () => {
     await flush();
     const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
     expect(options.center).toEqual([15.99, 45.77]);
-    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, 45.77, frameSpanM(FRAME_RADIUS_M[8])));
+    // WP2: the square of side 2R on the field's shorter side (map/frame.ts frameView), Kadar 8's fallback until the stop table is in.
+    expect(options.zoom).toBe(frameView({ lon: 15.99, lat: 45.77 }, FRAME_RADIUS_M[8], FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide).zoom);
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.frame).toBe('8');
   });
@@ -2186,7 +2196,7 @@ describe('the field, the column and the one map', () => {
     await flush();
     // The same map, moved -- never a second one built for the new frame.
     expect(map.factory).toHaveBeenCalledTimes(1);
-    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.77], zoom: fieldZoom(FIELD_DESIGN_WIDTH.wide, 45.77, frameSpanM(FRAME_RADIUS_M[6])) }));
+    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.77], zoom: frameView({ lon: 15.99, lat: 45.77 }, FRAME_RADIUS_M[6], FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide).zoom }));
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
   });
   // While Postavke is open the stage -- and with it the map's box -- is

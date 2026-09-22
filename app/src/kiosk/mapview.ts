@@ -39,9 +39,8 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
-import { bikeAvailability } from '../../../shared/city/bikes';
-import { activeVenues, locatedEvents } from '../../../shared/city/events';
-import { located, matchStreet } from '../../../shared/city/geo';
+import { matchStreet } from '../../../shared/city/geo';
+import { CURATED_WALL, curatedCityPoints, type CuratedOptions } from '../city/curated';
 import { DEFAULT_FRAME_STOPS, FRAME_RADIUS_M, frameSpanM, type FrameStops } from '../../../shared/city/frame';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { MapSelection } from '../map/city-map';
@@ -495,56 +494,9 @@ export function cityPoints(snapshots: FeedSnapshots, stop: ScreenStop | null, no
   ];
 }
 
-/** What the city itself publishes, on the window a screen nobody configured
- *  opens with: every BAJS station with the count of bikes standing in it, and
- *  every venue with something on this week with the count of its programme.
- *  Both as a mark and a badge alone -- the names are off (CityMapOptions
- *  cityLabels), because a hundred station names over the tram network is a
- *  list and not a map, and a count is the one thing a passer-by can act on
- *  from across a room. The names come back the moment somebody explores,
- *  where discover() picks the few places a query or a group is about.
- *
- *  The shapes are discover()'s own (app/src/city/discovery.ts), so one tap
- *  reaches the same place through the same properties whichever built it. */
-export function cityWindowPoints(city: CityState, dogadanja: readonly FeedItem[], now: number): MapPoint[] {
-  const out: MapPoint[] = [];
-  for (const place of dynamicPlaces(city, now)) {
-    if (place.sourceId !== 'bajs' || !located(place)) continue;
-    out.push({ id: place.id, title: '', lon: place.lon, lat: place.lat, place: 'city', props: { category: 'bikes', badge: bikeAvailability(place, 'rent'), eventCount: 0, priority: 2 } });
-  }
-  for (const venue of activeVenues(locatedEvents(dogadanja, city.places, now, 'week'), city.places)) {
-    if (!located(venue.place)) continue;
-    out.push({ id: venue.place.id, title: '', lon: venue.place.lon, lat: venue.place.lat, place: 'city', props: { category: venue.place.category, badge: String(venue.count), eventCount: venue.count, priority: 0 } });
-  }
-  return out;
-}
-
-// --- STUB: WP2 Section B's app/src/city/curated.ts (lane/w-WP2-B) -----------
-//
-// requestKioskMap draws the city's places through curatedCityPoints on every
-// invitation window, framed or not, with the options that say which. Section B
-// owns the module (every BAJS station a counted disc, venues only with a
-// programme tonight, air optional); until it lands this stub keeps the
-// signature and answers with today's window points, so the frame's wiring
-// here is testable on its own. At the merge (review.local/companion/plan/WP2/
-// mapview-after-B-C.patch): delete this block and cityWindowPoints, and
-// `import { curatedCityPoints, CURATED_WALL, type CuratedOptions } from
-// '../city/curated'`; B carries the unframed window's flag as
-// CuratedOptions.far (props.far on each BAJS point), as CURATED_FAR does here.
-
-/** Section B's CuratedOptions, with the ruling's `far` flag: the unframed whole-city window's dot without a count. */
-interface CuratedOptions {
-  venues: 'week' | 'today' | 'tomorrow' | 'tonight';
-  air: boolean;
-  far?: boolean;
-}
-const CURATED_WALL: CuratedOptions = Object.freeze({ venues: 'tonight', air: false });
-/** The unframed whole-city window (ruling of 22 Sep): today's thinning, small BAJS dots without numbers and no venue names. */
-const CURATED_FAR: CuratedOptions = Object.freeze({ ...CURATED_WALL, far: true });
-function curatedCityPoints(city: CityState, dogadanja: readonly FeedItem[], now: number, o: CuratedOptions = CURATED_WALL): MapPoint[] {
-  void o;
-  return cityWindowPoints(city, dogadanja, now);
-}
+/** The unframed whole-city window (ruling of 22 Sep): today's thinning, each BAJS station a
+ *  small dot without its number and no venue names (city/curated.ts CuratedOptions.far). */
+const CURATED_FAR: Readonly<CuratedOptions> = Object.freeze({ ...CURATED_WALL, far: true });
 
 // --- The kvart outline ------------------------------------------------------
 //
@@ -829,14 +781,6 @@ export type KioskCityLabels = 'all' | 'venues' | 'none';
 export function kioskCityLabels(framed: boolean, cityWindow: boolean): KioskCityLabels {
   return framed ? 'venues' : cityWindow ? 'none' : 'all';
 }
-/** The mode as CityMapOptions.cityLabels takes it: 'all' and 'none' as the booleans it has always
- *  taken (Section B keeps accepting them), 'venues' as Section B's widened `CityLabels | boolean`.
- *  Until lane/w-WP2-B lands the option is typed boolean, so 'venues' rides through this one cast;
- *  at the merge pass kioskCityLabels(...) straight through. */
-function cityLabelsOption(mode: KioskCityLabels): boolean {
-  return mode === 'venues' ? (mode as unknown as boolean) : mode === 'all';
-}
-
 export interface KioskMapInput {
   handheld?: boolean;
   displayScale?: number;
@@ -1012,7 +956,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     // off on the whole-city window, the venues alone on the frame, all of them
     // the moment somebody explores and on every paired presentation, whose one
     // subject has to be named on the wall (kioskCityLabels).
-    cityLabels: cityLabelsOption(kioskCityLabels(framed, cityWindow)),
+    cityLabels: kioskCityLabels(framed, cityWindow),
     // The frame's street-name padding is for the ground it shows: 2R across,
     // not the field's span. The read-path default place's window draws every
     // stop, as the whole-city window always has: its stop is the list's.

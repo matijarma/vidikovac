@@ -27,6 +27,7 @@ import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
+import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../shared/city/frame';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
@@ -277,6 +278,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer, clearTimer));
   const maps = createMapSlots(mapAdapter.factory);
 
+  // WP2: the frame's radius around the wall's place, measured along the tram
+  // lines (shared/city/frame.ts), so it needs the stop table and the network
+  // artefact's call order; until both are in it is the Kadar's fallback
+  // (FRAME_RADIUS_M), never a guess. One number for the camera, the
+  // "U blizini" circle and the pill: every reader calls wallRadiusM().
+  let frameNetwork: Network | null = null;
+  let frameNetworkAsked = false;
+  let frameTable: { stops: readonly ScreenStop[]; network: Network | null; table: FrameStop[] } | null = null;
+  function wallRadiusM(): number {
+    if (!wall.place || !stops?.length) return FRAME_RADIUS_M[wall.frame];
+    if (frameTable?.stops !== stops || frameTable.network !== frameNetwork) {
+      frameTable = { stops, network: frameNetwork, table: frameStopsFrom(stops, isTram, frameNetwork ? frameLinesOf(frameNetwork) : []) };
+    }
+    return frameRadiusM(wall.place, frameTable.table, wall.frame);
+  }
+
   // --- Alerts: the beacon socket and the teaser fetch fail independently -------
   type AlertSource = 'beacon' | 'teaser';
   const alerts = new Map<AlertSource, string>();
@@ -318,7 +335,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const composition=compositionOf(layout);
     const width=invitation?.measureWidth()||FIELD_DESIGN_WIDTH[composition];
     const height=invitation?.measureHeight()||FIELD_DESIGN_HEIGHT[composition];
-    const camera=fieldView({stop,district:null,widthPx:width,heightPx:height,spanM:composition==='handheld'?HANDHELD_SPAN_M:FIELD_SPAN_M});
+    const camera=fieldView({stop,district:null,widthPx:width,heightPx:height,spanM:composition==='handheld'?HANDHELD_SPAN_M:FIELD_SPAN_M,place:wall.place,placeSet:wall.placeSet,frame:wall.frame,radiusM:wallRadiusM(),handheld:composition==='handheld'});
     const actualCamera=phase==='invitation'?mapAdapter.handle()?.camera?.():null;
     const boardTimes=stop?platformIds(stop,stops).map(id=>boards.get('zet',id)?.generatedAt).filter((value):value is string=>Boolean(value)).sort():[];
     const bounds=!lightweight&&mapAdapter.handle()?.status?.()==='ready'?highlightBounds(actualCamera?.center??camera.center??[15.97726,45.81286],actualCamera?.zoom??camera.zoom,width,height):undefined;
@@ -517,9 +534,20 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // With the width, the ground the field shows: the street names' padding follows it (mapview.ts labelPadding).
       heightPx: host.clientHeight || invitation?.measureHeight() || FIELD_DESIGN_HEIGHT[composition],
       spanM: wallSpanM({ handheld: composition === 'handheld', wall, stops, isTram }),
+      // WP2: the frame. A chosen place frames its measured Kadar on a wall; the
+      // read-path default (placeSet false) keeps the whole-city window. Prikaz
+      // shema, or ?prikaz=shema at boot, is the whole network without zoom.
+      place: wall.place, placeSet: wall.placeSet, frame: wall.frame, radiusM: wallRadiusM(),
+      view: mapMode === 'schema' ? 'schema' : view,
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
     if (!container) return;
+    // The network the map already fetches (withNetwork) carries the tram lines'
+    // call order: once it lands the frame is measured, and the map is asked again once.
+    if (!frameNetworkAsked) {
+      frameNetworkAsked = true;
+      void loadNetworkOnce().then((net) => { if (net && !disposed) { frameNetwork = net; paintMap(); } });
+    }
     container.inert=true;
     mapAdapter.handle()?.setHighlight?.(phase==='invitation'?ambient?.map??null:null);
     mapContainer = container;

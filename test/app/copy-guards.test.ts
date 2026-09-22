@@ -173,6 +173,10 @@ describe('the wall legend kiosk.legend.* (WP2)', () => {
     expect(kioskStrings('hr').legend).toEqual(hr.kiosk.legend);
     expect(kioskStrings('en').legend).toEqual(en.kiosk.legend);
   });
+  it('the invitation reads the legend from the catalogue, not from literals of its own', () => {
+    const own = literals(read('app/src/kiosk/invitation.ts')).join('\n');
+    for (const word of ['Tramvajska linija', 'Tram route', 'nepotvrđeno', 'unconfirmed', 'Događanja ovaj tjedan', 'Events this week']) expect(own, word).not.toContain(word);
+  });
 });
 
 describe('hostname', () => {
