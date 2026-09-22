@@ -44,6 +44,7 @@ export const PALETTE = Object.freeze([
  * The sRGB literal (`#hex` or `rgba(...)`) tokens.css writes for each palette
  * colour of one scheme. The OKLCH twins inside `@supports` never match: the
  * page states colour-scheme with plain sRGB, which every engine paints.
+ * @returns {Record<string, string>}
  */
 export function readPalette(tokensCss, scheme) {
   const out = {};

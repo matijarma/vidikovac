@@ -69,7 +69,7 @@ interface ZipInput {
 }
 
 /** A valid zip (local headers, central directory, EOCD) with no library. */
-function makeZip(files: ZipInput[]): Uint8Array {
+function makeZip(files: ZipInput[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
@@ -188,7 +188,7 @@ const STOP_TIMES_TXT =
   't1_trip_2,07:00:00,07:00:00,S_close,1,,,\nt1_trip_2,07:04:00,07:04:00,S_close2,2,,,\n';
 const FEED_INFO_TXT = 'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version\nZET,https://www.zet.hr,hr,20260901,20301231,000123\n';
 
-function makeFullZip(opts: { withFeedInfo?: boolean; stopTimes?: string } = {}): Uint8Array {
+function makeFullZip(opts: { withFeedInfo?: boolean; stopTimes?: string } = {}): Uint8Array<ArrayBuffer> {
   const files: ZipInput[] = [
     { name: 'routes.txt', data: ROUTES_TXT, method: 8 },
     { name: 'trips.txt', data: TRIPS_TXT, method: 8 },

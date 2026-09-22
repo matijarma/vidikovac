@@ -41,7 +41,7 @@ describe('checkUrl', () => {
       calls.push(init.method as string);
       return new Response(null, { status: 200 });
     };
-    const row = await checkUrl('https://a.example/x', { fetchImpl });
+    const row = await checkUrl('https://a.example/x', { fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(row).toMatchObject({ url: 'https://a.example/x', method: 'HEAD', status: 200, ok: true });
     expect(calls).toEqual(['HEAD']);
   });
@@ -60,7 +60,7 @@ describe('checkUrl', () => {
       });
       return new Response(body, { status: 200 });
     };
-    const row = await checkUrl('https://a.example/big.zip', { fetchImpl });
+    const row = await checkUrl('https://a.example/big.zip', { fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(row).toMatchObject({ method: 'GET', status: 200, ok: true });
     expect(cancelled).toBe(true);
   });

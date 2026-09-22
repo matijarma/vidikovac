@@ -25,7 +25,7 @@ import { lastDeparture, type LastRunSnapshot } from '../../app/src/core/lastrun'
 interface ZipInput { name: string; data: string; method: 0 | 8 }
 
 /** Builds a valid zip (local headers, central directory, EOCD) with no library; the helper gtfs-routes.test.ts and gtfs-shapes.test.ts use. */
-function makeZip(files: ZipInput[]): Uint8Array {
+function makeZip(files: ZipInput[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
@@ -130,7 +130,7 @@ const FEED_INFO = `feed_publisher_name,feed_publisher_url,feed_lang,feed_start_d
 "ZET","http://www.zet.hr","hr",20260901,20301231,"000395"
 `;
 
-function feed(): Uint8Array {
+function feed(): Uint8Array<ArrayBuffer> {
   return makeZip([
     { name: 'calendar.txt', data: CALENDAR, method: 8 },
     { name: 'calendar_dates.txt', data: CALENDAR_DATES, method: 0 },

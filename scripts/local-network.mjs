@@ -3,7 +3,11 @@
 // browsers in that scenario share it, including same-Wi-Fi pairing proofs.
 import { createHash, randomUUID } from 'node:crypto';
 
-/** @returns {Record<string, string>} */
+/**
+ * @param {string} base
+ * @param {string} [scenario]
+ * @returns {Record<string, string>}
+ */
 export function localNetworkHeaders(base, scenario = randomUUID()) {
   const url = new URL(base);
   if (!['http:', 'https:'].includes(url.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return {};
