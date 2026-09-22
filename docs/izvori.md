@@ -80,7 +80,8 @@ križanjima, sintetička staza za svaki tramvajski uzorak, posluženi popis
 stajališta i `graphHash`), `npm run build:trips`, zatim `npm run build:schema`
 (shema i, uz nju, tablica boja `app/src/data/zet-line-colours.json`).
 Verzije mreže, indeksa i sheme moraju se slagati; provjera artefakta i njegove
-152 staze dio je testova (146 ih se smješta na nacrt). Shema se poslužuje statički pod `/data/`, ne kroz
+152 staze dio je testova (146 ih se smješta na nacrt). Uz njih artefakt nosi 17 okretišnih petlji
+(staze `loop:`); vozilo koje vozi petljom shema crta na kolutu okretišta. Shema se poslužuje statički pod `/data/`, ne kroz
 Worker i ne kao novi skup pod `/open`.
 
 ### Ručne i građevne dopune uz ZET-ove artefakte
@@ -92,7 +93,7 @@ stoji uz ZET-ov GTFS i nacrt.
 | Datoteka | Tko je održava | Što nosi |
 |---|---|---|
 | `scripts/zet-schema-overrides.json` | razvoj, uz gradnju sheme | imenovane razlike između povijesnog nacrta i ugrađenog GTFS-a: krajnje stanice, aliasi naziva, staze bez smještaja na nacrt. |
-| `scripts/gtfs-shapes-overrides.json` | razvoj, uz `npm run build:network` | `unreachableStops` (peron uzorka bez oblika dalje od 60 m od svake nacrtane tračnice; na feedu 000395 prazno) i `longLegs` (hop sintetičke staze koji i nakon čvorenja križanja ide preko dvostruke zračne linije i još 500 m dulje). Bez unosa gradnja **pada**: takav obilazak je u pravilu nedostajući čvor, a ne ruta. Svaki unos nosi razlog s mjerom -- danas dva, Botanički vrt → Zrinjevac za linije 6 i 9, gdje dva kolosijeka završavaju 6,79 m jedan od drugoga i nikad se ne sijeku. |
+| `scripts/gtfs-shapes-overrides.json` | razvoj, uz `npm run build:network` | `unreachableStops` (peron uzorka bez oblika dalje od 60 m od svake nacrtane tračnice), `servedGaps` (isto pravilo za perone vožnji s oblikom) i `longLegs` (hop sintetičke staze koji i nakon čvorenja križanja ide preko dvostruke zračne linije i još 500 m dulje); na feedu 000395 sva su tri popisa prazna. Bez unosa gradnja **pada**: takav je slučaj u pravilu kriva koordinata ili nedostajući čvor, a ne ruta. `connectors` dodaju skretanje koje nijedan oblik ne crta jer jedan kolosijek završava nekoliko metara od mjesta gdje drugi počinje: Glavni kolodvor za linije 6 i 9 (6,79 m, pa hop Botanički vrt → Zrinjevac više ne ide oko bloka), vrh okretišne petlje na Mihaljevcu (14,66 m) i spoj od 1,36 m u petlji linije 12 u Dubravi; spoj koji ne pogodi nijedan čvor ruši gradnju. Svaki unos nosi razlog s mjerom. |
 | `app/public/data/stop-dwell-overrides.json` | **vlasnik**, izravno u repozitoriju | ručna tablica zadržavanja po peronu (`stop`, neobavezni `route`, `defaultSec`, neobavezni `pin`, obavezni `reason`). Deployabilna imovina: blizanac je dohvaća s `/data/stop-dwell-overrides.json`, pa između izmjene i onoga što planer čita nema koraka gradnje. Zasijana je s dvadeset tramvajskih okretišta na 60 s i razlogom „terminus layover placeholder — owner to adjust” (pogađa 61 tramvajski peron i nijedno autobusno ugibalište). Neispravan redak ruši učitavanje cijele datoteke i vidi se na `/stats`; upute su u `docs/kaj-verification.md`. |
 
 ### Prostorni slojevi modula `ckan-geo`
