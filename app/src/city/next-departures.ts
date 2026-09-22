@@ -41,20 +41,22 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
   const stop = place.departuresStop;
   // The catalogue is in hand and no platform is within reach of the place: nothing to board.
   if (!stop && ctx.stops) return '';
-  const frozen = ctx.frozenAt !== undefined || Boolean(ctx.session?.frozen);
+  // One frozen moment for the whole block: the shell's own, else now when only the session flag says so.
+  const frozenAt = ctx.frozenAt ?? (ctx.session?.frozen ? ctx.now : undefined);
+  const frozen = frozenAt !== undefined;
   let body: string;
   let busy = false;
   if (!stop) {
-    // The catalogue is still on its way; a frozen view will not receive it.
-    busy = !frozen;
-    body = emptyRow(frozen ? i18n.t('arrivals.frozen') : null);
+    // No catalogue yet: on its way while live, down when its load failed, never coming once frozen.
+    busy = !frozen && !ctx.stopsDown;
+    body = emptyRow(frozen ? i18n.t('arrivals.frozen') : ctx.stopsDown ? i18n.t('arrivals.down') : null);
   } else {
     const ids = platformIds(stop, ctx.stops);
     if (!frozen) ctx.boards?.ensure('zet', ids, ctx.onLocalData);
     const held = ids.map((id) => ctx.boards?.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
     const answer = arrivalsAt(held, vehicleFixes(ctx.snapshots['zet-rt'], ctx.now), ctx.now, { stopIds: ids, rows: opts.rows ?? DEPARTURE_ROWS });
     if (answer.rows.length) {
-      body = answer.rows.map((row) => departureRow(i18n, row, kindOfRoute, ctx.frozenAt)).join('');
+      body = answer.rows.map((row) => departureRow(i18n, row, kindOfRoute, frozenAt)).join('');
     } else if (answer.status === 'none') {
       // No board in hand: on its way while live, never coming once frozen.
       busy = !frozen;

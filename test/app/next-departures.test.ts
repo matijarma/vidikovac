@@ -112,6 +112,13 @@ describe('departuresBlock', () => {
       expect(waiting.list.getAttribute('aria-busy')).toBe('true');
       expect(departuresBlock(ctx({ boards: boards([]) }), place(null, { kind: 'address', name: 'Sljeme' }))).toBe('');
     });
+
+    it('a catalogue that failed to load says the timetable is unavailable, in one row that is not busy', () => {
+      const down = empty(departuresBlock(ctx({ stops: undefined, stopsDown: true, boards: boards([]) }), place(null, { kind: 'city' })));
+      expect(down.list.hasAttribute('aria-busy')).toBe(false);
+      expect(down.row.hasAttribute('aria-hidden')).toBe(false);
+      expect(text(down.row)).toBe('Vozni red trenutačno nije dostupan.');
+    });
   });
 
   it('frozen, a tracked row keeps its dot but is no longer live and never says "uživo"', () => {
@@ -119,6 +126,18 @@ describe('departuresBlock', () => {
     const row = dom(html).querySelector<HTMLElement>('li.sada-departure')!;
     expect(row.dataset.live).toBe('false');
     expect(row.querySelector('.t-live')).not.toBeNull();
+    expect(html).not.toContain('uživo');
+  });
+
+  it('frozen by the session flag alone, the block uses one frozen moment: no board asked for, no live row, no "uživo"', () => {
+    const cache = boards([board('106_1', 'live', [4, 9])]);
+    const html = departuresBlock(ctx({ boards: cache, session: { expiresAt: NOW, frozen: true } }), place(STOP));
+    expect(cache.ensure).not.toHaveBeenCalled();
+    const rows = [...dom(html).querySelectorAll<HTMLElement>('li.sada-departure')];
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.dataset.live)).toEqual(['false', 'false']);
+    expect(rows[0]!.querySelector('.t-live')?.getAttribute('aria-label')).toBe('podaci od 17:20');
+    expect(html).not.toContain('data-live="true"');
     expect(html).not.toContain('uživo');
   });
 });

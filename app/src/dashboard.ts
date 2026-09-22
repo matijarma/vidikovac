@@ -56,6 +56,8 @@ import { ct } from './city/strings';
 const TICK_MS = 1_000;
 /** How long a cast button says "sent" after its frame went out. */
 const CAST_SENT_MS = 1_500;
+/** How many times a session asks for the stop catalogue before it leaves it down (one per draw after a failure). */
+const STOPS_ATTEMPTS = 3;
 
 /** The layer last opened, mirrored so the next scan reopens it (R-60). */
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
@@ -183,9 +185,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const boards = deps.createBoards?.() ?? createBoardCache({now});
   let locationContext: LocationContext | undefined;
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
-  /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
+  /** The stop catalogue, fetched once per session: the place and its departures stop are resolved from it (B.10, WP4). */
   let stops: readonly ScreenStop[] | null = null;
   let stopsRequested = false;
+  /** How many times the catalogue has been asked for, and whether the last answer failed (the departures block then says so). */
+  let stopsAttempts = 0;
+  let stopsDown = false;
   /** The screen stop's last scheduled departures (T3.1, FEED_LASTRUN): fetched once per stop, null until it answers. */
   let lastRun: LastRunSnapshot | null = null;
   let lastRunStop: string | null = null;
@@ -417,7 +422,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
-      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, stopsDown, lastRun,
     };
   }
 
@@ -487,16 +492,23 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen || error === 'no-ticket') maps.pause();
   }
 
-  /** The 245 kB stop catalogue, once per mount and only when a saved stop needs its walking row. */
+  /** The 245 kB stop catalogue, once per mount. A failed load marks the catalogue down, so the departures
+   *  block says so in one row instead of waiting, and the next draw asks again, at most STOPS_ATTEMPTS times. */
   function ensureStops(): void {
     if (stopsRequested) return;
     stopsRequested = true;
+    stopsAttempts += 1;
     loadStops().then((list) => {
       if (disposed) return;
       stops = list;
+      stopsDown = false;
       render();
     }, () => {
-      // The walking row stays absent; nothing else depends on the catalogue.
+      if (disposed) return;
+      stopsDown = true;
+      render();
+      // Re-armed after this draw, not before it, so a retry waits for the next poll rather than looping here.
+      if (stopsAttempts < STOPS_ATTEMPTS && !frozen) stopsRequested = false;
     });
   }
 

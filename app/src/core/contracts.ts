@@ -78,6 +78,8 @@ export interface ExperienceActions {
   cast?: CastState;
   /** The stop catalogue (`loadStops`), fetched once per session: the place and its departures stop are resolved from it (D16). */
   stops?: readonly ScreenStop[];
+  /** The stop catalogue's last load failed (the page asks again a bounded number of times); absent or false while it loads or once it is in hand. */
+  stopsDown?: boolean;
   /** The nearest bike-share and parking stations (plan T3.2, D7): undefined until
    *  FEED_BIKES / FEED_PARKING turn on with their worker module. */
   bikes?: MobilitySnapshot;
