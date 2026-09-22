@@ -130,12 +130,14 @@ pokreće izričitom radnjom, ne automatskom petljom.
 ## Što zaslon prikazuje
 
 Normalan zaslon prikazuje koristan pregled grada i prije i nakon
-skeniranja. Karta zauzima cijeli lijevi stupac i otvara se na prozoru
-cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja, a ne na
-jednom stajalištu. Na njoj su tramvajska mreža u neutralnom sivom, ispod
-svega ostaloga, pločice tramvaja u brendiranoj plavoj, sve BAJS stanice
-kao tirkizni diskovi s brojem raspoloživih bicikala, zatvorene prometnice,
-prsten dežurne ljekarne i aktivna kulturna mjesta. Imena se ne ispisuju:
+skeniranja. Karta zauzima cijeli lijevi stupac. Zaslon postavljen na cijeli
+grad (polje „Adresa ili stajalište” ostavljeno prazno) otvara kartu na
+prozoru cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja;
+zaslon s izabranim mjestom otvara kadar oko tog mjesta, opisan u sljedećem
+odlomku. Na prozoru cijeloga grada su tramvajska mreža u neutralnom sivom,
+ispod svega ostaloga, pločice tramvaja u brendiranoj plavoj, sve BAJS
+stanice kao male tirkizne točke bez broja, zatvorene prometnice, prsten
+dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
 mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
 imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
@@ -145,17 +147,37 @@ na kojima neka vožnja počinje ili završava (`terminal` iz mrežnog
 artefakta), njih 29 u gradu i dvanaest na zadnjoj snimci. Broj linija nije
 mjerilo: 111 od 114 tramvajskih stajališta vidi dvije ili više tramvajskih
 linija, pa bi "dva tramvaja" imenovalo gotovo sve. Od 13,5 naviše sva se
-imena vraćaju onakva kakva su izvedena za kadar od 2,8 km. Stanica bez
-bicikala ili sa zastarjelim očitanjem stoji blijeđa.
+imena vraćaju onakva kakva su izvedena za kadar od 2,8 km.
 Autobusi -- kapsule i njihove linije -- pridružuju se tramvajima tek kad je
 kamera na zumu 14 ili bliže; tristo kapsula nad cijelim gradom zakrilo bi
 tramvaje o kojima slika govori. Brojevi vozila prorjeđuju se pri
 preklapanju, a položaji ostaju označeni točkama.
 
-Odabrano mjesto nadjačava prozor kadrom od 4, 6 ili 8 stajališta (Kadar);
-gradska četvrt više se ne bira. Stajališta ostaju
+Zaslon s izabranim mjestom, stajalištem ili adresom, otvara kartu na kadru
+oko tog mjesta: kadar obuhvaća onoliko stajališta koliko kaže postavka
+Kadar, 4, 6 ili 8, zadano 6. Polumjer kadra mjeri se za svako mjesto
+posebno, kao udaljenost do N-tog stajališta niz linije tramvaja koji ondje
+staju (autobusna stajališta broje se samo kad u krugu od 3 km nema nijednog
+tramvajskog stajališta), i uvijek je između 500 m i 3 km; tablica
+1,3 / 2 / 2,7 km vrijedi samo dok stajališta nisu učitana. Kamera, krug
+popisa „U blizini” i naslov tog popisa čitaju isti izmjereni broj, pa naslov
+ispisuje izmjerenu udaljenost i vrijeme hoda, na primjer
+„U blizini · 2 km · ~15 min”.
+Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
+dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, siv s nulom
+kad bicikala nema, a siv i bez broja kad broj nije poznat ili stanica ne
+iznajmljuje, nikad s upitnikom; kulturna mjesta pojavljuju se samo s
+programom večeras, i to s imenom; imenuju se važnija stajališta (po rangu iz
+mrežnog artefakta), sva tramvajska čvorišta i glavne ulice. Imena slijede
+kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
+nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
+ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika
+(„Tramvajska linija”, „BAJS: broj bicikala”, „Kultura večeras”), a pod
+`?lagano=1`, gdje karte nema, nema ni legende.
+
+Gradska četvrt više se ne bira. Stajališta ostaju
 dodirljivi prstenovi i na gradskom kadru, uz toleranciju dodira od 28 CSS
-piksela, jer prst na zidu nije miš na stolu. Dodir na stajalište otvara
+piksela, jer prst na zaslonu nije miš na stolu. Dodir na stajalište otvara
 istraživanje grada, s imenima, i prvo kaže koji tramvaji i autobusi dolaze
 i za koliko minuta; 90 sekundi bez dodira vraća prozor.
 
@@ -344,10 +366,14 @@ Autobusi, gradske točke i obrisi četvrti nisu dio tog prikaza.
 `?lagano=1` je nepromijenjen i ne učitava shemu.
 
 Krug F ne mijenja ponašanje zaslona osim na dva mjesta. Prvo: oznake vozila i
-njihove skupine (pločica za tramvaj, kapsula za autobus) **nikad se ne ispuštaju** --
+njihove skupine (pločica za tramvaj, kapsula za autobus) **nikad se ne ispuštaju**:
 sudarni prolaz karte ne odbacuje nijednu oznaku, a gužvu drži čitljivom spajanje
 preklopljenih oznaka u jednu skupinu s natpisom tipa „6·11·12·14”, računato na
 zaslonovoj skali oznaka, pa se oznake ne spajaju na pola stvarne udaljenosti.
+Spojena oznaka ispisuje svaku liniju, nikad „+N”, i širi se s natpisom: svih
+petnaest tramvajskih linija stane u jednu oznaku, a tek na autobusnom čvorištu
+s natpisom duljim od četrdeset znakova oznaka zadržava samo cijele linije koje
+stanu.
 Drugo: shema na zaslonu vozi **isti sudarni prolaz naziva kao svaka druga
 površina**, samo sa svojim stajalištem prvim u rangu -- zaslon koji pokaže baš
 svaki naziv pokaže ih jedne preko drugih. Donja granica naziva od 24 CSS px i

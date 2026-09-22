@@ -84,7 +84,17 @@ the city a passer-by means by Zagreb, Črnomerec to Maksimir and the Sava to
 Mirogoj, with trams, the tram network in neutral grey, BAJS stations as teal
 discs carrying their bike count, closures, the on-duty pharmacy and active
 cultural venues; neighbourhood names leave the basemap and buses join the
-picture only once the camera is in a neighbourhood. A tapped stop says first
+picture only once the camera is in a neighbourhood. On 22 September 2026 the
+owner kept that whole-city window for a screen set to the whole city (the
+setup field left empty) and gave a screen with a place a frame: the map opens
+on N stops around the place (Kadar: 4, 6 or 8 "stajališta odavde", default 6),
+its radius measured per place along the tram lines that serve it, the same
+number the "U blizini" pill prints ("2 km · ~15 min" at 2 km). On the frame
+buses stay at every hour, every BAJS station is a disc with its count (grey at
+zero, grey and blank when the count is unknown, never "?"), venues appear only
+with a programme tonight and are named, and a merged vehicle pill lists every
+line number. The whole-city window keeps small BAJS dots without a number and
+shows only tonight's venues, unnamed. A tapped stop says first
 which vehicles come next and in how many minutes: trips with a tracked vehicle
 show a countdown derived from the schedule and ZET's own reported delay, the
 rest keep their timetable clock time, and the list says which is which. The

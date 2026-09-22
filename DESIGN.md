@@ -81,7 +81,9 @@ honour reduced motion. Do not animate layout width for countdown bars.
 below:** one steady geographic map beside a reserved 520–760px information
 column at 1×, scaled for 4K. Conditions, one attributed highlight and the QR
 occupy independent grid regions. No kiosk discovery/search/filter list or
-idle map-navigation controls. The map has a compact tram/BAJS/culture legend.
+idle map-navigation controls. The map has a legend of three plain items (tram
+route, BAJS bike count, culture tonight), never a caveat, and no legend
+stands where no map is drawn (lagano).
 Highlights hold for 20 seconds, alternate mobility and city life, and use
 real cultural/heritage records when events are quiet. A separate geometry
 overlay identifies the subject without fitting or moving the camera.
@@ -101,15 +103,23 @@ exceptions cards no longer define the current product.
 
 The normal `/kiosk/` surface is a live city window, not a locked dashboard
 and not an ambient decoration. Pairing acknowledges access without replacing
-it. The map takes the whole left column and opens on the whole city, with the
-live transit picture on it: the tram network as a thin neutral ground, tram
-plates, bike-share stations as dots carrying their count, closures, the
-on-duty pharmacy and active venues. On this surface transport is the default
-cartography; the earlier rule that it must not dominate applies to the phone
-and the desk. Place names are a reader's, not a passer-by's: no neighbourhood
-names, no station or venue names on the window. Buses join the picture only
-once the camera is in a neighbourhood. Compact landscape and portrait keep the
-same grammar in their own arrangements.
+it. The map takes the whole left column. A screen with a place (a stop or an
+address) opens on a frame of N stops around it (Kadar: 4, 6 or 8
+"stajališta odavde", default 6), its radius measured per place and the same
+number the "U blizini" circle and its pill use. The frame is a neighbourhood:
+buses at every hour, every BAJS station a disc carrying its count (grey at
+zero, grey and blank when the count is unknown, never "?"), venues only with a
+programme tonight and named, ranked stop names with every tram interchange,
+and the major street names. A screen set to the whole city opens on the whole
+city, with the live transit picture on it: the tram network as a thin neutral
+ground, tram plates, bike-share stations as small dots without a number,
+closures, the on-duty pharmacy and tonight's venues. On this surface transport
+is the default cartography; the earlier rule that it must not dominate applies
+to the phone and the desk. On the whole-city window place names are a
+reader's, not a passer-by's: no neighbourhood names, no station or venue
+names. Buses join the whole-city window only once the camera is in a
+neighbourhood. Compact landscape and portrait keep the same grammar in their
+own arrangements.
 
 The other column carries weather, a transit-exceptions card, an events card
 that fills the room it is given, and the pairing card. Weather is an
@@ -148,7 +158,10 @@ promoted street names go, the assembly points keep their squares and lose their
 titles, and of the stops only the tram interchanges are named -- a tram calls
 there and some trip begins or ends there. Route count is not a measure of
 importance and is not used for this. From the thinning zoom up every name is
-back, exactly as derived.
+back, exactly as derived. A framed screen names by being framed, not by zoom:
+whatever its Kadar, it draws the ranked stop names with every tram interchange
+and the major street names, so Kadar 4, 6 or 8 never changes the naming
+grammar; the thinning rule belongs to the whole-city window alone.
 Preserve the map instance across polling and composition changes.
 
 Overview content has deliberate budgets. A fitting routine may not hide
@@ -205,8 +218,9 @@ and help. “In-app highlights” describes local emphasis, never push delivery.
 
 Living city, culture, transport, useful places and heritage are progressive
 map groups. Active venue pins have bounded size and explicit event counts;
-geographic clusters use a distinct plus-count mark. Selected places stay
-outside clustering and filters. Venue programs open the in-app event detail
+there are no geographic clusters on any surface: the map curates (every BAJS
+station counted, venues only with a programme tonight). Selected places stay
+outside filters. Venue programs open the in-app event detail
 before its original source. Street stories have map-label and search paths.
 Heritage selections draw the protection outline, never an assumed entrance.
 Every category has a map-free list path.

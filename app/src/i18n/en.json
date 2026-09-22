@@ -840,6 +840,11 @@
       "codeWaiting": "waiting for a code",
       "progressLabel": "Time left on this code"
     },
+    "legend": {
+      "tram": "Tram route",
+      "bikes": "BAJS: bikes available",
+      "culture": "Culture tonight"
+    },
     "weather": {
       "title": "Weather now",
       "humidity": "humidity {value} %",
