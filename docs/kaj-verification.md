@@ -139,6 +139,12 @@ pristupnim tokenom iz okoline i vraća izlazni kod 1 kad zakaže bilo koje pravi
 geometrije, veličine teksta, cilja ili prelijevanja. Ovaj odlomak opisuje metodu;
 rezultati se bilježe tek nakon pokretanja na spojenoj grani.
 
+Promatranje produkcije nakon svake isporuke, samo čitanjem i na postojećem zaslonu:
+`E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10`
+(prije isporuke D2 s `--stage d1`). Skripta ne stvara zaslon; pragovi, izlazni
+kodovi i datoteke opisani su u `docs/kiosk.md`, u odjeljku „Razvoj i automatska
+provjera”.
+
 ## Preinaka za telefon, 13. i 14. rujna 2026.
 
 Preinaka je isporučena u tri koraka, svaki nakon zelenog prolaza cijelog
